@@ -257,16 +257,28 @@ export class CredentialProxyServer {
     }
   }
 
+  private asRecord(value: unknown): Record<string, unknown> {
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+    return {};
+  }
+
+  private hasStringValue(value: unknown): value is string {
+    return typeof value === 'string' && value.length > 0;
+  }
+
   private async dispatchRequest(
     socket: net.Socket,
     frame: Record<string, unknown>,
   ): Promise<void> {
     const id =
       typeof frame.id === 'string' ? frame.id : String(frame.id ?? 'unknown');
-    const op = typeof frame.op === 'string' ? frame.op : undefined;
-    const payload = (frame.payload as Record<string, unknown>) ?? {};
+    const hasRequestId = Boolean(frame.id);
+    const op = frame.op;
+    const payload = this.asRecord(frame.payload);
 
-    if (!frame.id || !op) {
+    if (!hasRequestId || !this.hasStringValue(op)) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing request id or op');
       return;
     }
@@ -602,18 +614,18 @@ export class CredentialProxyServer {
       };
 
       // Add flow-type-specific data
-      if (flowType === 'pkce_redirect' || flowType === 'browser_redirect') {
-        // For redirect flows, return the complete auth URL
-        response.auth_url =
-          initiationResult.verification_uri_complete ??
-          initiationResult.verification_uri;
-      } else if (flowType === 'device_code') {
+      if (flowType === 'device_code') {
         // For device code flows, return verification URI and user code
         response.auth_url = initiationResult.verification_uri;
         response.verification_uri = initiationResult.verification_uri;
         response.user_code = initiationResult.user_code;
         response.verification_uri_complete =
           initiationResult.verification_uri_complete;
+      } else {
+        // For redirect flows, return the complete auth URL
+        response.auth_url =
+          initiationResult.verification_uri_complete ??
+          initiationResult.verification_uri;
       }
 
       // SECURITY: Do NOT return PKCE verifier, device_code internals, or flow instance
@@ -740,10 +752,8 @@ export class CredentialProxyServer {
     try {
       // Retrieve flow instance from session
       const flowInstance = session.flowInstance;
-      if (
-        !flowInstance ||
-        typeof flowInstance.exchangeCodeForToken !== 'function'
-      ) {
+      const exchangeCodeForToken = flowInstance.exchangeCodeForToken;
+      if (typeof exchangeCodeForToken !== 'function') {
         this.sendError(
           socket,
           id,
@@ -754,7 +764,8 @@ export class CredentialProxyServer {
       }
 
       // Call REAL provider exchange
-      const token = await flowInstance.exchangeCodeForToken(
+      const token = await exchangeCodeForToken.call(
+        flowInstance,
         code,
         session.pkceState,
       );
@@ -832,16 +843,7 @@ export class CredentialProxyServer {
       return;
     }
 
-    // Verify session has flow instance and device_code (required for polling)
-    if (!session.flowInstance) {
-      this.sendError(
-        socket,
-        id,
-        'INTERNAL_ERROR',
-        'Session missing flow instance',
-      );
-      return;
-    }
+    // Verify session has device_code and polling support (required for polling)
     if (!session.deviceCode) {
       this.sendError(
         socket,
@@ -853,10 +855,9 @@ export class CredentialProxyServer {
     }
 
     // Verify flow instance has pollForToken method
-    if (
-      !('pollForToken' in session.flowInstance) ||
-      typeof session.flowInstance.pollForToken !== 'function'
-    ) {
+    const flowInstance = session.flowInstance;
+    const pollForToken = flowInstance.pollForToken;
+    if (typeof pollForToken !== 'function') {
       this.sendError(
         socket,
         id,
@@ -868,7 +869,7 @@ export class CredentialProxyServer {
 
     try {
       // Poll the provider for token
-      const token = await session.flowInstance.pollForToken(session.deviceCode);
+      const token = await pollForToken.call(flowInstance, session.deviceCode);
 
       // Success! Token received from provider
       // Mark session as used BEFORE storing to prevent race conditions
