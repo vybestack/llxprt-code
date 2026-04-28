@@ -37,51 +37,47 @@ export function useModelTracking({
     let disposed = false;
     let requestSeq = 0;
 
+    const isCurrentRequest = (seq: number) => !disposed && seq === requestSeq;
+
     const updateModel = async () => {
-      const seq = ++requestSeq;
+      requestSeq += 1;
+      const seq = requestSeq;
       const settingsService = getSettingsService();
 
       // Try to get from SettingsService first (same as diagnostics does)
-      if (settingsService?.getDiagnosticsData) {
-        try {
-          const diagnosticsData = await settingsService.getDiagnosticsData();
-          if (!disposed && seq === requestSeq) {
-            if (diagnosticsData?.model) {
-              setCurrentModel(diagnosticsData.model);
-              return;
-            }
-          } else {
-            return;
-          }
-        } catch {
-          // Fall through to config
+      try {
+        const diagnosticsData = await settingsService.getDiagnosticsData();
+        if (!isCurrentRequest(seq)) {
+          return;
         }
+
+        if (diagnosticsData.model !== '') {
+          setCurrentModel(diagnosticsData.model);
+          return;
+        }
+      } catch {
+        // Fall through to config
       }
 
       // Otherwise use config (which is what diagnostics falls back to)
-      if (!disposed && seq === requestSeq) {
+      if (isCurrentRequest(seq)) {
         setCurrentModel(config.getModel());
       }
     };
 
+    const handleSettingsChanged = () => {
+      void updateModel();
+    };
+
     // Update immediately
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    updateModel();
+    void updateModel();
 
     // Also listen for any changes if SettingsService is available
     const settingsService = getSettingsService();
-    if (settingsService) {
-      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Event emitter expects void, but we want to await the async updateModel
-      settingsService.on('settings-changed', updateModel);
-      return () => {
-        disposed = true;
-        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Event emitter expects void, but we want to await the async updateModel
-        settingsService.off('settings-changed', updateModel);
-      };
-    }
-
+    settingsService.on('settings-changed', handleSettingsChanged);
     return () => {
       disposed = true;
+      settingsService.off('settings-changed', handleSettingsChanged);
     };
   }, [config]);
 
