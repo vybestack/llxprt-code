@@ -40,7 +40,7 @@ export const bugCommand: SlashCommand = {
     const memoryUsage = formatMemoryUsage(process.memoryUsage().rss);
     const ideClient =
       (context.services.config?.getIdeMode() &&
-        context.services.config?.getIdeClient()?.getDetectedIdeDisplayName()) ??
+        context.services.config.getIdeClient()?.getDetectedIdeDisplayName()) ??
       '';
     const terminalName =
       terminalCapabilityManager.getTerminalName() ?? 'Unknown';
@@ -69,10 +69,15 @@ export const bugCommand: SlashCommand = {
     const client = config?.getGeminiClient();
     if (client?.hasChatInitialized()) {
       try {
-        const chat = client.getChat();
-        const history = chat?.getHistory();
+        const chat = client.getChat() as unknown;
+        const getHistory =
+          typeof chat === 'object' && chat !== null && 'getHistory' in chat
+            ? chat.getHistory
+            : undefined;
+        const history =
+          typeof getHistory === 'function' ? getHistory.call(chat) : undefined;
 
-        if (history && history.length > 0) {
+        if (Array.isArray(history) && history.length > 0) {
           const { filePath } = await exportHistoryForBugReport(history);
           info += `* **Conversation Transcript:** Exported to \`${filePath}\` (please attach to your bug report)\n`;
 
