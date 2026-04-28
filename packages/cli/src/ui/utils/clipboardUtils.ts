@@ -44,11 +44,11 @@ async function spawnAsync(
     let stdout = '';
     let stderr = '';
 
-    proc.stdout?.on('data', (data) => {
+    proc.stdout.on('data', (data) => {
       stdout += data.toString();
     });
 
-    proc.stderr?.on('data', (data) => {
+    proc.stderr.on('data', (data) => {
       stderr += data.toString();
     });
 
@@ -306,18 +306,24 @@ export function parsePastedPaths(
     return null;
   }
 
-  let anyValidPath = false;
-  const processedPaths = segments.map((segment) => {
-    if (!PATH_PREFIX_PATTERN.test(segment)) {
-      return segment;
-    }
-    const unescaped = unescapePath(segment);
-    if (isValidPath(unescaped)) {
-      anyValidPath = true;
-      return `@${segment}`;
-    }
-    return segment;
-  });
+  const processed = segments.reduce(
+    (result, segment) => {
+      if (!PATH_PREFIX_PATTERN.test(segment)) {
+        result.paths.push(segment);
+        return result;
+      }
 
-  return anyValidPath ? processedPaths.join(' ') + ' ' : null;
+      const unescaped = unescapePath(segment);
+      if (isValidPath(unescaped)) {
+        result.anyValidPath = true;
+        result.paths.push(`@${segment}`);
+      } else {
+        result.paths.push(segment);
+      }
+      return result;
+    },
+    { anyValidPath: false, paths: [] as string[] },
+  );
+
+  return processed.anyValidPath ? processed.paths.join(' ') + ' ' : null;
 }
