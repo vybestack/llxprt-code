@@ -260,24 +260,9 @@ export const useSlashCommandProcessor = (
         historyItemContent = {
           type: 'lb_stats',
         };
-      } else if (
-        message.type === MessageType.INFO ||
-        message.type === MessageType.ERROR ||
-        message.type === MessageType.USER ||
-        message.type === MessageType.WARNING
-      ) {
+      } else {
         historyItemContent = {
           type: message.type,
-          text: message.content || '',
-        };
-      } else if (message.type === MessageType.GEMINI) {
-        historyItemContent = {
-          type: 'cache_stats',
-        };
-      } else {
-        // Fallback for unknown types - treat as info message
-        historyItemContent = {
-          type: MessageType.INFO,
           text: message.content || '',
         };
       }
@@ -652,7 +637,7 @@ export const useSlashCommandProcessor = (
                   }
                 case 'load_history': {
                   // eslint-disable-next-line @typescript-eslint/no-floating-promises
-                  config?.getGeminiClient()?.setHistory(result.clientHistory);
+                  config?.getGeminiClient().setHistory(result.clientHistory);
                   fullCommandContext.ui.clear();
                   result.history.forEach((item, index) => {
                     fullCommandContext.ui.addItem(item, index);
@@ -675,11 +660,7 @@ export const useSlashCommandProcessor = (
                         if (typeof part === 'string') {
                           return part;
                         }
-                        if (
-                          typeof part === 'object' &&
-                          part !== null &&
-                          'text' in part
-                        ) {
+                        if (typeof part === 'object' && 'text' in part) {
                           return (part as { text?: string }).text ?? '';
                         }
                         return '';
@@ -892,7 +873,7 @@ export const useSlashCommandProcessor = (
                   // Restore IContent[] to gemini client via restoreHistory
                   await config
                     .getGeminiClient()
-                    ?.restoreHistory(resumeResult.history);
+                    .restoreHistory(resumeResult.history);
 
                   // Convert IContent[] to UI history items and load
                   const uiHistory = iContentToHistoryItems(
