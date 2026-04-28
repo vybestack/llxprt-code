@@ -35,7 +35,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
   renderMarkdown = true,
 }) => {
   const settings = useSettings();
-  const responseColor = theme.text.response ?? theme.text.primary;
+  const responseColor = theme.text.response;
 
   if (!text) return <></>;
 
@@ -68,8 +68,8 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
   const tableSeparatorRegex = /^\s*\|?\s*(:?-+:?)\s*(\|\s*(:?-+:?)\s*)+\|?\s*$/;
 
   const contentBlocks: React.ReactNode[] = [];
+  const renderState = { lastLineEmpty: true };
   let inCodeBlock = false;
-  let lastLineEmpty = true;
   let codeBlockContent: string[] = [];
   let codeBlockLang: string | null = null;
   let codeBlockFence = '';
@@ -78,13 +78,11 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
   let tableHeaders: string[] = [];
 
   function addContentBlock(block: React.ReactNode) {
-    if (block) {
-      contentBlocks.push(block);
-      lastLineEmpty = false;
-    }
+    contentBlocks.push(block);
+    renderState.lastLineEmpty = false;
   }
 
-  lines.forEach((line, index) => {
+  for (const [index, line] of lines.entries()) {
     const key = `line-${index}`;
 
     if (inCodeBlock) {
@@ -111,7 +109,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       } else {
         codeBlockContent.push(line);
       }
-      return;
+      continue;
     }
 
     const codeFenceMatch = line.match(codeFenceRegex);
@@ -158,7 +156,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
         cells.length = tableHeaders.length;
       }
       tableRows.push(cells);
-    } else if (inTable && !tableRowMatch) {
+    } else if (inTable) {
       // End of table
       if (tableHeaders.length > 0 && tableRows.length > 0) {
         addContentBlock(
@@ -193,15 +191,9 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
     } else if (headerMatch) {
       const level = headerMatch[1].length;
       const headerText = headerMatch[2];
-      let headerNode: React.ReactNode = null;
+      let headerNode: React.ReactNode;
       switch (level) {
         case 1:
-          headerNode = (
-            <Text bold color={theme.text.link}>
-              <RenderInline text={headerText} defaultColor={theme.text.link} />
-            </Text>
-          );
-          break;
         case 2:
           headerNode = (
             <Text bold color={theme.text.link}>
@@ -234,7 +226,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           );
           break;
       }
-      if (headerNode) addContentBlock(<Box key={key}>{headerNode}</Box>);
+      addContentBlock(<Box key={key}>{headerNode}</Box>);
     } else if (ulMatch) {
       const leadingWhitespace = ulMatch[1];
       const marker = ulMatch[2];
@@ -263,11 +255,11 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       );
     } else if (line.trim().length === 0) {
       // inCodeBlock is always false here due to early return at line 112
-      if (!lastLineEmpty) {
+      if (!renderState.lastLineEmpty) {
         contentBlocks.push(
           <Box key={`spacer-${index}`} height={EMPTY_LINE_HEIGHT} />,
         );
-        lastLineEmpty = true;
+        renderState.lastLineEmpty = true;
       }
     } else {
       addContentBlock(
@@ -278,7 +270,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
         </Box>,
       );
     }
-  });
+  }
 
   if (inCodeBlock) {
     addContentBlock(
@@ -404,7 +396,7 @@ const RenderListItemInternal: React.FC<RenderListItemProps> = ({
   const prefix = type === 'ol' ? `${marker}. ` : `${marker} `;
   const prefixWidth = prefix.length;
   const indentation = leadingWhitespace.length;
-  const listResponseColor = theme.text.response ?? theme.text.primary;
+  const listResponseColor = theme.text.response;
 
   return (
     <Box
