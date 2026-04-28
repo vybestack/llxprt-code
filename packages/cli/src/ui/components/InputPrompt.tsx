@@ -700,7 +700,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           }
           return;
         }
-      } else if (shellModeActive) {
+      } else {
         // Shell History Navigation — only when NO path suggestions showing
         if (keyMatchers[Command.NAVIGATION_UP](key)) {
           const prevCommand = shellHistory.getPreviousCommand();
@@ -1055,7 +1055,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
                 const renderedLine: React.ReactNode[] = [];
 
-                const [logicalLineIdx] = mapEntry ?? [0];
+                const [logicalLineIdx] = mapEntry;
                 const logicalLine = buffer.lines[logicalLineIdx] || '';
                 const transformations =
                   buffer.transformationsByLine[logicalLineIdx] ?? [];
@@ -1077,13 +1077,9 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                   visualEndCol,
                 );
                 let charCount = 0;
-                let hasVisibleContent = false;
 
                 segments.forEach((seg, segIdx) => {
                   const segLen = cpLen(seg.text);
-                  if (segLen > 0) {
-                    hasVisibleContent = true;
-                  }
                   let display = seg.text;
 
                   if (isOnCursorLine && segLen > 0) {
@@ -1156,11 +1152,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                   cursorVisualColAbsolute === cpLen(lineText) &&
                   currentLineGhost;
 
-                if (
-                  !hasVisibleContent &&
-                  !currentLineGhost &&
-                  renderedLine.length === 0
-                ) {
+                if (!currentLineGhost && renderedLine.length === 0) {
                   renderedLine.push(
                     <Text key="blank-placeholder" color={Colors.Foreground}>
                       {' '}
