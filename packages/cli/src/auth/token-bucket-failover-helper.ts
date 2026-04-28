@@ -24,6 +24,14 @@ import type { BucketFailoverOAuthManagerLike } from './types.js';
 
 const logger = new DebugLogger('llxprt:oauth:token');
 
+type RuntimeAuthErrorHandlerConfig = Omit<
+  Config,
+  'getOnAuthErrorHandler' | 'setOnAuthErrorHandler'
+> & {
+  getOnAuthErrorHandler?: Config['getOnAuthErrorHandler'];
+  setOnAuthErrorHandler?: Config['setOnAuthErrorHandler'];
+};
+
 /**
  * Ensure the Config's bucket failover handler exists and is consistent with
  * the current profile buckets and request scope. Creates a new handler when
@@ -58,9 +66,9 @@ export function ensureFailoverHandler(
     return undefined;
   }
 
-  let failoverHandler = config.getBucketFailoverHandler?.();
+  let failoverHandler = config.getBucketFailoverHandler();
 
-  const existingBuckets = failoverHandler?.getBuckets?.() ?? [];
+  const existingBuckets = failoverHandler?.getBuckets() ?? [];
   const sameBuckets =
     existingBuckets.length === profileBuckets.length &&
     existingBuckets.every((value, index) => value === profileBuckets[index]);
@@ -123,7 +131,8 @@ export function ensureOnAuthErrorHandler(
   }
 
   // Check if handler already exists
-  const existingHandler = config.getOnAuthErrorHandler?.();
+  const authErrorHandlerConfig: RuntimeAuthErrorHandlerConfig = config;
+  const existingHandler = authErrorHandlerConfig.getOnAuthErrorHandler?.();
   if (existingHandler) {
     logger.debug(
       () =>
@@ -134,7 +143,7 @@ export function ensureOnAuthErrorHandler(
 
   // Create new handler
   const newHandler = new OnAuthErrorHandlerImpl(facadeRef);
-  config.setOnAuthErrorHandler?.(newHandler);
+  authErrorHandlerConfig.setOnAuthErrorHandler?.(newHandler);
 
   logger.debug(
     () =>
