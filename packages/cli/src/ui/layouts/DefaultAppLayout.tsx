@@ -169,6 +169,12 @@ export const DefaultAppLayout = ({
 
   const showTodoPanelSetting = settings.merged.ui.showTodoPanel ?? true;
   const hideContextSummary = settings.merged.ui.hideContextSummary ?? false;
+  const hideFooter = settings.merged.ui.hideFooter ?? false;
+  const showMemoryUsage =
+    config.getDebugMode() || (settings.merged.ui.showMemoryUsage ?? false);
+  const disableLoadingPhrases =
+    config.getAccessibility().disableLoadingPhrases === true ||
+    config.getScreenReader();
   const currentThemeName = themeManager.getActiveTheme().name;
   const { isNarrow } = uiState;
 
@@ -435,16 +441,12 @@ export const DefaultAppLayout = ({
                 <LoadingIndicator
                   thought={
                     streamingState === StreamingState.WaitingForConfirmation ||
-                    config.getAccessibility()?.disableLoadingPhrases ||
-                    config.getScreenReader()
+                    disableLoadingPhrases
                       ? undefined
                       : thought
                   }
                   currentLoadingPhrase={
-                    config.getAccessibility()?.disableLoadingPhrases ||
-                    config.getScreenReader()
-                      ? undefined
-                      : currentLoadingPhrase
+                    disableLoadingPhrases ? undefined : currentLoadingPhrase
                   }
                   elapsedTime={elapsedTime}
                 />
@@ -521,7 +523,7 @@ export const DefaultAppLayout = ({
               </>
             )}
 
-            {!settings.merged.ui.hideFooter && (
+            {!hideFooter && (
               <Footer
                 model={currentModel}
                 targetDir={config.getTargetDir()}
@@ -530,12 +532,7 @@ export const DefaultAppLayout = ({
                 debugMessage={debugMessage}
                 errorCount={errorCount}
                 showErrorDetails={showErrorDetails}
-                showMemoryUsage={
-                  config.getDebugMode() ||
-                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for boolean flags (false is a valid default)
-                  settings.merged.ui.showMemoryUsage ||
-                  false
-                }
+                showMemoryUsage={showMemoryUsage}
                 historyTokenCount={historyTokenCount}
                 nightly={nightly}
                 vimMode={vimModeEnabled ? vimMode : undefined}
@@ -604,16 +601,12 @@ export const DefaultAppLayout = ({
               <LoadingIndicator
                 thought={
                   streamingState === StreamingState.WaitingForConfirmation ||
-                  config.getAccessibility()?.disableLoadingPhrases ||
-                  config.getScreenReader()
+                  disableLoadingPhrases
                     ? undefined
                     : thought
                 }
                 currentLoadingPhrase={
-                  config.getAccessibility()?.disableLoadingPhrases ||
-                  config.getScreenReader()
-                    ? undefined
-                    : currentLoadingPhrase
+                  disableLoadingPhrases ? undefined : currentLoadingPhrase
                 }
                 elapsedTime={elapsedTime}
               />
@@ -690,7 +683,7 @@ export const DefaultAppLayout = ({
             </>
           )}
 
-          {!settings.merged.ui.hideFooter && (
+          {!hideFooter && (
             <Footer
               model={currentModel}
               targetDir={config.getTargetDir()}
@@ -699,12 +692,7 @@ export const DefaultAppLayout = ({
               debugMessage={debugMessage}
               errorCount={errorCount}
               showErrorDetails={showErrorDetails}
-              showMemoryUsage={
-                config.getDebugMode() ||
-                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for boolean flags (false is a valid default)
-                settings.merged.ui.showMemoryUsage ||
-                false
-              }
+              showMemoryUsage={showMemoryUsage}
               historyTokenCount={historyTokenCount}
               nightly={nightly}
               vimMode={vimModeEnabled ? vimMode : undefined}
