@@ -152,10 +152,7 @@ export const useGeminiStream = (
   const thinkingBlocksRef = useRef<ThinkingBlock[]>([]);
 
   const emojiFilter = useMemo(() => {
-    const getEphemeralSetting = config.getEphemeralSetting as
-      | Config['getEphemeralSetting']
-      | undefined;
-    const emojiFilterMode = getEphemeralSetting?.('emojifilter');
+    const emojiFilterMode = config.getEphemeralSetting('emojifilter');
     const mode: EmojiFilterMode =
       typeof emojiFilterMode === 'string' && emojiFilterMode.length > 0
         ? (emojiFilterMode as EmojiFilterMode)
