@@ -17,16 +17,18 @@ import type { LoadedSettings } from './config/settings.js';
  * Check if any authentication environment variables are set.
  */
 function hasAuthEnvVars(): boolean {
-  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: checking for presence of any auth env var (empty string means not set) */
-  return !!(
-    process.env.OPENAI_API_KEY ||
-    process.env.ANTHROPIC_API_KEY ||
+  const authKeys = [
+    process.env.OPENAI_API_KEY,
+    process.env.ANTHROPIC_API_KEY,
+    process.env.GEMINI_API_KEY,
+    process.env.LLXPRT_API_KEY,
+  ];
+
+  return (
+    authKeys.some((key) => key !== undefined && key !== '') ||
     process.env.GOOGLE_GENAI_USE_GCA === 'true' ||
-    process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true' ||
-    process.env.GEMINI_API_KEY ||
-    process.env.LLXPRT_API_KEY
+    process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true'
   );
-  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 }
 
 function reportNonInteractiveAuthError(config: Config, message: string): void {
@@ -56,11 +58,14 @@ export async function validateNonInteractiveAuth(
   nonInteractiveConfig: Config,
   settings?: LoadedSettings,
 ) {
-  const providerManager = nonInteractiveConfig.getProviderManager?.();
-  const configProvider = nonInteractiveConfig.getProvider?.();
+  const providerManager = nonInteractiveConfig.getProviderManager();
+  const configProvider = nonInteractiveConfig.getProvider();
 
   // Check if we have any auth configured (provider CLI args or env vars)
-  const hasProvider = configProvider && providerManager?.hasActiveProvider?.();
+  let hasProvider = false;
+  if (configProvider !== undefined && providerManager !== undefined) {
+    hasProvider = providerManager.hasActiveProvider();
+  }
   const hasEnvAuth = hasAuthEnvVars();
 
   if (!hasProvider && !hasEnvAuth) {
@@ -71,7 +76,7 @@ export async function validateNonInteractiveAuth(
     process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
   }
 
-  if (!useExternalAuth) {
+  if (useExternalAuth !== true) {
     await nonInteractiveConfig.refreshAuth();
   }
 
@@ -95,10 +100,10 @@ export async function validateNonInteractiveAuth(
   }
 
   // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
-  if (providerManager) {
-    const serverToolsProvider = providerManager.getServerToolsProvider?.();
+  if (providerManager !== undefined) {
+    const serverToolsProvider = providerManager.getServerToolsProvider();
     if (
-      serverToolsProvider &&
+      serverToolsProvider !== null &&
       serverToolsProvider.name === 'gemini' &&
       'setConfig' in serverToolsProvider &&
       typeof serverToolsProvider.setConfig === 'function'
