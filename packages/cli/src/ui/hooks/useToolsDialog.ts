@@ -36,8 +36,11 @@ export const useToolsDialog = ({
   const openDialog = useCallback(
     async (dialogAction: 'enable' | 'disable') => {
       try {
-        const toolRegistry = config.getToolRegistry();
-        if (!toolRegistry) {
+        const toolRegistry = config.getToolRegistry() as
+          | ReturnType<Config['getToolRegistry']>
+          | null
+          | undefined;
+        if (toolRegistry === null || toolRegistry === undefined) {
           addMessage({
             type: MessageType.ERROR,
             content: 'Could not retrieve tool registry.',
@@ -47,9 +50,13 @@ export const useToolsDialog = ({
         }
 
         // Get current disabled tools from ephemeral settings
-        const ephemeralSettings = config.getEphemeralSettings() || {};
-        const currentDisabledTools =
-          (ephemeralSettings['disabled-tools'] as string[]) || [];
+        const ephemeralSettings = config.getEphemeralSettings() as
+          | Record<string, unknown>
+          | undefined;
+        const disabledToolsValue = ephemeralSettings?.['disabled-tools'];
+        const currentDisabledTools = Array.isArray(disabledToolsValue)
+          ? (disabledToolsValue as string[])
+          : [];
 
         // Get all non-MCP tools
         const allTools = toolRegistry.getAllTools();
