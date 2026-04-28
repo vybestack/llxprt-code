@@ -96,11 +96,11 @@ function registerCommands(yargsInstance: Argv, settings: Settings): Argv {
     yargsInstance.command(hooksCommand);
   }
 
-  if (settings?.extensionManagement ?? false) {
+  if (settings.extensionManagement ?? false) {
     yargsInstance.command(extensionsCommand);
   }
 
-  if (settings?.experimental?.skills ?? false) {
+  if (settings.experimental?.skills ?? false) {
     yargsInstance.command(skillsCommand);
   }
 
@@ -207,8 +207,8 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
 
 /** Checks for subcommand dispatch (mcp, hooks, extensions) and exits if handled. */
 function handleSubcommandExit(result: Record<string, unknown>): void {
-  const commands = result['_'] as unknown[];
-  if (!commands || commands.length === 0) {
+  const commands = result['_'];
+  if (!Array.isArray(commands) || commands.length === 0) {
     return;
   }
 
