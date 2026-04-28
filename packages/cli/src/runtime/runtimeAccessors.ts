@@ -20,7 +20,7 @@
 import {
   type Config,
   DebugLogger,
-  SettingsService,
+  type SettingsService,
   type ProviderManager,
   type ProfileManager,
   createProviderRuntimeContext,
@@ -100,9 +100,7 @@ export function getCliRuntimeContext() {
 
     // Fallback path for legacy compatibility (disabled under stateless hardening)
     const resolvedSettings =
-      settingsService ??
-      entry.config.getSettingsService() ??
-      new SettingsService();
+      settingsService ?? entry.config.getSettingsService();
     return createProviderRuntimeContext({
       settingsService: resolvedSettings,
       config: entry.config,
@@ -137,7 +135,7 @@ export function getCliRuntimeServices(): CliRuntimeServices {
   const { runtimeId } = resolveActiveRuntimeIdentity();
   const entry = requireRuntimeEntry(runtimeId);
   const context = getCliRuntimeContext();
-  const config = entry.config ?? context.config;
+  const config = entry.config;
   if (!config) {
     throw new Error(
       formatNormalizationFailureMessage({
@@ -147,16 +145,7 @@ export function getCliRuntimeServices(): CliRuntimeServices {
       }),
     );
   }
-  const settingsService = entry.settingsService ?? context.settingsService;
-  if (!settingsService) {
-    throw new Error(
-      formatMissingRuntimeMessage({
-        runtimeId,
-        missingFields: ['SettingsService'],
-        hint: 'Call activateIsolatedRuntimeContext() or inject a runtime-specific SettingsService for tests.',
-      }),
-    );
-  }
+  const settingsService = context.settingsService;
   const providerManager = entry.providerManager;
   if (!providerManager) {
     throw new Error(
@@ -378,7 +367,7 @@ export function getActiveModelName(): string {
 
   try {
     const provider = providerManager.getActiveProvider();
-    return provider.getDefaultModel?.() ?? '';
+    return provider.getDefaultModel();
   } catch {
     return '';
   }
