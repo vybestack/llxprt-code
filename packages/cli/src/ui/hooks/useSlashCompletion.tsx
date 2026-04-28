@@ -28,15 +28,6 @@ import { useCompletion } from './useCompletion.js';
 import { createCompletionHandler } from '../commands/schema/index.js';
 
 /**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P08
- * @requirement:REQ-002
- * @requirement:REQ-003
- * @requirement:REQ-004
- * Feature flag enabled for hint display integration
- */
-const SHOW_ARGUMENT_HINTS = true;
-
-/**
  * @plan:PLAN-20251013-AUTOCOMPLETE.P05
  * @requirement:REQ-001
  * @requirement:REQ-002
@@ -88,6 +79,22 @@ export interface UseSlashCompletionReturn {
 }
 
 const debugLogger = new DebugLogger('llxprt:ui:slash-completion');
+
+type RuntimeExtensionConfig = Partial<Pick<Config, 'isExtensionEnabled'>>;
+type RuntimeCommandContext = Omit<CommandContext, 'services'> & {
+  services?: {
+    config?: RuntimeExtensionConfig | null;
+  };
+};
+
+type RuntimeCompletionResult = {
+  hint?: string;
+};
+
+const getRuntimeExtensionConfig = (
+  commandContext: CommandContext,
+): RuntimeExtensionConfig | null | undefined =>
+  (commandContext as RuntimeCommandContext).services?.config;
 
 export function useSlashCompletion(
   buffer: TextBuffer,
@@ -144,6 +151,7 @@ export function useSlashCompletion(
 
   const cursorRow = buffer.cursor[0];
   const cursorCol = buffer.cursor[1];
+  const extensionConfig = getRuntimeExtensionConfig(commandContext);
 
   // Check if cursor is after @ or / without unescaped spaces
   const commandIndex = useMemo(() => {
@@ -418,16 +426,13 @@ export function useSlashCompletion(
                 }),
               );
 
-              // Set suggestions and hint based on feature flag
+              // Set suggestions and hint
               setSuggestions(finalSuggestions);
               setShowSuggestions(finalSuggestions.length > 0);
               setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
-
-              if (SHOW_ARGUMENT_HINTS) {
-                setActiveHint(completionResult.hint || '');
-              } else {
-                setActiveHint('');
-              }
+              setActiveHint(
+                (completionResult as RuntimeCompletionResult).hint ?? '',
+              );
 
               setIsLoadingSuggestions(false);
             })
@@ -466,11 +471,11 @@ export function useSlashCompletion(
             if (!cmd.extensionName) {
               return false;
             }
-            const config = commandContext.services?.config;
-            if (config && typeof config.isExtensionEnabled === 'function') {
-              if (!config.isExtensionEnabled(cmd.extensionName)) {
-                return false;
-              }
+            if (
+              typeof extensionConfig?.isExtensionEnabled === 'function' &&
+              !extensionConfig.isExtensionEnabled(cmd.extensionName)
+            ) {
+              return false;
             }
           }
           // Match by name or altNames
@@ -652,12 +657,9 @@ export function useSlashCompletion(
       });
 
       const suggestions: Suggestion[] = files
-        .filter((file) => {
-          if (fileDiscoveryService) {
-            return !fileDiscoveryService.shouldIgnoreFile(file, filterOptions);
-          }
-          return true;
-        })
+        .filter(
+          (file) => !fileDiscoveryService.shouldIgnoreFile(file, filterOptions),
+        )
         .map((file: string) => {
           const absolutePath = path.resolve(searchDir, file);
           const label = path.relative(cwd, absolutePath);
@@ -674,11 +676,8 @@ export function useSlashCompletion(
     const fetchSuggestions = async () => {
       let fetchedSuggestions: Suggestion[] = [];
 
-      // We'll only set loading state if the operation actually takes time
-      let loadingTimer: NodeJS.Timeout | null = null;
-
       // Set loading state after a delay to avoid flicker for fast operations
-      loadingTimer = setTimeout(() => {
+      const loadingTimer = setTimeout(() => {
         setIsLoadingSuggestions(true);
       }, 200); // Only show loading if operation takes more than 200ms
 
@@ -832,9 +831,7 @@ export function useSlashCompletion(
       }
 
       // Clear the loading timer if it hasn't fired yet
-      if (loadingTimer) {
-        clearTimeout(loadingTimer);
-      }
+      clearTimeout(loadingTimer);
 
       if (isMounted) {
         setIsLoadingSuggestions(false);
@@ -868,7 +865,7 @@ export function useSlashCompletion(
     cwd,
     slashCommands,
     commandContext,
-    commandContext.services?.config, // Add explicit dependency on config to catch changes
+    extensionConfig, // Add explicit dependency on config to catch changes
     config,
     // These are the setters - they're stable references
     resetCompletionState,
