@@ -5,11 +5,28 @@
  */
 
 // File for 'llxprt mcp add' command
-import type { CommandModule } from 'yargs';
+import type { ArgumentsCamelCase, CommandModule } from 'yargs';
 import { loadSettings, SettingScope } from '../../config/settings.js';
+import type { Settings } from '../../config/settings.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import { exitCli } from '../utils.js';
+
+type AddCommandArgs = {
+  name: string;
+  commandOrUrl: string;
+  args?: Array<string | number>;
+  scope: string;
+  transport: string;
+  env?: string[];
+  header?: string[];
+  timeout?: number;
+  trust?: boolean;
+  description?: string;
+  includeTools?: string[];
+  excludeTools?: string[];
+  '--'?: string[];
+};
 
 async function addMcpServer(
   name: string,
@@ -116,9 +133,12 @@ async function addMcpServer(
   }
 
   const existingSettings = settings.forScope(settingsScope).settings;
-  const mcpServers = existingSettings.mcpServers ?? {};
+  const mcpServers: Settings['mcpServers'] = existingSettings.mcpServers ?? {};
 
-  const isExistingServer = !!mcpServers[name];
+  const isExistingServer = Object.prototype.hasOwnProperty.call(
+    mcpServers,
+    name,
+  );
   if (isExistingServer) {
     debugLogger.log(
       `MCP server "${name}" is already configured within ${scope} settings.`,
@@ -208,11 +228,12 @@ export const addCommand: CommandModule = {
         type: 'array',
         string: true,
       })
-      .middleware((argv) => {
+      .middleware((argv: ArgumentsCamelCase<AddCommandArgs>) => {
         // Handle -- separator args as server args if present
-        if (argv['--']) {
-          const existingArgs = (argv.args as Array<string | number>) || [];
-          argv.args = [...existingArgs, ...(argv['--'] as string[])];
+        const separatorArgs = argv['--'];
+        if (separatorArgs !== undefined) {
+          const existingArgs = argv.args ?? [];
+          argv.args = [...existingArgs, ...separatorArgs];
         }
       }),
   handler: async (argv) => {
