@@ -51,11 +51,9 @@ function getOpenUrlsCommands(readmeUrl: string): string[] {
   const urlsToOpen = [readmeUrl];
 
   const repoInfo = getGitHubRepoInfo();
-  if (repoInfo) {
-    urlsToOpen.push(
-      `https://github.com/${repoInfo.owner}/${repoInfo.repo}/settings/secrets/actions`,
-    );
-  }
+  urlsToOpen.push(
+    `https://github.com/${repoInfo.owner}/${repoInfo.repo}/settings/secrets/actions`,
+  );
 
   // Create and join the individual commands
   const commands = urlsToOpen.map((url) => `${openCmd} "${url}"`);
@@ -227,7 +225,8 @@ export const setupGithubCommand: SlashCommand = {
     }
 
     // Get the latest release tag from GitHub
-    const proxy = context?.services?.config?.getProxy();
+    const proxy =
+      'services' in context ? context.services.config?.getProxy() : undefined;
     const releaseTag = await getLatestGitHubRelease(proxy);
     const readmeUrl = `https://github.com/acoliver/run-llxprt-code/blob/${releaseTag}/README.md#quick-start`;
 
