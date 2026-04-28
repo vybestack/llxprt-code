@@ -37,7 +37,7 @@ const getSavedChatTags = async (
   mtSortDesc: boolean,
 ): Promise<ChatDetail[]> => {
   const cfg = context.services.config;
-  const geminiDir = cfg?.storage?.getProjectTempDir();
+  const geminiDir = cfg?.storage.getProjectTempDir();
   if (!geminiDir) {
     return [];
   }
@@ -196,8 +196,17 @@ const resumeCommand: SlashCommand = {
     await logger.initialize();
 
     // Get emoji filter mode from settings
-    const emojiFilterMode =
-      (config?.getEphemeralSetting('emojifilter') as EmojiFilterMode) || 'auto';
+    const emojiFilterSetting = config?.getEphemeralSetting('emojifilter');
+    const emojiFilterMode = (
+      emojiFilterSetting === undefined ||
+      emojiFilterSetting === null ||
+      emojiFilterSetting === false ||
+      emojiFilterSetting === '' ||
+      emojiFilterSetting === 0 ||
+      Number.isNaN(emojiFilterSetting)
+        ? 'auto'
+        : emojiFilterSetting
+    ) as EmojiFilterMode;
 
     // Create emoji filter if not in 'allowed' mode
     const emojiFilter =
@@ -546,7 +555,7 @@ const debugCommand: SlashCommand = {
     }
 
     // Checkpoint directory information
-    const checkpointDir = config?.storage?.getProjectTempDir();
+    const checkpointDir = config?.storage.getProjectTempDir();
     if (checkpointDir) {
       debugInfo.push(`Checkpoint directory: ${checkpointDir}`);
     } else {
