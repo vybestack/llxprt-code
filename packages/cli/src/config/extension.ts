@@ -255,7 +255,8 @@ export function loadExtension(
   if (
     (installMetadata?.type === 'git' ||
       installMetadata?.type === 'github-release') &&
-    settings.security?.blockGitExtensions
+    (settings.security as { blockGitExtensions?: boolean } | undefined)
+      ?.blockGitExtensions === true
   ) {
     return null;
   }
@@ -682,7 +683,8 @@ export async function installOrUpdateExtension(
   if (
     (installMetadata.type === 'git' ||
       installMetadata.type === 'github-release') &&
-    settings.security?.blockGitExtensions
+    (settings.security as { blockGitExtensions?: boolean } | undefined)
+      ?.blockGitExtensions === true
   ) {
     throw new Error(
       'Installing extensions from remote sources is disallowed by your current settings.',
@@ -731,13 +733,8 @@ export async function installOrUpdateExtension(
     // Update the ref in metadata to the actual tag that was downloaded
     installMetadata.ref = result.tagName;
     localSourcePath = tempDir;
-  } else if (
-    installMetadata.type === 'local' ||
-    installMetadata.type === 'link'
-  ) {
-    localSourcePath = installMetadata.source;
   } else {
-    throw new Error(`Unsupported install type: ${installMetadata.type}`);
+    localSourcePath = installMetadata.source;
   }
 
   try {
