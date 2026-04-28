@@ -105,7 +105,7 @@ export const useProfileManagement = ({
   useEffect(() => {
     try {
       const diagnostics = runtime.getRuntimeDiagnosticsSnapshot();
-      const current = diagnostics?.profileName;
+      const current = diagnostics.profileName;
       if (current) {
         setActiveProfileName(current);
       }
@@ -161,8 +161,7 @@ export const useProfileManagement = ({
       // Try to get active profile name
       try {
         const diagnostics = runtime.getRuntimeDiagnosticsSnapshot();
-        const current = diagnostics?.profileName;
-        setActiveProfileName(current ?? null);
+        setActiveProfileName(diagnostics.profileName);
       } catch {
         // Ignore errors getting active profile
       }
@@ -243,7 +242,7 @@ export const useProfileManagement = ({
     async (profileName: string) => {
       try {
         const result = await runtime.loadProfileByName(profileName);
-        const extra = (result.infoMessages ?? [])
+        const extra = result.infoMessages
           .map((message: string) => `\n- ${message}`)
           .join('');
         addMessage({
@@ -251,7 +250,7 @@ export const useProfileManagement = ({
           content: `Profile '${profileName}' loaded${extra}`,
           timestamp: new Date(),
         });
-        for (const warning of result.warnings ?? []) {
+        for (const warning of result.warnings) {
           addMessage({
             type: MessageType.INFO,
             content: `\u26A0 ${warning}`,
