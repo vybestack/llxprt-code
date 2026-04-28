@@ -48,6 +48,37 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+type PersistedSessionDisplay = {
+  provider: string;
+  model: string;
+  fileSize: number;
+};
+
+function getSessionDisplay(
+  session: EnrichedSessionSummary,
+): PersistedSessionDisplay {
+  const boundarySession = session as {
+    provider?: unknown;
+    model?: unknown;
+    fileSize?: unknown;
+  };
+
+  return {
+    provider:
+      typeof boundarySession.provider === 'string'
+        ? boundarySession.provider
+        : 'unknown',
+    model:
+      typeof boundarySession.model === 'string'
+        ? boundarySession.model
+        : 'unknown',
+    fileSize:
+      typeof boundarySession.fileSize === 'number'
+        ? boundarySession.fileSize
+        : 0,
+  };
+}
+
 /**
  * Interactive session browser dialog for selecting and resuming sessions
  * @plan PLAN-20260214-SESSIONBROWSER.P15
@@ -77,7 +108,7 @@ export function SessionBrowserDialog(
   // Register keypress handler
   useKeypress(
     (key) => {
-      state.handleKeypress(key.sequence ?? '', key);
+      state.handleKeypress(key.sequence, key);
     },
     { isActive: true },
   );
@@ -195,6 +226,8 @@ export function SessionBrowserDialog(
       mode: isNarrow ? 'short' : 'long',
     });
 
+    const display = getSessionDisplay(session);
+
     if (isNarrow) {
       // Narrow mode: compact layout, no index, show session ID suffix for selected
       return (
@@ -216,7 +249,7 @@ export function SessionBrowserDialog(
                   : SemanticColors.text.primary
               }
             >
-              {session.provider ?? 'unknown'}
+              {display.provider}
             </Text>
             <Text color={SemanticColors.text.secondary}> · </Text>
             <Text color={SemanticColors.text.secondary}>{relTime}</Text>
@@ -257,17 +290,17 @@ export function SessionBrowserDialog(
                 : SemanticColors.text.primary
             }
           >
-            {session.provider ?? 'unknown'}
+            {display.provider}
           </Text>
           <Text color={SemanticColors.text.secondary}>/</Text>
           <Text color={SemanticColors.text.primary}>
-            {truncateEnd(session.model ?? 'unknown', 30)}
+            {truncateEnd(display.model, 30)}
           </Text>
           <Text color={SemanticColors.text.secondary}> · </Text>
           <Text color={SemanticColors.text.secondary}>{relTime}</Text>
           <Text color={SemanticColors.text.secondary}> · </Text>
           <Text color={SemanticColors.text.secondary}>
-            {formatFileSize(session.fileSize ?? 0)}
+            {formatFileSize(display.fileSize)}
           </Text>
           {session.isLocked ? (
             <Text color={SemanticColors.status.warning}> (in use)</Text>
@@ -393,6 +426,7 @@ export function SessionBrowserDialog(
 
     const session = state.selectedSession;
     const relTime = formatRelativeTime(session.lastModified, { mode: 'long' });
+    const display = getSessionDisplay(session);
 
     return (
       <Box marginTop={1}>
@@ -400,7 +434,7 @@ export function SessionBrowserDialog(
         <Text color={SemanticColors.text.primary}>{session.sessionId}</Text>
         <Text color={SemanticColors.text.secondary}> · </Text>
         <Text color={SemanticColors.text.primary}>
-          {session.provider}/{session.model}
+          {display.provider}/{display.model}
         </Text>
         <Text color={SemanticColors.text.secondary}> · </Text>
         <Text color={SemanticColors.text.secondary}>{relTime}</Text>
