@@ -191,19 +191,14 @@ export function useReactToolScheduler(
       outputChunk: string | AnsiOutput,
     ) => {
       updateToolCallsForScheduler(schedulerId, (prevCalls) => {
-        let updated = false;
-        const nextCalls = prevCalls.map((call) => {
-          if (call.request.callId !== toolCallId) {
-            return call;
-          }
-          if (call.status !== 'executing') {
-            return call;
-          }
-          updated = true;
-          const executingCall = call;
-          return { ...executingCall, liveOutput: outputChunk };
-        });
-        return updated ? nextCalls : prevCalls;
+        const nextCalls = prevCalls.map((call) =>
+          call.request.callId === toolCallId && call.status === 'executing'
+            ? { ...call, liveOutput: outputChunk }
+            : call,
+        );
+        return nextCalls.some((call, index) => call !== prevCalls[index])
+          ? nextCalls
+          : prevCalls;
       });
       updatePendingHistoryItem(toolCallId, outputChunk);
     },
@@ -377,7 +372,7 @@ export function useReactToolScheduler(
               await onCompleteRef.current(schedulerId, calls, {
                 isPrimary: false,
               });
-              await onAllToolCallsComplete?.(calls);
+              await onAllToolCallsComplete(calls);
             }
             replaceToolCallsForScheduler(schedulerId, []);
           },
@@ -420,7 +415,7 @@ export function useReactToolScheduler(
     );
 
     return () => {
-      configWithFactory.setInteractiveSubagentSchedulerFactory?.(undefined);
+      configWithFactory.setInteractiveSubagentSchedulerFactory(undefined);
     };
   }, [config, createExternalScheduler]);
 
