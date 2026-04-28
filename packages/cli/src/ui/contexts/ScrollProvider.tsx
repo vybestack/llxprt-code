@@ -42,6 +42,9 @@ interface ScrollContextType {
 
 const ScrollContext = createContext<ScrollContextType | null>(null);
 
+const getOptionalBoundingBox = (element: DOMElement) =>
+  getBoundingBox(element) as ReturnType<typeof getBoundingBox> | undefined;
+
 const findScrollableCandidates = (
   mouseEvent: MouseEvent,
   scrollables: Map<string, ScrollableEntry>,
@@ -53,7 +56,7 @@ const findScrollableCandidates = (
       continue;
     }
 
-    const boundingBox = getBoundingBox(entry.ref.current);
+    const boundingBox = getOptionalBoundingBox(entry.ref.current);
     if (!boundingBox) continue;
 
     const { x, y, width, height } = boundingBox;
@@ -179,7 +182,7 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
         continue;
       }
 
-      const boundingBox = getBoundingBox(entry.ref.current);
+      const boundingBox = getOptionalBoundingBox(entry.ref.current);
       if (!boundingBox) continue;
 
       const { x, y, width, height } = boundingBox;
@@ -274,7 +277,7 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
       return false;
     }
 
-    const boundingBox = getBoundingBox(entry.ref.current);
+    const boundingBox = getOptionalBoundingBox(entry.ref.current);
     if (!boundingBox) return false;
 
     const { y } = boundingBox;
