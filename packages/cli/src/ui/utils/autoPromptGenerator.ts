@@ -53,17 +53,19 @@ export async function generateAutoPrompt(
     typeof config.getProvider === 'function'
       ? config.getProvider()?.toLowerCase()
       : undefined;
-  let client = config.getGeminiClient();
-  let cleanupDetached: GeminiClient | undefined;
-  let useRuntimeScope = true;
+  const configuredClient = config.getGeminiClient() as
+    | GeminiClient
+    | null
+    | undefined;
+  const useDetachedClient =
+    configuredClient == null || providerName === 'gemini';
+  const cleanupDetached = useDetachedClient
+    ? createDetachedGeminiClient(config)
+    : undefined;
+  const client = cleanupDetached ?? configuredClient;
+  const useRuntimeScope = !useDetachedClient;
 
-  if (!client || providerName === 'gemini') {
-    cleanupDetached = createDetachedGeminiClient(config);
-    client = cleanupDetached;
-    useRuntimeScope = false;
-  }
-
-  if (!client) {
+  if (client == null) {
     throw new Error(
       'Unable to access Gemini client. Run /auth login or try manual mode.',
     );
@@ -97,7 +99,7 @@ export async function generateAutoPrompt(
   try {
     response = await requestFromClient(client, { useRuntimeScope });
   } finally {
-    cleanupDetached?.dispose?.();
+    cleanupDetached?.dispose();
   }
 
   const text = response.text ?? '';
