@@ -69,7 +69,7 @@ function formatTask(task: AsyncTaskInfo): string {
  * Returns full task IDs (agentIds) for uniqueness.
  */
 function getRunningTaskIds(context: CommandContext): string[] {
-  const asyncTaskManager = context.services.config?.getAsyncTaskManager?.();
+  const asyncTaskManager = context.services.config?.getAsyncTaskManager();
   if (!asyncTaskManager) {
     return [];
   }
@@ -100,8 +100,7 @@ export const taskCommand: SlashCommand = {
       description: 'List all async background tasks',
       kind: CommandKind.BUILT_IN,
       action: (context: CommandContext) => {
-        const asyncTaskManager =
-          context.services.config?.getAsyncTaskManager?.();
+        const asyncTaskManager = context.services.config?.getAsyncTaskManager();
         if (!asyncTaskManager) {
           context.ui.addItem(
             {
@@ -172,8 +171,7 @@ export const taskCommand: SlashCommand = {
           return;
         }
 
-        const asyncTaskManager =
-          context.services.config?.getAsyncTaskManager?.();
+        const asyncTaskManager = context.services.config?.getAsyncTaskManager();
         if (!asyncTaskManager) {
           context.ui.addItem(
             {
