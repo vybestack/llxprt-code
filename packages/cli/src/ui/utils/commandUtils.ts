@@ -71,18 +71,18 @@ const getStdioTty = (): TtyTarget => {
   // On Windows, prioritize stdout to prevent shell-specific formatting (e.g., PowerShell's
   // red stderr) from corrupting the raw escape sequence payload.
   if (process.platform === 'win32') {
-    if (process.stdout?.isTTY)
+    if (process.stdout.isTTY)
       return { stream: process.stdout, closeAfter: false };
-    if (process.stderr?.isTTY)
+    if (process.stderr.isTTY)
       return { stream: process.stderr, closeAfter: false };
     return null;
   }
 
   // On non-Windows platforms, prioritize stderr to avoid polluting stdout,
   // preserving it for potential redirection or piping.
-  if (process.stderr?.isTTY)
+  if (process.stderr.isTTY)
     return { stream: process.stderr, closeAfter: false };
-  if (process.stdout?.isTTY)
+  if (process.stdout.isTTY)
     return { stream: process.stdout, closeAfter: false };
   return null;
 };
@@ -165,8 +165,16 @@ const isWindowsTerminal = (): boolean =>
 
 const isDumbTerm = (): boolean => (process.env['TERM'] ?? '') === 'dumb';
 
-const shouldUseOsc52 = (tty: TtyTarget): boolean =>
-  Boolean(tty) && !isDumbTerm() && (isSSH() || isWSL() || isWindowsTerminal());
+const hasOsc52Environment = (): boolean =>
+  isSSH() || isWSL() || isWindowsTerminal();
+
+const shouldUseOsc52 = (tty: TtyTarget): tty is Exclude<TtyTarget, null> => {
+  if (tty === null) {
+    return false;
+  }
+
+  return !isDumbTerm() && hasOsc52Environment();
+};
 
 const safeUtf8Truncate = (buf: Buffer, maxBytes: number): Buffer => {
   if (buf.length <= maxBytes) return buf;
@@ -195,6 +203,18 @@ const wrapForScreen = (seq: string): string => {
     out += `${ESC}P${seq.slice(i, i + SCREEN_DCS_CHUNK_SIZE)}${ST}`;
   }
   return out;
+};
+
+const wrapOsc52Payload = (osc: string): string => {
+  if (inTmux()) {
+    return wrapForTmux(osc);
+  }
+
+  if (inScreen()) {
+    return wrapForScreen(osc);
+  }
+
+  return osc;
 };
 
 const writeAll = (stream: Writable, data: string): Promise<void> =>
@@ -249,17 +269,12 @@ export const copyToClipboard = async (text: string): Promise<void> => {
   const tty = await pickTty();
 
   if (shouldUseOsc52(tty)) {
-    const osc = buildOsc52(text);
-    const payload = inTmux()
-      ? wrapForTmux(osc)
-      : inScreen()
-        ? wrapForScreen(osc)
-        : osc;
+    const payload = wrapOsc52Payload(buildOsc52(text));
 
-    await writeAll(tty!.stream, payload);
+    await writeAll(tty.stream, payload);
 
-    if (tty!.closeAfter) {
-      (tty!.stream as fs.WriteStream).end();
+    if (tty.closeAfter) {
+      (tty.stream as fs.WriteStream).end();
     }
     return;
   }
