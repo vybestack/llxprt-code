@@ -5,7 +5,23 @@
  */
 
 import { useEffect, useState } from 'react';
-import { getSettingsService, type Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+
+interface RuntimeSettingsServiceBoundary {
+  getDiagnosticsData?: () => Promise<{ model?: string | null } | null>;
+  on?: (eventName: 'settings-changed', listener: () => void) => void;
+  off?: (eventName: 'settings-changed', listener: () => void) => void;
+}
+
+interface RuntimeConfigBoundary {
+  getSettingsService?: () => RuntimeSettingsServiceBoundary | null | undefined;
+}
+
+function getRuntimeSettingsService(
+  config: Config,
+): RuntimeSettingsServiceBoundary | null {
+  return (config as RuntimeConfigBoundary).getSettingsService?.() ?? null;
+}
 
 /**
  * @hook useModelTracking
@@ -42,21 +58,24 @@ export function useModelTracking({
     const updateModel = async () => {
       requestSeq += 1;
       const seq = requestSeq;
-      const settingsService = getSettingsService();
+      const settingsService = getRuntimeSettingsService(config);
 
       // Try to get from SettingsService first (same as diagnostics does)
-      try {
-        const diagnosticsData = await settingsService.getDiagnosticsData();
-        if (!isCurrentRequest(seq)) {
-          return;
-        }
+      if (settingsService?.getDiagnosticsData) {
+        try {
+          const diagnosticsData = await settingsService.getDiagnosticsData();
+          if (!isCurrentRequest(seq)) {
+            return;
+          }
 
-        if (diagnosticsData.model !== '') {
-          setCurrentModel(diagnosticsData.model);
-          return;
+          const model = diagnosticsData?.model;
+          if (model !== undefined && model !== null && model !== '') {
+            setCurrentModel(model);
+            return;
+          }
+        } catch {
+          // Fall through to config
         }
-      } catch {
-        // Fall through to config
       }
 
       // Otherwise use config (which is what diagnostics falls back to)
@@ -73,11 +92,17 @@ export function useModelTracking({
     void updateModel();
 
     // Also listen for any changes if SettingsService is available
-    const settingsService = getSettingsService();
-    settingsService.on('settings-changed', handleSettingsChanged);
+    const settingsService = getRuntimeSettingsService(config);
+    if (settingsService?.on && settingsService.off) {
+      settingsService.on('settings-changed', handleSettingsChanged);
+      return () => {
+        disposed = true;
+        settingsService.off?.('settings-changed', handleSettingsChanged);
+      };
+    }
+
     return () => {
       disposed = true;
-      settingsService.off('settings-changed', handleSettingsChanged);
     };
   }, [config]);
 
