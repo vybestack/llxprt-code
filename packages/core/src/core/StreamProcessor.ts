@@ -421,7 +421,7 @@ export class StreamProcessor {
       'allowedFunctionNames' in modifiedConfig.toolConfig
     ) {
       const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
-      if (allowedFunctions?.length) {
+      if (Array.isArray(allowedFunctions)) {
         return toolsFromConfig
           .map((toolGroup) => ({
             ...toolGroup,
