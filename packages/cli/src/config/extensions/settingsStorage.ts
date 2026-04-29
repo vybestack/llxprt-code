@@ -148,7 +148,7 @@ export class ExtensionSettingsStorage {
    */
   async saveSettings(
     settings: ExtensionSetting[],
-    values: Record<string, string>,
+    values: Record<string, string | undefined>,
   ): Promise<void> {
     // Ensure directory exists
     await fs.promises.mkdir(this.extensionDir, { recursive: true });
@@ -160,8 +160,9 @@ export class ExtensionSettingsStorage {
 
     // Collect non-sensitive values for .env file
     for (const setting of nonSensitiveSettings) {
-      if (values[setting.envVar] !== undefined) {
-        nonSensitiveValues[setting.envVar] = values[setting.envVar];
+      const value = values[setting.envVar];
+      if (value !== undefined) {
+        nonSensitiveValues[setting.envVar] = value;
       }
     }
 
