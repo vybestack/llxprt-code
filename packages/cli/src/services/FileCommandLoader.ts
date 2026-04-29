@@ -115,10 +115,9 @@ export class FileCommandLoader implements ICommandLoader {
         // Add all commands without deduplication
         allCommands.push(...commands);
       } catch (error) {
-        if (
-          !signal.aborted &&
-          (error as { code?: string })?.code !== 'ENOENT'
-        ) {
+        const errorCode =
+          error == null ? undefined : (error as { code?: unknown }).code;
+        if (!signal.aborted && errorCode !== 'ENOENT') {
           debugLogger.error(
             `[FileCommandLoader] Error loading commands from ${dirInfo.path}:`,
             error,
