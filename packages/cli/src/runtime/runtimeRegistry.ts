@@ -151,7 +151,7 @@ export function disposeCliRuntime(
   runtimeId: string,
   context?: RuntimeAuthScopeFlushResult,
 ): void {
-  if (context?.revokedTokens?.length) {
+  if (context !== undefined && context.revokedTokens.length > 0) {
     logger.debug(
       () =>
         `[cli-runtime] Revoked ${context.revokedTokens.length} scoped OAuth token(s) for runtime ${runtimeId}.`,
