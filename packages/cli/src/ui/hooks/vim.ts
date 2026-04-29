@@ -214,10 +214,8 @@ export function useVim(buffer: TextBuffer, onSubmit?: (value: string) => void) {
             [CMD_TYPES.CHANGE_MOVEMENT.RIGHT]: 'l',
           };
           const movementType = movementMap[cmdType];
-          if (movementType) {
-            buffer.vimChangeMovement(movementType, count);
-            updateMode('INSERT');
-          }
+          buffer.vimChangeMovement(movementType, count);
+          updateMode('INSERT');
           break;
         }
 
@@ -406,7 +404,7 @@ export function useVim(buffer: TextBuffer, onSubmit?: (value: string) => void) {
       }
 
       // Handle NORMAL mode
-      if (state.mode === 'NORMAL') {
+      {
         // If in NORMAL mode, allow escape to pass through to other handlers
         // if there's no pending operation.
         if (normalizedKey.name === 'escape') {
