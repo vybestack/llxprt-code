@@ -110,13 +110,14 @@ export class LoadedTrustedFolders {
   }
 
   setValue(path: string, trustLevel: TrustLevel): void {
+    const hadOriginalTrustLevel = Object.hasOwn(this.user.config, path);
     const originalTrustLevel = this.user.config[path];
     this.user.config[path] = trustLevel;
     try {
       saveTrustedFolders(this.user);
     } catch (e) {
       // Revert the in-memory change if the save failed.
-      if (originalTrustLevel === undefined) {
+      if (!hadOriginalTrustLevel) {
         delete this.user.config[path];
       } else {
         this.user.config[path] = originalTrustLevel;
