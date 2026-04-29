@@ -153,13 +153,16 @@ ${baseProfile.error}`);
     if (inlineValue !== undefined) {
       return { value: normaliseArgValue(inlineValue), nextIndex: currentIndex };
     }
-    const nextToken = tokens[currentIndex + 1];
-    // Check for next token - empty string is valid, undefined means no value
-    if (nextToken !== undefined && !nextToken.startsWith('-')) {
-      return {
-        value: normaliseArgValue(nextToken),
-        nextIndex: currentIndex + 1,
-      };
+    const nextIndex = currentIndex + 1;
+    // Check for next token - empty string is valid, out of bounds means no value
+    if (nextIndex < tokens.length) {
+      const nextToken = tokens[nextIndex];
+      if (!nextToken.startsWith('-')) {
+        return {
+          value: normaliseArgValue(nextToken),
+          nextIndex,
+        };
+      }
     }
     return { value: null, nextIndex: currentIndex };
   };
