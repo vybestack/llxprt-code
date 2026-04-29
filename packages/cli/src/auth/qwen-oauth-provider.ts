@@ -245,7 +245,9 @@ export class QwenOAuthProvider implements OAuthProvider {
       const { getEphemeralSetting } = await import(
         '../runtime/runtimeSettings.js'
       );
-      noBrowser = (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+      noBrowser =
+        (getEphemeralSetting('auth.noBrowser') as boolean | null | undefined) ??
+        false;
     } catch {
       // Runtime not initialized (e.g., tests) — use default
     }
