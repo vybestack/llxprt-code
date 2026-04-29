@@ -213,12 +213,15 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     logger.debug(
       () => `[FLOW] Calling provider.initiateAuth() for ${providerName}...`,
     );
-    const token = await provider.initiateAuth();
+    const token = (await provider.initiateAuth()) as
+      | OAuthToken
+      | null
+      | undefined;
     logger.debug(
       () => `[FLOW] provider.initiateAuth() returned token for ${providerName}`,
     );
 
-    if (!token) {
+    if (token == null) {
       throw new Error('Authentication completed but no token was returned');
     }
 
