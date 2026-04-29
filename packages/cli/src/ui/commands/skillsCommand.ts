@@ -201,20 +201,20 @@ async function reloadAction(
   const beforeNames = new Set(skillManager.getSkills().map((s) => s.name));
 
   const startTime = Date.now();
-  let pendingItemSet = false;
+  const pendingState = { itemSet: false };
   const pendingTimeout = setTimeout(() => {
     context.ui.setPendingItem({
       type: MessageType.INFO,
       text: 'Reloading skills...',
     });
-    pendingItemSet = true;
+    pendingState.itemSet = true;
   }, 100);
 
   try {
     await config.reloadSkills();
 
     clearTimeout(pendingTimeout);
-    if (pendingItemSet) {
+    if (pendingState.itemSet) {
       // If we showed the pending item, make sure it stays for at least 500ms
       // total to avoid a "flicker" where it appears and immediately disappears.
       const elapsed = Date.now() - startTime;
@@ -264,7 +264,7 @@ async function reloadAction(
     );
   } catch (error) {
     clearTimeout(pendingTimeout);
-    if (pendingItemSet) {
+    if (pendingState.itemSet) {
       context.ui.setPendingItem(null);
     }
     context.ui.addItem(
