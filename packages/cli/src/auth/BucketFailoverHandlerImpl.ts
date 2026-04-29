@@ -247,9 +247,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       // Skip buckets already tried in this session (REQ-1598-FL13)
       if (this.triedBucketsThisSession.has(bucket)) {
         // Only mark as skipped if not already classified in Pass 1
-        if (!this.lastFailoverReasons[bucket]) {
-          this.lastFailoverReasons[bucket] = 'skipped';
-        }
+        this.lastFailoverReasons[bucket] ??= 'skipped';
         continue;
       }
 
