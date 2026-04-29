@@ -69,6 +69,23 @@ const Section: React.FC<SectionProps> = ({ title, children }) => (
   </Box>
 );
 
+const getInputTokens = (
+  inputTokens: number | undefined,
+  promptTokens: number,
+  cachedTokens: number,
+) => inputTokens ?? promptTokens - cachedTokens;
+
+const hasCodeChanges = (
+  files:
+    | {
+        totalLinesAdded: number;
+        totalLinesRemoved: number;
+      }
+    | undefined,
+) =>
+  files !== undefined &&
+  (files.totalLinesAdded > 0 || files.totalLinesRemoved > 0);
+
 // Logic for building the unified list of table rows
 const buildModelRows = (models: Record<string, ModelMetrics>) => {
   const getBaseModelName = (name: string) => name.replace('-001', '');
@@ -80,7 +97,11 @@ const buildModelRows = (models: Record<string, ModelMetrics>) => {
       const cachedTokens = metrics.tokens.cached;
       const promptTokens = metrics.tokens.prompt;
       // Use input if available, otherwise compute from prompt - cached
-      const inputTokens = metrics.tokens.input ?? promptTokens - cachedTokens;
+      const inputTokens = getInputTokens(
+        metrics.tokens.input,
+        promptTokens,
+        cachedTokens,
+      );
       return {
         key: name,
         modelName,
@@ -318,19 +339,18 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
               </Text>
             </StatRow>
           )}
-          {files &&
-            (files.totalLinesAdded > 0 || files.totalLinesRemoved > 0) && (
-              <StatRow title="Code Changes:">
-                <Text color={theme.text.primary}>
-                  <Text color={theme.status.success}>
-                    +{files.totalLinesAdded}
-                  </Text>{' '}
-                  <Text color={theme.status.error}>
-                    -{files.totalLinesRemoved}
-                  </Text>
+          {hasCodeChanges(files) && (
+            <StatRow title="Code Changes:">
+              <Text color={theme.text.primary}>
+                <Text color={theme.status.success}>
+                  +{files.totalLinesAdded}
+                </Text>{' '}
+                <Text color={theme.status.error}>
+                  -{files.totalLinesRemoved}
                 </Text>
-              </StatRow>
-            )}
+              </Text>
+            </StatRow>
+          )}
         </Section>
       )}
 
