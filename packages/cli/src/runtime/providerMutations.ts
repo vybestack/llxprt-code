@@ -395,7 +395,10 @@ export async function setActiveModel(
 ): Promise<ModelChangeResult> {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
 
-  const activeProvider = providerManager.getActiveProvider();
+  const activeProvider = providerManager.getActiveProvider() as
+    | ReturnType<typeof providerManager.getActiveProvider>
+    | null
+    | undefined;
   if (!activeProvider) {
     throw new Error('No active provider is available.');
   }
