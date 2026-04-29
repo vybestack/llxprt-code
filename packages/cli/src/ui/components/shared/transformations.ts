@@ -119,10 +119,10 @@ export function calculateTransformations(lines: string[]): Transformation[][] {
 export function getTransformUnderCursor(
   row: number,
   col: number,
-  spansByLine: Transformation[][],
+  spansByLine: Transformation[][] | null | undefined,
 ): Transformation | null {
   if (!spansByLine || row < 0 || row >= spansByLine.length) return null;
-  const spans = spansByLine[row];
+  const spans = spansByLine.at(row);
   if (!spans || spans.length === 0) return null;
   for (const span of spans) {
     if (col >= span.logStart && col <= span.logEnd) {
