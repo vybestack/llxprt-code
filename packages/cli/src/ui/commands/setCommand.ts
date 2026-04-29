@@ -136,8 +136,8 @@ const modelParamSchemaNext: CommandArgumentSchema = [
     completer: async (ctx, partial) => {
       const enableFuzzy = getFuzzyEnabled(ctx);
       const modelParams = getRuntimeApi().getActiveModelParams();
-      if (modelParams && Object.keys(modelParams).length > 0) {
-        const paramNames = Object.keys(modelParams);
+      const paramNames = Object.keys(modelParams);
+      if (paramNames.length > 0) {
         const matches = filterStrings(paramNames, partial, { enableFuzzy });
         if (matches.length > 0) {
           return matches.map((name) => ({
@@ -365,7 +365,7 @@ export const setCommand: SlashCommand = {
   ): Promise<MessageActionReturn> => {
     const runtime = getRuntimeApi();
     // This handles direct ephemeral settings: /set <ephemeral-key> <value>
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
     if (!trimmedArgs) {
       return {
         type: 'message',
