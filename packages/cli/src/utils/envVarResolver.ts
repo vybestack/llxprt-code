@@ -22,8 +22,9 @@ export function resolveEnvVarsInString(value: string): string {
   return value.replace(envVarRegex, (match, varName1, varName2) => {
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: regex capture groups, one may be empty string
     const varName = varName1 || varName2;
-    if (process?.env && typeof process.env[varName] === 'string') {
-      return process.env[varName];
+    const envValue = process.env[varName];
+    if (typeof envValue === 'string') {
+      return envValue;
     }
     return match;
   });
