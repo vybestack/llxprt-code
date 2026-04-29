@@ -79,7 +79,7 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
       };
     default: {
       let content = `[DISCONNECTED] Disconnected`;
-      if (connection?.details) {
+      if (connection.details) {
         content += `: ${connection.details}`;
       }
       return {
