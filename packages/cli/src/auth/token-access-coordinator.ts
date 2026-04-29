@@ -329,7 +329,7 @@ export class TokenAccessCoordinator {
     );
 
     if (!bucketToUse) {
-      const handlerBucket = failoverHandler?.getCurrentBucket?.();
+      const handlerBucket = failoverHandler?.getCurrentBucket();
       if (typeof handlerBucket === 'string' && handlerBucket.trim() !== '') {
         bucketToUse = handlerBucket;
       } else if (profileBuckets.length > 0) {
@@ -697,8 +697,11 @@ export class TokenAccessCoordinator {
       const { getEphemeralSetting: getRuntimeEphemeralSetting } = await import(
         '../runtime/runtimeSettings.js'
       );
-      showPrompt =
-        (getRuntimeEphemeralSetting('auth-bucket-prompt') as boolean) ?? false;
+      const promptSetting = getRuntimeEphemeralSetting('auth-bucket-prompt') as
+        | boolean
+        | null
+        | undefined;
+      showPrompt = promptSetting ?? false;
     } catch (runtimeError) {
       logger.debug(
         'Could not get ephemeral setting (runtime not initialized), using default',
