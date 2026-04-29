@@ -25,8 +25,17 @@ const PrivacyNoticeText = ({
   onExit: () => void;
 }) => {
   // Check active provider to determine which privacy notice to show
-  const providerManager = config.getProviderManager?.();
-  const activeProvider = providerManager?.getActiveProvider?.();
+  const providerManager = config.getProviderManager();
+  let activeProvider:
+    | ReturnType<NonNullable<typeof providerManager>['getActiveProvider']>
+    | undefined;
+  if (providerManager) {
+    try {
+      activeProvider = providerManager.getActiveProvider();
+    } catch {
+      activeProvider = undefined;
+    }
+  }
 
   // If we have a non-Gemini provider active, show its specific notice
   if (activeProvider && activeProvider.name !== 'gemini') {
