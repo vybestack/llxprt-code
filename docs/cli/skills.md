@@ -60,8 +60,9 @@ Use the `/skills` slash command to view and manage available expertise:
 - `/skills enable <name>`: Re-enables a disabled skill.
 - `/skills reload`: Refreshes the list of discovered skills from all tiers.
 
-_Note: `/skills disable` and `/skills enable` default to the `user` scope. Use
-`--scope workspace` to manage workspace-specific settings._
+_Note: `/skills disable` uses the `workspace` scope when workspace settings are
+available; otherwise, it falls back to `user`. `/skills enable` removes the
+skill from both workspace and user disabled lists._
 
 ### From the Terminal
 
@@ -86,11 +87,15 @@ llxprt skills install /path/to/skill --scope workspace
 # Uninstall a skill by name
 llxprt skills uninstall my-expertise --scope workspace
 
-# Enable a skill (globally)
+# Enable a skill (removes disabled entries from both workspace and user scopes)
 llxprt skills enable my-expertise
 
-# Disable a skill. Can use --scope to specify workspace or user (defaults to workspace)
+# Disable a skill (defaults to workspace scope)
+llxprt skills disable my-expertise
+
+# Disable a skill in a specific scope
 llxprt skills disable my-expertise --scope workspace
+llxprt skills disable my-expertise --scope user
 ```
 
 ## Creating a Skill
