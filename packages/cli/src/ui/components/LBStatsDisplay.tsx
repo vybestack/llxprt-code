@@ -39,7 +39,9 @@ const StatRow: React.FC<StatRowProps> = ({
 
 export const LBStatsDisplay: React.FC = () => {
   const { getCliProviderManager } = useRuntimeApi();
-  const providerManager = getCliProviderManager();
+  const providerManager = getCliProviderManager() as ReturnType<
+    typeof getCliProviderManager
+  > | null;
 
   if (!providerManager) {
     return (
@@ -54,7 +56,9 @@ export const LBStatsDisplay: React.FC = () => {
     );
   }
 
-  const activeProvider = providerManager.getActiveProvider();
+  const activeProvider = providerManager.getActiveProvider() as ReturnType<
+    typeof providerManager.getActiveProvider
+  > | null;
 
   if (!activeProvider || activeProvider.name !== 'load-balancer') {
     return (
