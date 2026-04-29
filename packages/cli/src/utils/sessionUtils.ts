@@ -61,14 +61,13 @@ export const getAllSessionFiles = async (
       async (file): Promise<SessionFileEntry> => {
         const filePath = path.join(chatsDir, file);
         try {
-          const content: ConversationRecord = JSON.parse(
+          const content = JSON.parse(
             await fs.readFile(filePath, 'utf8'),
-          );
+          ) as Partial<ConversationRecord>;
 
           // Validate required fields
           if (
             !content.sessionId ||
-            !content.messages ||
             !Array.isArray(content.messages) ||
             !content.startTime ||
             !content.lastUpdated
@@ -85,11 +84,10 @@ export const getAllSessionFiles = async (
             (m: { role?: string }) => m.role === 'user',
           ) as unknown as Record<string, unknown> | undefined;
           // Session files may have extended message records with parts/text
-          const firstUserMessage =
-            (userMsg?.text as string) ??
+          const firstUserMessage = (userMsg?.text ??
             (userMsg?.parts as Array<{ text?: string }> | undefined)?.[0]
               ?.text ??
-            '(no message)';
+            '(no message)') as string;
 
           const sessionInfo: SessionInfo = {
             id: content.sessionId,
