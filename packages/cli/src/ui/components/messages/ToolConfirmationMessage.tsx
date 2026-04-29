@@ -68,7 +68,7 @@ export const ToolConfirmationMessage: React.FC<
         const client = await IdeClient.getInstance();
         if (isMounted) {
           setIdeClient(client);
-          setIsDiffingEnabled(client?.isDiffingEnabled() ?? false);
+          setIsDiffingEnabled(client.isDiffingEnabled());
         }
       };
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
