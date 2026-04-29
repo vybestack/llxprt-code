@@ -489,7 +489,7 @@ export const keyCommand: SlashCommand = {
     // @plan PLAN-20260211-SECURESTORE.P15
     // @pseudocode lines 2-30
     // @requirement R12.6 — trim whitespace
-    const trimmedArgs = args?.trim() ?? '';
+    const trimmedArgs = args.trim();
 
     // @requirement R12.4 — no args: show status (legacy behavior)
     if (trimmedArgs.length === 0) {
