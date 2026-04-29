@@ -163,7 +163,10 @@ export class GeminiOAuthProvider implements OAuthProvider {
       const { getEphemeralSetting } = await import(
         '../runtime/runtimeSettings.js'
       );
-      noBrowser = (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+      const noBrowserSetting = getEphemeralSetting('auth.noBrowser') as
+        | boolean
+        | undefined;
+      noBrowser = noBrowserSetting ?? false;
     } catch {
       // Runtime not initialized (e.g., tests) — use default
     }
@@ -247,7 +250,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
   private async extractAndPersistToken(
     credentials: Credentials,
   ): Promise<OAuthToken> {
-    if (!credentials?.access_token) {
+    if (!credentials.access_token) {
       throw OAuthErrorFactory.authenticationRequired(this.name, {
         reason: 'No valid credentials received from Google OAuth',
       });
