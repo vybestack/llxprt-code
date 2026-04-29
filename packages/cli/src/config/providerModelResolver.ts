@@ -34,7 +34,7 @@ function getAliasDefaultModel(provider: string): string | undefined {
     const entry = loadProviderAliasEntries().find(
       (candidate: { alias: string }) => candidate.alias === provider,
     );
-    const candidate = entry?.config?.defaultModel;
+    const candidate = entry?.config.defaultModel;
     return typeof candidate === 'string' && candidate.trim()
       ? candidate.trim()
       : undefined;
