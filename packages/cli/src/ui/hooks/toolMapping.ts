@@ -22,7 +22,7 @@ const logger = DebugLogger.getLogger('llxprt:cli:tool-mapping');
  * Maps a CoreToolScheduler status to the UI's ToolCallStatus enum.
  * Memoized as a constant map for better performance.
  */
-const STATUS_MAP: Record<CoreStatus, ToolCallStatus> = {
+const STATUS_MAP = {
   validating: ToolCallStatus.Executing,
   awaiting_approval: ToolCallStatus.Confirming,
   executing: ToolCallStatus.Executing,
@@ -30,12 +30,15 @@ const STATUS_MAP: Record<CoreStatus, ToolCallStatus> = {
   cancelled: ToolCallStatus.Canceled,
   error: ToolCallStatus.Error,
   scheduled: ToolCallStatus.Pending,
-};
+} satisfies Record<CoreStatus, ToolCallStatus>;
+
+const STATUS_LOOKUP: Readonly<Record<string, ToolCallStatus | undefined>> =
+  STATUS_MAP;
 
 export function mapCoreStatusToDisplayStatus(
   coreStatus: CoreStatus,
 ): ToolCallStatus {
-  const mappedStatus = STATUS_MAP[coreStatus];
+  const mappedStatus = STATUS_LOOKUP[coreStatus];
   if (mappedStatus !== undefined) {
     return mappedStatus;
   }
@@ -60,7 +63,7 @@ export function mapToDisplay(
     toolCalls
       .map((trackedCall) => {
         const responseAgentId =
-          'response' in trackedCall ? trackedCall.response?.agentId : undefined;
+          'response' in trackedCall ? trackedCall.response.agentId : undefined;
         return responseAgentId ?? trackedCall.request.agentId;
       })
       .find(
