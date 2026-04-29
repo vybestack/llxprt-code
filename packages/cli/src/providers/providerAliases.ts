@@ -100,17 +100,18 @@ function readAliasFile(
 ): ProviderAliasEntry | null {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
-    const parsed = JSON.parse(stripJsonComments(raw)) as ProviderAliasConfig;
-    if (!parsed || typeof parsed !== 'object') {
+    const parsed = JSON.parse(stripJsonComments(raw)) as unknown;
+    if (parsed === null || typeof parsed !== 'object') {
       debugLogger.warn(
         `[ProviderAliases] Ignoring invalid alias file ${filePath}`,
       );
       return null;
     }
 
+    const aliasConfig = parsed as ProviderAliasConfig;
     const alias =
-      (parsed.name && parsed.name.trim().length > 0
-        ? parsed.name
+      (aliasConfig.name && aliasConfig.name.trim().length > 0
+        ? aliasConfig.name
         : path.basename(filePath, path.extname(filePath))) || '';
 
     if (!alias) {
@@ -120,7 +121,7 @@ function readAliasFile(
       return null;
     }
 
-    if (!parsed.baseProvider) {
+    if (!aliasConfig.baseProvider) {
       debugLogger.warn(
         `[ProviderAliases] Alias '${alias}' is missing required baseProvider`,
       );
@@ -128,34 +129,34 @@ function readAliasFile(
     }
 
     if (
-      Object.prototype.hasOwnProperty.call(parsed, 'sandbox-base-url') &&
-      typeof parsed['sandbox-base-url'] !== 'string'
+      Object.prototype.hasOwnProperty.call(aliasConfig, 'sandbox-base-url') &&
+      typeof aliasConfig['sandbox-base-url'] !== 'string'
     ) {
       debugLogger.warn(
         `[ProviderAliases] Ignoring non-string sandbox-base-url in ${filePath}`,
       );
-      parsed['sandbox-base-url'] = undefined;
+      aliasConfig['sandbox-base-url'] = undefined;
     }
 
     if (
-      Object.prototype.hasOwnProperty.call(parsed, 'requires-auth') &&
-      typeof parsed['requires-auth'] !== 'boolean'
+      Object.prototype.hasOwnProperty.call(aliasConfig, 'requires-auth') &&
+      typeof aliasConfig['requires-auth'] !== 'boolean'
     ) {
       debugLogger.warn(
         `[ProviderAliases] Ignoring non-boolean requires-auth in ${filePath}`,
       );
-      parsed['requires-auth'] = undefined;
+      aliasConfig['requires-auth'] = undefined;
     }
 
     // Validate modelDefaults if present
-    if ('modelDefaults' in parsed) {
-      if (!Array.isArray(parsed.modelDefaults)) {
+    if ('modelDefaults' in aliasConfig) {
+      if (!Array.isArray(aliasConfig.modelDefaults)) {
         debugLogger.warn(
           `[ProviderAliases] Ignoring non-array modelDefaults in ${filePath}`,
         );
-        parsed.modelDefaults = undefined;
+        aliasConfig.modelDefaults = undefined;
       } else {
-        parsed.modelDefaults = parsed.modelDefaults.filter(
+        aliasConfig.modelDefaults = aliasConfig.modelDefaults.filter(
           (entry: unknown): entry is ModelDefaultRule => {
             if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
               debugLogger.warn(
@@ -208,7 +209,7 @@ function readAliasFile(
 
     return {
       alias,
-      config: parsed,
+      config: aliasConfig,
       filePath,
       source,
     };
