@@ -494,9 +494,9 @@ function handleKillLineLeftAction(state: TextBufferState): TextBufferState {
 }
 
 function handleUndoAction(state: TextBufferState): TextBufferState {
-  const stateToRestore = state.undoStack[state.undoStack.length - 1];
-  if (!stateToRestore) return state;
+  if (state.undoStack.length === 0) return state;
 
+  const stateToRestore = state.undoStack[state.undoStack.length - 1];
   const currentSnapshot = {
     lines: [...state.lines],
     cursorRow: state.cursorRow,
@@ -511,9 +511,9 @@ function handleUndoAction(state: TextBufferState): TextBufferState {
 }
 
 function handleRedoAction(state: TextBufferState): TextBufferState {
-  const stateToRestore = state.redoStack[state.redoStack.length - 1];
-  if (!stateToRestore) return state;
+  if (state.redoStack.length === 0) return state;
 
+  const stateToRestore = state.redoStack[state.redoStack.length - 1];
   const currentSnapshot = {
     lines: [...state.lines],
     cursorRow: state.cursorRow,
