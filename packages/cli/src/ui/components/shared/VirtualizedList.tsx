@@ -65,6 +65,10 @@ function findLastIndex<T>(
   return -1;
 }
 
+function getOffsetAt(offsets: number[], index: number): number | undefined {
+  return offsets[index];
+}
+
 /**
  * @plan PLAN-20251215-OLDUI-SCROLL.P05
  * @requirement REQ-456.4
@@ -404,7 +408,7 @@ function VirtualizedList<T>(
         viewPosition?: number;
       }) => {
         setIsStickingToBottom(false);
-        const offset = offsets[index];
+        const offset = getOffsetAt(offsets, index);
         if (offset !== undefined) {
           const newScrollTop = Math.max(
             0,
@@ -429,7 +433,7 @@ function VirtualizedList<T>(
         setIsStickingToBottom(false);
         const index = data.indexOf(item);
         if (index !== -1) {
-          const offset = offsets[index];
+          const offset = getOffsetAt(offsets, index);
           if (offset !== undefined) {
             const newScrollTop = Math.max(
               0,
