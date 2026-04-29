@@ -64,6 +64,13 @@ function normaliseProfileName(
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function getOptionalEphemeralSettings(
+  profile: Profile,
+): Profile['ephemeralSettings'] | undefined {
+  return (profile as { ephemeralSettings?: Profile['ephemeralSettings'] })
+    .ephemeralSettings;
+}
+
 /**
  * Extracts profile values from a loaded Profile object, respecting --provider override.
  */
@@ -79,19 +86,20 @@ export function prepareProfileForApplication(
     argv.provider !== undefined ? undefined : profile.provider;
   const profileModel = argv.provider !== undefined ? undefined : profile.model;
   const profileModelParams = profile.modelParams;
+  const ephemeralSettings = getOptionalEphemeralSettings(profile);
   const profileBaseUrl =
-    typeof profile.ephemeralSettings?.['base-url'] === 'string'
-      ? profile.ephemeralSettings['base-url']
+    typeof ephemeralSettings?.['base-url'] === 'string'
+      ? ephemeralSettings['base-url']
       : undefined;
 
-  const loadSummary = `Loaded ${profileSource === 'inline' ? 'inline profile from --profile' : `profile ${profileSource}`}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`;
+  const loadSummary = `Loaded ${profileSource === 'inline' ? 'inline profile from --profile' : `profile ${profileSource}`}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!ephemeralSettings}`;
   logger.debug(() => loadSummary);
 
   let profileMergedSettings = baseSettings;
-  if (argv.provider === undefined && profile.ephemeralSettings) {
+  if (argv.provider === undefined && ephemeralSettings) {
     profileMergedSettings = {
       ...baseSettings,
-      ...profile.ephemeralSettings,
+      ...ephemeralSettings,
     } as Settings;
     logger.debug(
       () =>
