@@ -21,7 +21,10 @@ export function mergeMcpServers(
   const mcpServers = { ...(settings.mcpServers ?? {}) };
   for (const extension of extensions) {
     Object.entries(extension.mcpServers ?? {}).forEach(([key, server]) => {
-      if (mcpServers[key]) {
+      const existingServer = (
+        mcpServers as Partial<Record<string, MCPServerConfig>>
+      )[key];
+      if (existingServer !== undefined) {
         logger.debug(
           () =>
             `WARNING: Skipping extension MCP config for server with key "${key}" as it already exists.`,
