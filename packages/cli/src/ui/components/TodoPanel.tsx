@@ -117,15 +117,21 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({
     let marker = '';
     let markerColor = SemanticColors.text.primary;
 
-    if (todo.status === 'completed') {
-      marker = '\u2713'; // [OK] checkmark
-      markerColor = SemanticColors.status.success;
-    } else if (todo.status === 'pending') {
-      marker = '○';
-      markerColor = SemanticColors.text.secondary;
-    } else if (todo.status === 'in_progress') {
-      marker = '→';
-      markerColor = SemanticColors.status.warning;
+    switch (todo.status) {
+      case 'completed':
+        marker = '\u2713'; // [OK] checkmark
+        markerColor = SemanticColors.status.success;
+        break;
+      case 'pending':
+        marker = '○';
+        markerColor = SemanticColors.text.secondary;
+        break;
+      case 'in_progress':
+        marker = '→';
+        markerColor = SemanticColors.status.warning;
+        break;
+      default:
+        break;
     }
 
     // Calculate available width for content
@@ -156,7 +162,8 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({
   // Render collapsed state (minimal)
   if (collapsed) {
     const summary = `${todos.length} task${todos.length !== 1 ? 's' : ''}`;
-    const currentTodo = todos[currentTodoIndex];
+    const currentTodo =
+      currentTodoIndex === -1 ? undefined : todos[currentTodoIndex];
 
     return (
       <Box
