@@ -16,7 +16,7 @@ type PollStatus = 'pending' | 'complete' | 'error';
 
 export interface InitiateResponse {
   readonly flow_type?: FlowType | string;
-  readonly mode?: 'pkce' | 'device_code' | 'browser_redirect';
+  readonly mode?: 'pkce' | 'device_code' | 'browser_redirect' | string;
 
   readonly session_id?: string;
   readonly sessionId?: string;
