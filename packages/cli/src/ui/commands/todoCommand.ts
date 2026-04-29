@@ -62,10 +62,10 @@ export function parsePosition(pos: string, todos: Todo[]): ParsedPosition {
     const parentIndex = parseInt(subtaskMatch[1], 10) - 1;
 
     // Line 55: VALIDATE parent exists
-    const parent = todos[parentIndex];
-    if (!parent) {
+    if (parentIndex < 0 || parentIndex >= todos.length) {
       throw new Error(`Parent position ${subtaskMatch[1]} does not exist`);
     }
+    const parent = todos[parentIndex];
 
     // Line 56: IF subtask_pos == "last"
     if (subtaskMatch[2] === 'last') {
