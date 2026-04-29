@@ -18,6 +18,14 @@ import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const checkpointSuggestionDescription = 'Restorable tool call checkpoint';
 
+type LoadHistory = CommandContext['ui']['loadHistory'];
+
+function getRuntimeLoadHistory(
+  ui: CommandContext['ui'],
+): LoadHistory | undefined {
+  return (ui as unknown as { loadHistory?: LoadHistory }).loadHistory;
+}
+
 const restoreSchema: CommandArgumentSchema = [
   {
     kind: 'value',
@@ -58,9 +66,18 @@ async function restoreAction(
 ): Promise<void | SlashCommandActionReturn> {
   const { services, ui } = context;
   const { config, git: gitService } = services;
-  const { addItem, loadHistory } = ui;
+  const { addItem } = ui;
+  const loadHistory = getRuntimeLoadHistory(ui);
 
-  const checkpointDir = config?.storage.getProjectTempCheckpointsDir();
+  if (!config) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Could not determine the configuration directory path.',
+    };
+  }
+
+  const checkpointDir = config.storage.getProjectTempCheckpointsDir();
 
   if (!checkpointDir) {
     return {
@@ -116,18 +133,18 @@ async function restoreAction(
 
     if (toolCallData.history) {
       if (!loadHistory) {
-        // This should not happen
         return {
           type: 'message',
           messageType: 'error',
           content: 'loadHistory function is not available.',
         };
       }
+
       loadHistory(toolCallData.history);
     }
 
     if (toolCallData.clientHistory) {
-      await config?.getGeminiClient()?.setHistory(toolCallData.clientHistory);
+      await config.getGeminiClient().setHistory(toolCallData.clientHistory);
     }
 
     if (toolCallData.commitHash) {
