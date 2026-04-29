@@ -196,9 +196,11 @@ function resolveVisualToLogical(
     Math.min(visRow, layout.visualLines.length - 1),
   );
   const visualLine = layout.visualLines[clampedVisRow] || '';
-  const mapping = layout.visualToLogicalMap[clampedVisRow];
+  const mapping = (
+    layout.visualToLogicalMap as Array<[number, number] | undefined>
+  )[clampedVisRow];
 
-  if (!mapping) return null;
+  if (mapping === undefined) return null;
 
   const [logRow, logStartCol] = mapping;
   const codePoints = toCodePoints(visualLine);
@@ -244,15 +246,14 @@ async function runExternalEditor(params: {
   const filePath = pathMod.join(tmpDir, 'buffer.txt');
   fs.writeFileSync(filePath, text, 'utf8');
 
-  let command: string | undefined = undefined;
   const args = [filePath];
 
   const preferredEditorType = getPrefEditor?.();
-  if (!command && preferredEditorType) {
-    command = getEditorCommand(preferredEditorType);
-    if (isGuiEditor(preferredEditorType)) {
-      args.unshift('--wait');
-    }
+  let command = preferredEditorType
+    ? getEditorCommand(preferredEditorType)
+    : undefined;
+  if (preferredEditorType && isGuiEditor(preferredEditorType)) {
+    args.unshift('--wait');
   }
 
   command ??=
