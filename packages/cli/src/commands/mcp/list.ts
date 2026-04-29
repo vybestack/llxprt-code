@@ -34,7 +34,7 @@ async function getMcpServersFromConfig(): Promise<
   const mcpServers = { ...(settings.merged.mcpServers ?? {}) };
   for (const extension of extensions) {
     Object.entries(extension.mcpServers ?? {}).forEach(([key, server]) => {
-      if (mcpServers[key]) {
+      if (Object.prototype.hasOwnProperty.call(mcpServers, key)) {
         return;
       }
       mcpServers[key] = {
