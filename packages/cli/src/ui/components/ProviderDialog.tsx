@@ -206,28 +206,25 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
         </Text>
 
         {/* Search input for standard/wide */}
-        {!isNarrow && (
-          <Box marginY={1}>
-            <Text
-              color={
-                isSearching
-                  ? SemanticColors.text.primary
-                  : SemanticColors.text.secondary
-              }
-            >
-              Search:{' '}
-              {isSearching && <Text color={SemanticColors.text.accent}>▌</Text>}
+        <Box marginY={1}>
+          <Text
+            color={
+              isSearching
+                ? SemanticColors.text.primary
+                : SemanticColors.text.secondary
+            }
+          >
+            Search:{' '}
+            {isSearching && <Text color={SemanticColors.text.accent}>▌</Text>}
+          </Text>
+          <Text color={SemanticColors.text.primary}>{searchTerm}</Text>
+          {searchTerm && (
+            <Text color={SemanticColors.text.secondary}>
+              {' '}
+              (Found {filteredProviders.length} of {providers.length} providers)
             </Text>
-            <Text color={SemanticColors.text.primary}>{searchTerm}</Text>
-            {searchTerm && (
-              <Text color={SemanticColors.text.secondary}>
-                {' '}
-                (Found {filteredProviders.length} of {providers.length}{' '}
-                providers)
-              </Text>
-            )}
-          </Box>
-        )}
+          )}
+        </Box>
 
         {/* Grid results */}
         {filteredProviders.length > 0 ? (
@@ -247,9 +244,7 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
           </Text>
         )}
 
-        {!isNarrow && (
-          <Text color={SemanticColors.text.secondary}>Tab to switch modes</Text>
-        )}
+        <Text color={SemanticColors.text.secondary}>Tab to switch modes</Text>
       </Box>
     );
   };
