@@ -68,6 +68,16 @@ function isLoadBalancerProfile(profile: Profile): profile is Profile & {
   );
 }
 
+function asRenderableRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value as Record<string, unknown>;
+}
+
 export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
   profileName,
   profile,
@@ -201,6 +211,12 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
     }
 
     // Standard profile
+    const modelParams = asRenderableRecord(
+      (profile as { modelParams?: unknown }).modelParams,
+    );
+    const ephemeralSettings = asRenderableRecord(
+      (profile as { ephemeralSettings?: unknown }).ephemeralSettings,
+    );
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>
@@ -217,10 +233,10 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
         </Box>
 
         {/* Model Parameters */}
-        {profile.modelParams && Object.keys(profile.modelParams).length > 0 && (
+        {modelParams !== undefined && Object.keys(modelParams).length > 0 && (
           <Box flexDirection="column" marginBottom={1}>
             <Text color={SemanticColors.text.secondary}>Model Parameters:</Text>
-            {Object.entries(profile.modelParams).map(([key, value]) => (
+            {Object.entries(modelParams).map(([key, value]) => (
               <Text key={key} color={SemanticColors.text.primary}>
                 {'  '}
                 {key}: {JSON.stringify(value)}
@@ -230,10 +246,10 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
         )}
 
         {/* Ephemeral Settings - show only allowlisted safe keys */}
-        {profile.ephemeralSettings && (
+        {ephemeralSettings !== undefined && (
           <Box flexDirection="column" marginBottom={1}>
             <Text color={SemanticColors.text.secondary}>Settings:</Text>
-            {Object.entries(profile.ephemeralSettings)
+            {Object.entries(ephemeralSettings)
               .filter(([key]) => SAFE_EPHEMERAL_KEYS.has(key.toLowerCase()))
               .filter(([, value]) => value !== undefined && value !== null)
               .slice(0, 10) // Limit displayed settings
