@@ -57,7 +57,10 @@ export const compressCommand: SlashCommand = {
         return;
       }
       const chat = geminiClient.getChat();
-      const historyService = chat.getHistoryService();
+      const getHistoryService = (): ReturnType<
+        typeof chat.getHistoryService
+      > | null => chat.getHistoryService();
+      const historyService = getHistoryService();
       if (!historyService) {
         ui.addItem(
           {
