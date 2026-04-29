@@ -83,27 +83,32 @@ export class ConversationDataRedactor {
     }
 
     const redactedTool = { ...tool };
+    const toolRecord = tool as unknown as Record<string, unknown>;
+    const redactedToolRecord = redactedTool as unknown as Record<
+      string,
+      unknown
+    >;
+    const toolFunction = toolRecord.function;
 
     // Handle both ITool interface and test format
-    if (
-      redactedTool.function &&
-      redactedTool.function.parameters &&
-      tool.function.name
-    ) {
-      redactedTool.function.parameters = this.redactToolParameters(
-        redactedTool.function.parameters,
-        tool.function.name,
+    if (this.hasNamedFunction(toolFunction)) {
+      const redactedFunction = redactedToolRecord.function as Record<
+        string,
+        unknown
+      >;
+      redactedFunction.parameters = this.redactToolParameters(
+        redactedFunction.parameters,
+        toolFunction.name,
       ) as object;
     } else if (
-      (redactedTool as unknown as Record<string, unknown>).parameters &&
-      (tool as unknown as Record<string, unknown>).name
+      typeof toolRecord.name === 'string' &&
+      Object.prototype.hasOwnProperty.call(redactedToolRecord, 'parameters')
     ) {
       // Handle test format that doesn't match ITool interface
-      (redactedTool as unknown as Record<string, unknown>).parameters =
-        this.redactToolParameters(
-          (redactedTool as unknown as Record<string, unknown>).parameters,
-          (tool as unknown as Record<string, unknown>).name as string,
-        ) as object;
+      redactedToolRecord.parameters = this.redactToolParameters(
+        redactedToolRecord.parameters,
+        toolRecord.name,
+      ) as object;
     }
 
     return redactedTool;
@@ -214,6 +219,16 @@ export class ConversationDataRedactor {
   private shouldRedact(): boolean {
     // Check if any redaction is enabled
     return Object.values(this.redactionConfig).some((value) => value === true);
+  }
+
+  private hasNamedFunction(
+    value: unknown,
+  ): value is { name: string; parameters?: unknown } {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      typeof (value as { name?: unknown }).name === 'string'
+    );
   }
 
   private redactContent(content: string, providerName: string): string {
