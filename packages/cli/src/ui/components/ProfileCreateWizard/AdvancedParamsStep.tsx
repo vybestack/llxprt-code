@@ -16,6 +16,18 @@ import { PARAM_VALIDATORS } from './validation.js';
 import { getStepPosition } from './utils.js';
 import type { WizardState, AdvancedParams } from './types.js';
 
+const getParameterDefaults = (provider: string | null): AdvancedParams => {
+  if (provider === null || provider === '') {
+    return PARAMETER_DEFAULTS.anthropic;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(PARAMETER_DEFAULTS, provider)) {
+    return PARAMETER_DEFAULTS[provider];
+  }
+
+  return PARAMETER_DEFAULTS.anthropic;
+};
+
 interface AdvancedParamsStepProps {
   state: WizardState;
   onUpdateParams: (params: AdvancedParams | undefined) => void;
@@ -67,10 +79,7 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
     (value: string) => {
       if (value === 'defaults') {
         // Use provider defaults
-        const defaults =
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider name should use default key
-          PARAMETER_DEFAULTS[state.config.provider || ''] ||
-          PARAMETER_DEFAULTS.anthropic;
+        const defaults = getParameterDefaults(state.config.provider);
         onUpdateParams(defaults);
         onContinue();
       } else if (value === 'skip') {
@@ -146,10 +155,7 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
     }
   }, [fieldInput, currentField, customParams, onUpdateParams, onContinue]);
 
-  const providerDefaults =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider name should use default key
-    PARAMETER_DEFAULTS[state.config.provider || ''] ||
-    PARAMETER_DEFAULTS.anthropic;
+  const providerDefaults = getParameterDefaults(state.config.provider);
 
   const paramOptions = [
     {
