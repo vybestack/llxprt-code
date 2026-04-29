@@ -68,7 +68,7 @@ export const useLoadProfileDialog = ({
     async (profileName: string) => {
       try {
         const result = await runtime.loadProfileByName(profileName);
-        const extra = (result.infoMessages ?? [])
+        const extra = result.infoMessages
           .map((message) => `\n- ${message}`)
           .join('');
         addMessage({
@@ -76,7 +76,7 @@ export const useLoadProfileDialog = ({
           content: `Profile '${profileName}' loaded${extra}`,
           timestamp: new Date(),
         });
-        for (const warning of result.warnings ?? []) {
+        for (const warning of result.warnings) {
           addMessage({
             type: MessageType.INFO,
             content: `⚠ ${warning}`,
