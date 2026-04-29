@@ -102,7 +102,9 @@ function buildZodSchemaFromJsonSchema(def: any): z.ZodTypeAny {
  * Builds a Zod enum schema from options array.
  */
 function buildEnumSchema(
-  options: ReadonlyArray<{ value: string | number | boolean; label: string }>,
+  options:
+    | ReadonlyArray<{ value: string | number | boolean; label: string }>
+    | undefined,
 ): z.ZodTypeAny {
   if (!options || options.length === 0) {
     throw new Error(
@@ -189,7 +191,7 @@ function buildZodSchemaFromDefinition(
       break;
 
     case 'enum': {
-      baseSchema = buildEnumSchema(definition.options!);
+      baseSchema = buildEnumSchema(definition.options);
       break;
     }
 
@@ -248,7 +250,7 @@ function buildZodSchemaFromCollection(
       return buildPrimitiveSchema(collection.type);
 
     case 'enum': {
-      return buildEnumSchema(collection.options!);
+      return buildEnumSchema(collection.options);
     }
 
     case 'array':
