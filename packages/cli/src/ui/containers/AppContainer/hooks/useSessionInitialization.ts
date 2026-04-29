@@ -50,6 +50,10 @@ export interface UseSessionInitializationResult {
   setCoreMemoryFileCount: (count: number) => void;
 }
 
+function isAbortSignalAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
 async function runSessionStartHook(
   config: Config,
   addItem: UseSessionInitializationParams['addItem'],
@@ -76,17 +80,15 @@ async function runSessionStartHook(
     }
 
     const additionalContext = sessionStartOutput.getAdditionalContext();
-    if (additionalContext && !signal.aborted) {
+    if (additionalContext && !isAbortSignalAborted(signal)) {
       const geminiClient = config.getGeminiClient();
-      if (geminiClient) {
-        try {
-          await geminiClient.addHistory({
-            role: 'user',
-            parts: [{ text: additionalContext }],
-          });
-        } catch {
-          // Hook failures should not block session start.
-        }
+      try {
+        await geminiClient.addHistory({
+          role: 'user',
+          parts: [{ text: additionalContext }],
+        });
+      } catch {
+        // Hook failures should not block session start.
       }
     }
   }
