@@ -430,8 +430,7 @@ export async function handleAtCommand({
         const prevPart = commandParts[i - 1];
         if (
           prevPart.type === 'text' ||
-          (prevPart.type === 'atPath' &&
-            atPathToResolvedSpecMap.has(prevPart.content))
+          atPathToResolvedSpecMap.has(prevPart.content)
         ) {
           initialQueryText += ' ';
         }
