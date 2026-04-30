@@ -292,7 +292,7 @@ export function useSelectionList<T>({
 
     if (state.pendingSelect && items[state.activeIndex]) {
       const currentItem = items[state.activeIndex];
-      if (currentItem && !currentItem.disabled) {
+      if (!currentItem.disabled) {
         if (selectionLogger.enabled) {
           selectionLogger.debug(
             () =>
