@@ -107,7 +107,7 @@ export class TerminalCapabilityManager {
       let bgReceived = false;
       let modifyOtherKeysReceived = false;
       // eslint-disable-next-line prefer-const
-      let timeoutId: NodeJS.Timeout;
+      let timeoutId: NodeJS.Timeout | undefined;
 
       const cleanup = () => {
         if (timeoutId) {

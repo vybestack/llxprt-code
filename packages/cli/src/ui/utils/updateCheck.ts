@@ -31,7 +31,7 @@ function getBestAvailableUpdate(
   stable?: UpdateInfo,
 ): UpdateInfo | null {
   if (!nightly) return stable ?? null;
-  if (!stable) return nightly ?? null;
+  if (!stable) return nightly;
 
   const nightlyVer = nightly.latest;
   const stableVer = stable.latest;

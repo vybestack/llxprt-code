@@ -93,8 +93,13 @@ export function parseDockerMemoryToMB(memoryStr: string): number | undefined {
     return undefined;
   }
 
-  const value = parseFloat(match[1]);
-  const suffix = (match[2] ?? '').toLowerCase();
+  const [, valueMatch, suffixMatch] = match as [
+    string,
+    string,
+    string | undefined,
+  ];
+  const value = parseFloat(valueMatch);
+  const suffix = (suffixMatch ?? '').toLowerCase();
 
   switch (suffix) {
     case 'g':

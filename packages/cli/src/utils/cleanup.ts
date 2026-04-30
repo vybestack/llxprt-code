@@ -13,7 +13,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 type FileOutputWithOptionalDisposeInstance = typeof FileOutput & {
-  disposeInstance?: () => Promise<void>;
+  disposeInstance?: unknown;
 };
 
 const cleanupFunctions: Array<(() => void) | (() => Promise<void>)> = [];
@@ -63,7 +63,7 @@ export async function runExitCleanup() {
     const disposeInstance = (
       FileOutput as FileOutputWithOptionalDisposeInstance
     ).disposeInstance;
-    if (disposeInstance) {
+    if (typeof disposeInstance === 'function') {
       await disposeInstance.call(FileOutput);
     } else {
       const instance = FileOutput.getInstance();
