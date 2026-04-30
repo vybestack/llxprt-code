@@ -444,7 +444,7 @@ export const Footer = React.memo<FooterProps>(
                             };
                           }
                         ).getStats();
-                        if (lbStats?.lastSelected) {
+                        if (lbStats.lastSelected) {
                           return (
                             <>
                               <Text color={SemanticColors.text.primary}>
