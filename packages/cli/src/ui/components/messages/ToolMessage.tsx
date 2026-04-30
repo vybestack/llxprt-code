@@ -211,7 +211,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
           <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1}>
             <ShellInputPrompt
               activeShellPtyId={activeShellPtyId ?? null}
-              focus={embeddedShellFocused ?? false}
+              focus={embeddedShellFocused}
             />
           </Box>
         )}
