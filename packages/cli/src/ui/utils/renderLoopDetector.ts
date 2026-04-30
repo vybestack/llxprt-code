@@ -127,14 +127,14 @@ export function useWhyDidYouRender(
   componentName: string,
   props: Record<string, unknown>,
 ) {
-  const previousProps = useRef<Record<string, unknown>>({});
+  const previousProps = useRef<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     if (!process.env.DEBUG) {
       return;
     }
 
-    if (previousProps.current) {
+    if (previousProps.current !== null) {
       const allKeys = new Set([
         ...Object.keys(previousProps.current),
         ...Object.keys(props),
