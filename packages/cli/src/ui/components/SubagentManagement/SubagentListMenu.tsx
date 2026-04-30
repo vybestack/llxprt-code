@@ -11,6 +11,9 @@ import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { ListFocusMode, type SubagentInfo } from './types.js';
 
+const isListFocusMode = (mode: ListFocusMode): boolean =>
+  mode === ListFocusMode.LIST;
+
 interface SubagentListMenuProps {
   subagents: SubagentInfo[];
   onSelect: (subagent: SubagentInfo) => void;
@@ -123,7 +126,7 @@ export const SubagentListMenu: React.FC<SubagentListMenuProps> = ({
       }
 
       // List navigation mode
-      if (focusMode === ListFocusMode.LIST) {
+      if (isListFocusMode(focusMode)) {
         if (key.name === 'up') {
           moveSelection(-1);
           return;
