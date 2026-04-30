@@ -123,7 +123,7 @@ export const Notifications = ({
         >
           {(() => {
             const matchingHistoryError = history.find(
-              (item) => item.type === 'error' && item.text?.includes(initError),
+              (item) => item.type === 'error' && item.text.includes(initError),
             );
             if (matchingHistoryError?.text) {
               return (
