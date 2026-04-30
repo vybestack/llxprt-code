@@ -222,7 +222,7 @@ export default tseslint.config(
         'error',
         { considerDefaultExhaustiveForUnions: true },
       ],
-      '@typescript-eslint/no-unnecessary-condition': 'warn',
+      '@typescript-eslint/no-unnecessary-condition': 'error',
       '@typescript-eslint/prefer-nullish-coalescing': 'error',
       '@typescript-eslint/prefer-optional-chain': 'error',
 
