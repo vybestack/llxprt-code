@@ -77,7 +77,7 @@ export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
           : Math.max(0, currentVisualRow - lineCount);
 
       const targetVisualMap = promptBuffer.visualToLogicalMap[targetVisualRow];
-      if (!targetVisualMap) {
+      if (Object.is(targetVisualMap, undefined)) {
         return;
       }
 
