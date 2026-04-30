@@ -33,7 +33,7 @@ export const useFolderTrust = (
     config.isTrustedFolder(),
   );
   const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(
-    config.isTrustedFolder() === undefined,
+    (config.isTrustedFolder() as boolean | undefined) === undefined,
   );
   const [isRestarting, setIsRestarting] = useState(false);
   const startupMessageSent = useRef(false);
