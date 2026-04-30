@@ -36,7 +36,9 @@ const StatRow: React.FC<StatRowProps> = ({
 
 export const CacheStatsDisplay: React.FC = () => {
   const { getCliProviderManager } = useRuntimeApi();
-  const providerManager = getCliProviderManager();
+  const providerManager = getCliProviderManager() as ReturnType<
+    typeof getCliProviderManager
+  > | null;
 
   if (!providerManager) {
     return (
