@@ -60,7 +60,9 @@ export const ProfileAttachmentWizard: React.FC<
         .catch(() => {
           if (!cancelled) setPreviewInfo(null);
         });
-    } else if (!cancelled) setPreviewInfo(null);
+    } else {
+      setPreviewInfo(null);
+    }
     return () => {
       cancelled = true;
     };
