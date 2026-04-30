@@ -118,12 +118,12 @@ export function usePromptCompletion({
         },
       };
 
-      const response = await geminiClient.generateContent(
+      const response = (await geminiClient.generateContent(
         contents,
         generationConfig,
         signal,
         DEFAULT_GEMINI_FLASH_LITE_MODEL,
-      );
+      )) as Awaited<ReturnType<typeof geminiClient.generateContent>> | null;
 
       if (signal.aborted) {
         return;
