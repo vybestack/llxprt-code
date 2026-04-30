@@ -262,9 +262,7 @@ export function ThemeDialog({
   const diffHeight = Math.floor(availableHeightForPanes * 0.4);
 
   const previewTheme = useMemo(
-    () =>
-      themeManager.getTheme(highlightedThemeName ?? DEFAULT_THEME.name) ??
-      DEFAULT_THEME,
+    () => themeManager.getTheme(highlightedThemeName) ?? DEFAULT_THEME,
     [highlightedThemeName],
   );
 
