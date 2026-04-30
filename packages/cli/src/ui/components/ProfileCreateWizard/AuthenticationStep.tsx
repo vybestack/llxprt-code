@@ -54,7 +54,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
           // Go back to auth method selection
           setFocusedComponent('select');
           setValidationError(null);
-        } else if (focusedComponent === 'select') {
+        } else {
           // Go back to previous step
           onBack();
         }
