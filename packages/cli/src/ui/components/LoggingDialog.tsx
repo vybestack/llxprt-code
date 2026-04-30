@@ -192,7 +192,7 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
     // Format the main content
     let mainContent = '';
     if (entry.type === 'request' && entry.messages) {
-      const lastMessage = entry.messages[entry.messages.length - 1];
+      const lastMessage = entry.messages.at(-1);
       if (lastMessage) {
         mainContent = formatContent(lastMessage.content, contentWidth);
       }
