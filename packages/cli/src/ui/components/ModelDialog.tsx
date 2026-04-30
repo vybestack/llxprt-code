@@ -326,10 +326,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
 
       // Enter to select
       if (key.name === 'return' && filteredModels.length > 0) {
-        const selected = filteredModels[state.selectedIndex];
-        if (selected) {
-          onSelect(selected);
-        }
+        onSelect(filteredModels[state.selectedIndex]);
         return;
       }
 
