@@ -30,14 +30,6 @@ export const MAX_SUGGESTIONS_TO_SHOW = 8;
  * @plan:PLAN-20251013-AUTOCOMPLETE.P08
  * @requirement:REQ-002
  * @requirement:REQ-003
- * Feature flag enabled for hint display integration
- */
-const SHOW_ARGUMENT_HINTS = true;
-
-/**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P08
- * @requirement:REQ-002
- * @requirement:REQ-003
  * @requirement:REQ-004
  * @pseudocode UIHintRendering.md lines 4-7
  * Full implementation of hint line rendering
@@ -96,8 +88,7 @@ export function SuggestionsDisplay({
 
   return (
     <Box flexDirection="column" paddingX={1} width={width}>
-      {/* Hint line - rendered when feature flag is enabled and hint is provided */}
-      {SHOW_ARGUMENT_HINTS && activeHint ? (
+      {activeHint ? (
         <Box marginBottom={1}>
           <Text color={Colors.Gray} wrap="wrap">
             {activeHint}
