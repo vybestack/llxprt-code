@@ -33,7 +33,7 @@ export function useShellFocusAutoReset({
     () =>
       pendingHistoryItems.some(
         (item) =>
-          item?.type === 'tool_group' &&
+          item.type === 'tool_group' &&
           item.tools.some(
             (tool) =>
               (tool.name === SHELL_COMMAND_NAME || tool.name === SHELL_NAME) &&
