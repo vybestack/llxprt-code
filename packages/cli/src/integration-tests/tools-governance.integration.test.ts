@@ -71,7 +71,7 @@ describe('tools governance integration', () => {
     expect(setSpy).toHaveBeenCalledWith('tools.allowed', []);
     expect(settings.get('tools.disabled')).toStrictEqual(['code-editor']);
     const exported = await settings.exportForProfile();
-    expect(exported.tools?.disabled).toStrictEqual(['code-editor']);
+    expect(exported.tools.disabled).toStrictEqual(['code-editor']);
 
     const mockToolRegistry = {
       getAllTools: () => [

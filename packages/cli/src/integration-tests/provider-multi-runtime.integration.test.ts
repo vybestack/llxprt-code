@@ -171,7 +171,7 @@ async function bootstrapRuntimeFixture(options: {
         options.model,
       );
 
-      const baseUrl = profile.ephemeralSettings?.['base-url'];
+      const baseUrl = profile.ephemeralSettings['base-url'];
       settingsService.setProviderSetting(
         options.providerName,
         'baseUrl',

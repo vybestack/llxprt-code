@@ -56,7 +56,7 @@ describe('Error and edge case behavioral scenarios', () => {
     });
 
     afterEach(() => {
-      proactiveManager?.clearAllTimers();
+      proactiveManager.clearAllTimers();
       vi.useRealTimers();
     });
 

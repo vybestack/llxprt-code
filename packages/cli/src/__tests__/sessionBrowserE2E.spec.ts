@@ -231,7 +231,7 @@ function makeCommandContext(
     services: {
       config: {
         isInteractive: () =>
-          overrides.services?.config?.isInteractive?.() ?? true,
+          overrides.services?.config?.isInteractive() ?? true,
       } as CommandContext['services']['config'],
       settings: {} as CommandContext['services']['settings'],
       git: undefined,

@@ -833,11 +833,11 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       expect(updated.version).toBe(1);
       expect(updated.provider).toBe('anthropic');
       expect(updated.model).toBe('claude-sonnet-4');
-      expect(updated.modelParams?.temperature).toBe(0.7);
-      expect(updated.modelParams?.max_tokens).toBe(4096);
+      expect(updated.modelParams.temperature).toBe(0.7);
+      expect(updated.modelParams.max_tokens).toBe(4096);
       expect(updated.auth).toBeDefined();
-      expect(updated.auth?.type).toBe('oauth');
-      expect(updated.auth?.buckets).toStrictEqual(['work-company']);
+      expect(updated.auth!.type).toBe('oauth');
+      expect(updated.auth!.buckets).toStrictEqual(['work-company']);
     });
   });
 

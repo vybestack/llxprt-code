@@ -48,21 +48,19 @@ import { Colors } from '../colors.js';
 function isDialogAction(
   result: SlashCommandActionReturn | void | undefined,
 ): result is OpenDialogActionReturn {
-  return result !== undefined && result !== null && result.type === 'dialog';
+  return result !== undefined && result.type === 'dialog';
 }
 
 function isPerformResumeAction(
   result: SlashCommandActionReturn | void | undefined,
 ): result is PerformResumeActionReturn {
-  return (
-    result !== undefined && result !== null && result.type === 'perform_resume'
-  );
+  return result !== undefined && result.type === 'perform_resume';
 }
 
 function isMessageAction(
   result: SlashCommandActionReturn | void | undefined,
 ): result is MessageActionReturn {
-  return result !== undefined && result !== null && result.type === 'message';
+  return result !== undefined && result.type === 'message';
 }
 
 // ---------------------------------------------------------------------------

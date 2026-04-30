@@ -276,12 +276,12 @@ describe('oauth_poll handler', () => {
 
   afterEach(async () => {
     try {
-      client?.close();
+      client.close();
     } catch {
       // client may not be initialized
     }
     try {
-      await server?.stop();
+      await server.stop();
     } catch {
       // server may not be started
     }

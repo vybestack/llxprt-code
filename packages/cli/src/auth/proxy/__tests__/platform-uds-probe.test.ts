@@ -124,7 +124,7 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
         );
 
         expect(response.ok).toBe(true);
-        expect((response.data as Record<string, unknown>)?.echo).toBe('probe');
+        expect((response.data as Record<string, unknown>).echo).toBe('probe');
 
         clientSocket.destroy();
       },

@@ -685,9 +685,9 @@ describe('AuthStatusService.getAuthStatusWithBuckets', () => {
 
     expect(statuses).toHaveLength(1);
     const defaultStatus = statuses[0];
-    expect(defaultStatus?.authenticated).toBe(false);
+    expect(defaultStatus.authenticated).toBe(false);
     // expiry field is still present even when token is expired
-    expect(defaultStatus?.expiry).toBe(expiredToken.expiry);
+    expect(defaultStatus.expiry).toBe(expiredToken.expiry);
   });
 });
 

@@ -480,9 +480,9 @@ describe('BucketFailoverHandlerImpl', () => {
       await handler.tryFailover({ triggeringStatus: 429 });
 
       // Assert: bucket-a should be classified as quota-exhausted
-      const reasons = handler.getLastFailoverReasons?.();
+      const reasons = handler.getLastFailoverReasons();
       expect(reasons).toBeDefined();
-      expect(reasons?.['bucket-a']).toBe('quota-exhausted');
+      expect(reasons['bucket-a']).toBe('quota-exhausted');
     });
 
     /**
@@ -514,9 +514,9 @@ describe('BucketFailoverHandlerImpl', () => {
       const result = await handler.tryFailover({ triggeringStatus: 401 });
 
       // Assert: bucket-a should be classified as expired-refresh-failed (not 'skipped')
-      const reasons = handler.getLastFailoverReasons?.();
+      const reasons = handler.getLastFailoverReasons();
       expect(reasons).toBeDefined();
-      expect(reasons?.['bucket-a']).toBe('expired-refresh-failed');
+      expect(reasons['bucket-a']).toBe('expired-refresh-failed');
       // Should have switched to bucket-b
       expect(result).toBe(true);
       expect(handler.getCurrentBucket()).toBe('bucket-b');
@@ -559,9 +559,9 @@ describe('BucketFailoverHandlerImpl', () => {
       const result = await handler.tryFailover();
 
       // Assert: bucket-a should be classified as expired-refresh-failed
-      const reasons = handler.getLastFailoverReasons?.();
+      const reasons = handler.getLastFailoverReasons();
       expect(reasons).toBeDefined();
-      expect(reasons?.['bucket-a']).toBe('expired-refresh-failed');
+      expect(reasons['bucket-a']).toBe('expired-refresh-failed');
       // Should have switched to bucket-b
       expect(result).toBe(true);
       expect(handler.getCurrentBucket()).toBe('bucket-b');
@@ -630,9 +630,9 @@ describe('BucketFailoverHandlerImpl', () => {
       const result = await handler.tryFailover();
 
       // Assert: bucket-a should be classified as no-token
-      const reasons = handler.getLastFailoverReasons?.();
+      const reasons = handler.getLastFailoverReasons();
       expect(reasons).toBeDefined();
-      expect(reasons?.['bucket-a']).toBe('no-token');
+      expect(reasons['bucket-a']).toBe('no-token');
       // Should have switched to bucket-b
       expect(result).toBe(true);
       expect(handler.getCurrentBucket()).toBe('bucket-b');
@@ -672,9 +672,9 @@ describe('BucketFailoverHandlerImpl', () => {
       const result = await handler.tryFailover();
 
       // Assert: bucket-a should be classified as no-token
-      const reasons = handler.getLastFailoverReasons?.();
+      const reasons = handler.getLastFailoverReasons();
       expect(reasons).toBeDefined();
-      expect(reasons?.['bucket-a']).toBe('no-token');
+      expect(reasons['bucket-a']).toBe('no-token');
       // Should have switched to bucket-b
       expect(result).toBe(true);
       expect(handler.getCurrentBucket()).toBe('bucket-b');
@@ -699,15 +699,15 @@ describe('BucketFailoverHandlerImpl', () => {
 
       // First call: establish some reasons
       await handler.tryFailover({ triggeringStatus: 429 });
-      const firstReasons = handler.getLastFailoverReasons?.();
-      expect(firstReasons?.['bucket-a']).toBe('quota-exhausted');
+      const firstReasons = handler.getLastFailoverReasons();
+      expect(firstReasons['bucket-a']).toBe('quota-exhausted');
 
       // Reset session to allow retry
       handler.resetSession();
 
       // Second call: reasons should be cleared
       await handler.tryFailover();
-      const secondReasons = handler.getLastFailoverReasons?.();
+      const secondReasons = handler.getLastFailoverReasons();
       // Should not have reasons from first call
       expect(secondReasons).toBeDefined();
       // First call had bucket-a as quota-exhausted, second call should have different/new reasons
@@ -735,19 +735,17 @@ describe('BucketFailoverHandlerImpl', () => {
       await handler.tryFailover({ triggeringStatus: 429 });
 
       // Get reasons and try to mutate
-      const reasons = handler.getLastFailoverReasons?.();
+      const reasons = handler.getLastFailoverReasons();
       expect(reasons).toBeDefined();
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!reasons) throw new Error('unreachable: narrowing failed');
       const originalBucketAReason = reasons['bucket-a'];
       // Try to mutate the returned object
       reasons['bucket-a'] = 'no-token' as BucketFailureReason;
 
       // Get reasons again - should not be affected by mutation
-      const reasonsAgain = handler.getLastFailoverReasons?.();
-      expect(reasonsAgain?.['bucket-a']).toBe(originalBucketAReason);
-      expect(reasonsAgain?.['bucket-a']).not.toBe('no-token');
+      const reasonsAgain = handler.getLastFailoverReasons();
+      expect(reasonsAgain['bucket-a']).toBe(originalBucketAReason);
+      expect(reasonsAgain['bucket-a']).not.toBe('no-token');
     });
   });
 
@@ -870,8 +868,8 @@ describe('BucketFailoverHandlerImpl', () => {
       // Assert: Should classify bucket-b as expired-refresh-failed and continue to bucket-c
       expect(result).toBe(true);
       expect(handler.getCurrentBucket()).toBe('bucket-c');
-      const reasons = handler.getLastFailoverReasons?.();
-      expect(reasons?.['bucket-b']).toBe('expired-refresh-failed');
+      const reasons = handler.getLastFailoverReasons();
+      expect(reasons['bucket-b']).toBe('expired-refresh-failed');
     });
 
     /**
@@ -973,8 +971,8 @@ describe('BucketFailoverHandlerImpl', () => {
       // Assert: Should classify bucket-b as no-token and continue to bucket-c
       expect(result).toBe(true);
       expect(handler.getCurrentBucket()).toBe('bucket-c');
-      const reasons = handler.getLastFailoverReasons?.();
-      expect(reasons?.['bucket-b']).toBe('no-token');
+      const reasons = handler.getLastFailoverReasons();
+      expect(reasons['bucket-b']).toBe('no-token');
     });
 
     /**
@@ -1002,8 +1000,8 @@ describe('BucketFailoverHandlerImpl', () => {
       // Assert: Should classify bucket-b as no-token and continue to bucket-c
       expect(result).toBe(true);
       expect(handler.getCurrentBucket()).toBe('bucket-c');
-      const reasons = handler.getLastFailoverReasons?.();
-      expect(reasons?.['bucket-b']).toBe('no-token');
+      const reasons = handler.getLastFailoverReasons();
+      expect(reasons['bucket-b']).toBe('no-token');
     });
   });
 
@@ -1181,8 +1179,8 @@ describe('BucketFailoverHandlerImpl', () => {
       const result = await handler.tryFailover();
 
       // Assert: Should classify bucket-b as reauth-failed
-      const reasons = handler.getLastFailoverReasons?.();
-      expect(reasons?.['bucket-b']).toBe('reauth-failed');
+      const reasons = handler.getLastFailoverReasons();
+      expect(reasons['bucket-b']).toBe('reauth-failed');
       expect(result).toBe(false); // No buckets succeeded
     });
 
@@ -1210,8 +1208,8 @@ describe('BucketFailoverHandlerImpl', () => {
       const result = await handler.tryFailover();
 
       // Assert: Should classify bucket-b as reauth-failed
-      const reasons = handler.getLastFailoverReasons?.();
-      expect(reasons?.['bucket-b']).toBe('reauth-failed');
+      const reasons = handler.getLastFailoverReasons();
+      expect(reasons['bucket-b']).toBe('reauth-failed');
       expect(result).toBe(false); // No buckets succeeded
     });
 
@@ -1255,8 +1253,8 @@ describe('BucketFailoverHandlerImpl', () => {
       expect(handler.getCurrentBucket()).toBe('bucket-b');
 
       // Verify bucket-a was classified as quota-exhausted
-      const reasons = handler.getLastFailoverReasons?.();
-      expect(reasons?.['bucket-a']).toBe('quota-exhausted');
+      const reasons = handler.getLastFailoverReasons();
+      expect(reasons['bucket-a']).toBe('quota-exhausted');
     });
 
     /**

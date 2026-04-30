@@ -167,13 +167,13 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     getCliOAuthManager: vi.fn(() => runtimeSettingsState.oauthManager ?? null),
     getActiveProviderStatus: vi.fn(() => ({
       name:
-        runtimeSettingsState.providerManager?.getActiveProviderName?.() ??
-        runtimeSettingsState.context?.config?.getProvider?.() ??
+        runtimeSettingsState.providerManager?.getActiveProviderName() ??
+        runtimeSettingsState.context?.config?.getProvider() ??
         null,
     })),
     listProviders: vi.fn(() => getProviderManager().listProviders()),
     getActiveProviderName: vi.fn(
-      () => getProviderManager().getActiveProviderName?.() ?? null,
+      () => getProviderManager().getActiveProviderName(),
     ),
     setActiveModel: vi.fn(async () => ({
       changed: false,
@@ -182,7 +182,7 @@ vi.mock('../runtime/runtimeSettings.js', () => {
       infoMessages: [],
     })),
     listAvailableModels: vi.fn(
-      async () => (await getProviderManager().getAvailableModels?.()) ?? [],
+      async () => getProviderManager().getAvailableModels(),
     ),
     getActiveModelName: vi.fn(() => null),
     getActiveModelParams: vi.fn(() => ({})),
@@ -1818,7 +1818,8 @@ describe('defaultDisabledTools', () => {
       argv,
     );
     const currentDisabled =
-      (config.getEphemeralSetting('tools.disabled') as string[]) || [];
+      (config.getEphemeralSetting('tools.disabled') as string[] | undefined) ??
+      [];
     expect(currentDisabled).toStrictEqual(
       expect.arrayContaining(['read_file', 'google_web_fetch']),
     );

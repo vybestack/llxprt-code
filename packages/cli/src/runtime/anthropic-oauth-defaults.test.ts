@@ -31,6 +31,7 @@ const {
     }
 
     setProviderSetting(provider: string, key: string, value: unknown): void {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: Record index access returns undefined for missing keys despite TS type
       if (!this.providers[provider]) {
         this.providers[provider] = {};
       }
@@ -42,7 +43,7 @@ const {
     }
 
     getProviderSettings(provider: string): Record<string, unknown> {
-      return this.providers[provider] || {};
+      return this.providers[provider] ?? {};
     }
 
     switchProvider = vi.fn(async (provider: string) => {
@@ -56,7 +57,6 @@ const {
       ) => {
         if (
           typeof providerOrChanges === 'string' &&
-          maybeChanges &&
           typeof maybeChanges === 'object'
         ) {
           for (const [key, value] of Object.entries(maybeChanges)) {

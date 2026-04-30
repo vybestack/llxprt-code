@@ -144,9 +144,9 @@ describe('RadioButtonSelect', () => {
 
       const result = renderItem(item, mockContext);
 
-      expect(result?.props?.color).toBe(mockContext.titleColor);
-      expect(result?.props?.children).toBe('Option 1');
-      expect(result?.props?.wrap).toBe('truncate');
+      expect(result.props.color).toBe(mockContext.titleColor);
+      expect(result.props.children).toBe('Option 1');
+      expect(result.props.wrap).toBe('truncate');
     });
 
     it('should render the special theme display when theme props are present', () => {
@@ -160,10 +160,10 @@ describe('RadioButtonSelect', () => {
 
       const result = renderItem(themeItem, mockContext);
 
-      expect(result?.props?.color).toBe(mockContext.titleColor);
-      expect(result?.props?.wrap).toBe('truncate');
+      expect(result.props.color).toBe(mockContext.titleColor);
+      expect(result.props.wrap).toBe('truncate');
 
-      const children = result?.props?.children;
+      const children = result.props.children;
 
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!Array.isArray(children) || children.length < 3) {
@@ -179,8 +179,8 @@ describe('RadioButtonSelect', () => {
         color?: string;
         children?: React.ReactNode;
       }>;
-      expect(nestedTextElement?.props?.color).toBe('COLOR_SECONDARY');
-      expect(nestedTextElement?.props?.children).toBe('(Light)');
+      expect(nestedTextElement.props.color).toBe('COLOR_SECONDARY');
+      expect(nestedTextElement.props.children).toBe('(Light)');
     });
 
     it('should fall back to standard display if only one theme prop is present', () => {
@@ -193,7 +193,7 @@ describe('RadioButtonSelect', () => {
 
       const result = renderItem(partialThemeItem, mockContext);
 
-      expect(result?.props?.children).toBe('Incomplete Theme');
+      expect(result.props.children).toBe('Incomplete Theme');
     });
   });
 });

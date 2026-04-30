@@ -834,8 +834,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       // Verify stdin.setRawMode was never called (no stdin fallback occurred)
       expect(setRawModeSpy).not.toHaveBeenCalled();
 
-      // Restore original setRawMode
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      // Restore original setRawMode (platform-specific: setRawMode may not exist on non-TTY)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, vitest/no-conditional-in-test -- setRawMode may be undefined on non-TTY platforms
       if (originalSetRawMode) {
         process.stdin.setRawMode = originalSetRawMode;
       }

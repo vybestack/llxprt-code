@@ -35,7 +35,7 @@ describe('keyBindings config', () => {
       for (const command of commands) {
         expect(defaultKeyBindings[command]).toBeDefined();
         expect(Array.isArray(defaultKeyBindings[command])).toBe(true);
-        expect(defaultKeyBindings[command]?.length).toBeGreaterThan(0);
+        expect(defaultKeyBindings[command].length).toBeGreaterThan(0);
       }
     });
 
@@ -123,7 +123,7 @@ describe('keyBindings config', () => {
 
       for (const command of commandValues) {
         expect(typeof commandDescriptions[command]).toBe('string');
-        expect(commandDescriptions[command]?.trim()).not.toHaveLength(0);
+        expect(commandDescriptions[command].trim()).not.toHaveLength(0);
       }
     });
 

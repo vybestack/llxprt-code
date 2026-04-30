@@ -38,7 +38,7 @@ function mockTokenInfo(partial: string = ''): TokenInfo {
 function isMessageAction(
   result: SlashCommandActionReturn | void | undefined,
 ): result is MessageActionReturn {
-  return result !== undefined && result !== null && result.type === 'message';
+  return result !== undefined && result.type === 'message';
 }
 
 /**
@@ -47,7 +47,7 @@ function isMessageAction(
 function isDialogAction(
   result: SlashCommandActionReturn | void | undefined,
 ): result is OpenDialogActionReturn {
-  return result !== undefined && result !== null && result.type === 'dialog';
+  return result !== undefined && result.type === 'dialog';
 }
 
 /**
@@ -56,9 +56,7 @@ function isDialogAction(
 function isPerformResumeAction(
   result: SlashCommandActionReturn | void | undefined,
 ): result is PerformResumeActionReturn {
-  return (
-    result !== undefined && result !== null && result.type === 'perform_resume'
-  );
+  return result !== undefined && result.type === 'perform_resume';
 }
 
 describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
@@ -423,7 +421,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       await fc.assert(
         fc.asyncProperty(fc.string(), async (args) => {
           const result = await continueCommand.action!(ctx, args);
-          if (result === undefined || result === null) {
+          if (result === undefined) {
             // void return is valid for some commands
             return true;
           }
