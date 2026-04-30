@@ -270,7 +270,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
                   `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
                 ],
               });
-            } else if (paymentMode === false) {
+            } else {
               dispatch({
                 type: 'SET_TRANSIENT_WARNINGS',
                 payload: [
