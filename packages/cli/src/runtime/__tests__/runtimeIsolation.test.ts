@@ -486,7 +486,7 @@ async function bootstrapRuntimeFixture(options: {
       );
       providerManager.setActiveProvider(options.primaryProvider);
       settingsService.set('activeProvider', options.primaryProvider);
-      settingsService.setCurrentProfileName?.(options.profileName);
+      settingsService.setCurrentProfileName(options.profileName);
       settingsService.setProviderSetting(
         options.primaryProvider,
         'model',

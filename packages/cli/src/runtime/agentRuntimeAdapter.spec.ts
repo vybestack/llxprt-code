@@ -612,7 +612,7 @@ describe('AgentRuntimeAdapter - Global Registry', () => {
   afterEach(() => {
     // Reset global adapter after each test
     try {
-      getRuntimeAdapter()?.dispose();
+      getRuntimeAdapter().dispose();
     } catch {
       // No adapter set
     }

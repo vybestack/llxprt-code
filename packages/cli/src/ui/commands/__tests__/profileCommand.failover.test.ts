@@ -42,7 +42,7 @@ describe('profileCommand - failover policy parsing', () => {
     });
   });
 
-  const save = profileCommand.subCommands!.find((cmd) => cmd?.name === 'save')!;
+  const save = profileCommand.subCommands!.find((cmd) => cmd.name === 'save')!;
 
   describe('Policy parameter parsing', () => {
     it('should parse policy "failover" from command', async () => {

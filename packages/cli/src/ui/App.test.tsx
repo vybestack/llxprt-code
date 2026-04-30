@@ -403,10 +403,7 @@ describe('App UI', () => {
     }) as unknown as MockServerConfig;
     mockVersion = '0.0.0-test';
 
-    // Ensure the getShowMemoryUsage mock function is specifically set up if not covered by constructor mock
-    if (!mockConfig.getShowMemoryUsage) {
-      mockConfig.getShowMemoryUsage = vi.fn(() => false);
-    }
+    // Set up mock for getShowMemoryUsage
     mockConfig.getShowMemoryUsage.mockReturnValue(false); // Default for most tests
 
     // Ensure a theme is set so the theme dialog does not appear.

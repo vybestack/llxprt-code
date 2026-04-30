@@ -2442,7 +2442,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
                   expect(a.lastModified.getTime()).toBeLessThanOrEqual(
                     b.lastModified.getTime(),
                   );
-                } else if (result.current.sortOrder === 'size') {
+                } else {
+                  // sortOrder === 'size'
                   // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                   expect(a.fileSize).toBeGreaterThanOrEqual(b.fileSize);
                 }

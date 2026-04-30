@@ -36,7 +36,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
     ]);
   });
 
-  const save = profileCommand.subCommands!.find((cmd) => cmd?.name === 'save')!;
+  const save = profileCommand.subCommands!.find((cmd) => cmd.name === 'save')!;
 
   describe('protected settings stripping', () => {
     it('strips protected settings when saving loadbalancer profile', async () => {

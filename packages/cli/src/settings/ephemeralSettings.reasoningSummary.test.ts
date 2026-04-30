@@ -21,7 +21,7 @@ describe('reasoning.summary ephemeral setting @issue:922', () => {
 
     it('should mention OpenAI in the description', () => {
       const description = ephemeralSettingHelp['reasoning.summary'];
-      expect(description?.toLowerCase()).toContain('openai');
+      expect(description.toLowerCase()).toContain('openai');
     });
 
     it('should mention valid values in the description', () => {
