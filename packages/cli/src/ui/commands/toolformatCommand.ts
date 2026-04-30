@@ -33,7 +33,7 @@ export const toolformatCommand: SlashCommand = {
     _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | void> => {
-    const formatName = args?.trim();
+    const formatName = args.trim();
     let state;
     try {
       const runtime = getRuntimeApi();
