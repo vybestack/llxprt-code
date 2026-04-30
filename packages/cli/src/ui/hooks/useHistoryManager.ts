@@ -167,7 +167,10 @@ function normalizeHistoryLimits(options?: UseHistoryOptions): HistoryLimits {
   };
 }
 
-function normalizeLimit(value: number | undefined, fallback: number): number {
+function normalizeLimit(
+  value: number | null | undefined,
+  fallback: number,
+): number {
   if (value === undefined || value === null) {
     return fallback;
   }
