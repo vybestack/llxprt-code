@@ -89,7 +89,7 @@ export const useExtensionUpdates = (
       );
       if (!currentStatus) return true;
       const currentState = currentStatus.status;
-      return !currentState || currentState === ExtensionUpdateState.UNKNOWN;
+      return currentState === ExtensionUpdateState.UNKNOWN;
     });
     if (extensionsToCheck.length === 0) return;
     void checkForAllExtensionUpdates(
