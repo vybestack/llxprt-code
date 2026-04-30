@@ -110,11 +110,12 @@ function persistToolLists(
       config.setEphemeralSetting('tools.allowed', allowedList);
     }
     if (typeof config.getEphemeralSettings === 'function') {
-      const ephemerals = config.getEphemeralSettings();
-      if (ephemerals) {
-        ephemerals['tools.disabled'] = disabledList;
-        ephemerals['disabled-tools'] = disabledList;
-        ephemerals['tools.allowed'] = allowedList;
+      const ephemerals: unknown = config.getEphemeralSettings();
+      if (ephemerals !== null && typeof ephemerals === 'object') {
+        const ephemeralSettings = ephemerals as Record<string, unknown>;
+        ephemeralSettings['tools.disabled'] = disabledList;
+        ephemeralSettings['disabled-tools'] = disabledList;
+        ephemeralSettings['tools.allowed'] = allowedList;
       }
     }
   }
