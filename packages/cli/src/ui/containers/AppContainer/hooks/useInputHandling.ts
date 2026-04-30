@@ -51,7 +51,7 @@ export interface UseInputHandlingResult {
  */
 function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]): boolean {
   return pendingHistoryItems.some((item) => {
-    if (item && item.type === 'tool_group') {
+    if (item.type === 'tool_group') {
       return item.tools.some(
         (tool) => tool.status === ToolCallStatus.Executing,
       );
