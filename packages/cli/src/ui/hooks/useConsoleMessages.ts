@@ -34,9 +34,9 @@ function consoleMessagesReducer(
     case 'ADD_MESSAGES': {
       const newMessages = [...state];
       for (const queuedMessage of action.payload) {
-        const lastMessage = newMessages[newMessages.length - 1];
+        const lastMessage = newMessages.at(-1);
         if (
-          lastMessage &&
+          lastMessage !== undefined &&
           lastMessage.type === queuedMessage.type &&
           lastMessage.content === queuedMessage.content
         ) {
