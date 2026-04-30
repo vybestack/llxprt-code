@@ -85,8 +85,6 @@ export function AuthDialog({
   // Default to first item (Gemini OAuth)
   const initialAuthIndex = 0;
 
-  // Ensure we have a valid initial index (default to 0 if not found)
-  const safeInitialIndex = initialAuthIndex >= 0 ? initialAuthIndex : 0;
   const handleAuthSelect = useCallback(
     (authMethod: string) => {
       setErrorMessage(null);
@@ -165,7 +163,7 @@ export function AuthDialog({
       <Box marginTop={1}>
         <RadioButtonSelect
           items={items}
-          initialIndex={safeInitialIndex}
+          initialIndex={initialAuthIndex}
           onSelect={handleAuthSelect}
         />
       </Box>
