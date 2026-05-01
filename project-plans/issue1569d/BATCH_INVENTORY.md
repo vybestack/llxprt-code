@@ -109,7 +109,9 @@ implementer starts.
 - Promote to global `'error'` only after every sub-batch is green.
 
 ### RS-BN5 — `@typescript-eslint/strict-boolean-expressions`
-- Expected large (~2000 warnings). Same split-before-start rule as BN4.
+- Repo sweep. Pre-flight count: 1502 warnings across 442 files (355 prod,
+  87 test). Split into per-package sub-batches per plan cap rules.
+- Frozen split plan: see [`batches/RS-BN5.md`](./batches/RS-BN5.md).
 - Promote to global `'error'` only after every sub-batch is green.
 
 ---
