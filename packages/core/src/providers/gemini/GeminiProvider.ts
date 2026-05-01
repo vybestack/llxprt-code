@@ -45,6 +45,26 @@ import type { DumpMode } from '../utils/dumpContext.js';
 
 import { isGemini3Model } from '../../config/models.js';
 
+/** Set of values considered missing/falsy in legacy schema checks (non-nullish falsy + nullish). */
+const MISSING_SCHEMA_VALUES = new Set<unknown>([false, 0, '', undefined, null]);
+
+/**
+ * Helper predicate: checks if a schema value is missing/falsy in the legacy sense.
+ * Preserves old !schema semantics: reject all falsy runtime values
+ * (undefined, null, false, 0, empty string), not only nullish.
+ */
+function isMissingGeminiSchema(value: unknown): boolean {
+  return MISSING_SCHEMA_VALUES.has(value);
+}
+
+/**
+ * Helper predicate: checks if a value is a valid object (non-null, typeof 'object').
+ * Used for runtime type guards on metadata/config objects.
+ */
+function isValidRecord(value: unknown): value is Record<string, unknown> {
+  return value !== undefined && value !== null && typeof value === 'object';
+}
+
 /**
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
  * @requirement:REQ-SP4-002
@@ -353,7 +373,7 @@ export class GeminiProvider extends BaseProvider {
       typeof manager.isOAuthEnabled === 'function' &&
       manager.isOAuthEnabled('gemini');
 
-    if (isOAuthEnabled) {
+    if (isOAuthEnabled === true) {
       return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
     }
 
@@ -578,8 +598,12 @@ export class GeminiProvider extends BaseProvider {
     try {
       const settingsService = this.resolveSettingsService();
       const providerSettings = settingsService.getProviderSettings(this.name);
-      if (providerSettings.model) {
-        return providerSettings.model as string;
+      if (
+        providerSettings.model !== undefined &&
+        providerSettings.model !== null &&
+        typeof providerSettings.model === 'string'
+      ) {
+        return providerSettings.model;
       }
     } catch (error) {
       this.getLogger().debug(
@@ -714,7 +738,7 @@ export class GeminiProvider extends BaseProvider {
       );
 
       // Check for abort before auth determination
-      if (_signal?.aborted) {
+      if (_signal !== undefined && _signal.aborted === true) {
         const error = new Error('Operation was aborted');
         error.name = 'AbortError';
         throw error;
@@ -733,7 +757,8 @@ export class GeminiProvider extends BaseProvider {
       const { authMode, token: authToken } = await this.determineBestAuth();
 
       // Check for abort after auth determination
-      if (_signal?.aborted) {
+      // Must re-check because signal could have been aborted during async call
+      if (_signal !== undefined && _signal.aborted === true) {
         const error = new Error('Operation was aborted');
         error.name = 'AbortError';
         throw error;
@@ -900,7 +925,7 @@ export class GeminiProvider extends BaseProvider {
       }
     } else if (toolName === 'web_fetch') {
       // Check for abort before auth determination
-      if (_signal?.aborted) {
+      if (_signal !== undefined && _signal.aborted === true) {
         const error = new Error('Operation was aborted');
         error.name = 'AbortError';
         throw error;
@@ -921,7 +946,8 @@ export class GeminiProvider extends BaseProvider {
       const { authMode, token: authToken } = await this.determineBestAuth();
 
       // Check for abort after auth determination
-      if (_signal?.aborted) {
+      // Must re-check because signal could have been aborted during async call
+      if (_signal !== undefined && _signal.aborted === true) {
         const error = new Error('Operation was aborted');
         error.name = 'AbortError';
         throw error;
@@ -1249,15 +1275,17 @@ export class GeminiProvider extends BaseProvider {
     const geminiTools = tools
       ? tools.map((toolGroup) => ({
           functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
-            if (!decl.parametersJsonSchema) {
+            const schema: unknown = decl.parametersJsonSchema;
+            if (isMissingGeminiSchema(schema)) {
               throw new Error(
                 `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
                   `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
               );
             }
             // parameters is the result of cleanGeminiSchema which always returns an object
-            let parameters = this.cleanGeminiSchema(decl.parametersJsonSchema);
-            if (!('type' in (parameters as Record<string, unknown>))) {
+            let parameters = this.cleanGeminiSchema(schema);
+            const parametersRecord = parameters as Record<string, unknown>;
+            if (!('type' in parametersRecord)) {
               parameters = { type: Type.OBJECT, ...parameters };
             }
             return {
@@ -1285,25 +1313,31 @@ export class GeminiProvider extends BaseProvider {
     const directOverridesRaw = (
       options.metadata as { geminiDirectOverrides?: unknown }
     ).geminiDirectOverrides;
-    const directOverrides =
-      directOverridesRaw && typeof directOverridesRaw === 'object'
-        ? (directOverridesRaw as Record<string, unknown>)
-        : undefined;
+    const directOverrides = isValidRecord(directOverridesRaw)
+      ? directOverridesRaw
+      : undefined;
 
-    const serverToolsOverride =
-      directOverrides && 'serverTools' in directOverrides
-        ? directOverrides.serverTools
-        : options.config &&
-            typeof (options.config as { serverTools?: unknown }).serverTools !==
-              'undefined'
-          ? (options.config as { serverTools?: unknown }).serverTools
+    // Resolve serverTools from directOverrides or config, using clearer branching
+    let serverToolsOverride: unknown;
+    if (directOverrides !== undefined && 'serverTools' in directOverrides) {
+      serverToolsOverride = directOverrides.serverTools;
+    } else {
+      const configServerTools = options.config as
+        | { serverTools?: unknown }
+        | undefined;
+      serverToolsOverride =
+        configServerTools !== undefined &&
+        'serverTools' in configServerTools &&
+        configServerTools.serverTools !== undefined
+          ? configServerTools.serverTools
           : undefined;
+    }
     const serverTools = Array.isArray(serverToolsOverride)
       ? serverToolsOverride
       : ['web_search', 'web_fetch'];
 
     const toolConfigOverride =
-      directOverrides && 'toolConfig' in directOverrides
+      directOverrides !== undefined && 'toolConfig' in directOverrides
         ? directOverrides.toolConfig
         : undefined;
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
@@ -1329,10 +1363,10 @@ export class GeminiProvider extends BaseProvider {
       requestConfig['maxOutputTokens'] = genericMaxOutput;
     }
     requestConfig.serverTools = serverTools;
-    if (geminiTools) {
+    if (geminiTools !== undefined) {
       requestConfig.tools = geminiTools;
     }
-    if (toolConfigOverride) {
+    if (toolConfigOverride !== undefined) {
       requestConfig.toolConfig = toolConfigOverride;
     }
 
@@ -1361,9 +1395,10 @@ export class GeminiProvider extends BaseProvider {
 
     const requestLogger = new DebugLogger('llxprt:provider:gemini:logging');
     requestLogger.log(() => '[GeminiProvider] request config overrides', {
-      hasDirectOverrides: !!directOverrides,
+      hasDirectOverrides: directOverrides !== undefined,
       serverTools,
-      toolConfigOverride: toolConfigOverride ? 'present' : 'absent',
+      toolConfigOverride:
+        toolConfigOverride !== undefined ? 'present' : 'absent',
     });
 
     // Debug: Log thinking configuration
@@ -1412,11 +1447,13 @@ export class GeminiProvider extends BaseProvider {
       // Gemini returns thought content with `thought: true` on parts
       const thoughtParts = parts.filter(
         (part: Part) =>
-          'text' in part && (part as Part & { thought?: boolean }).thought,
+          'text' in part &&
+          (part as Part & { thought?: boolean }).thought === true,
       );
       const nonThoughtTextParts = parts.filter(
         (part: Part) =>
-          'text' in part && !(part as Part & { thought?: boolean }).thought,
+          'text' in part &&
+          (part as Part & { thought?: boolean }).thought !== true,
       );
 
       // Extract thoughtSignature from the first part that has one (for Gemini 3.x)
@@ -1600,10 +1637,11 @@ export class GeminiProvider extends BaseProvider {
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isInteractive may not exist on all IProviderConfig implementations
-        interactionMode: subagentConfig?.isInteractive?.()
-          ? 'interactive'
-          : 'non-interactive',
+        interactionMode:
+          typeof subagentConfig?.isInteractive === 'function' &&
+          subagentConfig.isInteractive() === true
+            ? 'interactive'
+            : 'non-interactive',
       });
 
       const contentsWithSystemPrompt = [
@@ -1779,10 +1817,11 @@ export class GeminiProvider extends BaseProvider {
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isInteractive may not exist on all IProviderConfig implementations
-        interactionMode: subagentConfig?.isInteractive?.()
-          ? 'interactive'
-          : 'non-interactive',
+        interactionMode:
+          typeof subagentConfig?.isInteractive === 'function' &&
+          subagentConfig.isInteractive() === true
+            ? 'interactive'
+            : 'non-interactive',
       });
 
       const apiRequest = {
@@ -1873,8 +1912,9 @@ export class GeminiProvider extends BaseProvider {
     }
 
     // stream is either AsyncIterable (truthy object) or null - explicit null check
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- stream is typed as AsyncIterable | null but TS infers control flow differently
-    if (stream !== null) {
+    // Widen to unknown to avoid different-types-comparison (assignments may narrow type)
+    const streamRuntime: unknown = stream;
+    if (streamRuntime !== null) {
       const iterator: AsyncIterator<GenerateContentResponse> =
         typeof stream[Symbol.asyncIterator] === 'function'
           ? stream[Symbol.asyncIterator]()
@@ -1882,7 +1922,7 @@ export class GeminiProvider extends BaseProvider {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Intentional infinite loop with break conditions
       while (true) {
         const { value, done } = await iterator.next();
-        if (done) {
+        if (done === true) {
           break;
         }
         const mapped = mapResponseToChunks(value, reasoningIncludeInResponse);

@@ -178,8 +178,12 @@ export class LoadBalancingProvider implements IProvider {
     private readonly providerManager: ProviderManager,
   ) {
     // Validate required dependencies
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
-    if (!providerManager) {
+    // Widen to unknown for defensive runtime check (DI frameworks may pass null/undefined)
+    const providerManagerRuntime: unknown = providerManager;
+    if (
+      providerManagerRuntime === undefined ||
+      providerManagerRuntime === null
+    ) {
       throw new Error(
         'LoadBalancingProvider requires a ProviderManager dependency',
       );
@@ -195,8 +199,7 @@ export class LoadBalancingProvider implements IProvider {
    */
   private validateConfig(config: LoadBalancingProviderConfig): void {
     // Check for empty subProfiles array
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
-    if (!config.subProfiles || config.subProfiles.length === 0) {
+    if (config.subProfiles.length === 0) {
       throw new Error(
         'LoadBalancingProvider requires at least one sub-profile in configuration',
       );
@@ -242,20 +245,22 @@ export class LoadBalancingProvider implements IProvider {
           );
         }
 
+        // Use runtime-widened local to reject null explicitly (typeof null === 'object')
+        const ephemeralSettingsRuntime: unknown = subProfile.ephemeralSettings;
         if (
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
-          !subProfile.ephemeralSettings ||
-          typeof subProfile.ephemeralSettings !== 'object'
+          typeof ephemeralSettingsRuntime !== 'object' ||
+          ephemeralSettingsRuntime === null
         ) {
           throw new Error(
             `ResolvedSubProfile "${subProfile.name}" must have a valid "ephemeralSettings" field (object)`,
           );
         }
 
+        // Use runtime-widened local to reject null explicitly (typeof null === 'object')
+        const modelParamsRuntime: unknown = subProfile.modelParams;
         if (
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
-          !subProfile.modelParams ||
-          typeof subProfile.modelParams !== 'object'
+          typeof modelParamsRuntime !== 'object' ||
+          modelParamsRuntime === null
         ) {
           throw new Error(
             `ResolvedSubProfile "${subProfile.name}" must have a valid "modelParams" field (object)`,
@@ -380,8 +385,11 @@ export class LoadBalancingProvider implements IProvider {
           ...options.resolved,
           // Provider, model, baseURL, authToken ALWAYS come from sub-profile
           model: subProfile.model,
-          ...(subProfile.baseURL && { baseURL: subProfile.baseURL }),
-          ...(subProfile.authToken && { authToken: subProfile.authToken }),
+          // Use explicit string checks: empty string must NOT override existing values
+          ...(typeof subProfile.baseURL === 'string' &&
+            subProfile.baseURL !== '' && { baseURL: subProfile.baseURL }),
+          ...(typeof subProfile.authToken === 'string' &&
+            subProfile.authToken !== '' && { authToken: subProfile.authToken }),
           // Map ephemeralSettings to resolved fields
           ...(temperature !== undefined && { temperature }),
           ...(maxTokens !== undefined && { maxTokens }),
@@ -399,7 +407,7 @@ export class LoadBalancingProvider implements IProvider {
         () =>
           `Resolved settings (ResolvedSubProfile) - model: ${resolvedOptions.resolved?.model}, ` +
           `baseURL: ${resolvedOptions.resolved?.baseURL}, ` +
-          `authToken: ${resolvedOptions.resolved?.authToken ? 'present' : 'missing'}, ` +
+          `authToken: ${typeof resolvedOptions.resolved?.authToken === 'string' && resolvedOptions.resolved.authToken !== '' ? 'present' : 'missing'}, ` +
           `temperature: ${temperature}, maxTokens: ${maxTokens}, ` +
           `ephemeralSettings keys: ${Object.keys(mergedEphemeralSettings).join(', ')}, ` +
           `modelParams keys: ${Object.keys(subProfile.modelParams).join(', ')}`,
@@ -407,15 +415,19 @@ export class LoadBalancingProvider implements IProvider {
     } else {
       // Phase 3: Handle LoadBalancerSubProfile (legacy path)
       // Sub-profile settings override any existing resolved settings
+      // Use explicit string checks: empty string must NOT override existing values
       resolvedOptions = {
         ...options,
         resolved: {
           // Start with existing resolved settings if any
           ...options.resolved,
-          // Override with sub-profile settings (only if defined)
-          ...(subProfile.modelId && { model: subProfile.modelId }),
-          ...(subProfile.baseURL && { baseURL: subProfile.baseURL }),
-          ...(subProfile.authToken && { authToken: subProfile.authToken }),
+          // Override with sub-profile settings (only if non-empty string)
+          ...(typeof subProfile.modelId === 'string' &&
+            subProfile.modelId !== '' && { model: subProfile.modelId }),
+          ...(typeof subProfile.baseURL === 'string' &&
+            subProfile.baseURL !== '' && { baseURL: subProfile.baseURL }),
+          ...(typeof subProfile.authToken === 'string' &&
+            subProfile.authToken !== '' && { authToken: subProfile.authToken }),
         },
       };
 
@@ -423,7 +435,7 @@ export class LoadBalancingProvider implements IProvider {
         () =>
           `Resolved settings (LoadBalancerSubProfile) - model: ${resolvedOptions.resolved?.model}, ` +
           `baseURL: ${resolvedOptions.resolved?.baseURL}, ` +
-          `authToken: ${resolvedOptions.resolved?.authToken ? 'present' : 'missing'}`,
+          `authToken: ${typeof resolvedOptions.resolved?.authToken === 'string' && resolvedOptions.resolved.authToken !== '' ? 'present' : 'missing'}`,
       );
     }
 
@@ -698,7 +710,12 @@ export class LoadBalancingProvider implements IProvider {
     if (state.state === 'open') {
       const now = Date.now();
       const recoveryTimeout = settings.circuitBreakerRecoveryTimeoutMs;
-      if (state.openedAt && now - state.openedAt >= recoveryTimeout) {
+      // Use explicit undefined check to avoid different-types-comparison
+      const openedAtRuntime: unknown = state.openedAt;
+      if (
+        typeof openedAtRuntime === 'number' &&
+        now - openedAtRuntime >= recoveryTimeout
+      ) {
         state.state = 'half-open';
         state.lastAttempt = now;
         this.logger.debug(
@@ -732,10 +749,11 @@ export class LoadBalancingProvider implements IProvider {
    */
   private recordBackendFailure(profileName: string, error: Error): void {
     const settings = this.extractFailoverSettings();
-    if (!settings.circuitBreakerEnabled) return;
+    if (settings.circuitBreakerEnabled !== true) return;
 
     let state = this.circuitBreakerStates.get(profileName);
-    if (!state) {
+    // Use explicit undefined check to avoid different-types-comparison
+    if (state === undefined) {
       state = this.initCircuitBreakerState(profileName);
       this.circuitBreakerStates.set(profileName, state);
     }
@@ -768,7 +786,8 @@ export class LoadBalancingProvider implements IProvider {
     timeoutMs: number | undefined,
     profileName: string,
   ): AsyncGenerator<IContent> {
-    if (!timeoutMs || timeoutMs <= 0) {
+    // Use explicit undefined check to avoid different-types-comparison
+    if (timeoutMs === undefined || timeoutMs <= 0) {
       // Use for-await instead of yield* to ensure proper error propagation
       // yield* can have subtle issues with error propagation in async generators
       for await (const chunk of iterator) {
@@ -791,9 +810,9 @@ export class LoadBalancingProvider implements IProvider {
       const firstResult = await Promise.race([iteratorResult, timeoutPromise]);
 
       // Got first chunk, clear timeout
-      if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
 
-      if (!firstResult.done) {
+      if (firstResult.done !== true) {
         yield firstResult.value;
       }
 
@@ -892,7 +911,8 @@ export class LoadBalancingProvider implements IProvider {
     profileName: string,
     tpmThreshold: number | undefined,
   ): boolean {
-    if (!tpmThreshold || tpmThreshold <= 0) return false;
+    // Use explicit undefined check to avoid different-types-comparison
+    if (tpmThreshold === undefined || tpmThreshold <= 0) return false;
 
     const currentTPM = this.calculateTPM(profileName);
     // Only skip if we have some history and TPM is below threshold
@@ -912,18 +932,22 @@ export class LoadBalancingProvider implements IProvider {
    * @plan PLAN-20251212issue489 - Phase 4/5
    */
   private extractTokenCount(chunks: IContent[]): number {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
-    if (!chunks || chunks.length === 0) return 0;
+    // Runtime-widen to handle potential null/undefined from provider edge cases
+    const chunksRuntime: unknown = chunks;
+    if (!Array.isArray(chunksRuntime) || chunksRuntime.length === 0) return 0;
 
     // Look for usage information in the last chunk (common pattern)
-    const lastChunk = chunks[chunks.length - 1] as unknown as Record<
-      string,
-      unknown
-    >;
+    const lastChunk = chunksRuntime[
+      chunksRuntime.length - 1
+    ] as unknown as Record<string, unknown>;
 
     // Gemini format: usageMetadata.promptTokenCount, usageMetadata.candidatesTokenCount
-    if (lastChunk.usageMetadata) {
-      const usageMetadata = lastChunk.usageMetadata as Record<string, unknown>;
+    const usageMetadataRuntime: unknown = lastChunk.usageMetadata;
+    if (
+      typeof usageMetadataRuntime === 'object' &&
+      usageMetadataRuntime !== null
+    ) {
+      const usageMetadata = usageMetadataRuntime as Record<string, unknown>;
       const promptTokenCount =
         typeof usageMetadata.promptTokenCount === 'number'
           ? usageMetadata.promptTokenCount
@@ -938,8 +962,9 @@ export class LoadBalancingProvider implements IProvider {
     }
 
     // Anthropic format: usage.input_tokens, usage.output_tokens
-    if (lastChunk.usage) {
-      const usage = lastChunk.usage as Record<string, unknown>;
+    const usageRuntime: unknown = lastChunk.usage;
+    if (typeof usageRuntime === 'object' && usageRuntime !== null) {
+      const usage = usageRuntime as Record<string, unknown>;
       const inputTokens =
         typeof usage.input_tokens === 'number' ? usage.input_tokens : 0;
       const outputTokens =

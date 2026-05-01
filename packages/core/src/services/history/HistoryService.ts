@@ -34,6 +34,20 @@ import type { DensityResult } from '../../core/compression/types.js';
 import { CompressionStrategyError } from '../../core/compression/types.js';
 
 /**
+ * Helper predicate: checks if content has valid blocks array with at least one element.
+ * Used for defensive runtime guards that tolerate malformed persisted/runtime history.
+ * Preserves old !content.blocks optional-chain protections.
+ * Uses runtime widening to handle potentially malformed persisted data while avoiding
+ * type comparison warnings for non-nullable static types.
+ */
+function hasValidBlocks(content: IContent): boolean {
+  // Widen to unknown for runtime check to handle malformed persisted history
+  // where blocks may not be an array despite static typing
+  const blocks: unknown = content.blocks;
+  return Array.isArray(blocks) && blocks.length > 0;
+}
+
+/**
  * Typed EventEmitter for HistoryService events
  */
 interface HistoryServiceEventEmitter {
@@ -781,7 +795,7 @@ export class HistoryService
             messageIndex: aiMessagesAnalyzed,
             hasValidContent,
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            blockCount: content.blocks?.length || 0,
+            blockCount: content.blocks?.length ?? 0,
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             blocks: content.blocks?.map((b) => ({
               type: b.type,
@@ -976,8 +990,7 @@ export class HistoryService
     const respondedCallIds = new Set<string>();
 
     for (const content of this.history) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (!content.blocks) continue;
+      if (!hasValidBlocks(content)) continue;
       for (const block of content.blocks) {
         if (block.type === 'tool_response') {
           const response = block;
@@ -992,8 +1005,7 @@ export class HistoryService
     const seenToolCallIds = new Set<string>();
 
     for (const content of this.history) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (!content.blocks) continue;
+      if (content.blocks.length === 0) continue;
       for (const block of content.blocks) {
         if (block.type !== 'tool_call') continue;
 
@@ -1022,8 +1034,7 @@ export class HistoryService
   validateAndFix(): void {
     const respondedCallIds = new Set<string>();
     for (const content of this.history) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (!content.blocks) continue;
+      if (!hasValidBlocks(content)) continue;
       for (const block of content.blocks) {
         if (block.type === 'tool_response') {
           const response = block;
@@ -1038,8 +1049,7 @@ export class HistoryService
 
     for (let i = 0; i < this.history.length; i++) {
       const content = this.history[i];
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (content.speaker !== 'ai' || !content.blocks) continue;
+      if (content.speaker !== 'ai' || !hasValidBlocks(content)) continue;
 
       const toolCalls = content.blocks.filter(
         (b): b is ToolCallBlock => b.type === 'tool_call',
@@ -1048,7 +1058,10 @@ export class HistoryService
       if (toolCalls.length === 0) continue;
 
       const missing = toolCalls.filter(
-        (tc) => tc.id && !respondedCallIds.has(tc.id),
+        (tc) =>
+          typeof tc.id === 'string' &&
+          tc.id !== '' &&
+          !respondedCallIds.has(tc.id),
       );
 
       if (missing.length === 0) continue;
@@ -1140,8 +1153,7 @@ export class HistoryService
     const result: IContent[] = [];
 
     for (const content of contents) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (content.speaker !== 'tool' || !content.blocks?.length) {
+      if (content.speaker !== 'tool' || !hasValidBlocks(content)) {
         result.push(content);
         continue;
       }
@@ -1189,8 +1201,7 @@ export class HistoryService
     const normalized: IContent[] = [];
 
     for (const content of contents) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (content.blocks && content.blocks.length > 0) {
+      if (hasValidBlocks(content)) {
         for (const block of content.blocks) {
           if (block.type === 'tool_call') {
             seenToolCallIds.add(block.id);
@@ -1198,8 +1209,7 @@ export class HistoryService
         }
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (content.speaker === 'tool' && content.blocks?.length) {
+      if (content.speaker === 'tool' && hasValidBlocks(content)) {
         const missingResponses = content.blocks.filter(
           (block) =>
             block.type === 'tool_response' &&
@@ -1262,8 +1272,7 @@ export class HistoryService
     const respondedCallIds = new Set<string>();
 
     for (const content of contents) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (!content.blocks?.length) continue;
+      if (!hasValidBlocks(content)) continue;
       for (const block of content.blocks) {
         if (block.type !== 'tool_response') continue;
         const callId = block.callId;
@@ -1279,8 +1288,7 @@ export class HistoryService
       const content = contents[i];
       result.push(content);
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (content.speaker !== 'ai' || !content.blocks?.length) continue;
+      if (content.speaker !== 'ai' || !hasValidBlocks(content)) continue;
 
       const toolCalls = content.blocks.filter(
         (b): b is ToolCallBlock => b.type === 'tool_call',
@@ -1288,7 +1296,10 @@ export class HistoryService
       if (toolCalls.length === 0) continue;
 
       const missing = toolCalls.filter(
-        (tc) => tc.id && !respondedCallIds.has(tc.id),
+        (tc) =>
+          typeof tc.id === 'string' &&
+          tc.id !== '' &&
+          !respondedCallIds.has(tc.id),
       );
       if (missing.length === 0) continue;
 
@@ -1333,8 +1344,7 @@ export class HistoryService
 
     for (let i = 0; i < contents.length; i++) {
       const content = contents[i];
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (!content.blocks?.length) continue;
+      if (!hasValidBlocks(content)) continue;
       for (const block of content.blocks) {
         if (block.type !== 'tool_call') continue;
         const id = block.id;
@@ -1357,15 +1367,14 @@ export class HistoryService
 
     const scoreResponse = (response: ToolResponseBlock): number => {
       let score = 0;
-      if (response.isComplete) score += 2;
+      if (response.isComplete === true) score += 2;
       if (response.error) score -= 1;
       if (response.result !== undefined && response.result !== null) score += 1;
       return score;
     };
 
     const strippedContents: Array<IContent | null> = contents.map((content) => {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (!content.blocks?.length) return content;
+      if (!hasValidBlocks(content)) return content;
 
       const toolResponseBlocks = content.blocks.filter(
         (b): b is ToolResponseBlock => b.type === 'tool_response',

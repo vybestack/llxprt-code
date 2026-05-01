@@ -34,6 +34,56 @@ import {
   processToolParameters as doubleEscapeProcessToolParameters,
 } from './doubleEscapeUtils.js';
 
+/** Set of values considered missing/falsy in legacy schema checks (non-nullish falsy + nullish). */
+const MISSING_SCHEMA_VALUES = new Set<unknown>([false, 0, '', undefined, null]);
+
+/**
+ * Helper predicate: checks if a schema value is missing/falsy in the legacy sense.
+ * Preserves old !schema semantics: reject all falsy runtime values
+ * (undefined, null, false, 0, empty string), not only nullish.
+ */
+function isMissingGeminiSchema(value: unknown): boolean {
+  return MISSING_SCHEMA_VALUES.has(value);
+}
+
+/**
+ * Helper predicate: checks if an accumulated tool call slot is missing/empty.
+ * Preserves old truthy behavior: treats undefined, null, false, 0, and empty string as missing.
+ * Used for streaming accumulation where old code overwrote any falsy slot.
+ */
+function isMissingToolCallSlot(
+  slot: unknown,
+): slot is undefined | null | false | 0 | '' {
+  return MISSING_SCHEMA_VALUES.has(slot);
+}
+
+/**
+ * Helper predicate: checks if a value is a non-empty string.
+ * Used for string field checks that preserve old truthy behavior (empty string skipped).
+ */
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value !== '';
+}
+
+/**
+ * Helper predicate: checks if a value is a valid object (non-null, typeof 'object').
+ * Used for schema property checks to reduce expression complexity.
+ */
+function isValidObject(value: unknown): value is Record<string, unknown> {
+  return value !== undefined && value !== null && typeof value === 'object';
+}
+
+/**
+ * Helper predicate: checks if a required value is missing for 'object' types.
+ * Treats falsy values and empty arrays as missing (old truthy behavior).
+ */
+function isRequiredMissing(requiredValue: unknown): boolean {
+  if (Array.isArray(requiredValue)) {
+    return requiredValue.length === 0;
+  }
+  return MISSING_SCHEMA_VALUES.has(requiredValue);
+}
+
 export class ToolFormatter implements IToolFormatter {
   private logger = new DebugLogger('llxprt:tools:formatter');
 
@@ -70,9 +120,9 @@ export class ToolFormatter implements IToolFormatter {
     if (this.logger.enabled) {
       this.logger.debug(() => `convertGeminiToOpenAI input:`, {
         toolGroupCount: geminiTools.length,
-        hasFirstGroup: !!geminiTools[0],
+        hasFirstGroup: geminiTools.length > 0,
         firstGroupFunctionCount:
-          geminiTools[0]?.functionDeclarations?.length || 0,
+          geminiTools[0]?.functionDeclarations?.length ?? 0,
       });
     }
 
@@ -88,14 +138,15 @@ export class ToolFormatter implements IToolFormatter {
       }
 
       return toolGroup.functionDeclarations.map((decl) => {
-        if (!decl.parametersJsonSchema) {
+        const schema: unknown = decl.parametersJsonSchema;
+        if (isMissingGeminiSchema(schema)) {
           throw new Error(
             `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
               `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
           );
         }
         const convertedParams = this.convertGeminiSchemaToStandard(
-          decl.parametersJsonSchema,
+          schema,
         ) as Record<string, unknown>;
 
         return {
@@ -115,7 +166,7 @@ export class ToolFormatter implements IToolFormatter {
           `Converted ${openAITools.length} tools from Gemini to OpenAI format`,
         {
           toolNames: openAITools.map((t) => t.function.name),
-          hasFirstTool: !!openAITools[0],
+          hasFirstTool: openAITools.length > 0,
           firstToolName: openAITools[0]?.function?.name,
         },
       );
@@ -148,14 +199,15 @@ export class ToolFormatter implements IToolFormatter {
 
     const anthropicTools = geminiTools.flatMap((toolGroup) =>
       toolGroup.functionDeclarations.map((decl) => {
-        if (!decl.parametersJsonSchema) {
+        const schema: unknown = decl.parametersJsonSchema;
+        if (isMissingGeminiSchema(schema)) {
           throw new Error(
             `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
               `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
           );
         }
         const convertedParams = this.convertGeminiSchemaToStandard(
-          decl.parametersJsonSchema,
+          schema,
         ) as Record<string, unknown>;
 
         // Remove verbose per-tool logging
@@ -177,7 +229,7 @@ export class ToolFormatter implements IToolFormatter {
           `Converted ${anthropicTools.length} tools from Gemini to Anthropic format`,
         {
           toolNames: anthropicTools.map((t) => t.name),
-          hasFirstTool: !!anthropicTools[0],
+          hasFirstTool: anthropicTools.length > 0,
         },
       );
     }
@@ -235,7 +287,8 @@ export class ToolFormatter implements IToolFormatter {
       }
 
       return toolGroup.functionDeclarations.map((decl) => {
-        if (!decl.parametersJsonSchema) {
+        const schema: unknown = decl.parametersJsonSchema;
+        if (isMissingGeminiSchema(schema)) {
           throw new Error(
             `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
               `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
@@ -246,7 +299,7 @@ export class ToolFormatter implements IToolFormatter {
           function: {
             name: decl.name,
             description: decl.description ?? '',
-            parameters: decl.parametersJsonSchema,
+            parameters: schema,
           },
         };
       });
@@ -260,23 +313,40 @@ export class ToolFormatter implements IToolFormatter {
    * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
    */
   convertGeminiSchemaToStandard(schema: unknown): unknown {
-    if (!schema || typeof schema !== 'object') {
+    if (schema === null || schema === undefined || typeof schema !== 'object') {
       return schema;
     }
 
     const newSchema: Record<string, unknown> = { ...schema };
 
-    // Handle properties
-    if (newSchema.properties && typeof newSchema.properties === 'object') {
+    this.convertSchemaProperties(newSchema);
+    this.convertSchemaItems(newSchema);
+    this.normalizeSchemaType(newSchema);
+    this.ensureRequiredForObjects(newSchema);
+    this.normalizeEnumValues(newSchema);
+    this.convertStringLengthConstraints(newSchema);
+
+    return newSchema;
+  }
+
+  /**
+   * Recursively converts properties object in schema.
+   */
+  private convertSchemaProperties(newSchema: Record<string, unknown>): void {
+    if (isValidObject(newSchema.properties)) {
       const newProperties: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(newSchema.properties)) {
         newProperties[key] = this.convertGeminiSchemaToStandard(value);
       }
       newSchema.properties = newProperties;
     }
+  }
 
-    // Handle items
-    if (newSchema.items) {
+  /**
+   * Recursively converts items in schema (handles both array and single item).
+   */
+  private convertSchemaItems(newSchema: Record<string, unknown>): void {
+    if (newSchema.items !== undefined && newSchema.items !== null) {
       if (Array.isArray(newSchema.items)) {
         newSchema.items = newSchema.items.map((item) =>
           this.convertGeminiSchemaToStandard(item),
@@ -285,27 +355,43 @@ export class ToolFormatter implements IToolFormatter {
         newSchema.items = this.convertGeminiSchemaToStandard(newSchema.items);
       }
     }
+  }
 
-    // Convert type from UPPERCASE enum to lowercase string
-    if (newSchema.type) {
+  /**
+   * Normalizes type field from UPPERCASE enum to lowercase string.
+   */
+  private normalizeSchemaType(newSchema: Record<string, unknown>): void {
+    const typeValue: unknown = newSchema.type;
+    if (!isMissingGeminiSchema(typeValue) && typeValue !== '') {
       newSchema.type = String(newSchema.type).toLowerCase();
     }
+  }
 
-    // Ensure required is always present for object types
-    // This is critical for some models like K2 to use structured function calls
-    // instead of falling back to text-based tool call format
-    if (newSchema.type === 'object' && !newSchema.required) {
+  /**
+   * Ensures required field is present for object types (critical for K2 structured calls).
+   */
+  private ensureRequiredForObjects(newSchema: Record<string, unknown>): void {
+    if (newSchema.type === 'object' && isRequiredMissing(newSchema.required)) {
       newSchema.required = [];
     }
+  }
 
-    // Convert enum values if present (they should remain as-is)
-    // But ensure they're arrays of strings, not some other type
-    if (newSchema.enum && Array.isArray(newSchema.enum)) {
+  /**
+   * Normalizes enum values to strings.
+   */
+  private normalizeEnumValues(newSchema: Record<string, unknown>): void {
+    if (Array.isArray(newSchema.enum)) {
       newSchema.enum = newSchema.enum.map((v) => String(v));
     }
+  }
 
-    // Convert minLength from string to number if present
-    if (newSchema.minLength && typeof newSchema.minLength === 'string') {
+  /**
+   * Converts minLength/maxLength from string to number when present.
+   */
+  private convertStringLengthConstraints(
+    newSchema: Record<string, unknown>,
+  ): void {
+    if (isNonEmptyString(newSchema.minLength)) {
       const minLengthNum = parseInt(newSchema.minLength, 10);
       if (!isNaN(minLengthNum)) {
         newSchema.minLength = minLengthNum;
@@ -314,8 +400,7 @@ export class ToolFormatter implements IToolFormatter {
       }
     }
 
-    // Convert maxLength from string to number if present
-    if (newSchema.maxLength && typeof newSchema.maxLength === 'string') {
+    if (isNonEmptyString(newSchema.maxLength)) {
       const maxLengthNum = parseInt(newSchema.maxLength, 10);
       if (!isNaN(maxLengthNum)) {
         newSchema.maxLength = maxLengthNum;
@@ -323,8 +408,6 @@ export class ToolFormatter implements IToolFormatter {
         delete newSchema.maxLength;
       }
     }
-
-    return newSchema;
   }
 
   toProviderFormat(tools: ITool[], format: 'openai'): OpenAITool[];
@@ -553,7 +636,9 @@ export class ToolFormatter implements IToolFormatter {
       case 'gemma':
         // All use same accumulation logic for now
         if (deltaToolCall.index !== undefined) {
-          if (!accumulatedToolCalls[deltaToolCall.index]) {
+          // Preserve old truthy behavior: overwrite any falsy slot (not just nullish)
+          const existingSlot = accumulatedToolCalls[deltaToolCall.index];
+          if (isMissingToolCallSlot(existingSlot)) {
             accumulatedToolCalls[deltaToolCall.index] = {
               type: 'tool_call',
               id: deltaToolCall.id ?? '',

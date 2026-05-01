@@ -204,17 +204,21 @@ class ReadFileToolInvocation extends BaseToolInvocation<
 
     if (typeof result.llmContent !== 'string') {
       llmContent = result.llmContent;
-    } else if (result.isTruncated) {
+    } else if (result.isTruncated === true) {
       const [start, end] = result.linesShown!;
       const total = result.originalLineCount!;
-      const nextOffset = this.params.offset
-        ? this.params.offset + end - start + 1
-        : end;
+      const nextOffset =
+        this.params.offset != null ? this.params.offset + end - start + 1 : end;
 
-      const startLine = this.params.offset ? this.params.offset + 1 : start;
+      const startLine =
+        this.params.offset != null ? this.params.offset + 1 : start;
 
       let formattedContent = result.llmContent;
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+      if (
+        this.params.showGitChanges === true &&
+        markersByLine != null &&
+        deletionAfterLines != null
+      ) {
         formattedContent = formatWithGitChanges(
           result.llmContent,
           startLine,
@@ -222,17 +226,18 @@ class ReadFileToolInvocation extends BaseToolInvocation<
           deletionAfterLines,
           this.params.showLineNumbers === true,
         );
-      } else if (this.params.showLineNumbers) {
+      } else if (this.params.showLineNumbers === true) {
         formattedContent = formatWithLineNumbers(result.llmContent, startLine);
       }
 
-      const gitLegend = this.params.showGitChanges
-        ? `
+      const gitLegend =
+        this.params.showGitChanges === true
+          ? `
 Git changes legend: ░ unchanged, N new, M modified, D deletion after line.
 `
-        : '';
+          : '';
       const gitWarningText =
-        this.params.showGitChanges && gitWarning
+        this.params.showGitChanges === true && gitWarning != null
           ? `
 NOTE: Failed to read git change status: ${gitWarning}
 `
@@ -246,9 +251,13 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
 --- FILE CONTENT (truncated) ---
 ${formattedContent}`;
     } else {
-      const startLine = this.params.offset ? this.params.offset + 1 : 1;
+      const startLine = this.params.offset != null ? this.params.offset + 1 : 1;
 
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+      if (
+        this.params.showGitChanges === true &&
+        markersByLine != null &&
+        deletionAfterLines != null
+      ) {
         llmContent = formatWithGitChanges(
           result.llmContent,
           startLine,
@@ -257,14 +266,15 @@ ${formattedContent}`;
           this.params.showLineNumbers === true,
         );
       } else {
-        llmContent = this.params.showLineNumbers
-          ? formatWithLineNumbers(result.llmContent, startLine)
-          : result.llmContent;
+        llmContent =
+          this.params.showLineNumbers === true
+            ? formatWithLineNumbers(result.llmContent, startLine)
+            : result.llmContent;
       }
 
-      if (this.params.showGitChanges) {
+      if (this.params.showGitChanges === true) {
         const headerParts: string[] = [];
-        if (gitWarning) {
+        if (gitWarning != null) {
           headerParts.push(
             `NOTE: Failed to read git change status: ${gitWarning}`,
           );

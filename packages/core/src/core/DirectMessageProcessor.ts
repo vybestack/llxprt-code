@@ -76,8 +76,9 @@ export class DirectMessageProcessor {
     prompt_id: string,
   ): Promise<GenerateContentResponse> {
     const provider = this.providerResolver('DirectMessageProcessor');
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!provider) {
+    // Widen to unknown for defensive runtime check (providerResolver may return null/undefined at runtime)
+    const providerRuntime: unknown = provider;
+    if (providerRuntime === undefined || providerRuntime === null) {
       throw new Error('No active provider configured');
     }
 
@@ -232,15 +233,14 @@ export class DirectMessageProcessor {
     const upstreamAbortSignal = params.config?.abortSignal;
     const onAbort = () => timeoutController.abort();
     upstreamAbortSignal?.addEventListener('abort', onAbort, { once: true });
-    if (upstreamAbortSignal?.aborted) {
+    if (upstreamAbortSignal?.aborted === true) {
       onAbort();
     }
 
     const streamResponse = provider.generateChatCompletion({
       contents: contentsForApi,
       tools:
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
+        effectiveToolsFromConfig.length > 0
           ? (effectiveToolsFromConfig as ProviderToolset)
           : undefined,
       config: runtimeContext.config,
@@ -275,7 +275,7 @@ export class DirectMessageProcessor {
             timeoutMs: effectiveTimeoutMs,
             signal: timeoutSignal,
             onTimeout: () => {
-              if (upstreamAbortSignal?.aborted) {
+              if (upstreamAbortSignal?.aborted === true) {
                 return;
               }
               timeoutController.abort();
@@ -286,7 +286,7 @@ export class DirectMessageProcessor {
           // Watchdog disabled: call iterator.next() directly
           nextResponse = await iterator.next();
         }
-        if (nextResponse.done) {
+        if (nextResponse.done === true) {
           break;
         }
 
@@ -317,8 +317,7 @@ export class DirectMessageProcessor {
       {
         contents: contentsForApi,
         tools:
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
+          effectiveToolsFromConfig.length > 0
             ? effectiveToolsFromConfig
             : undefined,
       },
@@ -396,19 +395,15 @@ export class DirectMessageProcessor {
       'allowedFunctionNames' in modifiedConfig.toolConfig
     ) {
       const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
-      if (allowedFunctions?.length) {
-        return (
-          toolsFromConfig
-            .map((toolGroup) => ({
-              ...toolGroup,
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-              functionDeclarations: toolGroup.functionDeclarations?.filter(
-                (fn) => allowedFunctions.includes(fn.name),
-              ),
-            }))
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            .filter((g) => g.functionDeclarations?.length) as ToolGroupArray
-        );
+      if (allowedFunctions !== undefined && allowedFunctions.length > 0) {
+        return toolsFromConfig
+          .map((toolGroup) => ({
+            ...toolGroup,
+            functionDeclarations: toolGroup.functionDeclarations.filter((fn) =>
+              allowedFunctions.includes(fn.name),
+            ),
+          }))
+          .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
       }
     }
     return toolsFromConfig;
@@ -453,7 +448,7 @@ export class DirectMessageProcessor {
       }
     }
 
-    if (beforeModelResult?.isBlockingDecision()) {
+    if (beforeModelResult?.isBlockingDecision() === true) {
       const syntheticResponse = beforeModelResult.getSyntheticResponse();
       return {
         syntheticResponse:
@@ -487,11 +482,12 @@ export class DirectMessageProcessor {
         model: this.runtimeContext.state.model || '',
         contents: ContentConverters.toGeminiContents(userIContents),
       });
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (modifiedRequest?.contents) {
+      // Runtime-widen to handle potential undefined from API
+      const contentsRuntime: unknown = modifiedRequest.contents;
+      if (contentsRuntime !== undefined && contentsRuntime !== null) {
         return {
           modifiedContents: ContentConverters.toIContents(
-            modifiedRequest.contents as Content[],
+            contentsRuntime as Content[],
           ),
         };
       }
@@ -514,7 +510,7 @@ export class DirectMessageProcessor {
 
     // Trigger AfterModel hook
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (config?.getEnableHooks?.()) {
+    if (config?.getEnableHooks?.() === true) {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const hookSystem = config.getHookSystem?.();
       if (hookSystem) {
@@ -538,7 +534,7 @@ export class DirectMessageProcessor {
       if (candidate) {
         const parts = candidate.content?.parts ?? [];
         const hasText = parts.some(
-          (part) => 'text' in part && part.text?.trim(),
+          (part) => typeof part.text === 'string' && part.text.trim() !== '',
         );
         if (!hasText) {
           candidate.content = candidate.content ?? {

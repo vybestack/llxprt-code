@@ -139,7 +139,7 @@ function collectErrorDetails(error: unknown): {
       errorObject.error,
     ];
     for (const nested of possibleNestedErrors) {
-      if (nested && nested !== current) {
+      if (nested !== undefined && nested !== null && nested !== current) {
         stack.push(nested);
       }
     }
@@ -156,10 +156,10 @@ export function createStreamInterruptionError(
   const error = new Error(message);
   error.name = 'StreamInterruptionError';
   (error as { code?: string }).code = STREAM_INTERRUPTED_ERROR_CODE;
-  if (details) {
+  if (details != null) {
     (error as { details?: Record<string, unknown> }).details = details;
   }
-  if (cause && !(error as { cause?: unknown }).cause) {
+  if (cause != null && (error as { cause?: unknown }).cause == null) {
     (error as { cause?: unknown }).cause = cause;
   }
   return error;
@@ -260,7 +260,7 @@ export function isRetryableError(
   }
 
   // PRIORITY 3: Generic "fetch failed" messages only retry when explicitly enabled
-  if (retryFetchErrors) {
+  if (retryFetchErrors === true) {
     const { messages } = collectErrorDetails(error);
     if (messages.some((msg) => msg.toLowerCase().includes('fetch failed'))) {
       return true;
@@ -303,7 +303,7 @@ export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options?: Partial<RetryOptions>,
 ): Promise<T> {
-  if (options?.signal?.aborted) {
+  if (options?.signal?.aborted === true) {
     throw createAbortError();
   }
 
@@ -338,7 +338,7 @@ export async function retryWithBackoff<T>(
   const failoverThreshold = 1; // Attempt bucket failover after this many consecutive 429s
 
   while (attempt < maxAttempts) {
-    if (signal?.aborted) {
+    if (signal?.aborted === true) {
       throw createAbortError();
     }
     attempt++;
@@ -349,7 +349,7 @@ export async function retryWithBackoff<T>(
       consecutive429s = 0;
       consecutiveAuthErrors = 0;
 
-      if (shouldRetryOnContent?.(result as GenerateContentResponse)) {
+      if (shouldRetryOnContent?.(result as GenerateContentResponse) === true) {
         const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
         const delayWithJitter = Math.max(0, currentDelay + jitter);
         await delay(delayWithJitter, signal);
@@ -391,7 +391,9 @@ export async function retryWithBackoff<T>(
       // This retry relies on either automatic OAuth refresh during the next request
       // or refresh logic inside onPersistent429 before failover executes.
       const shouldAttemptRefreshRetry =
-        isAuthError && options?.onPersistent429 && consecutiveAuthErrors === 1;
+        isAuthError &&
+        options?.onPersistent429 !== undefined &&
+        consecutiveAuthErrors === 1;
 
       if (shouldAttemptRefreshRetry) {
         logger.debug(
@@ -489,7 +491,7 @@ export async function retryWithBackoff<T>(
 
       const shouldRetry = shouldRetryOnError(error as Error, retryFetchErrors);
 
-      if (!shouldRetry && !shouldAttemptRefreshRetry) {
+      if (shouldRetry !== true && shouldAttemptRefreshRetry !== true) {
         throw error;
       }
 
@@ -500,7 +502,7 @@ export async function retryWithBackoff<T>(
 
       // Handle RetryableQuotaError and 500 errors with max attempts check
       if (classifiedError instanceof RetryableQuotaError || is500) {
-        if (attempt >= maxAttempts && !shouldAttemptRefreshRetry) {
+        if (attempt >= maxAttempts && shouldAttemptRefreshRetry !== true) {
           const errorMessage =
             classifiedError instanceof Error ? classifiedError.message : '';
           logger.warn(
@@ -511,11 +513,11 @@ export async function retryWithBackoff<T>(
         }
       }
 
-      if (attempt >= maxAttempts && !shouldAttemptRefreshRetry) {
+      if (attempt >= maxAttempts && shouldAttemptRefreshRetry !== true) {
         throw error;
       }
 
-      if (attempt >= maxAttempts && shouldAttemptRefreshRetry) {
+      if (attempt >= maxAttempts && shouldAttemptRefreshRetry === true) {
         attempt--;
       }
 
@@ -589,7 +591,7 @@ export async function retryWithBackoff<T>(
  * @returns True if the error is an overloaded_error or rate_limit_error, false otherwise.
  */
 export function isOverloadError(error: unknown): boolean {
-  if (error && typeof error === 'object') {
+  if (error !== null && error !== undefined && typeof error === 'object') {
     const errorObj = error as {
       error?: { type?: string; message?: string };
       type?: string;
@@ -704,13 +706,18 @@ function logRetryAttempt(
 ): void {
   const logger = new DebugLogger('llxprt:retry');
   let message = `Attempt ${attempt} failed. Retrying with backoff...`;
-  if (errorStatus) {
+  if (errorStatus !== undefined && errorStatus !== 0) {
     message = `Attempt ${attempt} failed with status ${errorStatus}. Retrying with backoff...`;
   }
 
   if (errorStatus === 429) {
     logger.debug(() => `${message} Error: ${error}`);
-  } else if (errorStatus && errorStatus >= 500 && errorStatus < 600) {
+  } else if (
+    errorStatus !== undefined &&
+    errorStatus !== 0 &&
+    errorStatus >= 500 &&
+    errorStatus < 600
+  ) {
     logger.error(() => `${message} Error: ${error}`);
   } else if (error instanceof Error) {
     // Fallback for errors that might not have a status but have a message
