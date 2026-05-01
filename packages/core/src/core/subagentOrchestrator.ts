@@ -195,7 +195,7 @@ export class SubagentOrchestrator {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent settings cross persisted/runtime boundaries despite declared types.
         const history = runtimeResult.history ?? scope.runtimeContext.history;
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent settings cross persisted/runtime boundaries despite declared types.
-        if (history) {
+        if (history !== undefined) {
           const disposable = (history as { dispose?: () => void }).dispose;
           if (typeof disposable === 'function') {
             disposable();
@@ -211,7 +211,7 @@ export class SubagentOrchestrator {
   }
 
   private throwIfAborted(signal: AbortSignal | undefined, message: string) {
-    if (signal?.aborted) {
+    if (signal?.aborted === true) {
       throw createAbortError(message);
     }
   }
@@ -246,7 +246,7 @@ export class SubagentOrchestrator {
     const trimmedAdditions = (additions ?? [])
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent settings cross persisted/runtime boundaries despite declared types.
       .map((part) => part?.trim())
-      .filter((part) => part && part.length > 0);
+      .filter((part): part is string => part.length > 0);
 
     const promptSections: string[] = [];
 
@@ -425,12 +425,20 @@ export class SubagentOrchestrator {
       const expandedKeyfile = authKeyfile.replace(/^~(?=$|[\\/])/, homedir());
       service.set('auth-keyfile', expandedKeyfile);
       service.set(`providers.${provider}.apiKeyfile`, expandedKeyfile);
-      if (!service.get(`providers.${provider}.apiKey`)) {
+      const apiKey = service.get(`providers.${provider}.apiKey`);
+      const shouldLoadApiKeyfile =
+        apiKey === undefined ||
+        apiKey === null ||
+        apiKey === '' ||
+        apiKey === false ||
+        apiKey === 0 ||
+        (typeof apiKey === 'number' && Number.isNaN(apiKey));
+      if (shouldLoadApiKeyfile) {
         try {
           const resolvedPath = path.resolve(expandedKeyfile);
           if (fs.existsSync(resolvedPath)) {
             const content = fs.readFileSync(resolvedPath, 'utf8').trim();
-            if (content) {
+            if (content !== '') {
               service.set(`providers.${provider}.apiKey`, content);
             }
           }

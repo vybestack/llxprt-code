@@ -28,9 +28,12 @@ export class TerminalQuotaError extends Error {
     super(message);
     this.name = 'TerminalQuotaError';
     this.cause = cause;
-    this.retryDelayMs = retryDelaySeconds
-      ? retryDelaySeconds * 1000
-      : undefined;
+    this.retryDelayMs =
+      retryDelaySeconds !== undefined &&
+      retryDelaySeconds !== 0 &&
+      !Number.isNaN(retryDelaySeconds)
+        ? retryDelaySeconds * 1000
+        : undefined;
   }
 }
 
@@ -49,9 +52,12 @@ export class RetryableQuotaError extends Error {
     super(message);
     this.name = 'RetryableQuotaError';
     this.cause = cause;
-    this.retryDelayMs = retryDelaySeconds
-      ? retryDelaySeconds * 1000
-      : undefined;
+    this.retryDelayMs =
+      retryDelaySeconds !== undefined &&
+      retryDelaySeconds !== 0 &&
+      !Number.isNaN(retryDelaySeconds)
+        ? retryDelaySeconds * 1000
+        : undefined;
   }
 }
 
@@ -179,7 +185,11 @@ export function classifyGoogleError(error: unknown): unknown {
           let delaySeconds = 10; // Default retry of 10s
           if (retryInfo?.retryDelay) {
             const parsedDelay = parseDurationInSeconds(retryInfo.retryDelay);
-            if (parsedDelay) {
+            if (
+              parsedDelay !== null &&
+              parsedDelay !== 0 &&
+              !Number.isNaN(parsedDelay)
+            ) {
               delaySeconds = parsedDelay;
             }
           }
@@ -212,7 +222,11 @@ export function classifyGoogleError(error: unknown): unknown {
   // 2. Check for long delays in RetryInfo
   if (retryInfo?.retryDelay) {
     const delaySeconds = parseDurationInSeconds(retryInfo.retryDelay);
-    if (delaySeconds) {
+    if (
+      delaySeconds !== null &&
+      delaySeconds !== 0 &&
+      !Number.isNaN(delaySeconds)
+    ) {
       if (delaySeconds > 120) {
         return new TerminalQuotaError(
           `${googleApiError.message}\nSuggested retry after ${retryInfo.retryDelay}.`,

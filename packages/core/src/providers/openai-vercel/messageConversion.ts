@@ -220,7 +220,10 @@ export function convertToVercelMessages(
         };
 
         // Add reasoning_content if includeReasoningInContext is true and thinking blocks exist
-        if (options?.includeReasoningInContext && thinkingBlocks.length > 0) {
+        if (
+          options?.includeReasoningInContext === true &&
+          thinkingBlocks.length > 0
+        ) {
           const reasoningText = thinkingToReasoningField(thinkingBlocks);
           if (reasoningText) {
             const messageWithReasoning = baseMessage as unknown as Record<
@@ -243,7 +246,10 @@ export function convertToVercelMessages(
         };
 
         // Add reasoning_content if includeReasoningInContext is true and thinking blocks exist
-        if (options?.includeReasoningInContext && thinkingBlocks.length > 0) {
+        if (
+          options?.includeReasoningInContext === true &&
+          thinkingBlocks.length > 0
+        ) {
           const reasoningText = thinkingToReasoningField(thinkingBlocks);
           if (reasoningText) {
             const messageWithReasoning = baseMessage as unknown as Record<
@@ -475,13 +481,15 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
         if (part.type === 'tool-result') {
           const output = (part as { output?: unknown }).output;
           const isErrorOutput =
-            output &&
+            output !== null &&
+            output !== undefined &&
             typeof output === 'object' &&
             'type' in (output as { type?: string }) &&
             typeof (output as { type?: string }).type === 'string' &&
             (output as { type?: string }).type?.startsWith('error');
           const resultValue =
-            output &&
+            output !== null &&
+            output !== undefined &&
             typeof output === 'object' &&
             'value' in (output as { value?: unknown })
               ? (output as { value?: unknown }).value
@@ -507,7 +515,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
             result: parsedResult,
           };
 
-          if (isErrorOutput) {
+          if (isErrorOutput === true) {
             toolResponseBlock.isError = true;
             if (typeof resultValue === 'string') {
               toolResponseBlock.error = resultValue;

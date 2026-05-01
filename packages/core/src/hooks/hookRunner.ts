@@ -189,7 +189,8 @@ export class HookRunner {
             const modifiedToolInput =
               hookOutput.hookSpecificOutput['tool_input'];
             if (
-              modifiedToolInput &&
+              modifiedToolInput !== null &&
+              modifiedToolInput !== undefined &&
               typeof modifiedToolInput === 'object' &&
               !Array.isArray(modifiedToolInput) &&
               'tool_input' in modifiedInput
@@ -312,8 +313,8 @@ export class HookRunner {
       }, timeout);
 
       // Send input to stdin
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook output crosses plugin process boundaries despite declared types.
-      if (child.stdin) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- child.stdin type is Writable | null but TypeScript may narrow incorrectly based on spawn options
+      if (child.stdin != null) {
         child.stdin.on('error', (err: NodeJS.ErrnoException) => {
           // Ignore EPIPE errors which happen when the child process closes stdin early
           if (err.code !== 'EPIPE') {
@@ -354,6 +355,15 @@ export class HookRunner {
           return;
         }
 
+        const effectiveErrorExitCode =
+          exitCode !== null && exitCode !== 0 && !Number.isNaN(exitCode)
+            ? exitCode
+            : EXIT_CODE_NON_BLOCKING_ERROR;
+        const effectiveResultExitCode =
+          exitCode !== null && exitCode !== 0 && !Number.isNaN(exitCode)
+            ? exitCode
+            : EXIT_CODE_SUCCESS;
+
         // Parse output
         let output: HookOutput | undefined;
         if (exitCode === EXIT_CODE_SUCCESS && stdout.trim()) {
@@ -364,7 +374,7 @@ export class HookRunner {
               // it's double-encoded JSON string.
               parsed = JSON.parse(parsed);
             }
-            if (parsed) {
+            if (parsed !== null && parsed !== undefined) {
               output = parsed as HookOutput;
             }
           } catch {
@@ -375,8 +385,7 @@ export class HookRunner {
           // Convert error output to structured format
           output = this.convertPlainTextToHookOutput(
             stderr.trim(),
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: exitCode 0 means success but explicit value needed for non-blocking error
-            exitCode || EXIT_CODE_NON_BLOCKING_ERROR,
+            effectiveErrorExitCode,
           );
         }
 
@@ -387,8 +396,7 @@ export class HookRunner {
           output,
           stdout,
           stderr,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: exitCode 0 means success but explicit value needed for EXIT_CODE_SUCCESS
-          exitCode: exitCode || EXIT_CODE_SUCCESS,
+          exitCode: effectiveResultExitCode,
           duration,
         });
       });

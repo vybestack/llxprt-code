@@ -329,8 +329,9 @@ export async function* parseResponsesStream(
                   // 2. Previously emitted WITHOUT encrypted_content, but now we have it
                   //    (reasoning_text.done arrived before output_item.done)
                   const shouldEmit =
-                    finalThought &&
-                    (!prior || (hasEncryptedContent && !prior.hasEncrypted));
+                    finalThought !== '' &&
+                    (prior === undefined ||
+                      (hasEncryptedContent && prior.hasEncrypted !== true));
 
                   if (shouldEmit) {
                     // If re-emitting for encrypted_content, hide it so UI doesn't show duplicate
@@ -523,15 +524,27 @@ export function parseErrorResponse(
 
     // Handle various error response formats
     let message = 'Unknown error';
-    if (errorData.error?.message) {
+    if (
+      typeof errorData.error?.message === 'string' &&
+      errorData.error.message !== ''
+    ) {
       message = errorData.error.message;
-    } else if (errorData.error?.description) {
+    } else if (
+      typeof errorData.error?.description === 'string' &&
+      errorData.error.description !== ''
+    ) {
       message = errorData.error.description;
-    } else if (errorData.message) {
+    } else if (
+      typeof errorData.message === 'string' &&
+      errorData.message !== ''
+    ) {
       message = errorData.message;
-    } else if (errorData.description) {
+    } else if (
+      typeof errorData.description === 'string' &&
+      errorData.description !== ''
+    ) {
       message = errorData.description;
-    } else if (typeof errorData === 'string') {
+    } else if (typeof errorData === 'string' && errorData !== '') {
       message = errorData;
     }
 

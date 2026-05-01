@@ -327,10 +327,16 @@ export async function loadPoliciesFromToml(
               );
             } catch (e) {
               const error = e as Error;
-              /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string regex patterns should fall through to 'unknown' */
               const patternStr =
-                rule.commandRegex || rule.commandPrefix || 'unknown';
-              /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+                (typeof rule.commandRegex === 'string' &&
+                rule.commandRegex !== ''
+                  ? rule.commandRegex
+                  : '') ||
+                (typeof rule.commandPrefix === 'string' &&
+                rule.commandPrefix !== ''
+                  ? rule.commandPrefix
+                  : '') ||
+                'unknown';
               errors.push({
                 filePath,
                 fileName: file,
@@ -350,19 +356,22 @@ export async function loadPoliciesFromToml(
 
             // For each argsPattern, expand toolName arrays
             return argsPatterns.flatMap((argsPattern) => {
-              const toolNames: Array<string | undefined> = rule.toolName
-                ? Array.isArray(rule.toolName)
-                  ? rule.toolName
-                  : [rule.toolName]
-                : [undefined];
+              const toolNames: Array<string | undefined> =
+                rule.toolName !== undefined
+                  ? Array.isArray(rule.toolName)
+                    ? rule.toolName
+                    : [rule.toolName]
+                  : [undefined];
 
               // Create a policy rule for each tool name
               return toolNames.map((toolName) => {
-                // Transform mcpName field to composite toolName format
+                const hasMcpName =
+                  rule.mcpName !== undefined && rule.mcpName !== '';
+                const hasToolName = toolName !== undefined && toolName !== '';
                 let effectiveToolName: string | undefined;
-                if (rule.mcpName && toolName) {
+                if (hasMcpName && hasToolName) {
                   effectiveToolName = `${rule.mcpName}__${toolName}`;
-                } else if (rule.mcpName) {
+                } else if (hasMcpName) {
                   effectiveToolName = `${rule.mcpName}__*`;
                 } else {
                   effectiveToolName = toolName;
@@ -451,12 +460,20 @@ export async function loadPolicyFromToml(
     let effectiveArgsPattern = rule.argsPattern;
     const commandPrefixes: string[] = [];
 
-    if (rule.commandPrefix) {
+    const hasCommandPrefix =
+      rule.commandPrefix !== undefined &&
+      (!Array.isArray(rule.commandPrefix) || rule.commandPrefix.length > 0) &&
+      rule.commandPrefix !== '';
+    const hasCommandRegex =
+      rule.commandRegex !== undefined && rule.commandRegex !== '';
+    if (hasCommandPrefix) {
       const prefixes = Array.isArray(rule.commandPrefix)
         ? rule.commandPrefix
-        : [rule.commandPrefix];
+        : rule.commandPrefix !== undefined
+          ? [rule.commandPrefix]
+          : [];
       commandPrefixes.push(...prefixes);
-    } else if (rule.commandRegex) {
+    } else if (hasCommandRegex) {
       effectiveArgsPattern = `"command":"${rule.commandRegex}`;
     }
 
@@ -471,19 +488,21 @@ export async function loadPolicyFromToml(
 
     // For each argsPattern, expand toolName arrays
     return argsPatterns.flatMap((argsPattern) => {
-      const toolNames: Array<string | undefined> = rule.toolName
-        ? Array.isArray(rule.toolName)
-          ? rule.toolName
-          : [rule.toolName]
-        : [undefined];
+      const toolNames: Array<string | undefined> =
+        rule.toolName !== undefined
+          ? Array.isArray(rule.toolName)
+            ? rule.toolName
+            : [rule.toolName]
+          : [undefined];
 
       // Create a policy rule for each tool name
       return toolNames.map((toolName) => {
-        // Transform mcpName field to composite toolName format
+        const hasMcpName = rule.mcpName !== undefined && rule.mcpName !== '';
+        const hasToolName = toolName !== undefined && toolName !== '';
         let effectiveToolName: string | undefined;
-        if (rule.mcpName && toolName) {
+        if (hasMcpName && hasToolName) {
           effectiveToolName = `${rule.mcpName}__${toolName}`;
-        } else if (rule.mcpName) {
+        } else if (hasMcpName) {
           effectiveToolName = `${rule.mcpName}__*`;
         } else {
           effectiveToolName = toolName;

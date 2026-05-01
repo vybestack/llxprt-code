@@ -163,7 +163,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       forceQwenOAuth?: boolean;
     };
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (providerConfig?.forceQwenOAuth) {
+    if (providerConfig?.forceQwenOAuth === true) {
       return true;
     }
     // CRITICAL FIX: Check provider name first for cases where base URL is changed by profiles
@@ -336,7 +336,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (this.name === 'qwen' && config?.forceQwenOAuth) {
+    if (this.name === 'qwen' && config?.forceQwenOAuth === true) {
       try {
         const token = await this.authResolver.resolveAuthentication({
           settingsService: this.resolveSettingsService(),
@@ -461,8 +461,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       ]);
 
       const params: Record<string, unknown> = {};
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (providerSettings) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard - providerSettings is object type but we guard against null/undefined from external sources
+      if (providerSettings != null) {
         for (const [key, value] of Object.entries(providerSettings)) {
           if (reservedKeys.has(key) || value === undefined || value === null) {
             continue;
@@ -712,22 +712,22 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Process the continuation response
       for await (const chunk of continuationResponse as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
-        if (abortSignal?.aborted) {
+        if (abortSignal?.aborted === true) {
           break;
         }
 
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         const choice = chunk.choices?.[0];
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        if (!choice) continue;
+        if (choice === null || choice === undefined) continue;
 
         const deltaContent = coerceMessageContentToString(
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           choice.delta?.content as unknown,
         );
-        if (deltaContent) {
+        if (deltaContent !== undefined && deltaContent !== '') {
           const sanitized = sanitizeProviderText(deltaContent);
-          if (sanitized) {
+          if (sanitized !== '') {
             accumulatedText += sanitized;
             yield {
               speaker: 'ai',

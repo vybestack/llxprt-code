@@ -284,7 +284,8 @@ export class BeforeToolHookOutput extends DefaultHookOutput {
     if (this.hookSpecificOutput && 'tool_input' in this.hookSpecificOutput) {
       const modifiedInput = this.hookSpecificOutput['tool_input'];
       if (
-        modifiedInput &&
+        modifiedInput !== null &&
+        modifiedInput !== undefined &&
         typeof modifiedInput === 'object' &&
         !Array.isArray(modifiedInput)
       ) {
@@ -308,7 +309,7 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
         'llm_response'
       ] as LLMResponse;
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookResponse) {
+      if (hookResponse != null) {
         // Convert hook format to SDK format
         return defaultHookTranslator.fromHookLLMResponse(hookResponse);
       }
@@ -327,7 +328,7 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
         'llm_request'
       ] as Partial<LLMRequest>;
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookRequest) {
+      if (hookRequest !== null && hookRequest !== undefined) {
         // Convert hook format to SDK format
         const sdkRequest = defaultHookTranslator.fromHookLLMRequest(
           hookRequest as LLMRequest,
@@ -365,7 +366,7 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
         'toolConfig'
       ] as HookToolConfig;
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookToolConfig) {
+      if (hookToolConfig != null) {
         // Convert hook format to SDK format
         const sdkToolConfig =
           defaultHookTranslator.fromHookToolConfig(hookToolConfig);

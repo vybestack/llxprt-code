@@ -59,9 +59,9 @@ export class IdeContextTracker {
     }
 
     const openFiles = currentIdeContext.workspaceState?.openFiles ?? [];
-    const activeFile = openFiles.find((f) => f.isActive);
+    const activeFile = openFiles.find((f) => f.isActive === true);
     const otherOpenFiles = openFiles
-      .filter((f) => !f.isActive)
+      .filter((f) => f.isActive !== true)
       .map((f) => f.path);
 
     const contextData: Record<string, unknown> = {};
@@ -189,10 +189,10 @@ export class IdeContextTracker {
   ): void {
     const lastActiveFile = (
       lastIdeContext.workspaceState?.openFiles ?? []
-    ).find((f: File) => f.isActive);
+    ).find((f: File) => f.isActive === true);
     const currentActiveFile = (
       currentIdeContext.workspaceState?.openFiles ?? []
-    ).find((f: File) => f.isActive);
+    ).find((f: File) => f.isActive === true);
 
     if (currentActiveFile) {
       if (!lastActiveFile || lastActiveFile.path !== currentActiveFile.path) {

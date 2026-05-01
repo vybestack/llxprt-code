@@ -40,25 +40,25 @@ export function createAgentRuntimeContext(
   options: AgentRuntimeContextFactoryOptions,
 ): AgentRuntimeContext {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
-  if (!options.provider) {
+  if (options.provider == null) {
     throw new Error(
       'AgentRuntimeContext requires a provider adapter. Supply options.provider.',
     );
   }
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
-  if (!options.telemetry) {
+  if (options.telemetry == null) {
     throw new Error(
       'AgentRuntimeContext requires a telemetry adapter. Supply options.telemetry.',
     );
   }
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
-  if (!options.tools) {
+  if (options.tools == null) {
     throw new Error(
       'AgentRuntimeContext requires a tools view. Supply options.tools.',
     );
   }
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
-  if (!options.providerRuntime) {
+  if (options.providerRuntime == null) {
     throw new Error(
       'AgentRuntimeContext requires a provider runtime context. Supply options.providerRuntime.',
     );
@@ -74,7 +74,7 @@ export function createAgentRuntimeContext(
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
     const settingsService = options.providerRuntime?.settingsService;
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
-    if (settingsService) {
+    if (settingsService !== undefined && settingsService !== null) {
       const liveValue = settingsService.get(key) as T | undefined;
       if (liveValue !== undefined) {
         return liveValue;

@@ -185,7 +185,7 @@ export function logToolCall(
 
   const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
-    body: `Tool call: ${event.function_name}${event.decision ? `. Decision: ${event.decision}` : ''}. Success: ${event.success}. Duration: ${event.duration_ms}ms.`,
+    body: `Tool call: ${event.function_name}${event.decision != null ? `. Decision: ${event.decision}` : ''}. Success: ${event.success}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };
   logger.emit(logRecord);
@@ -254,7 +254,11 @@ export function logFileOperation(
     operation: event.operation,
   };
 
-  if (event.lines) {
+  if (
+    event.lines !== undefined &&
+    event.lines !== 0 &&
+    !Number.isNaN(event.lines)
+  ) {
     attributes['lines'] = event.lines;
   }
   if (event.mimetype) {
@@ -361,7 +365,7 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
   }
   if (event.error) {
     attributes['error.message'] = event.error;
-  } else if (event.status_code) {
+  } else if (event.status_code !== undefined) {
     if (typeof event.status_code === 'number') {
       attributes[SemanticAttributes.HTTP_STATUS_CODE] = event.status_code;
     }
@@ -369,8 +373,7 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
 
   const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: status_code is number | string | undefined, 0 is not a valid HTTP status
-    body: `API response from ${event.model}. Status: ${event.status_code || 'N/A'}. Duration: ${event.duration_ms}ms.`,
+    body: `API response from ${event.model}. Status: ${event.status_code !== undefined && event.status_code !== '' && event.status_code !== 0 && !(typeof event.status_code === 'number' && Number.isNaN(event.status_code)) ? event.status_code : 'N/A'}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };
   logger.emit(logRecord);

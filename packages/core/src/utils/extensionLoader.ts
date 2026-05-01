@@ -76,9 +76,12 @@ export abstract class ExtensionLoader {
       await this.config.getMcpClientManager()!.startExtension(extension);
       await this.maybeRefreshGeminiTools(extension);
       // Register extension subagents
-      if (extension.subagents?.length) {
+      if (
+        Array.isArray(extension.subagents) &&
+        extension.subagents.length > 0
+      ) {
         const subagentMgr = this.config.getSubagentManager();
-        if (subagentMgr) {
+        if (subagentMgr != null) {
           subagentMgr.registerExtensionSubagents(
             extension.name,
             extension.subagents,
@@ -112,7 +115,7 @@ export abstract class ExtensionLoader {
   protected maybeStartExtension(
     extension: GeminiCLIExtension,
   ): Promise<void> | undefined {
-    if (this.config?.getEnableExtensionReloading()) {
+    if (this.config?.getEnableExtensionReloading() === true) {
       return this.startExtension(extension);
     }
     return;
@@ -127,7 +130,7 @@ export abstract class ExtensionLoader {
   ): Promise<void> {
     if (extension.excludeTools && extension.excludeTools.length > 0) {
       const geminiClient = this.config?.getGeminiClient();
-      if (geminiClient?.isInitialized()) {
+      if (geminiClient?.isInitialized() === true) {
         await geminiClient.setTools();
       }
     }
@@ -207,7 +210,7 @@ export abstract class ExtensionLoader {
   protected maybeStopExtension(
     extension: GeminiCLIExtension,
   ): Promise<void> | undefined {
-    if (this.config?.getEnableExtensionReloading()) {
+    if (this.config?.getEnableExtensionReloading() === true) {
       return this.stopExtension(extension);
     }
     return;

@@ -62,19 +62,19 @@ class Cell {
       return;
     }
 
-    if (cell.isInverse()) {
+    if (cell.isInverse() !== 0) {
       this.attributes += Attribute.inverse;
     }
-    if (cell.isBold()) {
+    if (cell.isBold() !== 0) {
       this.attributes += Attribute.bold;
     }
-    if (cell.isItalic()) {
+    if (cell.isItalic() !== 0) {
       this.attributes += Attribute.italic;
     }
-    if (cell.isUnderline()) {
+    if (cell.isUnderline() !== 0) {
       this.attributes += Attribute.underline;
     }
-    if (cell.isDim()) {
+    if (cell.isDim() !== 0) {
       this.attributes += Attribute.dim;
     }
 

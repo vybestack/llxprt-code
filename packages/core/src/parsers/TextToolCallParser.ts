@@ -206,8 +206,31 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
       try {
         const parsed = JSON.parse(jsonSegment.segment);
-        const toolName = String(parsed.name ?? '');
-        const argsText = JSON.stringify(parsed.arguments ?? {});
+        const parsedName = parsed.name;
+        const toolName = String(
+          parsedName !== undefined &&
+            parsedName !== null &&
+            parsedName !== false &&
+            parsedName !== 0 &&
+            parsedName !== '' &&
+            !(typeof parsedName === 'number' && Number.isNaN(parsedName))
+            ? parsedName
+            : '',
+        );
+        const parsedArguments = parsed.arguments;
+        const argsText = JSON.stringify(
+          parsedArguments !== undefined &&
+            parsedArguments !== null &&
+            parsedArguments !== false &&
+            parsedArguments !== 0 &&
+            parsedArguments !== '' &&
+            !(
+              typeof parsedArguments === 'number' &&
+              Number.isNaN(parsedArguments)
+            )
+            ? parsedArguments
+            : {},
+        );
         const endMarkerIndex = content.indexOf(endMarker, jsonSegment.endIndex);
         if (toolName && endMarkerIndex !== -1) {
           const fullEnd = endMarkerIndex + endMarker.length;
@@ -274,11 +297,29 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     try {
       const parsed = JSON.parse(innerContent);
       if (typeof parsed === 'object' && parsed !== null && 'name' in parsed) {
-        // Hermes format validation
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string tool name should fall through
-        const toolName = String(parsed.name || '');
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined arguments should default to empty object
-        const args = parsed.arguments || {};
+        const parsedName = parsed.name;
+        const toolName = String(
+          parsedName !== undefined &&
+            parsedName !== null &&
+            parsedName !== false &&
+            parsedName !== 0 &&
+            parsedName !== '' &&
+            !(typeof parsedName === 'number' && Number.isNaN(parsedName))
+            ? parsedName
+            : '',
+        );
+        const parsedArguments = parsed.arguments;
+        const args =
+          parsedArguments !== undefined &&
+          parsedArguments !== null &&
+          parsedArguments !== false &&
+          parsedArguments !== 0 &&
+          parsedArguments !== '' &&
+          !(
+            typeof parsedArguments === 'number' && Number.isNaN(parsedArguments)
+          )
+            ? parsedArguments
+            : {};
         return {
           start,
           end,
@@ -547,8 +588,8 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const merged: Array<{ start: number; end: number }> = [];
     for (const range of sorted) {
       const last = merged[merged.length - 1];
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool-call parser consumes model text boundaries despite declared types.
-      if (last && range.start <= last.end) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Array access may return undefined at runtime despite TypeScript inference
+      if (last != null && range.start <= last.end) {
         last.end = Math.max(last.end, range.end);
       } else {
         merged.push({ ...range });
@@ -638,11 +679,11 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     toolName: string,
   ): Record<string, unknown> {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool-call parser consumes model text boundaries despite declared types.
-    if (!args) {
+    if (args === null || args === undefined) {
       return args;
     }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool-call parser consumes model text boundaries despite declared types.
-    const normalizedTool = toolName?.trim().toLowerCase();
+    const normalizedTool =
+      typeof toolName === 'string' ? toolName.trim().toLowerCase() : '';
     if (normalizedTool === 'todo_write') {
       const todos = args['todos'];
       if (Array.isArray(todos)) {
@@ -659,7 +700,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     index: number,
   ): Record<string, unknown> {
     const normalized =
-      todo && typeof todo === 'object'
+      todo != null && typeof todo === 'object'
         ? { ...(todo as Record<string, unknown>) }
         : {};
 

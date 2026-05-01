@@ -178,7 +178,7 @@ export class SubAgentScope {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
       runtimeBundle.runtimeContext.tools ?? runtimeBundle.toolsView;
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
-    if (!toolsView) {
+    if (toolsView == null) {
       throw new Error(
         'SubAgentScope.create requires a ToolRegistryView from the runtime bundle.',
       );
@@ -268,7 +268,7 @@ export class SubAgentScope {
     }
     this.clearTimeoutHandle();
     this.timeoutHandle = setTimeout(() => {
-      if (abortController.signal.aborted) {
+      if (abortController.signal.aborted === true) {
         return;
       }
       this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
@@ -368,7 +368,7 @@ export class SubAgentScope {
             turnCounter++,
             execCtx,
           );
-        if (abortController.signal.aborted) return;
+        if (abortController.signal.aborted === true) return;
 
         processInteractiveTextResponse(textResponse, execCtx);
 
@@ -450,7 +450,7 @@ export class SubAgentScope {
     try {
       const stream = turn.run(parts, abortController.signal);
       for await (const event of stream) {
-        if (abortController.signal.aborted) break;
+        if (abortController.signal.aborted === true) break;
         if (event.type === GeminiEventType.Content && event.value) {
           textResponse += event.value;
           const filtered = filterTextWithEmoji(event.value, execCtx);
@@ -463,14 +463,18 @@ export class SubAgentScope {
           if (execCtx.onMessage && filtered.text) {
             execCtx.onMessage(filtered.text);
           }
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
-        } else if (event.type === GeminiEventType.Error && event.value?.error) {
-          execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
-          throw new Error(event.value.error.message);
+        } else if (event.type === GeminiEventType.Error) {
+          const eventError = (
+            event.value as { error?: Error | null } | undefined
+          )?.error;
+          if (eventError != null) {
+            execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
+            throw new Error(eventError.message);
+          }
         }
       }
     } catch (error) {
-      if (abortController.signal.aborted) {
+      if (abortController.signal.aborted === true) {
         throw createAbortError();
       }
       throw error;
@@ -631,7 +635,7 @@ export class SubAgentScope {
           currentTurn,
           execCtx,
         );
-        if (abortController.signal.aborted) return;
+        if (abortController.signal.aborted === true) return;
 
         // Post-send timeout recheck
         const recheck = checkTerminationConditions(
@@ -691,7 +695,7 @@ export class SubAgentScope {
     const timeoutSignal = timeoutController.signal;
     const onAbort = () => timeoutController.abort();
     abortController.signal.addEventListener('abort', onAbort, { once: true });
-    if (abortController.signal.aborted) {
+    if (abortController.signal.aborted === true) {
       onAbort();
       abortController.signal.removeEventListener('abort', onAbort);
       return { functionCalls: [], textResponse: '' };
@@ -715,7 +719,7 @@ export class SubAgentScope {
             timeoutMs: effectiveTimeoutMs,
             signal: timeoutSignal,
             onTimeout: () => {
-              if (abortController.signal.aborted) {
+              if (abortController.signal.aborted === true) {
                 return;
               }
               this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
@@ -728,14 +732,16 @@ export class SubAgentScope {
           // Watchdog disabled: call iterator.next() directly
           result = await iterator.next();
         }
-        if (result.done) {
+        if (result.done === true) {
           break;
         }
         const resp = result.value;
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
-        if (abortController.signal.aborted)
-          return { functionCalls: [], textResponse: '' };
-        if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
+        const isRuntimeAborted = Boolean(abortController.signal.aborted);
+        if (isRuntimeAborted) return { functionCalls: [], textResponse: '' };
+        if (
+          resp.type === StreamEventType.CHUNK &&
+          resp.value.functionCalls != null
+        ) {
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
           const chunkCalls = resp.value.functionCalls ?? [];
           if (chunkCalls.length > 0) {
@@ -811,10 +817,13 @@ export class SubAgentScope {
   }
 
   cancel(reason?: string): void {
-    if (this.activeAbortController?.signal.aborted) {
+    if (
+      this.activeAbortController !== null &&
+      this.activeAbortController.signal.aborted === true
+    ) {
       return;
     }
-    if (!this.activeAbortController) {
+    if (this.activeAbortController === null) {
       return;
     }
     this.logger.warn(() => {

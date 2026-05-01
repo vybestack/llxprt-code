@@ -39,7 +39,16 @@ export function coerceMessageContentToString(
   if (Array.isArray(content)) {
     const parts: string[] = [];
     for (const part of content) {
-      if (!part) continue;
+      if (
+        part === undefined ||
+        part === null ||
+        part === false ||
+        part === 0 ||
+        part === '' ||
+        (typeof part === 'number' && Number.isNaN(part))
+      ) {
+        continue;
+      }
       if (typeof part === 'string') {
         parts.push(part);
       } else if (
@@ -51,7 +60,7 @@ export function coerceMessageContentToString(
         parts.push((part as { text: string }).text);
       }
     }
-    return parts.length ? parts.join('') : undefined;
+    return parts.length > 0 ? parts.join('') : undefined;
   }
   return undefined;
 }
@@ -103,7 +112,7 @@ export function sanitizeToolArgumentsString(
     }
   }
 
-  return text.length ? text : '{}';
+  return text.length > 0 ? text : '{}';
 }
 
 /**
@@ -235,7 +244,7 @@ export function parseStreamingReasoningDelta(
   delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta | undefined,
   logger: DebugLogger,
 ): { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] } {
-  if (!delta) {
+  if (delta == null) {
     return { thinking: null, toolCalls: [] };
   }
 
@@ -244,7 +253,11 @@ export function parseStreamingReasoningDelta(
     .reasoning_content;
 
   // Handle absent, null, or non-string
-  if (!reasoningContent || typeof reasoningContent !== 'string') {
+  if (
+    reasoningContent === null ||
+    reasoningContent === undefined ||
+    typeof reasoningContent !== 'string'
+  ) {
     return { thinking: null, toolCalls: [] };
   }
 

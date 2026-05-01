@@ -318,27 +318,27 @@ export class FileTokenStore extends BaseTokenStore {
   private isValidCredentials(
     credentials: unknown,
   ): credentials is MCPOAuthCredentials {
-    if (!credentials || typeof credentials !== 'object') {
+    if (credentials === null || credentials === undefined || typeof credentials !== 'object') {
       return false;
     }
 
     const cred = credentials as Record<string, unknown>;
 
     // Check required fields
-    if (!cred.serverName || typeof cred.serverName !== 'string') {
+    if (typeof cred.serverName !== 'string' || cred.serverName === '') {
       return false;
     }
 
-    if (!cred.token || typeof cred.token !== 'object') {
+    if (cred.token === null || cred.token === undefined || typeof cred.token !== 'object') {
       return false;
     }
 
     const token = cred.token as Record<string, unknown>;
-    if (!token.accessToken || typeof token.accessToken !== 'string') {
+    if (typeof token.accessToken !== 'string' || token.accessToken === '') {
       return false;
     }
 
-    if (!token.tokenType || typeof token.tokenType !== 'string') {
+    if (typeof token.tokenType !== 'string' || token.tokenType === '') {
       return false;
     }
 

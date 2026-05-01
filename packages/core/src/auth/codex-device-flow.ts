@@ -187,8 +187,14 @@ export class CodexDeviceFlow {
 
     // Build validated Codex token - use Unix timestamp in SECONDS (not milliseconds)
     const now = Math.floor(Date.now() / 1000);
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: expires_in 0 is invalid but should fall through to default 1 hour
-    const expiresIn = tokenResponse.expires_in || 3600; // Default 1 hour
+    // expires_in 0 is invalid, treat nullish/NaN/0 as default 1 hour
+    const rawExpiresIn = tokenResponse.expires_in;
+    const expiresIn =
+      typeof rawExpiresIn === 'number' &&
+      !Number.isNaN(rawExpiresIn) &&
+      rawExpiresIn !== 0
+        ? rawExpiresIn
+        : 3600;
     const expiry = now + expiresIn;
 
     this.logger.debug(
@@ -257,8 +263,14 @@ export class CodexDeviceFlow {
 
     // Use Unix timestamp in SECONDS
     const now = Math.floor(Date.now() / 1000);
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: expires_in 0 is invalid but should fall through to default 1 hour
-    const expiresIn = tokenResponse.expires_in || 3600;
+    // expires_in 0 is invalid, treat nullish/NaN/0 as default 1 hour
+    const rawExpiresIn = tokenResponse.expires_in;
+    const expiresIn =
+      typeof rawExpiresIn === 'number' &&
+      !Number.isNaN(rawExpiresIn) &&
+      rawExpiresIn !== 0
+        ? rawExpiresIn
+        : 3600;
     const expiry = now + expiresIn;
 
     return CodexOAuthTokenSchema.parse({
@@ -565,8 +577,14 @@ export class CodexDeviceFlow {
 
     // Build and return the CodexOAuthToken
     const now = Date.now();
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: expires_in 0 is invalid but should fall through to default 1 hour
-    const expiresIn = tokenResponse.expires_in || 3600; // Default to 1 hour if not provided
+    // expires_in 0 is invalid, treat nullish/NaN/0 as default 1 hour
+    const rawExpiresIn = tokenResponse.expires_in;
+    const expiresIn =
+      typeof rawExpiresIn === 'number' &&
+      !Number.isNaN(rawExpiresIn) &&
+      rawExpiresIn !== 0
+        ? rawExpiresIn
+        : 3600;
     const token: CodexOAuthToken = CodexOAuthTokenSchema.parse({
       access_token: tokenResponse.access_token,
       refresh_token: tokenResponse.refresh_token,

@@ -135,7 +135,7 @@ export class GeminiChat {
     initialHistory: Content[] = [],
   ) {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
-    if (!view) {
+    if (view == null) {
       throw new Error('AgentRuntimeContext is required for GeminiChat');
     }
 
@@ -154,7 +154,7 @@ export class GeminiChat {
     this.logger.debug('GeminiChat initialized:', {
       model,
       initialHistoryLength: initialHistory.length,
-      hasHistoryService: !!this.historyService,
+      hasHistoryService: true,
       hasRuntimeState: true,
     });
 
@@ -231,7 +231,7 @@ export class GeminiChat {
   private _installDensityWrapper(): void {
     if (typeof this.historyService.add !== 'function') return;
     const hs = this.historyService as unknown as Record<symbol, unknown>;
-    if (hs[GeminiChat.DENSITY_WRAPPED]) return;
+    if (hs[GeminiChat.DENSITY_WRAPPED] === true) return;
     const originalAdd = this.historyService.add.bind(this.historyService);
     this.historyService.add = (...args: Parameters<typeof originalAdd>) => {
       const result = originalAdd(...args);
@@ -292,7 +292,7 @@ export class GeminiChat {
         adapter.setActiveProvider(desiredProviderName);
         const updatedProvider = adapter.getActiveProvider();
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
-        if (updatedProvider) {
+        if (updatedProvider != null) {
           provider = updatedProvider;
         }
         this.logger.debug(

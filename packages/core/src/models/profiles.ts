@@ -15,21 +15,21 @@ export function generateDefaultProfile(
   const profile: LlxprtDefaultProfile = {};
 
   // Reasoning models
-  if (model.reasoning) {
+  if (model.reasoning === true) {
     profile.thinkingEnabled = true;
     profile.thinkingBudget = 10000; // Conservative default
 
     // Lower temperature for reasoning models
-    if (model.temperature) {
+    if (model.temperature === true) {
       profile.temperature = 0.7;
     }
-  } else if (model.temperature) {
+  } else if (model.temperature === true) {
     // Non-reasoning models
     profile.temperature = 1.0;
   }
 
   // Top-p recommendations
-  if (model.temperature) {
+  if (model.temperature === true) {
     profile.topP = 0.95; // Standard default
   }
 

@@ -453,7 +453,7 @@ export class Turn {
             // Watchdog disabled: call iterator.next() directly
             result = await streamIterator.next();
           }
-          if (result.done) {
+          if (result.done === true) {
             break;
           }
 
@@ -495,7 +495,7 @@ export class Turn {
           // Narrow to CHUNK — the only other variant in the discriminated union
           const resp = streamEvent.value;
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
-          if (!resp) continue; // Skip if there's no response body
+          if (resp === null || resp === undefined) continue; // Skip if there's no response body
 
           this.debugResponses.push(resp);
 
@@ -506,7 +506,7 @@ export class Turn {
           // @plan PLAN-20251202-THINKING.P16
           const allParts = resp.candidates?.[0]?.content?.parts ?? [];
           for (const part of allParts) {
-            if ((part as unknown as { thought?: boolean }).thought) {
+            if ((part as unknown as { thought?: boolean }).thought === true) {
               const thought = parseThought(
                 (part as unknown as { text?: string }).text ?? '',
               );
@@ -545,7 +545,7 @@ export class Turn {
           const finishReason = resp.candidates?.[0]?.finishReason;
 
           // This is the key change: Only yield 'Finished' if there is a finishReason.
-          if (finishReason) {
+          if (finishReason != null) {
             this.logger.debug(() => `[stream:turn] emitting Finished event`, {
               finishReason,
               traceId,

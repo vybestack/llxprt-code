@@ -440,7 +440,7 @@ export async function createPolicyEngineConfig(
     for (const [serverName, serverConfig] of Object.entries(
       settings.mcpServers,
     )) {
-      if (serverConfig.trust) {
+      if (serverConfig.trust === true) {
         // Trust all tools from this MCP server
         // Using pattern matching for MCP tool names which are formatted as "serverName__toolName"
         rules.push({
@@ -492,7 +492,7 @@ export function createPolicyUpdater(
       void (async () => {
         const toolName = message.toolName;
 
-        if (message.commandPrefix) {
+        if (message.commandPrefix !== undefined) {
           // Convert commandPrefix(es) to argsPatterns for in-memory rules
           const prefixes = Array.isArray(message.commandPrefix)
             ? message.commandPrefix
@@ -534,7 +534,7 @@ export function createPolicyUpdater(
         }
 
         // PERSISTENCE LOGIC - Save to TOML if persist=true
-        if (message.persist) {
+        if (message.persist === true) {
           try {
             const userPoliciesDir = Storage.getUserPoliciesDir();
             await fs.mkdir(userPoliciesDir, { recursive: true });
@@ -577,9 +577,9 @@ export function createPolicyUpdater(
               newRule.priority = 100;
             }
 
-            if (message.commandPrefix) {
+            if (message.commandPrefix !== undefined) {
               newRule.commandPrefix = message.commandPrefix;
-            } else if (message.argsPattern) {
+            } else if (message.argsPattern !== undefined) {
               newRule.argsPattern = message.argsPattern;
             }
 

@@ -355,11 +355,8 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     } = correctedContentResult;
     // fileExists is true if the file existed (and was readable or unreadable but caught by readError).
     // fileExists is false if the file did not exist (ENOENT).
-    const isNewFile =
-      !fileExists ||
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Write-file inputs cross tool invocation boundaries despite declared types.
-      (correctedContentResult.error !== undefined &&
-        !correctedContentResult.fileExists);
+    // Note: At this point correctedContentResult.error is undefined (we returned early above if there was an error)
+    const isNewFile = !fileExists;
 
     try {
       const dirName = path.dirname(filePath);
@@ -391,13 +388,9 @@ class WriteFileToolInvocation extends BaseToolInvocation<
 
       // Generate diff for display result
       const fileName = path.basename(filePath);
-      // If there was a readError, originalContent in correctedContentResult is '',
-      // but for the diff, we want to show the original content as it was before the write if possible.
-      // However, if it was unreadable, currentContentForDiff will be empty.
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Write-file inputs cross tool invocation boundaries despite declared types.
-      const currentContentForDiff = correctedContentResult.error
-        ? '' // Or some indicator of unreadable content
-        : originalContent;
+      // At this point correctedContentResult.error is undefined (we returned early above if there was an error)
+      // So currentContentForDiff is just originalContent
+      const currentContentForDiff = originalContent;
 
       const fileDiff = Diff.createPatch(
         fileName,
@@ -425,7 +418,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
           ? `Successfully created and wrote to new file: ${displayPath}.`
           : `Successfully overwrote file: ${displayPath}.`,
       ];
-      if (filteredParams.modified_by_user) {
+      if (filteredParams.modified_by_user === true) {
         llmSuccessMessageParts.push(
           `User modified the \`content\` to be: ${filteredParams.content}`,
         );
@@ -449,7 +442,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
        */
       try {
         const lspClient = this.config.getLspServiceClient();
-        if (lspClient?.isAlive()) {
+        if (lspClient?.isAlive() === true) {
           // Check the written file to trigger diagnostics
           await lspClient.checkFile(filePath);
 
@@ -483,18 +476,18 @@ class WriteFileToolInvocation extends BaseToolInvocation<
               break;
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Write-file inputs cross tool invocation boundaries despite declared types.
-            const fileDiagnostics = allDiagnostics[file] || [];
+            // Write-file inputs cross tool invocation boundaries despite declared types.
+            const fileDiagnostics = allDiagnostics[file] ?? [];
             // Filter by severity
             const filtered = fileDiagnostics.filter((d) =>
               includeSeverities.includes(d.severity),
             );
             // Sort by line, then column
-            const sorted = filtered.sort(
-              (a, b) =>
-                (a.line ?? 0) - (b.line ?? 0) ||
-                (a.column ?? 0) - (b.column ?? 0),
-            );
+            const sorted = filtered.sort((a, b) => {
+              const lineDiff = (a.line ?? 0) - (b.line ?? 0);
+              if (lineDiff !== 0) return lineDiff;
+              return (a.column ?? 0) - (b.column ?? 0);
+            });
 
             if (sorted.length === 0) {
               continue;
