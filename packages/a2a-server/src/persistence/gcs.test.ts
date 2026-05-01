@@ -59,7 +59,7 @@ vi.mock('tar', async () => {
   const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
   return {
     c: vi.fn(({ file }) => {
-      if (file) {
+      if (file != null) {
         actualFs.writeFileSync(file, Buffer.from('dummy tar content'));
       }
       return Promise.resolve();
