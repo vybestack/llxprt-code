@@ -104,7 +104,8 @@ async function checkForUpdates(
 
     if (
       !isManagedExtensionSurface &&
-      latestVersion &&
+      typeof latestVersion === 'string' &&
+      latestVersion.length > 0 &&
       semver.gt(latestVersion, currentVersion)
     ) {
       const selection = await vscode.window.showInformationMessage(
@@ -180,7 +181,7 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   if (
-    !context.globalState.get(INFO_MESSAGE_SHOWN_KEY) &&
+    context.globalState.get(INFO_MESSAGE_SHOWN_KEY) !== true &&
     !isManagedExtensionSurface
   ) {
     void vscode.window.showInformationMessage(

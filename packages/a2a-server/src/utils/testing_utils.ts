@@ -161,12 +161,12 @@ export function createMockConfig(
                     const tool = mockConfig
                       .getToolRegistry()
                       ?.getTool?.(call.request.name);
-                    if (!tool || typeof tool.build !== 'function') {
+                    if (tool == null || typeof tool.build !== 'function') {
                       return false;
                     }
                     const invocation = tool.build(call.request.args);
                     if (
-                      !invocation ||
+                      invocation == null ||
                       typeof invocation.shouldConfirmExecute !== 'function'
                     ) {
                       return false;

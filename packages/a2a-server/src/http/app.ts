@@ -168,7 +168,7 @@ export async function createApp() {
           return res.status(400).json({ error: 'Invalid "command" field.' });
         }
 
-        if (args && !Array.isArray(args)) {
+        if (args !== undefined && !Array.isArray(args)) {
           return res
             .status(400)
             .json({ error: '"args" field must be an array.' });
@@ -176,7 +176,7 @@ export async function createApp() {
 
         const commandToExecute = commandRegistry.get(command);
 
-        if (commandToExecute?.requiresWorkspace) {
+        if (commandToExecute?.requiresWorkspace === true) {
           if (!process.env['CODER_AGENT_WORKSPACE_PATH']) {
             return res.status(400).json({
               error: `Command "${command}" requires a workspace, but CODER_AGENT_WORKSPACE_PATH is not set.`,
@@ -190,7 +190,7 @@ export async function createApp() {
             .json({ error: `Command not found: ${command}` });
         }
 
-        if (commandToExecute.streaming) {
+        if (commandToExecute.streaming === true) {
           const eventBus = new DefaultExecutionEventBus();
           res.setHeader('Content-Type', 'text/event-stream');
           const eventHandler = (event: AgentExecutionEvent) => {
@@ -262,7 +262,7 @@ export async function createApp() {
 
         const commands = commandRegistry
           .getAllCommands()
-          .filter((command) => command.topLevel)
+          .filter((command) => command.topLevel === true)
           .map((command) => transformCommand(command, []));
 
         return res.status(200).json({ commands });
@@ -335,7 +335,7 @@ export async function main() {
       let actualPort;
       if (process.env['CODER_AGENT_PORT']) {
         actualPort = process.env['CODER_AGENT_PORT'];
-      } else if (address && typeof address !== 'string') {
+      } else if (address !== null && typeof address !== 'string') {
         actualPort = address.port;
       } else {
         throw new Error('[Core Agent] Could not find port number.');

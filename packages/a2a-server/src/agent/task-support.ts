@@ -392,7 +392,7 @@ export async function handleToolConfirmationPart(
   const outcomeString = part.data['outcome'];
   const confirmationOutcome = mapOutcomeStringToEnum(outcomeString);
 
-  if (!confirmationOutcome) {
+  if (confirmationOutcome === undefined) {
     logger.warn(
       `[Task] Unknown tool confirmation outcome: "${outcomeString}" for callId: ${callId}`,
     );
@@ -633,10 +633,10 @@ export async function normalizeToolCallRequest(
 
   if (
     normalizedRequest.name === 'replace' &&
-    !normalizedRequest.args['newContent'] &&
-    normalizedRequest.args['file_path'] &&
-    normalizedRequest.args['old_string'] &&
-    normalizedRequest.args['new_string']
+    normalizedRequest.args['newContent'] === undefined &&
+    normalizedRequest.args['file_path'] !== undefined &&
+    normalizedRequest.args['old_string'] !== undefined &&
+    normalizedRequest.args['new_string'] !== undefined
   ) {
     const newContent = await getProposedContent(
       normalizedRequest.args['file_path'] as string,

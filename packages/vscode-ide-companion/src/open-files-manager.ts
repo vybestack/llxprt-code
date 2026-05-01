@@ -91,7 +91,7 @@ export class OpenFilesManager {
 
   private addOrMoveToFront(editor: vscode.TextEditor) {
     // Deactivate previous active file
-    const currentActive = this.openFiles.find((f) => f.isActive);
+    const currentActive = this.openFiles.find((f) => f.isActive === true);
     if (currentActive) {
       currentActive.isActive = false;
       currentActive.cursor = undefined;
@@ -139,7 +139,7 @@ export class OpenFilesManager {
     const file = this.openFiles.find(
       (f) => f.path === editor.document.uri.fsPath,
     );
-    if (!file?.isActive) {
+    if (file?.isActive !== true) {
       return;
     }
 

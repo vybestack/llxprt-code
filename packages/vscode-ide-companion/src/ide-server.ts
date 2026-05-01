@@ -352,7 +352,7 @@ export class IDEServer {
         void (async () => {
           try {
             const address = (this.server as HTTPServer).address();
-            if (address && typeof address !== 'string') {
+            if (address !== null && typeof address !== 'string') {
               this.port = address.port;
               this.log(`IDE server listening on http://127.0.0.1:${this.port}`);
               let portFile: string | undefined;
@@ -409,7 +409,12 @@ export class IDEServer {
   }
 
   async syncEnvVars(): Promise<void> {
-    if (this.context && this.server && this.port && this.authToken) {
+    if (
+      this.context !== undefined &&
+      this.server !== undefined &&
+      this.port !== undefined &&
+      this.authToken !== undefined
+    ) {
       await writePortAndWorkspace({
         context: this.context,
         port: this.port,
