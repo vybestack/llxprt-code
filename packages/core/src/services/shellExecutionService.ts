@@ -142,7 +142,8 @@ function isIgnorablePtyExitError(e: unknown): boolean {
   const err = e as { code?: string; message?: string };
   return (
     err.code === 'ESRCH' ||
-    !!err.message?.includes('Cannot resize a pty that has already exited')
+    (typeof err.message === 'string' &&
+      err.message.includes('Cannot resize a pty that has already exited'))
   );
 }
 
@@ -161,7 +162,7 @@ const getFullBufferText = (terminal: pkg.Terminal): string => {
     let trimRight = true;
     if (i + 1 < buffer.length) {
       const nextLine = buffer.getLine(i + 1);
-      if (nextLine?.isWrapped) {
+      if (nextLine?.isWrapped === true) {
         trimRight = false;
       }
     }
@@ -334,7 +335,7 @@ export class ShellExecutionService {
           TERM: 'xterm-256color',
           PAGER: 'cat',
         },
-        !!shellExecutionConfig.isSandboxOrCI,
+        shellExecutionConfig.isSandboxOrCI === true,
       );
       delete envVars.BASH_ENV;
 
@@ -369,30 +370,33 @@ export class ShellExecutionService {
         const inactivityTimeoutMs = shellExecutionConfig?.inactivityTimeoutMs;
         const inactivityAbortController = new AbortController();
 
-        const resetInactivityTimer = () => {
-          if (!inactivityTimeoutMs || inactivityTimeoutMs <= 0 || exited) {
+        const resetInactivityTimer = (): void => {
+          if (
+            inactivityTimeoutMs === undefined ||
+            inactivityTimeoutMs <= 0 ||
+            exited
+          ) {
             return;
           }
-
-          if (inactivityTimeout) {
+          if (inactivityTimeout !== null) {
             clearTimeout(inactivityTimeout);
           }
-
           inactivityTimeout = setTimeout(() => {
             if (!exited) {
-              // Kill the process due to inactivity
               inactivityAbortController.abort('inactivity_timeout');
             }
           }, inactivityTimeoutMs);
         };
 
         // Set up inactivity abort handler (mirrors abortHandler's SIGKILL escalation)
-        if (inactivityTimeoutMs && inactivityTimeoutMs > 0) {
+        if (inactivityTimeoutMs !== undefined && inactivityTimeoutMs > 0) {
           inactivityAbortController.signal.addEventListener(
             'abort',
             () => {
               void (async () => {
-                if (child.pid && !exited) {
+                // Preserve old truthiness semantics: skip pid 0 and undefined (invalid process IDs)
+                // Old code: if (child.pid && !exited)
+                if (child.pid !== undefined && child.pid !== 0 && !exited) {
                   const pid = child.pid;
                   if (isWindows) {
                     cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
@@ -402,12 +406,12 @@ export class ShellExecutionService {
                       await new Promise((res) =>
                         setTimeout(res, SIGKILL_TIMEOUT_MS),
                       );
-                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive check for race condition: process may exit during await
                       if (!exited) {
                         process.kill(-pid, 'SIGKILL');
                       }
                     } catch (_e) {
-                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive check for race condition: process may exit during await
                       if (!exited) child.kill('SIGKILL');
                     }
                   }
@@ -503,8 +507,10 @@ export class ShellExecutionService {
           const { finalBuffer } = cleanup();
           // Ensure we don't add an extra newline if stdout already ends with one.
           const separator = stdout.endsWith('\n') ? '' : '\n';
-          let combinedOutput =
-            stdout + (stderr ? (stdout ? separator : '') + stderr : '');
+          let combinedOutput = stdout;
+          if (stderr) {
+            combinedOutput += (stdout !== '' ? separator : '') + stderr;
+          }
 
           if (stdoutTruncated || stderrTruncated) {
             const truncationMessage = `\n[LLXPRT_CODE_WARNING: Output truncated. The buffer is limited to ${
@@ -536,7 +542,9 @@ export class ShellExecutionService {
 
         const abortHandler = () => {
           void (async () => {
-            if (child.pid && !exited) {
+            // Preserve old truthiness semantics: skip pid 0 and undefined (invalid process IDs)
+            // Old code: if (child.pid && !exited)
+            if (child.pid !== undefined && child.pid !== 0 && !exited) {
               if (isWindows) {
                 cpSpawn('taskkill', ['/pid', child.pid.toString(), '/f', '/t']);
               } else {
@@ -545,12 +553,12 @@ export class ShellExecutionService {
                   await new Promise((res) =>
                     setTimeout(res, SIGKILL_TIMEOUT_MS),
                   );
-                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive check for race condition: process may exit during await
                   if (!exited) {
                     process.kill(-child.pid, 'SIGKILL');
                   }
                 } catch (_e) {
-                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive check for race condition: process may exit during await
                   if (!exited) child.kill('SIGKILL');
                 }
               }
@@ -560,12 +568,20 @@ export class ShellExecutionService {
 
         abortSignal.addEventListener('abort', abortHandler, { once: true });
 
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        if (child.once) {
-          child.once('exit', (code, signal) => {
+        const childOnce = child.once as
+          | ((
+              event: 'exit' | 'close',
+              listener: (
+                code: number | null,
+                signal: NodeJS.Signals | null,
+              ) => void,
+            ) => typeof child)
+          | undefined;
+        if (childOnce !== undefined) {
+          childOnce.call(child, 'exit', (code, signal) => {
             handleExit(code, signal);
           });
-          child.once('close', (code, signal) => {
+          childOnce.call(child, 'close', (code, signal) => {
             handleExit(code, signal);
           });
         } else {
@@ -661,7 +677,7 @@ export class ShellExecutionService {
           TERM: 'xterm-256color',
           PAGER: shellExecutionConfig.pager ?? 'cat',
         },
-        !!shellExecutionConfig.isSandboxOrCI,
+        shellExecutionConfig.isSandboxOrCI === true,
       );
       delete envVars.BASH_ENV;
 
@@ -744,24 +760,25 @@ export class ShellExecutionService {
             return;
           }
 
-          if (!shellExecutionConfig.disableDynamicLineTrimming) {
-            if (!hasStartedOutput) {
-              const bufferText = getFullBufferText(headlessTerminal);
-              if (bufferText.trim().length === 0) {
-                shellDebug.log('renderFn: skipped (no output yet)');
-                return;
-              }
-              hasStartedOutput = true;
+          if (
+            shellExecutionConfig.disableDynamicLineTrimming !== true &&
+            !hasStartedOutput
+          ) {
+            const bufferText = getFullBufferText(headlessTerminal);
+            if (bufferText.trim().length === 0) {
+              shellDebug.log('renderFn: skipped (no output yet)');
+              return;
             }
+            hasStartedOutput = true;
           }
 
           const buffer = headlessTerminal.buffer.active;
           let newOutput: AnsiOutput;
-          if (shellExecutionConfig.showColor) {
+          if (shellExecutionConfig.showColor === true) {
             newOutput = serializeTerminalToObject(headlessTerminal);
           } else {
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            newOutput = (serializeTerminalToObject(headlessTerminal) || [])
+            const serialized = serializeTerminalToObject(headlessTerminal);
+            newOutput = (Array.isArray(serialized) ? serialized : [])
               .filter((line): line is AnsiLine => Array.isArray(line))
               .map((line) =>
                 line.map((token) => {
@@ -793,23 +810,26 @@ export class ShellExecutionService {
 
           const trimmedOutput = newOutput.slice(0, lastNonEmptyLine + 1);
 
-          const finalOutput = shellExecutionConfig.disableDynamicLineTrimming
-            ? newOutput
-            : trimmedOutput;
+          const finalOutput =
+            shellExecutionConfig.disableDynamicLineTrimming === true
+              ? newOutput
+              : trimmedOutput;
 
           // Using stringify for a quick deep comparison.
           const finalJson = JSON.stringify(finalOutput);
           const outputJson = JSON.stringify(output);
           if (outputJson !== finalJson) {
             // Extract text from cursor line for debug
-            const cursorLine = finalOutput[buffer.cursorY];
+            const cursorLine = finalOutput[buffer.cursorY] as
+              | AnsiLine
+              | undefined;
             const cursorLineText =
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-              cursorLine
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-                ?.map((t) => t.text)
-                .join('')
-                .trimEnd() ?? '(no line)';
+              cursorLine !== undefined
+                ? cursorLine
+                    .map((t) => t.text)
+                    .join('')
+                    .trimEnd()
+                : '(no line)';
             shellDebug.log(
               'renderFn: CHANGED cursorY=%d cursorX=%d lines=%d cursorLine=%s',
               buffer.cursorY,
@@ -877,30 +897,33 @@ export class ShellExecutionService {
           }
         });
 
-        const resetInactivityTimer = () => {
-          if (!inactivityTimeoutMs || inactivityTimeoutMs <= 0 || exited) {
+        const resetInactivityTimer = (): void => {
+          if (
+            inactivityTimeoutMs === undefined ||
+            inactivityTimeoutMs <= 0 ||
+            exited
+          ) {
             return;
           }
-
-          if (inactivityTimeout) {
+          if (inactivityTimeout !== null) {
             clearTimeout(inactivityTimeout);
           }
-
           inactivityTimeout = setTimeout(() => {
             if (!exited) {
-              // Kill the process due to inactivity
               inactivityAbortController.abort('inactivity_timeout');
             }
           }, inactivityTimeoutMs);
         };
 
         // Set up inactivity abort handler (mirrors abortHandler's SIGKILL escalation)
-        if (inactivityTimeoutMs && inactivityTimeoutMs > 0) {
+        if (inactivityTimeoutMs !== undefined && inactivityTimeoutMs > 0) {
           inactivityAbortController.signal.addEventListener(
             'abort',
             () => {
               void (async () => {
-                if (ptyProcess.pid && !exited) {
+                // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
+                // Old code: if (ptyProcess.pid && !exited)
+                if (ptyProcess.pid !== 0 && !exited) {
                   const pid = ptyProcess.pid;
                   if (isWindows) {
                     cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
@@ -1035,7 +1058,15 @@ export class ShellExecutionService {
 
         const abortHandler = () => {
           void (async () => {
-            if (ptyProcess.pid && !exited) {
+            // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
+            // Old code: if (ptyProcess.pid && !exited)
+            // IPty.pid is typed as number, but defensive check for undefined/null too
+            if (
+              ptyProcess.pid !== 0 &&
+              ptyProcess.pid !== undefined &&
+              ptyProcess.pid !== null &&
+              !exited
+            ) {
               const pid = ptyProcess.pid;
               if (isWindows) {
                 cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
@@ -1131,15 +1162,21 @@ export class ShellExecutionService {
    */
   static writeToPty(pid: number, input: string): void {
     const activePty = this.activePtys.get(pid);
-    if (activePty) {
+    if (activePty !== undefined) {
       activePty.ptyProcess.write(input);
       return;
     }
 
     const fallbackPtyId = this.lastActivePtyId;
-    if (fallbackPtyId && fallbackPtyId !== pid) {
+    // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
+    // Old code: if (fallbackPtyId && ...)
+    if (
+      fallbackPtyId !== null &&
+      fallbackPtyId !== 0 &&
+      fallbackPtyId !== pid
+    ) {
       const fallbackPty = this.activePtys.get(fallbackPtyId);
-      if (fallbackPty) {
+      if (fallbackPty !== undefined) {
         fallbackPty.ptyProcess.write(input);
       }
     }
@@ -1237,13 +1274,19 @@ export class ShellExecutionService {
   static scrollPty(pid: number, lines: number): void {
     const activePty = this.activePtys.get(pid);
     const fallbackPtyId = this.lastActivePtyId;
-    const targetPty = activePty
-      ? { id: pid, pty: activePty }
-      : fallbackPtyId
-        ? { id: fallbackPtyId, pty: this.activePtys.get(fallbackPtyId) }
-        : null;
+    let targetPty: { id: number; pty: ActivePty | undefined } | undefined;
 
-    if (!targetPty?.pty) {
+    if (activePty !== undefined) {
+      targetPty = { id: pid, pty: activePty };
+    } else if (fallbackPtyId !== null && fallbackPtyId !== 0) {
+      // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
+      targetPty = {
+        id: fallbackPtyId,
+        pty: this.activePtys.get(fallbackPtyId),
+      };
+    }
+
+    if (targetPty?.pty === undefined) {
       return;
     }
 

@@ -65,6 +65,43 @@ export const OUTPUT_UPDATE_INTERVAL_MS = 100;
 const DEFAULT_SHELL_TIMEOUT_SECONDS = 300;
 const MAX_SHELL_TIMEOUT_SECONDS = 900;
 
+/**
+ * Check if a PID should be propagated to the UI for interactive shell focus.
+ * Preserves old falsy semantics: pid 0 is skipped (invalid process ID).
+ */
+function getPropagatablePid(
+  pid: number | undefined,
+  setPidCallback: ((pid: number) => void) | undefined,
+  shouldUseNodePty: boolean,
+): number | undefined {
+  // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
+  if (pid === undefined || pid === 0) {
+    return undefined;
+  }
+  if (setPidCallback === undefined) {
+    return undefined;
+  }
+  if (!shouldUseNodePty || !ShellExecutionService.isActivePty(pid)) {
+    return undefined;
+  }
+  return pid;
+}
+
+/**
+ * Check if a line from pgrep output is a valid background PID.
+ * Preserves old falsy semantics: result.pid 0 is skipped.
+ */
+function isValidBackgroundPid(
+  linePid: number,
+  mainPid: number | undefined,
+): boolean {
+  // Preserve old falsy semantics: main pid 0 means we can't identify background PIDs
+  if (mainPid === undefined || mainPid === 0) {
+    return false;
+  }
+  return linePid !== mainPid;
+}
+
 export interface ShellToolParams {
   /**
    * The shell command to execute
@@ -241,16 +278,20 @@ export class ShellToolInvocation extends BaseToolInvocation<
     setPidCallback?: (pid: number) => void,
   ): Promise<ToolResult> {
     // Validate filtering parameters
-    if (this.params.head_lines) {
+    if (this.params.head_lines !== undefined && this.params.head_lines !== 0) {
       validatePositiveInteger(this.params.head_lines, 'head_lines');
     }
-    if (this.params.tail_lines) {
+    if (this.params.tail_lines !== undefined && this.params.tail_lines !== 0) {
       validatePositiveInteger(this.params.tail_lines, 'tail_lines');
     }
-    if (this.params.grep_pattern) {
-      if (!this.params.grep_pattern.trim()) {
-        throw new Error('grep_pattern cannot be empty');
-      }
+    // Validate grep_pattern: null/undefined/empty string skip; whitespace-only throws
+    const grepPattern =
+      typeof this.params.grep_pattern === 'string' &&
+      this.params.grep_pattern !== ''
+        ? this.params.grep_pattern
+        : undefined;
+    if (grepPattern !== undefined && grepPattern.trim() === '') {
+      throw new Error('grep_pattern cannot be empty');
     }
     if (this.params.grep_flags) {
       validateGrepFlags(this.params.grep_flags);
@@ -385,21 +426,20 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // Propagate PID immediately (before awaiting result) so the UI can
       // offer Ctrl+F interactive shell focus while the process is running.
       const pid = executionResult.pid;
-      if (
-        pid &&
-        setPidCallback &&
-        this.config.getShouldUseNodePtyShell() &&
-        ShellExecutionService.isActivePty(pid)
-      ) {
-        setPidCallback(pid);
+      const propagatablePid = getPropagatablePid(
+        pid,
+        setPidCallback,
+        this.config.getShouldUseNodePtyShell(),
+      );
+      if (propagatablePid !== undefined) {
+        setPidCallback?.(propagatablePid);
       }
 
       const result = await executionResult.result;
 
       const backgroundPIDs: number[] = [];
       let pgid: number | null = null;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (os.platform() !== 'win32' && result) {
+      if (os.platform() !== 'win32') {
         if (fs.existsSync(tempFilePath)) {
           const pgrepLines = fs
             .readFileSync(tempFilePath, 'utf8')
@@ -410,13 +450,13 @@ export class ShellToolInvocation extends BaseToolInvocation<
               this.logger.debug(() => `pgrep: ${line}`);
               continue;
             }
-            const pid = Number(line);
-            if (result.pid && pid !== result.pid) {
-              backgroundPIDs.push(pid);
+            const linePid = Number(line);
+            if (isValidBackgroundPid(linePid, result.pid)) {
+              backgroundPIDs.push(linePid);
             }
           }
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        } else if (!signal.aborted) {
+        } else if (signal.aborted === false) {
           this.logger.debug(() => 'missing pgrep output');
         }
 
@@ -444,20 +484,15 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
       let llmContent = '';
       let returnDisplayMessage = '';
+      let timeoutTriggered = false;
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (!result) {
-        llmContent = 'Command failed to execute.';
-        if (this.config.getDebugMode()) {
-          returnDisplayMessage = llmContent;
-        }
-      } else if (result.aborted) {
-        const timeoutTriggered =
-          timeoutController.signal.aborted && !signal.aborted;
+      if (result.aborted === true) {
+        timeoutTriggered =
+          timeoutController.signal.aborted === true &&
+          (signal.aborted as boolean | undefined) === false;
         if (timeoutTriggered) {
           llmContent = `Command timed out after ${timeoutSeconds ?? defaultTimeoutSeconds}s (timeout_seconds).`;
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          if (rawOutput?.trim()) {
+          if (rawOutput.trim() !== '') {
             llmContent += ` Partial output:\n${rawOutput}`;
           } else {
             llmContent += ' There was no output before timeout.';
@@ -467,8 +502,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         } else {
           llmContent =
             'Command was cancelled by user before it could complete.';
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          if (rawOutput?.trim()) {
+          if (rawOutput.trim() !== '') {
             llmContent += ` Below is the output before it was cancelled:\n${rawOutput}`;
           } else {
             llmContent += ' There was no output before it was cancelled.';
@@ -476,8 +510,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
           if (this.config.getDebugMode()) {
             returnDisplayMessage = llmContent;
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          } else if (filteredOutput?.trim()) {
+          } else if (filteredOutput.trim() !== '') {
             returnDisplayMessage = filteredOutput;
           } else {
             returnDisplayMessage = 'Command cancelled by user.';
@@ -498,85 +531,97 @@ export class ShellToolInvocation extends BaseToolInvocation<
           `Exit Code: ${result.exitCode ?? '(none)'}`,
           `Signal: ${result.signal ?? '(none)'}`,
           `Background PIDs: ${
-            backgroundPIDs.length ? backgroundPIDs.join(', ') : '(none)'
+            backgroundPIDs.length > 0 ? backgroundPIDs.join(', ') : '(none)'
           }`,
           `Process Group PGID: ${pgid ?? result.pid ?? '(none)'}`,
         ].join('\n');
 
         if (this.config.getDebugMode()) {
           returnDisplayMessage = llmContent;
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        } else if (filteredOutput?.trim()) {
+        } else if (filteredOutput.trim() !== '') {
           returnDisplayMessage = filteredOutput;
-        } else if (result.signal) {
+        } else if (result.signal !== null) {
           returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
-        } else if (result.error) {
+        } else if (result.error !== null) {
           returnDisplayMessage = `Command failed: ${getErrorMessage(result.error)}`;
         } else if (result.exitCode !== null && result.exitCode !== 0) {
           returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
         }
       }
 
-      if (filterInfo.description && !this.config.getDebugMode()) {
-        returnDisplayMessage = returnDisplayMessage
-          ? `[${filterInfo.description}]\n${returnDisplayMessage}`
-          : `[${filterInfo.description}]`;
+      if (
+        filterInfo.description !== undefined &&
+        filterInfo.description !== '' &&
+        !this.config.getDebugMode()
+      ) {
+        returnDisplayMessage =
+          returnDisplayMessage !== ''
+            ? `[${filterInfo.description}]\n${returnDisplayMessage}`
+            : `[${filterInfo.description}]`;
       }
 
       // Check if summarization is configured
       const summarizeConfig = this.config.getSummarizeToolOutputConfig();
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      const executionError = result?.error
-        ? {
-            error: {
-              message: result.error.message,
-              type: ToolErrorType.SHELL_EXECUTE_ERROR,
-            },
-          }
-        : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          result?.aborted && timeoutController.signal.aborted && !signal.aborted
-          ? {
-              error: {
-                message: llmContent,
-                type: ToolErrorType.TIMEOUT,
-              },
-            }
-          : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            result?.aborted
-            ? {
-                error: {
-                  message: llmContent,
-                  type: ToolErrorType.EXECUTION_FAILED,
-                },
-              }
-            : {};
+      let executionError:
+        | { error: { message: string; type: ToolErrorType } }
+        | Record<string, never> = {};
+      const commandResult = result;
+      const commandError = commandResult.error as
+        | typeof commandResult.error
+        | null
+        | undefined;
+      if (commandError !== undefined && commandError !== null) {
+        executionError = {
+          error: {
+            message: commandError.message,
+            type: ToolErrorType.SHELL_EXECUTE_ERROR,
+          },
+        };
+      } else if (commandResult.aborted === true && timeoutTriggered) {
+        executionError = {
+          error: {
+            message: llmContent,
+            type: ToolErrorType.TIMEOUT,
+          },
+        };
+      } else if (commandResult.aborted === true) {
+        executionError = {
+          error: {
+            message: llmContent,
+            type: ToolErrorType.EXECUTION_FAILED,
+          },
+        };
+      }
 
       let llmPayload = llmContent;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (summarizeConfig?.[ShellTool.Name] && result && !result.aborted) {
+      const shellToolConfig = summarizeConfig?.[ShellTool.Name];
+      if (shellToolConfig !== undefined && commandResult.aborted !== true) {
         // Get the ServerToolsProvider for summarization
         const contentGenConfig = this.config.getContentGeneratorConfig();
-        if (contentGenConfig?.providerManager) {
+        if (contentGenConfig?.providerManager !== undefined) {
           const serverToolsProvider =
             contentGenConfig.providerManager.getServerToolsProvider();
 
           // If we have a ServerToolsProvider that can handle summarization
-          if (serverToolsProvider) {
-            // TODO: Need to adapt summarizeToolOutput to use ServerToolsProvider
-            // For now, check if it's a Gemini provider and use the existing function
-            if (serverToolsProvider.name === 'gemini') {
-              const summary = await summarizeToolOutput(
-                llmContent,
-                this.config.getGeminiClient(),
-                signal,
-                summarizeConfig[ShellTool.Name].tokenBudget,
-              );
-              if (summary) {
-                llmPayload = summary;
-              }
+          // TODO: Need to adapt summarizeToolOutput to use ServerToolsProvider
+          // For now, check if it's a Gemini provider and use the existing function
+          if (
+            serverToolsProvider !== null &&
+            serverToolsProvider.name === 'gemini'
+          ) {
+            // Widen the type at this runtime/provider boundary for null-safety
+            const summary = (await summarizeToolOutput(
+              llmContent,
+              this.config.getGeminiClient(),
+              signal,
+              shellToolConfig.tokenBudget,
+            )) as string | null | undefined;
+            // Preserve old truthy behavior: only use summary if non-nullish and non-empty
+            if (summary !== undefined && summary !== null && summary !== '') {
+              llmPayload = summary;
             }
-            // If not Gemini, we can't summarize yet - need provider-agnostic summarization
           }
+          // If not Gemini, we can't summarize yet - need provider-agnostic summarization
         }
       }
 
@@ -585,12 +630,13 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // We still respect the current maxTokens and truncateMode settings.
       const limits = getOutputLimits(this.config);
       const maxTokens = limits.maxTokens;
-      const effectiveLimit = maxTokens
-        ? getEffectiveTokenLimit(maxTokens)
-        : undefined;
+      const effectiveLimit =
+        maxTokens !== undefined && maxTokens !== 0
+          ? getEffectiveTokenLimit(maxTokens)
+          : undefined;
 
       if (
-        effectiveLimit &&
+        effectiveLimit !== undefined &&
         effectiveLimit > 0 &&
         limits.truncateMode === 'truncate'
       ) {
@@ -679,6 +725,33 @@ export class ShellToolInvocation extends BaseToolInvocation<
   }
 }
 
+function applyGrepFilter(
+  content: string,
+  params: ShellToolParams,
+  descriptionParts: string[],
+): string {
+  const grepPattern =
+    typeof params.grep_pattern === 'string' && params.grep_pattern !== ''
+      ? params.grep_pattern
+      : undefined;
+  if (grepPattern === undefined) {
+    return content;
+  }
+
+  const invertMatch = params.grep_flags?.includes('-v') === true;
+  const options = params.grep_flags?.includes('-i') === true ? 'i' : '';
+  const regex = new RegExp(grepPattern, options);
+  const filteredLines = content
+    .split('\n')
+    .filter((line) => (invertMatch ? !regex.test(line) : regex.test(line)));
+
+  descriptionParts.push(`grep_pattern filter: "${grepPattern}"`);
+  if (params.grep_flags !== undefined && params.grep_flags.length > 0) {
+    descriptionParts.push(`flags: [${params.grep_flags.join(', ')}]`);
+  }
+  return filteredLines.join('\n');
+}
+
 function applyOutputFilters(
   output: string,
   params: ShellToolParams,
@@ -686,32 +759,10 @@ function applyOutputFilters(
   let content = output;
   const descriptionParts: string[] = [];
 
-  // Apply grep filter first
-  if (params.grep_pattern) {
-    const lines = content.split('\n');
-    let filteredLines: string[];
-
-    if (params.grep_flags?.includes('-v')) {
-      // Inverted grep
-      const options = params.grep_flags.includes('-i') ? 'i' : '';
-      const regex = new RegExp(params.grep_pattern, options);
-      filteredLines = lines.filter((line) => !regex.test(line));
-    } else {
-      // Normal grep
-      const options = params.grep_flags?.includes('-i') ? 'i' : '';
-      const regex = new RegExp(params.grep_pattern, options);
-      filteredLines = lines.filter((line) => regex.test(line));
-    }
-
-    content = filteredLines.join('\n');
-    descriptionParts.push(`grep_pattern filter: "${params.grep_pattern}"`);
-    if (params.grep_flags?.length) {
-      descriptionParts.push(`flags: [${params.grep_flags.join(', ')}]`);
-    }
-  }
+  content = applyGrepFilter(content, params, descriptionParts);
 
   // Apply head_lines filter
-  if (params.head_lines) {
+  if (params.head_lines !== undefined && params.head_lines !== 0) {
     validatePositiveInteger(params.head_lines, 'head_lines');
     const lines = content.split('\n');
     const headLines = lines.slice(0, params.head_lines);
@@ -724,7 +775,7 @@ function applyOutputFilters(
   }
 
   // Apply tail_lines filter
-  if (params.tail_lines) {
+  if (params.tail_lines !== undefined && params.tail_lines !== 0) {
     validatePositiveInteger(params.tail_lines, 'tail_lines');
     const lines = content.split('\n');
     const tailLines = lines.slice(-params.tail_lines);

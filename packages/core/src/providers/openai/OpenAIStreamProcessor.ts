@@ -84,6 +84,106 @@ function createStreamingState(): StreamingState {
   };
 }
 
+/**
+ * Check if text buffer ends with a sentence-ending pattern.
+ */
+function endsWithSentence(text: string): boolean {
+  return text.endsWith('. ') || text.endsWith('! ') || text.endsWith('? ');
+}
+
+/**
+ * Check if the text buffer has reached a natural break point for flushing.
+ */
+function hasNaturalBreakPoint(
+  textBuffer: string,
+  hasOpenKimiSection: boolean,
+): boolean {
+  if (hasOpenKimiSection) {
+    return false;
+  }
+  return (
+    textBuffer.includes('\n') ||
+    endsWithSentence(textBuffer) ||
+    textBuffer.length > 100
+  );
+}
+
+/**
+ * Check if an error object is an AbortError.
+ */
+function isAbortError(error: unknown): boolean {
+  if (error === null || error === undefined) {
+    return false;
+  }
+  if (typeof error !== 'object') {
+    return false;
+  }
+  const err = error as Record<string, unknown>;
+  return err.name === 'AbortError';
+}
+
+/**
+ * Check if an error or abort signal indicates cancellation.
+ */
+function isCancellation(
+  error: unknown,
+  abortSignal: AbortSignal | undefined,
+): boolean {
+  if (abortSignal?.aborted === true) {
+    return true;
+  }
+  return isAbortError(error);
+}
+
+/**
+ * Check if all content fields in state are empty.
+ */
+function hasEmptyContentFields(state: StreamingState): boolean {
+  return (
+    state.accumulatedText.length === 0 &&
+    state.textBuffer.length === 0 &&
+    state.accumulatedReasoningContent.length === 0 &&
+    state.accumulatedThinkingContent.length === 0
+  );
+}
+
+/**
+ * Check if all content fields are empty (no text or thinking content received).
+ */
+function hasNoContent(state: StreamingState, toolCallCount: number): boolean {
+  return hasEmptyContentFields(state) && toolCallCount === 0;
+}
+
+/**
+ * Check if the response has tool calls but no text content.
+ */
+function hasToolsButNoTextContent(
+  state: StreamingState,
+  toolCallCount: number,
+): boolean {
+  return (
+    state.lastFinishReason === 'stop' &&
+    toolCallCount > 0 &&
+    hasEmptyContentFields(state)
+  );
+}
+
+/**
+ * Build troubleshooting message for empty streaming responses.
+ */
+function buildEmptyResponseTroubleshooting(
+  isKimi: boolean,
+  isSynthetic: boolean,
+): string {
+  if (!isKimi) {
+    return ' Consider using streaming: "disabled" in your profile settings.';
+  }
+  if (isSynthetic) {
+    return ' To fix: use streaming: "disabled" in your profile settings. Synthetic API streaming does not work reliably with tool calls.';
+  }
+  return ' This provider may not support streaming with tool calls.';
+}
+
 async function* flushTextBuffer(
   buffer: string,
   state: StreamingState,
@@ -261,7 +361,7 @@ export async function* processStreamingResponse(
     // CRITICAL: Do NOT collect all chunks first — that blocks the entire pipeline,
     // prevents abort signal checks, and causes indefinite hangs. See #1846.
     for await (const chunk of response) {
-      if (abortSignal?.aborted) {
+      if (abortSignal?.aborted === true) {
         break;
       }
       state.allChunks.push(chunk);
@@ -276,7 +376,11 @@ export async function* processStreamingResponse(
         } catch {
           parsedData = undefined;
         }
-      } else if (rawData && typeof rawData === 'object') {
+      } else if (
+        rawData !== null &&
+        rawData !== undefined &&
+        typeof rawData === 'object'
+      ) {
         parsedData = rawData as Record<string, unknown>;
       }
 
@@ -295,7 +399,9 @@ export async function* processStreamingResponse(
         (parsedData as { message?: string } | undefined)?.message;
       if (
         streamingEvent === 'error' ||
-        (streamingError && typeof streamingError === 'object')
+        (streamingError !== null &&
+          streamingError !== undefined &&
+          typeof streamingError === 'object')
       ) {
         const errorMessage =
           streamingErrorMessage ??
@@ -313,7 +419,7 @@ export async function* processStreamingResponse(
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const choice = chunk.choices?.[0];
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (!choice) continue;
+      if (choice == null) continue;
 
       // Parse reasoning_content
       const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
@@ -406,14 +512,7 @@ export async function* processStreamingResponse(
           );
 
           // Emit buffered text at natural break points
-          if (
-            !hasOpenKimiSection &&
-            (state.textBuffer.includes('\n') ||
-              state.textBuffer.endsWith('. ') ||
-              state.textBuffer.endsWith('! ') ||
-              state.textBuffer.endsWith('? ') ||
-              state.textBuffer.length > 100)
-          ) {
+          if (hasNaturalBreakPoint(state.textBuffer, hasOpenKimiSection)) {
             deps.logger.debug(
               () =>
                 `[stream:kimi-buffer] flushing buffered text at natural boundary`,
@@ -459,10 +558,10 @@ export async function* processStreamingResponse(
       const deltaToolCalls = choice.delta?.tool_calls;
       if (deltaToolCalls && deltaToolCalls.length > 0) {
         for (const deltaToolCall of deltaToolCalls) {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          if (deltaToolCall.index === undefined) continue;
+          const deltaToolCallIndex = deltaToolCall.index as number | undefined;
+          if (deltaToolCallIndex === undefined) continue;
 
-          deps.toolCallPipeline.addFragment(deltaToolCall.index, {
+          deps.toolCallPipeline.addFragment(deltaToolCallIndex, {
             id: deltaToolCall.id,
             name: deltaToolCall.function?.name,
             args: deltaToolCall.function?.arguments,
@@ -484,8 +583,7 @@ export async function* processStreamingResponse(
             toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
             index: number,
           ) => {
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            if (!toolCall || toolCall.type !== 'function') {
+            if (toolCall.type !== 'function') {
               return;
             }
 
@@ -501,13 +599,7 @@ export async function* processStreamingResponse(
       }
     }
   } catch (error) {
-    if (
-      abortSignal?.aborted ||
-      (error &&
-        typeof error === 'object' &&
-        'name' in error &&
-        error.name === 'AbortError')
-    ) {
+    if (isCancellation(error, abortSignal)) {
       deps.logger.debug(
         () =>
           `Pipeline streaming response cancelled by AbortSignal (error: ${error instanceof Error ? error.name : 'unknown'})`,
@@ -516,10 +608,11 @@ export async function* processStreamingResponse(
     } else {
       // Special handling for Cerebras/Qwen errors
       const errorMessage = String(error);
+      const baseURL = deps.getBaseURL();
       if (
         errorMessage.includes('Tool is not present in the tools list') &&
         (model.toLowerCase().includes('qwen') ||
-          deps.getBaseURL()?.includes('cerebras'))
+          baseURL?.includes('cerebras') === true)
       ) {
         deps.logger.error(
           'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
@@ -675,18 +768,32 @@ export async function* processStreamingResponse(
         },
       );
 
-      if (state.streamingUsage) {
+      if (state.streamingUsage !== null) {
         const cacheMetrics = extractCacheMetrics(state.streamingUsage);
+        // Preserve old || fallback semantics: 0/NaN/undefined for total_tokens triggers fallback
+        // For prompt/completion, NaN/undefined becomes 0 while preserving valid numbers (including 0)
+        const promptTokensVal = state.streamingUsage.prompt_tokens;
+        const completionTokensVal = state.streamingUsage.completion_tokens;
+        const promptTokens =
+          promptTokensVal === undefined || Number.isNaN(promptTokensVal)
+            ? 0
+            : promptTokensVal;
+        const completionTokens =
+          completionTokensVal === undefined || Number.isNaN(completionTokensVal)
+            ? 0
+            : completionTokensVal;
+        const totalTokensVal = state.streamingUsage.total_tokens;
+        const totalTokens =
+          totalTokensVal === undefined ||
+          totalTokensVal === 0 ||
+          Number.isNaN(totalTokensVal)
+            ? promptTokens + completionTokens
+            : totalTokensVal;
         combinedContent.metadata = {
           usage: {
-            /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- 0 tokens is valid but || 0 is equivalent to ?? 0 for numbers */
-            promptTokens: state.streamingUsage.prompt_tokens || 0,
-            completionTokens: state.streamingUsage.completion_tokens || 0,
-            totalTokens:
-              state.streamingUsage.total_tokens ||
-              (state.streamingUsage.prompt_tokens || 0) +
-                (state.streamingUsage.completion_tokens || 0),
-            /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+            promptTokens,
+            completionTokens,
+            totalTokens,
             cachedTokens: cacheMetrics.cachedTokens,
             cacheCreationTokens: cacheMetrics.cacheCreationTokens,
             cacheMissTokens: cacheMetrics.cacheMissTokens,
@@ -741,25 +848,39 @@ export async function* processStreamingResponse(
 
   // Emit metadata-only response if needed
   if (
-    state.streamingUsage &&
+    state.streamingUsage !== null &&
     state.accumulatedReasoningContent.length === 0 &&
     deps.toolCallPipeline.getStats().collector.totalCalls === 0
   ) {
     const cacheMetrics = extractCacheMetrics(state.streamingUsage);
     const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
+    // Preserve old || fallback semantics: 0/NaN/undefined for total_tokens triggers fallback
+    // For prompt/completion, NaN/undefined becomes 0 while preserving valid numbers (including 0)
+    const promptTokensVal = state.streamingUsage.prompt_tokens;
+    const completionTokensVal = state.streamingUsage.completion_tokens;
+    const promptTokens =
+      promptTokensVal === undefined || Number.isNaN(promptTokensVal)
+        ? 0
+        : promptTokensVal;
+    const completionTokens =
+      completionTokensVal === undefined || Number.isNaN(completionTokensVal)
+        ? 0
+        : completionTokensVal;
+    const totalTokensVal = state.streamingUsage.total_tokens;
+    const totalTokens =
+      totalTokensVal === undefined ||
+      totalTokensVal === 0 ||
+      Number.isNaN(totalTokensVal)
+        ? promptTokens + completionTokens
+        : totalTokensVal;
     const metaOnlyContent: IContent = {
       speaker: 'ai',
       blocks: [],
       metadata: {
         usage: {
-          /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- 0 tokens is valid but || 0 is equivalent to ?? 0 for numbers */
-          promptTokens: state.streamingUsage.prompt_tokens || 0,
-          completionTokens: state.streamingUsage.completion_tokens || 0,
-          totalTokens:
-            state.streamingUsage.total_tokens ||
-            (state.streamingUsage.prompt_tokens || 0) +
-              (state.streamingUsage.completion_tokens || 0),
-          /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+          promptTokens,
+          completionTokens,
+          totalTokens,
           cachedTokens: cacheMetrics.cachedTokens,
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
@@ -839,18 +960,16 @@ export async function* processStreamingResponse(
   }
 
   // Handle empty streaming responses after tool calls
-  const toolCallCount =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    (state.cachedPipelineResult?.normalized.length ?? 0) +
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    (state.cachedPipelineResult?.failed.length ?? 0);
-  const hasToolsButNoText =
-    state.lastFinishReason === 'stop' &&
-    toolCallCount > 0 &&
-    state.accumulatedText.length === 0 &&
-    state.textBuffer.length === 0 &&
-    state.accumulatedReasoningContent.length === 0 &&
-    state.accumulatedThinkingContent.length === 0;
+  // Widen the type at this runtime boundary for null-safety before accessing .normalized
+  const pipelineResult = state.cachedPipelineResult as
+    | StreamingState['cachedPipelineResult']
+    | null
+    | undefined;
+  const hasCachedPipelineResult = pipelineResult != null;
+  const toolCallCount = hasCachedPipelineResult
+    ? pipelineResult.normalized.length + pipelineResult.failed.length
+    : 0;
+  const hasToolsButNoText = hasToolsButNoTextContent(state, toolCallCount);
 
   if (hasToolsButNoText) {
     deps.logger.log(
@@ -863,13 +982,12 @@ export async function* processStreamingResponse(
       },
     );
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!state.cachedPipelineResult) {
+    if (!hasCachedPipelineResult) {
       throw new Error(
         'Pipeline result not cached - this should not happen in pipeline mode',
       );
     }
-    const toolCallsForHistory = state.cachedPipelineResult.normalized.map(
+    const toolCallsForHistory = pipelineResult.normalized.map(
       (normalizedCall, index) => ({
         id:
           normalizedCall.id && normalizedCall.id.trim().length > 0
@@ -897,21 +1015,14 @@ export async function* processStreamingResponse(
   }
 
   // Warn about empty streaming responses
-  if (
-    state.accumulatedText.length === 0 &&
-    toolCallCount === 0 &&
-    state.textBuffer.length === 0 &&
-    state.accumulatedReasoningContent.length === 0 &&
-    state.accumulatedThinkingContent.length === 0
-  ) {
+  if (hasNoContent(state, toolCallCount)) {
     const isKimi = model.toLowerCase().includes('kimi');
     const isSynthetic =
       (baseURL ?? deps.getBaseURL())?.includes('synthetic') ?? false;
-    const troubleshooting = isKimi
-      ? isSynthetic
-        ? ' To fix: use streaming: "disabled" in your profile settings. Synthetic API streaming does not work reliably with tool calls.'
-        : ' This provider may not support streaming with tool calls.'
-      : ' Consider using streaming: "disabled" in your profile settings.';
+    const troubleshooting = buildEmptyResponseTroubleshooting(
+      isKimi,
+      isSynthetic,
+    );
 
     deps.logger.warn(
       () =>
