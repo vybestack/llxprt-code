@@ -107,27 +107,30 @@ const createCombinedCallbacks = (
     );
 
   return {
-    outputUpdateHandler: outputHandlers.length
-      ? (toolCallId, outputChunk) => {
-          for (const handler of outputHandlers) {
-            handler(toolCallId, outputChunk);
+    outputUpdateHandler:
+      outputHandlers.length > 0
+        ? (toolCallId, outputChunk) => {
+            for (const handler of outputHandlers) {
+              handler(toolCallId, outputChunk);
+            }
           }
-        }
-      : undefined,
-    onAllToolCallsComplete: completionHandlers.length
-      ? async (completedToolCalls) => {
-          for (const handler of completionHandlers) {
-            await handler(completedToolCalls);
+        : undefined,
+    onAllToolCallsComplete:
+      completionHandlers.length > 0
+        ? async (completedToolCalls) => {
+            for (const handler of completionHandlers) {
+              await handler(completedToolCalls);
+            }
           }
-        }
-      : undefined,
-    onToolCallsUpdate: updateHandlers.length
-      ? (toolCalls) => {
-          for (const handler of updateHandlers) {
-            handler(toolCalls);
+        : undefined,
+    onToolCallsUpdate:
+      updateHandlers.length > 0
+        ? (toolCalls) => {
+            for (const handler of updateHandlers) {
+              handler(toolCalls);
+            }
           }
-        }
-      : undefined,
+        : undefined,
     getPreferredEditor: () => {
       const preferredEditor = preferredEditorSelectors
         .map((handler) => handler())

@@ -40,7 +40,7 @@ export class TemplateEngine {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
-    const vars = variables || {};
+    const vars = variables ?? {};
 
     // Step 2: Initialize processing state
     let result = '';
@@ -126,7 +126,7 @@ export class TemplateEngine {
   ): TemplateVariables {
     // Validate context - return minimal valid object if no context
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
-    if (!context) {
+    if (context === undefined || context === null) {
       return {
         MODEL: '',
         PROVIDER: '',
@@ -146,7 +146,7 @@ export class TemplateEngine {
 
     // Add environment variables
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
-    if (context.environment) {
+    if (context.environment !== undefined && context.environment !== null) {
       variables['IS_GIT_REPO'] = context.environment.isGitRepository
         ? 'true'
         : 'false';

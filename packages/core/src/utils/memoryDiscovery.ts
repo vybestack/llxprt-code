@@ -63,9 +63,10 @@ async function findProjectRoot(startDir: string): Promise<string | null> {
       // Only log unexpected errors in non-test environments
       // process.env['NODE_ENV'] === 'test' or VITEST are common test indicators
       const isTestEnv =
-        process.env['NODE_ENV'] === 'test' || process.env['VITEST'];
+        process.env['NODE_ENV'] === 'test' ||
+        process.env['VITEST'] !== undefined;
 
-      if (!isENOENT && !isTestEnv) {
+      if (isENOENT === false && isTestEnv === false) {
         if (typeof error === 'object' && error !== null && 'code' in error) {
           const fsError = error as { code: string; message: string };
           logger.warn(
@@ -293,8 +294,9 @@ async function readGeminiMdFiles(
           return { filePath, content: processedResult.content };
         } catch (error: unknown) {
           const isTestEnv =
-            process.env['NODE_ENV'] === 'test' || process.env['VITEST'];
-          if (!isTestEnv) {
+            process.env['NODE_ENV'] === 'test' ||
+            process.env['VITEST'] !== undefined;
+          if (isTestEnv === false) {
             const message =
               error instanceof Error ? error.message : String(error);
             logger.warn(
@@ -561,8 +563,9 @@ export async function loadCoreMemory(
       results.push({ path: filePath, content });
     } catch (error: unknown) {
       const isTestEnv =
-        process.env['NODE_ENV'] === 'test' || process.env['VITEST'];
-      if (!isTestEnv) {
+        process.env['NODE_ENV'] === 'test' ||
+        process.env['VITEST'] !== undefined;
+      if (isTestEnv === false) {
         const message = error instanceof Error ? error.message : String(error);
         logger.warn(
           `Warning: Could not read core memory file at ${filePath}. Error: ${message}`,

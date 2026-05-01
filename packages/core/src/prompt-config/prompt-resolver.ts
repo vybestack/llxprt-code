@@ -214,7 +214,7 @@ export class PromptResolver {
     }
 
     // 5. Resolve tool prompts (only if enabled via setting, default: false)
-    if (context.enableToolPrompts) {
+    if (context.enableToolPrompts === true) {
       for (const tool of context.enabledTools) {
         // Skip MCP tools - they don't have prompt files
         if (tool.startsWith('mcp__')) {
@@ -373,7 +373,7 @@ export class PromptResolver {
         previousWasDigit = false;
       } else if (/[A-Z]/.test(char)) {
         // Handle uppercase letters
-        const nextIsLower = nextChar && /[a-z]/.test(nextChar);
+        const nextIsLower = nextChar !== '' && /[a-z]/.test(nextChar);
         const shouldAddHyphen =
           previousWasLowercase ||
           (previousWasDigit && result.length > 0) ||

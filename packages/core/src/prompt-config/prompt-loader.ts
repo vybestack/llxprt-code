@@ -227,8 +227,12 @@ export class PromptLoader {
     shouldCompress: boolean,
   ): Promise<Map<string, string>> {
     // Step 1: Validate inputs
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt loading crosses filesystem/plugin boundaries despite declared types.
-    if (!baseDir || !fileList) {
+    if (
+      (baseDir as unknown) == null ||
+      baseDir === '' ||
+      (fileList as unknown) == null ||
+      fileList.length === 0
+    ) {
       return new Map();
     }
 
@@ -385,10 +389,7 @@ export class PromptLoader {
           timeouts.clear();
 
           // Close the watcher
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt loading crosses filesystem/plugin boundaries despite declared types.
-          if (watcher && typeof watcher.close === 'function') {
-            watcher.close();
-          }
+          watcher.close();
         },
       };
     } catch {
@@ -400,7 +401,7 @@ export class PromptLoader {
         fsWatcher.on(
           'change',
           (eventType: string | null, filename: string | Buffer | null) => {
-            if (filename) {
+            if (filename !== null) {
               const filenameStr =
                 typeof filename === 'string' ? filename : filename.toString();
               if (filenameStr.endsWith('.md')) {

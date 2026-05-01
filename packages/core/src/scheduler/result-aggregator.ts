@@ -283,7 +283,7 @@ export class ResultAggregator {
         break; // Gap — wait for the missing result to arrive
       }
 
-      if (!nextBuffered.isCancelled) {
+      if (nextBuffered.isCancelled !== true) {
         await this.publishResult(nextBuffered, signal);
       }
 
@@ -357,7 +357,7 @@ export class ResultAggregator {
       };
 
       logger.debug(
-        `callId=${callId}, toolName=${toolName}, returnDisplay type=${typeof result.returnDisplay}, hasValue=${!!result.returnDisplay}`,
+        `callId=${callId}, toolName=${toolName}, returnDisplay type=${typeof result.returnDisplay}, hasValue=${Boolean(result.returnDisplay)}`,
       );
 
       this.callbacks.setSuccess(callId, successResponse);
@@ -414,9 +414,17 @@ export class ResultAggregator {
         getEphemeralSettings: () => ({
           ...ephemeral,
           'tool-output-max-tokens': perToolBudget,
-          ...(!ephemeral['tool-output-truncate-mode']
-            ? { 'tool-output-truncate-mode': 'truncate' }
-            : {}),
+          ...(ephemeral['tool-output-truncate-mode'] !== undefined &&
+          ephemeral['tool-output-truncate-mode'] !== null &&
+          ephemeral['tool-output-truncate-mode'] !== false &&
+          ephemeral['tool-output-truncate-mode'] !== 0 &&
+          ephemeral['tool-output-truncate-mode'] !== '' &&
+          !(
+            typeof ephemeral['tool-output-truncate-mode'] === 'number' &&
+            Number.isNaN(ephemeral['tool-output-truncate-mode'])
+          )
+            ? {}
+            : { 'tool-output-truncate-mode': 'truncate' }),
         }),
       };
     } catch (error) {

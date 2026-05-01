@@ -197,7 +197,7 @@ export class MCPOAuthProvider {
       const lastSegment = segments[segments.length - 1];
       if (lastSegment && versionSegmentPattern.test(lastSegment)) {
         const withoutVersionPath = segments.slice(0, -1);
-        if (withoutVersionPath.length) {
+        if (withoutVersionPath.length > 0) {
           issuerCandidates.add(
             `${authUrl.origin}/${withoutVersionPath.join('/')}`,
           );
@@ -957,7 +957,10 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
       scope: tokenResponse.scope,
     };
 
-    if (tokenResponse.expires_in) {
+    if (
+      tokenResponse.expires_in !== undefined &&
+      tokenResponse.expires_in > 0
+    ) {
       token.expiresAt = Date.now() + tokenResponse.expires_in * 1000;
     }
 
@@ -1046,7 +1049,10 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
           scope: newTokenResponse.scope || token.scope,
         };
 
-        if (newTokenResponse.expires_in) {
+        if (
+          newTokenResponse.expires_in !== undefined &&
+          newTokenResponse.expires_in > 0
+        ) {
           newToken.expiresAt = Date.now() + newTokenResponse.expires_in * 1000;
         }
 

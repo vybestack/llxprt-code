@@ -87,10 +87,11 @@ export async function executeApiRequest(
     } catch (error) {
       // Special handling for Cerebras/Qwen "Tool not present" errors
       const errorMessage = String(error);
+      const baseURL = getBaseURL();
       if (
         errorMessage.includes('Tool is not present in the tools list') &&
         (model.toLowerCase().includes('qwen') ||
-          getBaseURL()?.includes('cerebras'))
+          (baseURL?.includes('cerebras') ?? false))
       ) {
         logger.error(
           'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
@@ -173,18 +174,20 @@ export async function executeApiRequest(
       logger.debug(() => `[OpenAIProvider] Chat request error`, {
         errorType: error?.constructor?.name,
         status:
-          typeof error === 'object' && error && 'status' in error
+          typeof error === 'object' && error !== null && 'status' in error
             ? (error as { status?: number }).status
             : undefined,
-        errorKeys: error && typeof error === 'object' ? Object.keys(error) : [],
+        errorKeys:
+          error !== null && typeof error === 'object' ? Object.keys(error) : [],
       });
 
+      const baseURL = getBaseURL();
       const isCerebrasToolError =
         errorMessage.includes('Tool is not present in the tools list') &&
         (model.toLowerCase().includes('qwen') ||
-          getBaseURL()?.includes('cerebras'));
+          (baseURL?.includes('cerebras') ?? false));
 
-      if (isCerebrasToolError) {
+      if (isCerebrasToolError === true) {
         logger.error(
           'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
           {

@@ -267,7 +267,10 @@ export class OAuthUtils {
         }
       }
 
-      if (resourceMetadata?.authorization_servers?.length) {
+      if (
+        resourceMetadata?.authorization_servers &&
+        resourceMetadata.authorization_servers.length > 0
+      ) {
         // Use the first authorization server
         const authServerUrl = resourceMetadata.authorization_servers[0];
         const authServerMetadata =
@@ -358,7 +361,10 @@ export class OAuthUtils {
       }
     }
 
-    if (!resourceMetadata?.authorization_servers?.length) {
+    if (
+      !resourceMetadata?.authorization_servers ||
+      resourceMetadata.authorization_servers.length === 0
+    ) {
       return null;
     }
 
@@ -416,7 +422,11 @@ export class OAuthUtils {
         Buffer.from(idToken.split('.')[1], 'base64').toString(),
       );
 
-      if (payload && typeof payload.exp === 'number') {
+      if (
+        typeof payload === 'object' &&
+        payload !== null &&
+        typeof payload.exp === 'number'
+      ) {
         return payload.exp * 1000; // Convert seconds to milliseconds
       }
     } catch (e) {

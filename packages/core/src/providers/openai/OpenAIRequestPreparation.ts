@@ -91,18 +91,16 @@ export async function prepareRequest(
   }
 
   // Debug log the conversion result
-  if (logger.enabled && formattedTools) {
+  if (logger.enabled && formattedTools !== undefined) {
     logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
       detectedFormat,
       inputHadTools: !!tools,
       inputToolsLength: tools?.length,
       inputFirstGroup: tools?.[0],
       inputFunctionDeclarationsLength: tools?.[0]?.functionDeclarations?.length,
-      outputHasTools: !!formattedTools,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      outputToolsLength: formattedTools?.length,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      outputToolNames: formattedTools?.map((t) => t.function.name),
+      outputHasTools: formattedTools.length > 0,
+      outputToolsLength: formattedTools.length,
+      outputToolNames: formattedTools.map((t) => t.function.name),
     });
   }
 
@@ -138,10 +136,12 @@ export async function prepareRequest(
     model,
     tools: toolNamesArg,
     includeSubagentDelegation,
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    interactionMode: config?.isInteractive?.()
-      ? 'interactive'
-      : 'non-interactive',
+    interactionMode:
+      config != null &&
+      typeof config.isInteractive === 'function' &&
+      config.isInteractive() === true
+        ? 'interactive'
+        : 'non-interactive',
   });
 
   // Add system prompt as the first message
@@ -204,8 +204,7 @@ export async function prepareRequest(
     | { include_usage?: boolean }
     | undefined) ?? { include_usage: true };
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  if (streamingEnabled && streamOptions) {
+  if (streamingEnabled) {
     Object.assign(requestBody, { stream_options: streamOptions });
   }
 

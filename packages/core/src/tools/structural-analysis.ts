@@ -207,7 +207,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
             searchPath,
             resolvedLang,
             targetDir,
-            !!reverse,
+            reverse === true,
             signal,
           );
           break;
@@ -234,7 +234,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
     lang: string | Lang,
   ): Promise<string[]> {
     const stat = await fs.stat(searchPath).catch(() => null);
-    if (stat?.isFile()) {
+    if (stat !== null && stat.isFile() === true) {
       return [searchPath];
     }
     const extensions = this.getExtensionsForLanguage(lang);
@@ -788,7 +788,8 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
               (
                 a: { start: number; end: number },
                 b: { start: number; end: number },
-              ) => a.start - b.start || b.end - a.end,
+              ) =>
+                a.start - b.start !== 0 ? a.start - b.start : b.end - a.end,
             );
 
             const outermost: typeof ranges = [];

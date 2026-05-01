@@ -166,11 +166,11 @@ export function getRecommendedModel(
     candidates = candidates.filter((m) => m.metadata.status !== 'deprecated');
 
     // Apply capability filters
-    if (options?.requireToolCalling) {
+    if (options?.requireToolCalling === true) {
       candidates = candidates.filter((m) => m.capabilities.toolCalling);
     }
 
-    if (options?.requireReasoning) {
+    if (options?.requireReasoning === true) {
       candidates = candidates.filter((m) => m.capabilities.reasoning);
     }
 
@@ -179,7 +179,7 @@ export function getRecommendedModel(
     }
 
     // Sort by preference
-    if (options?.preferCheaper) {
+    if (options?.preferCheaper === true) {
       candidates.sort((a, b) => {
         const priceA = a.pricing?.input ?? Infinity;
         const priceB = b.pricing?.input ?? Infinity;

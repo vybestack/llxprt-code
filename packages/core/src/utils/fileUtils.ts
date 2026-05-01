@@ -264,7 +264,7 @@ export async function detectFileType(
   }
 
   const lookedUpMimeType = mime.lookup(filePath); // Returns false if not found, or the mime type string
-  if (lookedUpMimeType) {
+  if (typeof lookedUpMimeType === 'string' && lookedUpMimeType !== '') {
     if (lookedUpMimeType.startsWith('image/')) {
       return 'image';
     }
@@ -390,8 +390,7 @@ export async function processSingleFileContent(
         const originalLineCount = countLines(lines);
 
         const startLine =
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: offset 0 is valid and should be preserved
-          offset || 0;
+          offset !== undefined && !Number.isNaN(offset) ? offset : 0;
         const effectiveLimit = limit ?? DEFAULT_MAX_LINES_TEXT_FILE;
         // Ensure endLine does not exceed originalLineCount
         const endLine = Math.min(startLine + effectiveLimit, originalLineCount);
@@ -441,7 +440,11 @@ export async function processSingleFileContent(
       case 'video': {
         const contentBuffer = await fs.promises.readFile(filePath);
         const base64Data = contentBuffer.toString('base64');
-        const mimeType = mime.lookup(filePath) || 'application/octet-stream';
+        const mimeTypeRaw = mime.lookup(filePath);
+        const mimeType =
+          typeof mimeTypeRaw === 'string' && mimeTypeRaw !== ''
+            ? mimeTypeRaw
+            : 'application/octet-stream';
 
         return {
           llmContent: {

@@ -46,7 +46,7 @@ function parseFrontmatter(
 ): { name: string; description: string } | null {
   try {
     const parsed = yaml.load(content);
-    if (parsed && typeof parsed === 'object') {
+    if (parsed !== null && parsed !== undefined && typeof parsed === 'object') {
       const { name, description } = parsed as Record<string, unknown>;
       if (typeof name === 'string' && typeof description === 'string') {
         return { name, description };
@@ -123,7 +123,7 @@ export async function loadSkillsFromDir(
   try {
     const absoluteSearchPath = path.resolve(dir);
     const stats = await fs.stat(absoluteSearchPath).catch(() => null);
-    if (!stats?.isDirectory()) {
+    if (stats === null || stats.isDirectory() !== true) {
       return [];
     }
 
@@ -203,7 +203,11 @@ function loadSkillFromFileSync(
     }
 
     const frontmatter = yaml.load(match[1]);
-    if (!frontmatter || typeof frontmatter !== 'object') {
+    if (
+      frontmatter === null ||
+      frontmatter === undefined ||
+      typeof frontmatter !== 'object'
+    ) {
       return null;
     }
 

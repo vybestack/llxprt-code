@@ -58,7 +58,7 @@ export class OAuthCredentialStorage {
           scope: scope || undefined,
         };
 
-        if (expiresAt) {
+        if (expiresAt !== undefined) {
           googleCreds.expiry_date = expiresAt;
         }
 
@@ -98,8 +98,11 @@ export class OAuthCredentialStorage {
         tokenType: credentials.token_type || 'Bearer',
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string scope means "not provided"
         scope: credentials.scope || undefined,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: 0 expiry_date means "no expiration"
-        expiresAt: credentials.expiry_date || undefined,
+        // Preserve JS falsy behavior: 0/null/undefined expiry_date means "no expiration"
+        expiresAt:
+          credentials.expiry_date != null && credentials.expiry_date !== 0
+            ? credentials.expiry_date
+            : undefined,
       },
       updatedAt: Date.now(),
     };

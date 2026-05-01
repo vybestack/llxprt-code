@@ -162,8 +162,16 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
   toHookLLMRequest(sdkRequest: GenerateContentParameters): LLMRequest {
     const messages: LLMRequest['messages'] = [];
 
-    // Convert contents to messages format (simplified)
-    if (sdkRequest.contents) {
+    const rawContents = sdkRequest.contents as unknown;
+    const hasContents =
+      rawContents !== undefined &&
+      rawContents !== null &&
+      rawContents !== false &&
+      rawContents !== 0 &&
+      rawContents !== '' &&
+      !(typeof rawContents === 'number' && Number.isNaN(rawContents));
+
+    if (hasContents) {
       const contents = Array.isArray(sdkRequest.contents)
         ? sdkRequest.contents
         : [sdkRequest.contents];
@@ -193,7 +201,7 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
             .join('');
 
           // Only add message if there's text content
-          if (textContent) {
+          if (textContent !== '') {
             messages.push({
               role,
               content: textContent,
@@ -285,10 +293,8 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
             candidate.finishReason as LLMResponse['candidates'][0]['finishReason'],
           index: candidate.index,
           safetyRatings: candidate.safetyRatings?.map((rating) => ({
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string category should fall through to empty string
-            category: String(rating.category || ''),
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string probability should fall through to empty string
-            probability: String(rating.probability || ''),
+            category: String(rating.category ?? ''),
+            probability: String(rating.probability ?? ''),
           })),
         };
       }),

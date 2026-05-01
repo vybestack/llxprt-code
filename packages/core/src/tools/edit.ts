@@ -336,7 +336,7 @@ class EditToolInvocation extends BaseToolInvocation<
       } else {
         const replaceLine = filteredParams.replaceBeginLineNumber;
 
-        if (replaceLine && replaceLine > 0) {
+        if (replaceLine !== undefined && replaceLine > 0) {
           // Restrict search to the specified line only
           const lines = currentContent.split('\n');
           if (replaceLine > lines.length) {
@@ -468,7 +468,7 @@ class EditToolInvocation extends BaseToolInvocation<
       const replaceLine = filteredParams.replaceBeginLineNumber;
       if (
         fileExists &&
-        replaceLine &&
+        replaceLine !== undefined &&
         replaceLine > 0 &&
         currentContent !== null
       ) {
@@ -761,7 +761,7 @@ class EditToolInvocation extends BaseToolInvocation<
           ? `Created new file: ${filePath} with provided content.`
           : `Successfully modified file: ${filePath} (${editData.occurrences} replacements).`,
       ];
-      if (this.params.modified_by_user) {
+      if (this.params.modified_by_user === true) {
         llmSuccessMessageParts.push(
           `User modified the \`new_string\` content to be: ${this.params.new_string}.`,
         );

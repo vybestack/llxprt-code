@@ -51,7 +51,13 @@ export function createHttpAgents(
   }
 
   // Socket configuration with defaults for when settings ARE configured
-  const socketTimeout = (settings['socket-timeout'] as number) || 60000; // 60 seconds default
+  const socketTimeoutRaw = settings['socket-timeout'];
+  const socketTimeout =
+    typeof socketTimeoutRaw === 'number' &&
+    socketTimeoutRaw !== 0 &&
+    !Number.isNaN(socketTimeoutRaw)
+      ? socketTimeoutRaw
+      : 60000; // 60 seconds default
   const socketKeepAlive = settings['socket-keepalive'] !== false; // true by default
   const socketNoDelay = settings['socket-nodelay'] !== false; // true by default
 
@@ -204,18 +210,24 @@ export function mergeInvocationHeaders(
   const invocationHeadersRaw =
     options.invocation.getEphemeral('custom-headers');
   const invocationHeaders =
-    invocationHeadersRaw && typeof invocationHeadersRaw === 'object'
+    invocationHeadersRaw !== null &&
+    invocationHeadersRaw !== undefined &&
+    typeof invocationHeadersRaw === 'object'
       ? (invocationHeadersRaw as Record<string, string>)
       : undefined;
 
   const invocationUserAgent = options.invocation.getEphemeral('user-agent');
 
-  return baseHeaders || invocationHeaders || invocationUserAgent
+  const hasHeaders =
+    baseHeaders !== undefined ||
+    invocationHeaders !== undefined ||
+    (typeof invocationUserAgent === 'string' && invocationUserAgent !== '');
+  return hasHeaders
     ? {
         ...(baseHeaders ?? {}),
         ...(invocationHeaders ?? {}),
         ...(typeof invocationUserAgent === 'string' &&
-        invocationUserAgent.trim()
+        invocationUserAgent.trim() !== ''
           ? { 'User-Agent': invocationUserAgent.trim() }
           : {}),
       }

@@ -101,7 +101,7 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
   }
 
   const tier = getOnboardTier(loadRes);
-  if (tier.userDefinedCloudaicompanionProject && !projectId) {
+  if (tier.userDefinedCloudaicompanionProject === true && !projectId) {
     throw new ProjectIdRequiredError();
   }
 
@@ -126,7 +126,7 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
 
   // Poll onboardUser until long running operation is complete.
   let lroRes = await caServer.onboardUser(onboardReq);
-  while (!lroRes.done) {
+  while (lroRes.done !== true) {
     await new Promise((f) => setTimeout(f, 5000));
     lroRes = await caServer.onboardUser(onboardReq);
   }
@@ -150,7 +150,7 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
 function getOnboardTier(res: LoadCodeAssistResponse): GeminiUserTier {
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined allowedTiers should default to empty array
   for (const tier of res.allowedTiers || []) {
-    if (tier.isDefault) {
+    if (tier.isDefault === true) {
       return tier;
     }
   }

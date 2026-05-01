@@ -76,7 +76,10 @@ export function checkTerminationConditions(
     'runConfig' | 'subagentId' | 'output' | 'logger'
   >,
 ): TerminationCheck {
-  if (ctx.runConfig.max_turns && turnCounter >= ctx.runConfig.max_turns) {
+  if (
+    ctx.runConfig.max_turns !== undefined &&
+    turnCounter >= ctx.runConfig.max_turns
+  ) {
     ctx.output.terminate_reason = SubagentTerminateMode.MAX_TURNS;
     ctx.logger.warn(
       () =>
@@ -389,7 +392,7 @@ export function createCompletionChannel(
       pendingCompletedCalls = null;
       return Promise.resolve(calls);
     }
-    if (signal?.aborted) {
+    if (signal?.aborted === true) {
       return Promise.reject(createAbortError());
     }
     const completionPromise = new Promise<CompletedToolCall[]>(
@@ -413,7 +416,7 @@ export function createCompletionChannel(
   };
 
   const outputUpdateHandler: OutputUpdateHandler = (_toolCallId, output) => {
-    if (output && ctx.onMessage) {
+    if ((output as unknown) != null && ctx.onMessage != null) {
       const textOutput =
         typeof output === 'string'
           ? output

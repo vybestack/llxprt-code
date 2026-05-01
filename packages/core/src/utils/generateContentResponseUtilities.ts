@@ -36,7 +36,7 @@ export function getResponseText(
   // not be duplicated in Content events. Model context path handles thinking separately
   // via IContent blocks and reasoning ephemerals. (fixes #721 duplicate thinking)
   const textSegments = parts
-    .filter((part) => !(part as { thought?: boolean }).thought)
+    .filter((part) => (part as { thought?: boolean }).thought !== true)
     .map((part) => part.text)
     .filter((text): text is string => typeof text === 'string');
 
@@ -49,7 +49,7 @@ export function getResponseText(
 export function getResponseTextFromParts(parts: Part[]): string | undefined {
   // Filter out thought parts - same as getResponseText (fixes #721)
   const textSegments = parts
-    .filter((part) => !(part as { thought?: boolean }).thought)
+    .filter((part) => (part as { thought?: boolean }).thought !== true)
     .map((part) => part.text)
     .filter((text): text is string => typeof text === 'string');
 
@@ -216,7 +216,7 @@ export function toParts(input: PartListUnion): Part[] {
     if (typeof part === 'string') {
       parts.push({ text: part });
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- SDK PartListUnion callers can pass nullish entries at runtime.
-    } else if (part) {
+    } else if (part !== null && part !== undefined) {
       parts.push(part);
     }
   }
