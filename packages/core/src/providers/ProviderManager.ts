@@ -171,7 +171,7 @@ export class ProviderManager implements IProviderManager {
 
     if (
       typeof init === 'object' &&
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- preserve defensive runtime boundary guard despite current static types.
       init !== null &&
       'settingsService' in init &&
       ('runtimeId' in init || 'metadata' in init)
@@ -249,7 +249,8 @@ export class ProviderManager implements IProviderManager {
       let baseProvider = provider;
       while (
         'wrappedProvider' in baseProvider &&
-        baseProvider.wrappedProvider
+        baseProvider.wrappedProvider !== undefined &&
+        baseProvider.wrappedProvider !== null
       ) {
         baseProvider = baseProvider.wrappedProvider as IProvider;
       }
@@ -342,9 +343,10 @@ export class ProviderManager implements IProviderManager {
       this.runtime = { ...this.runtime, config: baseRuntime.config };
     }
 
-    const settingsService = baseRuntime.settingsService;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!settingsService) {
+    const settingsService = (
+      baseRuntime as { settingsService?: SettingsService | null }
+    ).settingsService;
+    if (settingsService === null || settingsService === undefined) {
       throw new MissingProviderRuntimeError({
         providerKey: 'ProviderManager',
         missingFields: ['settings'],
@@ -455,7 +457,9 @@ export class ProviderManager implements IProviderManager {
           ).getSettingsService()
         : undefined;
     const configMatchesSettingsService =
-      !configSettingsService || configSettingsService === settingsService;
+      configSettingsService === undefined ||
+      configSettingsService === null ||
+      configSettingsService === settingsService;
     const activeProviderRaw = settingsService.get('activeProvider');
     const activeProviderName =
       typeof activeProviderRaw === 'string' ? activeProviderRaw.trim() : '';
@@ -473,9 +477,9 @@ export class ProviderManager implements IProviderManager {
       model:
         rawOptions.resolved?.model ??
         (providerSettings.model as string | undefined) ??
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         (shouldApplyGlobalEphemerals ? config.getModel?.() : undefined) ??
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         providerInstance?.getDefaultModel?.() ??
         undefined,
       baseURL:
@@ -492,7 +496,7 @@ export class ProviderManager implements IProviderManager {
       },
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const effectiveConfig = rawOptions.config ?? config ?? null;
     // Debug: Log resolved authToken before global auth-key check
     logger.debug(() => {
@@ -503,8 +507,8 @@ export class ProviderManager implements IProviderManager {
 
     if (
       shouldApplyGlobalEphemerals &&
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      effectiveConfig &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- preserve defensive runtime boundary guard despite current static types.
+      effectiveConfig !== null &&
       typeof (
         effectiveConfig as Config & {
           getEphemeralSetting?: (key: string) => unknown;
@@ -518,7 +522,7 @@ export class ProviderManager implements IProviderManager {
           getEphemeralSetting?: (key: string) => unknown;
         }
       )
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         .getEphemeralSetting?.('auth-key') as string | undefined;
 
       // Debug: Log global auth-key check
@@ -587,7 +591,17 @@ export class ProviderManager implements IProviderManager {
     if (!resolved.baseURL && !baseUrlOptionalProviders.has(targetProvider)) {
       missingFields.push('baseURL');
     }
-    if (!resolved.authToken && targetProvider !== 'gemini') {
+    const resolvedAuthToken = resolved.authToken as unknown;
+    const hasResolvedAuthToken =
+      resolvedAuthToken !== undefined &&
+      resolvedAuthToken !== null &&
+      resolvedAuthToken !== '' &&
+      resolvedAuthToken !== false &&
+      resolvedAuthToken !== 0 &&
+      !(
+        typeof resolvedAuthToken === 'number' && Number.isNaN(resolvedAuthToken)
+      );
+    if (!hasResolvedAuthToken && targetProvider !== 'gemini') {
       // Check if provider can resolve auth lazily (e.g., via OAuth)
       // If the provider has getAuthToken(), it can handle its own auth precedence
       const providerInstance = this.providers.get(targetProvider);
@@ -609,11 +623,11 @@ export class ProviderManager implements IProviderManager {
       }
 
       const canResolveAuth =
-        actualProvider &&
+        actualProvider !== undefined &&
         'getAuthToken' in actualProvider &&
         typeof (actualProvider as ProviderWithAuth).getAuthToken === 'function';
 
-      if (!canResolveAuth) {
+      if (canResolveAuth === false) {
         // Only fail for providers without lazy auth resolution capability
         missingFields.push('authToken');
       }
@@ -636,7 +650,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     // REQ-SP4-005: Ensure normalized.userMemory and metadata derive from runtime context
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const userMemory = rawOptions.userMemory ?? config.getUserMemory?.();
     const metadata = {
       ...rawOptions.metadata,
@@ -656,7 +670,7 @@ export class ProviderManager implements IProviderManager {
     };
 
     const userMemorySnapshot =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
       typeof userMemory === 'string' ? userMemory : config.getUserMemory?.();
 
     const invocation =
@@ -671,7 +685,7 @@ export class ProviderManager implements IProviderManager {
         ),
         telemetry: resolved.telemetry,
         metadata,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         userMemory: userMemorySnapshot ?? undefined,
         fallbackRuntimeId: runtimeId,
       });
@@ -745,7 +759,7 @@ export class ProviderManager implements IProviderManager {
     this.providerCapabilities.set(provider.name, capabilities);
 
     // Log provider capability information if logging enabled
-    if (this.config?.getConversationLoggingEnabled()) {
+    if (this.config?.getConversationLoggingEnabled() === true) {
       const context = this.createProviderContext(provider, capabilities);
       logProviderCapability(
         this.config,
@@ -754,10 +768,15 @@ export class ProviderManager implements IProviderManager {
     }
 
     // If this is the default provider and no provider is active, set it as active
-    const currentActiveProvider = this.settingsService.get(
-      'activeProvider',
-    ) as string;
-    if (provider.isDefault && !currentActiveProvider) {
+    const currentActiveProvider = this.settingsService.get('activeProvider');
+    const isActiveProviderAbsent =
+      currentActiveProvider == null ||
+      currentActiveProvider === '' ||
+      currentActiveProvider === false ||
+      currentActiveProvider === 0 ||
+      (typeof currentActiveProvider === 'number' &&
+        Number.isNaN(currentActiveProvider));
+    if (provider.isDefault === true && isActiveProviderAbsent) {
       this.settingsService.set('activeProvider', provider.name);
     }
 
@@ -802,7 +821,7 @@ export class ProviderManager implements IProviderManager {
 
     // Log provider switch if conversation logging enabled
     if (
-      this.config?.getConversationLoggingEnabled() &&
+      this.config?.getConversationLoggingEnabled() === true &&
       previousProviderName &&
       previousProviderName !== name
     ) {
@@ -849,7 +868,7 @@ export class ProviderManager implements IProviderManager {
     let resolvedName = activeProviderName;
 
     if (!resolvedName) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
       const preferredFromConfig = this.config?.getProvider?.();
       if (preferredFromConfig && this.providers.has(preferredFromConfig)) {
         resolvedName = preferredFromConfig;
@@ -857,7 +876,7 @@ export class ProviderManager implements IProviderManager {
         resolvedName = 'openai';
       } else {
         const firstProvider = this.providers.keys().next();
-        resolvedName = firstProvider.done ? '' : firstProvider.value;
+        resolvedName = firstProvider.done === true ? '' : firstProvider.value;
       }
 
       if (resolvedName) {
@@ -926,7 +945,7 @@ export class ProviderManager implements IProviderManager {
           const providerModels = registry.getByProvider(providerId);
           for (const rm of providerModels) {
             // Only exclude models that explicitly disable tool support
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
             if (rm.capabilities?.toolCalling === false) continue;
 
             registryModels.push({
@@ -1062,7 +1081,7 @@ export class ProviderManager implements IProviderManager {
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     return provider.getDefaultModel?.() ?? '';
   }
 
@@ -1203,27 +1222,29 @@ export class ProviderManager implements IProviderManager {
         `[ProviderManager.accumulateSessionTokens] Called with: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}, cacheReads===undefined: ${usage.cacheReads === undefined}, cacheWrites===undefined: ${usage.cacheWrites === undefined}`,
     );
 
-    // Only accumulate non-negative values
-    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- 0 tokens is valid, || 0 is equivalent to ?? 0 for numbers */
-    this.sessionTokenUsage.input += Math.max(0, usage.input || 0);
-    this.sessionTokenUsage.output += Math.max(0, usage.output || 0);
+    const inputTokens = Math.max(0, this._sanitizeTokenValue(usage.input));
+    const outputTokens = Math.max(0, this._sanitizeTokenValue(usage.output));
+    const toolTokens = Math.max(0, this._sanitizeTokenValue(usage.tool));
+    const thoughtTokens = Math.max(0, this._sanitizeTokenValue(usage.thought));
+
+    this.sessionTokenUsage.input += inputTokens;
+    this.sessionTokenUsage.output += outputTokens;
 
     // For cache field: use the explicit cache value OR cacheReads if cache is 0
     // This handles both Gemini (which uses cached_content_token_count) and
     // Anthropic (which uses cache_read_input_tokens)
-    const cacheTokens =
-      Math.max(0, usage.cache || 0) || Math.max(0, usage.cacheReads || 0);
+    const cacheValue = Math.max(0, this._sanitizeTokenValue(usage.cache));
+    const cacheReadValue = Math.max(
+      0,
+      this._sanitizeTokenValue(usage.cacheReads),
+    );
+    const cacheTokens = cacheValue > 0 ? cacheValue : cacheReadValue;
     this.sessionTokenUsage.cache += cacheTokens;
 
-    this.sessionTokenUsage.tool += Math.max(0, usage.tool || 0);
-    this.sessionTokenUsage.thought += Math.max(0, usage.thought || 0);
+    this.sessionTokenUsage.tool += toolTokens;
+    this.sessionTokenUsage.thought += thoughtTokens;
     this.sessionTokenUsage.total +=
-      Math.max(0, usage.input || 0) +
-      Math.max(0, usage.output || 0) +
-      cacheTokens +
-      Math.max(0, usage.tool || 0) +
-      Math.max(0, usage.thought || 0);
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+      inputTokens + outputTokens + cacheTokens + toolTokens + thoughtTokens;
 
     // Track cache reads/writes if provided
     // Note: cacheWrites can be null (provider doesn't report) vs undefined (not in usage object)
@@ -1233,11 +1254,10 @@ export class ProviderManager implements IProviderManager {
           `[ProviderManager.accumulateSessionTokens] Received cache usage: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`,
       );
       this.trackCacheUsage(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- 0 cacheReads is valid
-        Math.max(0, usage.cacheReads || 0),
+        Math.max(0, this._sanitizeTokenValue(usage.cacheReads)),
         usage.cacheWrites === null || usage.cacheWrites === undefined
           ? null
-          : Math.max(0, usage.cacheWrites),
+          : Math.max(0, this._sanitizeTokenValue(usage.cacheWrites)),
       );
     } else {
       logger.debug(
@@ -1272,15 +1292,25 @@ export class ProviderManager implements IProviderManager {
     thought: number;
     total: number;
   } {
-    // Validate and replace any NaN or undefined values with 0
     return {
-      input: this.sessionTokenUsage.input || 0,
-      output: this.sessionTokenUsage.output || 0,
-      cache: this.sessionTokenUsage.cache || 0,
-      tool: this.sessionTokenUsage.tool || 0,
-      thought: this.sessionTokenUsage.thought || 0,
-      total: this.sessionTokenUsage.total || 0,
+      input: this._sanitizeTokenValue(this.sessionTokenUsage.input),
+      output: this._sanitizeTokenValue(this.sessionTokenUsage.output),
+      cache: this._sanitizeTokenValue(this.sessionTokenUsage.cache),
+      tool: this._sanitizeTokenValue(this.sessionTokenUsage.tool),
+      thought: this._sanitizeTokenValue(this.sessionTokenUsage.thought),
+      total: this._sanitizeTokenValue(this.sessionTokenUsage.total),
     };
+  }
+
+  /**
+   * Helper to sanitize token values: undefined/NaN → 0, finite numbers preserved.
+   * Preserves old `value || 0` runtime-boundary semantics without implicit truthiness.
+   */
+  private _sanitizeTokenValue(value: number | null | undefined): number {
+    if (value == null) return 0;
+    if (Object.is(value, -0)) return 0;
+    if (Number.isNaN(value)) return 0;
+    return value;
   }
 
   /**
@@ -1345,7 +1375,7 @@ export class ProviderManager implements IProviderManager {
    * @plan PLAN-20250909-TOKTRACK
    */
   getProviderMetrics(providerName?: string) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const name = providerName ?? this.getActiveProvider()?.name;
     if (!name) return null;
 
@@ -1377,7 +1407,7 @@ export class ProviderManager implements IProviderManager {
     providerName?: string,
   ): ProviderCapabilities | undefined {
     const name =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
       providerName ??
       (this.settingsService.get('activeProvider') as string) ??
       '';
@@ -1402,8 +1432,13 @@ export class ProviderManager implements IProviderManager {
       });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!runtimeContext.settingsService) {
+    const invocationSettingsService = (
+      runtimeContext as { settingsService?: SettingsService | null }
+    ).settingsService;
+    if (
+      invocationSettingsService === null ||
+      invocationSettingsService === undefined
+    ) {
       throw new MissingProviderRuntimeError({
         providerKey: 'ProviderManager',
         missingFields: ['settings'],
@@ -1443,7 +1478,7 @@ export class ProviderManager implements IProviderManager {
 
     this.runtime = {
       ...runtimeContext,
-      settingsService: runtimeContext.settingsService,
+      settingsService: invocationSettingsService,
       config: resolvedConfig,
       metadata: statelessMetadata,
     };
@@ -1532,8 +1567,8 @@ export class ProviderManager implements IProviderManager {
     const visited = new Set<IProvider>();
     let current: IProvider | undefined = provider;
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    while (current) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- preserve defensive runtime boundary guard despite current static types.
+    while (current != null) {
       if (visited.has(current)) {
         break;
       }

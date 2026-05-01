@@ -150,7 +150,7 @@ function maskToken(token: string): string {
 }
 
 function normalizeExpiry(expiry?: number | null): number | undefined {
-  if (!expiry || Number.isNaN(expiry)) {
+  if (expiry == null || expiry === 0 || Number.isNaN(expiry)) {
     return undefined;
   }
   return expiry > 1_000_000_000_000 ? expiry : expiry * 1000;
@@ -287,10 +287,10 @@ function getValidCachedEntry(
   if (!entry) {
     return null;
   }
-  if (entry.stale) {
+  if (entry.stale === true) {
     return null;
   }
-  if (entry.expiresAt && entry.expiresAt <= Date.now()) {
+  if (entry.expiresAt != null && entry.expiresAt <= Date.now()) {
     invalidateEntry(state, cacheKey, 'expired');
     return null;
   }
@@ -583,18 +583,20 @@ export class AuthPrecedenceResolver {
   private resolveSettingsService(
     override?: SettingsService | null,
   ): SettingsService {
-    if (override) {
+    if (override != null) {
       return override;
     }
-    if (this.settingsService) {
+    if (this.settingsService != null) {
       return this.settingsService;
     }
     const context = getActiveProviderRuntimeContext();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Auth precedence consumes persisted/runtime credentials despite declared types.
-    if (!context?.settingsService) {
+    const settingsService = (
+      context as { settingsService?: SettingsService | null }
+    ).settingsService;
+    if (settingsService === null || settingsService === undefined) {
       throw new Error('Active provider runtime context not available');
     }
-    this.settingsService = context.settingsService;
+    this.settingsService = settingsService;
     return this.settingsService;
   }
 
@@ -684,10 +686,10 @@ export class AuthPrecedenceResolver {
 
     if (
       includeOAuth &&
-      this.config.isOAuthEnabled &&
-      this.config.supportsOAuth &&
-      this.oauthManager &&
-      this.config.oauthProvider
+      this.config.isOAuthEnabled === true &&
+      this.config.supportsOAuth === true &&
+      this.oauthManager != null &&
+      this.config.oauthProvider != null
     ) {
       const providerId = this.resolveProviderIdentifier(providerKey);
       const profileId = resolveProfileId(settingsService);
@@ -875,19 +877,23 @@ export class AuthPrecedenceResolver {
 
     // Check precedence levels and return method name
     const authKey = settingsService.get('auth-key');
-    if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
+    if (
+      authKey != null &&
+      typeof authKey === 'string' &&
+      authKey.trim() !== ''
+    ) {
       return 'command-key';
     }
 
     const authKeyName = this.normalizeAuthValue(
       settingsService.get('auth-key-name'),
     );
-    if (authKeyName) {
+    if (authKeyName !== undefined && authKeyName !== '') {
       return 'named-key';
     }
 
     const authKeyfile = settingsService.get('auth-keyfile');
-    if (authKeyfile && typeof authKeyfile === 'string') {
+    if (typeof authKeyfile === 'string' && authKeyfile) {
       try {
         const keyFromFile = await this.readKeyFile(authKeyfile);
         if (keyFromFile) {
@@ -916,10 +922,10 @@ export class AuthPrecedenceResolver {
     }
 
     if (
-      this.config.isOAuthEnabled &&
-      this.config.supportsOAuth &&
-      this.oauthManager &&
-      this.config.oauthProvider
+      this.config.isOAuthEnabled === true &&
+      this.config.supportsOAuth === true &&
+      this.oauthManager != null &&
+      this.config.oauthProvider != null
     ) {
       try {
         const isAuthenticated = await this.oauthManager.isAuthenticated(

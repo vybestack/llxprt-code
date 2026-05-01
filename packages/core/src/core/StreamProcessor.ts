@@ -61,12 +61,18 @@ import {
  */
 
 type ToolGroupArray = Array<{
-  functionDeclarations: Array<{
+  functionDeclarations?: Array<{
     name: string;
     description?: string;
     parametersJsonSchema?: unknown;
   }>;
 }>;
+
+function isMissingFinishReason(
+  finishReason: FinishReason | null | undefined | '',
+): boolean {
+  return finishReason == null || finishReason === '';
+}
 
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
@@ -103,7 +109,7 @@ export class StreamProcessor {
       () => '[StreamProcessor] Active provider snapshot before stream request',
       {
         providerName: provider.name,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         providerDefaultModel: provider.getDefaultModel?.(),
         configModel: this.runtimeContext.state.model,
         baseUrl: providerBaseUrl,
@@ -151,14 +157,12 @@ export class StreamProcessor {
         value?: unknown,
       ): Promise<IteratorResult<GenerateContentResponse>> {
         if (processedStream) {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          return processedStream.return
+          return typeof processedStream.return === 'function'
             ? processedStream.return(value)
             : { done: true, value: undefined };
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        if (streamResponse.return) {
+        if (typeof streamResponse.return === 'function') {
           await streamResponse.return(value);
         }
 
@@ -168,20 +172,17 @@ export class StreamProcessor {
         error?: unknown,
       ): Promise<IteratorResult<GenerateContentResponse>> {
         if (processedStream) {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          if (processedStream.throw) {
+          if (typeof processedStream.throw === 'function') {
             return processedStream.throw(error);
           }
           throw error;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        if (streamResponse.throw) {
+        if (typeof streamResponse.throw === 'function') {
           return streamResponse.throw(error);
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        if (streamResponse.return) {
+        if (typeof streamResponse.return === 'function') {
           await streamResponse.return(undefined);
         }
 
@@ -255,30 +256,46 @@ export class StreamProcessor {
     );
 
     // Trigger BeforeModel hook for streaming path
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (configForHooks?.getEnableHooks?.()) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      const hookSystem = configForHooks.getHookSystem?.();
-      if (hookSystem) {
+    if (
+      configForHooks !== undefined &&
+      typeof configForHooks.getEnableHooks === 'function' &&
+      configForHooks.getEnableHooks() === true
+    ) {
+      const hookSystem =
+        typeof configForHooks.getHookSystem === 'function'
+          ? configForHooks.getHookSystem()
+          : undefined;
+      if (hookSystem !== undefined) {
         await hookSystem.initialize();
         const beforeModelResult = await hookSystem.fireBeforeModelEvent({
           contents: requestContents,
           tools: tools as ProviderToolset | undefined,
         });
 
-        if (beforeModelResult?.shouldStopExecution()) {
+        if (beforeModelResult?.shouldStopExecution() === true) {
+          // Explicit empty-string fallback (preserve old || behavior without implicit truthiness)
+          const reason = beforeModelResult.getEffectiveReason() as
+            | string
+            | null
+            | undefined;
           throw new AgentExecutionStoppedError(
-            beforeModelResult.getEffectiveReason() ||
-              'Execution stopped by BeforeModel hook',
+            reason !== undefined && reason !== null && reason !== ''
+              ? reason
+              : 'Execution stopped by BeforeModel hook',
             beforeModelResult.systemMessage,
           );
         }
 
-        if (beforeModelResult?.isBlockingDecision()) {
+        if (beforeModelResult?.isBlockingDecision() === true) {
           let syntheticResponse = beforeModelResult.getSyntheticResponse();
           if (syntheticResponse) {
             const candidate = syntheticResponse.candidates?.[0];
-            if (candidate && !candidate.finishReason) {
+            const candidateFinishReason = candidate?.finishReason as
+              | FinishReason
+              | ''
+              | null
+              | undefined;
+            if (candidate && isMissingFinishReason(candidateFinishReason)) {
               syntheticResponse = {
                 ...syntheticResponse,
                 candidates: [
@@ -290,24 +307,29 @@ export class StreamProcessor {
               } as GenerateContentResponse;
             }
           }
+          const reason = beforeModelResult.getEffectiveReason() as
+            | string
+            | null
+            | undefined;
           throw new AgentExecutionBlockedError(
-            beforeModelResult.getEffectiveReason() ||
-              'Request blocked by BeforeModel hook',
+            reason !== undefined && reason !== null && reason !== ''
+              ? reason
+              : 'Request blocked by BeforeModel hook',
             syntheticResponse,
           );
         }
 
-        if (beforeModelResult) {
+        if (beforeModelResult != null) {
           const modifiedRequest =
             beforeModelResult.applyLLMRequestModifications({
               model: this.runtimeContext.state.model || '',
               contents: ContentConverters.toGeminiContents(requestContents),
             });
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          if (modifiedRequest?.contents) {
-            requestContents = ContentConverters.toIContents(
-              modifiedRequest.contents as Content[],
-            );
+          const modifiedContents = (
+            modifiedRequest as { contents?: Content[] | null }
+          ).contents;
+          if (modifiedContents !== undefined && modifiedContents !== null) {
+            requestContents = ContentConverters.toIContents(modifiedContents);
           }
         }
       }
@@ -348,7 +370,7 @@ export class StreamProcessor {
           ...runtimeContext.metadata,
           abortSignal: params.config?.abortSignal,
         },
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         userMemory: baseRuntimeContext.config?.getUserMemory?.(),
       } as GenerateChatOptions);
 
@@ -408,14 +430,24 @@ export class StreamProcessor {
     tools: GenerateContentConfig['tools'],
   ): Promise<GenerateContentConfig['tools']> {
     const toolsFromConfig = tools as ToolGroupArray | undefined;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!toolsFromConfig || !configForHooks?.getEnableHooks?.()) {
+    if (toolsFromConfig === undefined || configForHooks === undefined) {
       return tools;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    const hookSystem = configForHooks.getHookSystem?.();
-    if (!hookSystem) {
+    const getToolSelectionHooksEnabled = configForHooks.getEnableHooks;
+    if (
+      typeof getToolSelectionHooksEnabled !== 'function' ||
+      getToolSelectionHooksEnabled.call(configForHooks) !== true
+    ) {
+      return tools;
+    }
+
+    const getToolSelectionHookSystem = configForHooks.getHookSystem;
+    const hookSystem =
+      typeof getToolSelectionHookSystem === 'function'
+        ? getToolSelectionHookSystem.call(configForHooks)
+        : undefined;
+    if (hookSystem === undefined) {
       return tools;
     }
 
@@ -426,24 +458,27 @@ export class StreamProcessor {
       tools: toolsFromConfig,
     });
 
+    const toolConfig = modifiedConfig?.toolConfig as unknown;
     if (
-      modifiedConfig?.toolConfig &&
-      'allowedFunctionNames' in modifiedConfig.toolConfig
+      toolConfig !== undefined &&
+      toolConfig !== null &&
+      typeof toolConfig === 'object' &&
+      'allowedFunctionNames' in toolConfig
     ) {
-      const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
-      if (allowedFunctions?.length) {
-        return (
-          toolsFromConfig
-            .map((toolGroup) => ({
-              ...toolGroup,
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-              functionDeclarations: toolGroup.functionDeclarations?.filter(
-                (fn) => allowedFunctions.includes(fn.name),
-              ),
-            }))
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            .filter((g) => g.functionDeclarations?.length) as ToolGroupArray
-        );
+      const allowedFunctions = toolConfig.allowedFunctionNames;
+      if (Array.isArray(allowedFunctions) && allowedFunctions.length > 0) {
+        return toolsFromConfig
+          .map((toolGroup) => ({
+            ...toolGroup,
+            functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
+              ? toolGroup.functionDeclarations.filter(
+                  (fn) =>
+                    typeof fn.name === 'string' &&
+                    allowedFunctions.includes(fn.name),
+                )
+              : [],
+          }))
+          .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
       }
     }
 
@@ -533,11 +568,16 @@ export class StreamProcessor {
 
       // Trigger AfterModel hook per streamed chunk
       const hookConfig = this.runtimeContext.providerRuntime.config;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (hookConfig?.getEnableHooks?.()) {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        const hookSystem = hookConfig.getHookSystem?.();
-        if (hookSystem) {
+      if (
+        hookConfig !== undefined &&
+        typeof hookConfig.getEnableHooks === 'function' &&
+        hookConfig.getEnableHooks() === true
+      ) {
+        const hookSystem =
+          typeof hookConfig.getHookSystem === 'function'
+            ? hookConfig.getHookSystem()
+            : undefined;
+        if (hookSystem !== undefined) {
           if (!hookSystem.isInitialized()) {
             await hookSystem.initialize();
           }
@@ -546,22 +586,24 @@ export class StreamProcessor {
             iContent,
           );
 
-          if (afterModelResult?.shouldStopExecution()) {
+          if (afterModelResult?.shouldStopExecution() === true) {
+            const effectiveReason = afterModelResult.getEffectiveReason() as
+              | string
+              | undefined;
             throw new AgentExecutionStoppedError(
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-              afterModelResult.getEffectiveReason() ??
-                'Execution stopped by AfterModel hook',
+              effectiveReason ?? 'Execution stopped by AfterModel hook',
               afterModelResult.systemMessage,
             );
           }
 
-          if (afterModelResult?.isBlockingDecision()) {
+          if (afterModelResult?.isBlockingDecision() === true) {
             const modifiedResponse = afterModelResult.getModifiedResponse();
             const syntheticResponse = modifiedResponse ?? convertedChunk;
+            const effectiveReason = afterModelResult.getEffectiveReason() as
+              | string
+              | undefined;
             throw new AgentExecutionBlockedError(
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-              afterModelResult.getEffectiveReason() ??
-                'Execution blocked by AfterModel hook',
+              effectiveReason ?? 'Execution blocked by AfterModel hook',
               syntheticResponse,
               afterModelResult.systemMessage,
             );
@@ -619,22 +661,22 @@ export class StreamProcessor {
 
     for await (const chunk of streamResponse) {
       // Track finish reason
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      const candidateWithReason = chunk?.candidates?.find(
-        (c) => c.finishReason,
+      const candidateWithReason = chunk.candidates?.find(
+        (c) => c.finishReason !== undefined,
       );
-      if (candidateWithReason)
+      if (candidateWithReason !== undefined)
         finishReason = candidateWithReason.finishReason as FinishReason;
 
       // Track response content flags for later validation
       if (isValidResponse(chunk)) {
         const parts = chunk.candidates?.[0]?.content?.parts;
-        if (parts) {
-          if (parts.some((p) => p.functionCall)) hasToolCall = true;
+        if (parts !== undefined) {
+          if (parts.some((p) => p.functionCall !== undefined))
+            hasToolCall = true;
           if (
             parts.some(
               (p) =>
-                p.text &&
+                p.text !== undefined &&
                 typeof p.text === 'string' &&
                 p.text.trim() !== '' &&
                 !isThoughtPart(p),
@@ -643,7 +685,9 @@ export class StreamProcessor {
             hasTextResponse = true;
           if (parts.some((p) => isThoughtPart(p))) hasThinkingResponse = true;
           modelResponseParts.push(
-            ...(includeThoughts ? parts : parts.filter((p) => !p.thought)),
+            ...(includeThoughts
+              ? parts
+              : parts.filter((p) => p.thought !== true)),
           );
         }
       }
@@ -675,7 +719,7 @@ export class StreamProcessor {
     const consolidatedParts = this._consolidateTextParts(modelResponseParts);
     const responseText = this._extractResponseText(consolidatedParts);
 
-    if (!finishReason) {
+    if (isMissingFinishReason(finishReason)) {
       this.logger.debug(
         () =>
           `[stream:terminal] stream ended without finishReason (hasToolCall=${String(hasToolCall)}, hasTextResponse=${String(hasTextResponse)}, hasThinkingResponse=${String(hasThinkingResponse)}, responseTextLength=${responseText.length})`,
@@ -714,7 +758,7 @@ export class StreamProcessor {
     for (const part of modelResponseParts) {
       const lastPart = consolidatedParts[consolidatedParts.length - 1];
       if (
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         lastPart?.text &&
         isValidNonThoughtTextPart(lastPart) &&
         isValidNonThoughtTextPart(part)
@@ -779,9 +823,10 @@ export class StreamProcessor {
       !hasToolCall &&
       !isToolContinuationInput &&
       !hasThinkingResponse &&
-      ((!finishReason && !hasTextResponse) || !responseText)
+      ((isMissingFinishReason(finishReason) && !hasTextResponse) ||
+        responseText === '')
     ) {
-      if (!finishReason && !hasTextResponse) {
+      if (isMissingFinishReason(finishReason) && !hasTextResponse) {
         this.logger.warn(
           () =>
             `[stream:terminal] validation failed: missing finishReason and text`,
@@ -887,7 +932,7 @@ export class StreamProcessor {
 
     // Sync token counts AFTER recording history to replace estimated tokens with actual API prompt tokens
     // Use explicit check for undefined to allow 0 values
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- preserve defensive runtime boundary guard despite current static types.
     if (actualPromptTokens !== null && actualPromptTokens !== undefined) {
       if (actualPromptTokens > 0) {
         this.logger.debug(

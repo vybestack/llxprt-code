@@ -115,7 +115,8 @@ function createDeveloperRoleToSystemFetch(
     }
 
     if (
-      !parsedBody ||
+      parsedBody === null ||
+      parsedBody === undefined ||
       typeof parsedBody !== 'object' ||
       !('messages' in parsedBody) ||
       !Array.isArray(
@@ -133,8 +134,8 @@ function createDeveloperRoleToSystemFetch(
       // message typed as Record but could be null/undefined from malformed array
 
       if (
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        message &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
+        message != null &&
         typeof message === 'object' &&
         (message as { role?: unknown }).role === 'developer'
       ) {
@@ -293,7 +294,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     const providerConfig = config as IProviderConfig & {
       forceQwenOAuth?: boolean;
     };
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const forceQwenOAuth = Boolean(providerConfig?.forceQwenOAuth);
 
     const shouldEnableQwenOAuth = isQwenBaseURL(baseURL) || forceQwenOAuth;
@@ -313,11 +314,14 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   }
 
   protected override supportsOAuth(): boolean {
-    const providerConfig = this.providerConfig as IProviderConfig & {
-      forceQwenOAuth?: boolean;
-    };
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (providerConfig?.forceQwenOAuth) {
+    const providerConfig = this.providerConfig as
+      | (IProviderConfig & {
+          forceQwenOAuth?: unknown;
+        })
+      | undefined;
+    const forceQwenOAuth = providerConfig?.forceQwenOAuth;
+    const isForceQwenOAuthTruthy = Boolean(forceQwenOAuth) === true;
+    if (isForceQwenOAuthTruthy) {
       return true;
     }
     if (this.name === 'qwen') {
@@ -349,7 +353,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       forceQwenOAuth?: boolean;
     };
     const shouldForceSystemRole =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
       Boolean(providerConfig?.forceQwenOAuth) || isQwenBaseURL(baseURL);
 
     const requiresAuth = options.settings.getProviderSettings(this.name)[
@@ -385,11 +389,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   private extractModelParamsFromOptions(
     options: NormalizedGenerateChatOptions,
   ): Record<string, unknown> | undefined {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const modelParams = { ...(options.invocation?.modelParams ?? {}) };
 
     // Translate generic maxOutputTokens ephemeral to OpenAI's max_tokens
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const rawMaxOutput = options.settings?.get('maxOutputTokens');
     const genericMaxOutput =
       typeof rawMaxOutput === 'number' &&
@@ -500,13 +504,13 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     const toolsRecord: VercelTools = {};
 
     for (const t of formattedTools) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (!t || t.type !== 'function') continue;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
+      if (t == null || t.type !== 'function') continue;
       const fn = t.function;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (!fn?.name) continue;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (toolsRecord[fn.name]) continue;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
+      if (fn?.name == null || fn.name === '') continue;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
+      if (toolsRecord[fn.name] != null) continue;
 
       const inputSchema = fn.parameters
         ? jsonSchemaFn(fn.parameters as JSONSchema7)
@@ -555,15 +559,24 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         ? promptTokens + completionTokens
         : 0);
 
+    const cacheMetricOrUndefined = (value: number | null | undefined) => {
+      if (value == null || value === 0 || Number.isNaN(value)) {
+        return undefined;
+      }
+      return value;
+    };
+
     const cacheMetrics = extractCacheMetrics(usage, headers);
 
     return {
       promptTokens,
       completionTokens,
       totalTokens,
-      cachedTokens: cacheMetrics.cachedTokens || undefined,
-      cacheCreationTokens: cacheMetrics.cacheCreationTokens || undefined,
-      cacheMissTokens: cacheMetrics.cacheMissTokens || undefined,
+      cachedTokens: cacheMetricOrUndefined(cacheMetrics.cachedTokens),
+      cacheCreationTokens: cacheMetricOrUndefined(
+        cacheMetrics.cacheCreationTokens,
+      ),
+      cacheMissTokens: cacheMetricOrUndefined(cacheMetrics.cacheMissTokens),
     };
   }
 
@@ -597,9 +610,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     const logger = this.getLogger();
     const { contents, tools, metadata } = options;
     const modelId = options.resolved.model || this.getDefaultModel();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const ephemerals = options.invocation?.ephemerals ?? {};
 
     const resolved = options.resolved;
@@ -613,7 +626,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         authTokenPresent: Boolean(resolved.authToken),
         messageCount: contents.length,
         toolCount: tools?.length ?? 0,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         metadataKeys: Object.keys(metadata ?? {}),
       });
     }
@@ -642,7 +655,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     // Determine streaming vs non-streaming mode (default: enabled)
     const streamingSetting = ephemerals['streaming'];
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const streamingResolved = options.resolved?.streaming;
     const streamingEnabled =
       streamingResolved === false
@@ -663,28 +676,30 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     const userMemory = await resolveUserMemory(
       options.userMemory,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
       () => options.invocation?.userMemory,
     );
     const mcpInstructions = options.config
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
       ?.getMcpClientManager?.()
       ?.getMcpInstructions();
     const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
       toolNamesArg ?? [],
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
       () => options.config?.getSubagentManager?.(),
     );
+    const isInteractive = options.config?.isInteractive;
     const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
       mcpInstructions,
       model: modelId,
       tools: toolNamesArg,
       includeSubagentDelegation,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      interactionMode: options.config?.isInteractive?.()
-        ? 'interactive'
-        : 'non-interactive',
+      interactionMode:
+        typeof isInteractive === 'function' &&
+        isInteractive.call(options.config) === true
+          ? 'interactive'
+          : 'non-interactive',
     });
 
     // Filter thinking from context based on settings
@@ -710,9 +725,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     // Convert Gemini tools to OpenAI-style definitions using provider-specific converter
     const formattedTools = convertToolsToOpenAIVercel(tools);
 
-    if (logger.enabled && formattedTools) {
+    if (logger.enabled && formattedTools != null) {
       logger.debug(() => `[OpenAIVercelProvider] Tool conversion summary`, {
-        hasTools: !!formattedTools,
+        hasTools: true,
         toolCount: formattedTools.length,
         toolNames: formattedTools.map((t) => t.function.name),
       });
@@ -724,7 +739,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     // Model parameters (temperature, top_p, etc.)
     const modelParams = this.extractModelParamsFromOptions(options) ?? {};
     const maxTokensMeta =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
       (metadata?.maxTokens as number | undefined) ??
       (ephemerals['max-tokens'] as number | undefined);
     const maxTokensOverride =
@@ -854,8 +869,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       let totalUsage: LanguageModelUsage | undefined;
       let finishReason: string | undefined;
       const hasFullStream =
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        result &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
+        result != null &&
         typeof result === 'object' &&
         'fullStream' in (result as { fullStream?: unknown });
 
@@ -947,7 +962,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         return '';
       };
 
-      if (hasFullStream && (result as { fullStream?: unknown }).fullStream) {
+      if (
+        hasFullStream &&
+        (result as { fullStream?: unknown }).fullStream != null
+      ) {
         try {
           for await (const part of (
             result as {
@@ -963,7 +981,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
               }>;
             }
           ).fullStream) {
-            if (abortSignal?.aborted) {
+            if (abortSignal?.aborted === true) {
               break;
             }
 
@@ -1101,7 +1119,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
           // Emit any remaining accumulated thinking content that wasn't emitted yet
           if (
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
             !hasEmittedThinking &&
             accumulatedThinkingContent.length > 0 &&
             rsEnabled &&
@@ -1162,8 +1180,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
           }
         } catch (error) {
           if (
-            abortSignal?.aborted ||
-            (error &&
+            abortSignal?.aborted === true ||
+            (error != null &&
               typeof error === 'object' &&
               'name' in error &&
               (error as { name?: string }).name === 'AbortError')
@@ -1193,9 +1211,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         };
 
         try {
-          if (legacyStream.textStream) {
+          if (legacyStream.textStream != null) {
             for await (const textChunk of legacyStream.textStream) {
-              if (!textChunk) {
+              if (typeof textChunk !== 'string' || textChunk === '') {
                 continue;
               }
               yield {
@@ -1211,8 +1229,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
           }
         } catch (error) {
           if (
-            abortSignal?.aborted ||
-            (error &&
+            abortSignal?.aborted === true ||
+            (error != null &&
               typeof error === 'object' &&
               'name' in error &&
               (error as { name?: string }).name === 'AbortError')
@@ -1229,7 +1247,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
         const legacyToolCalls =
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          (legacyStream.toolCalls
+          (legacyStream.toolCalls != null
             ? await legacyStream.toolCalls.catch(() => [])
             : []) ?? [];
         for (const call of legacyToolCalls) {
@@ -1240,12 +1258,14 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
           });
         }
 
-        totalUsage = legacyStream.usage
-          ? await legacyStream.usage.catch(() => undefined)
-          : undefined;
-        finishReason = legacyStream.finishReason
-          ? await legacyStream.finishReason.catch(() => undefined)
-          : undefined;
+        totalUsage =
+          legacyStream.usage != null
+            ? await legacyStream.usage.catch(() => undefined)
+            : undefined;
+        finishReason =
+          legacyStream.finishReason != null
+            ? await legacyStream.finishReason.catch(() => undefined)
+            : undefined;
       }
 
       // Emit accumulated tool calls as a single IContent, with usage metadata if available
@@ -1380,28 +1400,26 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         const reasoningField = (
           result as { reasoning?: string | Array<{ text: string }> }
         ).reasoning;
-        if (reasoningField) {
-          let reasoning: string;
-          if (typeof reasoningField === 'string') {
-            reasoning = reasoningField;
-          } else if (Array.isArray(reasoningField)) {
-            reasoning = reasoningField
-              .map((r) => r.text)
-              .filter((text): text is string => !!text)
-              .join(' ');
-          } else {
-            reasoning = '';
+        let reasoning = '';
+        if (typeof reasoningField === 'string') {
+          reasoning = reasoningField;
+        } else if (Array.isArray(reasoningField)) {
+          reasoning = reasoningField
+            .map((r) => r.text)
+            .filter(
+              (text): text is string => typeof text === 'string' && text !== '',
+            )
+            .join(' ');
+        }
+        if (reasoning !== '') {
+          if (thinkingContent.length > 0) {
+            thinkingContent += ' ';
           }
-          if (reasoning) {
-            if (thinkingContent.length > 0) {
-              thinkingContent += ' ';
-            }
-            thinkingContent += reasoning;
-            logger.debug(
-              () =>
-                `[OpenAIVercelProvider] Extracted reasoning from result field: ${reasoning.length} chars`,
-            );
-          }
+          thinkingContent += reasoning;
+          logger.debug(
+            () =>
+              `[OpenAIVercelProvider] Extracted reasoning from result field: ${reasoning.length} chars`,
+          );
         }
       }
 
@@ -1433,16 +1451,17 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       }
 
       // Typed tool calls from AI SDK; execution is not automatic because we did not provide execute().
+      // Use explicit nullish check to preserve fallback when result.toolCalls is nullish/absent
+      const resultToolCalls = (
+        result as { toolCalls?: Array<TypedToolCall<VercelTools>> | null }
+      ).toolCalls;
       const toolCalls: Array<TypedToolCall<VercelTools>> =
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        'toolCalls' in result && result.toolCalls
-          ? await Promise.resolve(result.toolCalls)
-          : [];
+        resultToolCalls != null ? await Promise.resolve(resultToolCalls) : [];
 
       for (const call of toolCalls) {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         const toolName: string = call.toolName ?? 'unknown_tool';
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         const id: string = call.toolCallId ?? crypto.randomUUID();
         const rawInput =
           (call as { input?: unknown }).input ??
@@ -1469,8 +1488,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         } as ToolCallBlock);
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (blocks.length > 0 || result.usage) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
+      if (blocks.length > 0 || result.usage != null) {
         const usageMeta = this.mapUsageToMetadata(
           result.usage as LanguageModelUsage | undefined,
         );
@@ -1478,7 +1497,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         const content: IContent = {
           speaker: 'ai',
           blocks,
-          ...(usageMeta
+          ...(usageMeta != null
             ? {
                 metadata: {
                   usage: usageMeta,

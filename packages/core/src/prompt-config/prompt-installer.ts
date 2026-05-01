@@ -174,14 +174,14 @@ export class PromptInstaller {
     for (const dir of REQUIRED_DIRECTORIES) {
       const fullPath = path.join(expandedBaseDir, dir);
 
-      if (options?.dryRun) {
-        if (options.verbose) {
+      if (options?.dryRun === true) {
+        if (options.verbose === true) {
           logger.debug('Would create:', fullPath);
         }
       } else {
         try {
           await fs.mkdir(fullPath, { recursive: true, mode: 0o755 });
-          if (options?.verbose) {
+          if (options?.verbose === true) {
             logger.debug('Created directory:', fullPath);
           }
         } catch (error) {
@@ -201,11 +201,11 @@ export class PromptInstaller {
 
     // Load manifest for hash-based modification tracking
     let manifest: InstalledManifest | null = null;
-    if (!options?.dryRun && existsSync(expandedBaseDir)) {
+    if (options?.dryRun !== true && existsSync(expandedBaseDir)) {
       manifest = await this.loadManifest(expandedBaseDir);
     }
     // Initialize manifest if it doesn't exist
-    if (!manifest && !options?.dryRun) {
+    if (!manifest && options?.dryRun !== true) {
       manifest = { version: MANIFEST_VERSION, files: {} };
     }
 
@@ -215,7 +215,7 @@ export class PromptInstaller {
       const fileDir = path.dirname(fullPath);
 
       // Create parent directory if needed
-      if (!existsSync(fileDir) && !options?.dryRun) {
+      if (!existsSync(fileDir) && options?.dryRun !== true) {
         try {
           await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
         } catch (error) {
@@ -227,13 +227,13 @@ export class PromptInstaller {
       }
 
       // Check existing file
-      if (existsSync(fullPath) && !options?.force) {
+      if (existsSync(fullPath) && options?.force !== true) {
         const decision = await this.handleExistingFile(
           expandedBaseDir,
           relativePath,
           fullPath,
           content,
-          !options?.dryRun,
+          options?.dryRun !== true,
           manifest,
         ).catch((error) => {
           const message =
@@ -244,7 +244,7 @@ export class PromptInstaller {
 
         if (decision.action === 'same') {
           skipped.push(relativePath);
-          if (options?.verbose) {
+          if (options?.verbose === true) {
             logger.debug('Preserving existing:', relativePath);
           }
           continue;
@@ -252,7 +252,7 @@ export class PromptInstaller {
 
         if (decision.action === 'resolved') {
           skipped.push(relativePath);
-          if (options?.verbose) {
+          if (options?.verbose === true) {
             logger.debug(
               'Default update already provided for review:',
               relativePath,
@@ -263,22 +263,22 @@ export class PromptInstaller {
 
         if (decision.action === 'keep') {
           conflicts.push(decision.conflict);
-          if (decision.notice) {
+          if (decision.notice != null && decision.notice !== '') {
             notices.push(decision.notice);
           }
           skipped.push(relativePath);
           continue;
         }
 
-        if (options?.verbose) {
+        if (options?.verbose === true) {
           logger.debug('Updating unmodified file:', relativePath);
         }
       } else {
         // File doesn't exist or force mode - write it
       }
 
-      if (options?.dryRun) {
-        if (options.verbose) {
+      if (options?.dryRun === true) {
+        if (options.verbose === true) {
           logger.debug('Would write:', fullPath);
         }
         installed.push(relativePath);
@@ -292,14 +292,14 @@ export class PromptInstaller {
             await fs.rename(tempPath, fullPath);
             installed.push(relativePath);
             // Update manifest with new hash
-            if (manifest) {
+            if (manifest !== null) {
               this.updateManifestEntry(
                 manifest,
                 relativePath,
                 this.hashContent(content),
               );
             }
-            if (options?.verbose) {
+            if (options?.verbose === true) {
               logger.debug('Installed:', relativePath);
             }
           } catch (renameError) {
@@ -344,7 +344,7 @@ export class PromptInstaller {
     }
 
     // Set permissions on all files (if not dry run)
-    if (!options?.dryRun && errors.length === 0) {
+    if (options?.dryRun !== true && errors.length === 0) {
       try {
         // Set base directory permissions
         await fs.chmod(expandedBaseDir, 0o755);
@@ -368,19 +368,19 @@ export class PromptInstaller {
         }
       } catch (error) {
         // Non-critical error, don't fail the installation
-        if (options?.verbose) {
+        if (options?.verbose === true) {
           logger.debug('Could not set permissions:', error);
         }
       }
     }
 
     // Save manifest (if not dry run and we have a manifest)
-    if (!options?.dryRun && manifest && installed.length > 0) {
+    if (options?.dryRun !== true && manifest !== null && installed.length > 0) {
       try {
         await this.saveManifest(expandedBaseDir, manifest);
       } catch (error) {
         // Non-critical error, don't fail the installation
-        if (options?.verbose) {
+        if (options?.verbose === true) {
           logger.debug('Could not save manifest:', error);
         }
       }
@@ -598,7 +598,7 @@ export class PromptInstaller {
     // Build removal list
     const toRemove: string[] = [];
 
-    if (options?.removeUserFiles) {
+    if (options?.removeUserFiles === true) {
       // Remove all files
       try {
         await this.collectAllFiles(expandedBaseDir, expandedBaseDir, toRemove);
@@ -629,7 +629,7 @@ export class PromptInstaller {
     for (const file of toRemove) {
       const fullPath = path.join(expandedBaseDir, file);
 
-      if (options?.dryRun) {
+      if (options?.dryRun === true) {
         logger.debug('Would remove:', fullPath);
         removed.push(file);
       } else {
@@ -657,7 +657,7 @@ export class PromptInstaller {
     }
 
     // Remove empty directories (in reverse order to remove children first)
-    if (!options?.dryRun) {
+    if (options?.dryRun !== true) {
       const dirsToCheck = [...REQUIRED_DIRECTORIES].reverse();
 
       for (const dir of dirsToCheck) {
@@ -849,7 +849,7 @@ export class PromptInstaller {
       try {
         await fs.mkdir(expandedBaseDir, { recursive: true, mode: 0o755 });
         repaired.push('base directory');
-        if (options?.verbose) {
+        if (options?.verbose === true) {
           logger.debug('Created base directory:', expandedBaseDir);
         }
       } catch (error) {
@@ -877,7 +877,7 @@ export class PromptInstaller {
         try {
           await fs.mkdir(dirPath, { recursive: true, mode: 0o755 });
           repaired.push(missingItem);
-          if (options?.verbose) {
+          if (options?.verbose === true) {
             logger.debug('Created directory:', dirPath);
           }
         } catch (error) {
@@ -911,7 +911,7 @@ export class PromptInstaller {
           await fs.writeFile(tempPath, defaults[missingItem], { mode: 0o644 });
           await fs.rename(tempPath, filePath);
           repaired.push(missingItem);
-          if (options?.verbose) {
+          if (options?.verbose === true) {
             logger.debug('Restored file:', filePath);
           }
         } catch (error) {
@@ -937,7 +937,7 @@ export class PromptInstaller {
       await this.fixFilePermissions(expandedBaseDir);
       permissionsFixed = true;
 
-      if (options?.verbose) {
+      if (options?.verbose === true) {
         logger.debug('Fixed file permissions');
       }
     } catch (error) {
