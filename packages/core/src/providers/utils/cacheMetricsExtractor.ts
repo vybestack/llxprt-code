@@ -26,28 +26,45 @@ export function extractCacheMetrics(
   usage: unknown,
   headers?: Headers,
 ): CacheMetrics {
-  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: chain of fallbacks where 0 means "not found" */
-  const cachedTokens =
-    (hasProperty(usage, 'prompt_tokens_details') &&
-      hasProperty(usage.prompt_tokens_details, 'cached_tokens') &&
-      toNumber(usage.prompt_tokens_details.cached_tokens)) ||
-    (hasProperty(usage, 'cache_read_input_tokens') &&
-      toNumber(usage.cache_read_input_tokens)) ||
-    (hasProperty(usage, 'prompt_cache_hit_tokens') &&
-      toNumber(usage.prompt_cache_hit_tokens)) ||
-    (headers && toNumber(headers.get('fireworks-cached-prompt-tokens'))) ||
-    0;
+  const legacyFallback = (val: number, fallback: number): number =>
+    val !== 0 && !Number.isNaN(val) ? val : fallback;
 
-  const cacheCreationTokens =
-    (hasProperty(usage, 'cache_creation_input_tokens') &&
-      toNumber(usage.cache_creation_input_tokens)) ||
-    0;
+  const cachedTokens = legacyFallback(
+    legacyFallback(
+      legacyFallback(
+        legacyFallback(
+          hasProperty(usage, 'prompt_tokens_details') &&
+            hasProperty(usage.prompt_tokens_details, 'cached_tokens')
+            ? toNumber(usage.prompt_tokens_details.cached_tokens)
+            : 0,
+          hasProperty(usage, 'cache_read_input_tokens')
+            ? toNumber(usage.cache_read_input_tokens)
+            : 0,
+        ),
+        hasProperty(usage, 'prompt_cache_hit_tokens')
+          ? toNumber(usage.prompt_cache_hit_tokens)
+          : 0,
+      ),
+      headers !== undefined
+        ? toNumber(headers.get('fireworks-cached-prompt-tokens'))
+        : 0,
+    ),
+    0,
+  );
 
-  const cacheMissTokens =
-    (hasProperty(usage, 'prompt_cache_miss_tokens') &&
-      toNumber(usage.prompt_cache_miss_tokens)) ||
-    0;
-  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+  const cacheCreationTokens = legacyFallback(
+    hasProperty(usage, 'cache_creation_input_tokens')
+      ? toNumber(usage.cache_creation_input_tokens)
+      : 0,
+    0,
+  );
+
+  const cacheMissTokens = legacyFallback(
+    hasProperty(usage, 'prompt_cache_miss_tokens')
+      ? toNumber(usage.prompt_cache_miss_tokens)
+      : 0,
+    0,
+  );
 
   return {
     cachedTokens,

@@ -343,8 +343,10 @@ function completeToolCall(
 
   const toolSchema = findToolSchema(tools, currentToolCall.name, isOAuth);
   if (
-    toolSchema &&
-    processedParameters &&
+    toolSchema !== undefined &&
+    toolSchema !== null &&
+    processedParameters !== undefined &&
+    processedParameters !== null &&
     typeof processedParameters === 'object' &&
     typeof toolSchema === 'object'
   ) {
@@ -485,9 +487,26 @@ function* handleMessageDelta(
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
+  const rawInputTokens = usage.input_tokens as number | null | undefined;
+  const rawOutputTokens = usage.output_tokens as number | null | undefined;
+  const promptTokens =
+    rawInputTokens !== undefined &&
+    rawInputTokens !== null &&
+    rawInputTokens !== 0 &&
+    !Number.isNaN(rawInputTokens)
+      ? rawInputTokens
+      : 0;
+  const completionTokens =
+    rawOutputTokens !== undefined &&
+    rawOutputTokens !== null &&
+    rawOutputTokens !== 0 &&
+    !Number.isNaN(rawOutputTokens)
+      ? rawOutputTokens
+      : 0;
+
   logger.debug(
     () =>
-      `Received usage metadata from message_delta: promptTokens=${usage.input_tokens || 0}, completionTokens=${usage.output_tokens || 0}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, stopReason=${String(stopReason)}`,
+      `Received usage metadata from message_delta: promptTokens=${promptTokens}, completionTokens=${completionTokens}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, stopReason=${String(stopReason)}`,
   );
 
   yield {
@@ -495,9 +514,9 @@ function* handleMessageDelta(
     blocks: [],
     metadata: {
       usage: {
-        promptTokens: usage.input_tokens || 0,
-        completionTokens: usage.output_tokens || 0,
-        totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
+        promptTokens,
+        completionTokens,
+        totalTokens: promptTokens + completionTokens,
         cache_read_input_tokens: cacheRead,
         cache_creation_input_tokens: cacheCreation,
       },

@@ -78,7 +78,9 @@ export function createUserContentWithFunctionResponseFix(
     // First check if this is an array of functionResponse Parts
     // This happens when multiple tool responses are sent together
     const allFunctionResponses = message.every(
-      (item) => item && typeof item === 'object' && 'functionResponse' in item,
+      (item) =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        item !== null && typeof item === 'object' && 'functionResponse' in item,
     );
 
     if (allFunctionResponses) {
@@ -97,7 +99,7 @@ export function createUserContentWithFunctionResponseFix(
             parts.push(subItem);
           }
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        } else if (item && typeof item === 'object') {
+        } else if (item !== null && typeof item === 'object') {
           // Individual part (function response, text, etc.)
           parts.push(item);
         }
@@ -136,8 +138,9 @@ export function normalizeToolInteractionInput(
 
   // Detect if this is a tool response sequence (functionResponse parts only)
   const hasFunctionResponses = parts.some(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    (part) => part && typeof part === 'object' && 'functionResponse' in part,
+    (part) =>
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      part !== null && typeof part === 'object' && 'functionResponse' in part,
   );
 
   // If no function responses, fall back to original behavior
@@ -155,7 +158,7 @@ export function normalizeToolInteractionInput(
 export function isValidNonThoughtTextPart(part: Part): boolean {
   return (
     typeof part.text === 'string' &&
-    !part.thought &&
+    part.thought !== true &&
     // Technically, the model should never generate parts that have text and
     // any of these but we don't trust them so check anyways.
     !part.functionCall &&
@@ -191,7 +194,7 @@ export function isValidContent(content: Content): boolean {
     if (part === undefined || Object.keys(part).length === 0) {
       return false;
     }
-    if (!part.thought && part.text !== undefined && part.text === '') {
+    if (part.thought !== true && part.text !== undefined && part.text === '') {
       return false;
     }
   }
@@ -286,8 +289,9 @@ export function convertPartListUnionToIContent(input: PartListUnion): IContent {
 export function convertMixedPartsToIContent(parts: Part[]): IContent {
   // Fast path: all function responses → tool message
   const allFunctionResponses = parts.every(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    (part) => part && typeof part === 'object' && 'functionResponse' in part,
+    (part) =>
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider/runtime parts can be malformed at this boundary despite static Part typing.
+      part !== null && typeof part === 'object' && 'functionResponse' in part,
   );
   if (allFunctionResponses) {
     return convertAllFunctionResponses(parts);
@@ -306,6 +310,8 @@ function convertAllFunctionResponses(parts: Part[]): IContent {
   const blocks: ContentBlock[] = [];
   for (const part of parts) {
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider/runtime parts can be malformed at this boundary despite static Part typing.
+      part !== null &&
       typeof part === 'object' &&
       'functionResponse' in part &&
       part.functionResponse
@@ -531,7 +537,7 @@ export function applyResponseMetadata(
     };
     const mappedReason = finishReasonByTerminationReason[terminationReason];
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (mappedReason) {
+    if (mappedReason !== undefined) {
       response.candidates[0].finishReason = mappedReason;
       logger.debug(
         () => `[stream:message-converter] applied terminal metadata`,

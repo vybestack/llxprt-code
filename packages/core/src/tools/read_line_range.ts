@@ -187,12 +187,16 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
 
     if (typeof result.llmContent !== 'string') {
       llmContent = result.llmContent;
-    } else if (result.isTruncated) {
+    } else if (result.isTruncated === true) {
       const [start, end] = result.linesShown!;
       const total = result.originalLineCount!;
 
       let formattedContent = result.llmContent;
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+      if (
+        this.params.showGitChanges === true &&
+        markersByLine &&
+        deletionAfterLines
+      ) {
         formattedContent = formatWithGitChanges(
           result.llmContent,
           this.params.start_line,
@@ -200,24 +204,29 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
           deletionAfterLines,
           this.params.showLineNumbers === true,
         );
-      } else if (this.params.showLineNumbers) {
+      } else if (this.params.showLineNumbers === true) {
         formattedContent = formatWithLineNumbers(
           result.llmContent,
           this.params.start_line,
         );
       }
 
-      const gitLegend = this.params.showGitChanges
-        ? `\nGit changes legend: ░ unchanged, N new, M modified, D deletion after line.\n`
-        : '';
+      const gitLegend =
+        this.params.showGitChanges === true
+          ? `\nGit changes legend: ░ unchanged, N new, M modified, D deletion after line.\n`
+          : '';
       const gitWarningText =
-        this.params.showGitChanges && gitWarning
+        this.params.showGitChanges === true && gitWarning !== undefined
           ? `\nNOTE: Failed to read git change status: ${gitWarning}\n`
           : '';
 
       llmContent = `\nIMPORTANT: The file content has been truncated.${gitWarningText}${gitLegend}\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_line_range' tool with adjusted 'start_line' and 'end_line' parameters.\n\n--- FILE CONTENT (truncated) ---\n${formattedContent}`;
     } else {
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+      if (
+        this.params.showGitChanges === true &&
+        markersByLine &&
+        deletionAfterLines
+      ) {
         llmContent = formatWithGitChanges(
           result.llmContent,
           this.params.start_line,
@@ -226,12 +235,13 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
           this.params.showLineNumbers === true,
         );
       } else {
-        llmContent = this.params.showLineNumbers
-          ? formatWithLineNumbers(result.llmContent, this.params.start_line)
-          : result.llmContent;
+        llmContent =
+          this.params.showLineNumbers === true
+            ? formatWithLineNumbers(result.llmContent, this.params.start_line)
+            : result.llmContent;
       }
 
-      if (this.params.showGitChanges) {
+      if (this.params.showGitChanges === true) {
         const headerParts: string[] = [];
         if (gitWarning) {
           headerParts.push(

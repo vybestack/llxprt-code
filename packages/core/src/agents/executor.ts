@@ -190,7 +190,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       while (true) {
         // Check for termination conditions like max turns or timeout.
         const reason = this.checkTermination(startTime, turnCounter);
-        if (reason) {
+        if (reason !== null) {
           terminateReason = reason;
           break;
         }
@@ -317,7 +317,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           // Watchdog disabled: call iterator.next() directly
           result = await streamIterator.next();
         }
-        if (result.done) {
+        if (result.done === true) {
           break;
         }
 
@@ -330,9 +330,9 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
           // Extract and emit any subject "thought" content from the model.
           const { subject } = parseThought(
-            parts?.find((p: Part) => p.thought)?.text ?? '',
+            parts?.find((p: Part) => p.thought === true)?.text ?? '',
           );
-          if (subject) {
+          if (subject !== '') {
             this.emitActivity('THOUGHT_CHUNK', { text: subject });
           }
 
@@ -344,11 +344,13 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           // Handle text response (non-thought text)
           const text =
             parts
-              ?.filter((p: Part) => !p.thought && p.text)
+              ?.filter(
+                (p: Part) => p.thought !== true && typeof p.text === 'string',
+              )
               .map((p: Part) => p.text)
               .join('') ?? '';
 
-          if (text) {
+          if (text.length > 0) {
             textResponse += text;
           }
         }
@@ -870,7 +872,14 @@ Important Rules:
   ): AgentTerminateMode | null {
     const { runConfig } = this.definition;
 
-    if (runConfig.max_turns && turnCounter >= runConfig.max_turns) {
+    // Preserve old truthiness semantics: max_turns: 0 must NOT terminate.
+    // Use explicit nonzero/non-NaN numeric check to satisfy strict-boolean.
+    if (
+      typeof runConfig.max_turns === 'number' &&
+      runConfig.max_turns > 0 &&
+      !Number.isNaN(runConfig.max_turns) &&
+      turnCounter >= runConfig.max_turns
+    ) {
       return AgentTerminateMode.MAX_TURNS;
     }
 

@@ -79,7 +79,7 @@ interface GeminiToolDeclaration {
 export function convertSchemaToAnthropic(
   schema: unknown,
 ): AnthropicInputSchema {
-  if (!schema || typeof schema !== 'object') {
+  if (schema === null || schema === undefined || typeof schema !== 'object') {
     return {
       type: 'object',
       properties: {},
@@ -95,7 +95,11 @@ export function convertSchemaToAnthropic(
   };
 
   // Convert properties recursively
-  if (input.properties && typeof input.properties === 'object') {
+  if (
+    input.properties !== null &&
+    input.properties !== undefined &&
+    typeof input.properties === 'object'
+  ) {
     result.properties = convertProperties(
       input.properties as Record<string, unknown>,
     );
@@ -121,7 +125,7 @@ function convertProperties(
   const result: Record<string, AnthropicPropertySchema> = {};
 
   for (const [key, value] of Object.entries(properties)) {
-    if (value && typeof value === 'object') {
+    if (value !== null && value !== undefined && typeof value === 'object') {
       result[key] = convertPropertySchema(value as Record<string, unknown>);
     }
   }
@@ -149,8 +153,11 @@ function convertPropertySchema(
     result.enum = prop.enum.map((v) => String(v));
   }
 
-  // Handle array items
-  if (prop.items) {
+  // Handle array items - preserve old `if (prop.items)` truthiness semantics.
+  // Falsy non-null items (false, 0, '') should not be treated as present.
+  // Only objects/arrays (valid schema types) are considered present.
+  // eslint-disable-next-line no-extra-boolean-cast -- Preserve old schema item truthiness semantics for malformed provider schemas.
+  if (Boolean(prop.items)) {
     if (Array.isArray(prop.items)) {
       // Tuple type - use first item as representative
       result.items = convertPropertySchema(
@@ -164,7 +171,11 @@ function convertPropertySchema(
   }
 
   // Handle nested object properties
-  if (prop.properties && typeof prop.properties === 'object') {
+  if (
+    prop.properties !== null &&
+    prop.properties !== undefined &&
+    typeof prop.properties === 'object'
+  ) {
     result.properties = convertProperties(
       prop.properties as Record<string, unknown>,
     );
@@ -256,7 +267,8 @@ export function convertToolsToAnthropic(
     }
 
     for (const decl of toolGroup.functionDeclarations) {
-      if (!decl.parametersJsonSchema) {
+      // eslint-disable-next-line no-extra-boolean-cast -- Preserve old schema truthiness semantics for malformed provider schemas.
+      if (!Boolean(decl.parametersJsonSchema)) {
         throw new Error(
           `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
             `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
@@ -265,7 +277,8 @@ export function convertToolsToAnthropic(
       const inputSchema = convertSchemaToAnthropic(decl.parametersJsonSchema);
 
       // Prefix tool names for OAuth to avoid conflicts with Claude Code built-in tools
-      const toolName = isOAuth ? `${TOOL_PREFIX}${decl.name}` : decl.name;
+      const toolName =
+        isOAuth === true ? `${TOOL_PREFIX}${decl.name}` : decl.name;
 
       anthropicTools.push({
         name: toolName,

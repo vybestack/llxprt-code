@@ -63,19 +63,20 @@ export function stableStringify(
         // Handle arrays
         if (Array.isArray(val)) {
           const items: string[] = [];
-          const nextIndent = space ? indent + getIndentString(space) : '';
-          const separator = space ? '\n' : '';
+          const useSpace = Boolean(space);
+          const nextIndent = useSpace ? indent + getIndentString(space!) : '';
+          const separator = useSpace ? '\n' : '';
 
           for (let i = 0; i < val.length; i++) {
             const item = stringify(val[i], nextIndent, currentDepth + 1);
-            items.push(space ? `${nextIndent}${item}` : item);
+            items.push(useSpace ? `${nextIndent}${item}` : item);
           }
 
           if (items.length === 0) {
             return '[]';
           }
 
-          return space
+          return useSpace
             ? `[${separator}${items.join(`,${separator}`)}${separator}${indent}]`
             : `[${items.join(',')}]`;
         }
@@ -83,8 +84,9 @@ export function stableStringify(
         // Handle objects
         const keys = Object.keys(val).sort();
         const pairs: string[] = [];
-        const nextIndent = space ? indent + getIndentString(space) : '';
-        const separator = space ? '\n' : '';
+        const useSpace = Boolean(space);
+        const nextIndent = useSpace ? indent + getIndentString(space!) : '';
+        const separator = useSpace ? '\n' : '';
 
         for (const key of keys) {
           const value = (val as Record<string, unknown>)[key];
@@ -95,7 +97,7 @@ export function stableStringify(
               nextIndent,
               currentDepth + 1,
             );
-            const pair = space
+            const pair = useSpace
               ? `${nextIndent}${stringifiedKey}: ${stringifiedValue}`
               : `${stringifiedKey}:${stringifiedValue}`;
             pairs.push(pair);
@@ -106,7 +108,7 @@ export function stableStringify(
           return '{}';
         }
 
-        return space
+        return useSpace
           ? `{${separator}${pairs.join(`,${separator}`)}${separator}${indent}}`
           : `{${pairs.join(',')}}`;
       } finally {

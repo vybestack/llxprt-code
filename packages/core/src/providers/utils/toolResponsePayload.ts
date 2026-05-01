@@ -51,7 +51,7 @@ export interface ToolResponsePayload {
 export const EMPTY_TOOL_RESULT_PLACEHOLDER = '[no tool result]';
 
 export function humanizeJsonForDisplay(value: unknown): string | undefined {
-  if (!value || typeof value !== 'object') {
+  if (value === null || value === undefined || typeof value !== 'object') {
     return undefined;
   }
 
@@ -75,20 +75,20 @@ export function humanizeJsonForDisplay(value: unknown): string | undefined {
   const stdout = obj.stdout;
   const stderr = obj.stderr;
   const exitCode = obj.exitCode;
-  const hasStdout = typeof stdout === 'string' && stdout.trim();
-  const hasStderr = typeof stderr === 'string' && stderr.trim();
+  const hasStdout = typeof stdout === 'string' && stdout.trim().length > 0;
+  const hasStderr = typeof stderr === 'string' && stderr.trim().length > 0;
   const hasExitCode = typeof exitCode === 'number';
 
-  if (hasStdout || hasStderr || hasExitCode) {
+  if (hasStdout === true || hasStderr === true || hasExitCode === true) {
     const out: string[] = [];
 
-    if (hasExitCode) {
+    if (hasExitCode === true) {
       out.push('exitCode:');
       out.push(String(exitCode));
       out.push('');
     }
 
-    if (hasStdout) {
+    if (hasStdout === true) {
       out.push('stdout:');
       out.push(
         String(stdout)
@@ -98,7 +98,7 @@ export function humanizeJsonForDisplay(value: unknown): string | undefined {
       out.push('');
     }
 
-    if (hasStderr) {
+    if (hasStderr === true) {
       out.push('stderr:');
       out.push(
         String(stderr)
@@ -121,13 +121,13 @@ function coerceToString(value: unknown, humanizeJson?: boolean): string {
 
   // Default behavior is JSON.stringify for non-strings. For OpenAI tool output we may prefer
   // a human-readable multi-line rendering to preserve newlines.
-  if (humanizeJson) {
+  if (humanizeJson === true) {
     const human = humanizeJsonForDisplay(value);
-    if (typeof human === 'string' && human.trim()) {
+    if (typeof human === 'string' && human.trim().length > 0) {
       return human;
     }
     // Fallback: pretty JSON (multi-line) instead of a single-line blob.
-    if (value && typeof value === 'object') {
+    if (value !== null && typeof value === 'object') {
       try {
         return JSON.stringify(value, null, 2);
       } catch {

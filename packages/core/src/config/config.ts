@@ -159,7 +159,11 @@ export class Config extends ConfigBase {
     if (subagentMgr) {
       subagentMgr.clearExtensionSubagents();
       for (const extension of this.getExtensions()) {
-        if (extension.isActive && extension.subagents?.length) {
+        if (
+          extension.isActive &&
+          extension.subagents !== undefined &&
+          extension.subagents.length > 0
+        ) {
           subagentMgr.registerExtensionSubagents(
             extension.name,
             extension.subagents,
@@ -268,7 +272,7 @@ export class Config extends ConfigBase {
               newContent.parts = newContent.parts.map((part) => {
                 if (
                   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-                  part &&
+                  part !== null &&
                   typeof part === 'object' &&
                   'thoughtSignature' in part
                 ) {
@@ -298,7 +302,7 @@ export class Config extends ConfigBase {
     this.contentGeneratorConfig = newContentGeneratorConfig;
     if (
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      previousGeminiClient &&
+      previousGeminiClient != null &&
       typeof previousGeminiClient.dispose === 'function'
     ) {
       try {
@@ -332,13 +336,20 @@ export class Config extends ConfigBase {
     // Delegate to SettingsService as source of truth
     const settingsService = this.getSettingsService();
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (settingsService) {
+    if (settingsService !== undefined) {
       const activeProvider = settingsService.get('activeProvider') as string;
-      if (activeProvider) {
+      // Preserve old truthiness semantics: call getProviderSettings when
+      // activeProvider is truthy/non-empty. Do not add method-existence guard.
+      if (typeof activeProvider === 'string' && activeProvider.length > 0) {
         const providerSettings =
           settingsService.getProviderSettings(activeProvider);
-        if (providerSettings.model) {
-          return providerSettings.model as string;
+        // Restore old truthiness semantics: falsy model should not be returned.
+        // Only return truthy string models.
+        if (
+          typeof providerSettings.model === 'string' &&
+          providerSettings.model.length > 0
+        ) {
+          return providerSettings.model;
         }
       }
     }
@@ -351,15 +362,16 @@ export class Config extends ConfigBase {
     // Update SettingsService as source of truth
     const settingsService = this.getSettingsService();
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (settingsService) {
+    if (settingsService !== undefined) {
       const activeProvider = settingsService.get('activeProvider') as string;
-      if (activeProvider) {
+      if (typeof activeProvider === 'string' && activeProvider.length > 0) {
         settingsService.setProviderSetting(activeProvider, 'model', newModel);
       }
     }
     // Keep legacy updates for backward compatibility
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (this.contentGeneratorConfig) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (this.contentGeneratorConfig != null) {
       this.contentGeneratorConfig.model = newModel;
     }
     // Also update the base model so it persists across refreshAuth

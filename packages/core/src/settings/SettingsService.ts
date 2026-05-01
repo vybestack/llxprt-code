@@ -95,13 +95,38 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
   // Lines 40-54: Provider-specific methods - direct manipulation of settings.providers
   getProviderSettings(provider: string): Record<string, unknown> {
+    // Restore old `|| {}` truthiness semantics: falsy provider entries
+    // (false, 0, '', null, undefined) should fallback to {}.
+    // Cast to unknown to handle cross-boundary malformed data.
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
-    return this.settings.providers[provider] || {};
+    const entry = this.settings.providers[provider] as unknown;
+    if (
+      entry !== null &&
+      entry !== undefined &&
+      entry !== false &&
+      entry !== 0 &&
+      entry !== '' &&
+      !(typeof entry === 'number' && Number.isNaN(entry))
+    ) {
+      return entry as Record<string, unknown>;
+    }
+    return {};
   }
 
   setProviderSetting(provider: string, key: string, value: unknown): void {
+    // Restore old `if (!this.settings.providers[provider])` semantics:
+    // falsy entries (false, 0, '', null, undefined) should reset to {}.
+    // Cast to unknown to handle cross-boundary malformed data.
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
-    if (!this.settings.providers[provider]) {
+    const entry = this.settings.providers[provider] as unknown;
+    if (
+      entry === null ||
+      entry === undefined ||
+      entry === false ||
+      entry === 0 ||
+      entry === '' ||
+      (typeof entry === 'number' && Number.isNaN(entry))
+    ) {
       this.settings.providers[provider] = {};
     }
 
@@ -154,7 +179,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
     for (const k of keys) {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
-      if (current && typeof current === 'object' && k in current) {
+      if (current !== null && typeof current === 'object' && k in current) {
         current = current[k] as Record<string, unknown>;
       } else {
         return undefined;
@@ -183,7 +208,11 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
     for (let i = 0; i < keys.length - 1; i++) {
       const k = keys[i];
-      if (!current[k] || typeof current[k] !== 'object') {
+      if (
+        current[k] === null ||
+        current[k] === undefined ||
+        typeof current[k] !== 'object'
+      ) {
         current[k] = {};
       }
       current = current[k] as Record<string, unknown>;
@@ -242,12 +271,21 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     providerOrChanges?: string | Partial<GlobalSettings>,
     changes?: Partial<ProviderSettings>,
   ): Promise<void> {
-    if (typeof providerOrChanges === 'string' && changes) {
+    const runtimeChanges = changes as Partial<ProviderSettings> | null | undefined;
+    if (
+      typeof providerOrChanges === 'string' &&
+      runtimeChanges !== undefined &&
+      runtimeChanges !== null
+    ) {
       // Provider-specific update
-      for (const [key, value] of Object.entries(changes)) {
+      for (const [key, value] of Object.entries(runtimeChanges)) {
         this.setProviderSetting(providerOrChanges, key, value);
       }
-    } else if (providerOrChanges && typeof providerOrChanges === 'object') {
+    } else if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
+      providerOrChanges !== null &&
+      typeof providerOrChanges === 'object'
+    ) {
       // Global update
       for (const [key, value] of Object.entries(providerOrChanges)) {
         this.set(key, value);
@@ -299,7 +337,11 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     this.settings.providers = {};
 
     // Import profile data
-    if (profileData && typeof profileData === 'object') {
+    if (
+      profileData !== null &&
+      profileData !== undefined &&
+      typeof profileData === 'object'
+    ) {
       const data = profileData as {
         defaultProvider?: string;
         providers?: Record<string, Record<string, unknown>>;
@@ -319,7 +361,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       if (data.providers) {
         for (const [provider, settings] of Object.entries(data.providers)) {
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
-          if (settings && typeof settings === 'object') {
+          if (settings !== null && typeof settings === 'object') {
             for (const [key, value] of Object.entries(settings)) {
               this.setProviderSetting(provider, key, value);
             }

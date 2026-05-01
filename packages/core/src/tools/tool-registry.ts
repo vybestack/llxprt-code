@@ -150,11 +150,17 @@ Signal: Signal number or \`(none)\` if no signal was received.
     }
 
     // if there is any error, non-zero exit code, signal, or stderr, return error details instead of stdout
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (error || code !== 0 || exitSignal || stderr) {
+    /* eslint-disable @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types. */
+    if (
+      error !== null ||
+      code !== 0 ||
+      exitSignal !== null ||
+      stderr.length > 0
+    ) {
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
       const llmContent = [
-        `Stdout: ${stdout || '(empty)'}`,
-        `Stderr: ${stderr || '(empty)'}`,
+        `Stdout: ${stdout.length > 0 ? stdout : '(empty)'}`,
+        `Stderr: ${stderr.length > 0 ? stderr : '(empty)'}`,
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         `Error: ${error ?? '(none)'}`,
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
@@ -232,10 +238,23 @@ export class ToolRegistry {
     disabled: Set<string>;
     excluded: Set<string>;
   } {
-    const ephemerals =
+    const rawEphemerals =
       typeof this.config.getEphemeralSettings === 'function'
-        ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          this.config.getEphemeralSettings() || {}
+        ? (this.config.getEphemeralSettings() as
+            | Record<string, unknown>
+            | null
+            | undefined
+            | false
+            | 0
+            | '')
+        : undefined;
+    const ephemerals =
+      rawEphemerals !== null &&
+      rawEphemerals !== undefined &&
+      rawEphemerals !== false &&
+      rawEphemerals !== 0 &&
+      rawEphemerals !== ''
+        ? rawEphemerals
         : {};
 
     const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
@@ -461,31 +480,36 @@ export class ToolRegistry {
       const functions: FunctionDeclaration[] = [];
       const discoveredItems = JSON.parse(stdout.trim());
 
-      if (!discoveredItems || !Array.isArray(discoveredItems)) {
+      if (
+        discoveredItems === null ||
+        discoveredItems === undefined ||
+        !Array.isArray(discoveredItems)
+      ) {
         throw new Error(
           'Tool discovery command did not return a JSON array of tools.',
         );
       }
 
       for (const tool of discoveredItems) {
-        if (tool && typeof tool === 'object') {
+        if (tool !== null && typeof tool === 'object') {
           if (Array.isArray(tool['function_declarations'])) {
             functions.push(...tool['function_declarations']);
           } else if (Array.isArray(tool['functionDeclarations'])) {
             functions.push(...tool['functionDeclarations']);
-          } else if (tool['name']) {
+          } else if (typeof tool['name'] === 'string' && tool['name'] !== '') {
             functions.push(tool as FunctionDeclaration);
           }
         }
       }
       // register each function as a tool
       for (const func of functions) {
-        if (!func.name) {
+        if (func.name === undefined || func.name === '') {
           this.logger.warn(() => 'Discovered a tool with no name. Skipping.');
           continue;
         }
         const parameters =
-          func.parametersJsonSchema &&
+          func.parametersJsonSchema !== undefined &&
+          func.parametersJsonSchema !== null &&
           typeof func.parametersJsonSchema === 'object' &&
           !Array.isArray(func.parametersJsonSchema)
             ? func.parametersJsonSchema
@@ -522,7 +546,7 @@ export class ToolRegistry {
     // Global setting from /settings (subagents.asyncEnabled)
     let globalAsyncEnabled = true;
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (settingsService) {
+    if (settingsService !== undefined) {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const globalSettings = settingsService.getAllGlobalSettings?.();
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
@@ -538,7 +562,8 @@ export class ToolRegistry {
       settingsService?.get('subagents.async.enabled') !== false;
 
     return {
-      hideTaskAsync: !globalAsyncEnabled || !profileAsyncEnabled,
+      hideTaskAsync:
+        globalAsyncEnabled !== true || profileAsyncEnabled !== true,
     };
   }
 

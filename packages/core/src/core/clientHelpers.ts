@@ -33,10 +33,12 @@ export function findCompressSplitPoint(
   let cumulativeCharCount = 0;
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
-    const hasFunctionResponse = content.parts?.some(
-      (part) => !!part.functionResponse,
-    );
-    const hasFunctionCall = content.parts?.some((part) => !!part.functionCall);
+    // eslint-disable-next-line no-extra-boolean-cast -- Preserve old tool-part truthiness semantics for malformed provider payloads.
+    const hasFunctionResponse =
+      content.parts?.some((part) => Boolean(part.functionResponse)) === true;
+    // eslint-disable-next-line no-extra-boolean-cast -- Preserve old tool-part truthiness semantics for malformed provider payloads.
+    const hasFunctionCall =
+      content.parts?.some((part) => Boolean(part.functionCall)) === true;
     if (content.role === 'user' && !hasFunctionResponse) {
       if (cumulativeCharCount >= targetCharCount) {
         return i;
@@ -56,13 +58,16 @@ export function findCompressSplitPoint(
   }
 
   const lastContent = contents[contents.length - 1];
+  const hasNoFunctionCall = (content: Content | undefined): boolean => {
+    const parts = content?.parts;
+    // eslint-disable-next-line no-extra-boolean-cast -- Preserve old tool-part truthiness semantics for malformed provider payloads.
+
+    return parts?.some((part) => Boolean(part.functionCall)) !== true;
+  };
+
   if (lastSplitPoint > 0) {
-    if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
-      lastContent?.role === 'model' &&
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
-      !lastContent?.parts?.some((part) => part.functionCall)
-    ) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
+    if (lastContent?.role === 'model' && hasNoFunctionCall(lastContent)) {
       return contents.length;
     }
 
@@ -77,12 +82,8 @@ export function findCompressSplitPoint(
     return lastToolCallSplitPoint;
   }
 
-  if (
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
-    lastContent?.role === 'model' &&
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
-    !lastContent?.parts?.some((part) => part.functionCall)
-  ) {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
+  if (lastContent?.role === 'model' && hasNoFunctionCall(lastContent)) {
     return contents.length;
   }
 
@@ -95,8 +96,9 @@ export function extractPromptText(request: PartListUnion): string {
     return request
       .map((part) => {
         if (typeof part === 'string') return part;
+        // Preserve defensive runtime check: part could be null at runtime despite types.
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
-        if (part && typeof part === 'object' && 'text' in part) {
+        if (part !== null && typeof part === 'object' && 'text' in part) {
           return (part as { text: string }).text;
         }
         return '';
@@ -104,8 +106,9 @@ export function extractPromptText(request: PartListUnion): string {
       .filter(Boolean)
       .join(' ');
   }
+  // Not an array, check for single object with text
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
-  if (request && typeof request === 'object' && 'text' in request) {
+  if (request !== null && typeof request === 'object' && 'text' in request) {
     return (request as { text: string }).text;
   }
   return '';

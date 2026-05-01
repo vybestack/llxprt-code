@@ -113,8 +113,9 @@ export async function createToolRegistry(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const registerCoreTool = (ToolClass: any, ...args: unknown[]) => {
     const className = ToolClass.name;
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string class name should fall through
-    const toolName = ToolClass.Name || className;
+    const rawName = ToolClass.Name;
+    const toolName =
+      typeof rawName === 'string' && rawName !== '' ? rawName : className;
     const coreTools = effectiveCoreTools;
     const excludeTools = host.getExcludeTools() ?? [];
 
@@ -203,7 +204,7 @@ export async function createToolRegistry(
 
   let subagentManager = host.getSubagentManager();
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
-  if (!subagentManager && profileManager) {
+  if (subagentManager === undefined && profileManager !== undefined) {
     const subagentsDir = path.join(os.homedir(), '.llxprt', 'subagents');
     subagentManager = new SubagentManager(subagentsDir, profileManager);
     host.setSubagentManager(subagentManager);
@@ -218,21 +219,21 @@ export async function createToolRegistry(
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
-  if (profileManager && subagentManager) {
+  if (profileManager !== undefined && subagentManager !== undefined) {
     registerCoreTool(TaskTool, config, taskToolArgs);
   } else {
     const taskToolRecord: ToolRecord = {
       toolClass: TaskTool,
       toolName: 'TaskTool',
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries; Name is static but fallback preserves defensive semantics.
       displayName: TaskTool.Name || 'TaskTool',
       isRegistered: false,
       reason:
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
-        !profileManager && !subagentManager
+        profileManager === undefined && subagentManager === undefined
           ? 'requires profile manager and subagent manager'
           : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
-            !profileManager
+            profileManager === undefined
             ? 'requires profile manager'
             : 'requires subagent manager',
       args: [config, taskToolArgs],
@@ -244,13 +245,13 @@ export async function createToolRegistry(
     getSubagentManager: () => host.getSubagentManager(),
   };
 
-  if (subagentManager) {
+  if (subagentManager !== undefined) {
     registerCoreTool(ListSubagentsTool, config, listSubagentsArgs);
   } else {
     const listSubagentsRecord: ToolRecord = {
       toolClass: ListSubagentsTool,
       toolName: 'ListSubagentsTool',
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries; Name is static but fallback preserves defensive semantics.
       displayName: ListSubagentsTool.Name || 'ListSubagentsTool',
       isRegistered: false,
       reason: 'requires subagent manager',

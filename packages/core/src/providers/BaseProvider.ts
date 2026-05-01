@@ -182,7 +182,7 @@ export abstract class BaseProvider implements IProvider {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (this.defaultSettingsService) {
+    if (this.defaultSettingsService !== undefined) {
       return this.defaultSettingsService;
     }
 
@@ -488,7 +488,7 @@ export abstract class BaseProvider implements IProvider {
     // Invalidate cached tokens in the auth resolver
     if (
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      this.authResolver &&
+      this.authResolver !== undefined &&
       typeof this.authResolver.invalidateCache === 'function'
     ) {
       this.authResolver.invalidateCache();
@@ -513,9 +513,9 @@ export abstract class BaseProvider implements IProvider {
 
       // If no non-OAuth auth found, check if OAuth token exists without triggering flow
       if (
-        this.baseProviderConfig.isOAuthEnabled &&
-        this.baseProviderConfig.oauthManager &&
-        this.baseProviderConfig.oauthProvider
+        this.baseProviderConfig.isOAuthEnabled === true &&
+        this.baseProviderConfig.oauthManager !== undefined &&
+        this.baseProviderConfig.oauthProvider !== undefined
       ) {
         return await this.baseProviderConfig.oauthManager.isAuthenticated(
           this.baseProviderConfig.oauthProvider,
@@ -637,10 +637,12 @@ export abstract class BaseProvider implements IProvider {
     normalized: NormalizedGenerateChatOptions,
     previousContext: ProviderRuntimeContext | null,
   ): AsyncIterableIterator<IContent> {
-    const needsContextSwap =
+    const needsContextSwap: boolean =
       !previousContext ||
       previousContext.settingsService !== normalized.settings ||
-      (normalized.config && previousContext.config !== normalized.config);
+      Boolean(
+        normalized.config && previousContext.config !== normalized.config,
+      );
 
     const mergedMetadata: Record<string, unknown> = normalized.runtime
       ? {
@@ -674,7 +676,7 @@ export abstract class BaseProvider implements IProvider {
     return async function* (
       this: BaseProvider,
     ): AsyncIterableIterator<IContent> {
-      if (needsContextSwap) {
+      if (needsContextSwap === true) {
         setActiveProviderRuntimeContext(runtimeContext);
       }
 
@@ -684,7 +686,7 @@ export abstract class BaseProvider implements IProvider {
           yield chunk;
         }
       } finally {
-        if (needsContextSwap) {
+        if (needsContextSwap === true) {
           setActiveProviderRuntimeContext(previousContext ?? null);
         }
         normalized.resolved.authToken = '';
@@ -715,7 +717,7 @@ export abstract class BaseProvider implements IProvider {
       providedOptions.settings ?? this.defaultSettingsService ?? null;
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!settings) {
+    if (settings === null || settings === undefined) {
       throw new MissingProviderRuntimeError({
         providerKey: `BaseProvider.${this.name}`,
         missingFields: ['settings'],
@@ -949,7 +951,7 @@ export abstract class BaseProvider implements IProvider {
     this.clearAuthCache();
   }
   setConfig?(config: unknown): void {
-    if (!config || typeof config !== 'object') {
+    if (config === null || config === undefined || typeof config !== 'object') {
       return;
     }
 
@@ -996,7 +998,15 @@ export abstract class BaseProvider implements IProvider {
 
     try {
       const settings = await settingsService.getSettings(this.name);
-      return (settings[key] as T) || fallback;
+      const value = settings[key];
+      const shouldUseFallback =
+        value === undefined ||
+        value === null ||
+        value === false ||
+        value === '' ||
+        value === 0 ||
+        (typeof value === 'number' && Number.isNaN(value));
+      return shouldUseFallback ? fallback : (value as T);
     } catch (error) {
       if (process.env.DEBUG) {
         debugLogger.error(

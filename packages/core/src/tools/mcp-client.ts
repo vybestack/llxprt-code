@@ -307,7 +307,7 @@ export class McpClient {
 
     const capabilities = this.client.getServerCapabilities();
 
-    if (capabilities?.tools?.listChanged) {
+    if (capabilities?.tools?.listChanged === true) {
       debugLogger.log(
         `Server '${this.serverName}' supports tool updates. Listening for changes...`,
       );
@@ -323,7 +323,7 @@ export class McpClient {
       );
     }
 
-    if (capabilities?.resources?.listChanged) {
+    if (capabilities?.resources?.listChanged === true) {
       debugLogger.log(
         `Server '${this.serverName}' supports resource updates. Listening for changes...`,
       );
@@ -925,8 +925,8 @@ async function retryWithOAuth(
     // BUT: only fallback if config.type is NOT explicitly set
     // (url-only/no-type configs can fallback, explicit type:'http' should not)
     const is404 = is404Error(httpError);
-    const shouldFallback =
-      is404 && !config.type && config.url && !config.httpUrl;
+    const shouldFallback: boolean =
+      is404 && !config.type && Boolean(config.url && !config.httpUrl);
 
     if (shouldFallback) {
       debugLogger.log(
@@ -1575,7 +1575,7 @@ export async function connectToMcpServer(
       // Try automatic OAuth discovery for servers with explicit OAuth config
       const shouldTriggerOAuth = mcpServerConfig.oauth?.enabled;
 
-      if (!shouldTriggerOAuth) {
+      if (shouldTriggerOAuth !== true) {
         // No OAuth config and no stored token - show auth required message
         await showAuthRequiredMessage(mcpServerName);
       }
@@ -1707,8 +1707,9 @@ export async function connectToMcpServer(
         // Only try OAuth discovery for HTTP servers or when OAuth is explicitly configured
         // For SSE servers, we should not trigger new OAuth flows automatically
         const shouldTryDiscovery =
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string httpUrl should not trigger discovery
-          mcpServerConfig.httpUrl || mcpServerConfig.oauth?.enabled;
+          (typeof mcpServerConfig.httpUrl === 'string' &&
+            mcpServerConfig.httpUrl !== '') ||
+          mcpServerConfig.oauth?.enabled === true;
 
         if (!shouldTryDiscovery) {
           await showAuthRequiredMessage(mcpServerName);
@@ -1892,7 +1893,7 @@ export async function createTransport(
     if (authProvider === undefined) {
       // Check if we have OAuth configuration or stored tokens
       let accessToken: string | null = null;
-      let hasOAuthConfig = mcpServerConfig.oauth?.enabled;
+      let hasOAuthConfig: boolean = mcpServerConfig.oauth?.enabled === true;
 
       if (hasOAuthConfig && mcpServerConfig.oauth) {
         accessToken = await MCPOAuthProvider.getValidToken(
@@ -1900,7 +1901,11 @@ export async function createTransport(
           mcpServerConfig.oauth,
         );
 
-        if (!accessToken) {
+        if (
+          accessToken === null ||
+          (accessToken as string | undefined) === undefined ||
+          accessToken === ''
+        ) {
           throw new Error(
             `MCP server '${mcpServerName}' requires OAuth authentication. ` +
               `Please authenticate using the /mcp auth command.`,
@@ -1916,7 +1921,11 @@ export async function createTransport(
             clientId: credentials.clientId,
           });
 
-          if (accessToken) {
+          if (
+            accessToken !== null &&
+            (accessToken as string | undefined) !== undefined &&
+            accessToken !== ''
+          ) {
             hasOAuthConfig = true;
             debugLogger.log(
               `Found stored OAuth token for server '${mcpServerName}'`,
@@ -1924,7 +1933,12 @@ export async function createTransport(
           }
         }
       }
-      if (hasOAuthConfig && accessToken) {
+      if (
+        hasOAuthConfig &&
+        accessToken !== null &&
+        (accessToken as string | undefined) !== undefined &&
+        accessToken !== ''
+      ) {
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
     }
@@ -1988,12 +2002,13 @@ export function isEnabled(
   const { includeTools, excludeTools } = mcpServerConfig;
 
   // excludeTools takes precedence over includeTools
-  if (excludeTools?.includes(funcDecl.name)) {
+  // eslint-disable-next-line @typescript-eslint/prefer-optional-chain -- Explicit undefined check for clarity in filter logic.
+  if (excludeTools !== undefined && excludeTools.includes(funcDecl.name)) {
     return false;
   }
 
   return (
-    !includeTools ||
+    includeTools === undefined ||
     includeTools.some(
       (tool) => tool === funcDecl.name || tool.startsWith(`${funcDecl.name}(`),
     )
