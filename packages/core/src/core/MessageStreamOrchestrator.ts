@@ -173,8 +173,8 @@ export class MessageStreamOrchestrator {
       );
 
       if (
-        hookOutput?.isBlockingDecision() ||
-        hookOutput?.shouldStopExecution()
+        hookOutput?.isBlockingDecision() === true ||
+        hookOutput?.shouldStopExecution() === true
       ) {
         yield {
           type: GeminiEventType.Error,
@@ -228,7 +228,7 @@ export class MessageStreamOrchestrator {
     }
 
     const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
-    if (!boundedTurns) {
+    if (boundedTurns === 0) {
       yield* this._fireAfterHookAndEmitClearContext(ctx);
       return new Turn(
         getChat(),
@@ -459,7 +459,7 @@ export class MessageStreamOrchestrator {
     if (event.type === GeminiEventType.Error) {
       const errorStatus =
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
-        event.value?.error && typeof event.value.error === 'object'
+        event.value?.error != null && typeof event.value.error === 'object'
           ? (event.value.error as { status?: number }).status
           : undefined;
 
@@ -704,7 +704,10 @@ export class MessageStreamOrchestrator {
       for (const d of iter.deferredEvents) yield d;
       this._resetTodoState(todoContinuationService, latestSnapshot);
       const afterOut = yield* this._fireAfterHookAndEmitClearContext(ctx);
-      if (afterOut?.isBlockingDecision() || afterOut?.shouldStopExecution()) {
+      if (
+        afterOut?.isBlockingDecision() === true ||
+        afterOut?.shouldStopExecution() === true
+      ) {
         yield* sendMessageStream(
           [{ text: afterOut.getEffectiveReason() }],
           ctx.signal,
@@ -764,7 +767,10 @@ export class MessageStreamOrchestrator {
     todoContinuationService.toolActivityCount = 0;
 
     const afterOut = yield* this._fireAfterHookAndEmitClearContext(ctx);
-    if (afterOut?.isBlockingDecision() || afterOut?.shouldStopExecution()) {
+    if (
+      afterOut?.isBlockingDecision() === true ||
+      afterOut?.shouldStopExecution() === true
+    ) {
       yield* sendMessageStream(
         [{ text: afterOut.getEffectiveReason() }],
         ctx.signal,
@@ -928,7 +934,7 @@ export class MessageStreamOrchestrator {
     ctx: StreamContext,
   ): AsyncGenerator<ServerGeminiStreamEvent, AfterAgentHookOutput | undefined> {
     const afterOut = await this._fireAfterHook(ctx);
-    if (afterOut?.shouldClearContext()) {
+    if (afterOut?.shouldClearContext() === true) {
       yield {
         type: GeminiEventType.AgentExecutionStopped,
         reason:

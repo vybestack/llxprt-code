@@ -240,9 +240,9 @@ function formatStructure(
   // is not printed with a connector line itself, only its name as a header.
   // Its children are printed relative to that conceptual root.
   // Ignored root nodes ARE printed with a connector.
-  if (!isProcessingRootNode || node.isIgnored) {
+  if (!isProcessingRootNode || node.isIgnored === true) {
     builder.push(
-      `${currentIndent}${connector}${node.name}${path.sep}${node.isIgnored ? TRUNCATION_INDICATOR : ''}`,
+      `${currentIndent}${connector}${node.name}${path.sep}${node.isIgnored === true ? TRUNCATION_INDICATOR : ''}`,
     );
   }
 
@@ -259,13 +259,13 @@ function formatStructure(
     const isLastFileAmongSiblings =
       i === fileCount - 1 &&
       node.subFolders.length === 0 &&
-      !node.hasMoreSubfolders;
+      node.hasMoreSubfolders !== true;
     const fileConnector = isLastFileAmongSiblings ? '└───' : '├───';
     builder.push(`${indentForChildren}${fileConnector}${node.files[i]}`);
   }
-  if (node.hasMoreFiles) {
+  if (node.hasMoreFiles === true) {
     const isLastIndicatorAmongSiblings =
-      node.subFolders.length === 0 && !node.hasMoreSubfolders;
+      node.subFolders.length === 0 && node.hasMoreSubfolders !== true;
     const fileConnector = isLastIndicatorAmongSiblings ? '└───' : '├───';
     builder.push(`${indentForChildren}${fileConnector}${TRUNCATION_INDICATOR}`);
   }
@@ -274,7 +274,7 @@ function formatStructure(
   const subFolderCount = node.subFolders.length;
   for (let i = 0; i < subFolderCount; i++) {
     const isLastSubfolderAmongSiblings =
-      i === subFolderCount - 1 && !node.hasMoreSubfolders;
+      i === subFolderCount - 1 && node.hasMoreSubfolders !== true;
     // Children are never the root node being processed initially.
     formatStructure(
       node.subFolders[i],
@@ -284,7 +284,7 @@ function formatStructure(
       builder,
     );
   }
-  if (node.hasMoreSubfolders) {
+  if (node.hasMoreSubfolders === true) {
     builder.push(`${indentForChildren}└───${TRUNCATION_INDICATOR}`);
   }
 }
@@ -329,7 +329,11 @@ export async function getFolderStructure(
 
     // 3. Build the final output string
     function isTruncated(node: FullFolderInfo): boolean {
-      if (node.hasMoreFiles || node.hasMoreSubfolders || node.isIgnored) {
+      if (
+        node.hasMoreFiles === true ||
+        node.hasMoreSubfolders === true ||
+        node.isIgnored === true
+      ) {
         return true;
       }
       for (const sub of node.subFolders) {

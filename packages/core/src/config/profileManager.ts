@@ -53,7 +53,7 @@ export class ProfileManager {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!profile.profiles || profile.profiles.length === 0) {
+    if (profile.profiles == null || profile.profiles.length === 0) {
       throw new Error(
         `LoadBalancer profile '${name}' must reference at least one profile`,
       );
@@ -112,7 +112,7 @@ export class ProfileManager {
         }
 
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        if (!profile.profiles || profile.profiles.length === 0) {
+        if (profile.profiles == null || profile.profiles.length === 0) {
           throw new Error(
             `LoadBalancer profile '${profileName}' must reference at least one profile`,
           );
@@ -149,15 +149,22 @@ export class ProfileManager {
         return profile;
       }
 
+      const profileRecord = profile as unknown as Record<string, unknown>;
+      const profileVersion = profileRecord.version;
+      const profileProvider = profileRecord.provider;
+      const profileModel = profileRecord.model;
+
       if (
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        !profile.version ||
-        !profile.provider ||
-        !profile.model ||
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        !profile.modelParams ||
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        !profile.ephemeralSettings
+        profileVersion == null ||
+        profileVersion === 0 ||
+        (typeof profileVersion === 'number' && Number.isNaN(profileVersion)) ||
+        profileVersion === false ||
+        typeof profileProvider !== 'string' ||
+        profileProvider === '' ||
+        typeof profileModel !== 'string' ||
+        profileModel === '' ||
+        profileRecord.modelParams == null ||
+        profileRecord.ephemeralSettings == null
       ) {
         throw new Error('missing required fields');
       }
@@ -260,7 +267,7 @@ export class ProfileManager {
   ): Promise<void> {
     // Use SettingsService to export current settings
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!settingsService.exportForProfile) {
+    if (typeof settingsService.exportForProfile !== 'function') {
       throw new Error('SettingsService does not support profile export');
     }
     const settingsData = await settingsService.exportForProfile();
@@ -311,7 +318,7 @@ export class ProfileManager {
 
     // Update current profile name in SettingsService
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (settingsService.setCurrentProfileName) {
+    if (typeof settingsService.setCurrentProfileName === 'function') {
       settingsService.setCurrentProfileName(profileName);
     }
 
@@ -337,7 +344,11 @@ export class ProfileManager {
     const profile = await this.loadProfile(profileName);
 
     // Convert Profile format to SettingsService format
-    const settingsData = {
+    const settingsData: {
+      defaultProvider: string;
+      providers: Record<string, unknown>;
+      tools: { allowed: unknown[]; disabled: unknown[] };
+    } = {
       defaultProvider: profile.provider,
       providers: {
         [profile.provider]: {
@@ -367,29 +378,26 @@ export class ProfileManager {
 
     // Update current profile name first
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (settingsService.setCurrentProfileName) {
+    if (typeof settingsService.setCurrentProfileName === 'function') {
       settingsService.setCurrentProfileName(profileName);
     }
 
     // Apply through SettingsService
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!settingsService.importFromProfile) {
+    if (typeof settingsService.importFromProfile !== 'function') {
       throw new Error('SettingsService does not support profile import');
     }
     await settingsService.importFromProfile(settingsData);
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (settingsData.tools) {
-      const allowedList = Array.isArray(settingsData.tools.allowed)
-        ? settingsData.tools.allowed
-        : [];
-      const disabledList = Array.isArray(settingsData.tools.disabled)
-        ? settingsData.tools.disabled
-        : [];
-      settingsService.set('tools.allowed', allowedList);
-      settingsService.set('tools.disabled', disabledList);
-      settingsService.set('disabled-tools', disabledList);
-    }
+    const allowedList = Array.isArray(settingsData.tools.allowed)
+      ? settingsData.tools.allowed
+      : [];
+    const disabledList = Array.isArray(settingsData.tools.disabled)
+      ? settingsData.tools.disabled
+      : [];
+    settingsService.set('tools.allowed', allowedList);
+    settingsService.set('tools.disabled', disabledList);
+    settingsService.set('disabled-tools', disabledList);
 
     const reasoningSettings = profile.ephemeralSettings as unknown as Record<
       string,

@@ -44,6 +44,10 @@ import { DebugLogger } from '../debug/DebugLogger.js';
 import { AllBucketsExhaustedError } from './errors.js';
 import type { OnAuthErrorHandler } from '../config/configTypes.js';
 
+function isSignalAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
+
 export interface RetryOrchestratorConfig {
   /** Maximum retry attempts (default: 6) */
   maxAttempts?: number;
@@ -231,7 +235,7 @@ export class RetryOrchestrator implements IProvider {
     const signal = (options.invocation as { signal?: AbortSignal })?.signal;
 
     // Check for abort before starting
-    if (signal?.aborted) {
+    if (isSignalAborted(signal)) {
       throw createAbortError();
     }
 
@@ -255,7 +259,7 @@ export class RetryOrchestrator implements IProvider {
     const failoverThreshold = 1; // Attempt bucket failover after this many consecutive 429s/network errors
 
     while (attempt < maxAttempts) {
-      if (signal?.aborted) {
+      if (isSignalAborted(signal)) {
         throw createAbortError();
       }
 
@@ -263,7 +267,7 @@ export class RetryOrchestrator implements IProvider {
 
       try {
         // Check abort signal before calling provider
-        if (signal?.aborted) {
+        if (isSignalAborted(signal)) {
           throw createAbortError();
         }
 
@@ -323,7 +327,7 @@ export class RetryOrchestrator implements IProvider {
         // Propagate the error immediately
         if (
           (error as Error & { _chunksYieldedBeforeError?: boolean })
-            ._chunksYieldedBeforeError
+            ._chunksYieldedBeforeError === true
         ) {
           throw error;
         }
@@ -389,7 +393,7 @@ export class RetryOrchestrator implements IProvider {
 
         // Determine if we should attempt bucket failover
         const shouldAttemptFailover =
-          bucketFailoverHandler &&
+          bucketFailoverHandler != null &&
           ((is429 && consecutive429s > failoverThreshold) ||
             is402 ||
             (isAuthError && consecutiveAuthErrors > 1) ||
@@ -494,7 +498,7 @@ export class RetryOrchestrator implements IProvider {
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
     while (true) {
-      if (signal?.aborted) {
+      if (isSignalAborted(signal)) {
         throw createAbortError();
       }
 
@@ -518,7 +522,7 @@ export class RetryOrchestrator implements IProvider {
             clearTimeout(timeoutId);
           }
 
-          if (result.done) {
+          if (result.done === true) {
             return;
           }
 
@@ -534,7 +538,7 @@ export class RetryOrchestrator implements IProvider {
       } else {
         const result = await nextPromise;
 
-        if (result.done) {
+        if (result.done === true) {
           return;
         }
 
@@ -560,7 +564,7 @@ export class RetryOrchestrator implements IProvider {
     }
 
     // Retry server errors (5xx)
-    if (status && status >= 500 && status < 600) {
+    if (status !== undefined && status >= 500 && status < 600) {
       return true;
     }
 
@@ -606,20 +610,17 @@ export class RetryOrchestrator implements IProvider {
         response?: { headers?: { 'retry-after'?: unknown } };
       };
 
-      if (errorObj.response?.headers?.['retry-after']) {
-        const retryAfter = errorObj.response.headers['retry-after'];
+      const retryAfter = errorObj.response?.headers?.['retry-after'];
+      if (typeof retryAfter === 'string' && retryAfter !== '') {
+        const seconds = parseInt(retryAfter, 10);
+        if (!isNaN(seconds)) {
+          return seconds * 1000;
+        }
 
-        if (typeof retryAfter === 'string') {
-          const seconds = parseInt(retryAfter, 10);
-          if (!isNaN(seconds)) {
-            return seconds * 1000;
-          }
-
-          // Try parsing as HTTP date
-          const date = new Date(retryAfter);
-          if (!isNaN(date.getTime())) {
-            return Math.max(0, date.getTime() - Date.now());
-          }
+        // Try parsing as HTTP date
+        const date = new Date(retryAfter);
+        if (!isNaN(date.getTime())) {
+          return Math.max(0, date.getTime() - Date.now());
         }
       }
     }

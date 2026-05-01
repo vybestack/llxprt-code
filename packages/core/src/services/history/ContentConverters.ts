@@ -28,28 +28,38 @@ import {
  */
 export class ContentConverters {
   private static logger = new DebugLogger('llxprt:content:converters');
+
+  private static blocksOrEmpty(iContent: IContent): ContentBlock[] {
+    const blocks = (iContent as { blocks?: ContentBlock[] | null }).blocks;
+    return blocks ?? [];
+  }
+
+  private static hasLegacyTruthyValue(value: unknown): boolean {
+    return (
+      value !== null &&
+      value !== undefined &&
+      value !== false &&
+      value !== 0 &&
+      value !== '' &&
+      !(typeof value === 'number' && Number.isNaN(value))
+    );
+  }
+
   /**
    * Convert IContent to Gemini Content format
    */
   static toGeminiContent(iContent: IContent): Content {
+    const blocksForDebug = ContentConverters.blocksOrEmpty(iContent);
     this.logger.debug('Converting IContent to Gemini Content:', {
       speaker: iContent.speaker,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
-      blockCount: iContent.blocks?.length || 0,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
-      blockTypes: iContent.blocks?.map((b) => b.type) || [],
-      toolCallIds:
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
-        iContent.blocks
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
-          ?.filter((b) => b.type === 'tool_call')
-          .map((b) => b.id) || [],
-      toolResponseCallIds:
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
-        iContent.blocks
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
-          ?.filter((b) => b.type === 'tool_response')
-          .map((b) => b.callId) || [],
+      blockCount: blocksForDebug.length,
+      blockTypes: blocksForDebug.map((b) => b.type),
+      toolCallIds: blocksForDebug
+        .filter((b) => b.type === 'tool_call')
+        .map((b) => b.id),
+      toolResponseCallIds: blocksForDebug
+        .filter((b) => b.type === 'tool_response')
+        .map((b) => b.callId),
     });
     // Tool responses should have 'user' role in Gemini format
     let role: 'user' | 'model';
@@ -74,7 +84,9 @@ export class ContentConverters {
           this.logger.debug('Converting tool_call block to functionCall:', {
             id: toolCall.id,
             name: toolCall.name,
-            hasParameters: !!toolCall.parameters,
+            hasParameters: ContentConverters.hasLegacyTruthyValue(
+              toolCall.parameters,
+            ),
           });
           parts.push({
             functionCall: {
@@ -92,8 +104,12 @@ export class ContentConverters {
             {
               callId: toolResponse.callId,
               toolName: toolResponse.toolName,
-              hasResult: !!toolResponse.result,
-              hasError: !!toolResponse.error,
+              hasResult: ContentConverters.hasLegacyTruthyValue(
+                toolResponse.result,
+              ),
+              hasError: ContentConverters.hasLegacyTruthyValue(
+                toolResponse.error,
+              ),
             },
           );
           parts.push({
@@ -111,10 +127,12 @@ export class ContentConverters {
             thought: true,
             text: thinkingBlock.thought,
           };
-          if (thinkingBlock.signature) {
+          if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.signature)) {
             thinkingPart.thoughtSignature = thinkingBlock.signature;
           }
-          if (thinkingBlock.sourceField) {
+          if (
+            ContentConverters.hasLegacyTruthyValue(thinkingBlock.sourceField)
+          ) {
             (
               thinkingPart as Part & {
                 llxprtSourceField?: ThinkingBlock['sourceField'];
@@ -183,8 +201,7 @@ export class ContentConverters {
   ): IContent {
     this.logger.debug('Converting Gemini Content to IContent:', {
       role: content.role,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- length=0 is valid, preserve with ||
-      partCount: content.parts?.length || 0,
+      partCount: content.parts?.length ?? 0,
       partTypes:
         content.parts?.map((p) => {
           if ('text' in p) return 'text';
@@ -217,15 +234,17 @@ export class ContentConverters {
     let responseIndex = 0;
 
     // Handle empty parts array explicitly
-    if (!content.parts || content.parts.length === 0) {
+    if (content.parts == null || content.parts.length === 0) {
       // Empty content - keep it empty
       // This represents an empty model response
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
-    } else if (content.parts) {
+    } else {
       for (const part of content.parts) {
         if ('text' in part && part.text !== undefined) {
           // Check if this is a thinking block
-          if ('thought' in part && part.thought) {
+          if (
+            'thought' in part &&
+            ContentConverters.hasLegacyTruthyValue(part.thought)
+          ) {
             const partWithMetadata = part as Part & {
               llxprtSourceField?: ThinkingBlock['sourceField'];
             };
@@ -265,15 +284,19 @@ export class ContentConverters {
             originalId: part.functionCall.id,
             finalId,
             name: part.functionCall.name,
-            usedCallback: !!generatedId,
+            usedCallback: generatedId != null,
           });
+          const functionCallArgs = part.functionCall.args as Record<
+            string,
+            unknown
+          >;
           blocks.push({
             type: 'tool_call',
             id: finalId,
             name: toolName,
-            parameters:
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
-              (part.functionCall.args as Record<string, unknown>) || {},
+            parameters: ContentConverters.hasLegacyTruthyValue(functionCallArgs)
+              ? functionCallArgs
+              : {},
           });
           callIndex += 1;
         } else if ('functionResponse' in part && part.functionResponse) {

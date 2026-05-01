@@ -247,7 +247,7 @@ export class TurnProcessor {
           break;
         }
       }
-      if (lastError) throw lastError;
+      if (lastError != null) throw lastError;
     } finally {
       onDone();
     }
@@ -445,7 +445,7 @@ export class TurnProcessor {
     const upstreamAbortSignal = params.config?.abortSignal;
     const onAbort = () => timeoutController.abort();
     upstreamAbortSignal?.addEventListener('abort', onAbort, { once: true });
-    if (upstreamAbortSignal?.aborted) {
+    if (upstreamAbortSignal?.aborted === true) {
       onAbort();
     }
 
@@ -482,7 +482,7 @@ export class TurnProcessor {
             timeoutMs: effectiveTimeoutMs,
             signal: timeoutSignal,
             onTimeout: () => {
-              if (upstreamAbortSignal?.aborted) {
+              if (upstreamAbortSignal?.aborted === true) {
                 return;
               }
               timeoutController.abort();
@@ -493,7 +493,7 @@ export class TurnProcessor {
           // Watchdog disabled: call iterator.next() directly
           nextResponse = await iterator.next();
         }
-        if (nextResponse.done) {
+        if (nextResponse.done === true) {
           break;
         }
 
@@ -524,10 +524,11 @@ export class TurnProcessor {
     tools: unknown,
     baseUrl: string | undefined,
   ): void {
-    if (tools && Array.isArray(tools)) {
+    if (Array.isArray(tools)) {
       const total = tools.reduce((sum, g) => {
         if (
-          g &&
+          typeof g === 'object' &&
+          g !== null &&
           'functionDeclarations' in g &&
           Array.isArray(g.functionDeclarations)
         )
@@ -641,7 +642,7 @@ export class TurnProcessor {
         );
       }
     } else if (
-      response.candidates?.length &&
+      (response.candidates?.length ?? 0) > 0 &&
       (!afcHistory || afcHistory.length === 0)
     ) {
       const turnKey = this.historyService.generateTurnKey();
@@ -674,7 +675,11 @@ export class TurnProcessor {
         this.historyService.syncTotalTokens(combined);
         await this.historyService.waitForTokenUpdates();
       }
-    } else if (this.lastPromptTokenCount) {
+    } else if (
+      this.lastPromptTokenCount != null &&
+      this.lastPromptTokenCount !== 0 &&
+      !Number.isNaN(this.lastPromptTokenCount)
+    ) {
       // lastPromptTokenCount is already cache-adjusted (includes
       // cache_read + cache_creation tokens) from the provider call path
       if (this.lastPromptTokenCount > 0) {
@@ -690,11 +695,11 @@ export class TurnProcessor {
   private _enrichSchemaDepthError(error: unknown): void {
     if (
       error instanceof ApiError &&
-      error.message &&
+      error.message !== '' &&
       isSchemaDepthError(error.message)
     ) {
       const tools = this.generationConfig.tools;
-      if (!tools || !Array.isArray(tools)) {
+      if (!Array.isArray(tools)) {
         return;
       }
 
@@ -703,23 +708,18 @@ export class TurnProcessor {
 
       for (const toolGroup of tools) {
         if (
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
-          toolGroup &&
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool groups can be malformed at runtime.
+          toolGroup !== null &&
+          typeof toolGroup === 'object' &&
           'functionDeclarations' in toolGroup &&
           Array.isArray(toolGroup.functionDeclarations)
         ) {
           for (const funcDecl of toolGroup.functionDeclarations) {
             const name = funcDecl.name ?? 'unknown';
             toolNames.push(name);
-            if (
-              funcDecl.parametersJsonSchema &&
-              typeof funcDecl.parametersJsonSchema === 'object'
-            ) {
-              if (
-                hasCycleInSchema(
-                  funcDecl.parametersJsonSchema as Record<string, unknown>,
-                )
-              ) {
+            const schema = funcDecl.parametersJsonSchema;
+            if (schema != null && typeof schema === 'object') {
+              if (hasCycleInSchema(schema as Record<string, unknown>)) {
                 cyclicSchemaTools.push(name);
               }
             }
