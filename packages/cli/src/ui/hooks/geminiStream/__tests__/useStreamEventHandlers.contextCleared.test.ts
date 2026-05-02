@@ -97,7 +97,7 @@ function setupContextClearTest() {
 }
 
 describe('useStreamEventHandlers contextCleared buffering', () => {
-  it('flushes pending Gemini text and resets buffer on AgentExecutionStopped context clear', async () => {
+  it('flushes pending Gemini text and resets buffer on AgentExecutionStopped context clear mid-stream', async () => {
     const { result, addItem, pendingHistoryItemRef } = setupContextClearTest();
 
     const stream =
