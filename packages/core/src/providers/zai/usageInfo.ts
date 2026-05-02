@@ -167,7 +167,11 @@ export async function fetchZaiUsage(
  * Format a reset time relative to now for display
  */
 function formatResetTime(nextResetTime: number | undefined): string {
-  if (!nextResetTime) {
+  if (
+    nextResetTime === undefined ||
+    nextResetTime === 0 ||
+    Number.isNaN(nextResetTime)
+  ) {
     return 'N/A';
   }
 

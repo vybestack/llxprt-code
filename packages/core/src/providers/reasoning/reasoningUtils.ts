@@ -276,5 +276,5 @@ function sanitizeToolArgumentsString(raw: unknown): string {
     }
   }
 
-  return text.length ? text : '{}';
+  return text.length > 0 ? text : '{}';
 }

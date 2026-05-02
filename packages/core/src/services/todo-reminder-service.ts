@@ -69,7 +69,7 @@ export class TodoReminderService {
 
     const statusChanged = currentTodos.filter((newTodo) => {
       const oldTodo = previousTodos.find((t) => t.id === newTodo.id);
-      return oldTodo && oldTodo.status !== newTodo.status;
+      return oldTodo !== undefined && oldTodo.status !== newTodo.status;
     });
 
     return {

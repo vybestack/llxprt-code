@@ -227,13 +227,13 @@ export const ContentValidation = {
     // Check if any block has actual content
     return content.blocks.some((block) => {
       if (block.type === 'text') {
-        return !!block.text && block.text.trim().length > 0;
+        return Boolean(block.text) && block.text.trim().length > 0;
       }
       if (block.type === 'tool_call') {
-        return !!block.name && !!block.parameters;
+        return Boolean(block.name) && Boolean(block.parameters);
       }
       if (block.type === 'tool_response') {
-        return !!block.callId && block.result !== undefined;
+        return Boolean(block.callId) && block.result !== undefined;
       }
       if (block.type === 'media') {
         return !!block.data && !!block.mimeType;
@@ -242,9 +242,13 @@ export const ContentValidation = {
         // A thinking block is valid if it has:
         // 1. Thought content (text), OR
         // 2. Encrypted content (for OpenAI Codex round-trip reasoning)
-        const hasThought = !!block.thought && block.thought.trim().length > 0;
+        const hasThought =
+          Boolean(block.thought) && block.thought.trim().length > 0;
+        const encryptedContent = block.encryptedContent as unknown;
         const hasEncrypted =
-          !!block.encryptedContent && block.encryptedContent.trim().length > 0;
+          typeof encryptedContent === 'string' &&
+          Boolean(encryptedContent) &&
+          encryptedContent.trim().length > 0;
 
         // For Anthropic extended thinking, require signature
         if (block.sourceField === 'thinking') {
@@ -254,7 +258,8 @@ export const ContentValidation = {
         // For OpenAI/Codex, either thought OR encrypted content is valid
         return hasThought || hasEncrypted;
       }
-      return block.code.trim().length > 0;
+      // CodeBlock - code is always a string on this type
+      return Boolean(block.code) && block.code.trim().length > 0;
     });
   },
 };

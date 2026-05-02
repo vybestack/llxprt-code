@@ -378,7 +378,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
         if (allStatuses.every((s) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
           processingError = true;
         }
-      } else if (!responseText.trim() && !sources?.length) {
+      } else if (!responseText.trim() && (sources === undefined || sources.length === 0)) {
         // No URL metadata and no content/sources
         processingError = true;
       }

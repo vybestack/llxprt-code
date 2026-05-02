@@ -154,8 +154,20 @@ export async function replaySession(
             projectHash: startPayload.projectHash,
             provider: startPayload.provider,
             model: startPayload.model,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
-            workspaceDirs: startPayload.workspaceDirs || [],
+            workspaceDirs: (() => {
+              const workspaceDirs = startPayload.workspaceDirs as unknown;
+              if (
+                workspaceDirs !== undefined &&
+                workspaceDirs !== null &&
+                workspaceDirs !== false &&
+                workspaceDirs !== 0 &&
+                workspaceDirs !== '' &&
+                !Number.isNaN(workspaceDirs)
+              ) {
+                return workspaceDirs as typeof startPayload.workspaceDirs;
+              }
+              return [];
+            })(),
             startTime: startPayload.startTime,
           };
           break;
@@ -164,9 +176,15 @@ export async function replaySession(
         // @pseudocode line 79-86: content
         case 'content': {
           const contentPayload = payload as unknown as ContentPayload;
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
-          if (contentPayload.content?.speaker) {
-            history.push(contentPayload.content);
+          const content = contentPayload.content as unknown;
+          if (
+            content !== undefined &&
+            content !== null &&
+            typeof content === 'object' &&
+            'speaker' in content &&
+            Boolean(content.speaker)
+          ) {
+            history.push(content as IContent);
           } else {
             malformedCount++;
             warnings.push(

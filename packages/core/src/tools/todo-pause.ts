@@ -69,7 +69,14 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
     }
 
     // Type guard to ensure params has the expected structure
-    if (!params || typeof params !== 'object') {
+    if (
+      params == null ||
+      params === false ||
+      params === 0 ||
+      params === '' ||
+      Number.isNaN(params) ||
+      typeof params !== 'object'
+    ) {
       const errorString = new String('params must be an object') as string & {
         message: string;
       };

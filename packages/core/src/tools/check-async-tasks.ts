@@ -185,15 +185,20 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
       duration: this.formatDuration(task.launchedAt, task.completedAt),
     };
 
-    if (task.completedAt) {
+    if (
+      task.completedAt !== undefined &&
+      task.completedAt !== 0 &&
+      !Number.isNaN(task.completedAt)
+    ) {
       details.completedAt = new Date(task.completedAt).toISOString();
     }
 
-    if (task.output) {
+    const output = task.output as unknown;
+    if (output !== undefined && output !== '') {
       details.output = task.output;
     }
 
-    if (task.error) {
+    if (task.error !== undefined && task.error !== '') {
       details.error = task.error;
     }
 

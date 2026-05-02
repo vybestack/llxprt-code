@@ -205,8 +205,8 @@ export function safeExtractToolName(
 
   // Standard OpenAI format
   if (
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
-    delta?.function &&
+    delta.function !== undefined &&
+    delta.function !== null &&
     typeof delta.function === 'object' &&
     'name' in delta.function
   ) {

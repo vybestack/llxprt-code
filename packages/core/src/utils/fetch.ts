@@ -70,7 +70,7 @@ export async function fetchWithTimeout(
       (error instanceof Error && error.name === 'AbortError')
     ) {
       // Check if it was our timeout or the external signal
-      if (signal?.aborted) {
+      if (signal?.aborted === true) {
         throw new FetchError('Request aborted by user', 'ABORT_ERR');
       }
       throw new FetchError(`Request timed out after ${timeout}ms`, 'ETIMEDOUT');

@@ -107,7 +107,7 @@ export async function bfsFileSearch(
             respectGitIgnore: options.fileFilteringOptions?.respectGitIgnore,
             respectLlxprtIgnore:
               options.fileFilteringOptions?.respectLlxprtIgnore,
-          })
+          }) === true
         ) {
           continue;
         }

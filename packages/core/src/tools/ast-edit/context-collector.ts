@@ -165,9 +165,12 @@ export class ASTContextCollector {
     const duration = Date.now() - startTime;
     const memoryDelta =
       (process.memoryUsage().heapUsed - startMemory) / 1024 / 1024;
+    const symbolCount =
+      enhancedContext.relatedSymbols !== undefined
+        ? enhancedContext.relatedSymbols.length
+        : 0;
     logger.debug(
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: number where 0 means unset
-      `collectEnhancedContext Metrics: ${duration}ms, Delta: ${memoryDelta.toFixed(2)}MB, Symbols: ${enhancedContext.relatedSymbols?.length || 0}`,
+      `collectEnhancedContext Metrics: ${duration}ms, Delta: ${memoryDelta.toFixed(2)}MB, Symbols: ${symbolCount}`,
     );
 
     return enhancedContext;

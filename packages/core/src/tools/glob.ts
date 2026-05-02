@@ -173,7 +173,7 @@ class GlobToolInvocation extends BaseToolInvocation<
           withFileTypes: true,
           nodir: true,
           stat: true,
-          nocase: !this.params.case_sensitive,
+          nocase: this.params.case_sensitive !== true,
           dot: true,
           ignore: this.config.getFileExclusions().getGlobExcludes(),
           follow: false,

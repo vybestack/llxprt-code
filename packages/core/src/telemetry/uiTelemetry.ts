@@ -273,9 +273,13 @@ export class UiTelemetryService extends EventEmitter {
       toolStats.fail++;
     }
 
-    if (event.decision) {
-      tools.totalDecisions[event.decision]++;
-      toolStats.decisions[event.decision]++;
+    const decision = event.decision as unknown;
+    if (decision !== undefined && decision !== '') {
+      const toolDecision = event.decision;
+      if (toolDecision !== undefined) {
+        tools.totalDecisions[toolDecision]++;
+        toolStats.decisions[toolDecision]++;
+      }
     }
 
     // Aggregate line count data from metadata

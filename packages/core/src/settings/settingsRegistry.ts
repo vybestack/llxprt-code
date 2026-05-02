@@ -1204,12 +1204,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 export function resolveAlias(key: string): string {
-  if (ALIAS_NORMALIZATION_RULES[key]) {
-    return ALIAS_NORMALIZATION_RULES[key];
+  const normalizedAlias = ALIAS_NORMALIZATION_RULES[key];
+  if (typeof normalizedAlias === 'string') {
+    return normalizedAlias;
   }
 
   for (const spec of SETTINGS_REGISTRY) {
-    if (spec.aliases?.includes(key)) {
+    if (spec.aliases?.includes(key) === true) {
       return spec.key;
     }
   }

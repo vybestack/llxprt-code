@@ -175,7 +175,7 @@ export class LoopDetectionService {
     const isDivider = /^[+-_=*\u2500-\u257F]+$/.test(content);
 
     if (
-      numFences ||
+      numFences > 0 ||
       hasTable ||
       hasListItem ||
       hasHeading ||

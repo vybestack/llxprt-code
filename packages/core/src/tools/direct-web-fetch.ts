@@ -229,7 +229,15 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
         errorMessage = error.message;
         // Preserve the cause chain (cause is ES2022+, so check with 'in' operator)
         const err = error as Error & { cause?: unknown };
-        if ('cause' in err && err.cause) {
+        if (
+          'cause' in err &&
+          err.cause !== undefined &&
+          err.cause !== null &&
+          err.cause !== false &&
+          err.cause !== 0 &&
+          err.cause !== '' &&
+          !Number.isNaN(err.cause)
+        ) {
           const causeMessage =
             err.cause instanceof Error ? err.cause.message : String(err.cause);
           errorMessage += `: ${causeMessage}`;

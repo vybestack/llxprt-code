@@ -151,9 +151,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     }
 
     // Determine if we're in interactive mode
-    const isInteractive =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: false is a valid value for interactiveMode, must default to false
-      this.context?.interactiveMode || false;
+    const isInteractive = this.context?.interactiveMode === true;
 
     // Set active todo ID if there's an in_progress todo
     if (isInteractive) {

@@ -45,7 +45,11 @@ export class TodoStore {
 
     // Check if it's the new format (object with todos property)
     if (
-      rawData &&
+      rawData != null &&
+      rawData !== false &&
+      rawData !== 0 &&
+      rawData !== '' &&
+      !Number.isNaN(rawData) &&
       typeof rawData === 'object' &&
       !Array.isArray(rawData) &&
       'todos' in rawData

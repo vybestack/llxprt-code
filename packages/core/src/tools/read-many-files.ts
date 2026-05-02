@@ -424,7 +424,7 @@ ${finalExclusionPatternsForDescription
             filePath,
           );
           let fileContentForLlm = '';
-          if (fileReadResult.isTruncated) {
+          if (fileReadResult.isTruncated === true) {
             fileContentForLlm += `[WARNING: This file was truncated. To view the full content, use the 'read_file' tool on this specific file.]\n\n`;
           }
           fileContentForLlm += fileReadResult.llmContent;
