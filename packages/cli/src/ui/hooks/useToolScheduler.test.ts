@@ -571,7 +571,7 @@ describe('useReactToolScheduler in YOLO Mode', () => {
 });
 
 describe('useReactToolScheduler', () => {
-  // TODO(ntaylormullen): The following tests are skipped due to difficulties in
+  // Note(ntaylormullen): The following tests are skipped due to difficulties in
   // reliably testing the asynchronous state updates and interactions with timers.
   // These tests involve complex sequences of events, including confirmations,
   // live output updates, and cancellations, which are challenging to assert

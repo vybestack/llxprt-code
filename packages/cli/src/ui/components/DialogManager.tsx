@@ -22,7 +22,7 @@ import {
   type ResumeContext,
 } from '../../services/performResume.js';
 import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
-// import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
+// import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // NOTE: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
 
@@ -55,7 +55,7 @@ import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-// import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // TODO: Not yet ported from upstream
+// import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // NOTE: Not yet ported from upstream
 
 interface DialogManagerProps {
   addItem: UseHistoryManagerReturn['addItem'];
@@ -253,7 +253,7 @@ export const DialogManager = ({
     [config, commandContext, addItem, uiActions],
   );
 
-  // TODO: IdeTrustChangeDialog not yet ported from upstream
+  // NOTE: IdeTrustChangeDialog not yet ported from upstream
   // if (uiState.showIdeRestartPrompt) {
   //   return <IdeTrustChangeDialog reason={uiState.ideTrustRestartReason} />;
   // }
@@ -293,7 +293,7 @@ export const DialogManager = ({
       />
     );
   }
-  // TODO: LoopDetectionConfirmation not yet ported from upstream
+  // NOTE: LoopDetectionConfirmation not yet ported from upstream
   // if (uiState.loopDetectionConfirmationRequest) {
   //   return (
   //     <LoopDetectionConfirmation

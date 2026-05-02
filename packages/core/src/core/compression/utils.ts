@@ -167,8 +167,8 @@ export function findBackwardValidSplitPoint(
 
 /**
  * Build a context-aware continuation directive to replace the static
- * compression acknowledgment. When active todos exist the directive
- * references the first task and points the model at todo_read for
+ * compression acknowledgment. When active tasks exist the directive
+ * references the first task and points the model at the read tool for
  * full recovery; otherwise it emits a simple "continue" statement.
  */
 export function buildContinuationDirective(

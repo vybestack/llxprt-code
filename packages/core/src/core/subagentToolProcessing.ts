@@ -472,7 +472,7 @@ function logToolResult(
 }
 
 // ---------------------------------------------------------------------------
-// Todo completion prompt
+// Task-list completion prompt
 // ---------------------------------------------------------------------------
 
 export async function buildTodoCompletionPrompt(

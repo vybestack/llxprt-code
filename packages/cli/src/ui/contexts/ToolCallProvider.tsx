@@ -33,7 +33,7 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
   // Track if we've already subscribed to avoid duplicate subscriptions
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
-  // Get executing tool calls for a specific todo
+  // Get executing tool calls for a specific task
   const getExecutingToolCalls = useCallback(
     (todoId: string): TodoToolCall[] => executingToolCalls.get(todoId) ?? [],
     [executingToolCalls],

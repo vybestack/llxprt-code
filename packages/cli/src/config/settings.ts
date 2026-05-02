@@ -957,8 +957,8 @@ function deepMergeWithComments(target: unknown, source: unknown): unknown {
 /**
  * Migrates deprecated settings to their new counterparts.
  *
- * TODO: After a couple of weeks (around early Feb 2026), we should start removing
- * the deprecated settings from the settings files by default.
+ * Follow-up (#1569): After a couple of weeks (around early Feb 2026), we should
+ * start removing the deprecated settings from the settings files by default.
  *
  * @returns true if any changes were made and need to be saved.
  */

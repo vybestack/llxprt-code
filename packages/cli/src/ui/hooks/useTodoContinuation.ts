@@ -42,9 +42,9 @@ export interface TodoContinuationHook {
 }
 
 /**
- * React hook for todo continuation - monitors stream completion and triggers continuation
- * prompts when active todos exist but no tool calls were made.
- * [REQ-001] Todo Continuation Detection, [REQ-002] Continuation Prompting
+ * React hook for task continuation - monitors stream completion and triggers continuation
+ * prompts when active tasks exist but no tool calls were made.
+ * [REQ-001] Task Continuation Detection, [REQ-002] Continuation Prompting
  */
 export const useTodoContinuation = (
   geminiClient: GeminiClient,
@@ -214,7 +214,7 @@ export const useTodoContinuation = (
         return;
       }
 
-      // Find the most relevant active todo
+      // Find the most relevant active task
       const activeTodo = _findMostRelevantActiveTodo(todoContext.todos);
 
       if (!activeTodo?.content || activeTodo.content.trim() === '') {

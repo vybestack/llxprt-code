@@ -117,7 +117,7 @@ describe('TodoPause - Behavioral Tests', () => {
       // Execute the pause
       const result = await tool.execute(params, abortSignal);
 
-      // The result should only contain the pause message, not any todo modifications
+      // The result should only contain the pause message, not any task-list modifications
       expect(result.llmContent).not.toContain('status');
       expect(result.llmContent).not.toContain('completed');
       expect(result.llmContent).not.toContain('pending');

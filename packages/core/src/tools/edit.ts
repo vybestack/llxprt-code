@@ -627,7 +627,7 @@ class EditToolInvocation extends BaseToolInvocation<
         if (ideConfirmation) {
           const result = await ideConfirmation;
           if (result.status === 'accepted' && result.content) {
-            // TODO(chrstn): See https://github.com/google-gemini/gemini-cli/pull/5618#discussion_r2255413084
+            // Task(chrstn): See https://github.com/google-gemini/gemini-cli/pull/5618#discussion_r2255413084
             // for info on a possible race condition where the file is modified on disk while being edited.
             // FIX: IDE confirmation is for visual review only
             // The IDE returns the entire file content, not just the replacement text

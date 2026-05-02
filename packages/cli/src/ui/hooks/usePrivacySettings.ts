@@ -9,11 +9,11 @@ import {
   type Config,
   type CodeAssistServer,
   UserTierId,
-  // TODO: Re-enable when getCodeAssistServer is exported from core
+  // Follow-up (#1569): Re-enable when getCodeAssistServer is exported from core
   // getCodeAssistServer,
 } from '@vybestack/llxprt-code-core';
 
-// TODO: Remove when getCodeAssistServer is exported from core
+// Follow-up (#1569): Remove when getCodeAssistServer is exported from core
 function getCodeAssistServer(config: Config): CodeAssistServer | undefined {
   const contentGenerator: unknown = config
     .getGeminiClient()

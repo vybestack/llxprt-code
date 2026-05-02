@@ -22,7 +22,7 @@ export class TodoReminderService {
   private static readonly TODO_CHANGED_SUFFIX = `. Continue on with the tasks at hand if applicable.`;
 
   /**
-   * Generate reminder for empty todo list
+   * Generate reminder for empty task list
    */
   getReminderForEmptyTodos(isComplexTask: boolean = false): string | null {
     if (!isComplexTask) {
@@ -33,7 +33,7 @@ export class TodoReminderService {
   }
 
   /**
-   * Generate reminder for todo state change
+   * Generate reminder for task-list state change
    */
   getReminderForStateChange(stateChange: TodoStateChange): string {
     const todoJson = JSON.stringify(
@@ -101,7 +101,7 @@ export class TodoReminderService {
   }
 
   /**
-   * Generate proactive todo suggestion for complex tasks
+   * Generate proactive task-list suggestion for complex tasks
    */
   getComplexTaskSuggestion(detectedTasks: string[]): string {
     const taskList = this.buildNumberedTaskList(detectedTasks);

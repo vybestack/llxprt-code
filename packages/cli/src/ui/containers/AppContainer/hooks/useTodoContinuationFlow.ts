@@ -6,7 +6,7 @@
 
 /**
  * @hook useTodoContinuationFlow
- * @description Todo continuation detection and prompts
+ * @description Task-list continuation detection and prompts
  * @inputs config, streamingState, history, pendingHistoryItems, todoContinuation
  * @outputs todoContinuationRef
  * @sideEffects Effect watching streaming state
@@ -68,8 +68,8 @@ export function useTodoContinuationFlow({
 
   /**
    * @plan PLAN-20260129-TODOPERSIST.P12
-   * Wire up todo continuation detection to trigger continuation prompts
-   * when streams complete without tool calls and active TODOs exist.
+   * Wire up task-list continuation detection to trigger continuation prompts
+   * when streams complete without tool calls and active tasks exist.
    */
   const geminiClientForContinuation = config.getGeminiClient();
   const todoContinuation = useTodoContinuation(

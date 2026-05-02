@@ -141,7 +141,7 @@ export function filterTextWithEmoji(
 
 /**
  * After a turn with no tool calls, determine what to send next:
- * - A todo-completion reminder, or
+ * - A task-list-completion reminder, or
  * - A nudge for missing output variables, or
  * - null (goal is met — caller should break the loop).
  */

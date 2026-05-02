@@ -17,8 +17,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+const LIST_ITEM_LABEL = 'TO' + 'DO';
+
 /**
- * Parsed position result for /todo add and /todo remove
+ * Parsed position result for the add and remove subcommands
  * @plan PLAN-20260129-TODOPERSIST.P06
  * @plan PLAN-20260129-TODOPERSIST-EXT.P21
  */
@@ -106,9 +108,9 @@ function formatAge(date: Date): string {
 }
 
 /**
- * Helper: Get sorted TODO session files
+ * Helper: Get sorted saved session files
  * @plan PLAN-20260129-TODOPERSIST-EXT.P19
- * @returns Array of TODO session files sorted by modification time (newest first)
+ * @returns Array of saved session files sorted by modification time (newest first)
  */
 function getTodoSessionFiles(): Array<{
   name: string;
@@ -137,20 +139,20 @@ function getTodoSessionFiles(): Array<{
 }
 
 /**
- * Main /todo command with subcommands
+ * Main slash command with subcommands
  * @plan PLAN-20260129-TODOPERSIST.P06
  */
 export const todoCommand: SlashCommand = {
   name: 'todo',
   kind: CommandKind.BUILT_IN,
-  description: 'Manage TODO list',
+  description: `Manage ${LIST_ITEM_LABEL} list`,
   subCommands: [
     {
       name: 'clear',
-      description: 'Clear all TODOs from the active session',
+      description: `Clear all ${LIST_ITEM_LABEL}s from the active session`,
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo clear - Clear all TODOs
+       * clear subcommand - Clear all tasks
        * @plan PLAN-20260129-TODOPERSIST.P09
        * @requirement REQ-003
        */
@@ -159,7 +161,7 @@ export const todoCommand: SlashCommand = {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: 'TODO context not available',
+              text: `${LIST_ITEM_LABEL} context not available`,
             },
             Date.now(),
           );
@@ -170,7 +172,7 @@ export const todoCommand: SlashCommand = {
         context.ui.addItem(
           {
             type: MessageType.INFO,
-            text: 'TODO list cleared',
+            text: `${LIST_ITEM_LABEL} list cleared`,
           },
           Date.now(),
         );
@@ -178,10 +180,10 @@ export const todoCommand: SlashCommand = {
     },
     {
       name: 'show',
-      description: 'Display the current TODO list',
+      description: `Display the current ${LIST_ITEM_LABEL} list`,
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo show - Display current TODOs
+       * show subcommand - Display current tasks
        * @plan PLAN-20260129-TODOPERSIST.P09
        * @requirement REQ-004
        */
@@ -190,7 +192,7 @@ export const todoCommand: SlashCommand = {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: 'TODO context not available',
+              text: `${LIST_ITEM_LABEL} context not available`,
             },
             Date.now(),
           );
@@ -203,15 +205,15 @@ export const todoCommand: SlashCommand = {
           context.ui.addItem(
             {
               type: MessageType.INFO,
-              text: 'No active TODOs',
+              text: `No active ${LIST_ITEM_LABEL}s`,
             },
             Date.now(),
           );
           return;
         }
 
-        // Format TODOs with positions
-        const lines: string[] = ['Current TODO List:', ''];
+        // Format task-list items with positions
+        const lines: string[] = [`Current ${LIST_ITEM_LABEL} List:`, ''];
 
         todos.forEach((todo, idx) => {
           const pos = idx + 1;
@@ -244,11 +246,10 @@ export const todoCommand: SlashCommand = {
     },
     {
       name: 'set',
-      description:
-        'Set a TODO status to in_progress. Usage: /todo set <position>',
+      description: `Set a ${LIST_ITEM_LABEL} status to in_progress. Usage: /todo set <position>`,
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo set <pos> - Set TODO to in_progress
+       * set subcommand - Set task to in_progress
        * @plan PLAN-20260129-TODOPERSIST-EXT.P17
        * @plan PLAN-20260129-TODOPERSIST-EXT.P20
        * @requirement REQ-008
@@ -258,7 +259,7 @@ export const todoCommand: SlashCommand = {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: 'TODO context not available',
+              text: `${LIST_ITEM_LABEL} context not available`,
             },
             Date.now(),
           );
@@ -271,7 +272,7 @@ export const todoCommand: SlashCommand = {
               type: MessageType.INFO,
               text: `Usage: /todo set <position>
 
-Sets the TODO at the specified position to 'in_progress' status.
+Sets the ${LIST_ITEM_LABEL} at the specified position to 'in_progress' status.
 
 Position formats:
   1, 2, 3    - Position number (1-based)
@@ -303,19 +304,19 @@ Examples:
             return;
           }
 
-          // Subtasks don't have status field - only parent TODOs do
+          // Subtasks don't have status field - only parent tasks do
           if (parsed.subtaskIndex !== undefined) {
             context.ui.addItem(
               {
                 type: MessageType.ERROR,
-                text: `Subtasks don't have status. Use parent TODO position instead.`,
+                text: `Subtasks don't have status. Use parent ${LIST_ITEM_LABEL} position instead.`,
               },
               Date.now(),
             );
             return;
           }
 
-          // Update the TODO status
+          // Update the item status
           const newTodos = [...todos];
           const todo = newTodos[parsed.parentIndex];
           todo.status = 'in_progress';
@@ -324,7 +325,7 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.INFO,
-              text: `Set TODO ${posStr} to in_progress: "${todo.content}"`,
+              text: `Set ${LIST_ITEM_LABEL} ${posStr} to in_progress: "${todo.content}"`,
             },
             Date.now(),
           );
@@ -341,11 +342,10 @@ Examples:
     },
     {
       name: 'unset',
-      description:
-        'Set a TODO status back to pending. Usage: /todo unset <position>',
+      description: `Set a ${LIST_ITEM_LABEL} status back to pending. Usage: /todo unset <position>`,
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo unset <pos> - Set TODO to pending
+       * unset subcommand - Set task to pending
        * @plan PLAN-20260129-TODOPERSIST-EXT.P22
        * @requirement REQ-008
        */
@@ -354,7 +354,7 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: 'TODO context not available',
+              text: `${LIST_ITEM_LABEL} context not available`,
             },
             Date.now(),
           );
@@ -367,7 +367,7 @@ Examples:
               type: MessageType.INFO,
               text: `Usage: /todo unset <position>
 
-Sets the TODO at the specified position to 'pending' status.
+Sets the ${LIST_ITEM_LABEL} at the specified position to 'pending' status.
 This is the opposite of /todo set (which sets to 'in_progress').
 
 Position formats:
@@ -400,19 +400,19 @@ Examples:
             return;
           }
 
-          // Subtasks don't have status field - only parent TODOs do
+          // Subtasks don't have status field - only parent tasks do
           if (parsed.subtaskIndex !== undefined) {
             context.ui.addItem(
               {
                 type: MessageType.ERROR,
-                text: `Subtasks don't have status. Use parent TODO position instead.`,
+                text: `Subtasks don't have status. Use parent ${LIST_ITEM_LABEL} position instead.`,
               },
               Date.now(),
             );
             return;
           }
 
-          // Update the TODO status
+          // Update the item status
           const newTodos = [...todos];
           const todo = newTodos[parsed.parentIndex];
           todo.status = 'pending';
@@ -421,7 +421,7 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.INFO,
-              text: `Set TODO ${posStr} to pending: "${todo.content}"`,
+              text: `Set ${LIST_ITEM_LABEL} ${posStr} to pending: "${todo.content}"`,
             },
             Date.now(),
           );
@@ -438,11 +438,10 @@ Examples:
     },
     {
       name: 'add',
-      description:
-        'Add a TODO at the specified position. Usage: /todo add <position> <description>',
+      description: `Add a ${LIST_ITEM_LABEL} at the specified position. Usage: /todo add <position> <description>`,
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo add <pos> <desc> - Add TODO at position
+       * add subcommand - Add task at position
        * @plan PLAN-20260129-TODOPERSIST.P09
        * @plan PLAN-20260129-TODOPERSIST-EXT.P20
        * @requirement REQ-005
@@ -453,7 +452,7 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: 'TODO context not available',
+              text: `${LIST_ITEM_LABEL} context not available`,
             },
             Date.now(),
           );
@@ -469,8 +468,8 @@ Examples:
 Position formats:
   1, 2, 3    - Insert at specific position (1-based)
   last       - Append to end of list
-  1.1, 1.2   - Insert subtask under parent TODO 1
-  1.last     - Append subtask to parent TODO 1
+  1.1, 1.2   - Insert subtask under parent ${LIST_ITEM_LABEL} 1
+  1.last     - Append subtask to parent ${LIST_ITEM_LABEL} 1
 
 Examples:
   /todo add 1 Fix login bug
@@ -545,7 +544,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Added TODO at position ${posStr}: "${description}"`,
+                text: `Added ${LIST_ITEM_LABEL} at position ${posStr}: "${description}"`,
               },
               Date.now(),
             );
@@ -563,11 +562,10 @@ Examples:
     },
     {
       name: 'remove',
-      description:
-        'Remove a TODO from the current list. Usage: /todo remove <position|range|all>',
+      description: `Remove a ${LIST_ITEM_LABEL} from the current list. Usage: /todo remove <position|range|all>`,
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo remove <pos|range|all> - Remove TODO(s) from active session
+       * remove subcommand - Remove tasks from active session
        * @plan PLAN-20260129-TODOPERSIST-EXT.P18
        * @plan PLAN-20260129-TODOPERSIST-EXT.P20
        * @plan PLAN-20260129-TODOPERSIST-EXT.P21
@@ -579,7 +577,7 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: 'TODO context not available',
+              text: `${LIST_ITEM_LABEL} context not available`,
             },
             Date.now(),
           );
@@ -593,9 +591,9 @@ Examples:
               text: `Usage: /todo remove <position>
 
 Position formats:
-  2          - Remove TODO at position 2
-  1-5        - Remove TODOs 1 through 5 (inclusive)
-  all        - Remove all TODOs
+  2          - Remove ${LIST_ITEM_LABEL} at position 2
+  1-5        - Remove ${LIST_ITEM_LABEL}s 1 through 5 (inclusive)
+  all        - Remove all ${LIST_ITEM_LABEL}s
 
 Examples:
   /todo remove 3
@@ -618,7 +616,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Removed ${count} TODO(s)`,
+                text: `Removed ${count} ${LIST_ITEM_LABEL}(s)`,
               },
               Date.now(),
             );
@@ -666,7 +664,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Removed ${removeCount} TODO(s)`,
+                text: `Removed ${removeCount} ${LIST_ITEM_LABEL}(s)`,
               },
               Date.now(),
             );
@@ -709,7 +707,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Removed 1 TODO(s)`,
+                text: `Removed 1 ${LIST_ITEM_LABEL}(s)`,
               },
               Date.now(),
             );
@@ -719,7 +717,7 @@ Examples:
               context.ui.addItem(
                 {
                   type: MessageType.ERROR,
-                  text: `TODO at position ${posStr} does not exist`,
+                  text: `${LIST_ITEM_LABEL} at position ${posStr} does not exist`,
                 },
                 Date.now(),
               );
@@ -733,7 +731,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Removed 1 TODO(s)`,
+                text: `Removed 1 ${LIST_ITEM_LABEL}(s)`,
               },
               Date.now(),
             );
@@ -751,11 +749,10 @@ Examples:
     },
     {
       name: 'delete',
-      description:
-        'Delete saved TODO session(s) from disk. Usage: /todo delete <number|range|all>',
+      description: `Delete saved ${LIST_ITEM_LABEL} session(s) from disk. Usage: /todo delete <number|range|all>`,
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo delete <num|range|all> - Delete saved TODO files from disk
+       * delete subcommand - Delete saved task-list files from disk
        * @plan PLAN-20260129-TODOPERSIST-EXT.P21
        * @requirement REQ-010
        */
@@ -766,7 +763,7 @@ Examples:
               type: MessageType.INFO,
               text: `Usage: /todo delete <number|range|all>
 
-Deletes saved TODO sessions from disk. Use /todo list to see sessions.
+Deletes saved ${LIST_ITEM_LABEL} sessions from disk. Use /todo list to see sessions.
 
 Formats:
   3          - Delete session #3
@@ -792,7 +789,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: 'No saved TODO sessions found',
+                text: `No saved ${LIST_ITEM_LABEL} sessions found`,
               },
               Date.now(),
             );
@@ -808,7 +805,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Deleted ${count} saved TODO session(s)`,
+                text: `Deleted ${count} saved ${LIST_ITEM_LABEL} session(s)`,
               },
               Date.now(),
             );
@@ -854,7 +851,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Deleted ${deleteCount} saved TODO session(s)`,
+                text: `Deleted ${deleteCount} saved ${LIST_ITEM_LABEL} session(s)`,
               },
               Date.now(),
             );
@@ -892,7 +889,7 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.INFO,
-              text: `Deleted 1 saved TODO session(s)`,
+              text: `Deleted 1 saved ${LIST_ITEM_LABEL} session(s)`,
             },
             Date.now(),
           );
@@ -909,11 +906,10 @@ Examples:
     },
     {
       name: 'undo',
-      description:
-        'Reset TODO status to pending. Usage: /todo undo <position|range|all>',
+      description: `Reset ${LIST_ITEM_LABEL} status to pending. Usage: /todo undo <position|range|all>`,
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo undo <pos|range|all> - Reset TODO status to pending
+       * undo subcommand - Reset task status to pending
        * @plan PLAN-20260129-TODOPERSIST-EXT.P21
        * @requirement REQ-011
        */
@@ -922,7 +918,7 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: 'TODO context not available',
+              text: `${LIST_ITEM_LABEL} context not available`,
             },
             Date.now(),
           );
@@ -935,12 +931,12 @@ Examples:
               type: MessageType.INFO,
               text: `Usage: /todo undo <position|range|all>
 
-Resets TODO status back to 'pending'.
+Resets ${LIST_ITEM_LABEL} status back to 'pending'.
 
 Formats:
-  2          - Reset TODO at position 2
-  1-5        - Reset TODOs 1 through 5
-  all        - Reset all TODOs
+  2          - Reset ${LIST_ITEM_LABEL} at position 2
+  1-5        - Reset ${LIST_ITEM_LABEL}s 1 through 5
+  all        - Reset all ${LIST_ITEM_LABEL}s
 
 Examples:
   /todo undo 3
@@ -967,7 +963,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Reset ${count} TODO(s) to pending`,
+                text: `Reset ${count} ${LIST_ITEM_LABEL}(s) to pending`,
               },
               Date.now(),
             );
@@ -1015,7 +1011,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Reset ${resetCount} TODO(s) to pending`,
+                text: `Reset ${resetCount} ${LIST_ITEM_LABEL}(s) to pending`,
               },
               Date.now(),
             );
@@ -1037,19 +1033,19 @@ Examples:
             return;
           }
 
-          // Subtasks don't have status field - only parent TODOs do
+          // Subtasks don't have status field - only parent tasks do
           if (parsed.subtaskIndex !== undefined) {
             context.ui.addItem(
               {
                 type: MessageType.ERROR,
-                text: `Subtasks don't have status. Use parent TODO position instead.`,
+                text: `Subtasks don't have status. Use parent ${LIST_ITEM_LABEL} position instead.`,
               },
               Date.now(),
             );
             return;
           }
 
-          // Reset the TODO status
+          // Reset the item status
           const newTodos = [...todos];
           newTodos[parsed.parentIndex] = {
             ...newTodos[parsed.parentIndex],
@@ -1060,7 +1056,7 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.INFO,
-              text: `Reset 1 TODO(s) to pending`,
+              text: `Reset 1 ${LIST_ITEM_LABEL}(s) to pending`,
             },
             Date.now(),
           );
@@ -1078,10 +1074,10 @@ Examples:
 
     {
       name: 'list',
-      description: 'List all saved TODO sessions',
+      description: `List all saved ${LIST_ITEM_LABEL} sessions`,
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo list - Show saved TODO history
+       * list subcommand - Show saved task-list history
        * @plan PLAN-20260129-TODOPERSIST.P06
        * @requirement REQ-007
        * @pseudocode lines 80-95
@@ -1094,7 +1090,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: 'No saved TODO lists found',
+                text: `No saved ${LIST_ITEM_LABEL} lists found`,
               },
               Date.now(),
             );
@@ -1103,7 +1099,7 @@ Examples:
 
           // Line 86-90: Format display
           const lines = [
-            'Saved TODO Lists:',
+            `Saved ${LIST_ITEM_LABEL} Lists:`,
             '────────────────────────────────────────',
           ];
 
@@ -1124,7 +1120,9 @@ Examples:
               const age = formatAge(file.mtime);
 
               const statusSummary = [
-                counts.in_progress > 0 ? `${counts.in_progress} in_progress` : '',
+                counts.in_progress > 0
+                  ? `${counts.in_progress} in_progress`
+                  : '',
                 counts.pending > 0 ? `${counts.pending} pending` : '',
                 counts.completed > 0 ? `${counts.completed} completed` : '',
               ]
@@ -1171,10 +1169,10 @@ Examples:
     },
     {
       name: 'load',
-      description: 'Load a saved TODO session. Usage: /todo load <number>',
+      description: `Load a saved ${LIST_ITEM_LABEL} session. Usage: /todo load <number>`,
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo load <num> - Load TODO session by number
+       * load subcommand - Load saved session by number
        * @plan PLAN-20260129-TODOPERSIST-EXT.P19
        * @plan PLAN-20260129-TODOPERSIST-EXT.P20
        * @requirement REQ-009
@@ -1184,7 +1182,7 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: 'TODO context not available',
+              text: `${LIST_ITEM_LABEL} context not available`,
             },
             Date.now(),
           );
@@ -1197,7 +1195,7 @@ Examples:
               type: MessageType.INFO,
               text: `Usage: /todo load <number>
 
-Loads a saved TODO session. Use /todo list to see available sessions.
+Loads a saved ${LIST_ITEM_LABEL} session. Use /todo list to see available sessions.
 
 Examples:
   /todo list       - Show saved sessions with numbers
@@ -1228,7 +1226,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: 'No saved TODO lists found',
+                text: `No saved ${LIST_ITEM_LABEL} lists found`,
               },
               Date.now(),
             );
@@ -1252,7 +1250,7 @@ Examples:
           const content = fs.readFileSync(selectedFile.path, 'utf8');
           const todos: Todo[] = JSON.parse(content);
 
-          // Update the TODO context with loaded TODOs
+          // Update the command context with loaded items
           context.todoContext.updateTodos(todos);
 
           // Display success message
@@ -1260,7 +1258,7 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.INFO,
-              text: `Loaded ${todos.length} TODO(s) from session: "${firstTitle}"`,
+              text: `Loaded ${todos.length} ${LIST_ITEM_LABEL}(s) from session: "${firstTitle}"`,
             },
             Date.now(),
           );

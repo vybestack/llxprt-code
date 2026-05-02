@@ -99,7 +99,7 @@ export interface EphemeralSettings {
    * - true/false: Legacy boolean values for backward compatibility
    */
   'shell-replacement'?: 'allowlist' | 'all' | 'none' | boolean;
-  /** Enable todo continuation after stream completion (default: true) */
+  /** Enable task-list continuation after stream completion (default: true) */
   'todo-continuation'?: boolean;
   /** Socket timeout in milliseconds for local AI servers */
   'socket-timeout'?: number;

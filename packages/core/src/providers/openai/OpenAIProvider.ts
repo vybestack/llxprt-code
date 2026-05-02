@@ -370,7 +370,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   override getServerTools(): string[] {
-    // TODO: Implement server tools for OpenAI provider
+    // Follow-up (#1569): Implement server tools for OpenAI provider
     return [];
   }
 
@@ -380,7 +380,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     _config?: unknown,
     _signal?: AbortSignal,
   ): Promise<unknown> {
-    // TODO: Implement server tool invocation for OpenAI provider
+    // Follow-up (#1569): Implement server tool invocation for OpenAI provider
     throw new Error(
       `Server tool '${toolName}' not supported by OpenAI provider`,
     );
@@ -647,7 +647,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * @returns Parsed tool response
    */
   parseToolResponse(response: unknown): unknown {
-    // TODO: Implement response parsing based on detected format
+    // Follow-up (#1569): Implement response parsing based on detected format
     // For now, return the response as-is
     return response;
   }

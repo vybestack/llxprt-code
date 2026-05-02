@@ -153,7 +153,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     // Determine if we're in interactive mode
     const isInteractive = this.context?.interactiveMode === true;
 
-    // Set active todo ID if there's an in_progress todo
+    // Set active task ID if there's an in_progress task
     if (isInteractive) {
       const scopedAgentId = agentId ?? DEFAULT_AGENT_ID;
       const inProgressTodo = todos.find(

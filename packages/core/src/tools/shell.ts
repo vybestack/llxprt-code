@@ -603,7 +603,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
             contentGenConfig.providerManager.getServerToolsProvider();
 
           // If we have a ServerToolsProvider that can handle summarization
-          // TODO: Need to adapt summarizeToolOutput to use ServerToolsProvider
+          // Follow-up (#1569): Need to adapt summarizeToolOutput to use ServerToolsProvider
           // For now, check if it's a Gemini provider and use the existing function
           if (
             serverToolsProvider !== null &&

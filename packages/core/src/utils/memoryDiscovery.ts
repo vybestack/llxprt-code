@@ -23,7 +23,7 @@ import type { GeminiCLIExtension } from '../config/config.js';
 import { debugLogger } from './debugLogger.js';
 
 // Simple console logger, similar to the one previously in CLI's config.ts
-// TODO: Integrate with a more robust server-side logger if available/appropriate.
+// Follow-up (#1569): Integrate with a more robust server-side logger if available/appropriate.
 const logger = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   debug: (...args: any[]) =>

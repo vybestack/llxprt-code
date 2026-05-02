@@ -330,7 +330,7 @@ export function loadExtension(
     // Resolve settings if present
     const resolvedSettings: ResolvedExtensionSetting[] = [];
 
-    // TODO: Settings resolution requires async operations which would make this
+    // Follow-up (#1569): Settings resolution requires async operations which would make this
     // function and all its callers async. For now, settings are passed through
     // but not resolved. Resolution can be added in a separate async flow if needed.
     // if (config.settings && config.settings.length > 0) {
@@ -535,7 +535,7 @@ async function cloneFromGit(
   destination: string,
 ): Promise<void> {
   try {
-    // TODO(chrstnb): Download the archive instead to avoid unnecessary .git info.
+    // Follow-up (#1569, chrstnb): Download the archive instead to avoid unnecessary .git info.
     await simpleGit().clone(gitUrl, destination, ['--depth', '1']);
   } catch (error) {
     throw new Error(`Failed to clone Git repository from ${gitUrl}`, {

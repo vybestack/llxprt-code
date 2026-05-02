@@ -238,7 +238,7 @@ export class GeminiAgent {
     try {
       const sessionId = randomUUID();
 
-      // TODO: Create a per-session Config to isolate approval mode, file system
+      // Follow-up (#1569): Create a per-session Config to isolate approval mode, file system
       // service, and tool registries between concurrent sessions. Currently all
       // sessions share one Config, which is safe only while Zed opens one
       // session at a time.
@@ -574,7 +574,7 @@ export class Session {
     const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
     this.emojiFilter = new EmojiFilter(filterConfig);
 
-    // Subscribe to todo events for this session
+    // Subscribe to task events for this session
     todoEvents.onTodoUpdated((event: TodoUpdateEvent) => {
       // Only handle events for this session
       const eventAgentId = event.agentId ?? DEFAULT_AGENT_ID;
@@ -1514,7 +1514,7 @@ export class Session {
   }
 
   private async sendPlanUpdate(todos: Todo[]): Promise<void> {
-    // Convert llxprt-code Todo format to ACP PlanEntry format
+    // Convert llxprt-code task format to ACP PlanEntry format
     const entries: acp.PlanEntry[] = todos.map((todo) => ({
       content: todo.content,
       status: todo.status,

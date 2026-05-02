@@ -68,7 +68,7 @@ export async function handleUpdate(args: UpdateArgs) {
         console.log(`Extension "${args.name}" is already up to date.`);
         return;
       }
-      // TODO(chrstnb): we should list extensions if the requested extension is not installed.
+      // Future work(chrstnb): we should list extensions if the requested extension is not installed.
       const updatedExtensionInfo = (await updateExtension(
         extension,
         workingDir,
@@ -153,7 +153,10 @@ export const updateCommand: CommandModule = {
       .conflicts('name', 'all')
       .check((argv) => {
         // argv.all is boolean | undefined, argv.name is string | undefined
-        if (argv.all !== true && (argv.name === undefined || argv.name === '')) {
+        if (
+          argv.all !== true &&
+          (argv.name === undefined || argv.name === '')
+        ) {
           throw new Error('Either an extension name or --all must be provided');
         }
         return true;

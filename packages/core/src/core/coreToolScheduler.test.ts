@@ -2014,7 +2014,7 @@ describe('CoreToolScheduler edit cancellation', () => {
 });
 
 describe('CoreToolScheduler queue handling', () => {
-  // TODO: Fix these tests - the current implementation executes tools in parallel in YOLO mode
+  // Follow-up (#1569): Fix these tests - the current implementation executes tools in parallel in YOLO mode
   // rather than sequentially. The queue prevents errors but doesn't enforce sequential execution.
 
   describe('CoreToolScheduler YOLO mode', () => {

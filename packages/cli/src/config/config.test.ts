@@ -172,8 +172,8 @@ vi.mock('../runtime/runtimeSettings.js', () => {
         null,
     })),
     listProviders: vi.fn(() => getProviderManager().listProviders()),
-    getActiveProviderName: vi.fn(
-      () => getProviderManager().getActiveProviderName(),
+    getActiveProviderName: vi.fn(() =>
+      getProviderManager().getActiveProviderName(),
     ),
     setActiveModel: vi.fn(async () => ({
       changed: false,
@@ -181,8 +181,8 @@ vi.mock('../runtime/runtimeSettings.js', () => {
       nextModel: null,
       infoMessages: [],
     })),
-    listAvailableModels: vi.fn(
-      async () => getProviderManager().getAvailableModels(),
+    listAvailableModels: vi.fn(async () =>
+      getProviderManager().getAvailableModels(),
     ),
     getActiveModelName: vi.fn(() => null),
     getActiveModelParams: vi.fn(() => ({})),
@@ -1760,7 +1760,7 @@ describe('parseArguments with positional prompt', () => {
   });
 });
 
-// TODO: These tests need provider runtime setup (activateIsolatedRuntimeContext)
+// Note: These tests need provider runtime setup (activateIsolatedRuntimeContext)
 describe('defaultDisabledTools', () => {
   const originalIsTTY = process.stdin.isTTY;
 

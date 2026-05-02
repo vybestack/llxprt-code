@@ -253,15 +253,11 @@ export class ConversationDataRedactor {
     return redacted;
   }
 
-  // TODO: Re-add redactContentPart method when needed for advanced content redaction
+  // Follow-up (#1569): Re-add redactContentPart method when needed for advanced content redaction
   // private redactContentPart(part: unknown, providerName: string): unknown {
 
   private redactToolParameters(params: unknown, toolName: string): unknown {
-    if (
-      params === null ||
-      params === undefined ||
-      typeof params !== 'object'
-    ) {
+    if (params === null || params === undefined || typeof params !== 'object') {
       return params;
     }
 
@@ -496,7 +492,7 @@ export class ConversationDataRedactor {
     return patterns;
   }
 
-  // TODO: Re-add isPatternEnabled method when needed for dynamic pattern checking
+  // Follow-up (#1569): Re-add isPatternEnabled method when needed for dynamic pattern checking
   // private isPatternEnabled(patternName: string): boolean {
 
   /**

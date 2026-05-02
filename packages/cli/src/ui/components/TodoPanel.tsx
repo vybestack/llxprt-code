@@ -109,7 +109,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({
     return null;
   }
 
-  // Render a single todo item (compact, single-line)
+  // Render a single task-list item (compact, single-line)
   const renderCompactTodo = (
     todo: Todo,
     availableWidth: number,

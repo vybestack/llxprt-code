@@ -201,7 +201,7 @@ async function _executeCompletedTools(
   }
   if (primaryTools.length === 0) return;
 
-  // todo_pause: signal the UI to pause, but continue processing
+  // The pause tool signals the UI to pause while processing continues.
   if (
     primaryTools.some(
       (tc) => tc.request.name === 'todo_pause' && tc.status === 'success',

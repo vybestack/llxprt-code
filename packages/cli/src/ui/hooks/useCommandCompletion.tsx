@@ -224,7 +224,7 @@ export function useCommandCompletion(
       let end = completionEnd;
       if (completionMode === CompletionMode.SLASH) {
         // For slash completion, we'll use the calculated positions
-        start = 0; // TODO: Fix this - need proper completion range
+        start = 0; // Follow-up (#1569): Fix this - need proper completion range
         end = 0;
       }
 

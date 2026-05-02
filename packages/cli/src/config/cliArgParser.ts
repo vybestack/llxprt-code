@@ -259,7 +259,8 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           if (
             typeof argv['prompt'] === 'string' &&
             argv['prompt'].length > 0 &&
-            argv['promptInteractive'] === true
+            typeof argv['promptInteractive'] === 'string' &&
+            argv['promptInteractive'].length > 0
           ) {
             throw new Error(
               'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
@@ -291,7 +292,8 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       if (
         typeof argv['prompt'] === 'string' &&
         argv['prompt'].length > 0 &&
-        argv['promptInteractive'] === true
+        typeof argv['promptInteractive'] === 'string' &&
+        argv['promptInteractive'].length > 0
       ) {
         throw new Error(
           'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',

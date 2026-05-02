@@ -133,7 +133,7 @@ export interface ContinuationPromptTemplates {
 export class TodoContinuationService {
   private static readonly MAX_CONTINUATION_ATTEMPTS = 3;
   private static readonly MIN_CONTINUATION_INTERVAL_MS = 1000;
-  // TODO: Add timeout functionality in the future
+  // Future enhancement: Add timeout functionality
   // private static readonly CONTINUATION_TIMEOUT_MS = 30000;
   private static readonly MAX_TASK_DESCRIPTION_LENGTH = 200;
 
@@ -238,7 +238,7 @@ export class TodoContinuationService {
       };
     }
 
-    // Find the active todo to continue
+    // Find the active task to continue
     const activeTodo = this.findBestActiveTodo(context.todos);
     if (!activeTodo) {
       return {
@@ -258,16 +258,20 @@ export class TodoContinuationService {
   }
 
   /**
-   * Formats a todo item's content into a task description
-   * @param todo Todo item to format
+   * Formats a task item's content into a task description
+   * @param taskItem Task item to format
    * @returns Formatted task description string
    */
-  formatTaskDescription(todo: Todo | null | undefined): string {
-    if (todo === null || todo === undefined || todo.content.length === 0) {
+  formatTaskDescription(taskItem: Todo | null | undefined): string {
+    if (
+      taskItem === null ||
+      taskItem === undefined ||
+      taskItem.content.length === 0
+    ) {
       return 'Complete task';
     }
 
-    let description = todo.content.trim();
+    let description = taskItem.content.trim();
 
     if (description.length === 0) {
       return 'Complete task';
@@ -543,9 +547,9 @@ export class TodoContinuationService {
   }
 
   /**
-   * Private method to find the best active todo to continue
-   * @param todos Array of todos to search
-   * @returns Best active todo or undefined
+   * Private method to find the best active task to continue
+   * @param todos Array of tasks to search
+   * @returns Best active task or undefined
    */
   private findBestActiveTodo(todos: readonly Todo[]): Todo | undefined {
     // First: Find in_progress todos (should be max 1)

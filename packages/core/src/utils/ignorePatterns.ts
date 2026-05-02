@@ -164,7 +164,7 @@ export class FileExclusions {
     }
 
     // Add custom patterns from configuration
-    // TODO: getCustomExcludes method needs to be implemented in Config interface
+    // Follow-up (#1569): getCustomExcludes method needs to be implemented in Config interface
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Config test doubles may omit getCustomExcludes at runtime.
     const configCustomExcludes = this.config?.getCustomExcludes?.() ?? [];
@@ -199,7 +199,7 @@ export class FileExclusions {
     const corePatterns = this.getCoreIgnorePatterns();
 
     // Add any custom patterns from config if available
-    // TODO: getCustomExcludes method needs to be implemented in Config interface
+    // Follow-up (#1569): getCustomExcludes method needs to be implemented in Config interface
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Config test doubles may omit getCustomExcludes at runtime.
     const configPatterns = this.config?.getCustomExcludes?.() ?? [];
 

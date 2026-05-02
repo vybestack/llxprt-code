@@ -89,7 +89,7 @@ describe('TodoPanel Semantic Colors', () => {
     // Check for the marker and content pattern in the rendered output
     expect(output).toMatch(/✔.*Completed task/);
 
-    // Verify the output contains the todo text - exact color testing is hard with ink
+    // Verify the output contains the task text - exact color testing is hard with ink
     // but we can verify the component renders correctly
     expect(output).toContain('Todo Progress');
   });

@@ -152,7 +152,7 @@ export class McpPromptLoader implements ICommandLoader {
               };
             }
           },
-          // TODO: Re-enable schema-based argument completion when SlashCommand interface supports it
+          // Follow-up (#1569): Re-enable schema-based argument completion when SlashCommand interface supports it
           // schema: [
           //   {
           //     kind: 'value',

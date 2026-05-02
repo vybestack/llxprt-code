@@ -72,13 +72,13 @@ describe('todoCommand', () => {
   describe('/todo clear', () => {
     /**
      * @requirement REQ-003
-     * @scenario Clear all TODOs from active session
-     * @given User has active TODO list
-     * @when User executes /todo clear
-     * @then All TODOs are removed from memory
+     * @scenario Clear all tasks from active session
+     * @given User has active task list
+     * @when User executes the clear command
+     * @then All tasks are removed from memory
      * @plan PLAN-20260129-TODOPERSIST.P08
      */
-    it('clears all TODOs from active session', async () => {
+    it('clears all tasks from active session', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'pending' },
         { id: '2', content: 'Task 2', status: 'in_progress' },
@@ -98,13 +98,13 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-003
-     * @scenario Clear empty TODO list
-     * @given User has empty TODO list
-     * @when User executes /todo clear
+     * @scenario Clear empty task list
+     * @given User has empty task list
+     * @when User executes the clear command
      * @then No error occurs
      * @plan PLAN-20260129-TODOPERSIST.P08
      */
-    it('handles clearing empty TODO list gracefully', async () => {
+    it('handles clearing empty task list gracefully', async () => {
       const ctx = createMockContext([]);
 
       const clearSubcommand = todoCommand.subCommands?.find(
@@ -119,13 +119,13 @@ describe('todoCommand', () => {
   describe('/todo show', () => {
     /**
      * @requirement REQ-004
-     * @scenario Display current TODO list
-     * @given User has active TODOs
-     * @when User executes /todo show
+     * @scenario Display current task list
+     * @given User has active tasks
+     * @when User executes the show command
      * @then Display formatted list with positions
      * @plan PLAN-20260129-TODOPERSIST.P08
      */
-    it('displays current TODO list with formatting', async () => {
+    it('displays current task list with formatting', async () => {
       const ctx = createMockContext([
         {
           id: '1',
@@ -156,13 +156,13 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-004
-     * @scenario Display empty TODO list
-     * @given User has no TODOs
-     * @when User executes /todo show
-     * @then Display "No active TODOs" message
+     * @scenario Display empty task list
+     * @given User has no tasks
+     * @when User executes the show command
+     * @then Display "No active tasks" message
      * @plan PLAN-20260129-TODOPERSIST.P08
      */
-    it('displays message when TODO list is empty', async () => {
+    it('displays message when task list is empty', async () => {
       const ctx = createMockContext([]);
 
       const showSubcommand = todoCommand.subCommands?.find(
@@ -181,13 +181,13 @@ describe('todoCommand', () => {
   describe('/todo add', () => {
     /**
      * @requirement REQ-005
-     * @scenario Insert TODO at numeric position
-     * @given User has TODO list
-     * @when User executes /todo add 2 "New task"
-     * @then TODO is inserted at position 2
+     * @scenario Insert task at numeric position
+     * @given User has task list
+     * @when User executes the add command 2 "New task"
+     * @then Task is inserted at position 2
      * @plan PLAN-20260129-TODOPERSIST.P08
      */
-    it('inserts TODO at numeric position', async () => {
+    it('inserts task at numeric position', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'pending' },
         { id: '3', content: 'Task 3', status: 'pending' },
@@ -210,13 +210,13 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-005
-     * @scenario Append TODO with "last" position
-     * @given User has TODO list
-     * @when User executes /todo add last "Final task"
-     * @then TODO is appended to end
+     * @scenario Append task with "last" position
+     * @given User has task list
+     * @when User executes the add command last "Final task"
+     * @then Task is appended to end
      * @plan PLAN-20260129-TODOPERSIST.P08
      */
-    it('appends TODO with "last" position', async () => {
+    it('appends task with "last" position', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'pending' },
       ]);
@@ -238,8 +238,8 @@ describe('todoCommand', () => {
     /**
      * @requirement REQ-005
      * @scenario Insert subtask at dotted position
-     * @given Parent TODO exists
-     * @when User executes /todo add 1.2 "New subtask"
+     * @given Parent task exists
+     * @when User executes the add command 1.2 "New subtask"
      * @then Subtask is inserted at position 1.2
      * @plan PLAN-20260129-TODOPERSIST.P08
      */
@@ -275,7 +275,7 @@ describe('todoCommand', () => {
      * @requirement REQ-005
      * @scenario Reject invalid position format
      * @given User provides invalid position
-     * @when User executes /todo add invalid "Task"
+     * @when User executes the add command invalid "Task"
      * @then Error is returned
      * @plan PLAN-20260129-TODOPERSIST.P08
      */
@@ -300,8 +300,8 @@ describe('todoCommand', () => {
     /**
      * @requirement REQ-005
      * @scenario Show help when no arguments provided
-     * @given User has TODO list
-     * @when User executes /todo add without arguments
+     * @given User has task list
+     * @when User executes the add command without arguments
      * @then Help text is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P20
      */
@@ -329,14 +329,14 @@ describe('todoCommand', () => {
   describe('/todo remove', () => {
     /**
      * @requirement REQ-006
-     * @scenario Remove TODO at numeric position
-     * @given User has TODO list
-     * @when User executes /todo remove 2
-     * @then TODO at position 2 is removed
+     * @scenario Remove task at numeric position
+     * @given User has task list
+     * @when User executes the remove command with position 2
+     * @then Task at position 2 is removed
      * @plan PLAN-20260129-TODOPERSIST.P08
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('removes TODO at numeric position', async () => {
+    it('removes task at numeric position', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'pending' },
         { id: '2', content: 'Task 2', status: 'pending' },
@@ -361,14 +361,14 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-006
-     * @scenario Remove parent TODO with all subtasks
-     * @given Parent TODO has subtasks
-     * @when User executes /todo remove 1
+     * @scenario Remove parent task with all subtasks
+     * @given Parent task has subtasks
+     * @when User executes the remove command with position 1
      * @then Parent and all subtasks are removed
      * @plan PLAN-20260129-TODOPERSIST.P08
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('removes parent TODO with all subtasks', async () => {
+    it('removes parent task with all subtasks', async () => {
       const ctx = createMockContext([
         {
           id: '1',
@@ -398,8 +398,8 @@ describe('todoCommand', () => {
     /**
      * @requirement REQ-006
      * @scenario Remove subtask
-     * @given Parent TODO has subtasks
-     * @when User executes /todo remove 1.1
+     * @given Parent task has subtasks
+     * @when User executes the remove command with position 1.1
      * @then Subtask is removed
      * @plan PLAN-20260129-TODOPERSIST.P08
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
@@ -434,14 +434,14 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-006
-     * @scenario Remove range of TODOs
-     * @given User has 5 TODOs
-     * @when User executes /todo remove 2-4
-     * @then TODOs 2, 3, 4 are removed, 2 remain
+     * @scenario Remove range of tasks
+     * @given User has 5 tasks
+     * @when User executes the remove command with range 2-4
+     * @then Tasks 2, 3, 4 are removed, 2 remain
      * @plan PLAN-20260129-TODOPERSIST-EXT.P18
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('removes range of TODOs', async () => {
+    it('removes range of tasks', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'pending' },
         { id: '2', content: 'Task 2', status: 'pending' },
@@ -467,14 +467,14 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-006
-     * @scenario Remove all TODOs
-     * @given User has 3 TODOs
-     * @when User executes /todo remove all
-     * @then All TODOs are removed, 0 remain
+     * @scenario Remove all tasks
+     * @given User has 3 tasks
+     * @when User executes the remove command with "all"
+     * @then All tasks are removed, 0 remain
      * @plan PLAN-20260129-TODOPERSIST-EXT.P18
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('removes all TODOs with "all" keyword', async () => {
+    it('removes all tasks with "all" keyword', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'pending' },
         { id: '2', content: 'Task 2', status: 'pending' },
@@ -496,14 +496,14 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-006
-     * @scenario Remove single TODO using range (1-1)
-     * @given User has 3 TODOs
-     * @when User executes /todo remove 1-1
-     * @then Only TODO 1 is removed
+     * @scenario Remove single task using range (1-1)
+     * @given User has 3 tasks
+     * @when User executes the remove command with range 1-1
+     * @then Only task 1 is removed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P18
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('removes single TODO with range syntax (1-1)', async () => {
+    it('removes single task with range syntax (1-1)', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'pending' },
         { id: '2', content: 'Task 2', status: 'pending' },
@@ -528,8 +528,8 @@ describe('todoCommand', () => {
     /**
      * @requirement REQ-006
      * @scenario Error on invalid range (start > end)
-     * @given User has 5 TODOs
-     * @when User executes /todo remove 5-2
+     * @given User has 5 tasks
+     * @when User executes the remove command with invalid range 5-2
      * @then Error is shown
      * @plan PLAN-20260129-TODOPERSIST-EXT.P18
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
@@ -559,8 +559,8 @@ describe('todoCommand', () => {
     /**
      * @requirement REQ-006
      * @scenario Error on out of bounds range
-     * @given User has 3 TODOs
-     * @when User executes /todo remove 1-99
+     * @given User has 3 tasks
+     * @when User executes the remove command with out of bounds range 1-99
      * @then Error is shown
      * @plan PLAN-20260129-TODOPERSIST-EXT.P18
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
@@ -588,7 +588,7 @@ describe('todoCommand', () => {
     /**
      * @requirement REQ-006
      * @scenario Property test: range removal count
-     * @given User has N TODOs
+     * @given User has N tasks
      * @when User removes range start-end
      * @then Removed count equals (end - start + 1)
      * @plan PLAN-20260129-TODOPERSIST-EXT.P18
@@ -648,8 +648,8 @@ describe('todoCommand', () => {
     /**
      * @requirement REQ-006
      * @scenario Show help when no arguments provided
-     * @given User has TODO list
-     * @when User executes /todo remove without arguments
+     * @given User has task list
+     * @when User executes the remove command without arguments
      * @then Help text is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P20
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
@@ -678,13 +678,13 @@ describe('todoCommand', () => {
   describe('/todo delete (disk files)', () => {
     /**
      * @requirement REQ-010
-     * @scenario Delete saved TODO session by number
-     * @given User has saved TODO sessions
-     * @when User executes /todo delete 1
+     * @scenario Delete saved task session by number
+     * @given User has saved task sessions
+     * @when User executes the delete command with position 1
      * @then First saved session is deleted from disk
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('deletes saved TODO session at position 1', async () => {
+    it('deletes saved task session at position 1', async () => {
       const ctx = createMockContext([]);
 
       const deleteSubcommand = todoCommand.subCommands?.find(
@@ -693,7 +693,7 @@ describe('todoCommand', () => {
       expect(deleteSubcommand).toBeDefined();
 
       // Note: This test relies on actual filesystem state
-      // In real implementation, we'd need to create temp TODO files
+      // In real implementation, we'd need to create temp task files
       await deleteSubcommand!.action!(ctx, '1');
 
       // Verify that addItem was called with appropriate message
@@ -702,13 +702,13 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-010
-     * @scenario Delete range of saved TODO sessions
+     * @scenario Delete range of saved task sessions
      * @given User has 5 saved sessions
-     * @when User executes /todo delete 1-3
+     * @when User executes the delete command with range 1-3
      * @then Sessions 1, 2, 3 are deleted from disk
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('deletes range of saved TODO sessions', async () => {
+    it('deletes range of saved task sessions', async () => {
       const ctx = createMockContext([]);
 
       const deleteSubcommand = todoCommand.subCommands?.find(
@@ -723,13 +723,13 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-010
-     * @scenario Delete all saved TODO sessions
+     * @scenario Delete all saved task sessions
      * @given User has saved sessions
-     * @when User executes /todo delete all
+     * @when User executes the delete command with "all"
      * @then All saved sessions are deleted from disk
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('deletes all saved TODO sessions with "all" keyword', async () => {
+    it('deletes all saved task sessions with "all" keyword', async () => {
       const ctx = createMockContext([]);
 
       const deleteSubcommand = todoCommand.subCommands?.find(
@@ -745,7 +745,7 @@ describe('todoCommand', () => {
      * @requirement REQ-010
      * @scenario Delete session with out of range number
      * @given User has 2 saved sessions
-     * @when User executes /todo delete 99
+     * @when User executes the delete command with position 99
      * @then Error message is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
@@ -769,7 +769,7 @@ describe('todoCommand', () => {
      * @requirement REQ-010
      * @scenario Delete session without arguments
      * @given User has saved sessions
-     * @when User executes /todo delete
+     * @when User executes the delete command without arguments
      * @then Usage help is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
@@ -794,13 +794,13 @@ describe('todoCommand', () => {
   describe('/todo undo', () => {
     /**
      * @requirement REQ-011
-     * @scenario Undo TODO at single position
-     * @given User has TODO at position 1 with status completed
-     * @when User executes /todo undo 1
-     * @then TODO status changes to pending
+     * @scenario Undo task at single position
+     * @given User has task at position 1 with status completed
+     * @when User executes the undo command with position 1
+     * @then Task status changes to pending
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('resets TODO at position 1 to pending', async () => {
+    it('resets task at position 1 to pending', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'completed' },
         { id: '2', content: 'Task 2', status: 'in_progress' },
@@ -823,13 +823,13 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-011
-     * @scenario Undo range of TODOs
-     * @given User has 5 TODOs with various statuses
-     * @when User executes /todo undo 1-3
-     * @then TODOs 1, 2, 3 status change to pending
+     * @scenario Undo range of tasks
+     * @given User has 5 tasks with various statuses
+     * @when User executes the undo command with range 1-3
+     * @then Tasks 1, 2, 3 status change to pending
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('resets range of TODOs to pending', async () => {
+    it('resets range of tasks to pending', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'completed' },
         { id: '2', content: 'Task 2', status: 'in_progress' },
@@ -857,13 +857,13 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-011
-     * @scenario Undo all TODOs
-     * @given User has 3 TODOs with various statuses
-     * @when User executes /todo undo all
-     * @then All TODOs status change to pending
+     * @scenario Undo all tasks
+     * @given User has 3 tasks with various statuses
+     * @when User executes the undo command with "all"
+     * @then All tasks status change to pending
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
-    it('resets all TODOs to pending with "all" keyword', async () => {
+    it('resets all tasks to pending with "all" keyword', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'completed' },
         { id: '2', content: 'Task 2', status: 'in_progress' },
@@ -888,8 +888,8 @@ describe('todoCommand', () => {
     /**
      * @requirement REQ-011
      * @scenario Undo without arguments
-     * @given User has TODOs
-     * @when User executes /todo undo
+     * @given User has tasks
+     * @when User executes the undo command without arguments
      * @then Usage help is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
@@ -914,9 +914,9 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-011
-     * @scenario Undo non-existent TODO position
-     * @given User has 2 TODOs
-     * @when User executes /todo undo 99
+     * @scenario Undo non-existent task position
+     * @given User has 2 tasks
+     * @when User executes the undo command with invalid position 99
      * @then Error message is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P21
      */
@@ -943,13 +943,13 @@ describe('todoCommand', () => {
   describe('/todo unset', () => {
     /**
      * @requirement REQ-008
-     * @scenario Unset TODO to pending
-     * @given User has TODO at position 1 with in_progress status
-     * @when User executes /todo unset 1
-     * @then TODO status changes to pending
+     * @scenario Unset task to pending
+     * @given User has task at position 1 with in_progress status
+     * @when User executes the unset command with position 1
+     * @then Task status changes to pending
      * @plan PLAN-20260129-TODOPERSIST-EXT.P22
      */
-    it('sets TODO at position 1 to pending', async () => {
+    it('sets task at position 1 to pending', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'in_progress' },
         { id: '2', content: 'Task 2', status: 'pending' },
@@ -972,9 +972,9 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-008
-     * @scenario Unset non-existent TODO position
-     * @given User has 2 TODOs
-     * @when User executes /todo unset 99
+     * @scenario Unset non-existent task position
+     * @given User has 2 tasks
+     * @when User executes the unset command with invalid position 99
      * @then Error message is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P22
      */
@@ -999,9 +999,9 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-008
-     * @scenario Unset TODO without position argument
-     * @given User has TODOs
-     * @when User executes /todo unset
+     * @scenario Unset task without position argument
+     * @given User has tasks
+     * @when User executes the unset command without arguments
      * @then Usage help message is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P22
      */
@@ -1028,13 +1028,13 @@ describe('todoCommand', () => {
   describe('/todo set', () => {
     /**
      * @requirement REQ-008
-     * @scenario Set TODO to in_progress
-     * @given User has TODO at position 1
-     * @when User executes /todo set 1
-     * @then TODO status changes to in_progress
+     * @scenario Set task to in_progress
+     * @given User has task at position 1
+     * @when User executes the set command with position 1
+     * @then Task status changes to in_progress
      * @plan PLAN-20260129-TODOPERSIST-EXT.P17
      */
-    it('sets TODO at position 1 to in_progress', async () => {
+    it('sets task at position 1 to in_progress', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'pending' },
         { id: '2', content: 'Task 2', status: 'pending' },
@@ -1057,13 +1057,13 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-008
-     * @scenario Set TODO at position 2 to in_progress
-     * @given User has multiple TODOs
-     * @when User executes /todo set 2
-     * @then Second TODO status changes to in_progress
+     * @scenario Set task at position 2 to in_progress
+     * @given User has multiple tasks
+     * @when User executes the set command with position 2
+     * @then Second task status changes to in_progress
      * @plan PLAN-20260129-TODOPERSIST-EXT.P17
      */
-    it('sets TODO at position 2 to in_progress', async () => {
+    it('sets task at position 2 to in_progress', async () => {
       const ctx = createMockContext([
         { id: '1', content: 'Task 1', status: 'pending' },
         { id: '2', content: 'Task 2', status: 'completed' },
@@ -1086,9 +1086,9 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-008
-     * @scenario Set non-existent TODO position
-     * @given User has 2 TODOs
-     * @when User executes /todo set 99
+     * @scenario Set non-existent task position
+     * @given User has 2 tasks
+     * @when User executes the set command with invalid position 99
      * @then Error message is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P17
      */
@@ -1113,9 +1113,9 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-008
-     * @scenario Set TODO without position argument
-     * @given User has TODOs
-     * @when User executes /todo set
+     * @scenario Set task without position argument
+     * @given User has tasks
+     * @when User executes the set command without arguments
      * @then Usage help message is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P17
      * @plan PLAN-20260129-TODOPERSIST-EXT.P20
@@ -1142,9 +1142,9 @@ describe('todoCommand', () => {
     /**
      * @requirement REQ-008
      * @scenario Property-based: Set any valid position
-     * @given User has N TODOs
+     * @given User has N tasks
      * @when User sets any valid position
-     * @then That TODO's status becomes in_progress
+     * @then That task's status becomes in_progress
      * @plan PLAN-20260129-TODOPERSIST-EXT.P17
      */
     it('property test: setting any valid position updates status', () => {
@@ -1191,13 +1191,13 @@ describe('todoCommand', () => {
   describe('/todo list', () => {
     /**
      * @requirement REQ-007
-     * @scenario Display sorted TODO history
-     * @given Multiple TODO files exist
-     * @when User executes /todo list
+     * @scenario Display sorted task history
+     * @given Multiple task files exist
+     * @when User executes the list command
      * @then Display sorted by mtime with current first
      * @plan PLAN-20260129-TODOPERSIST.P05
      */
-    it('displays sorted TODO history with current session first', async () => {
+    it('displays sorted task history with current session first', async () => {
       const ctx = createMockContext([]);
 
       const listSubcommand = todoCommand.subCommands?.find(
@@ -1210,19 +1210,19 @@ describe('todoCommand', () => {
       expect(ctx.ui.addItem).toHaveBeenCalled();
       const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
         .calls[0][0];
-      // Should either show files or "No saved TODO lists found"
+      // Should either show files or "No saved task lists found"
       expect(call.type).toBe('info');
     });
 
     /**
      * @requirement REQ-007
-     * @scenario Handle empty TODO directory
-     * @given No saved TODO files exist
-     * @when User executes /todo list
-     * @then Display "No saved TODO lists found"
+     * @scenario Handle empty task directory
+     * @given No saved task files exist
+     * @when User executes the list command
+     * @then Display "No saved task lists found"
      * @plan PLAN-20260129-TODOPERSIST.P05
      */
-    it('handles empty TODO directory gracefully', async () => {
+    it('handles empty task directory gracefully', async () => {
       const ctx = createMockContext([]);
 
       const listSubcommand = todoCommand.subCommands?.find(
@@ -1236,7 +1236,7 @@ describe('todoCommand', () => {
       const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
         .calls[0][0];
       expect(call.type).toBe('info');
-      // Should either show files or "No saved TODO lists found" message
+      // Should either show files or "No saved task lists found" message
       // (depending on whether files exist in the system from previous tests)
       expect(call.text).toMatch(/No saved TODO lists found|Saved TODO Lists/);
     });
@@ -1245,13 +1245,13 @@ describe('todoCommand', () => {
   describe('/todo load', () => {
     /**
      * @requirement REQ-009
-     * @scenario Load TODO session by number
-     * @given User has saved TODO sessions
-     * @when User executes /todo load 1
-     * @then First session is loaded into active TODOs
+     * @scenario Load task session by number
+     * @given User has saved task sessions
+     * @when User executes the load command with position 1
+     * @then First session is loaded into active tasks
      * @plan PLAN-20260129-TODOPERSIST-EXT.P19
      */
-    it('loads TODO session at position 1', async () => {
+    it('loads task session at position 1', async () => {
       const ctx = createMockContext([]);
 
       const loadSubcommand = todoCommand.subCommands?.find(
@@ -1260,7 +1260,7 @@ describe('todoCommand', () => {
       expect(loadSubcommand).toBeDefined();
 
       // Note: This test relies on actual filesystem state
-      // In real implementation, we'd need to create temp TODO files
+      // In real implementation, we'd need to create temp task files
       await loadSubcommand!.action!(ctx, '1');
 
       // Either updateTodos is called (files exist) or addItem shows error (no files)
@@ -1274,9 +1274,9 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-009
-     * @scenario Load TODO session with invalid number
+     * @scenario Load task session with invalid number
      * @given User has 2 saved sessions
-     * @when User executes /todo load 99
+     * @when User executes the load command with invalid position 99
      * @then Error message is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P19
      */
@@ -1298,9 +1298,9 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-009
-     * @scenario Load TODO session without arguments
+     * @scenario Load task session without arguments
      * @given User has saved sessions
-     * @when User executes /todo load
+     * @when User executes the load command without arguments
      * @then Usage help is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P19
      * @plan PLAN-20260129-TODOPERSIST-EXT.P20
@@ -1324,9 +1324,9 @@ describe('todoCommand', () => {
 
     /**
      * @requirement REQ-009
-     * @scenario Load TODO session with invalid number format
+     * @scenario Load task session with invalid number format
      * @given User has saved sessions
-     * @when User executes /todo load abc
+     * @when User executes the load command with invalid format "abc"
      * @then Error message is displayed
      * @plan PLAN-20260129-TODOPERSIST-EXT.P19
      */
@@ -1483,7 +1483,7 @@ describe('todoCommand', () => {
    * @plan PLAN-20260129-TODOPERSIST.P05
    */
   describe('add/delete consistency property tests', () => {
-    it('maintains TODO list consistency', () => {
+    it('maintains task list consistency', () => {
       fc.assert(
         fc.property(
           fc.array(
@@ -1505,7 +1505,7 @@ describe('todoCommand', () => {
               (cmd) => cmd.name === 'remove',
             );
 
-            // Add a todo at last position
+            // Add a task at last position
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
             addSubcommand!.action!(ctx, 'last New task');
 
@@ -1521,7 +1521,7 @@ describe('todoCommand', () => {
               ctx.todoContext!.updateTodos as ReturnType<typeof vi.fn>
             ).mockClear();
 
-            // Remove the last todo
+            // Remove the last task
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
             removeSubcommand!.action!(ctx, todosAfterAdd.length.toString());
 

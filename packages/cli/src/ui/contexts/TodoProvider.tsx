@@ -58,7 +58,7 @@ export const TodoProvider: React.FC<TodoProviderProps> = ({
     refreshTodos();
   }, [refreshTodos]);
 
-  // Listen for todo updates
+  // Listen for task-list updates
   useEffect(() => {
     const handleTodoUpdate = (eventData: TodoUpdateEvent) => {
       // Verify this update is for our session

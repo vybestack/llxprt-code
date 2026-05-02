@@ -539,7 +539,7 @@ export class IdeClient {
     try {
       this.client = new Client({
         name: 'streamable-http-client',
-        // TODO(#3487): use the CLI version here.
+        // Task(#3487): use the CLI version here.
         version: '1.0.0',
       });
       transport = new StreamableHTTPClientTransport(

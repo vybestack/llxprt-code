@@ -171,7 +171,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   };
 }
 
-/** Initializes todo state and pause controller */
+/** Initializes task-list state and pause controller */
 function useBootstrapTodo() {
   const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);

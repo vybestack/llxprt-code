@@ -115,8 +115,8 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
     [toolCalls],
   );
 
-  // Filter out todo_read completely when panel is visible
-  // and minimize todo_write output
+  // Filter out task-list reads completely when panel is visible
+  // and minimize task-list write output
   const filteredToolCalls = useMemo(
     () =>
       toolCalls

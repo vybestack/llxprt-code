@@ -27,7 +27,7 @@ export interface AnalysisStats {
   totalAnalyses: number;
   /** Number of complex requests detected */
   complexRequestCount: number;
-  /** Number of todo suggestions generated */
+  /** Number of task suggestions generated */
   suggestionsGenerated: number;
   /** Average complexity score across all analyses */
   averageComplexityScore: number;
@@ -35,7 +35,7 @@ export interface AnalysisStats {
 
 /**
  * Service that analyzes user messages to detect multi-step tasks
- * and determine when todo lists should be suggested.
+ * and determine when task lists should be suggested.
  * @requirement REQ-005.1
  */
 export class ComplexityAnalyzer {
@@ -75,7 +75,7 @@ export class ComplexityAnalyzer {
 
   /**
    * Analyzes a user message to determine its complexity and whether
-   * it would benefit from using a todo list.
+   * it would benefit from using a task list.
    * @requirement REQ-005.2
    */
   analyzeComplexity(message: string): ComplexityAnalysisResult {
@@ -89,7 +89,7 @@ export class ComplexityAnalyzer {
     const questionCount = this.countQuestions(message);
 
     // File references are no longer counted toward task detection
-    // This was causing too many false positives for todo suggestions
+    // This was causing too many false positives for task suggestions
     // const fileReferences = this.extractFileReferences(message);
     // for (const reference of fileReferences) {
     //   if (!detectedTasks.includes(reference)) {

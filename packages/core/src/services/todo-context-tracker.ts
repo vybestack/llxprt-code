@@ -5,8 +5,8 @@
  */
 
 /**
- * Service to track which todo item is currently active in a session and agent scope.
- * This allows associating tool calls with the active todo.
+ * Service to track which task item is currently active in a session and agent scope.
+ * This allows associating tool calls with the active task.
  */
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
@@ -55,21 +55,21 @@ export class TodoContextTracker {
   }
 
   /**
-   * Set the active todo for this session/agent scope.
+   * Set the active task for this session/agent scope.
    */
   setActiveTodo(todoId: string | null): void {
     this.activeTodoId = todoId;
   }
 
   /**
-   * Get the active todo ID for this session/agent scope.
+   * Get the active task ID for this session/agent scope.
    */
   getActiveTodoId(): string | null {
     return this.activeTodoId;
   }
 
   /**
-   * Clear the active todo for this session/agent scope.
+   * Clear the active task for this session/agent scope.
    */
   clearActiveTodo(): void {
     this.activeTodoId = null;

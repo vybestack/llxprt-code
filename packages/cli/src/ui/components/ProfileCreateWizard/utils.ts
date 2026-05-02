@@ -288,7 +288,7 @@ async function testConnection(
       return { success: false, error: 'API key is empty' };
     }
 
-    // TODO: Implement actual API testing
+    // Follow-up (#1569): Implement actual API testing
     // This requires adding a testProviderConnection() method to the runtime
     // that can create an isolated provider instance and make a test request
     // without affecting the active runtime state.

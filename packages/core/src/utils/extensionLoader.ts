@@ -91,7 +91,7 @@ export abstract class ExtensionLoader {
       // Note: Context files are loaded only once all extensions are done
       // loading/unloading to reduce churn, see the `maybeRefreshMemory` call
       // below.
-      // TODO: Move all extension features here, including at least:
+      // Follow-up (#1569): Move all extension features here, including at least:
       // - custom command loading
     } finally {
       this.startCompletedCount++;
@@ -186,7 +186,7 @@ export abstract class ExtensionLoader {
       // Note: Context files are loaded only once all extensions are done
       // loading/unloading to reduce churn, see the `maybeRefreshMemory` call
       // below.
-      // TODO: Remove all extension features here, including at least:
+      // Follow-up (#1569): Remove all extension features here, including at least:
       // - custom commands
     } finally {
       this.stopCompletedCount++;

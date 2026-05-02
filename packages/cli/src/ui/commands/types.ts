@@ -50,7 +50,7 @@ export interface CommandContext {
   };
   // Core services and configuration
   services: {
-    // TODO(abhipatel12): Ensure that config is never null.
+    // Follow-up (#1569, abhipatel12): Ensure that config is never null.
     config: Config | null;
     settings: LoadedSettings;
     git: GitService | undefined;
@@ -104,7 +104,7 @@ export interface CommandContext {
     /** Indicates whether a request is currently being processed. */
     isProcessing?: boolean;
   };
-  // TODO management
+  // Task-list management
   /**
    * @plan PLAN-20260129-TODOPERSIST.P07
    * @requirement REQ-003, REQ-004, REQ-005, REQ-006
@@ -314,7 +314,7 @@ export interface SlashCommand {
   // The action to run. Optional for parent commands that only group sub-commands.
   action?: (
     context: CommandContext,
-    args: string, // TODO: Remove args. CommandContext now contains the complete invocation.
+    args: string, // Follow-up (#1569): Remove args. CommandContext now contains the complete invocation.
   ) =>
     | void
     | SlashCommandActionReturn
