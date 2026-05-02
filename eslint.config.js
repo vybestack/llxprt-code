@@ -250,6 +250,8 @@ export default tseslint.config(
         ),
       ),
       'sonarjs/cognitive-complexity': ['warn', 30],
+      'sonarjs/todo-tag': 'error',
+
       'sonarjs/function-return-type': 'off',
       'sonarjs/no-wildcard-import': 'off',
       'sonarjs/file-header': 'off',
@@ -600,21 +602,6 @@ export default tseslint.config(
     },
   },
   // ============================================================================
-  // End Issue #1569 C5D
-  // ============================================================================
-  // Issue #1569: Batch S6A - sonarjs/todo-tag enforcement
-  // ============================================================================
-  // Enforce no TODO/FIXME/XXX/HACK comments in production code.
-  // These tags indicate incomplete work that should be tracked properly.
-  {
-    files: [
-      'packages/a2a-server/src/config/config.ts',
-      'packages/a2a-server/src/agent/task.ts',
-    ],
-    rules: {
-      'sonarjs/todo-tag': 'error',
-    },
-  },
   // ============================================================================
   // End Issue #1569 S6A
   // ============================================================================
