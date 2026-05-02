@@ -62,8 +62,8 @@ export class FileCommandLoader implements ICommandLoader {
   private readonly isTrustedFolder: boolean;
 
   constructor(private readonly config: Config | null) {
-    this.folderTrustEnabled = !!config?.getFolderTrust();
-    this.isTrustedFolder = !!config?.isTrustedFolder();
+    this.folderTrustEnabled = config?.getFolderTrust() === true;
+    this.isTrustedFolder = config?.isTrustedFolder() === true;
     this.projectRoot = config?.getProjectRoot() ?? process.cwd();
   }
 

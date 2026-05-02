@@ -146,7 +146,7 @@ export function useVim(buffer: TextBuffer, onSubmit?: (value: string) => void) {
 
   // Helper functions using the reducer state
   const getCurrentCount = useCallback(
-    () => state.count || DEFAULT_COUNT,
+    () => (state.count > 0 ? state.count : DEFAULT_COUNT),
     [state.count],
   );
 
@@ -310,8 +310,7 @@ export function useVim(buffer: TextBuffer, onSubmit?: (value: string) => void) {
       ctrl: key.ctrl || false,
       meta: key.meta || false,
       shift: key.shift || false,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean flag should fall back to false
-      insertable: key.insertable || false,
+      insertable: key.insertable === true,
     }),
     [],
   );

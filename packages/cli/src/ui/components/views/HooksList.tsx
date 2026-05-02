@@ -71,10 +71,10 @@ export const HooksList: React.FC<HooksListProps> = ({ hooks }) => {
               if (entry.matcher) {
                 details.push(`matcher: ${entry.matcher}`);
               }
-              if (entry.sequential) {
+              if (entry.sequential === true) {
                 details.push('sequential');
               }
-              if (entry.config.timeout) {
+              if (entry.config.timeout != null && entry.config.timeout > 0) {
                 details.push(`timeout: ${entry.config.timeout}ms`);
               }
 

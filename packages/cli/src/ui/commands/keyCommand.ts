@@ -111,7 +111,7 @@ async function handleSave(
       }
 
       // Interactive: prompt confirmation via confirm_action (R13.2)
-      if (!context.overwriteConfirmed) {
+      if (context.overwriteConfirmed !== true) {
         return {
           type: 'confirm_action',
           prompt: `Key '${name}' already exists. Overwrite?`,
@@ -368,7 +368,7 @@ async function handleDelete(
     }
 
     // Prompt for confirmation (R17.1)
-    if (!context.overwriteConfirmed) {
+    if (context.overwriteConfirmed !== true) {
       return {
         type: 'confirm_action',
         prompt: `Delete key '${name}'?`,

@@ -129,7 +129,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       const previousProvider =
         forcePreviousProvider ?? sessionState.lastProvider;
       const providerChanged =
-        currentProviderName && currentProviderName !== previousProvider;
+        currentProviderName != null && currentProviderName !== previousProvider;
       const paymentModeChanged =
         newPaymentMode !== sessionState.isPaidMode &&
         newPaymentMode !== undefined;

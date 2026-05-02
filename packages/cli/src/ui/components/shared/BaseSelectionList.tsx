@@ -115,12 +115,12 @@ export function BaseSelectionList<
         if (isSelected) {
           titleColor = theme.status.success;
           numberColor = theme.status.success;
-        } else if (item.disabled) {
+        } else if (item.disabled === true) {
           titleColor = theme.text.secondary;
           numberColor = theme.text.secondary;
         }
 
-        if (!isFocused && !item.disabled) {
+        if (!isFocused && item.disabled !== true) {
           numberColor = theme.text.secondary;
         }
 

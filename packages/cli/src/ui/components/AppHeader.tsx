@@ -36,8 +36,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   return (
     <Box flexDirection="column">
-      {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for boolean flags (hide banner if either condition is true) */}
-      {!(settings.merged.ui.hideBanner || config.getScreenReader()) && (
+      {!(
+        settings.merged.ui.hideBanner === true || config.getScreenReader()
+      ) && (
         <Header
           terminalWidth={terminalWidth}
           version={version}
@@ -47,8 +48,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       {bannerText && (
         <Text color={SemanticColors.text.primary}>{bannerText}</Text>
       )}
-      {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for boolean flags (hide tips if either condition is true) */}
-      {!(settings.merged.ui.hideTips || config.getScreenReader()) && (
+      {!(settings.merged.ui.hideTips === true || config.getScreenReader()) && (
         <Tips config={config} />
       )}
     </Box>

@@ -576,7 +576,7 @@ export function validateCustomTheme(customTheme: Partial<CustomTheme>): {
   ];
 
   for (const field of requiredFields) {
-    if (!customTheme[field]) {
+    if (customTheme[field] == null || customTheme[field] === '') {
       return {
         isValid: false,
         error: `Missing required field: ${field}`,
@@ -587,7 +587,7 @@ export function validateCustomTheme(customTheme: Partial<CustomTheme>): {
   const missingFields: string[] = [];
 
   for (const field of recommendedFields) {
-    if (!customTheme[field]) {
+    if (customTheme[field] == null || customTheme[field] === '') {
       missingFields.push(field);
     }
   }

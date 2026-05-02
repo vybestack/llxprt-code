@@ -364,7 +364,7 @@ export const diagnosticsCommand: SlashCommand = {
 
       diagnostics.push('\n## Telemetry');
       diagnostics.push(
-        `- Usage Statistics: ${merged.ui.usageStatisticsEnabled ? 'Enabled' : 'Disabled'}`,
+        `- Usage Statistics: ${merged.ui.usageStatisticsEnabled === true ? 'Enabled' : 'Disabled'}`,
       );
 
       diagnostics.push('\n## OAuth Tokens');
@@ -456,7 +456,11 @@ export const diagnosticsCommand: SlashCommand = {
                   `  - Status: ${isExpired ? 'Expired' : 'Valid'}`,
                 );
 
-                if (token.expiresAt) {
+                if (
+                  token.expiresAt != null &&
+                  token.expiresAt !== 0 &&
+                  !Number.isNaN(token.expiresAt)
+                ) {
                   const expiryDate = new Date(token.expiresAt);
                   const timeUntilExpiry = Math.max(
                     0,

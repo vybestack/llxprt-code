@@ -43,10 +43,10 @@ export const PermissionsModifyTrustDialog: React.FC<
   // Determine the display trust level text
   const getTrustLevelDisplay = useCallback(
     (level: TrustLevel | undefined): string => {
-      if (isIdeTrusted) {
+      if (isIdeTrusted === true) {
         return 'Trusted (via IDE)';
       }
-      if (isParentTrusted && !level) {
+      if (isParentTrusted === true && level == null) {
         return 'Trusted (via parent folder)';
       }
       switch (level) {
@@ -88,7 +88,7 @@ export const PermissionsModifyTrustDialog: React.FC<
 
   // Find initial index based on current trust level
   const initialIndex = useMemo(() => {
-    if (!currentTrustLevel) return 0;
+    if (currentTrustLevel == null) return 0;
     const index = options.findIndex((o) => o.value === currentTrustLevel);
     return index >= 0 ? index : 0;
   }, [currentTrustLevel, options]);

@@ -118,7 +118,12 @@ export const TextInput: React.FC<TextInputProps> = ({
       // Only block ctrl/meta combinations (except paste which terminals handle)
       if (key.sequence && !key.ctrl && !key.meta) {
         // Allow paste (Ctrl+V sends the pasted content as sequence)
-        if (maxLength && value.length >= maxLength) {
+        if (
+          maxLength != null &&
+          maxLength > 0 &&
+          !Number.isNaN(maxLength) &&
+          value.length >= maxLength
+        ) {
           return true; // Block input if at max length
         }
 
@@ -141,8 +146,8 @@ export const TextInput: React.FC<TextInputProps> = ({
   // Display value (masked or plain)
   const displayValue = mask && value ? '*'.repeat(value.length) : value;
 
-  // Show placeholder if empty
-  const showPlaceholder = !value && placeholder;
+  // Show placeholder if empty (placeholder has default value of '', so always defined)
+  const showPlaceholder = value === '' && placeholder !== '';
 
   // Build display text with cursor
   const beforeCursor = displayValue.slice(0, cursorPosition);

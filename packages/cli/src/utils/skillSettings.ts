@@ -47,7 +47,7 @@ export function enableSkill(
     if (isLoadableSettingScope(scope)) {
       const scopePath = settings.forScope(scope).path;
       const scopeDisabled = settings.forScope(scope).settings.skills?.disabled;
-      if (scopeDisabled?.includes(skillName)) {
+      if (scopeDisabled?.includes(skillName) === true) {
         foundInDisabledScopes.push({ scope, path: scopePath });
       } else {
         alreadyEnabledScopes.push({ scope, path: scopePath });
@@ -130,7 +130,7 @@ export function disableSkill(
   if (isLoadableSettingScope(otherScope)) {
     const otherScopeDisabled =
       settings.forScope(otherScope).settings.skills?.disabled;
-    if (otherScopeDisabled?.includes(skillName)) {
+    if (otherScopeDisabled?.includes(skillName) === true) {
       alreadyDisabledInOther.push({
         scope: otherScope,
         path: settings.forScope(otherScope).path,

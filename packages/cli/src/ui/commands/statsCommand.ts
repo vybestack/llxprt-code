@@ -410,7 +410,7 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
   const now = new Date();
   const { sessionStartTime } = context.session.stats;
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Runtime stats may be incomplete before session initialization.
-  if (!sessionStartTime) {
+  if (sessionStartTime == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -580,9 +580,12 @@ export const statsCommand: SlashCommand = {
               const stats = await tokenStore.getBucketStats(provider, bucket);
 
               if (stats) {
-                const lastUsedStr = stats.lastUsed
-                  ? new Date(stats.lastUsed).toISOString().split('T')[0]
-                  : 'Never';
+                const lastUsedStr =
+                  stats.lastUsed != null &&
+                  stats.lastUsed !== 0 &&
+                  !Number.isNaN(stats.lastUsed)
+                    ? new Date(stats.lastUsed).toISOString().split('T')[0]
+                    : 'Never';
 
                 output.push(`- ${bucket}:`);
                 output.push(

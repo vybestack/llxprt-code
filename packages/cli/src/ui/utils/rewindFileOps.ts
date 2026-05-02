@@ -199,7 +199,7 @@ export async function revertFileChanges(
             }
             // 1. Exact Match: Safe to revert directly
             if (currentContent === newContent) {
-              if (!isNewFile) {
+              if (isNewFile !== true) {
                 await fs.writeFile(filePath, originalContent ?? '');
               } else {
                 // Original content was null (new file), so we delete the file
@@ -221,7 +221,7 @@ export async function revertFileChanges(
               const patchedContent = Diff.applyPatch(currentContent, undoPatch);
 
               if (typeof patchedContent === 'string') {
-                if (patchedContent === '' && isNewFile) {
+                if (patchedContent === '' && isNewFile === true) {
                   // If the result is empty and the file didn't exist originally, delete it
                   await fs.unlink(filePath);
                 } else {

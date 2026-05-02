@@ -140,11 +140,11 @@ export function handleAutoUpdate(
   projectRoot: string,
   spawnFn: typeof spawn = spawnWrapper,
 ) {
-  if (!info) {
+  if (info == null) {
     return;
   }
 
-  if (!settings.merged.enableAutoUpdateNotification) {
+  if (settings.merged.enableAutoUpdateNotification !== true) {
     return;
   }
 
@@ -170,7 +170,10 @@ export function handleAutoUpdate(
     message: combinedMessage,
   });
 
-  if (!installationInfo.updateCommand || !settings.merged.enableAutoUpdate) {
+  if (
+    installationInfo.updateCommand == null ||
+    settings.merged.enableAutoUpdate !== true
+  ) {
     return;
   }
 

@@ -41,7 +41,7 @@ export const Notifications = ({
   const isScreenReaderEnabled = useIsScreenReaderEnabled();
   const showStartupWarnings = startupWarnings.length > 0;
   const showInitError =
-    initError && streamingState !== StreamingState.Responding;
+    initError != null && streamingState !== StreamingState.Responding;
 
   const [hasSeenScreenReaderNudge, setHasSeenScreenReaderNudge] = useState<
     boolean | undefined
@@ -83,7 +83,7 @@ export const Notifications = ({
   if (
     !showStartupWarnings &&
     !showInitError &&
-    !updateInfo &&
+    updateInfo == null &&
     !showScreenReaderNudge
   ) {
     return null;

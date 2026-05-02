@@ -120,7 +120,7 @@ export class McpPromptLoader implements ICommandLoader {
               }
               const result = await prompt.invoke(promptInputs);
 
-              if (result.error) {
+              if (result.error != null) {
                 return {
                   type: 'message',
                   messageType: 'error',
@@ -267,7 +267,8 @@ export class McpPromptLoader implements ICommandLoader {
       }
     }
     const unfilledArgs = promptArgs.filter(
-      (arg) => arg.required === true && !promptInputs[arg.name],
+      // eslint-disable-next-line no-extra-boolean-cast -- preserve old truthiness behavior for argument values
+      (arg) => arg.required === true && !Boolean(promptInputs[arg.name]),
     );
 
     if (unfilledArgs.length === 1) {

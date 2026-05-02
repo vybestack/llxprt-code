@@ -246,7 +246,7 @@ function useLayoutContext(p: AppLayoutParams) {
   const branchName = useGitBranchName(config.getTargetDir());
   const contextFileNames = useMemo(() => {
     const fromSettings = settings.merged.ui.contextFileName;
-    if (fromSettings)
+    if (fromSettings != null && fromSettings !== '')
       return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
     return getAllLlxprtMdFilenames();
   }, [settings.merged.ui.contextFileName]);
@@ -254,7 +254,7 @@ function useLayoutContext(p: AppLayoutParams) {
   useInitialPromptSubmit({
     initialPrompt,
     submitQuery,
-    geminiClientPresent: !!config.getGeminiClient(),
+    geminiClientPresent: Boolean(config.getGeminiClient()),
     blockedByDialogs: {
       isAuthDialogOpen,
       isThemeDialogOpen,

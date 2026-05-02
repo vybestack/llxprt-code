@@ -535,7 +535,7 @@ export class AuthCommandExecutor {
           ? 'authenticated'
           : 'not authenticated';
 
-        if (bucket.authenticated && bucket.expiry) {
+        if (bucket.authenticated && bucket.expiry != null) {
           const expiryDate = new Date(bucket.expiry * 1000);
           const now = Date.now() / 1000;
           const isExpired = bucket.expiry <= now;
@@ -631,7 +631,7 @@ export class AuthCommandExecutor {
       return statuses.map((status) => {
         const indicator = status.authenticated ? '[✓]' : '[]';
         const authInfo = status.authenticated
-          ? `authenticated${status.expiresIn ? ` (expires in ${Math.floor(status.expiresIn / 60)}m)` : ''}`
+          ? `authenticated${status.expiresIn != null ? ` (expires in ${Math.floor(status.expiresIn / 60)}m)` : ''}`
           : 'not authenticated';
         const oauthStatus =
           status.oauthEnabled !== undefined

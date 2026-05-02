@@ -258,7 +258,7 @@ export const useShellCommandProcessor = (
           );
 
           executionPid = pid;
-          if (pid) {
+          if (pid != null && pid > 0) {
             setActiveShellPtyId(pid);
             setPendingHistoryItem((prevItem) => {
               const nextItem: HistoryItemWithoutId =
@@ -307,7 +307,7 @@ export const useShellCommandProcessor = (
               } else if (result.aborted) {
                 finalStatus = ToolCallStatus.Canceled;
                 finalOutput = `Command was cancelled.\n${finalOutput}`;
-              } else if (result.signal) {
+              } else if (result.signal != null) {
                 finalStatus = ToolCallStatus.Error;
                 finalOutput = `Command terminated by signal: ${result.signal}.\n${finalOutput}`;
               } else if (result.exitCode !== 0) {

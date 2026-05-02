@@ -81,9 +81,9 @@ export function useInputHandling({
   // is the programmatic cancel path that guards against tool execution.
   const handleUserCancel = useCallback(
     (shouldRestorePrompt?: boolean) => {
-      if (shouldRestorePrompt) {
+      if (shouldRestorePrompt === true) {
         const lastUserMessage = lastSubmittedPromptRef.current;
-        if (lastUserMessage) {
+        if (lastUserMessage != null) {
           buffer.setText(lastUserMessage);
         }
       } else {
@@ -103,9 +103,9 @@ export function useInputHandling({
         return;
       }
 
-      if (shouldRestorePrompt) {
+      if (shouldRestorePrompt === true) {
         const lastUserMessage = lastSubmittedPromptRef.current;
-        if (lastUserMessage) {
+        if (lastUserMessage != null) {
           buffer.setText(lastUserMessage);
         }
       } else {
