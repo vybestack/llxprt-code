@@ -56,8 +56,8 @@ export async function getRipgrepPath(): Promise<string> {
     if (fs.existsSync(rgPath)) {
       return rgPath;
     }
-  } catch (_error) {
-    // Package not available or binary doesn't exist, continue to next option
+  } catch {
+    // Package not available or binary doesn't exist; try next option.
   }
 
   // 2. Try system installation
@@ -68,8 +68,8 @@ export async function getRipgrepPath(): Promise<string> {
     if (fs.existsSync(systemPath)) {
       return systemPath;
     }
-  } catch (_error) {
-    // System ripgrep not found
+  } catch {
+    // System ripgrep not found; continue to next option.
   }
 
   // 3. Windows specific locations
@@ -177,8 +177,8 @@ export function ensureWindowsShortcut(source: string, target: string): boolean {
       try {
         fs.linkSync(source, target);
         return true;
-      } catch (_linkError) {
-        // If hard link fails (common on Windows without admin), copy the binary
+      } catch {
+        // Hard link failed (common on Windows without admin); copy instead.
         fs.copyFileSync(source, target);
         return true;
       }

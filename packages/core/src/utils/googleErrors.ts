@@ -140,7 +140,7 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
   if (typeof errorObj === 'string') {
     try {
       errorObj = JSON.parse(errorObj);
-    } catch (_) {
+    } catch {
       // Not a JSON string, can't parse.
       return null;
     }
@@ -183,8 +183,8 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
         // The message is a JSON string, but not a nested error object.
         break;
       }
-    } catch (_error) {
-      // It wasn't a JSON string, so we've drilled down as far as we can.
+    } catch {
+      // Not a JSON string; drilling complete.
       break;
     }
   }
@@ -256,7 +256,7 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
     if (typeof data === 'string') {
       try {
         data = JSON.parse(data);
-      } catch (_) {
+      } catch {
         // Not a JSON string, can't parse.
       }
     }
@@ -304,7 +304,7 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
     if (typeof data === 'string') {
       try {
         data = JSON.parse(data);
-      } catch (_) {
+      } catch {
         // Not a JSON string, can't parse.
         const stringData = String(data);
 
@@ -314,8 +314,8 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
         if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
           try {
             data = JSON.parse(stringData.substring(firstBrace, lastBrace + 1));
-          } catch (__) {
-            // Still failed
+          } catch {
+            // Substring also not valid JSON.
           }
         }
       }

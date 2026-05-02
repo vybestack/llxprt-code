@@ -198,8 +198,8 @@ export function parseAndFormatApiError(
           if (isApiError(nestedError)) {
             finalMessage = nestedError.error.message;
           }
-        } catch (_e) {
-          // It's not a nested JSON error, so we just use the message as is.
+        } catch {
+          // Not nested JSON; use message as-is.
         }
         const statusSuffix = buildStatusSuffix(
           typeof parsedError.error.code === 'number'
@@ -215,8 +215,8 @@ export function parseAndFormatApiError(
         }
         return text;
       }
-    } catch (_e) {
-      // Not a valid JSON, fall through and return the original message.
+    } catch {
+      // Not valid JSON; fall through to original message.
     }
     return `[API Error: ${error}]`;
   }

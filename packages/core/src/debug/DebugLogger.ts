@@ -124,7 +124,8 @@ export class DebugLogger {
       // Line 32
       try {
         message = messageOrFn(); // Line 34
-      } catch (_error) {
+      } catch {
+        // Log function threw; use fallback message.
         message = '[Error evaluating log function]'; // Line 36
       }
     } else {
@@ -172,7 +173,8 @@ export class DebugLogger {
     if (typeof messageOrFn === 'function') {
       try {
         message = messageOrFn();
-      } catch (_error) {
+      } catch {
+        // Log function threw; use fallback message.
         message = '[Error evaluating log function]';
       }
     } else {
@@ -220,7 +222,8 @@ export class DebugLogger {
     if (typeof messageOrFn === 'function') {
       try {
         message = messageOrFn();
-      } catch (_error) {
+      } catch {
+        // Log function threw; use fallback message.
         message = '[Error evaluating log function]';
       }
     } else {

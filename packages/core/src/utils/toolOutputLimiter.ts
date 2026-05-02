@@ -42,7 +42,8 @@ function getEncoder(): ReturnType<typeof encoding_for_model> | null {
           cachedEncoder?.free();
         });
       }
-    } catch (_error) {
+    } catch {
+      // Encoder initialization failed; will use fallback.
       encoderInitFailed = true;
       return null;
     }
@@ -59,7 +60,8 @@ function encodeText(text: string): Uint32Array | null {
 
   try {
     return encoder.encode(text);
-  } catch (_error) {
+  } catch {
+    // Encoding failed; will use fallback.
     return null;
   }
 }

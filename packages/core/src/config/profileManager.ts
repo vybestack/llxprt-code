@@ -212,8 +212,8 @@ export class ProfileManager {
         .map((file) => file.slice(0, -5)); // Remove .json extension
 
       return profileNames;
-    } catch (_error) {
-      // If directory doesn't exist or other error, return empty array
+    } catch {
+      // Directory doesn't exist or error; return empty array.
       return [];
     }
   }
@@ -245,7 +245,8 @@ export class ProfileManager {
     try {
       await fs.access(filePath);
       return true;
-    } catch (_error) {
+    } catch {
+      // Profile doesn't exist.
       return false;
     }
   }

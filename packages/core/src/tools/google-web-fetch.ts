@@ -83,8 +83,8 @@ export function parsePrompt(text: string): {
             `Unsupported protocol in URL: "${cleaned}". Only http and https are supported.`,
           );
         }
-      } catch (_) {
-        // new URL() threw, so it's malformed according to WHATWG standard
+      } catch {
+        // Malformed URL according to WHATWG standard.
         errors.push(`Malformed URL detected: "${cleaned}".`);
       }
     }
@@ -156,8 +156,8 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
           .replace('github.com', 'raw.githubusercontent.com')
           .replace('/blob/', '/');
       }
-    } catch (_) {
-      // Ignore invalid URLs, they will be caught by fetchWithTimeout
+    } catch {
+      // Invalid URL; fetchWithTimeout will handle the error.
     }
 
     try {
@@ -253,8 +253,8 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
             .replace('github.com', 'raw.githubusercontent.com')
             .replace('/blob/', '/');
         }
-      } catch (_) {
-        // Ignore invalid URLs
+      } catch {
+        // Invalid URL; return as-is for error handling downstream.
       }
       return url;
     });

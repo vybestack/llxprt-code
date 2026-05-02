@@ -512,7 +512,7 @@ export class GeminiProvider extends BaseProvider {
     try {
       const result = await this.determineBestAuth();
       authMode = result.authMode;
-    } catch (_e) {
+    } catch {
       // No auth configured yet (pre-onboarding) - return full model list
       // including OAuth models so user can see all options when selecting
       return oauthModels;
@@ -559,8 +559,8 @@ export class GeminiProvider extends BaseProvider {
               }));
             }
           }
-        } catch (_error) {
-          // Fall through to default models
+        } catch {
+          // API request failed; fall through to default models.
         }
       }
     }

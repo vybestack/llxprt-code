@@ -258,8 +258,8 @@ async function buildPromptContext(
     if (toolPromptsSetting !== undefined) {
       enableToolPrompts = toolPromptsSetting;
     }
-  } catch (_error) {
-    // If we can't get settings, use default
+  } catch {
+    // Settings unavailable; use defaults.
   }
 
   // Generate folder structure for the current working directory
@@ -360,9 +360,8 @@ async function buildPromptContext(
       if (activeProvider) {
         resolvedProvider = activeProvider;
       }
-    } catch (_error) {
-      // If we can't get settings (e.g., during tests), use default
-      // Don't log in production to avoid noise
+    } catch {
+      // Settings unavailable (e.g., during tests); use default provider.
     }
   }
 
@@ -388,8 +387,8 @@ async function buildPromptContext(
         const profileValue = settingsService.get('subagents.async.enabled');
         profileAsyncEnabled = profileValue !== false;
       }
-    } catch (_error) {
-      // If we can't get settings, default to enabled
+    } catch {
+      // Settings unavailable; default to enabled.
       asyncSubagentsEnabled = asyncSubagentsEnabled ?? true;
       profileAsyncEnabled = profileAsyncEnabled ?? true;
     }

@@ -196,26 +196,26 @@ function safePtyDestroy(ptyProcess: IPty): void {
     } else {
       ptyProcess.kill();
     }
-  } catch (_) {
-    /* ignore – PTY may already be exited */
+  } catch {
+    // PTY may already be exited; cleanup is best-effort.
   }
 }
 
 function cleanupPtyEntryResources(entry: ActivePty): void {
   try {
     entry.onDataDisposable?.dispose();
-  } catch (_) {
-    /* ignore */
+  } catch {
+    // Dispose may fail if PTY already exited.
   }
   try {
     entry.onExitDisposable?.dispose();
-  } catch (_) {
-    /* ignore */
+  } catch {
+    // Dispose may fail if PTY already exited.
   }
   try {
     entry.onScrollDisposable?.dispose();
-  } catch (_) {
-    /* ignore */
+  } catch {
+    // Dispose may fail if PTY already exited.
   }
   if (entry.terminationTimeout) {
     clearTimeout(entry.terminationTimeout);
@@ -230,8 +230,8 @@ function cleanupPtyEntryResources(entry: ActivePty): void {
     if (typeof entry.headlessTerminal.dispose === 'function') {
       entry.headlessTerminal.dispose();
     }
-  } catch (_) {
-    /* ignore */
+  } catch {
+    // Terminal may already be disposed.
   }
 }
 
@@ -270,8 +270,8 @@ export class ShellExecutionService {
             shellExecutionConfig,
             ptyInfo,
           );
-        } catch (_e) {
-          // Fallback to child_process
+        } catch {
+          // PTY initialization failed; fallback to child_process.
         }
       }
     }
@@ -410,7 +410,8 @@ export class ShellExecutionService {
                       if (!exited) {
                         process.kill(-pid, 'SIGKILL');
                       }
-                    } catch (_e) {
+                    } catch {
+                      // Process may have exited during race.
                       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive check for race condition: process may exit during await
                       if (!exited) child.kill('SIGKILL');
                     }
@@ -557,7 +558,8 @@ export class ShellExecutionService {
                   if (!exited) {
                     process.kill(-child.pid, 'SIGKILL');
                   }
-                } catch (_e) {
+                } catch {
+                  // Process may have exited during race.
                   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive check for race condition: process may exit during await
                   if (!exited) child.kill('SIGKILL');
                 }
@@ -937,7 +939,8 @@ export class ShellExecutionService {
                       if (!exited) {
                         process.kill(-pid, 'SIGKILL');
                       }
-                    } catch (_e) {
+                    } catch {
+                      // Process may have exited during race.
                       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                       if (!exited) ptyProcess.kill('SIGKILL');
                     }
@@ -1088,13 +1091,13 @@ export class ShellExecutionService {
 
               try {
                 process.kill(-pid, 'SIGTERM');
-              } catch (_e) {
-                // ignore
+              } catch {
+                // Process may already be terminated.
               }
               try {
                 ptyProcess.kill('SIGTERM');
-              } catch (_e) {
-                // ignore
+              } catch {
+                // PTY may already be terminated.
               }
 
               await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
@@ -1105,13 +1108,13 @@ export class ShellExecutionService {
 
               try {
                 process.kill(-pid, 'SIGKILL');
-              } catch (_e) {
-                // ignore
+              } catch {
+                // Process may already be terminated.
               }
               try {
                 ptyProcess.kill('SIGKILL');
-              } catch (_e) {
-                // ignore
+              } catch {
+                // PTY may already be terminated.
               }
 
               abortFinalizeTimeout = setTimeout(() => {
@@ -1187,7 +1190,8 @@ export class ShellExecutionService {
       // process.kill with signal 0 is a way to check for the existence of a process.
       // It doesn't actually send a signal.
       return process.kill(pid, 0);
-    } catch (_) {
+    } catch {
+      // Process does not exist.
       return false;
     }
   }
@@ -1238,14 +1242,14 @@ export class ShellExecutionService {
 
     try {
       process.kill(-pid, 'SIGTERM');
-    } catch (_e) {
-      // ignore
+    } catch {
+      // Process may already be terminated.
     }
 
     try {
       activePty.ptyProcess.kill('SIGTERM');
-    } catch (_e) {
-      // ignore
+    } catch {
+      // PTY may already be terminated.
     }
 
     activePty.terminationTimeout = setTimeout(() => {
@@ -1254,13 +1258,13 @@ export class ShellExecutionService {
       }
       try {
         process.kill(-pid, 'SIGKILL');
-      } catch (_e) {
-        // ignore
+      } catch {
+        // Process may already be terminated.
       }
       try {
         activePty.ptyProcess.kill('SIGKILL');
-      } catch (_e) {
-        // ignore
+      } catch {
+        // PTY may already be terminated.
       }
     }, SIGKILL_TIMEOUT_MS);
   }

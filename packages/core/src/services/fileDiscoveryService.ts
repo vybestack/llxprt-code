@@ -166,7 +166,8 @@ export class FileDiscoveryService {
     if (path.isAbsolute(filePath)) {
       try {
         return fs.realpathSync(filePath);
-      } catch (_error) {
+      } catch {
+        // Path doesn't exist; return normalized path.
         return path.normalize(filePath);
       }
     }
@@ -174,7 +175,8 @@ export class FileDiscoveryService {
     const resolved = path.resolve(this.projectRoot, filePath);
     try {
       return fs.realpathSync(resolved);
-    } catch (_error) {
+    } catch {
+      // Path doesn't exist; return normalized path.
       return path.normalize(resolved);
     }
   }
@@ -185,7 +187,8 @@ export class FileDiscoveryService {
       return content
         .split('\n')
         .filter((line) => line.trim() !== '' && !line.startsWith('#'));
-    } catch (_error) {
+    } catch {
+      // File doesn't exist or can't be read; return empty patterns.
       return [];
     }
   }
@@ -193,7 +196,8 @@ export class FileDiscoveryService {
   private tryRealpath(p: string): string {
     try {
       return fs.realpathSync(p);
-    } catch (_error) {
+    } catch {
+      // Path doesn't exist; return normalized path.
       return path.normalize(p);
     }
   }

@@ -37,7 +37,8 @@ export class GitIgnoreParser implements GitIgnoreFilter {
     let content: string;
     try {
       content = fs.readFileSync(patternsFilePath, 'utf-8');
-    } catch (_error) {
+    } catch {
+      // File not readable; return empty ignore.
       return ignore();
     }
 
@@ -217,7 +218,8 @@ export class GitIgnoreParser implements GitIgnoreFilter {
       ig.add(this.processedExtraPatterns);
 
       return ig.ignores(normalizedPath);
-    } catch (_error) {
+    } catch {
+      // Path resolution failed; not ignored.
       return false;
     }
   }

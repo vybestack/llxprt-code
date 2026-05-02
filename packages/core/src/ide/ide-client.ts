@@ -59,9 +59,8 @@ export enum IDEConnectionStatus {
 function getRealPath(path: string): string {
   try {
     return fs.realpathSync(path);
-  } catch (_e) {
-    // If realpathSync fails, it might be because the path doesn't exist.
-    // In that case, we can fall back to the original path.
+  } catch {
+    // Path doesn't exist; return original path.
     return path;
   }
 }
@@ -403,8 +402,8 @@ export class IdeClient {
           ideInfo: configData?.ideInfo,
         };
       }
-    } catch (_) {
-      // Fall through to try old location
+    } catch {
+      // Port file in new location not found; try old location.
     }
 
     // For backwards compatibility, try old port file location
@@ -421,7 +420,8 @@ export class IdeClient {
         authToken: configData?.authToken,
         ideInfo: configData?.ideInfo,
       };
-    } catch (_) {
+    } catch {
+      // No port file found.
       return {};
     }
   }
@@ -557,7 +557,8 @@ export class IdeClient {
       this.registerClientHandlers();
       this.setState(IDEConnectionStatus.Connected);
       return true;
-    } catch (_error) {
+    } catch {
+      // Connection failed; cleanup transport if created.
       if (transport) {
         try {
           await transport.close();

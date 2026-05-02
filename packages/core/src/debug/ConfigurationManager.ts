@@ -114,9 +114,8 @@ export class ConfigurationManager {
           // Silently ignore — can't use debugLogger here (circular dep)
         }
       }
-    } catch (_error) {
-      // Silently skip if we can't determine home directory (e.g., in tests)
-      // This allows the debug system to work with default config
+    } catch {
+      // Home directory unavailable (e.g., in tests); use default config.
     }
   }
 
@@ -139,8 +138,8 @@ export class ConfigurationManager {
           // Silently ignore — can't use debugLogger here (circular dep)
         }
       }
-    } catch (_error) {
-      // Silently skip if we can't determine working directory (e.g., in tests)
+    } catch {
+      // Working directory unavailable (e.g., in tests); use default config.
     }
   }
 
@@ -215,7 +214,7 @@ export class ConfigurationManager {
       this.userConfig = existing.debug as Partial<DebugSettings>;
       this.ephemeralConfig = null;
       this.mergeConfigurations();
-    } catch (_error) {
+    } catch {
       throw new Error('Failed to persist configuration');
     }
   }

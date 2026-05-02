@@ -37,7 +37,8 @@ export class RepositoryContextProvider {
         branch: branch || 'unknown',
         rootPath,
       };
-    } catch (_error) {
+    } catch {
+      // Git info unavailable; not a git repo.
       return null;
     }
   }
@@ -81,8 +82,8 @@ export class RepositoryContextProvider {
       execGit(['log', `-n${limit}`, '--name-only', '--format=', '-z'])
         .split('\0')
         .forEach((f) => f && files.add(f));
-    } catch (_error) {
-      // Ignore errors, return what we have
+    } catch {
+      // Git command failed; return what we have.
     }
 
     // Filter existing files and convert to absolute paths

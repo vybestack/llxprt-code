@@ -49,7 +49,8 @@ async function getProcessTableWindows(): Promise<Map<number, ProcessInfo>> {
     let processes: RawProcessInfo | RawProcessInfo[];
     try {
       processes = JSON.parse(stdout);
-    } catch (_e) {
+    } catch {
+      // JSON parse failed; return empty map.
       return processMap;
     }
 
@@ -74,8 +75,8 @@ async function getProcessTableWindows(): Promise<Map<number, ProcessInfo>> {
         });
       }
     }
-  } catch (_e) {
-    // Fallback or error handling if PowerShell fails
+  } catch {
+    // PowerShell failed; return empty map.
   }
   return processMap;
 }
@@ -109,7 +110,8 @@ async function getProcessInfo(pid: number): Promise<{
       name: processName,
       command: fullCommand,
     };
-  } catch (_e) {
+  } catch {
+    // Process info unavailable; return defaults.
     return { parentPid: 0, name: '', command: '' };
   }
 }
