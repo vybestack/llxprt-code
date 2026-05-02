@@ -241,6 +241,7 @@ export class SchemaValidator {
    *  is null). Otherwise, returns a string describing the error.
    */
   static validate(schema: unknown | undefined, data: unknown): string | null {
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy no-schema behavior for malformed schemas.
     if (!schema) {
       return null;
     }
@@ -291,9 +292,11 @@ export class SchemaValidator {
     const validate = instance.compile(ajvSchema);
     const valid = validate(data);
 
-    if (!valid && validate.errors) {
+    // Check validation result - valid is boolean, errors may be undefined/null
+    if (valid === false && validate.errors != null && validate.errors.length > 0) {
       const formatPath = (path: string): string => {
-        if (!path) {
+        // Empty path should return 'params'
+        if (path === '') {
           return 'params';
         }
 
@@ -307,18 +310,32 @@ export class SchemaValidator {
       };
 
       const formattedErrors = validate.errors.map((err: ErrorObject) => {
-        /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty path strings should fall through to next option */
-        const path = (err as any).instancePath || (err as any).dataPath || '';
-        /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/prefer-nullish-coalescing */
-        const basePath = formatPath(path as string);
+        // Intentional falsy coalescing: empty path strings should fall through to next option
+        // instancePath and dataPath may be empty strings, '', null, or undefined
+        /* eslint-disable @typescript-eslint/no-explicit-any */
+        const instancePath = (err as any).instancePath;
+        const dataPath = (err as any).dataPath;
+        /* eslint-enable @typescript-eslint/no-explicit-any */
+        const path =
+          (typeof instancePath === 'string' && instancePath !== ''
+            ? instancePath
+            : null) ??
+          (typeof dataPath === 'string' && dataPath !== '' ? dataPath : null) ??
+          '';
+        const basePath = formatPath(path);
         const message = err.message ?? 'is invalid';
         return `${basePath} ${message}`;
       });
 
       const errorTextRaw = formattedErrors.join('; ');
-      let errorText =
-        errorTextRaw?.replace(/\bshould\b/gi, 'must') ?? errorTextRaw;
-      if (errorText) {
+      // Apply text replacements; nullish coalescing for optional chaining result
+      const replaced =
+        typeof errorTextRaw === 'string' && errorTextRaw !== ''
+          ? errorTextRaw.replace(/\bshould\b/gi, 'must')
+          : null;
+      let errorText = replaced ?? errorTextRaw;
+      // Only process non-empty error text
+      if (typeof errorText === 'string' && errorText !== '') {
         errorText = errorText.replace(
           /must NOT be shorter than (\d+) characters/gi,
           'must NOT have fewer than $1 characters',

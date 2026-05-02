@@ -558,10 +558,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
       tools: toolNamesForPrompt,
       includeSubagentDelegation,
       // config is optional, invocation is required - ephemerals is optional
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive config boundary for partial test/runtime configs.
-      interactionMode: options.config?.isInteractive?.()
-        ? 'interactive'
-        : 'non-interactive',
+      interactionMode:
+        options.config?.isInteractive() === true
+          ? 'interactive'
+          : 'non-interactive',
     });
 
     // Responses API input types: messages, function_call, function_call_output, reasoning
@@ -1013,11 +1013,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
       // Add reasoning.effort to request if set
       // Per Responses API, reasoning goes inside the 'reasoning' field
-      if (reasoningEffort && typeof reasoningEffort === 'string') {
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional conditional initialization
-        if (!request.reasoning) {
-          request.reasoning = {};
-        }
+      if (typeof reasoningEffort === 'string' && reasoningEffort !== '') {
+        // Intentional nullish coalescing: only set to {} if not already set
+        request.reasoning ??= {};
         (request.reasoning as { effort?: string }).effort = reasoningEffort;
         this.logger.debug(
           () => `Added reasoning.effort to request: ${reasoningEffort}`,
@@ -1028,14 +1026,12 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Add reasoning.summary to request if set and not 'none'
     // Per codex-rs implementation, the summary goes inside reasoning.summary
     if (
-      reasoningSummary &&
       typeof reasoningSummary === 'string' &&
+      reasoningSummary !== '' &&
       reasoningSummary !== 'none'
     ) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional conditional initialization
-      if (!request.reasoning) {
-        request.reasoning = {};
-      }
+      // Intentional nullish coalescing: only set to {} if not already set
+      request.reasoning ??= {};
       (request.reasoning as { summary?: string }).summary = reasoningSummary;
       this.logger.debug(
         () => `Added reasoning.summary to request: ${reasoningSummary}`,
@@ -1056,8 +1052,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive settings boundary for partial test/runtime options.
       options.settings?.get('text.verbosity');
     if (
-      textVerbosity &&
       typeof textVerbosity === 'string' &&
+      textVerbosity !== '' &&
       ['low', 'medium', 'high'].includes(textVerbosity.toLowerCase())
     ) {
       request.text = {

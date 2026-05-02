@@ -129,6 +129,7 @@ type ErrorShape = {
  * @returns A GoogleApiError object if the error matches, otherwise null.
  */
 export function parseGoogleApiError(error: unknown): GoogleApiError | null {
+  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy short-circuit for malformed error inputs.
   if (!error) {
     return null;
   }
@@ -169,7 +170,13 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
       const parsedMessage = JSON.parse(
         currentError.message.replace(/\u00A0/g, '').replace(/\n/g, ' '),
       );
-      if (parsedMessage.error) {
+      if (
+        typeof parsedMessage === 'object' &&
+        parsedMessage !== null &&
+        'error' in parsedMessage &&
+        parsedMessage.error !== undefined &&
+        parsedMessage.error !== null
+      ) {
         currentError = parsedMessage.error;
         depth++;
       } else {
@@ -190,11 +197,16 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
   const message = currentError.message;
   const errorDetails = currentError.details;
 
-  if (code && message) {
+  if (
+    typeof code === 'number' &&
+    !Number.isNaN(code) &&
+    typeof message === 'string' &&
+    message !== ''
+  ) {
     const details: GoogleApiErrorDetail[] = [];
     if (Array.isArray(errorDetails)) {
       for (const detail of errorDetails) {
-        if (detail && typeof detail === 'object') {
+        if (detail !== null && detail !== undefined && typeof detail === 'object') {
           const detailObj = detail as Record<string, unknown>;
           const typeKey = Object.keys(detailObj).find(
             (key) => key.trim() === '@type',
@@ -236,6 +248,8 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
   };
 
   let outerError: ErrorShape | undefined;
+  // External data boundary: gaxios error response data from Google API may have unexpected shapes at runtime
+  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy fallback for external response data.
   if (gaxiosError.response?.data) {
     let data = gaxiosError.response.data;
 
@@ -258,9 +272,12 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
     }
   }
 
-  if (!outerError) {
+  // External data boundary: outerError may be undefined after parsing attempts, and gaxiosError.error comes from external API
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (outerError === undefined || outerError === null) {
     // If the gaxios structure isn't there, check for a top-level `error` property.
-    if (gaxiosError.error) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (gaxiosError.error !== undefined && gaxiosError.error !== null) {
       outerError = gaxiosError.error;
     } else {
       return undefined;
@@ -280,6 +297,7 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
   };
 
   let outerError: ErrorShape | undefined;
+  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy fallback for external API error messages.
   if (apiError.message) {
     let data = apiError.message;
 

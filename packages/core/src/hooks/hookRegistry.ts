@@ -135,15 +135,15 @@ export class HookRegistry {
 
         if (Array.isArray(eventDefinitions)) {
           for (const definition of eventDefinitions) {
+            // External data boundary: projectHooks is parsed from user config files and may not match TypeScript types at runtime
             if (
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-              definition &&
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+              definition != null &&
               typeof definition === 'object' &&
               'hooks' in definition
             ) {
               const hookDef = definition;
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-              if (hookDef.hooks) {
+              if (Array.isArray(hookDef.hooks)) {
                 allProjectHooks.push(...hookDef.hooks);
               }
             }
@@ -194,8 +194,7 @@ export class HookRegistry {
     }
 
     // Get hooks from extensions (always allowed)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-    const extensions = this.config.getExtensions() || [];
+    const extensions = this.config.getExtensions();
     for (const extension of extensions) {
       if (extension.isActive && extension.hooks) {
         this.processHooksConfiguration(
@@ -256,9 +255,11 @@ export class HookRegistry {
     eventName: HookEventName,
     source: ConfigSource,
   ): void {
+    const disabledHooks = this.config.getDisabledHooks();
+
     if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-      !definition ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- External data boundary: definition is parsed from user config files and may not match TypeScript types at runtime.
+      definition == null ||
       typeof definition !== 'object' ||
       !Array.isArray(definition.hooks)
     ) {
@@ -269,13 +270,11 @@ export class HookRegistry {
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-    const disabledHooks = this.config.getDisabledHooks() || [];
-
     for (const hookConfig of definition.hooks) {
+      // External data boundary: hookConfig is parsed from user config files and may not match TypeScript types at runtime
       if (
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-        hookConfig &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        hookConfig != null &&
         typeof hookConfig === 'object' &&
         this.validateHookConfig(hookConfig, eventName, source)
       ) {
@@ -313,7 +312,7 @@ export class HookRegistry {
     eventName: HookEventName,
     source: ConfigSource,
   ): boolean {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unnecessary-condition -- Preserve original external hook payload validation, including legacy plugin type.
     if (!config.type || !['command', 'plugin'].includes(config.type)) {
       debugLogger.warn(
         `Invalid hook ${eventName} from ${source} type: ${config.type}`,
@@ -321,7 +320,8 @@ export class HookRegistry {
       return false;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
+    // Check command field for command-type hooks - must be a non-empty string.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve original falsy validation for external command hook payloads.
     if (config.type === 'command' && !config.command) {
       debugLogger.warn(
         `Command hook ${eventName} from ${source} missing command field`,
