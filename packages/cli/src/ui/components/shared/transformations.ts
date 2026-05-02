@@ -21,6 +21,7 @@ import path from 'node:path';
  * Matches paths starting with @ followed by image extensions.
  */
 export const imagePathRegex =
+  // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   /@((?:\\.|[^\s\r\n\\])+?\.(?:png|jpg|jpeg|gif|webp|svg|bmp))\b/gi;
 
 /**

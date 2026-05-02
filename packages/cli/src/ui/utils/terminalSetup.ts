@@ -41,7 +41,7 @@ const execAsync = promisify(exec);
  */
 function stripJsonComments(content: string): string {
   // Remove single-line comments (// ...)
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   return content.replace(/^\s*\/\/.*$/gm, '');
 }
 

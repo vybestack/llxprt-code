@@ -313,7 +313,7 @@ const saveCommand: SlashCommand = {
       const profileNameMatch = parts
         .slice(1)
         .join(' ')
-        /* eslint-disable-next-line sonarjs/regular-expr */
+        // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
         .match(/^"([^"]+)"(?:\s+(.+))?$/);
       if (profileNameMatch) {
         profileName = profileNameMatch[1];

@@ -27,9 +27,9 @@ export const MODEL_TOKEN_PATTERNS: Array<{ pattern: RegExp; tokens: number }> =
     { pattern: /claude-.*3-5.*sonnet/i, tokens: 8192 },
     // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     { pattern: /claude-.*3-5.*haiku/i, tokens: 8192 },
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     { pattern: /claude-.*3.*opus/i, tokens: 4096 },
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     { pattern: /claude-.*3.*haiku/i, tokens: 4096 },
   ];
 

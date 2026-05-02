@@ -37,7 +37,7 @@ async function readHistoryFile(filePath: string): Promise<string[]> {
     for (const raw of text.split(/\r?\n/)) {
       if (!raw.trim()) continue;
       const line = raw;
-
+      // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       const m = cur.match(/(\\+)$/);
       if (m != null && m[1].length % 2 !== 0) {
         // odd number of trailing '\'

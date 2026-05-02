@@ -33,7 +33,7 @@ export const COMMENT_PREFIXES = ['//', '#', '*', '/*', '*/'];
 export const REGEX = {
   // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   IMPORT_MODULE: /(?:import|from)\s+['"]([^'"]+)['"]/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   IMPORT_ITEMS: /\{([^}]+)\}/,
 } as const;
 

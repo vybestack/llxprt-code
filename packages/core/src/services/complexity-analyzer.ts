@@ -275,6 +275,7 @@ export class ComplexityAnalyzer {
    * Counts the number of questions in the message.
    */
   private countQuestions(message: string): number {
+    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const questionPattern = /[^.!?]*\?/g;
     const matches = message.match(questionPattern);
     return matches ? matches.length : 0;

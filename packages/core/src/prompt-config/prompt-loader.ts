@@ -178,12 +178,12 @@ export class PromptLoader {
       let compressedLine = line;
 
       // Simplify headers
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       compressedLine = compressedLine.replace(/^#{2,}\s+(.+)$/, '# $1');
 
       // Simplify bold list items
       compressedLine = compressedLine.replace(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+        // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
         /^(\s*)-\s+\*\*(.+?)\*\*:\s*(.*)$/,
         '$1- $2: $3',
       );

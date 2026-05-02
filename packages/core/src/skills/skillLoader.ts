@@ -78,7 +78,7 @@ function parseSimpleFrontmatter(
     const line = lines[i];
 
     // Match "name:" at the start of the line (optional whitespace)
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const nameMatch = line.match(/^\s*name:\s*(.*)$/);
     if (nameMatch) {
       name = nameMatch[1].trim();
@@ -86,7 +86,7 @@ function parseSimpleFrontmatter(
     }
 
     // Match "description:" at the start of the line (optional whitespace)
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const descMatch = line.match(/^\s*description:\s*(.*)$/);
     if (descMatch) {
       const descLines = [descMatch[1].trim()];

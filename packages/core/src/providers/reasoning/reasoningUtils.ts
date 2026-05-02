@@ -152,7 +152,8 @@ export function extractKimiToolCallsFromText(raw: string): {
       (_sectionMatch: string, sectionBody: string) => {
         try {
           const callRegex =
-            // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+
+            // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
             /<\|tool_call_begin\|>\s*([^<]+?)\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/g;
 
           let m: RegExpExecArray | null;

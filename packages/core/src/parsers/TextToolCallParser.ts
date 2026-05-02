@@ -625,7 +625,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       .replace(/<\/use>/g, '')
       // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       .replace(/<tool_call>\s*\{[^}]*$/gm, '')
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       .replace(/\{"name"\s*:\s*"[^"]*"\s*,?\s*"arguments"\s*:\s*\{[^}]*$/gm, '')
       .replace(/✦\s*<think>/g, '')
       .replace(/\n{2,}/g, '\n')

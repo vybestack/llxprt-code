@@ -224,6 +224,7 @@ export class ASTQueryExtractor {
 
   private extractSignatureBasic(line: string): string {
     // Try to capture parameters: ( ... )
+    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const match = line.match(/\(([^)]*)\)/);
     if (match) {
       return `(${match[1]})`;

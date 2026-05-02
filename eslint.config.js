@@ -253,6 +253,7 @@ export default tseslint.config(
       'sonarjs/todo-tag': 'error',
       'sonarjs/no-ignored-exceptions': 'error',
       'sonarjs/regular-expr': 'error',
+      'sonarjs/slow-regex': 'error',
 
       'sonarjs/function-return-type': 'off',
       'sonarjs/no-wildcard-import': 'off',

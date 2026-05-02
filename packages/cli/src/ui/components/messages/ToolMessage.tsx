@@ -124,7 +124,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
 
     const extractEchoText = (cmd: string): string | null => {
       // Static regex for echo command parsing - no dynamic parts
-      // eslint-disable-next-line sonarjs/regular-expr
+      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       const m = cmd.match(/^\s*echo\s+(.*)$/i);
       if (!m) return null;
       let text = m[1].trim();

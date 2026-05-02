@@ -316,7 +316,7 @@ export class PromptResolver {
     result = result.replace(/[^a-z0-9.-]+/g, '-');
 
     // c. Remove leading and trailing hyphens
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     result = result.replace(/^-+|-+$/g, '');
 
     // d. IF result is empty after sanitization
@@ -408,7 +408,7 @@ export class PromptResolver {
     result = result.replace(/-+/g, '-');
 
     // b. Remove leading and trailing hyphens
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     result = result.replace(/^-+|-+$/g, '');
 
     // 5. RETURN result

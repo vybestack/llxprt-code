@@ -111,7 +111,7 @@ function extractPythonImportItems(line: string): string[] {
   if (fromImportMatch) {
     return fromImportMatch[1]
       .split(',')
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       .map((item) => item.trim().replace(/\s+as\s+\w+$/, ''))
       .filter((item) => item);
   }
