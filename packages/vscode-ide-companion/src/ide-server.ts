@@ -447,8 +447,8 @@ export class IDEServer {
     if (this.portFile) {
       try {
         await fs.unlink(this.portFile);
-      } catch (_err) {
-        // Ignore errors if the file doesn't exist.
+      } catch {
+        // File may not exist; cleanup is best-effort.
       }
     }
   }
