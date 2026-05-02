@@ -91,7 +91,7 @@ describe('computeTerminalTitle', () => {
   ])('should return $description', ({ args, expected, exact }) => {
     const title = computeTerminalTitle(args);
     // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (exact) {
+    if (exact === true) {
       // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(title).toBe(expected);
     } else {
