@@ -59,20 +59,25 @@ async function detectTerminal(): Promise<SupportedTerminal | null> {
   // Check VS Code and its forks - check forks first to avoid false positives
   // Check for Cursor-specific indicators
   if (
-    process.env.CURSOR_TRACE_ID ||
-    process.env.VSCODE_GIT_ASKPASS_MAIN?.toLowerCase().includes('cursor')
+    (process.env.CURSOR_TRACE_ID !== undefined &&
+      process.env.CURSOR_TRACE_ID !== '') ||
+    process.env.VSCODE_GIT_ASKPASS_MAIN?.toLowerCase().includes('cursor') ===
+      true
   ) {
     return 'cursor';
   }
   // Check for Windsurf-specific indicators
-  if (process.env.VSCODE_GIT_ASKPASS_MAIN?.toLowerCase().includes('windsurf')) {
+  if (
+    process.env.VSCODE_GIT_ASKPASS_MAIN?.toLowerCase().includes('windsurf') ===
+    true
+  ) {
     return 'windsurf';
   }
   // Check for Antigravity-specific indicators
   if (
     process.env['VSCODE_GIT_ASKPASS_MAIN']
       ?.toLowerCase()
-      .includes('antigravity')
+      .includes('antigravity') === true
   ) {
     return 'antigravity';
   }
@@ -216,12 +221,12 @@ async function configureVSCodeStyle(
       return binding.key === 'ctrl+enter';
     });
 
-    if (existingShiftEnter || existingCtrlEnter) {
+    if (existingShiftEnter !== undefined || existingCtrlEnter !== undefined) {
       const messages: string[] = [];
-      if (existingShiftEnter) {
+      if (existingShiftEnter !== undefined) {
         messages.push(`- Shift+Enter binding already exists`);
       }
-      if (existingCtrlEnter) {
+      if (existingCtrlEnter !== undefined) {
         messages.push(`- Ctrl+Enter binding already exists`);
       }
       return {

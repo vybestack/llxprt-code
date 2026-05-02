@@ -66,11 +66,11 @@ function parseArgs(args: string): ModelCommandArgs {
 function hasAnyFlags(args: ModelCommandArgs): boolean {
   return !!(
     args.provider ||
-    args.tools ||
-    args.vision ||
-    args.reasoning ||
-    args.audio ||
-    args.all
+    args.tools === true ||
+    args.vision === true ||
+    args.reasoning === true ||
+    args.audio === true ||
+    args.all === true
   );
 }
 /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */

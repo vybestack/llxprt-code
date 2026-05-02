@@ -162,7 +162,7 @@ export function formatNonInteractiveError(error: unknown): string {
     return error.stack ?? error.message;
   }
 
-  if (error && typeof error === 'object') {
+  if (error !== null && typeof error === 'object') {
     try {
       return JSON.stringify(error, null, 2);
     } catch {
@@ -379,7 +379,10 @@ export async function main() {
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
 
-  if (settings.merged.ui.autoConfigureMaxOldSpaceSize && !process.env.SANDBOX) {
+  if (
+    settings.merged.ui.autoConfigureMaxOldSpaceSize === true &&
+    !process.env.SANDBOX
+  ) {
     // Only relaunch with a larger heap when the autosizing setting is enabled.
     const debugMode = isDebugMode();
     const memoryArgs = shouldRelaunchForMemory(debugMode);
@@ -391,7 +394,7 @@ export async function main() {
 
   const argv = await parseArguments(settings.merged);
 
-  const hasPipedInput = !process.stdin.isTTY && !argv.experimentalAcp;
+  const hasPipedInput = !process.stdin.isTTY && argv.experimentalAcp !== true;
   let cachedStdinData: string | null = null;
   let stdinWasRead = false;
 
@@ -430,7 +433,7 @@ export async function main() {
 
   // If we're in ACP mode, redirect console output IMMEDIATELY
   // before any config loading that might write to stdout
-  if (argv.experimentalAcp) {
+  if (argv.experimentalAcp === true) {
     // eslint-disable-next-line no-console
     console.log = console.error;
     // eslint-disable-next-line no-console
@@ -773,15 +776,22 @@ export async function main() {
     // computeSandboxMemoryArgs() always returns args because the sandbox starts fresh
     // with Node.js default ~950MB heap.
     let sandboxMemoryArgs: string[] = [];
-    if (settings.merged.ui.autoConfigureMaxOldSpaceSize) {
+    if (settings.merged.ui.autoConfigureMaxOldSpaceSize === true) {
       const containerMemoryStr =
         process.env.LLXPRT_SANDBOX_MEMORY ?? process.env.SANDBOX_MEMORY;
       let containerMemoryMB: number | undefined;
-      if (containerMemoryStr) {
+      // Preserve old empty-string falsy behavior: only process non-empty strings
+      if (
+        typeof containerMemoryStr === 'string' &&
+        containerMemoryStr.length > 0
+      ) {
         containerMemoryMB = parseDockerMemoryToMB(containerMemoryStr);
-      } else if (process.env.SANDBOX_FLAGS) {
+      } else if (
+        typeof process.env.SANDBOX_FLAGS === 'string' &&
+        process.env.SANDBOX_FLAGS.length > 0
+      ) {
         const match = process.env.SANDBOX_FLAGS.match(/--memory[= ](\S+)/);
-        if (match) {
+        if (match !== null) {
           containerMemoryMB = parseDockerMemoryToMB(match[1]);
         }
       }
@@ -918,7 +928,7 @@ export async function main() {
   await fsPromises.mkdir(chatsDir, { recursive: true });
 
   // --list-sessions: display sessions and exit
-  if (argv.listSessions) {
+  if (argv.listSessions === true) {
     const { sessions } = await listSessions(chatsDir, projectHash);
     if (sessions.length === 0) {
       debugLogger.log('No recorded sessions for this project.');
@@ -938,7 +948,8 @@ export async function main() {
   }
 
   // --delete-session: delete session and exit
-  if (argv.deleteSession) {
+  // Preserve old empty-string falsy behavior: only process non-empty strings
+  if (typeof argv.deleteSession === 'string' && argv.deleteSession.length > 0) {
     const result = await deleteSession(
       argv.deleteSession,
       chatsDir,
@@ -1177,13 +1188,13 @@ export async function main() {
 }
 
 function setWindowTitle(title: string, settings: LoadedSettings) {
-  if (!settings.merged.ui.hideWindowTitle) {
+  if (settings.merged.ui.hideWindowTitle !== true) {
     // Initial state before React loop starts
     const windowTitle = computeTerminalTitle({
       streamingState: StreamingState.Idle,
       isConfirming: false,
       folderName: title,
-      showThoughts: !!settings.merged.ui.showStatusInTitle,
+      showThoughts: settings.merged.ui.showStatusInTitle === true,
       useDynamicTitle: settings.merged.ui.dynamicWindowTitle ?? true,
     });
     writeToStdout(`\x1b]0;${windowTitle}\x07`);

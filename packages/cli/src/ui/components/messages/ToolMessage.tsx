@@ -73,12 +73,12 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     isShellTool &&
     status === ToolCallStatus.Executing &&
     isThisShellTargeted &&
-    embeddedShellFocused;
+    embeddedShellFocused === true;
 
   const isThisShellFocusable =
     isShellTool &&
     status === ToolCallStatus.Executing &&
-    config?.getEnableInteractiveShell() &&
+    config?.getEnableInteractiveShell() === true &&
     isThisShellTargeted;
 
   const [isDetailsVisible, setIsDetailsVisible] = useState(false);
@@ -86,7 +86,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   useKeypress(
     (key) => {
       // Handle 'ctrl' + 'r' key for full-command toggle while executing
-      if (key.ctrl && key.name === 'r') {
+      if (key.ctrl === true && key.name === 'r') {
         if (status === ToolCallStatus.Executing) {
           setIsDetailsVisible((prev) => !prev);
         }
@@ -207,7 +207,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
           terminalWidth={Math.max(0, terminalWidth - 4)}
           renderOutputAsMarkdown={renderOutputAsMarkdown}
         />
-        {isThisShellFocused && config && (
+        {isThisShellFocused && config != null && (
           <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1}>
             <ShellInputPrompt
               activeShellPtyId={activeShellPtyId ?? null}

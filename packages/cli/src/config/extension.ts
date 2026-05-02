@@ -186,7 +186,10 @@ export function loadExtensions(
 
   const allExtensions = [...loadUserExtensions()];
 
-  if ((isWorkspaceTrusted(settings) ?? true) && !settings.extensionManagement) {
+  if (
+    (isWorkspaceTrusted(settings) ?? true) &&
+    settings.extensionManagement !== true
+  ) {
     allExtensions.push(...getWorkspaceExtensions(workspaceDir));
   }
 
@@ -434,10 +437,14 @@ export async function resolveExtensionSettingsWithSource(
 
     // Workspace overrides user when workspace value is explicitly set
     if (workspaceValue !== undefined && workspaceValue !== '') {
-      value = setting.sensitive ? '[value stored in keychain]' : workspaceValue;
+      value =
+        setting.sensitive === true
+          ? '[value stored in keychain]'
+          : workspaceValue;
       source = 'workspace';
     } else if (userValue !== undefined && userValue !== '') {
-      value = setting.sensitive ? '[value stored in keychain]' : userValue;
+      value =
+        setting.sensitive === true ? '[value stored in keychain]' : userValue;
       source = 'user';
     } else {
       value = '[not set]';
@@ -498,7 +505,7 @@ export function loadInstallMetadata(
 }
 
 function getContextFileNames(config: ExtensionConfig): string[] {
-  if (!config.contextFileName) {
+  if (config.contextFileName === undefined || config.contextFileName === '') {
     return ['LLXPRT.md'];
   } else if (!Array.isArray(config.contextFileName)) {
     return [config.contextFileName];
@@ -655,7 +662,13 @@ export async function inferInstallMetadata(
   }
 
   // Local path - verify it exists
-  if (ref || autoUpdate) {
+  // Preserve old truthy behavior: reject only non-empty string ref or autoUpdate === true
+  if (typeof ref === 'string' && ref.length > 0) {
+    throw new Error(
+      'The --ref and --autoUpdate flags are only applicable for git-based installations.',
+    );
+  }
+  if (autoUpdate === true) {
     throw new Error(
       'The --ref and --autoUpdate flags are only applicable for git-based installations.',
     );
@@ -843,18 +856,22 @@ function extensionConsentString(extensionConfig: ExtensionConfig): string {
     '**Extensions may introduce unexpected behavior. Ensure you have investigated the extension source and trust the author.**',
   );
 
-  if (mcpServerEntries.length) {
+  if (mcpServerEntries.length > 0) {
     output.push('This extension will run the following MCP servers:');
     for (const [key, mcpServer] of mcpServerEntries) {
-      const isLocal = !!mcpServer.command;
+      const hasCommand =
+        typeof mcpServer.command === 'string' && mcpServer.command.length > 0;
+      const isLocal = hasCommand;
       const source =
         mcpServer.httpUrl ??
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string fallback for command display
-        `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
+        `${hasCommand ? mcpServer.command : ''}${Array.isArray(mcpServer.args) && mcpServer.args.length > 0 ? ' ' + mcpServer.args.join(' ') : ''}`;
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }
   }
-  if (sanitizedConfig.hooks && Object.keys(sanitizedConfig.hooks).length > 0) {
+  if (
+    sanitizedConfig.hooks != null &&
+    Object.keys(sanitizedConfig.hooks).length > 0
+  ) {
     output.push(
       `This extension will register hooks: ${Object.keys(sanitizedConfig.hooks).join(', ')}`,
     );
@@ -862,14 +879,19 @@ function extensionConsentString(extensionConfig: ExtensionConfig): string {
       'Note: Hooks can intercept and modify LLxprt Code behavior. Additional consent will be requested.',
     );
   }
-  if (sanitizedConfig.contextFileName) {
+  const contextFileName = sanitizedConfig.contextFileName;
+  const hasContextFileName = Array.isArray(contextFileName)
+    ? contextFileName.length > 0
+    : typeof contextFileName === 'string' && contextFileName.length > 0;
+  if (hasContextFileName) {
     output.push(
-      `This extension will append info to your LLXPRT.md context using ${sanitizedConfig.contextFileName}`,
+      `This extension will append info to your LLXPRT.md context using ${contextFileName}`,
     );
   }
-  if (sanitizedConfig.excludeTools) {
+  const excludeTools = sanitizedConfig.excludeTools;
+  if (Array.isArray(excludeTools) && excludeTools.length > 0) {
     output.push(
-      `This extension will exclude the following core tools: ${sanitizedConfig.excludeTools}`,
+      `This extension will exclude the following core tools: ${excludeTools}`,
     );
   }
   return output.join('\n');

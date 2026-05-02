@@ -257,7 +257,7 @@ export function useSlashCompletion(
           break;
         }
         const found = currentLevel.find(
-          (cmd) => cmd.name === part || cmd.altNames?.includes(part),
+          (cmd) => cmd.name === part || cmd.altNames?.includes(part) === true,
         );
         if (!found) {
           break;
@@ -291,12 +291,14 @@ export function useSlashCompletion(
 
       let exactMatchAsParent: SlashCommand | undefined;
       if (!hasTrailingSpace && currentLevel) {
-        const candidate = commandPartial || argumentPartial;
-        if (candidate) {
+        const candidate =
+          commandPartial.length > 0 ? commandPartial : argumentPartial;
+        if (candidate.length > 0) {
           exactMatchAsParent = currentLevel.find(
             (cmd) =>
-              (cmd.name === candidate || cmd.altNames?.includes(candidate)) &&
-              cmd.subCommands,
+              (cmd.name === candidate ||
+                cmd.altNames?.includes(candidate) === true) &&
+              cmd.subCommands != null,
           );
 
           if (exactMatchAsParent) {
@@ -308,7 +310,7 @@ export function useSlashCompletion(
                 (cmd.name.toLowerCase().startsWith(candidate.toLowerCase()) ||
                   cmd.altNames?.some((alt) =>
                     alt.toLowerCase().startsWith(candidate.toLowerCase()),
-                  )),
+                  ) === true),
             );
 
             if (otherMatches.length === 0) {
@@ -336,14 +338,14 @@ export function useSlashCompletion(
         ) {
           setIsPerfectMatch(true);
           setActiveHint('');
-        } else if (currentLevel && commandPartial) {
+        } else if (currentLevel && commandPartial.length > 0) {
           const perfectMatch = currentLevel.find(
             (cmd) =>
               (cmd.name === commandPartial ||
-                cmd.altNames?.includes(commandPartial)) &&
-              cmd.action,
+                cmd.altNames?.includes(commandPartial) === true) &&
+              cmd.action != null,
           );
-          if (perfectMatch) {
+          if (perfectMatch !== undefined) {
             setIsPerfectMatch(true);
             setActiveHint('');
           }
@@ -480,9 +482,11 @@ export function useSlashCompletion(
           }
           // Match by name or altNames
           return (
-            cmd.description &&
+            typeof cmd.description === 'string' &&
+            cmd.description.length > 0 &&
             (cmd.name.startsWith(commandPartial) ||
-              cmd.altNames?.some((alt) => alt.startsWith(commandPartial)))
+              cmd.altNames?.some((alt) => alt.startsWith(commandPartial)) ===
+                true)
           );
         });
         debugLogger.debug(
@@ -492,9 +496,11 @@ export function useSlashCompletion(
         // Sort potentialSuggestions so that exact match (by name or altName) comes first
         const sortedSuggestions = [...potentialSuggestions].sort((a, b) => {
           const aIsExact =
-            a.name === commandPartial || a.altNames?.includes(commandPartial);
+            a.name === commandPartial ||
+            a.altNames?.includes(commandPartial) === true;
           const bIsExact =
-            b.name === commandPartial || b.altNames?.includes(commandPartial);
+            b.name === commandPartial ||
+            b.altNames?.includes(commandPartial) === true;
           if (aIsExact && !bIsExact) return -1;
           if (!aIsExact && bIsExact) return 1;
           return 0;
@@ -599,7 +605,10 @@ export function useSlashCompletion(
 
           // Check if this entry should be ignored by filtering options
           if (
-            fileDiscovery?.shouldIgnoreFile(entryPathFromRoot, filterOptions)
+            fileDiscovery?.shouldIgnoreFile(
+              entryPathFromRoot,
+              filterOptions,
+            ) === true
           ) {
             continue;
           }
@@ -736,7 +745,7 @@ export function useSlashCompletion(
                 fileDiscoveryService?.shouldIgnoreFile(
                   relativePath,
                   filterOptions,
-                )
+                ) === true
               ) {
                 continue;
               }
@@ -800,9 +809,9 @@ export function useSlashCompletion(
             b.label.length - path.extname(b.label).length,
           );
 
-          return (
-            filenameA.localeCompare(filenameB) || a.label.localeCompare(b.label)
-          );
+          return filenameA.localeCompare(filenameB) !== 0
+            ? filenameA.localeCompare(filenameB)
+            : a.label.localeCompare(b.label);
         });
 
         if (isMounted) {

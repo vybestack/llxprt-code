@@ -42,7 +42,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
         }, 100);
       }
     },
-    { isActive: !isRestarting },
+    { isActive: isRestarting !== true },
   );
 
   useKeypress(
@@ -51,7 +51,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
         process.exit(ExitCodes.SUCCESS);
       }
     },
-    { isActive: !!isRestarting },
+    { isActive: isRestarting === true },
   );
 
   const currentFolder = path.basename(process.cwd());
@@ -99,10 +99,10 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
         <RadioButtonSelect
           items={options}
           onSelect={onSelect}
-          isFocused={!isRestarting}
+          isFocused={isRestarting !== true}
         />
       </Box>
-      {isRestarting && (
+      {isRestarting === true && (
         <Box marginLeft={1} marginTop={1}>
           <Text color={Colors.AccentYellow}>
             To see changes, llxprt must be restarted. Press r to exit and apply
@@ -110,7 +110,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
           </Text>
         </Box>
       )}
-      {exiting && (
+      {exiting === true && (
         <Box marginLeft={1} marginTop={1}>
           <Text color={theme.status.warning}>
             A folder trust level must be selected to continue. Exiting since

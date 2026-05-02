@@ -20,7 +20,7 @@ import {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildZodSchemaFromJsonSchema(def: any): z.ZodTypeAny {
-  if (Array.isArray(def.type)) {
+  if (def != null && typeof def === 'object' && Array.isArray(def.type)) {
     const members = def.type.map((memberType: string) =>
       buildZodSchemaFromJsonSchema({
         ...def,
@@ -34,7 +34,7 @@ function buildZodSchemaFromJsonSchema(def: any): z.ZodTypeAny {
     return z.union([first, second, ...rest]);
   }
 
-  if (def.anyOf) {
+  if (def != null && typeof def === 'object' && Array.isArray(def.anyOf)) {
     return z.union(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       def.anyOf.map((d: any) => buildZodSchemaFromJsonSchema(d)),
@@ -42,7 +42,8 @@ function buildZodSchemaFromJsonSchema(def: any): z.ZodTypeAny {
   }
 
   if (def.type === 'string') {
-    if (def.enum) return z.enum(def.enum as [string, ...string[]]);
+    if (def.enum !== undefined && def.enum !== null)
+      return z.enum(def.enum as [string, ...string[]]);
     return z.string();
   }
   if (def.type === 'number') return z.number();
@@ -55,7 +56,7 @@ function buildZodSchemaFromJsonSchema(def: any): z.ZodTypeAny {
   }
 
   if (def.type === 'array') {
-    if (def.items) {
+    if (def.items !== undefined && def.items !== null) {
       return z.array(buildZodSchemaFromJsonSchema(def.items));
     }
     return z.array(z.unknown());
@@ -63,15 +64,17 @@ function buildZodSchemaFromJsonSchema(def: any): z.ZodTypeAny {
 
   if (def.type === 'object') {
     let schema;
-    if (def.properties) {
+    if (def.properties !== undefined && def.properties !== null) {
       const shape: Record<string, z.ZodTypeAny> = {};
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const [key, propDef] of Object.entries(def.properties) as any) {
         let propSchema = buildZodSchemaFromJsonSchema(propDef);
+        const requiredArray = def.required as unknown;
         if (
-          def.required &&
-          Array.isArray(def.required) &&
-          def.required.includes(key)
+          requiredArray !== undefined &&
+          requiredArray !== null &&
+          Array.isArray(requiredArray) &&
+          requiredArray.includes(key)
         ) {
           // keep it required
         } else {
@@ -315,14 +318,14 @@ export function formatValidationError(
   const displayedIssues = error.issues.slice(0, MAX_ERRORS_TO_DISPLAY);
 
   for (const issue of displayedIssues) {
-    const path = issue.path.reduce(
+    const path = issue.path.reduce<string>(
       (acc, curr) =>
         typeof curr === 'number'
           ? `${acc}[${curr}]`
-          : `${acc ? acc + '.' : ''}${curr}`,
+          : `${acc.length > 0 ? acc + '.' : ''}${curr}`,
       '',
     );
-    lines.push(`Error in: ${path || '(root)'}`);
+    lines.push(`Error in: ${path.length > 0 ? path : '(root)'}`);
     lines.push(`    ${issue.message}`);
 
     if (issue.code === 'invalid_type') {

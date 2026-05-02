@@ -133,9 +133,13 @@ function normalizeCompletionContext(
   const sanitizedPath = Math.max(0, Math.min(commandPathLength, tokens.length));
   const argsFromTokens = tokens.slice(sanitizedPath);
 
-  if (!explicitCompleted) {
+  if (explicitCompleted === false) {
     completedArgs = [...argsFromTokens];
-    if (!hasTrailingSpace && tokenInfo.partialToken && argsFromTokens.length) {
+    if (
+      hasTrailingSpace === false &&
+      tokenInfo.partialToken !== '' &&
+      argsFromTokens.length > 0
+    ) {
       completedArgs = argsFromTokens.slice(0, -1);
     }
   }
@@ -208,9 +212,10 @@ function resolveActiveStep(
         remainingArgs.shift();
         consumedCount += 1;
         consumedLiterals += 1;
-        const remainingSchema = matched.stopPropagation
-          ? []
-          : currentSchema.slice(nextIndex);
+        const remainingSchema =
+          matched.stopPropagation === true
+            ? []
+            : currentSchema.slice(nextIndex);
         currentSchema = mergeSchemas(matched.next, remainingSchema);
         continue;
       }
@@ -266,7 +271,7 @@ async function suggestForValue(
       }));
     }
 
-    if (node.options?.length) {
+    if (node.options !== undefined && node.options.length > 0) {
       // Get the fuzzy filtering setting from context
       // Default to true if setting is not defined
       const settingValue = ctx.services.settings.merged.enableFuzzyFiltering;
@@ -398,7 +403,7 @@ async function computeHintForValue(
   tokenInfo: TokenInfo,
 ): Promise<string> {
   try {
-    if (node.hint) {
+    if (node.hint != null && node.hint !== '') {
       if (typeof node.hint === 'function') {
         return await node.hint(ctx, tokenInfo);
       }

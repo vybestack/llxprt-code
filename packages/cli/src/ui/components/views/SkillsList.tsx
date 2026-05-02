@@ -19,11 +19,11 @@ export const SkillsList: React.FC<SkillsListProps> = ({
   showDescriptions,
 }) => {
   const enabledSkills = skills
-    .filter((s) => !s.disabled)
+    .filter((s) => s.disabled !== true)
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const disabledSkills = skills
-    .filter((s) => s.disabled)
+    .filter((s) => s.disabled === true)
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const renderSkill = (skill: SkillDefinition) => {
@@ -40,18 +40,22 @@ export const SkillsList: React.FC<SkillsListProps> = ({
         <Box flexDirection="column">
           <Text
             bold
-            color={skill.disabled ? theme.text.secondary : theme.text.link}
+            color={
+              skill.disabled === true ? theme.text.secondary : theme.text.link
+            }
           >
             {skill.name}
-            {sourceLabel && (
+            {sourceLabel !== '' && (
               <Text color={theme.text.secondary}>{sourceLabel}</Text>
             )}
           </Text>
-          {showDescriptions && skill.description && (
+          {showDescriptions === true && skill.description !== '' && (
             <Box marginLeft={2}>
               <Text
                 color={
-                  skill.disabled ? theme.text.secondary : theme.text.primary
+                  skill.disabled === true
+                    ? theme.text.secondary
+                    : theme.text.primary
                 }
               >
                 {skill.description}

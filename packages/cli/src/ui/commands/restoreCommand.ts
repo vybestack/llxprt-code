@@ -129,10 +129,17 @@ async function restoreAction(
 
     const filePath = path.join(checkpointDir, selectedFile);
     const data = await fs.readFile(filePath, 'utf-8');
-    const toolCallData = JSON.parse(data);
+    const toolCallData = JSON.parse(data) as {
+      history?: Parameters<NonNullable<LoadHistory>>[0];
+      clientHistory?: Parameters<
+        ReturnType<Config['getGeminiClient']>['setHistory']
+      >[0];
+      commitHash?: string;
+      toolCall: { name: string; args: Record<string, unknown> };
+    };
 
-    if (toolCallData.history) {
-      if (!loadHistory) {
+    if (Array.isArray(toolCallData.history)) {
+      if (loadHistory == null) {
         return {
           type: 'message',
           messageType: 'error',
@@ -143,11 +150,14 @@ async function restoreAction(
       loadHistory(toolCallData.history);
     }
 
-    if (toolCallData.clientHistory) {
+    if (Array.isArray(toolCallData.clientHistory)) {
       await config.getGeminiClient().setHistory(toolCallData.clientHistory);
     }
 
-    if (toolCallData.commitHash) {
+    if (
+      typeof toolCallData.commitHash === 'string' &&
+      toolCallData.commitHash.length > 0
+    ) {
       await gitService?.restoreProjectFromSnapshot(toolCallData.commitHash);
       addItem(
         {
@@ -173,7 +183,7 @@ async function restoreAction(
 }
 
 export const restoreCommand = (config: Config | null): SlashCommand | null => {
-  if (!config?.getCheckpointingEnabled()) {
+  if (config?.getCheckpointingEnabled() !== true) {
     return null;
   }
 

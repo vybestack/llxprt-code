@@ -19,7 +19,7 @@ export interface SecureKeyInputProps {
 }
 
 const isEioError = (err: unknown): boolean => {
-  if (!err || typeof err !== 'object') {
+  if (err == null || typeof err !== 'object') {
     return false;
   }
 
@@ -44,7 +44,7 @@ export const SecureKeyInput: React.FC<SecureKeyInputProps> = ({
 
   const handleKeyPress = useCallback(
     (char: string, key: { name?: string; ctrl?: boolean }) => {
-      if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
+      if (key.name === 'escape' || (key.ctrl === true && key.name === 'c')) {
         onCancel();
         return;
       }
@@ -60,13 +60,13 @@ export const SecureKeyInput: React.FC<SecureKeyInputProps> = ({
       }
 
       // Toggle visibility with Ctrl+V
-      if (key.ctrl && key.name === 'v') {
+      if (key.ctrl === true && key.name === 'v') {
         setShowKey((prev) => !prev);
         return;
       }
 
       // Only accept printable characters
-      if (char && char.length === 1 && !key.ctrl) {
+      if (char.length > 0 && char.length === 1 && key.ctrl !== true) {
         setKeyValue((prev) => prev + char);
       }
     },

@@ -51,7 +51,7 @@ function findPrevWordBoundary(line: string, cursorCol: number): number {
   for (const seg of segmenter.segment(line)) {
     if (seg.index >= cursorIdx) break;
 
-    if (seg.isWordLike) {
+    if (seg.isWordLike === true) {
       targetIdx = seg.index;
     }
   }
@@ -70,7 +70,7 @@ function findNextWordBoundary(line: string, cursorCol: number): number {
     const segEnd = seg.index + seg.segment.length;
 
     if (segEnd > cursorIdx) {
-      if (seg.isWordLike) {
+      if (seg.isWordLike === true) {
         targetIdx = segEnd;
         break;
       }
@@ -133,10 +133,10 @@ function handleInsertAction(
   options: TextBufferOptions,
 ): TextBufferState {
   let payload = rawPayload;
-  if (options.singleLine) {
+  if (options.singleLine === true) {
     payload = payload.replace(/[\r\n]/g, '');
   }
-  if (options.inputFilter) {
+  if (options.inputFilter != null) {
     payload = options.inputFilter(payload);
   }
   if (payload.length === 0) return state;
@@ -302,7 +302,7 @@ function handleVisualMove(
     visualLines,
   );
 
-  if (visualToLogicalMap[pos.row]) {
+  if (pos.row in visualToLogicalMap) {
     const [logRow, logStartCol] = visualToLogicalMap[pos.row];
     return {
       ...state,

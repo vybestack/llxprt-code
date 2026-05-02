@@ -1084,7 +1084,7 @@ function entrypoint(
 
   for (const p of ports()) {
     // Skip socat relay for ports handled by SSH tunnels (Podman macOS)
-    if (skipPortRelays?.has(p)) {
+    if (skipPortRelays?.has(p) === true) {
       continue;
     }
     shellCmds.push(
@@ -1266,8 +1266,9 @@ export async function start_sandbox(
         // install handlers to stop proxy on exit/signal
         const stopProxy = () => {
           debugLogger.log('stopping proxy ...');
-          if (proxyProcess?.pid) {
-            process.kill(-proxyProcess.pid, 'SIGTERM');
+          const proxyPid = proxyProcess?.pid;
+          if (proxyPid !== undefined && proxyPid !== 0) {
+            process.kill(-proxyPid, 'SIGTERM');
           }
         };
         process.on('exit', stopProxy);
@@ -1282,8 +1283,9 @@ export async function start_sandbox(
           debugLogger.error(data.toString());
         });
         proxyProcess.on('close', (code, signal) => {
-          if (sandboxProcess?.pid) {
-            process.kill(-sandboxProcess.pid, 'SIGTERM');
+          const sandboxPid = sandboxProcess?.pid;
+          if (sandboxPid !== undefined && sandboxPid !== 0) {
+            process.kill(-sandboxPid, 'SIGTERM');
           }
           throw new FatalSandboxError(
             `Proxy command '${proxyCommand}' exited with code ${code}, signal ${signal}`,
@@ -1347,7 +1349,7 @@ export async function start_sandbox(
           } catch (err) {
             // Issue #1020: Log I/O errors but don't crash
             // This can happen after long-running sessions on macOS
-            if (cliConfig?.getDebugMode()) {
+            if (cliConfig?.getDebugMode() === true) {
               debugLogger.error('[sandbox] Failed to restore raw mode:', err);
             }
           }
@@ -1743,8 +1745,11 @@ export async function start_sandbox(
     // also mount-replace VIRTUAL_ENV directory with <project_settings>/sandbox.venv
     // sandbox can then set up this new VIRTUAL_ENV directory using sandbox.bashrc (see below)
     // directory will be empty if not set up, which is still preferable to having host binaries
+    const virtualEnv = process.env.VIRTUAL_ENV;
     if (
-      process.env.VIRTUAL_ENV?.toLowerCase().startsWith(workdir.toLowerCase())
+      virtualEnv !== undefined &&
+      virtualEnv.length > 0 &&
+      virtualEnv.toLowerCase().startsWith(workdir.toLowerCase())
     ) {
       const sandboxVenvPath = path.resolve(
         SETTINGS_DIRECTORY_NAME,
@@ -1755,12 +1760,9 @@ export async function start_sandbox(
       }
       args.push(
         '--volume',
-        `${sandboxVenvPath}:${getContainerPath(process.env.VIRTUAL_ENV)}`,
+        `${sandboxVenvPath}:${getContainerPath(virtualEnv)}`,
       );
-      args.push(
-        '--env',
-        `VIRTUAL_ENV=${getContainerPath(process.env.VIRTUAL_ENV)}`,
-      );
+      args.push('--env', `VIRTUAL_ENV=${getContainerPath(virtualEnv)}`);
     }
 
     // copy additional environment variables from SANDBOX_ENV
@@ -1960,8 +1962,9 @@ export async function start_sandbox(
         debugLogger.error(data.toString().trim());
       });
       proxyProcess.on('close', (code, signal) => {
-        if (sandboxProcess?.pid) {
-          process.kill(-sandboxProcess.pid, 'SIGTERM');
+        const sandboxPid = sandboxProcess?.pid;
+        if (sandboxPid !== undefined && sandboxPid !== 0) {
+          process.kill(-sandboxPid, 'SIGTERM');
         }
         throw new FatalSandboxError(
           `Proxy container command '${proxyContainerCommand}' exited with code ${code}, signal ${signal}`,
@@ -2030,7 +2033,7 @@ export async function start_sandbox(
         } catch (err) {
           // Issue #1020: Log I/O errors but don't crash
           // This can happen after long-running sessions on macOS
-          if (cliConfig?.getDebugMode()) {
+          if (cliConfig?.getDebugMode() === true) {
             debugLogger.error('[sandbox] Failed to restore raw mode:', err);
           }
         }

@@ -246,17 +246,26 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         })
         .check((argv) => {
           const pw = argv['promptWords'];
-          if (argv['prompt'] && Array.isArray(pw) && pw.length > 0) {
+          if (
+            typeof argv['prompt'] === 'string' &&
+            argv['prompt'].length > 0 &&
+            Array.isArray(pw) &&
+            pw.length > 0
+          ) {
             throw new Error(
               'Cannot use both a positional prompt and the --prompt (-p) flag together',
             );
           }
-          if (argv['prompt'] && argv['promptInteractive']) {
+          if (
+            typeof argv['prompt'] === 'string' &&
+            argv['prompt'].length > 0 &&
+            argv['promptInteractive'] === true
+          ) {
             throw new Error(
               'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
             );
           }
-          if (argv['yolo'] && argv['approvalMode']) {
+          if (argv['yolo'] === true && argv['approvalMode'] != null) {
             throw new Error(
               'Cannot use both --yolo (-y) and --approval-mode together. Use --approval-mode=yolo instead.',
             );
@@ -279,12 +288,21 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     .alias('h', 'help')
     .strict()
     .check((argv) => {
-      if (argv['prompt'] && argv['promptInteractive']) {
+      if (
+        typeof argv['prompt'] === 'string' &&
+        argv['prompt'].length > 0 &&
+        argv['promptInteractive'] === true
+      ) {
         throw new Error(
           'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
         );
       }
-      if (argv['profile'] && argv['profileLoad']) {
+      if (
+        typeof argv['profile'] === 'string' &&
+        argv['profile'].length > 0 &&
+        typeof argv['profileLoad'] === 'string' &&
+        argv['profileLoad'].length > 0
+      ) {
         throw new Error(
           'Cannot use both --profile and --profile-load. Use one at a time.',
         );

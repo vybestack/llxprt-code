@@ -53,8 +53,9 @@ export const ToolConfirmationMessage: React.FC<
 
   const isAlternateBuffer = useAlternateBuffer();
   const settings = useSettings();
-  const allowPermanentApproval =
-    settings.merged.security.enablePermanentToolApproval ?? false;
+  const permanentApprovalSetting =
+    settings.merged.security.enablePermanentToolApproval;
+  const allowPermanentApproval = permanentApprovalSetting === true;
 
   const [ideClient, setIdeClient] = useState<IdeClient | null>(null);
   const [isDiffingEnabled, setIsDiffingEnabled] = useState<boolean | null>(
@@ -81,7 +82,7 @@ export const ToolConfirmationMessage: React.FC<
 
   const handleConfirm = async (outcome: ToolConfirmationOutcome) => {
     if (confirmationDetails.type === 'edit') {
-      if (config.getIdeMode() && isDiffingEnabled) {
+      if (config.getIdeMode() && isDiffingEnabled === true) {
         const cliOutcome =
           outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
         await ideClient?.resolveDiffFromCli(
@@ -97,8 +98,8 @@ export const ToolConfirmationMessage: React.FC<
 
   useKeypress(
     (key) => {
-      if (!isFocused) return;
-      if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
+      if (isFocused !== true) return;
+      if (key.name === 'escape' || (key.ctrl === true && key.name === 'c')) {
         void handleConfirm(ToolConfirmationOutcome.Cancel);
       }
     },
@@ -115,7 +116,7 @@ export const ToolConfirmationMessage: React.FC<
     const options: Array<RadioSelectItem<ToolConfirmationOutcome>> = [];
 
     if (confirmationDetails.type === 'edit') {
-      if (!confirmationDetails.isModifying) {
+      if (confirmationDetails.isModifying !== true) {
         question = `Apply this change?`;
         options.push({
           label: 'Allow once',
@@ -272,7 +273,7 @@ export const ToolConfirmationMessage: React.FC<
     }
 
     if (confirmationDetails.type === 'edit') {
-      if (!confirmationDetails.isModifying) {
+      if (confirmationDetails.isModifying !== true) {
         bodyContent = (
           <DiffRenderer
             diffContent={confirmationDetails.fileDiff}
@@ -366,7 +367,8 @@ export const ToolConfirmationMessage: React.FC<
     } else if (confirmationDetails.type === 'info') {
       const infoProps = confirmationDetails;
       const displayUrls =
-        infoProps.urls &&
+        infoProps.urls !== undefined &&
+        infoProps.urls.length > 0 &&
         !(
           infoProps.urls.length === 1 && infoProps.urls[0] === infoProps.prompt
         );
@@ -379,7 +381,7 @@ export const ToolConfirmationMessage: React.FC<
               defaultColor={theme.text.link}
             />
           </Text>
-          {displayUrls && infoProps.urls && infoProps.urls.length > 0 && (
+          {displayUrls && infoProps.urls !== undefined && (
             <Box flexDirection="column" marginTop={1}>
               <Text color={theme.text.primary}>URLs to fetch:</Text>
               {infoProps.urls.map((url) => (
@@ -417,7 +419,7 @@ export const ToolConfirmationMessage: React.FC<
   ]);
 
   if (confirmationDetails.type === 'edit') {
-    if (confirmationDetails.isModifying) {
+    if (confirmationDetails.isModifying === true) {
       return (
         <Box
           width={terminalWidth}

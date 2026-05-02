@@ -27,11 +27,12 @@ import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 
 // Detect if running in PowerShell to handle @ symbol conflicts
 // PowerShell's IntelliSense treats @ as hashtable start and causes severe lag
-const isPowerShell =
+const isPowerShell = Boolean(
   process.env.PSModulePath !== undefined ||
-  process.env.PSVERSION !== undefined ||
-  (process.platform === 'win32' &&
-    process.env.ComSpec?.toLowerCase().includes('powershell'));
+    process.env.PSVERSION !== undefined ||
+    (process.platform === 'win32' &&
+      process.env.ComSpec?.toLowerCase().includes('powershell')),
+);
 
 // Track if we've shown the PowerShell tip
 let powershellTipShown = false;
@@ -353,7 +354,6 @@ export async function handleAtCommand({
                 signal,
               );
               if (
-                globResult.llmContent &&
                 typeof globResult.llmContent === 'string' &&
                 !globResult.llmContent.startsWith('No files found') &&
                 !globResult.llmContent.startsWith('Error:')
@@ -462,13 +462,13 @@ export async function handleAtCommand({
 
   if (totalIgnored > 0) {
     const messages = [];
-    if (ignoredByReason.git.length) {
+    if (ignoredByReason.git.length > 0) {
       messages.push(`Git-ignored: ${ignoredByReason.git.join(', ')}`);
     }
-    if (ignoredByReason.llxprt.length) {
+    if (ignoredByReason.llxprt.length > 0) {
       messages.push(`Llxprt-ignored: ${ignoredByReason.llxprt.join(', ')}`);
     }
-    if (ignoredByReason.both.length) {
+    if (ignoredByReason.both.length > 0) {
       messages.push(`Ignored by both: ${ignoredByReason.both.join(', ')}`);
     }
 
@@ -606,8 +606,9 @@ export async function handleAtCommand({
       description: invocation.getDescription(),
       status: ToolCallStatus.Success,
       resultDisplay:
-        result.returnDisplay ||
-        `Successfully read: ${contentLabelsForDisplay.join(', ')}`,
+        typeof result.returnDisplay === 'string' && result.returnDisplay
+          ? result.returnDisplay
+          : `Successfully read: ${contentLabelsForDisplay.join(', ')}`,
       confirmationDetails: undefined,
     };
 

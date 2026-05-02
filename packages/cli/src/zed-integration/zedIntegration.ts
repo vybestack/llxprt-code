@@ -460,7 +460,7 @@ export class GeminiAgent {
         if (contentGenConfig) {
           this.logger.debug(
             () =>
-              `ContentGeneratorConfig has providerManager: ${!!(contentGenConfig as Record<string, unknown>).providerManager}`,
+              `ContentGeneratorConfig has providerManager: ${(contentGenConfig as Record<string, unknown>).providerManager != null}`,
           );
         }
       } catch (error) {
@@ -494,7 +494,7 @@ export class GeminiAgent {
           );
 
           const providerManager = sessionConfig.getProviderManager();
-          if (providerManager?.hasActiveProvider()) {
+          if (providerManager?.hasActiveProvider() === true) {
             await sessionConfig.refreshAuth('provider');
           } else {
             await sessionConfig.refreshAuth('oauth');
@@ -714,7 +714,7 @@ export class Session {
                 continue;
               }
 
-              if (part.thought) {
+              if (part.thought === true) {
                 pendingThought += filteredText;
               } else {
                 pendingText += filteredText;
@@ -910,7 +910,11 @@ export class Session {
       const confirmationDetails =
         await invocation.shouldConfirmExecute(abortSignal);
 
-      if (confirmationDetails) {
+      if (
+        confirmationDetails !== false &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool confirmation payloads can be malformed at the ACP/runtime boundary.
+        confirmationDetails != null
+      ) {
         const content: acp.ToolCallContent[] = [];
 
         if (confirmationDetails.type === 'edit') {
@@ -946,7 +950,7 @@ export class Session {
             .nativeEnum(ToolConfirmationOutcome)
             .parse(output.outcome.optionId);
           const editedCommand = output.outcome.payload?.editedCommand?.trim();
-          if (editedCommand) {
+          if (typeof editedCommand === 'string' && editedCommand.length > 0) {
             payload = { editedCommand };
           }
         }
@@ -1076,7 +1080,7 @@ export class Session {
   private extractTextFromPartList(
     llmContent: PartListUnion | undefined,
   ): string | null {
-    if (!llmContent) {
+    if (llmContent === undefined) {
       return null;
     }
 
@@ -1087,7 +1091,7 @@ export class Session {
 
     const parts = this.normalizeToParts(llmContent);
     const text = getResponseTextFromParts(parts);
-    if (text) {
+    if (text !== undefined) {
       const trimmed = text.trim();
       if (trimmed.length > 0) {
         return trimmed;
@@ -1124,7 +1128,7 @@ export class Session {
   }
 
   private extractOutputString(response: unknown): string | null {
-    if (!response) {
+    if (response === undefined || response === null) {
       return null;
     }
 
@@ -1147,12 +1151,12 @@ export class Session {
       }
     }
 
-    if (responseRecord.content) {
+    if (responseRecord.content !== undefined) {
       const contentParts = this.normalizeToParts(
         responseRecord.content as PartListUnion,
       );
       const text = getResponseTextFromParts(contentParts);
-      if (text) {
+      if (text !== undefined) {
         const trimmed = text.trim();
         if (trimmed.length > 0) {
           return trimmed;
@@ -1164,7 +1168,7 @@ export class Session {
   }
 
   private isContent(value: unknown): value is Content {
-    if (!value || typeof value !== 'object') {
+    if (value === undefined || value === null || typeof value !== 'object') {
       return false;
     }
 
@@ -1281,7 +1285,6 @@ export class Session {
                 abortSignal,
               );
               if (
-                globResult.llmContent &&
                 typeof globResult.llmContent === 'string' &&
                 !globResult.llmContent.startsWith('No files found') &&
                 !globResult.llmContent.startsWith('Error:')
@@ -1344,7 +1347,8 @@ export class Session {
           i > 0 &&
           initialQueryText.length > 0 &&
           !initialQueryText.endsWith(' ') &&
-          resolvedSpec
+          resolvedSpec !== undefined &&
+          resolvedSpec.length > 0
         ) {
           // Add space if previous part was text and didn't end with space, or if previous was @path
           const prevPart = parts[i - 1];
@@ -1356,7 +1360,7 @@ export class Session {
             initialQueryText += ' ';
           }
         }
-        if (resolvedSpec) {
+        if (resolvedSpec !== undefined && resolvedSpec.length > 0) {
           initialQueryText += `@${resolvedSpec}`;
         } else {
           // If not resolved for reading (e.g. lone @ or invalid path that was skipped),
@@ -1365,11 +1369,14 @@ export class Session {
             i > 0 &&
             initialQueryText.length > 0 &&
             !initialQueryText.endsWith(' ') &&
-            !chunk.fileData?.fileUri.startsWith(' ')
+            chunk.fileData?.fileUri.startsWith(' ') !== true
           ) {
             initialQueryText += ' ';
           }
-          if (chunk.fileData?.fileUri) {
+          if (
+            chunk.fileData?.fileUri !== undefined &&
+            chunk.fileData.fileUri.length > 0
+          ) {
             initialQueryText += `@${chunk.fileData.fileUri}`;
           }
         }
@@ -1527,32 +1534,40 @@ function toToolCallContent(toolResult: ToolResult): acp.ToolCallContent | null {
     throw new Error(toolResult.error.message);
   }
 
-  if (toolResult.returnDisplay) {
-    if (typeof toolResult.returnDisplay === 'string') {
-      return {
-        type: 'content',
-        content: { type: 'text', text: toolResult.returnDisplay },
-      };
-    } else if ('fileDiff' in toolResult.returnDisplay) {
-      return {
-        type: 'diff',
-        path: toolResult.returnDisplay.fileName,
-        oldText: toolResult.returnDisplay.originalContent,
-        newText: toolResult.returnDisplay.newContent,
-      };
-    }
-    const content =
-      typeof toolResult.returnDisplay === 'object' &&
-      'content' in toolResult.returnDisplay &&
-      typeof toolResult.returnDisplay.content === 'string'
-        ? toolResult.returnDisplay.content
-        : '';
+  const returnDisplay = toolResult.returnDisplay;
+  // Preserve old falsy empty string return null behavior
+  if (returnDisplay === '') {
+    return null;
+  }
+  if (typeof returnDisplay === 'string') {
     return {
       type: 'content',
-      content: { type: 'text', text: content },
+      content: { type: 'text', text: returnDisplay },
     };
   }
-  return null;
+  if (
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ACP payloads can contain malformed returnDisplay values at runtime.
+    returnDisplay == null ||
+    typeof returnDisplay !== 'object'
+  ) {
+    return null;
+  }
+  if ('fileDiff' in returnDisplay) {
+    return {
+      type: 'diff',
+      path: returnDisplay.fileName,
+      oldText: returnDisplay.originalContent,
+      newText: returnDisplay.newContent,
+    };
+  }
+  const content =
+    'content' in returnDisplay && typeof returnDisplay.content === 'string'
+      ? returnDisplay.content
+      : '';
+  return {
+    type: 'content',
+    content: { type: 'text', text: content },
+  };
 }
 
 const basicPermissionOptions = [

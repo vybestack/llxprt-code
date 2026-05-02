@@ -436,7 +436,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         return;
       }
 
-      if (vimHandleInput?.(key)) {
+      if (vimHandleInput?.(key) === true) {
         return;
       }
 
@@ -829,7 +829,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   const handleMousePaste = useCallback(
     (event: MouseEvent) => {
-      if (!focus || isEmbeddedShellFocused) return;
+      if (focus !== true || isEmbeddedShellFocused === true) return;
       if (event.name === 'right-release') {
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
         handleClipboardPaste();
@@ -838,7 +838,9 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     [focus, isEmbeddedShellFocused, handleClipboardPaste],
   );
 
-  useMouse(handleMousePaste, { isActive: focus && !isEmbeddedShellFocused });
+  useMouse(handleMousePaste, {
+    isActive: focus === true && isEmbeddedShellFocused !== true,
+  });
 
   const linesToRender = buffer.viewportVisualLines;
   const [cursorVisualRowAbsolute, cursorVisualColAbsolute] =
@@ -847,8 +849,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   const getGhostTextLines = useCallback(() => {
     if (
-      !completion.promptCompletion.text ||
-      !buffer.text ||
+      completion.promptCompletion.text === '' ||
+      buffer.text === '' ||
       !completion.promptCompletion.text.startsWith(buffer.text)
     ) {
       return { inlineGhost: '', additionalLines: [] };
@@ -857,7 +859,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     const ghostSuffix = completion.promptCompletion.text.slice(
       buffer.text.length,
     );
-    if (!ghostSuffix) {
+    if (ghostSuffix === '') {
       return { inlineGhost: '', additionalLines: [] };
     }
 
@@ -1147,10 +1149,10 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                 }
 
                 const showCursorBeforeGhost =
-                  focus &&
-                  isOnCursorLine &&
+                  focus === true &&
+                  isOnCursorLine === true &&
                   cursorVisualColAbsolute === cpLen(lineText) &&
-                  currentLineGhost;
+                  currentLineGhost !== '';
 
                 if (!currentLineGhost && renderedLine.length === 0) {
                   renderedLine.push(
@@ -1166,8 +1168,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                     color={theme.text.accent}
                   >
                     {renderedLine}
-                    {showCursorBeforeGhost && chalk.inverse(' ')}
-                    {currentLineGhost && (
+                    {showCursorBeforeGhost === true && chalk.inverse(' ')}
+                    {currentLineGhost !== '' && (
                       <Text color={theme.text.secondary}>
                         {currentLineGhost}
                       </Text>

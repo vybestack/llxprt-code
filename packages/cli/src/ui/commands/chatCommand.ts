@@ -127,7 +127,7 @@ const saveCommand: SlashCommand = {
     await logger.initialize();
 
     // Check for overwrite confirmation first
-    if (!context.overwriteConfirmed) {
+    if (context.overwriteConfirmed !== true) {
       const exists = await logger.checkpointExists(tag);
       if (exists) {
         return {
@@ -148,7 +148,7 @@ const saveCommand: SlashCommand = {
 
     const client = config?.getGeminiClient();
     // Check if chat is initialized before accessing it
-    if (!client?.hasChatInitialized()) {
+    if (client?.hasChatInitialized() !== true) {
       return {
         type: 'message',
         messageType: 'error',
@@ -288,7 +288,7 @@ const deleteCommand: SlashCommand = {
     const { logger } = context.services;
     await logger.initialize();
 
-    if (!force && !context.overwriteConfirmed) {
+    if (force === false && context.overwriteConfirmed !== true) {
       return {
         type: 'confirm_action',
         prompt: React.createElement(
@@ -351,7 +351,7 @@ const renameCommand: SlashCommand = {
     }
 
     if (await logger.checkpointExists(newTag)) {
-      if (!context.overwriteConfirmed) {
+      if (context.overwriteConfirmed !== true) {
         return {
           type: 'confirm_action',
           prompt: React.createElement(
@@ -390,7 +390,7 @@ const clearCommand: SlashCommand = {
   action: async (context): Promise<MessageActionReturn | void> => {
     const client = context.services.config?.getGeminiClient();
     // Check if chat is initialized before clearing
-    if (!client?.hasChatInitialized()) {
+    if (client?.hasChatInitialized() !== true) {
       return {
         type: 'message',
         messageType: 'info',
@@ -428,7 +428,7 @@ const restoreHistory = async (
   turns: number,
 ): Promise<SlashCommandActionReturn> => {
   const client = context.services.config?.getGeminiClient();
-  if (!client?.hasChatInitialized()) {
+  if (client?.hasChatInitialized() !== true) {
     return {
       type: 'message',
       messageType: 'error',

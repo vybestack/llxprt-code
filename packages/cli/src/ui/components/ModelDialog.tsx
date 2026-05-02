@@ -46,7 +46,7 @@ interface ModelsDialogState {
 
 // Format context window (e.g., 200000 -> "200K", 1000000 -> "1M")
 function formatContext(tokens: number | undefined): string {
-  if (!tokens) return '-';
+  if (tokens == null || tokens === 0) return '-';
   if (tokens >= 1_000_000) return `${tokens / 1_000_000}M`;
   if (tokens >= 1_000) return `${Math.floor(tokens / 1_000)}K`;
   return String(tokens);
@@ -59,8 +59,8 @@ function formatCaps(
   narrow: boolean,
 ): string {
   const letters: string[] = [];
-  if (caps?.vision) letters.push('V');
-  if (caps?.reasoning) letters.push('R');
+  if (caps?.vision === true) letters.push('V');
+  if (caps?.reasoning === true) letters.push('R');
   return narrow ? letters.join('') : letters.join(' ');
 }
 
@@ -226,10 +226,10 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
     // 4. Filter by capabilities (AND logic) - only if hydrated
     // Note: All models now have tool support (filtered at provider level)
     if (state.filters.vision) {
-      models = models.filter((m) => m.capabilities?.vision);
+      models = models.filter((m) => m.capabilities?.vision === true);
     }
     if (state.filters.reasoning) {
-      models = models.filter((m) => m.capabilities?.reasoning);
+      models = models.filter((m) => m.capabilities?.reasoning === true);
     }
 
     // Sort by provider, then model ID
@@ -311,7 +311,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
       }
 
       // Ctrl+A toggles provider filter (all providers vs current provider)
-      if (key.name === 'a' && key.ctrl && currentProvider) {
+      if (key.name === 'a' && key.ctrl === true && currentProvider != null) {
         setState((prev) => ({
           ...prev,
           providerFilter:
@@ -391,8 +391,8 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
         if (
           key.sequence &&
           key.sequence.length === 1 &&
-          !key.ctrl &&
-          !key.meta &&
+          key.ctrl !== true &&
+          key.meta !== true &&
           key.sequence.match(/[\x20-\x7E]/)
         ) {
           setState((prev) => ({

@@ -87,7 +87,11 @@ export async function runNonInteractive({
     const prefix = payload.severity.toUpperCase();
     process.stderr.write(`[${prefix}] ${payload.message}
 `);
-    if (payload.error && config.getDebugMode()) {
+    if (
+      payload.error !== undefined &&
+      payload.error !== null &&
+      config.getDebugMode()
+    ) {
       /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty stack should fall back to message */
       const errorToLog =
         payload.error instanceof Error
@@ -135,7 +139,7 @@ export async function runNonInteractive({
       key: { name?: string; ctrl?: boolean },
     ) => {
       // Detect Ctrl+C: either ctrl+c key combo or raw character code 3
-      if ((key.ctrl && key.name === 'c') || str === '\u0003') {
+      if ((key.ctrl === true && key.name === 'c') || str === '\u0003') {
         // Only handle once
         if (isAborting) {
           return;
@@ -245,12 +249,18 @@ export async function runNonInteractive({
       // If a slash command is found and returns a prompt, use it.
       // Otherwise, slashCommandResult falls through to the default prompt
       // handling.
-      if (slashCommandResult) {
+      // Preserve old truthy behavior: assign only when content is truthy
+      // (non-empty string or any object/array). Empty string is falsy in old JS.
+      if (
+        slashCommandResult !== undefined &&
+        (typeof slashCommandResult !== 'string' ||
+          slashCommandResult.length > 0)
+      ) {
         query = slashCommandResult as Part[];
       }
     }
 
-    if (!query) {
+    if (query === undefined) {
       const { processedQuery, error } = await handleAtCommand({
         query: input,
         config,
@@ -260,14 +270,14 @@ export async function runNonInteractive({
         signal: abortController.signal,
       });
 
-      if (error || !processedQuery) {
+      if (error !== undefined || processedQuery === null) {
         // An error occurred during @include processing (e.g., file not found).
         // The error message is already logged by handleAtCommand.
-        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error should use default message */
-        throw new FatalInputError(
-          error || 'Exiting due to an error processing the @ command.',
-        );
-        /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+        const fatalMessage =
+          error !== undefined && error !== ''
+            ? error
+            : 'Exiting due to an error processing the @ command.';
+        throw new FatalInputError(fatalMessage);
       }
       query = processedQuery as Part[];
     }
@@ -384,7 +394,7 @@ export async function runNonInteractive({
           throw error;
         }
 
-        if (nextEvent.done) {
+        if (nextEvent.done === true) {
           break;
         }
 
@@ -608,20 +618,20 @@ export async function runNonInteractive({
             });
           }
 
-          if (toolResponse.error) {
-            if (!jsonOutput && !streamJsonOutput) {
-              /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty resultDisplay should fall back to error message */
+          if (toolResponse.error != null) {
+            if (jsonOutput === false && streamJsonOutput === false) {
+              /* eslint-disable @typescript-eslint/prefer-nullish-coalescing, @typescript-eslint/strict-boolean-expressions -- intentional falsy coalescing: empty resultDisplay should fall back to error message */
               debugLogger.error(
                 `Error executing tool ${requestFromModel.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
               );
-              /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+              /* eslint-enable @typescript-eslint/prefer-nullish-coalescing, @typescript-eslint/strict-boolean-expressions */
             }
           } else if (
-            !jsonOutput &&
-            !streamJsonOutput &&
-            !toolResponse.suppressDisplay &&
+            jsonOutput === false &&
+            streamJsonOutput === false &&
+            toolResponse.suppressDisplay !== true &&
             typeof toolResponse.resultDisplay === 'string' &&
-            toolResponse.resultDisplay.length > 0
+            toolResponse.resultDisplay.length !== 0
           ) {
             process.stdout.write(`${toolResponse.resultDisplay}
 `);
