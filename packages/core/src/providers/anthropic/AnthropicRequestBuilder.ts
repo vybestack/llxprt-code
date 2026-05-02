@@ -237,7 +237,7 @@ export function buildThinkingConfig(options: {
 
   if (
     opus46Plus &&
-    !options.reasoningBudgetTokens &&
+    options.reasoningBudgetTokens == null &&
     options.adaptiveThinking !== false
   ) {
     const config: {
@@ -311,7 +311,7 @@ export function buildAnthropicRequestBody(options: {
     ...options.modelParams,
   };
 
-  if (options.system) {
+  if (options.system !== undefined) {
     requestBody.system = options.system;
   }
 

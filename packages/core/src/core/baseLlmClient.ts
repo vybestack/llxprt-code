@@ -323,7 +323,7 @@ export class BaseLLMClient {
       abortSignal,
     };
 
-    if (systemInstruction) {
+    if (systemInstruction !== undefined && systemInstruction !== '') {
       config.systemInstruction = systemInstruction;
     }
 
@@ -363,7 +363,7 @@ export class BaseLLMClient {
         maxAttempts: maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
       });
     } catch (error) {
-      if (abortSignal?.aborted) {
+      if (abortSignal?.aborted === true) {
         throw error;
       }
 

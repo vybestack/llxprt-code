@@ -56,7 +56,7 @@ export class GoogleCredentialProvider implements McpAuthProvider {
     // check for a valid, non-expired cached token.
     if (
       this.cachedToken &&
-      this.tokenExpiryTime &&
+      this.tokenExpiryTime != null &&
       Date.now() < this.tokenExpiryTime - FIVE_MIN_BUFFER_MS
     ) {
       return this.cachedToken;
@@ -81,7 +81,7 @@ export class GoogleCredentialProvider implements McpAuthProvider {
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- GoogleAuth mocks and external clients may omit credentials at runtime.
     const expiryTime = client.credentials?.expiry_date;
-    if (expiryTime) {
+    if (expiryTime != null && expiryTime > 0) {
       this.tokenExpiryTime = expiryTime;
       this.cachedToken = newToken;
     }

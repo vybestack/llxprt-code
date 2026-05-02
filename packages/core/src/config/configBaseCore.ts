@@ -293,7 +293,7 @@ export abstract class ConfigBaseCore {
   }
 
   isContinueSession(): boolean {
-    return !!this.continueSession;
+    return Boolean(this.continueSession);
   }
   shouldLoadMemoryFromIncludeDirectories(): boolean {
     return this.loadMemoryFromIncludeDirectories;
@@ -398,7 +398,7 @@ export abstract class ConfigBaseCore {
     return this.approvalMode;
   }
   isJitContextEnabled(): boolean {
-    return !!this.jitContextEnabled;
+    return this.jitContextEnabled === true;
   }
   getContextManager(): ContextManager | undefined {
     return this.contextManager;

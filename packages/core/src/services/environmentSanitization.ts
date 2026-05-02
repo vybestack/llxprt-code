@@ -147,10 +147,10 @@ function shouldRedactEnvironmentVariable(
   value = value?.toUpperCase();
 
   // User overrides take precedence.
-  if (allowedSet?.has(key)) {
+  if (allowedSet?.has(key) === true) {
     return false;
   }
-  if (blockedSet?.has(key)) {
+  if (blockedSet?.has(key) === true) {
     return true;
   }
 

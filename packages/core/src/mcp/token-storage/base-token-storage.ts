@@ -27,7 +27,7 @@ export abstract class BaseTokenStorage {
       throw new Error('Server name is required');
     }
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Token storage validates malformed persisted credential records.
-    if (!credentials.token) {
+    if (credentials.token == null) {
       throw new Error('Token is required');
     }
     if (!credentials.token.accessToken) {
@@ -39,7 +39,7 @@ export abstract class BaseTokenStorage {
   }
 
   protected isTokenExpired(credentials: MCPOAuthCredentials): boolean {
-    if (!credentials.token.expiresAt) {
+    if (credentials.token.expiresAt == null) {
       return false;
     }
     const bufferMs = 5 * 60 * 1000;

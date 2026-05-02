@@ -260,7 +260,11 @@ export class ConfirmationCoordinator {
     // PolicyDecision.ASK — check shouldConfirmExecute
     const confirmationDetails = await invocation.shouldConfirmExecute(signal);
 
-    if (!confirmationDetails) {
+    if (
+      confirmationDetails === false ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Scheduler plugin boundary can return malformed nullish values at runtime.
+      confirmationDetails == null
+    ) {
       this.approveInternal(reqInfo.callId);
       return;
     }
@@ -682,7 +686,11 @@ export class ConfirmationCoordinator {
         const stillNeedsConfirmation =
           await pendingTool.invocation.shouldConfirmExecute(signal);
 
-        if (!stillNeedsConfirmation) {
+        if (
+          stillNeedsConfirmation === false ||
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Scheduler plugin boundary can return malformed nullish values at runtime.
+          stillNeedsConfirmation == null
+        ) {
           this.statusMutator.setOutcome(
             pendingTool.request.callId,
             ToolConfirmationOutcome.ProceedAlways,

@@ -262,7 +262,7 @@ function deepFreeze<T>(obj: T): T {
   Object.freeze(obj);
   Object.getOwnPropertyNames(obj).forEach((prop) => {
     const value = (obj as Record<string, unknown>)[prop];
-    if (value && typeof value === 'object') {
+    if (typeof value === 'object' && value !== null) {
       deepFreeze(value);
     }
   });
@@ -442,8 +442,8 @@ export function subscribeToAgentRuntimeState(
   // Store subscription (lines 298-302)
   subscribers.set(subscriptionId, {
     callback,
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean async option defaults to false
-    async: options?.async || false,
+
+    async: options?.async ?? false,
   });
 
   // Return unsubscribe function (lines 303-306)

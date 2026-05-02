@@ -82,7 +82,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
       const module = await keyringLoader();
       this.keytarModule =
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Keychain token storage data.
-        'default' in module ? module.default || null : module || null;
+        'default' in module ? (module.default ?? null) : (module ?? null);
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       const isModuleMissing =

@@ -186,11 +186,11 @@ export async function loadAgentRuntime(
 ): Promise<AgentRuntimeLoaderResult> {
   const { profile, overrides = {}, signal } = options;
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
-  if (!profile) {
+  if (profile == null) {
     throw new Error('AgentRuntimeLoader requires a profile option.');
   }
 
-  if (signal?.aborted) {
+  if (signal?.aborted === true) {
     const error = new Error('Runtime load aborted');
     error.name = 'AbortError';
     throw error;

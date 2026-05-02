@@ -24,10 +24,7 @@ function loadMarkdownFile(filename: string): string {
   // Skip debug logging if process or process.env is unavailable (test environment)
   let debugLog = false;
   try {
-    debugLog =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
-      process?.env &&
-      (process.env.DEBUG === '1' || process.env.DEBUG === 'true');
+    debugLog = process.env.DEBUG === '1' || process.env.DEBUG === 'true';
   } catch {
     debugLog = false;
   }
@@ -217,7 +214,7 @@ function loadMarkdownFile(filename: string): string {
       __dirname,
       dirname(__dirname),
       dirname(dirname(__dirname)),
-    ].filter((p) => p && p !== '');
+    ].filter((p): p is string => typeof p === 'string' && p !== '');
 
     if (debugLog) {
       logger.debug(

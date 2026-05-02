@@ -68,7 +68,7 @@ export function getOpenAIProviderInfo(
     const manager = providerManager ?? runtimeManager ?? null;
 
     const activeProviderName =
-      (manager?.hasActiveProvider()
+      (manager?.hasActiveProvider() === true
         ? manager.getActiveProviderName()
         : undefined) ??
       (typeof config?.getProvider === 'function'
@@ -81,7 +81,7 @@ export function getOpenAIProviderInfo(
 
     // Narrow to expected provider type using feature detection for ancillary data
     let openaiProvider: OpenAIProviderLike | null = null;
-    if (manager?.hasActiveProvider()) {
+    if (manager?.hasActiveProvider() === true) {
       const activeProvider = manager.getActiveProvider();
       if (activeProvider.name === 'openai') {
         openaiProvider = activeProvider as unknown as OpenAIProviderLike;

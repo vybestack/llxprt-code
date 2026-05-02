@@ -75,7 +75,7 @@ export class ServiceAccountImpersonationProvider implements McpAuthProvider {
     // 1. Check if we have a valid, non-expired cached token.
     if (
       this.cachedToken &&
-      this.tokenExpiryTime &&
+      this.tokenExpiryTime != null &&
       Date.now() < this.tokenExpiryTime - FIVE_MIN_BUFFER_MS
     ) {
       return this.cachedToken;
@@ -120,7 +120,7 @@ export class ServiceAccountImpersonationProvider implements McpAuthProvider {
       token_type: 'Bearer',
     };
 
-    if (expiryTime) {
+    if (expiryTime != null && expiryTime > 0) {
       this.tokenExpiryTime = expiryTime;
       this.cachedToken = newTokens;
     }

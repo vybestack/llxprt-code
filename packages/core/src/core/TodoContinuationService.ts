@@ -249,11 +249,14 @@ export class TodoContinuationService {
     if (todos.length === 0) {
       reminder = this.todoReminderService.getCreateListReminder([]);
     } else if (activeTodos.length > 0) {
-      reminder = options?.escalate
-        ? this.todoReminderService.getEscalatedActiveTodoReminder(
-            activeTodos[0],
-          )
-        : this.todoReminderService.getUpdateActiveTodoReminder(activeTodos[0]);
+      reminder =
+        options?.escalate === true
+          ? this.todoReminderService.getEscalatedActiveTodoReminder(
+              activeTodos[0],
+            )
+          : this.todoReminderService.getUpdateActiveTodoReminder(
+              activeTodos[0],
+            );
     }
 
     return { reminder, todos, activeTodos };
@@ -293,11 +296,11 @@ export class TodoContinuationService {
     }
     return response.responseParts.some((part) => {
       if (
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
-        part &&
+        /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads */
         typeof part === 'object' &&
+        part !== null &&
         'functionResponse' in part &&
-        part.functionResponse &&
+        part.functionResponse !== null &&
         typeof part.functionResponse === 'object'
       ) {
         const name = (part.functionResponse as { name?: unknown }).name;
@@ -323,7 +326,6 @@ export class TodoContinuationService {
       return PostTurnAction.Finish;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
     if (hadThinking && !hadContent && !hadToolCalls) {
       if (retryCount >= maxRetries) {
         return PostTurnAction.Finish;

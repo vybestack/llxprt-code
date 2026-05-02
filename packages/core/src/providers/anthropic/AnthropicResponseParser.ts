@@ -50,8 +50,8 @@ function parseContentBlocks(
 
       const toolSchema = findToolSchema(tools, unprefixName, isOAuth);
       if (
-        toolSchema &&
-        processedParameters &&
+        toolSchema != null &&
+        processedParameters != null &&
         typeof processedParameters === 'object' &&
         typeof toolSchema === 'object'
       ) {

@@ -69,7 +69,7 @@ export class PromptCache {
    */
   generateKey(context: PromptContext | null | undefined): string {
     // Validate context
-    if (!context) {
+    if (context == null) {
       return '';
     }
 
@@ -77,7 +77,7 @@ export class PromptCache {
     const provider = context.provider || 'unknown';
     const model = context.model || 'unknown';
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
-    const tools = [...(context.enabledTools || [])].sort();
+    const tools = [...(context.enabledTools ?? [])].sort();
     const envFlags: string[] = [];
 
     // Build environment flags
@@ -366,7 +366,7 @@ export class PromptCache {
 
     for (const context of contexts) {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
-      if (!context) continue;
+      if (context == null) continue;
 
       const key = this.generateKey(context);
       if (key && !this.has(context)) {

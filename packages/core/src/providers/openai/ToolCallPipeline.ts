@@ -89,7 +89,7 @@ export class ToolCallPipeline {
     logger.debug('Starting simplified tool call pipeline processing');
 
     // Check for cancellation at the start
-    if (abortSignal?.aborted) {
+    if (abortSignal !== undefined && abortSignal.aborted === true) {
       throw this.createAbortError();
     }
 
@@ -104,7 +104,7 @@ export class ToolCallPipeline {
     try {
       for (const candidate of candidates) {
         // Check for cancellation in processing loop
-        if (abortSignal?.aborted) {
+        if (abortSignal !== undefined && abortSignal.aborted === true) {
           throw this.createAbortError();
         }
         try {

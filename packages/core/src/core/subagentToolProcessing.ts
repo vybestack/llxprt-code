@@ -261,9 +261,11 @@ export function buildPartsFromCompletedCalls(
 ): Part[] {
   const aggregate: Part[] = [];
   for (const call of completedCalls) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
-    if (call.response?.responseParts?.length) {
-      for (const part of call.response.responseParts) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads may be malformed at boundaries.
+    const responseParts = call.response?.responseParts;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads may omit response parts.
+    if (responseParts !== undefined && responseParts.length > 0) {
+      for (const part of responseParts) {
         if ('functionCall' in part) {
           continue;
         }
@@ -380,7 +382,7 @@ export async function processFunctionCalls(
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
-    if (toolResponse.responseParts) {
+    if (toolResponse.responseParts !== undefined) {
       for (const part of toolResponse.responseParts) {
         if ('functionCall' in part) {
           continue;
