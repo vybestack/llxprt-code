@@ -127,10 +127,15 @@ export async function getRipgrepPath(): Promise<string> {
   // 5. Bundle-specific path resolution
   // Check if running from bundled environment
   const projectRoot = process.cwd();
+  const pkgEntrypoint = (
+    process as unknown as { pkg?: { entrypoint?: string } }
+  ).pkg?.entrypoint;
+  const nodeModulesExists = fs.existsSync(
+    path.join(projectRoot, 'node_modules'),
+  );
   const isBundled =
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string property may be empty, check node_modules as fallback
-    (process as unknown as { pkg?: { entrypoint?: string } }).pkg?.entrypoint ||
-    !fs.existsSync(path.join(projectRoot, 'node_modules'));
+    Boolean(pkgEntrypoint || !nodeModulesExists);
 
   if (isBundled) {
     // In bundle environment, look for ripgrep in bundle directory

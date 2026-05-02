@@ -230,7 +230,7 @@ export function coerceParametersToSchema(
   }
 
   // Handle null/undefined schema - return params unchanged
-  if (!schema || typeof schema !== 'object') {
+  if (schema === null || schema === undefined || typeof schema !== 'object') {
     return params;
   }
 

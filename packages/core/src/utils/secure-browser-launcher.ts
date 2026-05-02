@@ -152,7 +152,7 @@ export async function openBrowserSecurely(url: string): Promise<void> {
 export function shouldLaunchBrowser(
   options?: { forceManual?: boolean } | undefined,
 ): boolean {
-  if (options?.forceManual) {
+  if (options?.forceManual === true) {
     return false;
   }
   // A list of browser names that indicate we should not attempt to open a

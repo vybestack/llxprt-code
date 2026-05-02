@@ -202,12 +202,19 @@ export function limitOutputTokens(
 ): TruncatedOutput {
   const limits = getOutputLimits(config);
   const maxTokens = limits.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const rawMaxTokens = limits.maxTokens as unknown;
   const effectiveLimit = getEffectiveTokenLimit(maxTokens);
 
   const encodedContent = encodeText(content);
   const tokens = encodedContent?.length ?? Math.ceil(content.length / 3);
 
-  if (!maxTokens || tokens <= effectiveLimit) {
+  if (
+    rawMaxTokens === false ||
+    rawMaxTokens === '' ||
+    maxTokens === 0 ||
+    Number.isNaN(maxTokens) ||
+    tokens <= effectiveLimit
+  ) {
     return {
       content,
       wasTruncated: false,

@@ -508,14 +508,14 @@ export function checkCommandPermissions(
     const parseResult = parseCommandDetails(command);
     if (
       parseResult &&
-      !parseResult.hasError &&
+      parseResult.hasError !== true &&
       parseResult.details.length > 0
     ) {
       // Use tree-sitter results - extracts ALL commands including nested ones
       commandsToValidate = parseResult.details
         .map((detail) => normalize(detail.text))
         .filter(Boolean);
-    } else if (parseResult?.hasError) {
+    } else if (parseResult?.hasError === true) {
       // Tree-sitter detected a syntax error - reject for safety
       return {
         allAllowed: false,
