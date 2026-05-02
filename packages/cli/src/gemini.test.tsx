@@ -774,7 +774,7 @@ describe('gemini.tsx deferred initialization', () => {
 
     try {
       await main();
-    } catch (_e) {
+    } catch {
       // Expected
     }
 

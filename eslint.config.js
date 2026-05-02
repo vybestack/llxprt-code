@@ -251,6 +251,7 @@ export default tseslint.config(
       ),
       'sonarjs/cognitive-complexity': ['warn', 30],
       'sonarjs/todo-tag': 'error',
+      'sonarjs/no-ignored-exceptions': 'error',
 
       'sonarjs/function-return-type': 'off',
       'sonarjs/no-wildcard-import': 'off',

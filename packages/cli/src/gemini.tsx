@@ -1065,7 +1065,7 @@ export async function main() {
         if (!providerManagerForAcp.hasActiveProvider()) {
           providerManagerForAcp.setActiveProvider(configProvider);
         }
-      } catch (_e) {
+      } catch {
         // Non-fatal - continue without provider
         // Authentication can still happen via the ACP protocol
       }
