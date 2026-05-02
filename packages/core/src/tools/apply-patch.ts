@@ -364,7 +364,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
           : `Successfully created file from patch: ${filePath}.`,
       ];
 
-      if (this.params.modified_by_user) {
+      if (this.params.modified_by_user === true) {
         llmSuccessMessageParts.push(`User modified the patch content.`);
       }
 
@@ -373,7 +373,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       // Append LSP diagnostics after successful patch for content-write files
       try {
         const lspClient = this.config.getLspServiceClient();
-        if (lspClient?.isAlive()) {
+        if (lspClient !== undefined && lspClient.isAlive() === true) {
           // Only check files that had content writes (triggers LSP analysis)
           for (const contentFile of classification.contentWriteFiles) {
             const absoluteFilePath = path.resolve(

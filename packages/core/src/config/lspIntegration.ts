@@ -51,9 +51,13 @@ export async function initializeLsp(
     );
     await state.lspServiceClient.start();
 
-    if (!state.lspServiceClient.isAlive()) {
+    if (state.lspServiceClient.isAlive() !== true) {
       const reason = state.lspServiceClient.getUnavailableReason();
-      if (reason?.includes('not found')) {
+      if (
+        typeof reason === 'string' &&
+        reason !== '' &&
+        reason.includes('not found')
+      ) {
         debugLogger.error(
           'LSP: @vybestack/llxprt-code-lsp package not found. Install with: npm install -g @vybestack/llxprt-code-lsp',
         );

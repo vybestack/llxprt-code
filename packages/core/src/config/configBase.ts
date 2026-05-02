@@ -244,7 +244,7 @@ export abstract class ConfigBase extends ConfigBaseCore {
 
       const activeProvider = this.providerManager.getActiveProvider();
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider manager may have no active provider during settings updates.
-      if (!activeProvider) {
+      if (activeProvider === undefined || activeProvider === null) {
         return;
       }
 

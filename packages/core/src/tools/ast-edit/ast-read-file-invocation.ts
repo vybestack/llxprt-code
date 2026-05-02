@@ -65,12 +65,15 @@ export class ASTReadFileToolInvocation
       const lines = content.split('\n');
       const totalLineCount = countLines(lines);
       const startLine = Math.min(
-        this.params.offset ? Math.max(1, this.params.offset) - 1 : 0,
+        typeof this.params.offset === 'number' && this.params.offset > 0
+          ? Math.max(1, this.params.offset) - 1
+          : 0,
         totalLineCount,
       );
-      const endLine = this.params.limit
-        ? Math.min(totalLineCount, startLine + this.params.limit)
-        : totalLineCount;
+      const endLine =
+        typeof this.params.limit === 'number' && this.params.limit > 0
+          ? Math.min(totalLineCount, startLine + this.params.limit)
+          : totalLineCount;
       const selectedContent = lines.slice(startLine, endLine).join('\n');
 
       // Collect enhanced context (same as ASTEdit)

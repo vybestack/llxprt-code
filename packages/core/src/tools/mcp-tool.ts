@@ -97,7 +97,10 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     const serverAllowListKey = this.serverName;
     const toolAllowListKey = `${this.serverName}.${this.serverToolName}`;
 
-    if (this.cliConfig?.isTrustedFolder() && this.trust) {
+    if (
+      this.cliConfig?.isTrustedFolder() === true &&
+      this.trust === true
+    ) {
       return false; // server is trusted, no confirmation needed
     }
 

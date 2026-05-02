@@ -114,11 +114,13 @@ export function buildToolDeclarationsFromView(
  */
 export function getEnabledToolNamesForPrompt(config: Config): string[] {
   const toolRegistry = config.getToolRegistry();
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Config test doubles and runtime bootstrap may omit a tool registry.
+  if (toolRegistry == null) {
+    return [];
+  }
   if (
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Config test doubles and runtime bootstrap may omit a tool registry.
-    !toolRegistry ||
     typeof (toolRegistry as { getEnabledTools?: unknown }).getEnabledTools !==
-      'function'
+    'function'
   ) {
     return [];
   }

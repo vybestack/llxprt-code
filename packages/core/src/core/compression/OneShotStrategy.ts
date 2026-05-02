@@ -114,7 +114,7 @@ export class OneShotStrategy implements CompressionStrategy {
 
     // Optional verification pass — gated by compressionVerification flag (default off)
     let finalSummary = summary;
-    if (context.compressionVerification) {
+    if (context.compressionVerification === true) {
       finalSummary = await runVerificationPass(
         provider,
         summary,

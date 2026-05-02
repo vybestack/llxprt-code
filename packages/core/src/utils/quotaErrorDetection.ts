@@ -58,14 +58,19 @@ export function isProQuotaExceededError(error: unknown): boolean {
   }
 
   // Check if it's a Gaxios error with response data
-  if (error && typeof error === 'object' && 'response' in error) {
+  if (
+    error !== null &&
+    error !== undefined &&
+    typeof error === 'object' &&
+    'response' in error
+  ) {
     const gaxiosError = error as {
       response?: {
         data?: unknown;
       };
     };
     const responseData = gaxiosError.response?.data;
-    if (responseData) {
+    if (responseData !== undefined && responseData !== null) {
       if (typeof responseData === 'string') {
         return checkMessage(responseData);
       }

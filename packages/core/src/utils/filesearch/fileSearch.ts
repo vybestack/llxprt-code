@@ -56,7 +56,7 @@ export async function filter(
     // Yield control to the event loop periodically to prevent blocking.
     if (i % 1000 === 0) {
       await new Promise((resolve) => setImmediate(resolve));
-      if (signal?.aborted) {
+      if (signal?.aborted === true) {
         throw new AbortError();
       }
     }
@@ -170,7 +170,7 @@ class RecursiveFileSearch implements FileSearch {
     for (const [i, candidate] of filteredCandidates.entries()) {
       if (i % 1000 === 0) {
         await new Promise((resolve) => setImmediate(resolve));
-        if (options.signal?.aborted) {
+        if (options.signal?.aborted === true) {
           throw new AbortError();
         }
       }

@@ -212,7 +212,7 @@ export abstract class BaseToolInvocation<
 
         cleanup();
 
-        if (response.requiresUserConfirmation) {
+        if (response.requiresUserConfirmation === true) {
           resolve('ASK_USER');
           return;
         }
@@ -398,7 +398,11 @@ export abstract class DeclarativeTool<
   get schema(): FunctionDeclaration {
     // Strip requireOne from the schema before sending to the model
     // The requireOne property is used internally for validation but not sent to the model
-    if (this.parameterSchema && typeof this.parameterSchema === 'object') {
+    if (
+      this.parameterSchema !== null &&
+      this.parameterSchema !== undefined &&
+      typeof this.parameterSchema === 'object'
+    ) {
       const schemaClone = {
         ...(this.parameterSchema as Record<string, unknown>),
       };

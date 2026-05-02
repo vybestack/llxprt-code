@@ -101,8 +101,7 @@ export async function executeProviderWithBucketFailover(
     throw new Error('Bucket failover requires at least one bucket');
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Public failover boundary validates provider implementations supplied at runtime.
-  if (!provider.generateChatCompletion) {
+  if (typeof provider.generateChatCompletion !== 'function') {
     throw new Error('Provider does not support generateChatCompletion');
   }
 

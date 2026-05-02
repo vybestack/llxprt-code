@@ -23,7 +23,7 @@ export async function createCodeAssistContentGenerator(
 
   logger.debug(
     () =>
-      `createCodeAssistContentGenerator: config=${!!config}, baseURL=${baseURL}`,
+      `createCodeAssistContentGenerator: config=defined, baseURL=${baseURL}`,
   );
 
   try {

@@ -299,7 +299,7 @@ class MemoryToolInvocation extends BaseToolInvocation<
     const memoryFilePath = this.getMemoryFilePath();
 
     try {
-      if (modified_by_user && modified_content !== undefined) {
+      if (modified_by_user === true && modified_content !== undefined) {
         // User modified the content in external editor, write it directly
         await fs.mkdir(path.dirname(memoryFilePath), {
           recursive: true,
@@ -384,7 +384,7 @@ export class MemoryTool
         const canSaveCore = settingsService.get('model.canSaveCore') as
           | boolean
           | undefined;
-        if (!canSaveCore) {
+        if (canSaveCore !== true) {
           return (
             'Core memory scopes (core.global, core.project) are disabled. ' +
             'Enable them with: /set model.canSaveCore true\n' +

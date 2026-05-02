@@ -37,7 +37,7 @@ export async function collectLspDiagnosticsBlock(
   absolutePath: string,
 ): Promise<string | null> {
   const lspClient = config.getLspServiceClient();
-  if (!lspClient?.isAlive()) {
+  if (lspClient === undefined || lspClient.isAlive() !== true) {
     return null;
   }
 
@@ -65,10 +65,10 @@ export async function collectLspDiagnosticsBlock(
   const maxPerFile = lspConfig?.maxDiagnosticsPerFile ?? 20;
   const relPath = path.relative(config.getTargetDir(), absolutePath);
   const limited = filtered
-    .sort(
-      (a, b) =>
-        (a.line ?? 0) - (b.line ?? 0) || (a.column ?? 0) - (b.column ?? 0),
-    )
+    .sort((a, b) => {
+      const lineDiff = (a.line ?? 0) - (b.line ?? 0);
+      return lineDiff !== 0 ? lineDiff : (a.column ?? 0) - (b.column ?? 0);
+    })
     .slice(0, maxPerFile);
 
   // Build severity-reflective header based on actual severities present

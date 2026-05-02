@@ -577,7 +577,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private isAbortError(error: unknown): boolean {
-    if (!error || typeof error !== 'object') {
+    if (error === null || error === undefined || typeof error !== 'object') {
       return false;
     }
     const result = (error as { name?: string }).name === 'AbortError';
@@ -736,7 +736,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     if (!timeoutController.signal.aborted || signal.aborted) {
       return false;
     }
-    if (!error) {
+    if (error === undefined || error === null) {
       return true;
     }
     return this.isAbortError(error);

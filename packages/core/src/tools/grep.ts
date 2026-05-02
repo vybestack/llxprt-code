@@ -272,7 +272,7 @@ File: ${resolved.basename}
         });
 
         // Track if we hit limits
-        if (matches.wasLimited) {
+        if (matches.wasLimited === true) {
           wasLimited = true;
         }
 
@@ -680,7 +680,8 @@ File: ${resolved.basename}
       // --- Strategy 1: git grep ---
       // Skip git grep if include pattern has brace expansion (e.g., *.{ts,tsx})
       // because git grep pathspecs don't support shell-style brace expansion.
-      const hasBracePattern = include && hasBraceExpansion(include);
+      const hasBracePattern =
+        typeof include === 'string' && include.length > 0 && hasBraceExpansion(include);
       const isGit = !hasBracePattern && isGitRepository(absolutePath);
       const gitAvailable = isGit && (await this.isCommandAvailable('git'));
 

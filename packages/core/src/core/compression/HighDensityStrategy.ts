@@ -805,10 +805,12 @@ export class HighDensityStrategy implements CompressionStrategy {
         continue;
       }
 
-      entries.sort(
-        (a, b) =>
-          b.messageIndex - a.messageIndex || b.startOffset - a.startOffset,
-      );
+      entries.sort((a, b) => {
+        const messageDiff = b.messageIndex - a.messageIndex;
+        return messageDiff !== 0
+          ? messageDiff
+          : b.startOffset - a.startOffset;
+      });
 
       // entries[0] is the latest — preserve. Strip entries[1..n]
       for (let i = 1; i < entries.length; i++) {

@@ -56,7 +56,8 @@ class MockToolInvocation extends BaseToolInvocation<
       updateOutput,
     );
     if (
-      result &&
+      result !== null &&
+      result !== undefined &&
       typeof result === 'object' &&
       'llmContent' in result &&
       'returnDisplay' in result
@@ -149,7 +150,8 @@ export class MockModifiableToolInvocation extends BaseToolInvocation<
       updateOutput,
     );
     if (
-      result &&
+      result !== null &&
+      result !== undefined &&
       typeof result === 'object' &&
       'llmContent' in result &&
       'returnDisplay' in result

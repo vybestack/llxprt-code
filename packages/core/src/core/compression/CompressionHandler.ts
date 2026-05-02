@@ -545,7 +545,7 @@ export class CompressionHandler {
   ): Promise<PerformCompressionResult> {
     // Cooldown: skip compression if we have too many recent failures
     // When bypassCooldown is true (called from enforceContextWindow), skip this check
-    if (!options?.bypassCooldown && this.isCompressionInCooldown()) {
+    if (options?.bypassCooldown !== true && this.isCompressionInCooldown()) {
       this.logger.debug(
         'Skipping compression — in cooldown after repeated failures',
         {

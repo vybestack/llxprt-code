@@ -545,7 +545,11 @@ export function getAvailablePort(): Promise<number> {
       const server = net.createServer();
       server.listen(0, () => {
         const address = server.address();
-        if (address && typeof address === 'object' && 'port' in address) {
+        if (
+          address !== null &&
+          typeof address === 'object' &&
+          'port' in address
+        ) {
           resolve(address.port);
         } else {
           reject(new Error('Failed to get available port'));

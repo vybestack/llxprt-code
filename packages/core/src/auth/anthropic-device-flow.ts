@@ -271,10 +271,14 @@ export class AnthropicDeviceFlow {
    * Maps Anthropic's token response to our standard OAuthToken format.
    */
   private mapTokenResponse(data: Record<string, unknown>): OAuthToken {
+    const expiresIn = data.expires_in;
+    const expiresInSeconds =
+      typeof expiresIn === 'number' && !isNaN(expiresIn) && expiresIn > 0
+        ? expiresIn
+        : 3600;
     return {
       access_token: data.access_token as string,
-      expiry:
-        Math.floor(Date.now() / 1000) + ((data.expires_in as number) || 3600),
+      expiry: Math.floor(Date.now() / 1000) + expiresInSeconds,
       refresh_token: data.refresh_token as string | undefined,
       scope: data.scope as string | undefined,
       token_type: 'Bearer',
