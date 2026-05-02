@@ -321,7 +321,7 @@ export const Footer = React.memo<FooterProps>(
           {/* Right: Memory | Context | TPM | Wait Time | Time */}
           {!hideModelInfo && (
             <Box flexDirection="row" alignItems="center">
-              {showMemoryUsage && (
+              {(showMemoryUsage ?? false) && (
                 <>
                   <ResponsiveMemoryDisplay
                     compact={isCompact}

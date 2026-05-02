@@ -263,7 +263,7 @@ const saveCommand: SlashCommand = {
     // Check if exists for overwrite confirmation
     const exists = await subagentManager.subagentExists(name);
 
-    if (exists && !overwriteConfirmed) {
+    if (exists && overwriteConfirmed !== true) {
       return {
         type: 'confirm_action',
         prompt: React.createElement(

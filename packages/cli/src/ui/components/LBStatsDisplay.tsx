@@ -149,7 +149,8 @@ export const LBStatsDisplay: React.FC = () => {
         const cbState = stats.circuitBreakerStates[backendName] ?? {
           state: 'closed' as const,
         };
-        const tpm = stats.currentTPM[backendName] || 0;
+        const rawTpm = stats.currentTPM[backendName];
+        const tpm = rawTpm !== 0 && !Number.isNaN(rawTpm) ? rawTpm : 0;
 
         return (
           <Box key={backendName} flexDirection="column" marginTop={1}>

@@ -47,7 +47,7 @@ export function useMemoryRefreshAction({
       } else {
         const result = await loadHierarchicalLlxprtMemory(
           config.getWorkingDir(),
-          settings.merged.loadMemoryFromIncludeDirectories
+          settings.merged.loadMemoryFromIncludeDirectories === true
             ? config.getWorkspaceContext().getDirectories()
             : [],
           config.getDebugMode(),

@@ -79,11 +79,12 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
             </Text>
           )}
         </Box>
-        {rightContent && (
+        {/* eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve React conditional rendering semantics for ReactNode values. */}
+        {rightContent ? (
           <Box marginLeft={1} flexShrink={0}>
             {rightContent}
           </Box>
-        )}
+        ) : null}
       </Box>
     </Box>
   );

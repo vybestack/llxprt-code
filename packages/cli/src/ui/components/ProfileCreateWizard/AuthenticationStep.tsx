@@ -164,7 +164,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
   });
 
   // OAuth option (only if supported)
-  if (providerOption?.supportsOAuth) {
+  if (providerOption?.supportsOAuth ?? false) {
     authOptions.push({
       label: 'OAuth (authenticate when needed)',
       value: 'oauth',

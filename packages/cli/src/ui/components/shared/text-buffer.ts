@@ -508,7 +508,7 @@ export function useTextBuffer({
       else if (keyMatchers[Command.DELETE_CHAR_RIGHT](key)) del();
       else if (keyMatchers[Command.UNDO](key)) undo();
       else if (keyMatchers[Command.REDO](key)) redo();
-      else if (key.insertable) {
+      else if (key.insertable ?? false) {
         insert(input, { paste: false });
       }
     },

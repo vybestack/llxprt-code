@@ -70,9 +70,10 @@ export function SuggestionsDisplay({
   let commandNameWidth = 0;
 
   if (isSlashCommandMode) {
-    const maxLabelLength = visibleSuggestions.length
-      ? Math.max(...visibleSuggestions.map((s) => s.label.length))
-      : 0;
+    const maxLabelLength =
+      visibleSuggestions.length > 0
+        ? Math.max(...visibleSuggestions.map((s) => s.label.length))
+        : 0;
 
     const maxAllowedWidth = Math.floor(width * 0.35);
     commandNameWidth = Math.max(

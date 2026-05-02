@@ -102,7 +102,7 @@ export function mapToDisplay(
       switch (trackedCall.status) {
         case 'success': {
           logger.debug(
-            `mapToDisplay: success call ${trackedCall.request.callId}, toolName=${trackedCall.request.name}, resultDisplay type: ${typeof trackedCall.response.resultDisplay}, hasValue: ${!!trackedCall.response.resultDisplay}`,
+            `mapToDisplay: success call ${trackedCall.request.callId}, toolName=${trackedCall.request.name}, resultDisplay type: ${typeof trackedCall.response.resultDisplay}, hasValue: ${Boolean(trackedCall.response.resultDisplay)}`,
           );
           return {
             ...baseDisplayProperties,

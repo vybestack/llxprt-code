@@ -466,7 +466,10 @@ export const DialogManager = ({
       </Box>
     );
   }
-  if (uiState.isProfileEditorDialogOpen && uiState.selectedProfileData) {
+  if (
+    uiState.isProfileEditorDialogOpen &&
+    uiState.selectedProfileData != null
+  ) {
     return (
       <Box flexDirection="column">
         <ProfileInlineEditor

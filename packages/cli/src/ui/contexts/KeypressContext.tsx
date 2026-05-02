@@ -620,7 +620,7 @@ function* emitKeys(
       });
     } else if (escaped) {
       // Escape sequence timeout
-      name = ch.length ? undefined : 'escape';
+      name = ch.length > 0 ? undefined : 'escape';
       meta = true;
     } else {
       // Any other character is considered printable.

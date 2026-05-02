@@ -80,7 +80,7 @@ export function MouseProvider({
   );
 
   useEffect(() => {
-    if (!mouseEventsEnabled) {
+    if (mouseEventsEnabled !== true) {
       return;
     }
 

@@ -184,7 +184,11 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   }
   const countOneLineToolCalls =
     filteredToolCalls.length - countToolCallsWithResults;
-  const availableTerminalHeightPerToolMessage = availableTerminalHeight
+  const hasAvailableTerminalHeight =
+    availableTerminalHeight != null &&
+    availableTerminalHeight !== 0 &&
+    !Number.isNaN(availableTerminalHeight);
+  const availableTerminalHeightPerToolMessage = hasAvailableTerminalHeight
     ? Math.max(
         Math.floor(
           (availableTerminalHeight - staticHeight - countOneLineToolCalls) /

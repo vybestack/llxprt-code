@@ -101,13 +101,20 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
         initialIndex={selectedIndex}
       />
 
-      {availableTools[selectedIndex] && (
-        <Box marginTop={1}>
-          <Text color={Colors.DimComment}>
-            Tool name: {availableTools[selectedIndex].name}
-          </Text>
-        </Box>
-      )}
+      {(() => {
+        const selectedTool = availableTools[selectedIndex];
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve runtime guard for malformed tools arrays.
+        if (selectedTool == null) {
+          return null;
+        }
+        return (
+          <Box marginTop={1}>
+            <Text color={Colors.DimComment}>
+              Tool name: {selectedTool.name}
+            </Text>
+          </Box>
+        );
+      })()}
 
       <Box marginTop={1}>
         <Text color={Colors.DimComment}>

@@ -147,7 +147,7 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
 
           if (result.success) {
             onContinue();
-          } else if (result.alreadyExists) {
+          } else if (result.alreadyExists ?? false) {
             // Filesystem reports file exists - show conflict dialog
             // This catches stale existingProfiles or race conditions
             setValidationError('Profile name already exists');
