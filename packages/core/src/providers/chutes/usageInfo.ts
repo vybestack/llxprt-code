@@ -181,7 +181,7 @@ function formatQuotaValue(quota: unknown): string {
   if (typeof quota === 'number') {
     return `${quota} requests/day`;
   }
-  if (quota && typeof quota === 'object') {
+  if (quota !== null && typeof quota === 'object') {
     const q = quota as Record<string, unknown>;
     const parts: string[] = [];
     if (typeof q['usd_cents_per_hour'] === 'number') {

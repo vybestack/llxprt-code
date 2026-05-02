@@ -283,7 +283,7 @@ export class ModelRegistry {
 
     if (query.maxPrice !== undefined) {
       results = results.filter(
-        (m) => m.pricing && m.pricing.input <= query.maxPrice!,
+        (m) => m.pricing !== undefined && m.pricing.input <= query.maxPrice!,
       );
     }
 

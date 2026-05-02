@@ -33,10 +33,10 @@ export function findCompressSplitPoint(
   let cumulativeCharCount = 0;
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
-    // eslint-disable-next-line no-extra-boolean-cast -- Preserve old tool-part truthiness semantics for malformed provider payloads.
+
     const hasFunctionResponse =
       content.parts?.some((part) => Boolean(part.functionResponse)) === true;
-    // eslint-disable-next-line no-extra-boolean-cast -- Preserve old tool-part truthiness semantics for malformed provider payloads.
+
     const hasFunctionCall =
       content.parts?.some((part) => Boolean(part.functionCall)) === true;
     if (content.role === 'user' && !hasFunctionResponse) {
@@ -60,7 +60,6 @@ export function findCompressSplitPoint(
   const lastContent = contents[contents.length - 1];
   const hasNoFunctionCall = (content: Content | undefined): boolean => {
     const parts = content?.parts;
-    // eslint-disable-next-line no-extra-boolean-cast -- Preserve old tool-part truthiness semantics for malformed provider payloads.
 
     return parts?.some((part) => Boolean(part.functionCall)) !== true;
   };

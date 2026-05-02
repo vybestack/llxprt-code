@@ -246,14 +246,14 @@ export function calculateWaitTime(
   ];
 
   // Prefer any bucket that requires waiting over warning-only decisions
-  const waitDecision = decisions.find((d) => d?.shouldWait);
-  if (waitDecision) {
+  const waitDecision = decisions.find((d) => d?.shouldWait === true);
+  if (waitDecision !== undefined) {
     return waitDecision;
   }
 
   // Fall back to first warning-only decision if no bucket requires waiting
   const warningDecision = decisions.find((d) => d !== undefined);
-  if (warningDecision) {
+  if (warningDecision !== undefined) {
     return warningDecision;
   }
 

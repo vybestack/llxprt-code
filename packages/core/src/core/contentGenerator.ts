@@ -102,11 +102,11 @@ export async function createContentGenerator(
     },
   };
   // Always use provider path if a provider manager exists
-  if (config.providerManager) {
+  if (config.providerManager != null) {
     return new ProviderContentGenerator(config.providerManager, config);
   }
 
-  if (config.vertexai) {
+  if (config.vertexai === true) {
     return createCodeAssistContentGenerator(
       httpOptions,
       gcConfig,

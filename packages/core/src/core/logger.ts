@@ -278,7 +278,7 @@ export class Logger {
   }
 
   private _checkpointPath(tag: string): string {
-    if (!tag.length) {
+    if (tag.length === 0) {
       throw new Error('No checkpoint tag specified.');
     }
     if (!this.llxprtDir) {

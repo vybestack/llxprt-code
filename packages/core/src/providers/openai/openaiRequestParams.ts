@@ -64,7 +64,12 @@ const OPENAI_REASONING_INTERNAL_KEYS = new Set<string>([
 function stripInternalReasoningKeys(
   value: unknown,
 ): Record<string, unknown> | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value)
+  ) {
     return undefined;
   }
 

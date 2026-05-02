@@ -83,11 +83,10 @@ export function ensureActiveLoopHasThoughtSignatures(
     const content = requestContents[i];
     // Defensive runtime check: parts could be null/undefined despite type.
     // Cast to unknown to satisfy strict-boolean while preserving guard.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini history payloads cross provider boundaries despite declared types.
+
     if (content.role === 'model' && (content.parts as unknown) != null) {
       for (const part of content.parts) {
         // Check for functionCall with truthy value (object with properties)
-        // eslint-disable-next-line no-extra-boolean-cast -- Preserve old functionCall truthiness semantics for malformed provider payloads.
 
         if ('functionCall' in part && Boolean(part.functionCall)) {
           const partWithSig = part as PartWithThoughtSignature;
@@ -116,14 +115,13 @@ export function ensureActiveLoopHasThoughtSignatures(
     const content = newContents[i];
     // Defensive runtime check: parts could be null/undefined despite type.
     // Cast to unknown to satisfy strict-boolean while preserving guard.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini history payloads cross provider boundaries despite declared types.
+
     if (content.role === 'model' && (content.parts as unknown) != null) {
       const newParts = content.parts.slice();
       let modified = false;
 
       for (let j = 0; j < newParts.length; j++) {
         const part = newParts[j];
-        // eslint-disable-next-line no-extra-boolean-cast -- Preserve old functionCall truthiness semantics for malformed provider payloads.
 
         // Check for functionCall with truthy value (object with properties)
         if ('functionCall' in part && Boolean(part.functionCall)) {
@@ -199,7 +197,7 @@ export function stripThoughtsFromHistory(
     const content = contents[i];
     // Defensive runtime check: parts could be null/undefined despite type.
     // Cast to unknown to satisfy strict-boolean while preserving guard.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini history payloads cross provider boundaries despite declared types.
+
     if (content.role !== 'model' || (content.parts as unknown) == null)
       continue;
 
@@ -235,7 +233,7 @@ export function stripThoughtsFromHistory(
 
     // Defensive runtime check: parts could be null/undefined despite type.
     // Cast to unknown to satisfy strict-boolean while preserving guard.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini history payloads cross provider boundaries despite declared types.
+
     if (content.role !== 'model' || (content.parts as unknown) == null) {
       newContents.push(content);
       continue;

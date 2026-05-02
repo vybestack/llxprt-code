@@ -61,8 +61,12 @@ async function getProcessTableWindows(): Promise<Map<number, ProcessInfo>> {
       if (typeof p.ProcessId === 'number') {
         processMap.set(p.ProcessId, {
           pid: p.ProcessId,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: number fallback where 0 means unset
-          parentPid: p.ParentProcessId || 0,
+          parentPid:
+            p.ParentProcessId !== undefined &&
+            p.ParentProcessId !== 0 &&
+            !Number.isNaN(p.ParentProcessId)
+              ? p.ParentProcessId
+              : 0,
           // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional property
           name: p.Name || '',
           // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional property

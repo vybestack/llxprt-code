@@ -476,7 +476,7 @@ export async function getCoreSystemPromptAsync(
     const allMemoriesAreCore = settingsService.get(
       'model.allMemoriesAreCore',
     ) as boolean | undefined;
-    if (allMemoriesAreCore) {
+    if (allMemoriesAreCore === true) {
       // Merge user memory into core memory; leave user memory empty
       const parts = [effectiveCoreMemory, effectiveUserMemory].filter((p) =>
         p?.trim(),

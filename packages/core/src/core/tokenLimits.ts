@@ -14,7 +14,7 @@ export function tokenLimit(
   userContextLimit?: number,
 ): TokenCount {
   // If user has set a context limit, use it
-  if (userContextLimit && userContextLimit > 0) {
+  if (userContextLimit !== undefined && userContextLimit > 0) {
     return userContextLimit;
   }
 

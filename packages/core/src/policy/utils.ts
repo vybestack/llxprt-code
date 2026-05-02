@@ -44,7 +44,7 @@ export function buildArgsPatterns(
 ): RegExp[] {
   const patterns: RegExp[] = [];
 
-  if (commandPrefix) {
+  if (commandPrefix != null && commandPrefix !== '') {
     const prefixes = Array.isArray(commandPrefix)
       ? commandPrefix
       : [commandPrefix];
@@ -57,13 +57,13 @@ export function buildArgsPatterns(
     }
   }
 
-  if (commandRegex) {
+  if (commandRegex !== undefined && commandRegex !== '') {
     validatePolicyRegex(commandRegex);
     // Use non-backtracking prefix with bounded match length
     patterns.push(new RegExp(`"command":"(?:${commandRegex})`));
   }
 
-  if (argsPattern) {
+  if (argsPattern instanceof RegExp) {
     validatePolicyRegex(argsPattern.source);
     // Rebuild regex with .* replaced by [^"]* to prevent polynomial
     // backtracking when matching JSON-serialized tool arguments.

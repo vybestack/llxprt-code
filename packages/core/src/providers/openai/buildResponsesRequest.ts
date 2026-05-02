@@ -377,7 +377,11 @@ export function buildResponsesRequest(
   // Add tools if provided
   if (tools && tools.length > 0) {
     request.tools = tools as ResponsesTool[];
-    if (tool_choice) {
+    if (
+      (typeof tool_choice === 'string' && tool_choice !== '') ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve old runtime-boundary falsy handling for malformed null tool choices.
+      (typeof tool_choice === 'object' && tool_choice !== null)
+    ) {
       request.tool_choice = tool_choice;
     }
   }

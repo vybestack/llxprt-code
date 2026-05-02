@@ -166,7 +166,7 @@ export class HookAggregator {
       }
 
       // Handle suppress output (any true wins)
-      if (output.suppressOutput) {
+      if (output.suppressOutput === true) {
         merged.suppressOutput = true;
       }
 

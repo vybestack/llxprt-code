@@ -266,7 +266,7 @@ export class ProfileManager {
     settingsService: SettingsService,
   ): Promise<void> {
     // Use SettingsService to export current settings
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+
     if (typeof settingsService.exportForProfile !== 'function') {
       throw new Error('SettingsService does not support profile export');
     }
@@ -317,7 +317,7 @@ export class ProfileManager {
     profile.ephemeralSettings['disabled-tools'] = toolsDisabled;
 
     // Update current profile name in SettingsService
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+
     if (typeof settingsService.setCurrentProfileName === 'function') {
       settingsService.setCurrentProfileName(profileName);
     }
@@ -377,13 +377,13 @@ export class ProfileManager {
     };
 
     // Update current profile name first
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+
     if (typeof settingsService.setCurrentProfileName === 'function') {
       settingsService.setCurrentProfileName(profileName);
     }
 
     // Apply through SettingsService
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+
     if (typeof settingsService.importFromProfile !== 'function') {
       throw new Error('SettingsService does not support profile import');
     }

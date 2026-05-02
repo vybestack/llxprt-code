@@ -106,7 +106,10 @@ export class PolicyEngine {
           }
 
           // Check for redirections in allowed commands
-          if (!matchingRule.allowRedirection && hasRedirection(command)) {
+          if (
+            matchingRule.allowRedirection !== true &&
+            hasRedirection(command)
+          ) {
             // Downgrade to ASK_USER unless explicitly allowed
             return this.nonInteractive
               ? PolicyDecision.DENY

@@ -106,10 +106,18 @@ export class MCPOAuthTokenStorage implements TokenStorage {
    * Determine whether a token is expired (with a buffer to avoid clock skew).
    */
   static isTokenExpired(token: MCPOAuthToken): boolean {
-    if (!token.expiresAt) {
+    const expiresAt = token.expiresAt as unknown;
+    if (
+      expiresAt === undefined ||
+      expiresAt === null ||
+      expiresAt === false ||
+      expiresAt === '' ||
+      expiresAt === 0 ||
+      (typeof expiresAt === 'number' && Number.isNaN(expiresAt))
+    ) {
       return false;
     }
-    return Date.now() + EXPIRY_BUFFER_MS >= token.expiresAt;
+    return Date.now() + EXPIRY_BUFFER_MS >= (expiresAt as number);
   }
 
   /**

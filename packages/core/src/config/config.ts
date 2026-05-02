@@ -369,7 +369,7 @@ export class Config extends ConfigBase {
       }
     }
     // Keep legacy updates for backward compatibility
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (this.contentGeneratorConfig != null) {
       this.contentGeneratorConfig.model = newModel;

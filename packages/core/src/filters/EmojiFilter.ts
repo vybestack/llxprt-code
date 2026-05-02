@@ -429,7 +429,7 @@ export class EmojiFilter {
       return obj.map((item) => this.deepFilterObject(item));
     }
 
-    if (obj && typeof obj === 'object') {
+    if (obj !== null && typeof obj === 'object') {
       const filtered: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(obj)) {
         filtered[key] = this.deepFilterObject(value);

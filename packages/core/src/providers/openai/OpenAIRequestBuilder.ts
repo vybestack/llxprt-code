@@ -66,7 +66,11 @@ export function normalizeToolCallArguments(parameters: unknown): string {
     }
     try {
       const parsed = JSON.parse(trimmed);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      if (
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed)
+      ) {
         return JSON.stringify(parsed);
       }
       return JSON.stringify({ value: parsed });

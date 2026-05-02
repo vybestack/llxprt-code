@@ -145,7 +145,7 @@ export class FileOutput {
     if (
       this.isWriting ||
       this.writeQueue.length === 0 ||
-      (this.disposed && !options.allowDisposed)
+      (this.disposed === true && options.allowDisposed !== true)
     ) {
       return;
     }

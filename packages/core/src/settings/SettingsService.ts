@@ -98,7 +98,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     // Restore old `|| {}` truthiness semantics: falsy provider entries
     // (false, 0, '', null, undefined) should fallback to {}.
     // Cast to unknown to handle cross-boundary malformed data.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
+
     const entry = this.settings.providers[provider] as unknown;
     if (
       entry !== null &&
@@ -117,7 +117,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     // Restore old `if (!this.settings.providers[provider])` semantics:
     // falsy entries (false, 0, '', null, undefined) should reset to {}.
     // Cast to unknown to handle cross-boundary malformed data.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
+
     const entry = this.settings.providers[provider] as unknown;
     if (
       entry === null ||
@@ -271,7 +271,10 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     providerOrChanges?: string | Partial<GlobalSettings>,
     changes?: Partial<ProviderSettings>,
   ): Promise<void> {
-    const runtimeChanges = changes as Partial<ProviderSettings> | null | undefined;
+    const runtimeChanges = changes as
+      | Partial<ProviderSettings>
+      | null
+      | undefined;
     if (
       typeof providerOrChanges === 'string' &&
       runtimeChanges !== undefined &&

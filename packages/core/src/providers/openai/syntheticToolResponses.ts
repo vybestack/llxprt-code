@@ -95,7 +95,7 @@ export class SyntheticToolResponseHandler {
 
             // Track synthetic responses separately for debugging
             if (
-              msg.metadata?.synthetic ||
+              msg.metadata?.synthetic === true ||
               toolResponseBlock.result === 'Tool execution cancelled by user'
             ) {
               syntheticResponseIds.add(toolResponseBlock.callId);

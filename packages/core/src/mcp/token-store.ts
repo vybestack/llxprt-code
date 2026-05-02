@@ -85,13 +85,21 @@ export abstract class BaseTokenStore {
    * @returns True if the token is expired
    */
   static isTokenExpired(token: MCPOAuthToken): boolean {
-    if (!token.expiresAt) {
-      return false; // No expiry, assume valid
+    const expiresAt = token.expiresAt as unknown;
+    if (
+      expiresAt === undefined ||
+      expiresAt === null ||
+      expiresAt === false ||
+      expiresAt === '' ||
+      expiresAt === 0 ||
+      (typeof expiresAt === 'number' && Number.isNaN(expiresAt))
+    ) {
+      return false;
     }
 
     // Add a 5-minute buffer to account for clock skew
     const bufferMs = 5 * 60 * 1000;
-    return Date.now() + bufferMs >= token.expiresAt;
+    return Date.now() + bufferMs >= (expiresAt as number);
   }
 
   /**

@@ -195,8 +195,15 @@ export class PromptService {
     if (!this.initialized) {
       await this.initialize();
     }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Public prompt API validates malformed callers at runtime.
-    if (!context) {
+    const runtimeContext = context as unknown;
+    if (
+      runtimeContext === undefined ||
+      runtimeContext === null ||
+      runtimeContext === false ||
+      runtimeContext === 0 ||
+      (typeof runtimeContext === 'number' && Number.isNaN(runtimeContext)) ||
+      runtimeContext === ''
+    ) {
       throw new Error('Context is required');
     }
 

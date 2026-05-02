@@ -332,9 +332,8 @@ function buildToolResults(
     );
   }
 
-  const toolTextContent = toolResponseBlocks.length
-    ? blocksToText(nonToolResponseBlocks)
-    : '';
+  const toolTextContent =
+    toolResponseBlocks.length > 0 ? blocksToText(nonToolResponseBlocks) : '';
   const mediaBlocks = c.blocks.filter(
     (b): b is MediaBlock => b.type === 'media',
   );
