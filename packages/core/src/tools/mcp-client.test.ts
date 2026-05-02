@@ -1214,7 +1214,7 @@ describe('mcp-client', () => {
         listTools: vi.fn().mockImplementation(
           async (params, options) =>
             new Promise((resolve, reject) => {
-              if (options?.signal?.aborted) {
+              if (options?.signal?.aborted === true) {
                 return reject(new Error('Operation aborted'));
               }
               options?.signal?.addEventListener('abort', () => {

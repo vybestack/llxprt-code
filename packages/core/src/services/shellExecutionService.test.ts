@@ -473,7 +473,7 @@ describe('ShellExecutionService', () => {
 
       // Emit output every 50ms (within the 100ms inactivity window)
       const outputInterval = setInterval(() => {
-        if (mockPtyProcess.onData.mock.calls[0]) {
+        if (mockPtyProcess.onData.mock.calls.length > 0) {
           mockPtyProcess.onData.mock.calls[0][0]('output\n');
         }
       }, 50);
