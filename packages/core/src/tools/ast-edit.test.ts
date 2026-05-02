@@ -318,6 +318,7 @@ describe('AST Tools', () => {
           // - import './foo.js' (side-effect)
           // - export ... from './foo.js'
           const localRefRegex =
+            // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
             /(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]\.\/([^'"]+)['"]/g;
           let match;
           while ((match = localRefRegex.exec(content)) !== null) {

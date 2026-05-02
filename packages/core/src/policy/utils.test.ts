@@ -69,6 +69,7 @@ describe('buildArgsPatterns', () => {
   });
 
   it('should combine commandPrefix and argsPattern', () => {
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const argsPattern = new RegExp('"dir_path":".*test.*"');
     const patterns = buildArgsPatterns(argsPattern, 'npm');
     expect(patterns).toHaveLength(2);

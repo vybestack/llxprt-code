@@ -533,6 +533,7 @@ describe('EditTool', () => {
       const display = result.returnDisplay as FileDiff;
 
       expect(display.fileDiff).toMatch(/-old text\n-old text\n-old text/);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(display.fileDiff).toMatch(/\+new text\n\+new text\n\+new text/);
       expect(display.fileName).toBe(testFile);
       expect((result.returnDisplay as FileDiff).diffStat).toStrictEqual({
@@ -582,6 +583,7 @@ describe('EditTool', () => {
         /0 occurrences found for old_string on line 2/,
       );
       expect(result.llmContent).toMatch(/Context around requested line:/);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(result.llmContent).toMatch(/->\s+2\s+\|/);
     });
 

@@ -225,6 +225,7 @@ describe('WriteFileTool', () => {
         /--- confirm_new_file.txt\tCurrent/,
       );
       expect(confirmation.fileDiff).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /\+\+\+ confirm_new_file.txt\tProposed/,
       );
     });
@@ -249,6 +250,7 @@ describe('WriteFileTool', () => {
         }),
       );
       expect(confirmation.fileDiff).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         originalContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
     });
@@ -318,8 +320,10 @@ describe('WriteFileTool', () => {
       const display = result.returnDisplay as FileDiff;
       expect(display.fileName).toBe('execute_new_file.txt');
       expect(display.fileDiff).toMatch(/--- execute_new_file.txt\tOriginal/);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(display.fileDiff).toMatch(/\+\+\+ execute_new_file.txt\tWritten/);
       expect(display.fileDiff).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         proposedContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
     });
@@ -344,9 +348,11 @@ describe('WriteFileTool', () => {
       const display = result.returnDisplay as FileDiff;
       expect(display.fileName).toBe('execute_existing_file.txt');
       expect(display.fileDiff).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         initialContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
       expect(display.fileDiff).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         proposedContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
     });

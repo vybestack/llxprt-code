@@ -298,6 +298,7 @@ describe('ToolKeyStorage', () => {
       const content = await fs.readFile(filePath, 'utf-8');
       expect(content).not.toContain('sk-secret-value');
       // AES-256-GCM format: iv:authTag:encrypted (hex strings)
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(content).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
     });
 

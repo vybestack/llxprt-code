@@ -120,6 +120,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(() => {
         new LoadBalancingProvider(lbConfig, providerManager);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       }).toThrow(/round-robin.*failover|failover.*round-robin/i);
     });
   });
@@ -810,6 +811,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         for await (const chunk of provider.generateChatCompletion(options)) {
           results.push(chunk);
         }
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       }).rejects.toThrow(/backend-one.*backend-two|backend-two.*backend-one/i);
     });
   });
