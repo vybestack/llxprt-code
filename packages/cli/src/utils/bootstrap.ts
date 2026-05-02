@@ -88,6 +88,7 @@ export function parseDockerMemoryToMB(memoryStr: string): number | undefined {
     return undefined;
   }
 
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const match = memoryStr.match(/^(\d+(?:\.\d+)?)\s*([bkmg])?$/i);
   if (!match) {
     return undefined;

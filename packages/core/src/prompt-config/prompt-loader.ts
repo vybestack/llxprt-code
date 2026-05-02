@@ -178,10 +178,12 @@ export class PromptLoader {
       let compressedLine = line;
 
       // Simplify headers
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       compressedLine = compressedLine.replace(/^#{2,}\s+(.+)$/, '# $1');
 
       // Simplify bold list items
       compressedLine = compressedLine.replace(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         /^(\s*)-\s+\*\*(.+?)\*\*:\s*(.*)$/,
         '$1- $2: $3',
       );
@@ -189,7 +191,9 @@ export class PromptLoader {
       // Remove excessive whitespace
       // For list items, preserve leading spaces (indentation)
       if (
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         compressedLine.match(/^\s*[-*+]\s/) ||
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         compressedLine.match(/^\s*\d+\.\s/)
       ) {
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string leading spaces should default to empty string

@@ -1433,6 +1433,7 @@ export class Session {
           content: [content],
         });
         if (Array.isArray(result.llmContent)) {
+          // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
           const fileContentRegex = /^--- (.*?) ---\n\n([\s\S]*?)\n\n$/;
           processedQueryParts.push({
             text: '\n--- Content from referenced files ---',

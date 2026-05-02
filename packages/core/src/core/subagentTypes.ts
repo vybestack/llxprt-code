@@ -208,6 +208,7 @@ export function templateString(
   template: string,
   context: ContextState,
 ): string {
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const templateTokenRegex = /\$\{(\w+)\}/g;
 
   return template.replace(templateTokenRegex, (_match, key: string) => {

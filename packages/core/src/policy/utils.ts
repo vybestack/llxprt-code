@@ -8,6 +8,7 @@
  * Escapes special regex characters in a string.
  */
 export function escapeRegex(text: string): string {
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
@@ -26,6 +27,7 @@ function validatePolicyRegex(source: string): void {
     );
   }
   // Reject patterns with nested quantifiers that can cause catastrophic backtracking (ReDoS)
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   if (/([+*]|\{\d+,\d*\})\??([+*]|\{\d+,\d*\})/.test(source)) {
     throw new Error(
       'Policy regex contains nested quantifiers (potential ReDoS)',

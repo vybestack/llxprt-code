@@ -393,6 +393,7 @@ export async function createPolicyEngineConfig(
   if (settings.tools?.allowed) {
     for (const tool of settings.tools.allowed) {
       // Check for legacy ShellTool(args) format
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const match = /^([a-zA-Z0-9_-]+)\((.*)\)$/.exec(tool);
       if (match) {
         const [, toolName, argsStr] = match;

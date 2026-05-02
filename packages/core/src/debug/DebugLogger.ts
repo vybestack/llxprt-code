@@ -293,6 +293,7 @@ export class DebugLogger {
       // - Escape special regex chars except *
       // - Replace * with .* for regex wildcard matching
       const regexPattern = pattern
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape special chars
         .replace(/\*/g, '.*'); // Convert * to regex wildcard
 

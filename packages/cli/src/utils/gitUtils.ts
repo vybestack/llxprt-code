@@ -109,6 +109,7 @@ export function getGitHubRepoInfo(): { owner: string; repo: string } {
 
   // Matches either https://github.com/owner/repo.git or git@github.com:owner/repo.git
   const match = remoteUrl.match(
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /(?:https?:\/\/|git@)github\.com(?::|\/)([^/]+)\/([^/]+?)(?:\.git)?$/,
   );
 

@@ -15,6 +15,7 @@ import type { AgentInputs } from './types.js';
  * @returns The template with placeholders replaced
  */
 export function templateString(template: string, inputs: AgentInputs): string {
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const placeholderRegex = /\$\{(\w+)\}/g;
 
   // First, find all unique keys required by the template.

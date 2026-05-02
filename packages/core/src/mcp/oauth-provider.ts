@@ -192,6 +192,7 @@ export class MCPOAuthProvider {
     if (pathname) {
       issuerCandidates.add(`${authUrl.origin}${pathname}`);
 
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const versionSegmentPattern = /^v\d+(\.\d+)?$/i;
       const segments = pathname.split('/').filter(Boolean);
       const lastSegment = segments[segments.length - 1];

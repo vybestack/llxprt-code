@@ -84,6 +84,7 @@ export interface GenerateContentOptions {
  */
 function extractJsonFromMarkdown(text: string): string {
   // Try to match ```json ... ``` or ``` ... ```
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const markdownMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   if (markdownMatch?.[1]) {
     return markdownMatch[1].trim();

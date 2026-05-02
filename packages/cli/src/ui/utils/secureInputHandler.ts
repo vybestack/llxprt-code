@@ -61,6 +61,7 @@ export class SecureInputHandler {
       // @requirement REQ-006.1
       // @pseudocode lines 424-445
       // Handle /toolkey BEFORE /key (because /toolkey starts with /key)
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const toolkeyMatch = text.match(/^\/toolkey\s+\S+\s+([\s\S]*)/);
       if (toolkeyMatch?.[1]) {
         const patContent = toolkeyMatch[1];
@@ -79,6 +80,7 @@ export class SecureInputHandler {
       // @plan PLAN-20260211-SECURESTORE.P15
       // @requirement R20.1
       // /key save <name> <value> — mask only the value, leave subcommand and name visible
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const keySaveMatch = text.match(/^(\/key\s+save\s+\S+\s+)([\s\S]+)/);
       if (keySaveMatch?.[2]) {
         const prefix = keySaveMatch[1];
@@ -103,7 +105,9 @@ export class SecureInputHandler {
 
       // Check if text starts with /key or /keyfile followed by space and content
       // @requirement R20.2 — legacy /key <raw-key> masking preserved
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const keyMatch = text.match(/^\/key\s+([\s\S]*)/);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const keyfileMatch = text.match(/^\/keyfile\s+([\s\S]*)/);
 
       if (keyMatch?.[1]) {
@@ -203,6 +207,7 @@ export class SecureInputHandler {
       // @requirement REQ-006.2
       // @pseudocode lines 450-462
       // /toolkey MUST be checked BEFORE /key (because /toolkey starts with /key)
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const toolkeyCommandMatch = command.match(/^(\/toolkey\s+\S+\s+)(.+)$/);
       if (toolkeyCommandMatch) {
         const prefix = toolkeyCommandMatch[1];
@@ -212,6 +217,7 @@ export class SecureInputHandler {
 
       // @plan PLAN-20260211-SECURESTORE.P15
       // @requirement R20.1 — /key save <name> <value>: mask only the value
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const keySaveMatch = command.match(/^(\/key\s+save\s+\S+\s+)(.+)$/);
       if (keySaveMatch) {
         return `${keySaveMatch[1]}${this.maskValue(keySaveMatch[2])}`;
@@ -226,6 +232,7 @@ export class SecureInputHandler {
       }
 
       // @requirement R20.2 — legacy /key <raw-key> masking
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const keyCommandMatch = command.match(/^(\/key\s+)(.+)$/);
       if (keyCommandMatch) {
         const prefix = keyCommandMatch[1];

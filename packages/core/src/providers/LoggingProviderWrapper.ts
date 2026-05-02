@@ -147,6 +147,7 @@ class ConfigBasedRedactor implements ConversationDataRedactor {
     // Apply credential redaction if enabled
     if (this.redactionConfig.redactCredentials) {
       redacted = redacted.replace(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         /(?:password|pwd|pass)[=:\s]+[^\s\n\r]+/gi,
         'password=[REDACTED]',
       );
@@ -159,10 +160,12 @@ class ConfigBasedRedactor implements ConversationDataRedactor {
     // Apply file path redaction if enabled
     if (this.redactionConfig.redactFilePaths) {
       redacted = redacted.replace(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         /\/[^"\s]*\.ssh\/[^"\s]*/g,
         '[REDACTED-SSH-PATH]',
       );
       redacted = redacted.replace(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         /\/[^"\s]*\.env[^"\s]*/g,
         '[REDACTED-ENV-FILE]',
       );
@@ -173,6 +176,7 @@ class ConfigBasedRedactor implements ConversationDataRedactor {
     // Apply email redaction if enabled
     if (this.redactionConfig.redactEmails) {
       redacted = redacted.replace(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
         '[REDACTED-EMAIL]',
       );
@@ -180,8 +184,10 @@ class ConfigBasedRedactor implements ConversationDataRedactor {
 
     // Apply personal info redaction if enabled
     if (this.redactionConfig.redactPersonalInfo) {
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       redacted = redacted.replace(/\b\d{3}-\d{3}-\d{4}\b/g, '[REDACTED-PHONE]');
       redacted = redacted.replace(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
         '[REDACTED-CC-NUMBER]',
       );

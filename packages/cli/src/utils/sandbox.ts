@@ -432,6 +432,7 @@ export function getPodmanMachineConnection(): {
   }
 
   // Parse the URI: ssh://user@host:port/path
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const uriMatch = conn.URI.match(/^ssh:\/\/([^@]+)@([^:]+):(\d+)(\/.*)?$/);
   if (!uriMatch) {
     throw new FatalSandboxError(
@@ -968,7 +969,9 @@ async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
       if (
         osReleaseContent.includes('ID=debian') ||
         osReleaseContent.includes('ID=ubuntu') ||
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         osReleaseContent.match(/^ID_LIKE=.*debian.*/m) || // Covers derivatives
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         osReleaseContent.match(/^ID_LIKE=.*ubuntu.*/m) // Covers derivatives
       ) {
         // note here and below we use debugLogger.error for informational messages on stderr

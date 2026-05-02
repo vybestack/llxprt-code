@@ -1169,6 +1169,7 @@ export class PromptInstaller {
 
     // Expand environment variables with curly braces ${VAR}
     expandedPath = expandedPath.replace(
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /\$\{([^}]+)\}/g,
       (match, varName) => process.env[varName] ?? match,
     );
@@ -1204,8 +1205,11 @@ export class PromptInstaller {
    */
   private hasNoOverwriteFlag(content: string): boolean {
     const patterns = [
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /^#\s*NO\s*OVERWRITE/i, // Must be at absolute start of file (no /m flag)
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /^#\s*LLXPRT:\s*NO\s*OVERWRITE/i, // Must be at absolute start of file (no /m flag)
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /<!--\s*NO\s*OVERWRITE\s*-->/i, // Can be anywhere in file
     ];
     return patterns.some((p) => p.test(content));

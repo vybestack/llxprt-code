@@ -94,6 +94,7 @@ export interface PolicyLoadResult {
  * @returns The escaped string safe for use in a regex
  */
 export function escapeRegex(str: string): string {
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 

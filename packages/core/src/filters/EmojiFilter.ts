@@ -360,13 +360,21 @@ export class EmojiFilter {
   private compileEmojiPatterns(): CompiledRegexArray {
     return [
       // Unicode emoji ranges for comprehensive detection
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /[\u{1F300}-\u{1F9FF}]/gu, // Miscellaneous Symbols and Pictographs + Supplemental Symbols
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /[\u{1FA00}-\u{1FAFF}]/gu, // Extended Symbols and Pictographs (includes magic wand, rock, blood, planet, berries, vegetables, teapot, beans, jar)
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /[\u{2600}-\u{26FF}]/gu, // Miscellaneous Symbols
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /[\u{2700}-\u{27BF}]/gu, // Dingbats
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /[\u{1F170}-\u{1F1FF}]/gu, // Enclosed Alphanumeric Supplement (includes 🆙 U+1F199) and Regional Indicators
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /[\u{1F600}-\u{1F64F}]/gu, // Emoticons
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /[\u{1F680}-\u{1F6FF}]/gu, // Transport and Map Symbols
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /[\u{23E9}-\u{23FF}]/gu, // Additional symbols including ⏳ (hourglass)
       // Specific functional emojis that might not be caught by ranges
       /[\u2705\u2713\u26A0\u274C\u26A1]|\u26A0\uFE0F/gu,

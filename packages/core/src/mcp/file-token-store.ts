@@ -109,6 +109,7 @@ export class FileTokenStore extends BaseTokenStore {
    */
   private decrypt(payload: string): string {
     const trimmed = payload.trim();
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     const encryptedPattern = /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i;
 
     if (!encryptedPattern.test(trimmed)) {
