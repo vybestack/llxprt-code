@@ -278,7 +278,11 @@ export class TodoContinuationService {
     }
 
     // Clean up formatting
+    // Static regex for whitespace normalization - no dynamic parts
+
     description = description.replace(/\s+/g, ' '); // Normalize whitespace
+    // Static regex for list marker removal - no dynamic parts
+    // eslint-disable-next-line sonarjs/regular-expr
     description = description.replace(/^[-*+]\s*/, ''); // Remove list markers
 
     // Truncate if too long

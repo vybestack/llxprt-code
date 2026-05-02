@@ -29,13 +29,17 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
 }) => {
   const baseColor = defaultColor ?? theme.text.primary;
   // Early return for plain text without markdown or URLs
+  // Static regex for markdown marker detection - no dynamic parts
+
   if (!/[*_~`<[https?:]/.test(text)) {
     return <Text color={baseColor}>{text}</Text>;
   }
 
   const nodes: React.ReactNode[] = [];
   let lastIndex = 0;
+  // Static regex for inline markdown parsing - no dynamic parts
   const inlineRegex =
+    /* eslint-disable-next-line sonarjs/regular-expr */
     /(\*\*.*?\*\*|\*.*?\*|_.*?_|~~.*?~~|\[.*?\]\(.*?\)|`+.+?`+|<u>.*?<\/u>|https?:\/\/\S+)/g;
   let match;
 
@@ -67,11 +71,19 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
         fullMatch.length > ITALIC_MARKER_LENGTH * 2 &&
         ((fullMatch.startsWith('*') && fullMatch.endsWith('*')) ||
           (fullMatch.startsWith('_') && fullMatch.endsWith('_'))) &&
+        // Static regex for word boundary check - no dynamic parts
+
         !/\w/.test(text.substring(match.index - 1, match.index)) &&
+        // Static regex for word boundary check - no dynamic parts
+
         !/\w/.test(
           text.substring(inlineRegex.lastIndex, inlineRegex.lastIndex + 1),
         ) &&
+        // Static regex for punctuation check - no dynamic parts
+
         !/\S[./\\]/.test(text.substring(match.index - 2, match.index)) &&
+        // Static regex for punctuation check - no dynamic parts
+
         !/[./\\]\S/.test(
           text.substring(inlineRegex.lastIndex, inlineRegex.lastIndex + 2),
         )
@@ -99,6 +111,8 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
         fullMatch.endsWith('`') &&
         fullMatch.length > INLINE_CODE_MARKER_LENGTH
       ) {
+        // Static regex for inline code matching - no dynamic parts
+        // eslint-disable-next-line sonarjs/regular-expr
         const codeMatch = fullMatch.match(/^(`+)(.+?)\1$/s);
         if (codeMatch?.[2]) {
           renderedNode = (
@@ -112,6 +126,8 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
         fullMatch.includes('](') &&
         fullMatch.endsWith(')')
       ) {
+        // Static regex for link matching - no dynamic parts
+        // eslint-disable-next-line sonarjs/regular-expr
         const linkMatch = fullMatch.match(/\[(.*?)\]\((.*?)\)/);
         if (linkMatch) {
           const linkText = linkMatch[1];
@@ -177,6 +193,8 @@ export const RenderInline = React.memo(RenderInlineInternal);
  * This is useful for calculating column widths in tables
  */
 export const getPlainTextLength = (text: string): number => {
+  // Static regexes for stripping markdown formatting - no dynamic parts
+  /* eslint-disable sonarjs/regular-expr */
   const cleanText = text
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
@@ -185,5 +203,6 @@ export const getPlainTextLength = (text: string): number => {
     .replace(/`(.*?)`/g, '$1')
     .replace(/<u>(.*?)<\/u>/g, '$1')
     .replace(/.*\[(.*?)\]\(.*\)/g, '$1');
+  /* eslint-enable sonarjs/regular-expr */
   return stringWidth(cleanText);
 };

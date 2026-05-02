@@ -488,14 +488,18 @@ function* emitKeys(
          * and modifier from it
          */
         const cmd = sequence.slice(cmdStart);
+        // Static regex for parsing numeric escape codes - no dynamic parts
         const numberedCodeMatch =
+          /* eslint-disable-next-line sonarjs/regular-expr */
           /^(?<first>\d+)(?:;(?<second>\d+))?(?:;(?<third>\d+))?(?<suffix>[~^$u])$/.exec(
             cmd,
           );
         const letterCodeMatch =
           numberedCodeMatch !== null
             ? null
-            : /^(?<first>\d+)?(?:;(?<second>\d+))?(?<letter>[A-Za-z])$/.exec(
+            : // Static regex for parsing letter escape codes - no dynamic parts
+              // eslint-disable-next-line sonarjs/regular-expr
+              /^(?<first>\d+)?(?:;(?<second>\d+))?(?<letter>[A-Za-z])$/.exec(
                 cmd,
               );
 

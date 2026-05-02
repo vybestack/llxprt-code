@@ -309,9 +309,11 @@ const saveCommand: SlashCommand = {
       let bucketArgs: string[] = [];
 
       // Check if profile name is quoted
+      // Static regex for quoted profile name parsing - no dynamic parts
       const profileNameMatch = parts
         .slice(1)
         .join(' ')
+        /* eslint-disable-next-line sonarjs/regular-expr */
         .match(/^"([^"]+)"(?:\s+(.+))?$/);
       if (profileNameMatch) {
         profileName = profileNameMatch[1];

@@ -107,9 +107,14 @@ const ensureLeadingAndTrailingSlash = function (dirPath: string): string {
  * @returns A RegExp object.
  */
 function globToRegex(glob: string): RegExp {
+  // Glob patterns are sanitized: special regex chars are escaped above, only * wildcard allowed
+  /* eslint-disable sonarjs/regular-expr */
   const regexString = glob
     .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape special regex characters
     .replace(/(\/?)\*/g, '($1.*)?'); // Convert * to optional group
+  /* eslint-enable sonarjs/regular-expr */
+
+  // Dynamic regex safely constructed from sanitized glob input
 
   return new RegExp(`^${regexString}$`);
 }

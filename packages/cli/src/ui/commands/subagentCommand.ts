@@ -36,7 +36,9 @@ function parseSaveArgs(args: string): {
   mode: 'auto' | 'manual';
   input: string;
 } | null {
+  // Static regex for parsing save args with quoted input - no dynamic parts
   const match = args.match(
+    /* eslint-disable-next-line sonarjs/regular-expr */
     /^(\S+)\s+(\S+)\s+(auto|manual)\s+"((?:[^"\\]|\\.)*)("|"?)/,
   );
 

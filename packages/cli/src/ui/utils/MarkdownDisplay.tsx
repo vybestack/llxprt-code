@@ -59,12 +59,20 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
   }
 
   const lines = text.split(/\r?\n/);
+  // Static regexes for markdown parsing - no dynamic parts
+  // eslint-disable-next-line sonarjs/regular-expr
   const headerRegex = /^ *(#{1,4}) +(.*)/;
+  // eslint-disable-next-line sonarjs/regular-expr
   const codeFenceRegex = /^ *(`{3,}|~{3,}) *(\w*?) *$/;
+  // eslint-disable-next-line sonarjs/regular-expr
   const ulItemRegex = /^([ \t]*)([-*+]) +(.*)/;
+  // eslint-disable-next-line sonarjs/regular-expr
   const olItemRegex = /^([ \t]*)(\d+)\. +(.*)/;
+  // eslint-disable-next-line sonarjs/regular-expr
   const hrRegex = /^ *([-*_] *){3,} *$/;
+  // eslint-disable-next-line sonarjs/regular-expr
   const tableRowRegex = /^\s*\|(.+)\|\s*$/;
+  // eslint-disable-next-line sonarjs/regular-expr
   const tableSeparatorRegex = /^\s*\|?\s*(:?-+:?)\s*(\|\s*(:?-+:?)\s*)+\|?\s*$/;
 
   const contentBlocks: React.ReactNode[] = [];

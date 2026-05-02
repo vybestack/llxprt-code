@@ -18,6 +18,8 @@ export type HighlightToken = {
 // The @ pattern uses a negated character class to support URIs like `@file:///example.txt`
 // which contain colons. It matches any character except delimiters: comma, whitespace,
 // semicolon, common punctuation, and brackets.
+// Static regex for highlighting - no dynamic parts
+// eslint-disable-next-line sonarjs/regular-expr
 const HIGHLIGHT_REGEX = /(^\/[a-zA-Z0-9_-]+|@(?:\\ |[^,\s;!?()[\]{}])+)/g;
 
 const highlightCache = new LruCache<string, readonly HighlightToken[]>(

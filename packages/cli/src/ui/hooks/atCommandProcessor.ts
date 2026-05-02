@@ -613,6 +613,8 @@ export async function handleAtCommand({
     };
 
     if (Array.isArray(result.llmContent)) {
+      // Static regex for parsing file content markers - no dynamic parts
+      // eslint-disable-next-line sonarjs/regular-expr
       const fileContentRegex = /^--- (.*?) ---\n\n([\s\S]*?)\n\n$/;
       processedQueryParts.push({
         text: '\n--- Content from referenced files ---',

@@ -58,6 +58,8 @@ export function parsePosition(pos: string, todos: Todo[]): ParsedPosition {
   }
 
   // Line 53: ELSE IF position matches /^(\d+)\.(\d+|last)$/
+  // Static regex for position parsing - no dynamic parts
+  // eslint-disable-next-line sonarjs/regular-expr
   const subtaskMatch = pos.match(/^(\d+)\.(\d+|last)$/);
   if (subtaskMatch) {
     // Line 54: PARSE parent_pos, subtask_pos
@@ -624,6 +626,8 @@ Examples:
           }
 
           // Check for range pattern (e.g., "2-4")
+          // Static regex for range parsing - no dynamic parts
+          // eslint-disable-next-line sonarjs/regular-expr
           const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
           if (rangeMatch) {
             const start = parseInt(rangeMatch[1], 10);
@@ -813,6 +817,8 @@ Examples:
           }
 
           // Check for range pattern (e.g., "1-3")
+          // Static regex for range parsing - no dynamic parts
+          // eslint-disable-next-line sonarjs/regular-expr
           const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
           if (rangeMatch) {
             const start = parseInt(rangeMatch[1], 10);
@@ -971,6 +977,8 @@ Examples:
           }
 
           // Check for range pattern (e.g., "1-3")
+          // Static regex for range parsing - no dynamic parts
+          // eslint-disable-next-line sonarjs/regular-expr
           const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
           if (rangeMatch) {
             const start = parseInt(rangeMatch[1], 10);

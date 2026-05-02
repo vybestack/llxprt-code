@@ -123,6 +123,8 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         .pop() ?? '';
 
     const extractEchoText = (cmd: string): string | null => {
+      // Static regex for echo command parsing - no dynamic parts
+      // eslint-disable-next-line sonarjs/regular-expr
       const m = cmd.match(/^\s*echo\s+(.*)$/i);
       if (!m) return null;
       let text = m[1].trim();

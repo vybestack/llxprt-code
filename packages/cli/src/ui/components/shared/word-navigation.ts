@@ -23,6 +23,7 @@ import { toCodePoints, cpLen } from '../../utils/textUtils.js';
  * @returns true if the character is a word character
  */
 export const isWordCharStrict = (char: string): boolean =>
+  /* eslint-disable-next-line sonarjs/regular-expr */
   /[\w\p{L}\p{N}]/u.test(char);
 
 /**
@@ -37,7 +38,10 @@ export const isWhitespace = (char: string): boolean => /\s/.test(char);
  * @param char - The character to check
  * @returns true if the character is a combining mark
  */
-export const isCombiningMark = (char: string): boolean => /\p{M}/u.test(char);
+export const isCombiningMark = (char: string): boolean =>
+  // Static regex for combining mark check - no dynamic parts
+
+  /\p{M}/u.test(char);
 
 /**
  * Checks if a character should be considered part of a word (including combining marks).

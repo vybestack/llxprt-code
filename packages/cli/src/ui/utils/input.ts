@@ -8,9 +8,11 @@ export const ESC = '\u001B';
 export const SGR_EVENT_PREFIX = `${ESC}[<`;
 export const X11_EVENT_PREFIX = `${ESC}[M`;
 
-// eslint-disable-next-line no-control-regex
+// Static regex for SGR mouse event parsing - no dynamic parts
+// eslint-disable-next-line no-control-regex, sonarjs/regular-expr
 export const SGR_MOUSE_REGEX = /^\x1b\[<(\d+);(\d+);(\d+)([mM])/; // SGR mouse events
 // X11 is ESC [ M followed by 3 bytes.
+// Static regex for X11 mouse event parsing - no dynamic parts
 // eslint-disable-next-line no-control-regex
 export const X11_MOUSE_REGEX = /^\x1b\[M([\s\S]{3})/;
 

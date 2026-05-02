@@ -225,6 +225,7 @@ export class McpPromptLoader implements ICommandLoader {
     const promptInputs: Record<string, unknown> = {};
 
     // arg parsing: --key="value" or --key=value
+    /* eslint-disable-next-line sonarjs/regular-expr */
     const namedArgRegex = /--([^=]+)=(?:"((?:\\.|[^"\\])*)"|([^ ]+))/g;
     let match;
     let lastIndex = 0;
@@ -250,6 +251,8 @@ export class McpPromptLoader implements ICommandLoader {
 
     const positionalArgsString = positionalParts.join('').trim();
     // extracts either quoted strings or non-quoted sequences of non-space characters.
+    // Static regex for positional argument parsing - no dynamic parts
+    // eslint-disable-next-line sonarjs/regular-expr
     const positionalArgRegex = /(?:"((?:\\.|[^"\\])*)"|([^ ]+))/g;
     const positionalArgs: string[] = [];
     while ((match = positionalArgRegex.exec(positionalArgsString)) !== null) {

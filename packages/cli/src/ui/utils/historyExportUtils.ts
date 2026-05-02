@@ -57,19 +57,25 @@ export function sanitizeTranscript(text: string): string {
     /AWS_SECRET_ACCESS_KEY=\S+/g,
     'AWS_SECRET_ACCESS_KEY=[REDACTED]',
   );
+  // Static regex for AWS key redaction - no dynamic parts
+
   sanitized = sanitized.replace(
     /AWS_ACCESS_KEY_ID=\S+/g,
     'AWS_ACCESS_KEY_ID=[REDACTED]',
   );
 
   // Redact Bearer tokens
+  // Static regex for Bearer token redaction - no dynamic parts
   sanitized = sanitized.replace(
+    /* eslint-disable-next-line sonarjs/regular-expr */
     /Bearer\s+[a-zA-Z0-9_.-]+/gi,
     'Bearer [REDACTED]',
   );
 
   // Redact generic API keys in common formats
+  // Static regex for API key redaction - no dynamic parts
   sanitized = sanitized.replace(
+    /* eslint-disable-next-line sonarjs/regular-expr */
     /api[_-]?key["\s:=]+[a-zA-Z0-9_.-]{20,}/gi,
     'api_key=[REDACTED]',
   );

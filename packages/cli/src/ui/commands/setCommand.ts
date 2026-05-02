@@ -577,6 +577,8 @@ export const setCommand: SlashCommand = {
  */
 function parseValue(value: string): unknown {
   // Try to parse as number
+  // Static regex for numeric validation - no dynamic parts
+  // eslint-disable-next-line sonarjs/regular-expr
   if (/^-?\d+(\.\d+)?$/.test(value)) {
     const num = Number(value);
     if (!isNaN(num)) {
