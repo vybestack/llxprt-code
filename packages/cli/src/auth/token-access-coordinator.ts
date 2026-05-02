@@ -197,7 +197,10 @@ export class TokenAccessCoordinator {
 
     const explicitBucket = typeof bucket === 'string';
     const requestMetadata =
-      !explicitBucket && bucket && typeof bucket === 'object'
+      !explicitBucket &&
+      bucket !== null &&
+      bucket !== undefined &&
+      typeof bucket === 'object'
         ? (bucket as OAuthTokenRequestMetadata)
         : undefined;
 
@@ -434,7 +437,10 @@ export class TokenAccessCoordinator {
     );
     const explicitBucket = typeof bucket === 'string';
     const requestMetadata =
-      !explicitBucket && bucket && typeof bucket === 'object'
+      !explicitBucket &&
+      bucket !== null &&
+      bucket !== undefined &&
+      typeof bucket === 'object'
         ? (bucket as OAuthTokenRequestMetadata)
         : undefined;
 

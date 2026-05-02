@@ -287,7 +287,7 @@ async function disableCompletion(
   }
   return skillManager
     .getAllSkills()
-    .filter((s) => !s.disabled && s.name.startsWith(partialArg))
+    .filter((s) => s.disabled !== true && s.name.startsWith(partialArg))
     .map((s) => s.name);
 }
 
@@ -301,7 +301,7 @@ async function enableCompletion(
   }
   return skillManager
     .getAllSkills()
-    .filter((s) => s.disabled && s.name.startsWith(partialArg))
+    .filter((s) => s.disabled === true && s.name.startsWith(partialArg))
     .map((s) => s.name);
 }
 

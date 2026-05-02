@@ -303,7 +303,7 @@ async function extensionConsentString(
   output.push(`Installing extension "${sanitizedConfig.name}".`);
   output.push(INSTALL_WARNING_MESSAGE);
 
-  if (mcpServerEntries.length) {
+  if (mcpServerEntries.length > 0) {
     output.push('This extension will run the following MCP servers:');
     for (const [key, mcpServer] of mcpServerEntries) {
       const isLocal = !!mcpServer.command;
@@ -314,7 +314,7 @@ async function extensionConsentString(
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }
   }
-  if (sanitizedConfig.contextFileName) {
+  if (sanitizedConfig.contextFileName !== undefined && sanitizedConfig.contextFileName !== '') {
     output.push(
       `This extension will append info to your LLXPRT.md context using ${sanitizedConfig.contextFileName}`,
     );
@@ -324,7 +324,7 @@ async function extensionConsentString(
       `This extension will exclude the following core tools: ${sanitizedConfig.excludeTools}`,
     );
   }
-  if (hasHooks) {
+  if (hasHooks === true) {
     output.push(
       'This extension contains Hooks which can automatically execute commands.',
     );

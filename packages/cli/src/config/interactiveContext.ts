@@ -123,8 +123,9 @@ function resolveFiltering(
   };
 
   // Set the context filename BEFORE loading memory
-  if (profileMergedSettings.ui?.contextFileName) {
-    setServerGeminiMdFilename(profileMergedSettings.ui.contextFileName);
+  const contextFileName = profileMergedSettings.ui?.contextFileName;
+  if (contextFileName !== undefined && contextFileName !== '') {
+    setServerGeminiMdFilename(contextFileName);
   } else {
     setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
   }
@@ -190,9 +191,9 @@ function resolveExtensions(
 function resolveInteractiveMode(argv: CliArgs): boolean {
   const hasPromptWords = argv.promptWords?.some((word) => word.trim() !== '');
   return (
-    !!argv.promptInteractive ||
-    !!argv.experimentalAcp ||
-    (process.stdin.isTTY && !hasPromptWords && !argv.prompt)
+    argv.promptInteractive !== undefined ||
+    argv.experimentalAcp === true ||
+    (process.stdin.isTTY && hasPromptWords !== true && argv.prompt === undefined)
   );
 }
 

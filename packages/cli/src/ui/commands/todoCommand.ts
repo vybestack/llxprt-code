@@ -1124,11 +1124,11 @@ Examples:
               const age = formatAge(file.mtime);
 
               const statusSummary = [
-                counts.in_progress && `${counts.in_progress} in_progress`,
-                counts.pending && `${counts.pending} pending`,
-                counts.completed && `${counts.completed} completed`,
+                counts.in_progress > 0 ? `${counts.in_progress} in_progress` : '',
+                counts.pending > 0 ? `${counts.pending} pending` : '',
+                counts.completed > 0 ? `${counts.completed} completed` : '',
               ]
-                .filter(Boolean)
+                .filter((s) => s !== '')
                 .join(', ');
 
               lines.push(

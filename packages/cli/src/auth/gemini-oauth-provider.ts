@@ -385,9 +385,14 @@ export class GeminiOAuthProvider implements OAuthProvider {
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalize null/undefined/empty-string to undefined
       refresh_token: creds.refresh_token || undefined,
       // Google OAuth uses expiry_date (milliseconds), we need expiry (seconds)
-      expiry: creds.expiry_date
-        ? Math.floor(creds.expiry_date / 1000)
-        : Math.floor(Date.now() / 1000) + 3600,
+      // Explicitly check for valid timestamp (non-nullish, non-zero, non-NaN)
+      expiry:
+        creds.expiry_date !== null &&
+        creds.expiry_date !== undefined &&
+        creds.expiry_date > 0 &&
+        !Number.isNaN(creds.expiry_date)
+          ? Math.floor(creds.expiry_date / 1000)
+          : Math.floor(Date.now() / 1000) + 3600,
       token_type: 'Bearer' as const,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalize null/undefined/empty-string to undefined
       scope: creds.scope || undefined,
@@ -491,7 +496,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
    */
   private installPersistentAuthCodeHook(): void {
     const globalObj = global as Record<string, unknown>;
-    if (!globalObj.__oauth_wait_for_code) {
+    if (globalObj.__oauth_wait_for_code === undefined || globalObj.__oauth_wait_for_code === null) {
       globalObj.__oauth_wait_for_code = () => this.waitForAuthCode();
       globalObj.__oauth_provider = this.name;
     }

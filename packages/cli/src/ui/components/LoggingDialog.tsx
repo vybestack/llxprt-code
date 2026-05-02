@@ -82,10 +82,10 @@ const formatTokenCount = (tokens?: {
   input?: number;
   output?: number;
 }): string => {
-  if (!tokens) return '';
+  if (tokens === undefined) return '';
   const parts: string[] = [];
-  if (tokens.input) parts.push(`in:${tokens.input}`);
-  if (tokens.output) parts.push(`out:${tokens.output}`);
+  if (tokens.input !== undefined) parts.push(`in:${tokens.input}`);
+  if (tokens.output !== undefined) parts.push(`out:${tokens.output}`);
   return parts.length > 0 ? `[${parts.join(' ')}]` : '';
 };
 
@@ -202,7 +202,7 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
       // Format tool call content
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty tool name should fall back to 'Unknown tool'
       let toolContent = `${entry.tool || 'Unknown tool'}`;
-      if (entry.duration) {
+      if (entry.duration !== undefined && entry.duration > 0) {
         toolContent += ` (${entry.duration}ms)`;
       }
       if (entry.success === false) {

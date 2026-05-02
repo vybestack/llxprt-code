@@ -112,7 +112,7 @@ export async function cleanupExpiredSessions(
 
   try {
     // Early exit if cleanup is disabled
-    if (!settings.sessionRetention?.enabled) {
+    if (settings.sessionRetention?.enabled !== true) {
       return { ...result, disabled: true };
     }
 
@@ -272,7 +272,9 @@ async function identifySessionsToDelete(
     (e) => e.sessionInfo!.isCurrentSession,
   );
   const maxDeletableSessions =
-    retentionConfig.maxCount && hasActiveSession
+    retentionConfig.maxCount !== undefined &&
+    retentionConfig.maxCount > 0 &&
+    hasActiveSession
       ? Math.max(0, retentionConfig.maxCount - 1)
       : retentionConfig.maxCount;
 
@@ -332,7 +334,7 @@ function validateRetentionConfig(
   config: Config,
   retentionConfig: SessionRetentionSettings,
 ): string | null {
-  if (!retentionConfig.enabled) {
+  if (retentionConfig.enabled !== true) {
     return 'Retention not enabled';
   }
 

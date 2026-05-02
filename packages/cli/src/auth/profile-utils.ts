@@ -55,7 +55,8 @@ export function isLoadBalancerProfileLike(
   profile: unknown,
 ): profile is { type: 'loadbalancer'; profiles: string[] } {
   return (
-    !!profile &&
+    profile !== null &&
+    profile !== undefined &&
     typeof profile === 'object' &&
     'type' in profile &&
     (profile as { type?: unknown }).type === 'loadbalancer' &&
@@ -74,7 +75,7 @@ export function isLoadBalancerProfileLike(
 export function getOAuthBucketsFromProfile(
   profile: unknown,
 ): { providerName: string; buckets: string[] } | null {
-  if (!profile || typeof profile !== 'object') {
+  if (profile === null || profile === undefined || typeof profile !== 'object') {
     return null;
   }
 
@@ -82,12 +83,12 @@ export function getOAuthBucketsFromProfile(
     'provider' in profile && typeof profile.provider === 'string'
       ? profile.provider
       : null;
-  if (!providerName || providerName.trim() === '') {
+  if (providerName === null || providerName.trim() === '') {
     return null;
   }
 
   const auth = 'auth' in profile ? profile.auth : undefined;
-  if (!auth || typeof auth !== 'object') {
+  if (auth === null || auth === undefined || typeof auth !== 'object') {
     return null;
   }
 

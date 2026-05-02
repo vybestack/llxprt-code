@@ -41,7 +41,7 @@ export const normalizeToolNameForPolicy = (name: string): string =>
 
 export const buildNormalizedToolSet = (value: unknown): Set<string> => {
   const normalized = new Set<string>();
-  if (!value) {
+  if (value === null || value === undefined) {
     return normalized;
   }
 
@@ -137,7 +137,7 @@ export function resolveNonInteractiveExcludes(
   allowedToolsSet: Set<string>,
 ): readonly string[] {
   const extraExcludes: string[] = [];
-  if (!context.interactive && !argv.experimentalAcp) {
+  if (context.interactive !== true && argv.experimentalAcp !== true) {
     const defaultExcludes = [ShellTool.Name, EditTool.Name, WriteFileTool.Name];
     const autoEditExcludes = [ShellTool.Name];
     const toolExclusionFilter = createToolExclusionFilter(

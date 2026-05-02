@@ -156,7 +156,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       statsCommand,
       themeCommand,
       toolsCommand,
-      ...(this.config?.isSkillsSupportEnabled()
+      ...(this.config?.isSkillsSupportEnabled() === true
         ? this.config.getSkillManager().isAdminEnabled() === false
           ? [
               {
@@ -200,7 +200,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       todoCommand,
       setupCommand,
       ...tasksCommands,
-      ...(this.config?.getEnableHooksUI() ? [hooksCommand] : []),
+      ...(this.config?.getEnableHooksUI() === true ? [hooksCommand] : []),
       /**
        * @plan PLAN-20260214-SESSIONBROWSER.P21
        */

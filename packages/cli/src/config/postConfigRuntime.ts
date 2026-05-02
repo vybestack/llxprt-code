@@ -296,7 +296,7 @@ function applyToolPolicies(input: ApplyToolPoliciesInput): void {
 
   const experimentalAcp = argv.experimentalAcp;
 
-  if (!interactive && !experimentalAcp) {
+  if (interactive !== true && experimentalAcp !== true) {
     if (approvalMode === ApprovalMode.YOLO) {
       if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
         const finalAllowed = new Set(profileAllowedTools);
@@ -350,8 +350,8 @@ function applyEphemeralSettings(input: PostConfigInput): void {
     );
   }
   if (
-    profileSettingsWithTools.emojifilter &&
-    !settingsService.get('emojifilter')
+    profileSettingsWithTools.emojifilter !== undefined &&
+    settingsService.get('emojifilter') === undefined
   ) {
     settingsService.set('emojifilter', profileSettingsWithTools.emojifilter);
   }
@@ -359,10 +359,11 @@ function applyEphemeralSettings(input: PostConfigInput): void {
   // Apply ephemeral settings from profile (--profile-load or --profile)
   // Skip ALL profile ephemeral settings if --provider was explicitly specified
   const profileToLoad = profileLoadResult.profileToLoad;
-  if (
-    (profileToLoad || bootstrapArgs.profileJson !== null) &&
-    argv.provider === undefined
-  ) {
+  // Profile ephemeral settings apply if profileToLoad is a non-empty string OR profileJson is provided
+  const shouldApplyProfileSettings =
+    (profileToLoad !== undefined && profileToLoad !== '') ||
+    bootstrapArgs.profileJson !== null;
+  if (shouldApplyProfileSettings && argv.provider === undefined) {
     const ephemeralKeys = [
       'auth-key',
       'auth-keyfile',

@@ -546,7 +546,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
             // Watchdog disabled: call iterator.next() directly
             nextEvent = await iterator.next();
           }
-          if (nextEvent.done) {
+          if (nextEvent.done === true) {
             break;
           }
 
@@ -641,7 +641,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
                 },
                 userMessageTimestamp,
               );
-              if (event.contextCleared) {
+              if (event.contextCleared === true) {
                 addItem(
                   {
                     type: MessageType.INFO,
@@ -660,7 +660,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
                 },
                 userMessageTimestamp,
               );
-              if (event.contextCleared) {
+              if (event.contextCleared === true) {
                 addItem(
                   {
                     type: MessageType.INFO,
@@ -788,11 +788,11 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         );
         await logger?.logMessage(MessageSenderType.USER, trimmedQuery);
 
-        if (!shellModeActive) {
+        if (shellModeActive !== true) {
           const slashCommandResult = isSlashCommand(trimmedQuery)
             ? await handleSlashCommand(trimmedQuery)
             : false;
-          if (slashCommandResult) {
+          if (slashCommandResult !== false) {
             return processSlashCommandResult(
               slashCommandResult,
               scheduleToolCalls,
@@ -802,7 +802,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
           }
         }
 
-        if (shellModeActive && handleShellCommand(trimmedQuery, abortSignal)) {
+        if (shellModeActive === true && handleShellCommand(trimmedQuery, abortSignal)) {
           return { queryToSend: null, shouldProceed: false };
         }
 

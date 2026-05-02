@@ -95,7 +95,7 @@ export async function handleUpdate(args: UpdateArgs) {
       console.error(getErrorMessage(error));
     }
   }
-  if (args.all) {
+  if (args.all === true) {
     try {
       const extensionState = new Map();
       await checkForAllExtensionUpdates(
@@ -152,7 +152,8 @@ export const updateCommand: CommandModule = {
       })
       .conflicts('name', 'all')
       .check((argv) => {
-        if (!argv.all && !argv.name) {
+        // argv.all is boolean | undefined, argv.name is string | undefined
+        if (argv.all !== true && (argv.name === undefined || argv.name === '')) {
           throw new Error('Either an extension name or --all must be provided');
         }
         return true;

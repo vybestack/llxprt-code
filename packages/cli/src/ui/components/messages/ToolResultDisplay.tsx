@@ -38,17 +38,19 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
 }) => {
   const { renderMarkdown } = useUIState();
 
-  const availableHeight = availableTerminalHeight
-    ? Math.max(
-        availableTerminalHeight - STATIC_HEIGHT - RESERVED_LINE_COUNT,
-        MIN_LINES_SHOWN + 1,
-      )
-    : undefined;
+  const availableHeight =
+    availableTerminalHeight !== undefined
+      ? Math.max(
+          availableTerminalHeight - STATIC_HEIGHT - RESERVED_LINE_COUNT,
+          MIN_LINES_SHOWN + 1,
+        )
+      : undefined;
 
   // Long tool call response in MarkdownDisplay doesn't respect availableTerminalHeight properly,
   // we're forcing it to not render as markdown when the response is too long, it will fallback
   // to render as plain text, which is contained within the terminal using MaxSizedBox
-  const shouldRenderMarkdown = availableHeight ? false : renderOutputAsMarkdown;
+  const shouldRenderMarkdown =
+    availableHeight !== undefined ? false : renderOutputAsMarkdown;
 
   const childWidth = terminalWidth;
 
@@ -60,7 +62,9 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
     }
   }
 
-  if (!displayContent) return null;
+  if (displayContent === undefined) {
+    return null;
+  }
 
   // Check if displayContent is AnsiOutput (array of arrays)
   const isAnsiOutput =

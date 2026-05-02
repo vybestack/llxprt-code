@@ -71,29 +71,33 @@ export function computeTerminalTitle({
     title = `${base}${getSuffix(context)}`;
   } else {
     // Active/Working state
+    const rawSubject =
+      showThoughts === true ? thoughtSubject?.replace(/[\r\n]+/g, ' ').trim() : undefined;
     const cleanSubject =
-      showThoughts && thoughtSubject?.replace(/[\r\n]+/g, ' ').trim();
+      rawSubject !== undefined && rawSubject !== '' ? rawSubject : undefined;
 
     // If we have a thought subject and it's too long to fit with the suffix,
     // we drop the suffix to maximize space for the thought.
     // Otherwise, we keep the suffix.
     const suffix = getSuffix(displayContext);
     const suffixLen = suffix.length;
-    const canFitThoughtWithSuffix = cleanSubject
-      ? cleanSubject.length + suffixLen + 3 <= MAX_LEN
-      : true;
+    const canFitThoughtWithSuffix =
+      cleanSubject !== undefined
+        ? cleanSubject.length + suffixLen + 3 <= MAX_LEN
+        : true;
 
     let activeSuffix = '';
     let maxStatusLen = MAX_LEN - 3; // Subtract icon prefix "  " (3 chars)
 
-    if (!cleanSubject || canFitThoughtWithSuffix) {
+    if (cleanSubject === undefined || canFitThoughtWithSuffix) {
       activeSuffix = suffix;
       maxStatusLen -= activeSuffix.length;
     }
 
-    const displayStatus = cleanSubject
-      ? truncate(cleanSubject, maxStatusLen)
-      : 'Working…';
+    const displayStatus =
+      cleanSubject !== undefined
+        ? truncate(cleanSubject, maxStatusLen)
+        : 'Working…';
 
     title = `  ${displayStatus}${activeSuffix}`;
   }

@@ -139,13 +139,14 @@ export async function saveProfile(
     await fs.writeFile(profilePath, data, {
       encoding: 'utf-8',
       mode: 0o600,
-      flag: opts.overwrite ? 'w' : 'wx',
+      flag: opts.overwrite === true ? 'w' : 'wx',
     });
 
     return { success: true, path: profilePath };
   } catch (error) {
     if (
-      error &&
+      error !== null &&
+      error !== undefined &&
       typeof error === 'object' &&
       'code' in error &&
       (error as { code?: unknown }).code === 'EEXIST'
@@ -346,10 +347,9 @@ export function getNextStep(
 
 export function getPreviousStep(state: WizardState): WizardStep {
   // Pop from step history
-  return (
-    state.stepHistory[state.stepHistory.length - 2] ||
-    WizardStep.PROVIDER_SELECT
-  );
+  const prevStep = state.stepHistory[state.stepHistory.length - 2];
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard for potentially undefined array access
+  return prevStep ?? WizardStep.PROVIDER_SELECT;
 }
 
 export function getStepPosition(state: WizardState): {

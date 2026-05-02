@@ -39,7 +39,7 @@ export const bugCommand: SlashCommand = {
     const cliVersion = await getCliVersion();
     const memoryUsage = formatMemoryUsage(process.memoryUsage().rss);
     const ideClient =
-      (context.services.config?.getIdeMode() &&
+      (context.services.config?.getIdeMode() === true &&
         context.services.config.getIdeClient()?.getDetectedIdeDisplayName()) ??
       '';
     const terminalName =
@@ -61,13 +61,13 @@ export const bugCommand: SlashCommand = {
 * **Terminal Background:** ${terminalBgColor}
 * **Kitty Keyboard Protocol:** ${kittyProtocol}
 `;
-    if (ideClient) {
+    if (ideClient !== '') {
       info += `* **IDE Client:** ${ideClient}\n`;
     }
 
     // Export conversation history if available
     const client = config?.getGeminiClient();
-    if (client?.hasChatInitialized()) {
+    if (client?.hasChatInitialized() === true) {
       try {
         const chat = client.getChat() as unknown;
         const getHistory =

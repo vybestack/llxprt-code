@@ -453,7 +453,7 @@ export function parseInlineProfile(
   const obj = parsed as Record<string, unknown>;
 
   // Step 4: Validate required fields (provider and model must be strings)
-  if (!obj.provider || typeof obj.provider !== 'string') {
+  if (obj.provider === undefined || obj.provider === null || typeof obj.provider !== 'string') {
     return {
       providerName: '',
       modelName: '',
@@ -462,7 +462,7 @@ export function parseInlineProfile(
     };
   }
 
-  if (!obj.model || typeof obj.model !== 'string') {
+  if (obj.model === undefined || obj.model === null || typeof obj.model !== 'string') {
     return {
       providerName: '',
       modelName: '',
@@ -673,7 +673,7 @@ ${baseProfile.error}`);
         const profile = (settingsService as any).getProfile(
           bootstrapArgs.profileName,
         );
-        if (profile) {
+        if (profile !== null && profile !== undefined) {
           const baseProfile: ProfileApplicationResult = {
             providerName: profile.provider ?? '',
             modelName: profile.model ?? '',

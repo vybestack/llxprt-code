@@ -257,7 +257,11 @@ export class ConversationDataRedactor {
   // private redactContentPart(part: unknown, providerName: string): unknown {
 
   private redactToolParameters(params: unknown, toolName: string): unknown {
-    if (!params || typeof params !== 'object') {
+    if (
+      params === null ||
+      params === undefined ||
+      typeof params !== 'object'
+    ) {
       return params;
     }
 
@@ -269,7 +273,8 @@ export class ConversationDataRedactor {
       case 'write_file':
       case 'list_files':
         if (
-          redacted.file_path &&
+          redacted.file_path !== null &&
+          redacted.file_path !== undefined &&
           typeof redacted.file_path === 'string' &&
           this.redactionConfig.redactFilePaths
         ) {
@@ -279,7 +284,11 @@ export class ConversationDataRedactor {
 
       case 'run_command':
       case 'shell':
-        if (redacted.command && typeof redacted.command === 'string') {
+        if (
+          redacted.command !== null &&
+          redacted.command !== undefined &&
+          typeof redacted.command === 'string'
+        ) {
           redacted.command = this.redactShellCommand(redacted.command);
         }
         break;
@@ -287,7 +296,8 @@ export class ConversationDataRedactor {
       case 'web_search':
       case 'fetch_url':
         if (
-          redacted.url &&
+          redacted.url !== null &&
+          redacted.url !== undefined &&
           typeof redacted.url === 'string' &&
           this.redactionConfig.redactUrls
         ) {

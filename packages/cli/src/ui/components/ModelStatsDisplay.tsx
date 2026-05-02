@@ -178,10 +178,10 @@ export const ModelStatsDisplay: React.FC = () => {
       width: 28,
       renderCell: (row) => (
         <Text
-          bold={row.isSection}
-          color={row.isSection ? theme.text.primary : theme.text.link}
+          bold={row.isSection === true}
+          color={row.isSection === true ? theme.text.primary : theme.text.link}
         >
-          {row.isSubtle ? `  ↳ ${row.metric}` : row.metric}
+          {row.isSubtle === true ? `  ↳ ${row.metric}` : row.metric}
         </Text>
       ),
     },
@@ -191,7 +191,7 @@ export const ModelStatsDisplay: React.FC = () => {
       flexGrow: 1,
       renderCell: (row: StatRowData) => {
         // Don't render anything for section headers in model columns
-        if (row.isSection) return null;
+        if (row.isSection === true) return null;
         const val = row[name];
         if (val === undefined || val === null) return null;
         if (typeof val === 'string' || typeof val === 'number') {
