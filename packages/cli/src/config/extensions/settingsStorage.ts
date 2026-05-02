@@ -50,7 +50,7 @@ export function getKeychainServiceName(
     ?.replace(/\\/g, '/')
     .includes('.llxprt/extensions');
 
-  if (isWorkspaceScope) {
+  if (isWorkspaceScope === true) {
     // Include workspace identifier for workspace scope
     // Use getWorkspaceIdentity() to get the git root, not process.cwd()
     const workspaceIdentity = getWorkspaceIdentity();

@@ -71,7 +71,7 @@ function extractWrappedProviderBaseUrl(
 ): string | undefined {
   const wrappedProvider = (provider as { wrappedProvider?: unknown })
     .wrappedProvider;
-  if (!wrappedProvider) {
+  if (wrappedProvider == null) {
     return undefined;
   }
   return extractProviderBaseUrl(wrappedProvider, visited);

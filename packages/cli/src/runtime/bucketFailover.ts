@@ -134,7 +134,7 @@ export async function validateProfileBucketsExist(
   for (const bucket of buckets) {
     const token = await tokenStore.getToken(profile.provider, bucket);
 
-    if (!token) {
+    if (token == null) {
       errors.push(
         `OAuth bucket '${bucket}' for provider '${profile.provider}' not found. ` +
           `Use /auth ${profile.provider} login ${bucket} to authenticate.`,

@@ -102,8 +102,8 @@ export class ShellProcessor implements IPromptProcessor {
       const { allAllowed, disallowedCommands, blockReason, isHardDenial } =
         checkCommandPermissions(command, config, sessionShellAllowlist);
 
-      if (!allAllowed) {
-        if (isHardDenial) {
+      if (allAllowed !== true) {
+        if (isHardDenial === true) {
           throw new Error(
             `Blocked command: "${command}". Reason: ${blockReason ?? 'Blocked by configuration.'}`,
           );

@@ -33,7 +33,7 @@ export async function handleInstall(args: InstallArgs) {
       targetDir: string,
     ): Promise<boolean> => {
       const consentText = await skillsConsentString(skills, source, targetDir);
-      if (consent) {
+      if (consent === true) {
         debugLogger.log('You have consented to the following:');
         debugLogger.log(consentText);
         return true;

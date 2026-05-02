@@ -39,7 +39,7 @@ function formatFileList(openFiles: File[]): string {
         ? `${basename} (/${parentDir})`
         : basename;
 
-      return `  - ${displayName}${file.isActive ? ' (active)' : ''}`;
+      return `  - ${displayName}${file.isActive === true ? ' (active)' : ''}`;
     })
     .join('\n');
 

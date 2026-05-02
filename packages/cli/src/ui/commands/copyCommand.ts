@@ -19,7 +19,7 @@ export const copyCommand: SlashCommand = {
     const client = context.services.config?.getGeminiClient();
 
     // Check if chat is initialized before accessing it
-    if (!client?.hasChatInitialized()) {
+    if (client == null || client.hasChatInitialized() !== true) {
       return {
         type: 'message',
         messageType: 'info',

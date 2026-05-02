@@ -36,8 +36,8 @@ function toHaveOnlyValidCharacters(this: Assertion, buffer: TextBuffer) {
   return {
     pass,
     message: () =>
-      `Expected buffer ${isNot ? 'not ' : ''}to have only valid characters, but found invalid characters in lines:\n${invalidLines
-        .map((l) => `  [${l.line}]: "${l.content}"`) /* This line was changed */
+      `Expected buffer ${isNot === true ? 'not ' : ''}to have only valid characters, but found invalid characters in lines:\n${invalidLines
+        .map((l) => `  [${l.line}]: "${l.content}"`)
         .join('\n')}`,
     actual: buffer.lines,
     expected: 'Lines with no line breaks, backspaces, or escape codes.',

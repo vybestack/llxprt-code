@@ -95,9 +95,10 @@ export async function updateExtension(
       type: 'SET_STATE',
       payload: {
         name: extension.name,
-        state: enableExtensionReloading
-          ? ExtensionUpdateState.UPDATED
-          : ExtensionUpdateState.UPDATED_NEEDS_RESTART,
+        state:
+          enableExtensionReloading === true
+            ? ExtensionUpdateState.UPDATED
+            : ExtensionUpdateState.UPDATED_NEEDS_RESTART,
       },
     });
     return {

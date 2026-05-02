@@ -156,7 +156,7 @@ export async function applyProfileToRuntime(
     );
   } else if (
     loadedProfile &&
-    (profileToLoad ?? bootstrapArgs.profileJson !== null) &&
+    (profileToLoad ?? bootstrapArgs.profileJson) != null &&
     argv.provider === undefined
   ) {
     // @plan:PLAN-20251118-ISSUE533.P13 - Apply inline or file-based profile

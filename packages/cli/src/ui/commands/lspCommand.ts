@@ -101,7 +101,7 @@ async function statusAction(
   }
 
   const lspClient = config.getLspServiceClient?.();
-  if (!lspClient?.isAlive()) {
+  if (lspClient == null || lspClient.isAlive() !== true) {
     const reason =
       lspClient?.getUnavailableReason?.() ?? 'service startup failed';
     return {

@@ -638,7 +638,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         buckets.length,
       );
 
-      if (showPrompt) {
+      if (showPrompt === true) {
         logger.debug(
           'Prompt mode enabled - waiting indefinitely for user approval',
         );

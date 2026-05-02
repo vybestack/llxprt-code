@@ -108,13 +108,14 @@ export const keyfileCommand: SlashCommand = {
       const extendedContext = context as CommandContext & {
         checkPaymentModeChange?: () => void;
       };
-      if (extendedContext.checkPaymentModeChange) {
+      if (typeof extendedContext.checkPaymentModeChange === 'function') {
         setTimeout(extendedContext.checkPaymentModeChange, 100);
       }
 
-      const paymentWarning = result.isPaidMode
-        ? '\nWARNING: You are now in PAID MODE - API usage will be charged to your account'
-        : '';
+      const paymentWarning =
+        result.isPaidMode === true
+          ? '\nWARNING: You are now in PAID MODE - API usage will be charged to your account'
+          : '';
 
       return {
         type: 'message',

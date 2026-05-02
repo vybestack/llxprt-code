@@ -26,7 +26,8 @@ const continueSchema: CommandArgumentSchema = [
     description: 'Session ID, index, or "latest"',
     completer: async (ctx: CommandContext) => {
       // In non-interactive mode, return empty (graceful handling)
-      if (!ctx.services.config?.isInteractive()) {
+      const config = ctx.services.config;
+      if (config == null || config.isInteractive() !== true) {
         return [];
       }
       // Return at minimum 'latest'

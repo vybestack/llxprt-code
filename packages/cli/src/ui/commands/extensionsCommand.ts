@@ -130,7 +130,7 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
         },
       },
     });
-    if (names?.length) {
+    if (names != null && names.length > 0) {
       const extensions = listExtensions(context.services.config!);
       for (const name of names) {
         const extension = extensions.find(
