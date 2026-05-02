@@ -157,11 +157,7 @@ function applyThoughtToState(
 }
 
 function shouldResetGeminiBufferForContextClear(event: GeminiEvent): boolean {
-  return (
-    (event.type === ServerGeminiEventType.AgentExecutionStopped ||
-      event.type === ServerGeminiEventType.AgentExecutionBlocked) &&
-    event.contextCleared === true
-  );
+  return event.contextCleared === true;
 }
 
 export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
