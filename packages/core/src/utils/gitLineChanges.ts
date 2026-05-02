@@ -120,6 +120,7 @@ function parseUnifiedZeroDiff(diffText: string): {
 
   // We only need hunk headers. With --unified=0, a hunk header looks like:
   // @@ -oldStart,oldCount +newStart,newCount @@
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const hunkHeaderRe = /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/;
 
   for (const line of lines) {

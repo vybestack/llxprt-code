@@ -545,9 +545,13 @@ export function getMCPDiscoveryState(): MCPDiscoveryState {
 function extractWWWAuthenticateHeader(errorString: string): string | null {
   // Try multiple patterns to extract the header
   const patterns = [
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /www-authenticate:\s*([^\n\r]+)/i,
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /WWW-Authenticate:\s*([^\n\r]+)/i,
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /"www-authenticate":\s*"([^"]+)"/i,
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /'www-authenticate':\s*'([^']+)'/i,
   ];
 

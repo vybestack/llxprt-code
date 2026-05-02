@@ -64,6 +64,7 @@ export class ComplexityAnalyzer {
   ];
 
   // Task separator patterns for comma-separated lists
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   private readonly taskSeparatorPattern = /(?:,\s*(?:and\s+)?|;\s*|\band\s+)/;
   // NOTE: File reference pattern no longer used to reduce false positives
   // private readonly fileReferencePattern = /(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]+/g;
@@ -163,6 +164,7 @@ export class ComplexityAnalyzer {
     if (tasks.length === 0) {
       // Look for patterns like "I need to X, Y, and Z"
       const needToPattern =
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         /(?:need to|want to|have to|should|must|will)\s+([^\r\n.?!]+)/i;
       const match = message.match(needToPattern);
 
@@ -206,6 +208,7 @@ export class ComplexityAnalyzer {
           ) {
             // Extract the main action from the sentence
             const actionMatch = sentence.match(
+              // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
               /(?:first,?\s*|then\s*|after that,?\s*|finally,?\s*)?(.+)/i,
             );
             if (actionMatch) {

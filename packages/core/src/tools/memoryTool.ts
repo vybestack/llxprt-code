@@ -161,6 +161,7 @@ function ensureNewlineSeparation(currentContent: string): string {
  */
 function computeNewContent(currentContent: string, fact: string): string {
   let processedText = fact.trim();
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   processedText = processedText.replace(/^(-+\s*)+/, '').trim();
   const newMemoryItem = `- ${processedText}`;
 

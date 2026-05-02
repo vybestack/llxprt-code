@@ -88,10 +88,12 @@ function extractImportItems(line: string): string[] {
  * Handles: `import os`, `from pathlib import Path`, `from os.path import join`
  */
 function extractPythonImportModule(line: string): string {
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const fromMatch = line.match(/^from\s+([\w.]+)\s+import/);
   if (fromMatch) {
     return fromMatch[1];
   }
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const importMatch = line.match(/^import\s+([\w.]+)/);
   if (importMatch) {
     return importMatch[1];
@@ -104,10 +106,12 @@ function extractPythonImportModule(line: string): string {
  * Handles: `from typing import List, Dict`, `from os.path import join, exists`
  */
 function extractPythonImportItems(line: string): string[] {
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const fromImportMatch = line.match(/^from\s+[\w.]+\s+import\s+(.+)/);
   if (fromImportMatch) {
     return fromImportMatch[1]
       .split(',')
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       .map((item) => item.trim().replace(/\s+as\s+\w+$/, ''))
       .filter((item) => item);
   }

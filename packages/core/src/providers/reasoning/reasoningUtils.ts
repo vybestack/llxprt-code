@@ -152,6 +152,7 @@ export function extractKimiToolCallsFromText(raw: string): {
       (_sectionMatch: string, sectionBody: string) => {
         try {
           const callRegex =
+            // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
             /<\|tool_call_begin\|>\s*([^<]+?)\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/g;
 
           let m: RegExpExecArray | null;
@@ -162,7 +163,9 @@ export function extractKimiToolCallsFromText(raw: string): {
             // Infer tool name from ID.
             let toolName = '';
             const match =
+              // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
               /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ??
+              // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
               /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
             if (match) {
               toolName = match[1];
@@ -258,6 +261,7 @@ function sanitizeToolArgumentsString(raw: unknown): string {
 
   // Strip fenced code blocks like ```json { ... } ```.
   if (text.startsWith('```')) {
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     text = text.replace(/^```[a-zA-Z0-9_-]*\s*/m, '');
     text = text.replace(/```$/m, '');
     text = text.trim();

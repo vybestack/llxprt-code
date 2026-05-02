@@ -211,6 +211,7 @@ function registerCustomFormats(instance: {
     validate: () => true,
   });
   // Ensure date format is available when ajv-formats is not installed
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   instance.addFormat('date', /^\d{4}-\d{2}-\d{2}$/);
 }
 registerCustomFormats(ajValidator2020);

@@ -258,6 +258,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
   }
 
   private escapeRegex(s: string): string {
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 

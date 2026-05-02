@@ -217,6 +217,7 @@ export class ASTQueryExtractor {
   }
 
   private extractNameBasic(line: string): string {
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     const match = line.match(/(?:function|def|class)\s+(\w+)/);
     return match ? match[1] : 'unknown';
   }

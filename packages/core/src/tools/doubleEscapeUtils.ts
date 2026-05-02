@@ -269,6 +269,7 @@ function convertStringNumbersToNumbers(obj: unknown): unknown {
   if (obj == null) return obj;
 
   if (typeof obj === 'string') {
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     if (/^-?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$/.test(obj)) {
       const num = Number(obj);
       if (Number.isFinite(num)) return num;

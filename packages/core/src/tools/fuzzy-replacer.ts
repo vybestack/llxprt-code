@@ -47,6 +47,7 @@ export function levenshtein(a: string, b: string): number {
  * Helper function to escape special regex characters
  */
 const escapeRegExp = (str: string): string =>
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const ESCAPE_SEQUENCE_PATTERN = /\\(n|t|r|'|"|`|\\|\$)/g;

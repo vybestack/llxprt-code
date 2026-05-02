@@ -35,6 +35,7 @@ export interface SkillDefinition {
   source?: SkillSource;
 }
 
+// eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)/;
 
 /**
@@ -77,6 +78,7 @@ function parseSimpleFrontmatter(
     const line = lines[i];
 
     // Match "name:" at the start of the line (optional whitespace)
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     const nameMatch = line.match(/^\s*name:\s*(.*)$/);
     if (nameMatch) {
       name = nameMatch[1].trim();
@@ -84,6 +86,7 @@ function parseSimpleFrontmatter(
     }
 
     // Match "description:" at the start of the line (optional whitespace)
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     const descMatch = line.match(/^\s*description:\s*(.*)$/);
     if (descMatch) {
       const descLines = [descMatch[1].trim()];

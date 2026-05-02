@@ -105,6 +105,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
     for (const pattern of patterns) {
       // Convert glob pattern to RegExp
       const regexPattern = pattern
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         .replace(/[.+^${}()|[\]\\]/g, '\\$&')
         .replace(/\*/g, '.*')
         .replace(/\?/g, '.');

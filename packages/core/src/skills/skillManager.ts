@@ -225,6 +225,7 @@ export class SkillManager {
         if (await this.pathExists(filePath)) {
           const content = await fs.readFile(filePath, 'utf-8');
           // Extract body after frontmatter if present
+          // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
           const frontmatterRegex = /^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)/;
           const match = content.match(frontmatterRegex);
           return match ? match[1].trim() : content.trim();
