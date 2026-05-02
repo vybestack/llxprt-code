@@ -507,6 +507,21 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
           setPendingHistoryItem(null);
         }
       };
+      const clearContextAndResetBuffer = () => {
+        if (pendingHistoryItemRef.current) {
+          flushPendingHistoryItem(userMessageTimestamp);
+          setPendingHistoryItem(null);
+        }
+        geminiMessageBuffer = '';
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: 'Conversation context has been cleared.',
+          },
+          userMessageTimestamp,
+        );
+      };
+
       let iterator: AsyncIterator<GeminiEvent> | undefined;
 
       // Resolve the effective idle timeout from config
