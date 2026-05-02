@@ -654,18 +654,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
                 userMessageTimestamp,
               );
               if (event.contextCleared) {
-                if (pendingHistoryItemRef.current) {
-                  flushPendingHistoryItem(userMessageTimestamp);
-                  setPendingHistoryItem(null);
-                }
-                geminiMessageBuffer = '';
-                addItem(
-                  {
-                    type: MessageType.INFO,
-                    text: 'Conversation context has been cleared.',
-                  },
-                  userMessageTimestamp,
-                );
+                clearContextAndResetBuffer();
               }
               break;
             case ServerGeminiEventType.AgentExecutionBlocked:
@@ -677,18 +666,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
                 userMessageTimestamp,
               );
               if (event.contextCleared) {
-                if (pendingHistoryItemRef.current) {
-                  flushPendingHistoryItem(userMessageTimestamp);
-                  setPendingHistoryItem(null);
-                }
-                geminiMessageBuffer = '';
-                addItem(
-                  {
-                    type: MessageType.INFO,
-                    text: 'Conversation context has been cleared.',
-                  },
-                  userMessageTimestamp,
-                );
+                clearContextAndResetBuffer();
               }
               break;
             default:
