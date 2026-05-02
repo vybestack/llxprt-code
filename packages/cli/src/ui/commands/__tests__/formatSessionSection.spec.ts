@@ -152,6 +152,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const joinedOutput = result.join('\n');
       expect(joinedOutput).toMatch(/File size:/i);
       // Should contain some byte representation (B, KB, MB, etc.)
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(joinedOutput).toMatch(/\d+.*(?:B|KB|MB|bytes)/i);
     });
 

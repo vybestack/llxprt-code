@@ -282,6 +282,7 @@ describe('TodoPanel Responsive Behavior', () => {
       // This means more of the content should be visible before truncation
 
       // Count visible characters before truncation
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       const contentMatch = output!.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
       expect(contentMatch).toBeDefined();
       const visibleContent = contentMatch![1];
@@ -328,6 +329,7 @@ describe('TodoPanel Responsive Behavior', () => {
         );
 
         const output = lastFrame();
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         const contentMatch = output!.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
 
         expect(contentMatch).toBeDefined();

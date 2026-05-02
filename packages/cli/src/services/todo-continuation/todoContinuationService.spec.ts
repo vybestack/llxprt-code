@@ -239,6 +239,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(false);
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         expect(result.reason).toMatch(/no.*active.*todo/i);
       });
 
@@ -423,6 +424,7 @@ describe('TodoContinuationService', () => {
       const result = service.checkContinuationConditions(context);
 
       expect(result.shouldContinue).toBe(false);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(result.reason).toMatch(/no.*active.*todo/i);
       expect(result.activeTodo).toBeUndefined();
     });

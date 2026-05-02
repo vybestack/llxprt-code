@@ -777,6 +777,7 @@ describe('Config LSP Integration (P33)', () => {
 
         expect(consoleErrorSpy).toHaveBeenCalledWith(
           expect.stringMatching(
+            // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
             /LSP.*@vybestack\/llxprt-code-lsp.*not found.*npm install -g @vybestack\/llxprt-code-lsp/i,
           ),
         );

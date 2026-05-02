@@ -188,6 +188,7 @@ describe('Turn', () => {
         }),
       );
       expect(event2.value.callId).toStrictEqual(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         expect.stringMatching(/^tool2-\d{13}-\w{10,}$/),
       );
       expect(turn.pendingToolCalls[1]).toStrictEqual(event2.value);

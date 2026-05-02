@@ -300,6 +300,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       // Then: Should use YOLO-specific prompt
       expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         expect.stringMatching(/(continue|proceed).*without.*confirmation/i),
         { ephemeral: true },
       );

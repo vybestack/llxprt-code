@@ -216,6 +216,7 @@ describe('profileCommand', () => {
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
       // Gets usage error since parts.length < 5
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(content).toMatch(/Usage.*roundrobin.*failover/i);
     });
 

@@ -151,6 +151,7 @@ describe('formatRelativeTime', () => {
       // 46 days ago from 2026-02-16 is 2026-01-01
       const date46 = ago(46 * DAY);
       const result = formatRelativeTime(date46, { mode: 'long', now: NOW });
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
       expect(result).toBe('Jan 1, 2026');
     });
@@ -158,6 +159,7 @@ describe('formatRelativeTime', () => {
     it('returns formatted date for dates over a year ago', () => {
       const date365 = ago(365 * DAY);
       const result = formatRelativeTime(date365, { mode: 'long', now: NOW });
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
       expect(result).toBe('Feb 16, 2025');
     });
@@ -228,6 +230,7 @@ describe('formatRelativeTime', () => {
     it('returns short date "MMM D" for older dates within same year', () => {
       const date46 = ago(46 * DAY);
       const result = formatRelativeTime(date46, { mode: 'short', now: NOW });
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
       expect(result).toBe('Jan 1');
     });
@@ -238,6 +241,7 @@ describe('formatRelativeTime', () => {
         mode: 'short',
         now: NOW,
       });
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
       expect(result).toBe('Feb 16, 2025');
     });

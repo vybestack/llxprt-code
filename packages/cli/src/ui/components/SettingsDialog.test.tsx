@@ -320,6 +320,7 @@ describe('SettingsDialog', () => {
 
       // Wait for the toggled value to appear in the UI to confirm state update
       await waitFor(() => {
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         expect(lastFrame()).toMatch(/Screen Reader Mode\s+true\*/);
       });
 
@@ -794,6 +795,7 @@ describe('SettingsDialog', () => {
         // Wait for toggled value to appear to confirm state update
         await waitFor(() => {
           expect(lastFrame()).toMatch(
+            // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
             /Disable Loading Phrases\s+(true\*|false\*)/,
           );
         });
@@ -974,6 +976,7 @@ describe('SettingsDialog', () => {
       expect(lastFrame()).toContain('Apply To'); // Scope section
       expect(lastFrame()).toContain('User Settings'); // Scope options (no numbers when settings focused)
       // In nav mode, help text shows navigation help
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(lastFrame()).toMatch(/Enter.*select.*Tab.*focus.*Esc.*close/);
 
       // This test validates the complete UI structure is available for user workflow

@@ -137,6 +137,7 @@ describe('Footer', () => {
       // render strictly fewer characters of it and include the truncation
       // ellipsis from truncateMiddle.
       expect(textContent).not.toContain(longBranchName);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(textContent).toMatch(/feature\/.+\.\.\..+/);
     });
 
@@ -209,7 +210,7 @@ describe('Footer', () => {
           // NARROW/STANDARD must truncate the name via truncateMiddle.
           // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(textContent).not.toContain(longBranchName);
-          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+          // eslint-disable-next-line vitest/no-conditional-expect, sonarjs/regular-expr -- intentional breakpoint assertion with reviewed static regex.
           expect(textContent).toMatch(/feature\/.+\.\.\..+/);
         }
       });

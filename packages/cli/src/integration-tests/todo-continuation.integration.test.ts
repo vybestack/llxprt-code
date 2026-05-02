@@ -476,6 +476,7 @@ describe('Task-list Continuation Integration Tests', () => {
           ? `Continue to proceed with the active task without waiting for confirmation: "${prioritizedTodo.content}"`
           : `Please continue working on the following task: "${prioritizedTodo.content}"`;
 
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(yoloPrompt).toMatch(/(continue|proceed).*without.*confirmation/i);
 
       // Simulate pause functionality

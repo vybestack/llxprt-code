@@ -483,6 +483,7 @@ describe('FileOutput', () => {
 
     expect(fs.appendFile).toHaveBeenCalledWith(
       expect.stringMatching(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /llxprt-debug-[^-]+-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.jsonl$/,
       ),
       expect.any(String),

@@ -326,6 +326,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
   it('rejects invalid provider name with space', async () => {
     const token = makeMinimalToken();
     await expect(tokenStore.saveToken('invalid name', token)).rejects.toThrow(
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       /invalid.*provider.*name/i,
     );
   });
@@ -341,6 +342,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     const token = makeMinimalToken();
     await expect(
       tokenStore.saveToken('anthropic', token, 'bad/bucket'),
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     ).rejects.toThrow(/invalid.*bucket.*name/i);
   });
 

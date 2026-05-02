@@ -831,6 +831,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     // Verify prompt includes instructions
     expect(callArgs.message).toMatch(/comprehensive/i);
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     expect(callArgs.message).toMatch(/role.*capabilities.*behavior/i);
     expect(callArgs.message).toMatch(/output.*only/i);
   });

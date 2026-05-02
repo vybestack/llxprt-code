@@ -297,6 +297,7 @@ describe('SecureInputHandler', () => {
       };
 
       // What does the regex actually match?
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       const match = afterPaste.match(/^\/key\s+([\s\S]*)/);
       const debug3 = {
         matched: !!match,

@@ -112,6 +112,7 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     expect(output).toMatch(/→.*Current task.*← current/);
   });
 
@@ -212,6 +213,7 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     expect(output).toMatch(/→.*Main task.*← current/);
     expect(output).toMatch(/•.*Subtask 1/);
     expect(output).toMatch(/•.*Subtask 2/);

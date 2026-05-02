@@ -191,6 +191,7 @@ describe('ProxySocketClient', () => {
     // Verify each ID looks like a UUID
     for (const id of receivedIds) {
       expect(id).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
       );
     }

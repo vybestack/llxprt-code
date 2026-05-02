@@ -187,6 +187,7 @@ describe('useShellCommandProcessor', () => {
     });
     expect(mockShellExecutionService).toHaveBeenCalledWith(
       expect.stringMatching(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /^{ ls -l; }; __code=\$\?; pwd > ".*shell_pwd_abcdef\.tmp"; exit \$__code$/,
       ),
       '/test/dir',

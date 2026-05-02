@@ -140,6 +140,7 @@ describe('CLI --profile-load Integration Tests', () => {
       // Check that the profile was loaded (may be in debug output)
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Loaded profile.*test-profile|Loading profile.*test-profile/i,
       );
 
@@ -170,6 +171,7 @@ describe('CLI --profile-load Integration Tests', () => {
       // Should log error and exit with non-zero code
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Failed to load profile.*non-existent-profile|Profile.*non-existent-profile.*not found/i,
       );
       // Should exit with error code 1 when profile fails to load
@@ -195,6 +197,7 @@ describe('CLI --profile-load Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Failed to load profile.*invalid-profile|Profile.*invalid-profile.*corrupted/i,
       );
       // Should exit with error code 1 when profile is corrupted
@@ -235,6 +238,7 @@ describe('CLI --profile-load Integration Tests', () => {
       // Profile should be loaded
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Loaded profile.*test-profile|Loading profile.*test-profile/i,
       );
       // The --model flag should override the profile model
@@ -274,6 +278,7 @@ describe('CLI --profile-load Integration Tests', () => {
       // Profile should be loaded
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Loaded profile.*test-profile|Loading profile.*test-profile/i,
       );
       // The key should be used (we can't directly verify it but the CLI should attempt to use it)
@@ -319,6 +324,7 @@ describe('CLI --profile-load Integration Tests', () => {
       const fullOutput = result.stdout + result.stderr;
       // Profile should be loaded
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Loaded profile.*keyfile-profile|Loading profile.*keyfile-profile/i,
       );
       // CLI keyfile should be mentioned in debug output
@@ -361,6 +367,7 @@ describe('CLI --profile-load Integration Tests', () => {
       const fullOutput = result.stdout + result.stderr;
       // Profile should be loaded
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Loaded profile.*set-profile|Loading profile.*set-profile/i,
       );
       // The --set override should be applied (debug output may show ephemeral settings)
@@ -412,6 +419,7 @@ describe('CLI --profile-load Integration Tests', () => {
       const fullOutput = result.stdout + result.stderr;
       // Profile should be loaded
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Loaded profile.*timing-test|Loading profile.*timing-test/i,
       );
       // CLI keyfile should take precedence
@@ -460,6 +468,7 @@ describe('CLI --profile-load Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Loaded profile.*auth-profile|Loading profile.*auth-profile/i,
       );
       // Should not expose the actual key in output
@@ -501,6 +510,7 @@ describe('CLI --profile-load Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Loaded profile.*params-profile|Loading profile.*params-profile/i,
       );
       // The model params should be applied internally
@@ -550,8 +560,10 @@ describe('CLI --profile-load Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Loaded profile.*profile2|Loading profile.*profile2/i,
       );
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(fullOutput).toMatch(/provider.*gemini|gemini.*provider/i);
       expect(fullOutput).toMatch(/model.*gemini-exp-1206/i);
     });
@@ -577,6 +589,7 @@ describe('CLI --profile-load Integration Tests', () => {
       const fullOutput = result.stdout + result.stderr;
       // Should show auth error but not browser-related messages
       expect(fullOutput.toLowerCase()).not.toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /opening.*browser|browser.*auth/i,
       );
     });
@@ -607,6 +620,7 @@ describe('CLI --profile-load Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Failed to load profile.*no-version|Profile.*no-version.*invalid/i,
       );
       expect(fullOutput).toMatch(/missing required fields/i);
@@ -637,6 +651,7 @@ describe('CLI --profile-load Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Failed to load profile.*bad-version|Profile.*bad-version.*unsupported/i,
       );
       expect(fullOutput).toMatch(/unsupported.*version/i);
@@ -664,12 +679,14 @@ describe('CLI --version and --help flags', () => {
   it('should print version with --version flag', async () => {
     const result = await runCli(['--version'], { HOME: tempDir });
     expect(result.exitCode).toBe(0);
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
   it('should print version with -v flag', async () => {
     const result = await runCli(['-v'], { HOME: tempDir });
     expect(result.exitCode).toBe(0);
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
@@ -876,6 +893,7 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Cannot use both.*--profile.*--profile-load/i,
       );
     });
@@ -898,6 +916,7 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Cannot use both.*--profile.*--profile-load/i,
       );
       expect(result.stderr).toMatch(/Use one at a time/i);

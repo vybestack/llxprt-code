@@ -389,6 +389,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
       'my-profile',
     ];
     expect(() => parseBootstrapArgs()).toThrow(
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       /cannot use both.*--profile.*--profile-load/i,
     );
   });
@@ -411,6 +412,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
       '{"provider":"openai"}',
     ];
     expect(() => parseBootstrapArgs()).toThrow(
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       /cannot use both.*--profile.*--profile-load/i,
     );
   });
@@ -433,6 +435,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
       'my-profile',
     ];
     expect(() => parseBootstrapArgs()).toThrow(
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       /cannot use both.*--profile.*--profile-load.*use one at a time/i,
     );
   });

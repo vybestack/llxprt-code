@@ -415,6 +415,7 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       // Should show count like "1 session found" or similar
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/1.*found|found.*1|session/i);
     });
 
@@ -657,6 +658,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/skipped.*3|3.*skipped/i);
     });
 
@@ -704,6 +706,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/press\s+s|s\s+to\s+cycle/i);
     });
 
@@ -906,6 +909,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/page.*1.*of.*2|1\/2/i);
     });
 
@@ -922,6 +926,7 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       // Single page should not show page indicator
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).not.toMatch(/page.*1.*of.*1/i);
     });
 
