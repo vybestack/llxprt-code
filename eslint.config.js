@@ -252,6 +252,7 @@ export default tseslint.config(
       'sonarjs/cognitive-complexity': ['warn', 30],
       'sonarjs/todo-tag': 'error',
       'sonarjs/no-ignored-exceptions': 'error',
+      'sonarjs/regular-expr': 'error',
 
       'sonarjs/function-return-type': 'off',
       'sonarjs/no-wildcard-import': 'off',
@@ -620,21 +621,6 @@ export default tseslint.config(
   },
   // ============================================================================
   // End Issue #1569 S6B
-  // ============================================================================
-  // Issue #1569: Batch S6C - sonarjs/regular-expr enforcement
-  // ============================================================================
-  // Enforce proper regular expression construction and usage.
-  {
-    files: [
-      'packages/core/src/providers/anthropic/AnthropicResponseParser.ts',
-      'packages/core/src/providers/anthropic/AnthropicMessageNormalizer.ts',
-    ],
-    rules: {
-      'sonarjs/regular-expr': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 S6C
   // ============================================================================
   // Issue #1569: Batch S6D - sonarjs/os-command enforcement
   // ============================================================================
