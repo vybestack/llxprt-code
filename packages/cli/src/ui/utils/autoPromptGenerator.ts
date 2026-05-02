@@ -86,7 +86,7 @@ export async function generateAutoPrompt(
     try {
       const runtimeBridge = getRuntimeBridge();
       return await runtimeBridge.runWithScope(executeRequest);
-    } catch (_runtimeError) {
+    } catch {
       return executeRequest();
     }
   };

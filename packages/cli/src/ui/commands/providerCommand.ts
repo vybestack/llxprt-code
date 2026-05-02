@@ -210,7 +210,7 @@ export const providerCommand: SlashCommand = {
       let currentProvider: string | null = null;
       try {
         currentProvider = runtime.getActiveProviderName();
-      } catch (_error) {
+      } catch {
         try {
           currentProvider = providerManager.getActiveProviderName();
         } catch {

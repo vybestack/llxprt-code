@@ -471,7 +471,7 @@ export async function applyProfileWithGuards(
       let subProfile: Profile;
       try {
         subProfile = await profileManagerInstance.loadProfile(profileName);
-      } catch (_error) {
+      } catch {
         throw new Error(
           `Load balancer profile "${lbName}" references profile "${profileName}" which does not exist`,
         );

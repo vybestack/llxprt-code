@@ -122,7 +122,7 @@ function resolveLoadedSettings(
       const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
       userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
     }
-  } catch (_error) {
+  } catch {
     // Failed to load user settings, ignore and fall back to defaults.
   }
 
@@ -270,7 +270,7 @@ function resolveAuthOnlyFlag(
           return coerced;
         }
       }
-    } catch (_error) {
+    } catch {
       // Ignore SettingsService lookup failures and fall back to default
     }
   }

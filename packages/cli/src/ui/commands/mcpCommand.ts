@@ -242,7 +242,7 @@ const getMcpStatus = async (
         } else {
           message += ` ${COLOR_RED}(OAuth not authenticated)${RESET_COLOR}`;
         }
-      } catch (_err) {
+      } catch {
         // If we can't check OAuth status, just continue
       }
     }

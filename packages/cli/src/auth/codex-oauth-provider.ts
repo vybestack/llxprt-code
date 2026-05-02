@@ -519,7 +519,8 @@ export class CodexOAuthProvider implements OAuthProvider {
       }
 
       return merged;
-    } catch (_error) {
+    } catch {
+      // Token refresh failed — caller will fall back to re-auth
       this.logger.debug(() => `Token refresh failed`);
       return null;
     }

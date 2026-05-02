@@ -91,7 +91,7 @@ export const useFolderTrust = (
 
       try {
         trustedFolders.setValue(cwd, trustLevel);
-      } catch (_e) {
+      } catch {
         if (addItem) {
           addItem(
             {

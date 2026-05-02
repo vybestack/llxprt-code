@@ -103,7 +103,7 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
           redacted_messages: redactedMessages,
           timestamp: new Date().toISOString(),
         });
-      } catch (_error) {
+      } catch {
         // Silently catch logging errors to ensure provider operation continues
         // In real implementation, this would be properly logged to a fallback system
       }

@@ -36,7 +36,7 @@ export async function runExitCleanup() {
   // Tear down any active PTYs first to release FDs/sockets promptly
   try {
     ShellExecutionService.destroyAllPtys();
-  } catch (_) {
+  } catch {
     // Ignore errors during cleanup.
   }
 
@@ -44,7 +44,7 @@ export async function runExitCleanup() {
   for (const fn of syncCleanupFunctions) {
     try {
       fn();
-    } catch (_) {
+    } catch {
       // Ignore errors during cleanup.
     }
   }
@@ -53,7 +53,7 @@ export async function runExitCleanup() {
   for (const fn of cleanupFunctions) {
     try {
       await fn();
-    } catch (_) {
+    } catch {
       // Ignore errors during cleanup.
     }
   }
@@ -69,7 +69,7 @@ export async function runExitCleanup() {
       const instance = FileOutput.getInstance();
       await instance.dispose();
     }
-  } catch (_) {
+  } catch {
     // Ignore errors during cleanup.
   }
 }

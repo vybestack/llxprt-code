@@ -53,7 +53,7 @@ const restoreSchema: CommandArgumentSchema = [
             value: name,
             description: checkpointSuggestionDescription,
           }));
-      } catch (_err) {
+      } catch {
         return [];
       }
     }),

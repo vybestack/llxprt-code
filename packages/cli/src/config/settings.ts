@@ -667,7 +667,7 @@ export function loadEnvironment(settings: Settings): void {
           }
         }
       }
-    } catch (_e) {
+    } catch {
       // Errors are ignored to match the behavior of `dotenv.config({ quiet: true })`.
     }
   }
@@ -713,7 +713,7 @@ export function loadSettings(
   try {
     // fs.realpathSync gets the "true" path, resolving any symlinks
     realWorkspaceDir = fs.realpathSync(resolvedWorkspaceDir);
-  } catch (_e) {
+  } catch {
     // This is okay. The path might not exist yet, and that's a valid state.
   }
 

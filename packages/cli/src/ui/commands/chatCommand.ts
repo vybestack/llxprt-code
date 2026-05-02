@@ -66,7 +66,7 @@ const getSavedChatTags = async (
     );
 
     return chatDetails;
-  } catch (_err) {
+  } catch {
     return [];
   }
 };
@@ -535,7 +535,7 @@ const debugCommand: SlashCommand = {
         const chat = client.getChat();
         const history = chat.getHistory();
         debugInfo.push(`History entries: ${history.length}`);
-      } catch (_err) {
+      } catch {
         debugInfo.push('History entries: unavailable');
       }
     } else {
@@ -547,7 +547,7 @@ const debugCommand: SlashCommand = {
       try {
         const model = config.getModel();
         debugInfo.push(`Current model: ${model}`);
-      } catch (_err) {
+      } catch {
         debugInfo.push('Current model: unavailable');
       }
     } else {

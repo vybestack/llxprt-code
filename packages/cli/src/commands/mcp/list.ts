@@ -59,7 +59,8 @@ async function testMCPConnection(
   try {
     // Use the same transport creation logic as core
     transport = await createTransport(serverName, config, false);
-  } catch (_error) {
+  } catch {
+    // Transport creation failed
     await client.close();
     return MCPServerStatus.DISCONNECTED;
   }
@@ -73,7 +74,8 @@ async function testMCPConnection(
 
     await client.close();
     return MCPServerStatus.CONNECTED;
-  } catch (_error) {
+  } catch {
+    // Connection or ping failed
     await transport.close();
     return MCPServerStatus.DISCONNECTED;
   }

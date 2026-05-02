@@ -215,7 +215,8 @@ export class TerminalCapabilityManager {
             TerminalCapabilityManager.MODIFY_OTHER_KEYS_QUERY +
             TerminalCapabilityManager.DEVICE_ATTRIBUTES_QUERY,
         );
-      } catch (_e) {
+      } catch {
+        // Terminal I/O failed during detection
         cleanup();
       }
     });
@@ -278,7 +279,7 @@ export class TerminalCapabilityManager {
         enableKittyKeyboardProtocol();
         this.kittyEnabled = true;
       }
-    } catch (_e) {
+    } catch {
       // Ignore errors during enable (terminal may not support these modes)
     }
   }
@@ -289,7 +290,7 @@ export class TerminalCapabilityManager {
         disableKittyKeyboardProtocol();
         this.kittyEnabled = false;
       }
-    } catch (_e) {
+    } catch {
       // Ignore errors during disable (terminal may already be closed)
     }
   }
@@ -313,7 +314,7 @@ export class TerminalCapabilityManager {
         }
         this.kittyEnabled = false;
       }
-    } catch (_e) {
+    } catch {
       // Ignore errors during disable (terminal may already be closed)
     }
   }

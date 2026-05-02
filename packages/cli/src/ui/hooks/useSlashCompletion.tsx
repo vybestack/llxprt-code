@@ -642,7 +642,7 @@ export function useSlashCompletion(
             }
           }
         }
-      } catch (_err) {
+      } catch {
         // Ignore errors like permission denied or ENOENT during recursive search
       }
       return foundSuggestions.slice(0, maxResults);

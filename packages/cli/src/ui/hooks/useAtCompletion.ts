@@ -330,7 +330,7 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
         if (state.pattern !== null) {
           dispatch({ type: 'SEARCH', payload: state.pattern });
         }
-      } catch (_) {
+      } catch {
         dispatch({ type: 'ERROR' });
       }
     };

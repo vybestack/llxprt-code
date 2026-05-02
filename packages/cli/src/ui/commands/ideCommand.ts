@@ -64,7 +64,7 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
         if (openFiles && openFiles.length > 0) {
           content += formatFileList(openFiles);
         }
-      } catch (_e) {
+      } catch {
         // Ignore
       }
       return {

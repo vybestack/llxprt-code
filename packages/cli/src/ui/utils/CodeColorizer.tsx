@@ -118,7 +118,7 @@ function highlightAndRenderLine(
     );
 
     return renderedNode !== null ? renderedNode : line;
-  } catch (_error) {
+  } catch {
     return line;
   }
 }

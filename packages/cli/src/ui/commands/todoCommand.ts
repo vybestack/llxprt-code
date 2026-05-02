@@ -1134,7 +1134,7 @@ Examples:
                 `   → "${firstTitle}"`,
                 '',
               );
-            } catch (_error) {
+            } catch {
               // Skip files that can't be read/parsed
               lines.push(
                 `${idx + 1}. ${formatAge(file.mtime)} │ (error reading file)`,

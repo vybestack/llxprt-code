@@ -116,3 +116,63 @@ Tests  116 passed (116)
 ## Status: GREEN
 
 All 63 sonarjs/no-ignored-exceptions violations resolved in frozen files. No remaining violations in the 20 frozen files.
+
+---
+
+## Slice 3: packages/cli/src (COMPLETE)
+
+### Frozen Offender List
+
+| # | Count | File |
+|---|-------|------|
+| 1 | 1 | packages/cli/src/auth/codex-oauth-provider.ts |
+| 2 | 1 | packages/cli/src/auth/migration.ts |
+| 3 | 1 | packages/cli/src/commands/extensions/new.ts |
+| 4 | 1 | packages/cli/src/commands/mcp.test.ts |
+| 5 | 2 | packages/cli/src/commands/mcp/list.ts |
+| 6 | 3 | packages/cli/src/config/extension.ts |
+| 7 | 1 | packages/cli/src/config/settings.ts |
+| 8 | 1 | packages/cli/src/config/welcomeConfig.ts |
+| 9 | 1 | packages/cli/src/providers/logging/LoggingProviderWrapper.test.ts |
+| 10 | 1 | packages/cli/src/providers/providerManagerInstance.ts |
+| 11 | 1 | packages/cli/src/runtime/profileApplication.ts |
+| 12 | 2 | packages/cli/src/services/ClipboardService.ts |
+| 13 | 3 | packages/cli/src/ui/commands/chatCommand.ts |
+| 14 | 1 | packages/cli/src/ui/commands/ideCommand.ts |
+| 15 | 1 | packages/cli/src/ui/commands/mcpCommand.ts |
+| 16 | 1 | packages/cli/src/ui/commands/providerCommand.ts |
+| 17 | 1 | packages/cli/src/ui/commands/restoreCommand.ts |
+| 18 | 3 | packages/cli/src/ui/commands/setupGithubCommand.ts |
+| 19 | 1 | packages/cli/src/ui/commands/todoCommand.ts |
+| 20 | 1 | packages/cli/src/ui/contexts/KeypressContext.tsx |
+| 21 | 1 | packages/cli/src/ui/hooks/useAtCompletion.ts |
+| 22 | 1 | packages/cli/src/ui/hooks/useCreateProfileDialog.ts |
+| 23 | 1 | packages/cli/src/ui/hooks/useFolderTrust.ts |
+| 24 | 1 | packages/cli/src/ui/hooks/useGeminiStream.dedup.test.tsx |
+| 25 | 1 | packages/cli/src/ui/hooks/useGitBranchName.ts |
+| 26 | 1 | packages/cli/src/ui/hooks/useSlashCompletion.tsx |
+| 27 | 1 | packages/cli/src/ui/utils/autoPromptGenerator.ts |
+| 28 | 1 | packages/cli/src/ui/utils/CodeColorizer.tsx |
+| 29 | 2 | packages/cli/src/ui/utils/clipboardUtils.ts |
+| 30 | 4 | packages/cli/src/ui/utils/terminalCapabilityManager.ts |
+| 31 | 4 | packages/cli/src/utils/cleanup.ts |
+
+**Total Frozen Violations:** 43
+
+### Cleanup Applied
+
+Converted intentionally ignored catch bindings to parameterless catch blocks where the existing behavior was best-effort cleanup, fallback, probing, or optional diagnostics. In setupGithubCommand.ts, two catches now use the caught error in debug logging before throwing a user-facing error.
+
+### Verification Results
+
+```bash
+npx eslint <changed TS files> --ext .ts,.tsx --rule sonarjs/no-ignored-exceptions:error --quiet
+npx eslint <changed TS files> --ext .ts,.tsx --quiet
+npm run typecheck
+```
+
+All commands exited 0.
+
+## Status: GREEN
+
+All 43 sonarjs/no-ignored-exceptions violations resolved in the frozen Slice 3 files.

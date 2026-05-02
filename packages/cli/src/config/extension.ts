@@ -167,7 +167,7 @@ export async function performWorkspaceExtensionMigration(
         type: 'local',
       };
       await installOrUpdateExtension(installMetadata, requestConsent);
-    } catch (_) {
+    } catch {
       failedInstallNames.push(extension.name);
     }
   }
@@ -499,7 +499,7 @@ export function loadInstallMetadata(
     const configContent = fs.readFileSync(metadataFilePath, 'utf-8');
     const metadata = JSON.parse(configContent) as ExtensionInstallMetadata;
     return metadata;
-  } catch (_e) {
+  } catch {
     return undefined;
   }
 }
@@ -680,7 +680,7 @@ export async function inferInstallMetadata(
       source,
       type: 'local',
     };
-  } catch (_error) {
+  } catch {
     throw new Error(`Install source not found: ${source}`);
   }
 }

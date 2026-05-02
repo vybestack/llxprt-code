@@ -39,7 +39,7 @@ export async function migrateInMemoryTokens(
           debugLogger.log(`Migrated ${name} token to persistent storage`);
         }
       }
-    } catch (_error) {
+    } catch {
       // Skip providers that don't have valid tokens
       // This is expected during normal operation
       continue;
