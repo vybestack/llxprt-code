@@ -203,7 +203,7 @@ export default tseslint.config(
       // Strict TypeScript rules
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/strict-boolean-expressions': [
-        'warn',
+        'error',
         {
           allowString: true,
           allowNumber: false,
