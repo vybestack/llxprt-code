@@ -977,9 +977,8 @@ async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
         );
         return true;
       }
-    } catch (_err) {
-      // Silently ignore if /etc/os-release is not found or unreadable.
-      // The default (false) will be applied in this case.
+    } catch {
+      // /etc/os-release not found or unreadable - use default (false)
       debugLogger.warn(
         'Warning: Could not read /etc/os-release to auto-detect Debian/Ubuntu for UID/GID default.',
       );

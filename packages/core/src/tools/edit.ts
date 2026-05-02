@@ -786,7 +786,7 @@ class EditToolInvocation extends BaseToolInvocation<
         if (diagBlock) {
           llmSuccessMessageParts.push(diagBlock);
         }
-      } catch (_error) {
+      } catch {
         // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
         // Silently continue - edit was already successful
       }

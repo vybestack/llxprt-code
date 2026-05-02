@@ -81,8 +81,8 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
     }
 
     results = await api.crawl(options.crawlDirectory).withPromise();
-  } catch (_e) {
-    // The directory probably doesn't exist.
+  } catch {
+    // Directory probably doesn't exist
     return [];
   }
 

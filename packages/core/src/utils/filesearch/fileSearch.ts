@@ -154,7 +154,8 @@ class RecursiveFileSearch implements FileSearch {
             (entry: FzfResultItem<string>) => entry.item,
           );
           return true;
-        } catch (_e) {
+        } catch {
+          // FZF search failed - return empty results
           filteredCandidates = [];
           return false;
         }

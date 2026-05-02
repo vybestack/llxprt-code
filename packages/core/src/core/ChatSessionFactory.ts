@@ -203,7 +203,8 @@ async function applySystemPromptTokenOffset(
       model,
     );
     historyService.setBaseTokenOffset(tokens);
-  } catch (_error) {
+  } catch {
+    // Token estimation failed - use fallback estimation
     logger.debug(
       () =>
         `Failed to count system instruction tokens for model ${model}, using fallback`,

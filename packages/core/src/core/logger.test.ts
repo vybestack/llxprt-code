@@ -52,8 +52,8 @@ const TEST_CHECKPOINT_FILE_PATH = path.join(
 async function cleanupLogAndCheckpointFiles() {
   try {
     await fs.rm(TEST_LLXPRT_DIR, { recursive: true, force: true });
-  } catch (_error) {
-    // Ignore errors, as the directory may not exist, which is fine.
+  } catch {
+    // Directory may not exist - cleanup is best-effort
   }
 }
 

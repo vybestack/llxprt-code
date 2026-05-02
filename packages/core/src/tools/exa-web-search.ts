@@ -217,7 +217,7 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
                 returnDisplay: content,
               };
             }
-          } catch (_e) {
+          } catch {
             // Ignore parse errors
           }
         }

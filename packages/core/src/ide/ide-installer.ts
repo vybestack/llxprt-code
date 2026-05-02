@@ -139,7 +139,8 @@ class VsCodeInstaller implements IdeInstaller {
         success: true,
         message: `${this.ideInfo.displayName} companion extension was installed successfully.`,
       };
-    } catch (_error) {
+    } catch {
+      // Extension installation failed - user must install manually
       return {
         success: false,
         message: `Failed to install ${this.ideInfo.displayName} companion extension. Please try installing '${LLXPRT_CODE_COMPANION_EXTENSION_NAME}' manually from the ${this.ideInfo.displayName} extension marketplace.`,

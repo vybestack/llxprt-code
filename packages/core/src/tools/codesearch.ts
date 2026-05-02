@@ -186,7 +186,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
                 returnDisplay: content,
               };
             }
-          } catch (_e) {
+          } catch {
             // Ignore parse errors for intermediate lines
           }
         }

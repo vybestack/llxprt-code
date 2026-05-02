@@ -29,7 +29,8 @@ export async function shouldIncludeSubagentDelegation(
   try {
     const subagents = await subagentManager.listSubagents();
     return subagents.length > 0;
-  } catch (_error) {
+  } catch {
+    // Subagent list query failed - assume none exist
     return false;
   }
 }

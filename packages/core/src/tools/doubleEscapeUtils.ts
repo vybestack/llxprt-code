@@ -89,7 +89,7 @@ export function detectDoubleEscaping(jsonString: string): {
           secondParse: doubleParsed,
           originalLength: jsonString.length,
         });
-      } catch (_secondParseError) {
+      } catch {
         // Not double-stringified, just single stringified
         logger.debug(() => `JSON parameters are single-stringified (normal)`);
         result.correctedValue = parsed;

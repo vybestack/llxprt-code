@@ -99,9 +99,8 @@ export function getInstallationInfo(
               : `Installed via Homebrew. Attempting to automatically update via "${updateCommand}"...`,
           };
         }
-      } catch (_error) {
-        // Brew is not installed or llxprt-code is not installed via brew.
-        // Continue to the next check.
+      } catch {
+        // Brew not installed or llxprt-code not installed via brew - continue to next check
       }
 
       // Check for Homebrew-managed npm global install

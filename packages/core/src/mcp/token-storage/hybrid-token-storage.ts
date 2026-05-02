@@ -36,8 +36,8 @@ export class HybridTokenStorage extends BaseTokenStorage {
           this.storageType = TokenStorageType.KEYCHAIN;
           return this.storage;
         }
-      } catch (_e) {
-        // Fallback to file storage if keychain fails to initialize
+      } catch {
+        // Keychain unavailable - fallback to file storage
       }
     }
 

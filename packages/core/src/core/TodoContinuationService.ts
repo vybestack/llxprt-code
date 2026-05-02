@@ -199,7 +199,8 @@ export class TodoContinuationService {
       const sessionId = this.config.getSessionId();
       const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
       return await store.readTodos();
-    } catch (_error) {
+    } catch {
+      // Reading persisted task-list state failed; return an empty snapshot.
       return [];
     }
   }

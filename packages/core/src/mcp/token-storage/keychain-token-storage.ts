@@ -307,7 +307,8 @@ export class KeychainTokenStorage extends BaseTokenStorage {
       const success = deleted && retrieved === testPassword;
       this.keychainAvailable = success;
       return success;
-    } catch (_error) {
+    } catch {
+      // Keychain test failed - mark as unavailable
       this.keychainAvailable = false;
       return false;
     }

@@ -193,7 +193,8 @@ class GlobToolInvocation extends BaseToolInvocation<
         const toCanonicalPath = (filePath: string): string => {
           try {
             return fs.realpathSync(filePath);
-          } catch (_error) {
+          } catch {
+            // realpath failed - use normalized path as fallback
             return path.normalize(filePath);
           }
         };

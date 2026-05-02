@@ -584,7 +584,7 @@ export class PromptService {
             files.push(fullPath);
           }
         }
-      } catch (_error) {
+      } catch {
         // Permission denied or invalid paths: Skip
         // Silent failure as per pseudocode
       }

@@ -162,8 +162,9 @@ export class BaseLLMClient {
         const cleanedText = extractJsonFromMarkdown(text);
         JSON.parse(cleanedText);
         return false; // Valid JSON, don't retry
-      } catch (_e) {
-        return true; // Invalid JSON, retry
+      } catch {
+        // Invalid JSON - trigger retry
+        return true;
       }
     };
 

@@ -328,7 +328,8 @@ export class GeminiClient {
           model,
         );
         historyService.setBaseTokenOffset(systemPromptTokens);
-      } catch (_error) {
+      } catch {
+        // Token estimation failed - use fallback
         historyService.setBaseTokenOffset(
           estimateTextTokens(systemInstruction),
         );

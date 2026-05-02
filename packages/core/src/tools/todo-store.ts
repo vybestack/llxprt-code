@@ -87,7 +87,8 @@ export class TodoStore {
 
       const content = await fs.promises.readFile(this.filePath, 'utf8');
       return this.parseFileContent(content);
-    } catch (_error) {
+    } catch {
+      // Reading persisted task-list data failed; return empty state.
       return { todos: [], paused: false };
     }
   }

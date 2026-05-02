@@ -392,7 +392,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
         if (diagBlock) {
           llmSuccessMessageParts.push(diagBlock);
         }
-      } catch (_error) {
+      } catch {
         // LSP failure must never fail the patch (REQ-GRACE-050, REQ-GRACE-055)
         // Silently continue - patch was already successful
       }

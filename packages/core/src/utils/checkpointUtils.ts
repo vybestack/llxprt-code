@@ -176,8 +176,8 @@ export function getCheckpointInfoList(
           checkpoint: file.replace('.json', ''),
         });
       }
-    } catch (_e) {
-      // Ignore invalid JSON files
+    } catch {
+      // Invalid JSON file - skip
     }
   }
   return checkpointInfoList;

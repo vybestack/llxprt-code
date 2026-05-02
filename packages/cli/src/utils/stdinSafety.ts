@@ -165,9 +165,8 @@ export class StdinRawModeManager {
         } else {
           process.stdin.setRawMode(false);
         }
-      } catch (_err) {
-        // setRawMode can fail during cleanup
-        // Ignore and continue
+      } catch {
+        // setRawMode can fail during cleanup - ignore and continue
       }
     }
 
@@ -241,8 +240,8 @@ export function _resetGlobalStdinErrorHandler(): void {
     // Remove all instances of this handler from the listeners
     try {
       process.stdin.removeListener('error', globalStdinErrorHandler);
-    } catch (_err) {
-      // Ignore if handler not found
+    } catch {
+      // Handler not found - nothing to remove
     }
     globalStdinErrorHandler = null;
   }

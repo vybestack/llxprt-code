@@ -586,7 +586,7 @@ export class SubagentManager {
     let filePath: string;
     try {
       filePath = this.getSubagentPath(name);
-    } catch (_error) {
+    } catch {
       // getSubagentPath throws for invalid names. If it throws here, the agent doesn't exist.
       return false;
     }

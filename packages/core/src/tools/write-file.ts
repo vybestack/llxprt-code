@@ -534,7 +534,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
             llmSuccessMessageParts.push(blocks.join('\n'));
           }
         }
-      } catch (_error) {
+      } catch {
         // LSP failure must never fail write (REQ-GRACE-050, REQ-GRACE-055)
         // Silently continue - write was already successful
       }

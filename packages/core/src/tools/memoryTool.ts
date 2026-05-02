@@ -428,8 +428,8 @@ export class MemoryTool
       let currentContent = '';
       try {
         currentContent = await fsAdapter.readFile(memoryFilePath, 'utf-8');
-      } catch (_e) {
-        // File doesn't exist, which is fine. currentContent will be empty.
+      } catch {
+        // File doesn't exist - currentContent remains empty
       }
 
       const newContent = computeNewContent(currentContent, text);

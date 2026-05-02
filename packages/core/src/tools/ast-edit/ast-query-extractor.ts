@@ -146,7 +146,8 @@ export class ASTQueryExtractor {
       }
 
       return declarations;
-    } catch (_error) {
+    } catch {
+      // AST parsing failed - use fallback extraction
       return this.fallbackExtraction(content, extension);
     }
   }

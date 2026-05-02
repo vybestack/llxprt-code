@@ -361,8 +361,8 @@ export function parseCommandDetails(
           'Syntax Errors:',
           syntaxErrors,
         );
-      } catch (_e) {
-        // Ignore query errors
+      } catch {
+        // AST query failed - ignore syntax error detection
       } finally {
         query?.delete();
       }

@@ -1284,8 +1284,8 @@ export class LoggingProviderWrapper implements IProvider {
         cache_read_input_tokens: Math.max(0, cache_read_input_tokens),
         cache_creation_input_tokens: Math.max(0, cache_creation_input_tokens),
       };
-    } catch (_error) {
-      // Return zero counts if extraction fails
+    } catch {
+      // Token extraction failed - return zero counts as fallback
       return {
         input_token_count: 0,
         output_token_count: 0,

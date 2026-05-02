@@ -100,8 +100,8 @@ export class CrossFileRelationshipAnalyzer {
             });
           }
         }
-      } catch (_error) {
-        // Ignore read errors
+      } catch {
+        // File read failed - skip this import
       }
     }
   }

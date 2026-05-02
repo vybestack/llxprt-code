@@ -94,7 +94,8 @@ export async function initializeLsp(
         }
       }
     }
-  } catch (_error) {
+  } catch {
+    // LSP service initialization failed - continue without LSP
     state.lspServiceClient = undefined;
   }
 }
