@@ -25,7 +25,7 @@ export function useExtensionAutoUpdate({
   );
 
   useEffect(() => {
-    if (!autoUpdateSettings?.enabled) {
+    if (autoUpdateSettings?.enabled !== true) {
       return;
     }
 

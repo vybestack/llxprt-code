@@ -107,7 +107,7 @@ export const CloudFreePrivacyNotice = ({
         </Text>
         <RadioButtonSelect
           items={items}
-          initialIndex={privacyState.dataCollectionOptIn ? 0 : 1}
+          initialIndex={privacyState.dataCollectionOptIn === true ? 0 : 1}
           onSelect={handleSelect}
         />
       </Box>

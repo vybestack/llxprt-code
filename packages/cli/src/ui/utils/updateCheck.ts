@@ -49,7 +49,7 @@ export async function checkForUpdates(
   settings: LoadedSettings,
 ): Promise<UpdateObject | null> {
   try {
-    if (!settings.merged.enableAutoUpdateNotification) {
+    if (settings.merged.enableAutoUpdateNotification !== true) {
       return null;
     }
     // Skip update check when running from source (development mode)

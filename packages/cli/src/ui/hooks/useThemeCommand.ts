@@ -120,7 +120,8 @@ export const useThemeCommand = (
         };
         // Only allow selecting themes available in the merged custom themes or built-in themes
         const isBuiltIn = themeManager.findThemeByName(themeName);
-        const isCustom = themeName && mergedCustomThemes[themeName];
+        const isCustom =
+          themeName != null && Boolean(mergedCustomThemes[themeName]);
         if (!isBuiltIn && !isCustom) {
           appDispatch({
             type: 'SET_THEME_ERROR',

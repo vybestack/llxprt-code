@@ -48,7 +48,7 @@ export class ConsolePatcher {
   private patchConsoleMethod =
     (type: 'log' | 'warn' | 'error' | 'debug' | 'info') =>
     (...args: unknown[]) => {
-      if (this.params.stderr) {
+      if (this.params.stderr === true) {
         if (type !== 'debug' || this.params.debugMode) {
           this.originalConsoleError(this.formatArgs(args));
         }

@@ -39,7 +39,7 @@ async function readHistoryFile(filePath: string): Promise<string[]> {
       const line = raw;
 
       const m = cur.match(/(\\+)$/);
-      if (m && m[1].length % 2) {
+      if (m != null && m[1].length % 2 !== 0) {
         // odd number of trailing '\'
         cur = cur.slice(0, -1) + ' ' + line;
       } else {

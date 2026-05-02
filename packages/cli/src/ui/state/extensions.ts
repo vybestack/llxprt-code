@@ -110,8 +110,7 @@ export function extensionUpdatesReducer(
         ...state,
         // If there is a pre-existing scheduled update, we merge them.
         scheduledUpdate: {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean flag should fall back to action.payload.all
-          all: state.scheduledUpdate?.all || action.payload.all,
+          all: state.scheduledUpdate?.all === true || action.payload.all,
           names: [
             ...(state.scheduledUpdate?.names ?? []),
             ...(action.payload.names ?? []),

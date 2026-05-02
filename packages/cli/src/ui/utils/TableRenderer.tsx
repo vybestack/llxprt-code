@@ -324,7 +324,7 @@ export const TableRenderer: React.FC<TableRendererProps> = ({
   // Helper function to render a table row
   const renderRow = (cells: string[], isHeader = false): React.ReactNode => {
     const cellData = cells.map((cell, index) => {
-      const width = adjustedWidths[index] || 0;
+      const width = adjustedWidths[index] ?? 0;
       const contentWidth = Math.max(0, width - 2);
       const cacheKey = `${contentWidth}::${cell || ''}`;
       const cachedLines = wrapCache.get(cacheKey);

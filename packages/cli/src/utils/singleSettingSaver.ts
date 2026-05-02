@@ -23,7 +23,7 @@ function setNestedValue(
     return obj;
   }
 
-  if (!obj[first] || typeof obj[first] !== 'object') {
+  if (obj[first] == null || typeof obj[first] !== 'object') {
     obj[first] = {};
   }
 

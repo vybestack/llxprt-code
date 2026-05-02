@@ -31,7 +31,9 @@ export function useOAuthOrchestration({
   // Check for OAuth code needed flag
   useEffect(() => {
     const checkOAuthFlag = setInterval(() => {
-      if ((global as Record<string, unknown>).__oauth_needs_code) {
+      if (
+        (global as Record<string, unknown>).__oauth_needs_code === true
+      ) {
         // Clear the flag
         (global as Record<string, unknown>).__oauth_needs_code = false;
         // Open the OAuth code dialog

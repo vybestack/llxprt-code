@@ -82,7 +82,7 @@ export const getLatestGitHubRelease = async (
     }
 
     const releaseTag = (await response.json()).tag_name;
-    if (!releaseTag) {
+    if (releaseTag == null || releaseTag === '') {
       throw new Error(`Response did not include tag_name field`);
     }
     return releaseTag;

@@ -124,7 +124,7 @@ async function getRemoteDataCollectionOptIn(
     const resp = await server.getCodeAssistGlobalUserSetting();
     return resp.freeTierDataCollectionOptin;
   } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'response' in error) {
+    if (error != null && typeof error === 'object' && 'response' in error) {
       const gaxiosError = error as {
         response?: {
           status?: unknown;
