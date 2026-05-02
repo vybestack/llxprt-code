@@ -639,6 +639,11 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
                 userMessageTimestamp,
               );
               if (event.contextCleared) {
+                if (pendingHistoryItemRef.current) {
+                  flushPendingHistoryItem(userMessageTimestamp);
+                  setPendingHistoryItem(null);
+                }
+                geminiMessageBuffer = '';
                 addItem(
                   {
                     type: MessageType.INFO,
@@ -657,6 +662,11 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
                 userMessageTimestamp,
               );
               if (event.contextCleared) {
+                if (pendingHistoryItemRef.current) {
+                  flushPendingHistoryItem(userMessageTimestamp);
+                  setPendingHistoryItem(null);
+                }
+                geminiMessageBuffer = '';
                 addItem(
                   {
                     type: MessageType.INFO,
@@ -721,6 +731,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       setLastGeminiActivityTime,
       setThought,
       thinkingBlocksRef,
+      flushPendingHistoryItem,
     ],
   );
 
