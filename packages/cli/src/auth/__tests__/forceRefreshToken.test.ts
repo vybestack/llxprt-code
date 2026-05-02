@@ -68,7 +68,7 @@ function createMockTokenStore(
           ? ((_opts as { bucket?: string }).bucket as string)
           : undefined;
       const key = bucket ? `${_provider}::${bucket}` : _provider;
-      if (locks.get(key)) return false;
+      if (locks.get(key) === true) return false;
       locks.set(key, true);
       return true;
     }),

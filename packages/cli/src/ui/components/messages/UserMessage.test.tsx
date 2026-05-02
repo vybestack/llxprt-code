@@ -20,7 +20,7 @@ const collectTextNodes = (
   node: React.ReactNode,
   acc: TextNode[] = [],
 ): TextNode[] => {
-  if (!node) {
+  if (node === null || node === undefined) {
     return acc;
   }
 
@@ -51,7 +51,10 @@ const collectTextNodes = (
 
 const renderTextNodes = (text: string): TextNode[] => {
   const rendered = UserMessage({ text });
-  if (rendered && typeof (rendered as Promise<unknown>).then === 'function') {
+  if (
+    rendered !== null &&
+    typeof (rendered as Promise<unknown>).then === 'function'
+  ) {
     throw new Error('UserMessage should not return a promise');
   }
   return collectTextNodes(rendered as React.ReactNode);

@@ -483,10 +483,9 @@ describe('generateDynamicToolSettings', () => {
         },
       );
 
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty array is valid fallback for missing settings
-      const excludeTools = getEffectiveValue('excludeTools', {}, {}) || [];
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty array is valid fallback for missing settings
-      const allowedTools = getEffectiveValue('allowedTools', {}, {}) || [];
+      const excludeTools = getEffectiveValue('excludeTools', {}, {}) ?? [];
+
+      const allowedTools = getEffectiveValue('allowedTools', {}, {}) ?? [];
 
       expect(excludeTools).toStrictEqual([]);
       expect(allowedTools).toStrictEqual([]);

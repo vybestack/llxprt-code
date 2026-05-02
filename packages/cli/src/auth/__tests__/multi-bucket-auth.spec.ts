@@ -836,7 +836,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
 
       // Restore original setRawMode (platform-specific: setRawMode may not exist on non-TTY)
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, vitest/no-conditional-in-test -- setRawMode may be undefined on non-TTY platforms
-      if (originalSetRawMode) {
+      if (originalSetRawMode !== undefined) {
         process.stdin.setRawMode = originalSetRawMode;
       }
     });

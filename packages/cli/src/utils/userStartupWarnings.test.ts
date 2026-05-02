@@ -23,7 +23,8 @@ vi.mock('node:os', async (importOriginal) => {
   >();
   return {
     ...actualOs,
-    ...(actualOs.default &&
+    ...(actualOs.default !== null &&
+    actualOs.default !== undefined &&
     typeof actualOs.default === 'object'
       ? {
           default: {

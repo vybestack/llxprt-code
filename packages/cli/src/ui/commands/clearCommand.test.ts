@@ -36,6 +36,11 @@ import {
   SessionStartSource,
 } from '@vybestack/llxprt-code-core';
 
+const clearAction = clearCommand.action;
+if (clearAction === undefined) {
+  throw new Error('clearCommand must have an action.');
+}
+
 describe('clearCommand', () => {
   let mockContext: CommandContext;
   let mockResetChat: ReturnType<typeof vi.fn>;
@@ -63,12 +68,7 @@ describe('clearCommand', () => {
   });
 
   it('should set debug message, reset chat, reset telemetry, update history token count, and clear UI when config is available', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!clearCommand.action) {
-      throw new Error('clearCommand must have an action.');
-    }
-
-    await clearCommand.action(mockContext, '');
+    await clearAction(mockContext, '');
 
     expect(mockContext.ui.setDebugMessage).toHaveBeenCalledWith(
       'Clearing terminal and resetting chat.',
@@ -102,11 +102,6 @@ describe('clearCommand', () => {
   });
 
   it('should fallback to runtime services when command context lacks config', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!clearCommand.action) {
-      throw new Error('clearCommand must have an action.');
-    }
-
     const runtimeResetChat = vi.fn().mockResolvedValue(undefined);
     vi.mocked(getCliRuntimeServices).mockReturnValue({
       config: {
@@ -125,7 +120,7 @@ describe('clearCommand', () => {
       },
     });
 
-    await clearCommand.action(nullConfigContext, '');
+    await clearAction(nullConfigContext, '');
 
     expect(nullConfigContext.ui.setDebugMessage).toHaveBeenCalledWith(
       'Clearing terminal and resetting chat.',
@@ -139,11 +134,6 @@ describe('clearCommand', () => {
   });
 
   it('should skip reset when no config is available anywhere', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!clearCommand.action) {
-      throw new Error('clearCommand must have an action.');
-    }
-
     vi.mocked(getCliRuntimeServices).mockImplementation(() => {
       throw new Error('runtime unavailable');
     });
@@ -154,7 +144,7 @@ describe('clearCommand', () => {
       },
     });
 
-    await clearCommand.action(nullConfigContext, '');
+    await clearAction(nullConfigContext, '');
 
     expect(nullConfigContext.ui.setDebugMessage).toHaveBeenCalledWith(
       'Clearing terminal.',
@@ -177,14 +167,9 @@ describe('clearCommand', () => {
    */
 
   it('should trigger SessionEnd hook before resetChat when clearing', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!clearCommand.action) {
-      throw new Error('clearCommand must have an action.');
-    }
-
     vi.clearAllMocks();
 
-    await clearCommand.action(mockContext, '');
+    await clearAction(mockContext, '');
 
     // Assert: triggerSessionEndHook called with SessionEndReason.Clear
     expect(triggerSessionEndHook).toHaveBeenCalledWith(
@@ -211,11 +196,6 @@ describe('clearCommand', () => {
   });
 
   it('should complete clear even if SessionEnd hook throws', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!clearCommand.action) {
-      throw new Error('clearCommand must have an action.');
-    }
-
     vi.clearAllMocks();
 
     // Mock triggerSessionEndHook to throw
@@ -224,7 +204,7 @@ describe('clearCommand', () => {
     );
 
     // Execute clear and ensure it doesn't throw
-    await clearCommand.action(mockContext, '');
+    await clearAction(mockContext, '');
 
     // Assert: clear still completes, resetChat still called
     expect(mockResetChat).toHaveBeenCalledTimes(1);
@@ -232,11 +212,6 @@ describe('clearCommand', () => {
   });
 
   it('should complete clear even if SessionStart hook throws', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!clearCommand.action) {
-      throw new Error('clearCommand must have an action.');
-    }
-
     vi.clearAllMocks();
 
     // Mock triggerSessionStartHook to throw
@@ -245,7 +220,7 @@ describe('clearCommand', () => {
     );
 
     // Execute clear and ensure it doesn't throw
-    await clearCommand.action(mockContext, '');
+    await clearAction(mockContext, '');
 
     // Assert: clear still completes
     expect(mockResetChat).toHaveBeenCalledTimes(1);

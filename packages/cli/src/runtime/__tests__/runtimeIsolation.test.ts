@@ -600,7 +600,10 @@ async function runWithRuntime<T>(
   action: () => Promise<T>,
   options: { delayBeforeActivationMs?: number } = {},
 ): Promise<T> {
-  if (options.delayBeforeActivationMs) {
+  if (
+    options.delayBeforeActivationMs !== undefined &&
+    options.delayBeforeActivationMs !== 0
+  ) {
     await delay(options.delayBeforeActivationMs);
   }
   await activateIsolatedRuntimeContext(fixture.handle, {

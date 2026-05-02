@@ -33,10 +33,7 @@ const {
     }
 
     setProviderSetting(provider: string, key: string, value: unknown): void {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: Record index access returns undefined for missing keys despite TS type
-      if (!this.providers[provider]) {
-        this.providers[provider] = {};
-      }
+      this.providers[provider] ??= {};
       if (value === undefined) {
         delete this.providers[provider][key];
       } else {

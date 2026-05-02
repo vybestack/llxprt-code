@@ -261,7 +261,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
 
       // Restore (platform-specific: setRawMode may not exist on non-TTY)
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, vitest/no-conditional-in-test -- setRawMode may be undefined on non-TTY platforms
-      if (originalSetRawMode) {
+      if (originalSetRawMode !== undefined) {
         process.stdin.setRawMode = originalSetRawMode;
       }
     });

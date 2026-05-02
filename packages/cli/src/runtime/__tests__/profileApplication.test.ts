@@ -893,7 +893,7 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
         // At this point, check if auth is available
         const authKey = configStub.getEphemeralSetting('auth-key');
 
-        if (!authKey) {
+        if (authKey === undefined) {
           // OAuth would be triggered here if auth is not available
           oauthCalls.push('OAuth triggered during switch');
         }

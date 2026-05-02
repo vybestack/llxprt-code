@@ -514,7 +514,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       // Wait for previews to load
       await waitFor(() => {
         const hasPreview = result.current.sessions.some(
-          (s) => s.previewState === 'loaded' && s.firstUserMessage,
+          (s) =>
+            s.previewState === 'loaded' && s.firstUserMessage !== undefined,
         );
         expect(hasPreview).toBe(true);
       });

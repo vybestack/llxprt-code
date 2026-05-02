@@ -117,32 +117,62 @@ function parseAction(actionStr: string): TextBufferAction {
     case 'vim_delete_word_forward':
       return {
         type: 'vim_delete_word_forward',
-        payload: { count: Number(payload) || 1 },
+        payload: {
+          count: (() => {
+            const n = Number(payload);
+            return n > 0 ? n : 1;
+          })(),
+        },
       };
     case 'vim_delete_word_backward':
       return {
         type: 'vim_delete_word_backward',
-        payload: { count: Number(payload) || 1 },
+        payload: {
+          count: (() => {
+            const n = Number(payload);
+            return n > 0 ? n : 1;
+          })(),
+        },
       };
     case 'vim_move_word_forward':
       return {
         type: 'vim_move_word_forward',
-        payload: { count: Number(payload) || 1 },
+        payload: {
+          count: (() => {
+            const n = Number(payload);
+            return n > 0 ? n : 1;
+          })(),
+        },
       };
     case 'vim_move_word_backward':
       return {
         type: 'vim_move_word_backward',
-        payload: { count: Number(payload) || 1 },
+        payload: {
+          count: (() => {
+            const n = Number(payload);
+            return n > 0 ? n : 1;
+          })(),
+        },
       };
     case 'vim_delete_line':
       return {
         type: 'vim_delete_line',
-        payload: { count: Number(payload) || 1 },
+        payload: {
+          count: (() => {
+            const n = Number(payload);
+            return n > 0 ? n : 1;
+          })(),
+        },
       };
     case 'vim_change_word_forward':
       return {
         type: 'vim_change_word_forward',
-        payload: { count: Number(payload) || 1 },
+        payload: {
+          count: (() => {
+            const n = Number(payload);
+            return n > 0 ? n : 1;
+          })(),
+        },
       };
     case 'vim_insert_at_cursor':
       return { type: 'vim_insert_at_cursor' };
@@ -176,7 +206,12 @@ function parseAction(actionStr: string): TextBufferAction {
     case 'vim_delete_char':
       return {
         type: 'vim_delete_char',
-        payload: { count: Number(payload) || 1 },
+        payload: {
+          count: (() => {
+            const n = Number(payload);
+            return n > 0 ? n : 1;
+          })(),
+        },
       };
     case 'vim_delete_to_end_of_line':
       return { type: 'vim_delete_to_end_of_line' };
@@ -188,7 +223,10 @@ function parseAction(actionStr: string): TextBufferAction {
         type: 'vim_change_movement',
         payload: {
           movement: parts[0] as 'h' | 'j' | 'k' | 'l',
-          count: Number(parts[1]) || 1,
+          count: (() => {
+            const n = Number(parts[1]);
+            return n > 0 ? n : 1;
+          })(),
         },
       };
     }

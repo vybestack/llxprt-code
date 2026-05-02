@@ -205,7 +205,7 @@ class TestDeviceCodeFlow implements OAuthFlowInterface {
       newInterval?: number;
     };
     err.code = result.error ?? 'authorization_pending';
-    if (result.newInterval) {
+    if (result.newInterval !== undefined && result.newInterval !== 0) {
       err.newInterval = result.newInterval;
     }
     throw err;

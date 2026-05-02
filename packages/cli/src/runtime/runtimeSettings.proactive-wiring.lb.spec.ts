@@ -241,7 +241,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         ).auth;
         return (
           subProfileAuth?.type === 'oauth' &&
-          subProfileAuth.buckets &&
+          Array.isArray(subProfileAuth.buckets) &&
           subProfileAuth.buckets.length > 1
         );
       });
@@ -289,7 +289,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         ).auth;
         return (
           subProfileAuth?.type === 'oauth' &&
-          subProfileAuth.buckets &&
+          Array.isArray(subProfileAuth.buckets) &&
           subProfileAuth.buckets.length > 1
         );
       });
@@ -331,7 +331,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         ).auth;
         return (
           subProfileAuth?.type === 'oauth' &&
-          subProfileAuth.buckets &&
+          Array.isArray(subProfileAuth.buckets) &&
           subProfileAuth.buckets.length > 1
         );
       });
@@ -406,7 +406,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         ).auth;
         return (
           subProfileAuth?.type === 'oauth' &&
-          subProfileAuth.buckets &&
+          Array.isArray(subProfileAuth.buckets) &&
           subProfileAuth.buckets.length > 1
         );
       });

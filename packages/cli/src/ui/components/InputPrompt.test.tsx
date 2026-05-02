@@ -2336,7 +2336,9 @@ describe('InputPrompt', () => {
             expect(uiActions.setEmbeddedShellFocused).not.toHaveBeenCalled();
           }
 
-          expect(mockAccept).toHaveBeenCalledTimes(expectedAcceptCall ? 1 : 0);
+          expect(mockAccept).toHaveBeenCalledTimes(
+            expectedAcceptCall === true ? 1 : 0,
+          );
         });
         unmount();
       },

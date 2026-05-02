@@ -151,6 +151,7 @@ const buildMockScheduler = (
         try {
           const shouldConfirm =
             await call.invocation.shouldConfirmExecute(_signal);
+          // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- truthy check narrows union type (ToolCallConfirmationDetails | false | undefined) to ToolCallConfirmationDetails
           if (shouldConfirm) {
             // Create a Promise that resolves when the user calls onConfirm.
             // This allows the test to trigger confirmation and have execution resume.

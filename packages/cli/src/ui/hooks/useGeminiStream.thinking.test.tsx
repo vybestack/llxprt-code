@@ -1131,7 +1131,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
       // Count how many items have thinkingBlocks
       const itemsWithThinking = committedItems.filter(
-        (item) => item.thinkingBlocks && item.thinkingBlocks.length > 0,
+        (item) =>
+          item.thinkingBlocks != null && item.thinkingBlocks.length > 0,
       );
 
       // Exactly one item should own thinkingBlocks

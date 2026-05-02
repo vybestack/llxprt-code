@@ -192,9 +192,9 @@ describe('SettingsSchema', () => {
       );
       expect(SETTINGS_SCHEMA.ui.properties.hideTips.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.ui.properties.hideBanner.showInDialog).toBe(true);
-      expect(
-        SETTINGS_SCHEMA.ui.properties.enableMouseEvents.showInDialog,
-      ).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.enableMouseEvents.showInDialog).toBe(
+        true,
+      );
       expect(
         SETTINGS_SCHEMA.ui.properties.usageStatisticsEnabled.showInDialog,
       ).toBe(false);
@@ -216,8 +216,7 @@ describe('SettingsSchema', () => {
         false,
       ); // Changed to false
       expect(
-        SETTINGS_SCHEMA.ui.properties.autoConfigureMaxOldSpaceSize
-          .showInDialog,
+        SETTINGS_SCHEMA.ui.properties.autoConfigureMaxOldSpaceSize.showInDialog,
       ).toBe(true);
     });
 
@@ -285,7 +284,7 @@ describe('SettingsSchema', () => {
         if (definition.ref) {
           referenced.add(definition.ref);
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- verifying all refs are defined at runtime
-          if (!SETTINGS_SCHEMA_DEFINITIONS[definition.ref]) {
+          if (SETTINGS_SCHEMA_DEFINITIONS[definition.ref] === undefined) {
             missing.push(definition.ref);
           }
         }
@@ -304,7 +303,7 @@ describe('SettingsSchema', () => {
         if (collection.ref) {
           referenced.add(collection.ref);
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- verifying all refs are defined at runtime
-          if (!SETTINGS_SCHEMA_DEFINITIONS[collection.ref]) {
+          if (SETTINGS_SCHEMA_DEFINITIONS[collection.ref] === undefined) {
             missing.push(collection.ref);
           }
           return;

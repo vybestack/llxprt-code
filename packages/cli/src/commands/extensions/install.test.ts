@@ -99,7 +99,7 @@ describe('handleInstall', () => {
     'should install an extension from a $type',
     async ({ source, name, needsStat }) => {
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (needsStat) {
+      if (needsStat === true) {
         mockStat.mockResolvedValue({} as Stats);
       }
       mockInstallOrUpdateExtension.mockResolvedValue(name);

@@ -97,7 +97,7 @@ describe('ThemeManager', () => {
     expect(
       available.some(
         (t: { name: string; isCustom?: boolean }) =>
-          t.name === 'MyCustomTheme' && t.isCustom,
+          t.name === 'MyCustomTheme' && t.isCustom === true,
       ),
     ).toBe(true);
   });

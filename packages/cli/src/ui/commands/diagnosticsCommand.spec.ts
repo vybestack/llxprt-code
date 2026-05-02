@@ -145,7 +145,7 @@ describe('diagnosticsCommand OAuth token display', () => {
 
   afterEach(() => {
     // Restore original token store
-    if (originalTokenStore) {
+    if (originalTokenStore !== undefined) {
       MCPOAuthTokenStorage.setTokenStore(originalTokenStore);
     }
     mockTokenStore.clear();

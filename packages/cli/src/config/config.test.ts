@@ -228,7 +228,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
     loadServerHierarchicalMemory: vi.fn(
       (cwd, dirs, debug, fileService, extensionPaths, _maxDirs) =>
         Promise.resolve({
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for joined paths
+          // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions, @typescript-eslint/prefer-nullish-coalescing -- Preserve original truthy fallback for mocked extension paths.
           memoryContent: extensionPaths?.join(',') || '',
           fileCount: extensionPaths?.length ?? 0,
           filePaths: [],
@@ -1872,6 +1872,7 @@ describe('defaultDisabledTools', () => {
     const disabled = config.getEphemeralSetting('tools.disabled');
     // Should be either undefined, null, or empty array
     expect(
+      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy assertion for default disabled tool settings.
       !disabled || (Array.isArray(disabled) && disabled.length === 0),
     ).toBe(true);
   });
@@ -1895,6 +1896,7 @@ describe('defaultDisabledTools', () => {
     const disabled = config.getEphemeralSetting('tools.disabled');
     // Should be either undefined, null, or empty array
     expect(
+      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy assertion for default disabled tool settings.
       !disabled || (Array.isArray(disabled) && disabled.length === 0),
     ).toBe(true);
   });

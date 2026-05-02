@@ -36,7 +36,7 @@ describe('useSelectionList', () => {
     activeKeypressHandler = null;
     vi.mocked(useKeypress).mockImplementation(
       (handler: KeypressHandler, options?: UseKeypressMockOptions) => {
-        if (options?.isActive) {
+        if (options?.isActive === true) {
           activeKeypressHandler = handler;
         } else {
           activeKeypressHandler = null;
