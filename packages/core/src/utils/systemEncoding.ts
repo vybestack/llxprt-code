@@ -58,6 +58,7 @@ export function getSystemEncoding(): string | null {
   if (os.platform() === 'win32') {
     try {
       const output = execSync('chcp', { encoding: 'utf8' });
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex parses bounded Windows chcp output; behavior preserved.
       const match = output.match(/:\s*(\d+)/);
       if (match) {
         const codePage = parseInt(match[1], 10);
