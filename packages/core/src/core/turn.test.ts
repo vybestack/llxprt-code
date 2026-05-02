@@ -45,7 +45,7 @@ vi.mock('../utils/generateContentResponseUtilities', () => ({
   getResponseText: (resp: GenerateContentResponse) =>
     // Filter out thought parts - same as real implementation
     resp.candidates?.[0]?.content?.parts
-      ?.filter((part) => !(part as { thought?: boolean }).thought)
+      ?.filter((part) => (part as { thought?: boolean }).thought !== true)
       .map((part) => part.text)
       .join('') ?? undefined,
   getFunctionCalls: (resp: GenerateContentResponse) => resp.functionCalls ?? [],

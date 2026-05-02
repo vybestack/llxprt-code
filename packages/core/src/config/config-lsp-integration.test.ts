@@ -428,8 +428,8 @@ describe('Config LSP Integration (P33)', () => {
       const lspClient = config.getLspServiceClient();
       expect(lspClient).toBeDefined();
       expect(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean short-circuit for alive OR has-reason check
-        lspClient?.isAlive() || lspClient?.getUnavailableReason() !== undefined,
+        lspClient?.isAlive() === true ||
+          lspClient?.getUnavailableReason() !== undefined,
       ).toBe(true);
     });
 
@@ -587,8 +587,8 @@ describe('Config LSP Integration (P33)', () => {
       const lspClient = config.getLspServiceClient();
       expect(lspClient).toBeDefined();
       expect(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean short-circuit for alive OR has-reason check
-        lspClient?.isAlive() || lspClient?.getUnavailableReason() !== undefined,
+        lspClient?.isAlive() === true ||
+          lspClient?.getUnavailableReason() !== undefined,
       ).toBe(true);
     });
 
@@ -603,8 +603,8 @@ describe('Config LSP Integration (P33)', () => {
 
       const lspClient = config.getLspServiceClient();
       expect(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean short-circuit for alive OR has-reason check
-        lspClient?.isAlive() || lspClient?.getUnavailableReason() !== undefined,
+        lspClient?.isAlive() === true ||
+          lspClient?.getUnavailableReason() !== undefined,
       ).toBe(true);
 
       await config.shutdownLspService();
@@ -630,8 +630,8 @@ describe('Config LSP Integration (P33)', () => {
       const lspClient = config.getLspServiceClient();
       expect(lspClient).toBeDefined();
       expect(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean short-circuit for alive OR has-reason check
-        lspClient?.isAlive() || lspClient?.getUnavailableReason() !== undefined,
+        lspClient?.isAlive() === true ||
+          lspClient?.getUnavailableReason() !== undefined,
       ).toBe(true);
     });
 

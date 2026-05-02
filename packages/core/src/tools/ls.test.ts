@@ -42,11 +42,14 @@ describe('LSTool', () => {
       getDirectories: vi
         .fn()
         .mockReturnValue([mockPrimaryDir, mockSecondaryDir]),
-      isPathWithinWorkspace: vi.fn().mockImplementation(
-        (path) =>
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean short-circuit for workspace path matching
-          path.startsWith(mockPrimaryDir) || path.startsWith(mockSecondaryDir),
-      ),
+      isPathWithinWorkspace: vi
+        .fn()
+        .mockImplementation(
+          (path: string) =>
+            typeof path === 'string' &&
+            (path.startsWith(mockPrimaryDir) ||
+              path.startsWith(mockSecondaryDir)),
+        ),
       addDirectory: vi.fn(),
     } as unknown as WorkspaceContext;
 
@@ -125,13 +128,13 @@ describe('LSTool', () => {
         size: 1024,
       };
 
-      vi.mocked(fs.statSync).mockImplementation((path: any) => {
-        const pathStr = path.toString();
+      vi.mocked(fs.statSync).mockImplementation((pathArg: unknown) => {
+        const pathStr = String(pathArg);
         if (pathStr === testPath) {
           return { isDirectory: () => true } as fs.Stats;
         }
         // For individual files
-        if (pathStr.toString().endsWith('subdir')) {
+        if (pathStr.endsWith('subdir')) {
           return { ...mockStats, isDirectory: () => true, size: 0 } as fs.Stats;
         }
         return { ...mockStats, isDirectory: () => false } as fs.Stats;
@@ -311,11 +314,12 @@ describe('LSTool', () => {
       const testPath = '/home/user/project/src';
       const mockFiles = ['z-file.ts', 'a-dir', 'b-file.ts', 'c-dir'];
 
-      vi.mocked(fs.statSync).mockImplementation((path: any) => {
-        if (path.toString() === testPath) {
+      vi.mocked(fs.statSync).mockImplementation((pathArg: unknown) => {
+        const pathStr = String(pathArg);
+        if (pathStr === testPath) {
           return { isDirectory: () => true } as fs.Stats;
         }
-        if (path.toString().endsWith('-dir')) {
+        if (pathStr.endsWith('-dir')) {
           return {
             isDirectory: () => true,
             mtime: new Date(),
@@ -373,11 +377,12 @@ describe('LSTool', () => {
       const testPath = '/home/user/project/src';
       const mockFiles = ['accessible.ts', 'inaccessible.ts'];
 
-      vi.mocked(fs.statSync).mockImplementation((path: any) => {
-        if (path.toString() === testPath) {
+      vi.mocked(fs.statSync).mockImplementation((pathArg: unknown) => {
+        const pathStr = String(pathArg);
+        if (pathStr === testPath) {
           return { isDirectory: () => true } as fs.Stats;
         }
-        if (path.toString().endsWith('inaccessible.ts')) {
+        if (pathStr.endsWith('inaccessible.ts')) {
           throw new Error('EACCES: permission denied');
         }
         return {

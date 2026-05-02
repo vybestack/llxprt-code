@@ -67,11 +67,11 @@ function createMockSpawn(
         (call) => call[0] === 'close',
       )?.[1];
 
-      if (stdoutDataHandler && outputData) {
+      if (stdoutDataHandler != null && outputData) {
         stdoutDataHandler(Buffer.from(outputData));
       }
 
-      if (closeHandler) {
+      if (closeHandler != null) {
         closeHandler(exitCode, signal);
       }
     }, 0);
@@ -268,11 +268,11 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             // Only return match from the .js file in sub directory
             onData(Buffer.from(`another.js:1:const greeting = "hello";${EOL}`));
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -353,11 +353,11 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             // Return match for the regex pattern
             onData(Buffer.from(`fileB.js:1:const foo = "bar";${EOL}`));
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -400,7 +400,7 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             // Return case-insensitive matches for 'HELLO'
             onData(
               Buffer.from(
@@ -408,7 +408,7 @@ describe('RipGrepTool', () => {
               ),
             );
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -508,11 +508,11 @@ describe('RipGrepTool', () => {
               ].join(EOL) + EOL;
           }
 
-          if (stdoutDataHandler && outputData) {
+          if (stdoutDataHandler != null && outputData) {
             stdoutDataHandler(Buffer.from(outputData));
           }
 
-          if (closeHandler) {
+          if (closeHandler != null) {
             closeHandler(0);
           }
         }, 0);
@@ -592,10 +592,10 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             onData(Buffer.from(`fileC.txt:1:another world in sub dir${EOL}`));
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -660,7 +660,7 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (closeHandler) {
+          if (closeHandler != null) {
             // Simulate process killed by signal (code is null, signal is SIGTERM)
             closeHandler(null, 'SIGTERM');
           }
@@ -717,7 +717,7 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onClose) {
+          if (onClose != null) {
             onClose(1);
           }
         }, 0);
@@ -757,7 +757,7 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onClose) {
+          if (onClose != null) {
             onClose(1);
           }
         }, 0);
@@ -803,14 +803,14 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             onData(
               Buffer.from(
                 `${specialFileName}:1:hello world with special chars${EOL}`,
               ),
             );
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -858,14 +858,14 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             onData(
               Buffer.from(
                 `a/b/c/d/e/deep.txt:1:content in deep directory${EOL}`,
               ),
             );
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -913,14 +913,14 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             onData(
               Buffer.from(
                 `code.js:1:function getName() { return "test"; }${EOL}`,
               ),
             );
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -966,14 +966,14 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             onData(
               Buffer.from(
                 `case.txt:1:Hello World${EOL}case.txt:2:hello world${EOL}case.txt:3:HELLO WORLD${EOL}`,
               ),
             );
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -1020,10 +1020,10 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             onData(Buffer.from(`special.txt:1:Price: $19.99${EOL}`));
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -1077,14 +1077,14 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             onData(
               Buffer.from(
                 `test.ts:1:typescript content${EOL}test.tsx:1:tsx content${EOL}`,
               ),
             );
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -1137,10 +1137,10 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (onData) {
+          if (onData != null) {
             onData(Buffer.from(`src/main.ts:1:source code${EOL}`));
           }
-          if (onClose) {
+          if (onClose != null) {
             onClose(0);
           }
         }, 0);
@@ -1429,7 +1429,7 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'error',
           )?.[1];
 
-          if (errorHandler) {
+          if (errorHandler != null) {
             errorHandler(new Error('Test error during execution'));
           }
         }, 0);
@@ -1480,7 +1480,7 @@ describe('RipGrepTool', () => {
             (call) => call[0] === 'close',
           )?.[1];
 
-          if (closeHandler) {
+          if (closeHandler != null) {
             // Exit code 2 indicates ripgrep error
             closeHandler(2);
           }

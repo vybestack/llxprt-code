@@ -1367,7 +1367,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
               contents: [{ role: 'user', parts: [{ text: `test ${i}` }] }],
             });
             for await (const chunk of iterator) {
-              if (chunk.parts?.[0] && 'text' in chunk.parts[0]) {
+              if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
                 responses.push(chunk.parts[0].text as string);
               }
             }
@@ -1496,7 +1496,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
           const chunks: string[] = [];
           for await (const chunk of iterator) {
-            if (chunk.parts?.[0] && 'text' in chunk.parts[0]) {
+            if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
               chunks.push(chunk.parts[0].text as string);
             }
           }
@@ -1619,7 +1619,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
           });
           for await (const chunk of iterator1) {
-            if (chunk.parts?.[0] && 'text' in chunk.parts[0]) {
+            if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
               chunks1.push(chunk.parts[0].text as string);
             }
           }
@@ -1630,7 +1630,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
           });
           for await (const chunk of iterator2) {
-            if (chunk.parts?.[0] && 'text' in chunk.parts[0]) {
+            if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
               chunks2.push(chunk.parts[0].text as string);
             }
           }
@@ -2419,7 +2419,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           async *generateChatCompletion(
             options: GenerateChatOptions,
           ): AsyncIterableIterator<IContent> {
-            if (options.resolved?.authToken) {
+            if (options.resolved?.authToken != null) {
               capturedAuthTokens.push(options.resolved.authToken);
             }
             yield { role: 'model', parts: [{ text: 'response' }] };
@@ -2490,7 +2490,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           async *generateChatCompletion(
             options: GenerateChatOptions,
           ): AsyncIterableIterator<IContent> {
-            if (options.resolved?.baseURL) {
+            if (options.resolved?.baseURL != null) {
               capturedBaseURLs.push(options.resolved.baseURL);
             }
             yield { role: 'model', parts: [{ text: 'response' }] };

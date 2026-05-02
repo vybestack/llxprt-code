@@ -57,7 +57,7 @@ vi.mock('@anthropic-ai/sdk', () => {
           FakeAnthropic.requests.push({ request });
           const req = request as { stream?: boolean };
 
-          if (req.stream) {
+          if (req.stream === true) {
             // Return async iterable for streaming
             return {
               async *[Symbol.asyncIterator]() {

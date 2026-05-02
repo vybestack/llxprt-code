@@ -615,7 +615,7 @@ describe('ast-edit characterization tests', () => {
       expect(confirmationDetails?.onConfirm).toBeDefined();
 
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (confirmationDetails?.onConfirm) {
+      if (confirmationDetails?.onConfirm != null) {
         await confirmationDetails.onConfirm(
           ToolConfirmationOutcome.ProceedAlways,
         );
@@ -648,7 +648,7 @@ describe('ast-edit characterization tests', () => {
       // String.replace only replaces first occurrence
       // So 'hello hello hello' becomes 'goodbye hello hello'
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) {
+      if (result.error == null) {
         const display = result.returnDisplay as ToolReturnDisplay;
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(display.newContent).toBe('goodbye hello hello');
@@ -700,7 +700,7 @@ describe('ast-edit characterization tests', () => {
 
       const result = await invocation.execute(new AbortController().signal);
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) {
+      if (result.error == null) {
         const display = result.returnDisplay as ToolReturnDisplay;
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(display.fileDiff).toContain('Applied');
@@ -735,7 +735,7 @@ describe('ast-edit characterization tests', () => {
 
       // Only proceed if preview succeeded
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!previewResult.error) {
+      if (previewResult.error == null) {
         const previewDisplay = previewResult.returnDisplay as ToolReturnDisplay;
         const previewNewContent = previewDisplay.newContent;
         const previewAstValidation = previewDisplay.metadata?.astValidation;
@@ -754,7 +754,7 @@ describe('ast-edit characterization tests', () => {
           new AbortController().signal,
         );
 
-        if (!applyResult.error) {
+        if (applyResult.error == null) {
           const applyDisplay = applyResult.returnDisplay as ToolReturnDisplay;
           const applyNewContent = applyDisplay.newContent;
           const applyAstValidation = applyDisplay.metadata?.astValidation;
@@ -822,7 +822,7 @@ describe('ast-edit characterization tests', () => {
 
       const result = await invocation.execute(new AbortController().signal);
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) {
+      if (result.error == null) {
         const display = result.returnDisplay as ToolReturnDisplay;
         // AST validation may pass or fail depending on the parser
         // The key is that the metadata structure exists

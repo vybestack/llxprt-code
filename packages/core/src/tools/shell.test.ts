@@ -825,10 +825,10 @@ describe('ShellTool', () => {
       );
 
       expect(confirmation).not.toBe(false);
-      expect(confirmation && confirmation.type).toBe('exec');
+      expect(confirmation !== false && confirmation.type).toBe('exec');
 
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!confirmation || confirmation.type !== 'exec') {
+      if (confirmation === false || confirmation.type !== 'exec') {
         throw new Error('Expected exec confirmation details');
       }
 
@@ -850,7 +850,7 @@ describe('ShellTool', () => {
 
       expect(confirmation).not.toBe(false);
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!confirmation || confirmation.type !== 'exec') {
+      if (confirmation === false || confirmation.type !== 'exec') {
         throw new Error('Expected exec confirmation details');
       }
 
@@ -869,7 +869,7 @@ describe('ShellTool', () => {
 
       expect(confirmation).not.toBe(false);
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!confirmation || confirmation.type !== 'exec') {
+      if (confirmation === false || confirmation.type !== 'exec') {
         throw new Error('Expected exec confirmation details');
       }
 
@@ -1399,7 +1399,7 @@ describe('Shell Tool Filtering Behavior', () => {
       // Assert: Should contain first 3 ERROR lines only
       const stdoutMatch = result.llmContent.match(/Stdout:([\s\S]*?)\nStderr:/);
       expect(stdoutMatch).not.toBeNull();
-      const stdoutBlock = stdoutMatch ? stdoutMatch[1].trim() : '';
+      const stdoutBlock = stdoutMatch != null ? stdoutMatch[1].trim() : '';
       const lines = stdoutBlock.split('\n').filter((line) => line.trim());
       expect(lines.length).toBeGreaterThan(0);
       expect(lines.length).toBeLessThanOrEqual(3);
@@ -1440,7 +1440,7 @@ describe('Shell Tool Filtering Behavior', () => {
       // Assert: Should contain last 2 ERROR lines only
       const stdoutMatch = result.llmContent.match(/Stdout:([\s\S]*?)\nStderr:/);
       expect(stdoutMatch).not.toBeNull();
-      const stdoutBlock = stdoutMatch ? stdoutMatch[1].trim() : '';
+      const stdoutBlock = stdoutMatch != null ? stdoutMatch[1].trim() : '';
       const lines = stdoutBlock.split('\n').filter((line) => line.trim());
       expect(lines.length).toBeGreaterThan(0);
       expect(lines.length).toBeLessThanOrEqual(2);

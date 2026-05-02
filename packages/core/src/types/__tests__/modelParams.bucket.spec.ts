@@ -611,7 +611,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     expect(AuthConfigSchema).toBeDefined();
 
     // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!AuthConfigSchema || typeof AuthConfigSchema !== 'object') {
+    if (AuthConfigSchema == null || typeof AuthConfigSchema !== 'object') {
       throw new Error('AuthConfigSchema not implemented');
     }
 
@@ -629,7 +629,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     expect(AuthConfigSchema).toBeDefined();
 
     // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!AuthConfigSchema || typeof AuthConfigSchema !== 'object') {
+    if (AuthConfigSchema == null || typeof AuthConfigSchema !== 'object') {
       throw new Error('AuthConfigSchema not implemented');
     }
 
@@ -647,7 +647,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     expect(AuthConfigSchema).toBeDefined();
 
     // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!AuthConfigSchema || typeof AuthConfigSchema !== 'object') {
+    if (AuthConfigSchema == null || typeof AuthConfigSchema !== 'object') {
       throw new Error('AuthConfigSchema not implemented');
     }
 
@@ -664,7 +664,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     expect(AuthConfigSchema).toBeDefined();
 
     // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!AuthConfigSchema || typeof AuthConfigSchema !== 'object') {
+    if (AuthConfigSchema == null || typeof AuthConfigSchema !== 'object') {
       throw new Error('AuthConfigSchema not implemented');
     }
 
@@ -680,7 +680,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     expect(AuthConfigSchema).toBeDefined();
 
     // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!AuthConfigSchema || typeof AuthConfigSchema !== 'object') {
+    if (AuthConfigSchema == null || typeof AuthConfigSchema !== 'object') {
       throw new Error('AuthConfigSchema not implemented');
     }
 

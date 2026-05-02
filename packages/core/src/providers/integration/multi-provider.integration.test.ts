@@ -46,7 +46,7 @@ describe('Multi-Provider Integration Tests', () => {
       );
     }
 
-    if (baseURL?.includes('openrouter')) {
+    if (baseURL != null && baseURL.includes('openrouter') === true) {
       console.log(
         '\nWARNING:  Skipping Multi-Provider Integration Tests: OpenRouter detected',
       );
@@ -263,9 +263,10 @@ describe('Multi-Provider Integration Tests', () => {
         }
 
         const fullResponse = chunks.join('');
-        const providerName = baseURL?.includes('openrouter')
-          ? 'OpenRouter'
-          : 'OpenAI';
+        const providerName =
+          baseURL != null && baseURL.includes('openrouter') === true
+            ? 'OpenRouter'
+            : 'OpenAI';
         console.log(`\n[OK] ${providerName} response: "${fullResponse}"`);
 
         expect(fullResponse.toLowerCase()).toContain(

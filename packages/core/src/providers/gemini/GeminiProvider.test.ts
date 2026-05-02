@@ -213,7 +213,8 @@ describe('GeminiProvider', () => {
     const request = generateContentStreamMock.mock.calls[0][0];
     const toolMessage = request.contents.find((msg: { parts: Part[] }) =>
       msg.parts.some(
-        (part: Part) => 'functionResponse' in part && part.functionResponse,
+        (part: Part) =>
+          'functionResponse' in part && part.functionResponse != null,
       ),
     ) as { parts: Part[] };
     const functionResponsePart = toolMessage.parts.find(

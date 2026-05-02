@@ -666,7 +666,9 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     // Find the model message with tool calls
     const modelMessage = geminiContents.find(
-      (c) => c.role === 'model' && c.parts?.some((p) => 'functionCall' in p),
+      (c) =>
+        c.role === 'model' &&
+        (c.parts?.some((p) => 'functionCall' in p) ?? false),
     );
 
     expect(modelMessage).toBeDefined();
@@ -902,12 +904,10 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       thoughtSignature?: string;
       llxprtSourceField?: string;
     } =>
-      Boolean(
-        part &&
-          typeof part === 'object' &&
-          'thought' in part &&
-          (part as { thought: unknown }).thought === true,
-      );
+      part != null &&
+      typeof part === 'object' &&
+      'thought' in part &&
+      (part as { thought: unknown }).thought === true;
 
     // Extract thought parts like recordHistory does
     const thoughtParts = consolidatedParts.filter(isThoughtPart);
@@ -1154,12 +1154,10 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     // The isThoughtPart check:
     const isThoughtPart = (part: unknown): boolean =>
-      Boolean(
-        part &&
-          typeof part === 'object' &&
-          'thought' in part &&
-          (part as { thought: unknown }).thought === true,
-      );
+      part != null &&
+      typeof part === 'object' &&
+      'thought' in part &&
+      (part as { thought: unknown }).thought === true;
 
     const thoughtParts = simulatedParts.filter(isThoughtPart);
 
@@ -1224,7 +1222,9 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     // Find the model message
     const modelMessage = geminiContents.find(
-      (c) => c.role === 'model' && c.parts?.some((p) => 'functionCall' in p),
+      (c) =>
+        c.role === 'model' &&
+        (c.parts?.some((p) => 'functionCall' in p) ?? false),
     );
 
     expect(modelMessage).toBeDefined();

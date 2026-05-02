@@ -218,7 +218,8 @@ describe('OpenAIProvider - MediaBlock support', () => {
         Array.isArray(m.content) &&
         m.content.some(
           (c: { type: string; text?: string }) =>
-            c.type === 'text' && c.text?.includes('Images from tool response'),
+            c.type === 'text' &&
+            c.text?.includes('Images from tool response') === true,
         ),
     );
     expect(syntheticUserMessage).toBeDefined();
@@ -579,7 +580,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
           m.content.some(
             (c: { type: string; text?: string }) =>
               c.type === 'text' &&
-              c.text?.includes('Images from tool response'),
+              (c.text?.includes('Images from tool response') ?? false),
           ),
       );
 
@@ -763,7 +764,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
           m.content.some(
             (c: { type: string; text?: string }) =>
               c.type === 'text' &&
-              c.text?.includes('Images from tool response'),
+              (c.text?.includes('Images from tool response') ?? false),
           ),
       );
 

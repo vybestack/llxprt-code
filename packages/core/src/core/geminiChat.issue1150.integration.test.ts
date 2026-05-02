@@ -187,10 +187,10 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
       // Process with thoughts filtered
       [thinkingChunk, textChunk].forEach((chunk) => {
         const content = chunk.candidates?.[0]?.content;
-        if (content?.parts) {
+        if (content?.parts != null) {
           modelResponseParts.push(
             ...content.parts.filter(
-              (part) => !(part as { thought?: boolean }).thought,
+              (part) => (part as { thought?: boolean }).thought !== true,
             ),
           );
         }

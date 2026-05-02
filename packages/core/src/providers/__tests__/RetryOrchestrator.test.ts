@@ -78,7 +78,7 @@ function createRateLimitError(retryAfter?: number): Error {
     response?: { headers?: { 'retry-after'?: string } };
   };
   error.status = 429;
-  if (retryAfter) {
+  if (retryAfter != null && retryAfter > 0) {
     error.response = {
       headers: {
         'retry-after': retryAfter.toString(),
@@ -1516,7 +1516,7 @@ describe('RetryOrchestrator', () => {
           // Simulate provider checking signal
           await delay(50);
 
-          if (options.invocation?.signal?.aborted) {
+          if (options.invocation?.signal?.aborted === true) {
             throw new Error('Aborted');
           }
 

@@ -448,7 +448,12 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
           content as { blocks: Array<{ type: string; thought?: string }> }
         ).blocks;
         innerBlocks
-          .filter((block) => block.type === 'thinking' && block.thought)
+          .filter(
+            (block) =>
+              block.type === 'thinking' &&
+              block.thought != null &&
+              block.thought !== '',
+          )
           .forEach((block) => {
             allThinkingThoughts.push(block.thought!);
           });

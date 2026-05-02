@@ -16,10 +16,10 @@ vi.mock('../config/config.js', () => ({
   Config: vi.fn().mockImplementation((params) => ({
     getSessionId: vi
       .fn()
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: test default for optional sessionId param
-      .mockReturnValue(params.sessionId || 'default-session'),
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: test default for optional agentId param
-    getAgentId: vi.fn().mockReturnValue(params.agentId || DEFAULT_AGENT_ID),
+
+      .mockReturnValue(params.sessionId ?? 'default-session'),
+
+    getAgentId: vi.fn().mockReturnValue(params.agentId ?? DEFAULT_AGENT_ID),
   })),
 }));
 

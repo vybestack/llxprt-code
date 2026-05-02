@@ -121,12 +121,14 @@ describe('EditTool', () => {
         );
         const problematicSnippet = snippetMatch?.[1] ?? '';
 
-        if ((schema as any).properties?.corrected_target_snippet) {
+        const schemaProps = (schema as { properties?: Record<string, unknown> })
+          .properties;
+        if (schemaProps != null && 'corrected_target_snippet' in schemaProps) {
           return Promise.resolve({
             corrected_target_snippet: problematicSnippet,
           });
         }
-        if ((schema as any).properties?.corrected_new_string) {
+        if (schemaProps != null && 'corrected_new_string' in schemaProps) {
           // For new_string correction, we might need more sophisticated logic,
           // but for now, returning original is a safe default if not specified by a test.
           const originalNewStringMatch = promptText.match(
@@ -1005,7 +1007,7 @@ describe('EditTool', () => {
       expect(ideClient.openDiff).toHaveBeenCalledWith(filePath, newContent);
 
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (confirmation && 'onConfirm' in confirmation) {
+      if (confirmation !== false && 'onConfirm' in confirmation) {
         await confirmation.onConfirm(ToolConfirmationOutcome.ProceedOnce);
       }
 
@@ -1067,16 +1069,14 @@ describe('EditTool', () => {
         const invocation = tool.build(params);
         const result = await invocation.execute(new AbortController().signal);
 
+        const returnDisplay = result.returnDisplay;
         if (
-          result.returnDisplay &&
-          typeof result.returnDisplay === 'object' &&
-          'diffStat' in result.returnDisplay &&
-          result.returnDisplay.diffStat
+          typeof returnDisplay === 'object' &&
+          'diffStat' in returnDisplay &&
+          returnDisplay.diffStat != null
         ) {
-          actualLinesRemoved.push(
-            result.returnDisplay.diffStat.ai_removed_lines,
-          );
-        } else if (result.error) {
+          actualLinesRemoved.push(returnDisplay.diffStat.ai_removed_lines);
+        } else if (result.error != null) {
           console.error(`Edit failed for ${file.path}:`, result.error);
         }
       }

@@ -290,7 +290,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       let verifierVerified = false;
 
       testServer.on('request', (req, res) => {
-        if (req.url?.includes('device/code')) {
+        if (req.url?.includes('device/code') === true) {
           let body = '';
           req.on('data', (chunk) => {
             body += chunk;
@@ -310,7 +310,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
               }),
             );
           });
-        } else if (req.url?.includes('token')) {
+        } else if (req.url?.includes('token') === true) {
           let body = '';
           req.on('data', (chunk) => {
             body += chunk;
@@ -373,7 +373,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
 
         testServer.removeAllListeners('request');
         testServer.on('request', (req, res) => {
-          if (!req.url?.includes('token'))
+          if (req.url?.includes('token') !== true)
             throw new Error('unreachable: narrowing failed');
           pollCount++;
 
@@ -853,12 +853,12 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
         req.on('end', () => {
           const params = new URLSearchParams(body);
 
-          if (req.url?.includes('device/code')) {
+          if (req.url?.includes('device/code') === true) {
             requiredDeviceParams.forEach((param) => {
               // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(params.has(param)).toBe(true);
             });
-          } else if (req.url?.includes('token')) {
+          } else if (req.url?.includes('token') === true) {
             requiredTokenParams.forEach((param) => {
               // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(params.has(param)).toBe(true);

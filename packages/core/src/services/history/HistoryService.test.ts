@@ -882,7 +882,7 @@ describe('HistoryService - Behavioral Tests', () => {
       expect(
         curated.some(
           (content) =>
-            content.metadata?.synthetic &&
+            content.metadata?.synthetic === true &&
             content.metadata.reason === 'reconstructed_tool_call',
         ),
       ).toBe(false);

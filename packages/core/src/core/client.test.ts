@@ -1330,7 +1330,7 @@ sub memory
       let finalResult: Turn | undefined;
       for (;;) {
         const result = await stream.next();
-        if (result.done) {
+        if (result.done === true) {
           finalResult = result.value;
           break;
         }

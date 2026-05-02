@@ -73,7 +73,8 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
             type: 'function',
             function: {
               name: toolCall.name,
-              arguments: toolCall.input ? JSON.stringify(toolCall.input) : '',
+              arguments:
+                toolCall.input != null ? JSON.stringify(toolCall.input) : '',
             },
           },
         ];
@@ -81,11 +82,16 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       return [rawToolCall];
     }),
     convertGeminiToAnthropic: vi.fn((geminiTools) => {
-      if (!geminiTools || !Array.isArray(geminiTools)) return [];
+      if (
+        typeof geminiTools !== 'object' ||
+        geminiTools === null ||
+        !Array.isArray(geminiTools)
+      )
+        return [];
 
       const tools = [];
       for (const group of geminiTools) {
-        if (group.functionDeclarations) {
+        if (group.functionDeclarations != null) {
           for (const func of group.functionDeclarations) {
             tools.push({
               name: func.name,
@@ -102,12 +108,17 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       return tools;
     }),
     convertGeminiToFormat: vi.fn((geminiTools, format = 'openai') => {
-      if (!geminiTools || !Array.isArray(geminiTools)) return undefined;
+      if (
+        typeof geminiTools !== 'object' ||
+        geminiTools === null ||
+        !Array.isArray(geminiTools)
+      )
+        return undefined;
 
       if (format === 'anthropic') {
         const tools = [];
         for (const group of geminiTools) {
-          if (group.functionDeclarations) {
+          if (group.functionDeclarations != null) {
             for (const func of group.functionDeclarations) {
               tools.push({
                 name: func.name,
@@ -127,7 +138,7 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       // For other formats (openai, etc.), return OpenAI format
       const tools = [];
       for (const group of geminiTools) {
-        if (group.functionDeclarations) {
+        if (group.functionDeclarations != null) {
           for (const func of group.functionDeclarations) {
             tools.push({
               type: 'function',
@@ -1959,11 +1970,13 @@ describe('AnthropicProvider', () => {
         const options = call[1];
 
         // Check beta header - should not contain extended TTL
-        const betaHeader = options?.headers?.['anthropic-beta'];
+        const betaHeader = options?.headers?.['anthropic-beta'] as
+          | string
+          | undefined;
         // Either undefined or doesn't contain the extended TTL
-        const isValidHeader =
-          betaHeader === undefined ||
-          !betaHeader.includes('extended-cache-ttl-2025-04-11');
+        const isValidHeader = !(
+          betaHeader?.includes('extended-cache-ttl-2025-04-11') ?? false
+        );
         expect(isValidHeader).toBe(true);
       });
 
@@ -3761,7 +3774,7 @@ describe('AnthropicProvider', () => {
 
         // Consume the generator
         let result = await generator.next();
-        while (!result.done) {
+        while (result.done !== true) {
           result = await generator.next();
         }
 

@@ -159,7 +159,7 @@ const createMockStream = (
   // This mock now returns a Promise that resolves to the async generator,
   // matching the new signature for sendMessageStream.
   return vi.fn().mockImplementation(async () => {
-    const response = functionCallsList[index] || 'stop';
+    const response = functionCallsList[index] ?? 'stop';
     index++;
 
     return (async function* () {
@@ -2106,7 +2106,7 @@ describe('subagent.ts', () => {
                   err.name = 'AbortError';
                   reject(err);
                 };
-                if (signal?.aborted) {
+                if (signal?.aborted === true) {
                   abort();
                   return;
                 }

@@ -120,7 +120,7 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
         _input: RequestInfo | URL,
         init?: RequestInit,
       ): Promise<Response> => {
-        if (init?.body) {
+        if (init?.body != null) {
           capturedBody =
             typeof init.body === 'string'
               ? init.body
@@ -191,7 +191,7 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
         _input: RequestInfo | URL,
         init?: RequestInit,
       ): Promise<Response> => {
-        if (init?.body) {
+        if (init?.body != null) {
           capturedBody =
             typeof init.body === 'string'
               ? init.body
@@ -275,7 +275,7 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
         _input: RequestInfo | URL,
         init?: RequestInit,
       ): Promise<Response> => {
-        if (init?.body) {
+        if (init?.body != null) {
           capturedBody =
             typeof init.body === 'string'
               ? init.body
@@ -359,7 +359,7 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
         _input: RequestInfo | URL,
         init?: RequestInit,
       ): Promise<Response> => {
-        if (init?.body) {
+        if (init?.body != null) {
           capturedBody =
             typeof init.body === 'string'
               ? init.body
@@ -425,7 +425,7 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
         _input: RequestInfo | URL,
         init?: RequestInit,
       ): Promise<Response> => {
-        if (init?.body) {
+        if (init?.body != null) {
           capturedBody =
             typeof init.body === 'string'
               ? init.body

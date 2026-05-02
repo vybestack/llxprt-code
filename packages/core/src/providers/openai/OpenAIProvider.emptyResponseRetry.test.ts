@@ -216,7 +216,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     }
 
     // Verify we got tool calls first
-    const toolCallContent = contents.find((c) =>
+    const toolCallContent = contents.find((c): boolean =>
       c.blocks.some((b) => b.type === 'tool_call'),
     );
     expect(toolCallContent).toBeDefined();
@@ -225,7 +225,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     );
 
     // Verify we got text content (from automatic retry)
-    const textContent = contents.find((c) =>
+    const textContent = contents.find((c): boolean =>
       c.blocks.some((b) => b.type === 'text'),
     );
     expect(textContent).toBeDefined();
@@ -265,7 +265,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     // Should have assistant message with tool_calls
     const assistantMsg = continuationMessages.find(
-      (m) => m.role === 'assistant' && m.tool_calls,
+      (m) => m.role === 'assistant' && m.tool_calls != null,
     );
     expect(assistantMsg).toBeDefined();
     expect(assistantMsg?.tool_calls).toHaveLength(1);
@@ -324,9 +324,9 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     // Should have user continuation prompt
     const continuationPrompt = continuationMessages.find(
-      (m) =>
+      (m): boolean =>
         m.role === 'user' &&
-        m.content?.includes('tool calls above have been registered'),
+        m.content?.includes('tool calls above have been registered') === true,
     );
     expect(continuationPrompt).toBeDefined();
   });
@@ -486,7 +486,10 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     };
 
     const continuationAssistant = secondRequestBody.messages.find(
-      (m) => m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0,
+      (m): boolean =>
+        m.role === 'assistant' &&
+        m.tool_calls != null &&
+        m.tool_calls.length > 0,
     );
     expect(continuationAssistant).toBeDefined();
 
@@ -843,11 +846,13 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     // Verify we got both tool calls and text
     expect(
-      contents.some((c) => c.blocks.some((b) => b.type === 'tool_call')),
+      contents.some((c): boolean =>
+        c.blocks.some((b) => b.type === 'tool_call'),
+      ),
     ).toBe(true);
-    expect(contents.some((c) => c.blocks.some((b) => b.type === 'text'))).toBe(
-      true,
-    );
+    expect(
+      contents.some((c): boolean => c.blocks.some((b) => b.type === 'text')),
+    ).toBe(true);
 
     // Verify fetch was called only once (no retry)
     expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
@@ -944,7 +949,9 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     // Verify we got tool calls
     expect(
-      contents.some((c) => c.blocks.some((b) => b.type === 'tool_call')),
+      contents.some((c): boolean =>
+        c.blocks.some((b) => b.type === 'tool_call'),
+      ),
     ).toBe(true);
 
     // Verify fetch was called only once (no retry for length)

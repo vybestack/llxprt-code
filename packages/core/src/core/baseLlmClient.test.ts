@@ -26,7 +26,7 @@ vi.mock('../utils/retry.js', () => ({
 
       // If shouldRetryOnContent is provided and returns true (indicating retry needed),
       // simulate what would happen after exhausting retries
-      if (options?.shouldRetryOnContent?.(result)) {
+      if (options?.shouldRetryOnContent?.(result) === true) {
         throw new Error('Retry attempts exhausted');
       }
 
