@@ -156,6 +156,14 @@ function applyThoughtToState(
   }
 }
 
+function shouldResetGeminiBufferForContextClear(event: GeminiEvent): boolean {
+  return (
+    (event.type === ServerGeminiEventType.AgentExecutionStopped ||
+      event.type === ServerGeminiEventType.AgentExecutionBlocked) &&
+    event.contextCleared === true
+  );
+}
+
 export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
   const {
     config,
@@ -653,9 +661,6 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
                 },
                 userMessageTimestamp,
               );
-              if (event.contextCleared) {
-                clearContextAndResetBuffer();
-              }
               break;
             case ServerGeminiEventType.AgentExecutionBlocked:
               addItem(
@@ -665,12 +670,13 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
                 },
                 userMessageTimestamp,
               );
-              if (event.contextCleared) {
-                clearContextAndResetBuffer();
-              }
               break;
             default:
               break;
+          }
+
+          if (shouldResetGeminiBufferForContextClear(event)) {
+            clearContextAndResetBuffer();
           }
         }
 

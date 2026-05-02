@@ -214,4 +214,48 @@ describe('useStreamEventHandlers contextCleared buffering', () => {
       102,
     );
   });
+
+  it('does not reset buffered Gemini text when contextCleared is false', async () => {
+    const { result, addItem, pendingHistoryItemRef } = setupContextClearTest();
+
+    const stream =
+      (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+        yield { type: ServerGeminiEventType.Content, value: 'Before clear ' };
+        yield {
+          type: ServerGeminiEventType.AgentExecutionStopped,
+          reason: 'Stopped by hook',
+          contextCleared: false,
+        };
+        yield { type: ServerGeminiEventType.Content, value: 'After clear' };
+      })();
+
+    await act(async () => {
+      await result.current.processGeminiStreamEvents(
+        stream,
+        103,
+        new AbortController().signal,
+      );
+    });
+
+    expect(addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: 'Execution stopped by hook: Stopped by hook',
+      }),
+      103,
+    );
+    expect(addItem).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: 'Conversation context has been cleared.',
+      }),
+      103,
+    );
+    expect(pendingHistoryItemRef.current).toStrictEqual(
+      expect.objectContaining({
+        type: 'gemini',
+        text: 'Before clear After clear',
+      }),
+    );
+  });
 });
