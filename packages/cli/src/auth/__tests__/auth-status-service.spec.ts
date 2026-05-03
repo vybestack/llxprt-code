@@ -709,6 +709,7 @@ describe('AuthStatusService.logout session-bucket clear', () => {
     (
       bucketManager.getSessionBucket as ReturnType<typeof vi.fn>
     ).mockImplementation((_provider: string, meta?: unknown) =>
+      // eslint-disable-next-line sonarjs/no-all-duplicated-branches -- Intentional: both branches return same bucket to test the "matching bucket" code path
       meta !== undefined ? 'target-bucket' : 'target-bucket',
     );
 
