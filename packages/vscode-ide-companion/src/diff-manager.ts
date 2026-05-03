@@ -219,7 +219,8 @@ export class DiffManager {
       isVisible = this.diffDocuments.has(editor.document.uri.toString());
       if (!isVisible) {
         isVisible = Array.from(this.diffDocuments.values()).some(
-          (document) => document.originalFilePath === editor.document.uri.fsPath,
+          (document) =>
+            document.originalFilePath === editor.document.uri.fsPath,
         );
       }
     }
