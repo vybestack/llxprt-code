@@ -149,6 +149,7 @@ describe('AnthropicProvider Issue #1150: redacted_thinking Data Validation', () 
     for (const msg of request.messages) {
       if (Array.isArray(msg.content)) {
         for (const block of msg.content) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (block.type === 'redacted_thinking') {
             blocks.push(block as { type: 'redacted_thinking'; data: string });
           }
@@ -172,6 +173,7 @@ describe('AnthropicProvider Issue #1150: redacted_thinking Data Validation', () 
     for (const msg of request.messages) {
       if (Array.isArray(msg.content)) {
         for (const block of msg.content) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (block.type === 'thinking') {
             blocks.push(
               block as {

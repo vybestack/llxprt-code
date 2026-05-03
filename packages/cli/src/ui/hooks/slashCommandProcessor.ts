@@ -473,6 +473,7 @@ export const useSlashCommandProcessor = (
 
             // If a one-time list is provided for a "Proceed" action, temporarily
             // augment the session allowlist for this single execution.
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (oneTimeShellAllowlist && oneTimeShellAllowlist.size > 0) {
               fullCommandContext.session = {
                 ...fullCommandContext.session,
@@ -487,6 +488,7 @@ export const useSlashCommandProcessor = (
               args,
             );
 
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (result) {
               switch (result.type) {
                 case 'tool':

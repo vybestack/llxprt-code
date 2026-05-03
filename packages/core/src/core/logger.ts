@@ -93,6 +93,7 @@ export class Logger {
       }
       return parsedLogs.filter(
         (entry) =>
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           typeof entry.sessionId === 'string' &&
           typeof entry.messageId === 'number' &&
           typeof entry.timestamp === 'string' &&
@@ -370,6 +371,7 @@ export class Logger {
           const filteredItem = { ...item };
           if (Array.isArray(filteredItem.parts)) {
             filteredItem.parts = filteredItem.parts.map((part: Part) => {
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               if (part.text) {
                 const filterResult = emojiFilter.filterText(part.text);
                 return { ...part, text: filterResult.filtered as string };

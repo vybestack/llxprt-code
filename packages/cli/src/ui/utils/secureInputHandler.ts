@@ -32,6 +32,7 @@ export class SecureInputHandler {
     // @plan PLAN-20260206-TOOLKEY.P11
     // @requirement REQ-006.1
     return (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       trimmed.startsWith('/key ') ||
       trimmed === '/key' ||
       trimmed.startsWith('/keyfile ') ||
@@ -124,6 +125,7 @@ export class SecureInputHandler {
           const maskedKey = this.maskValue(keyToMask);
           const result = `/key ${maskedKey}${afterLineBreak}`;
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (process.env.DEBUG_SECURE_INPUT) {
             debugLogger.log('[SecureHandler] Output:', JSON.stringify(result));
             debugLogger.log(

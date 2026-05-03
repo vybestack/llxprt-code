@@ -147,6 +147,7 @@ export class PromptLoader {
     let codeBlockDelimiter: string | null = null;
 
     // Step 3: Process each line
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
@@ -284,6 +285,7 @@ export class PromptLoader {
 
     // Step 2: Detect sandbox environment
     const isSandboxed =
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       process.env.SANDBOX === '1' ||
       process.env.SANDBOX === 'true' ||
       process.env.CONTAINER === '1' ||
@@ -396,6 +398,7 @@ export class PromptLoader {
             if (filename !== null) {
               const filenameStr =
                 typeof filename === 'string' ? filename : filename.toString();
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               if (filenameStr.endsWith('.md')) {
                 // Simple debouncing
                 if (timeouts.has(filenameStr)) {

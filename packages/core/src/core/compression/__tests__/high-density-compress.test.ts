@@ -452,6 +452,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           if (block.type === 'tool_response') {
             // If outside tail, result should be a short summary string
             const resultStr = String(block.result);
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (resultStr !== bigContent) {
               // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(resultStr.length).toBeLessThan(200);
@@ -1099,6 +1100,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           for (const entry of nonTailEntries) {
             if (entry.speaker === 'tool') {
               for (const block of entry.blocks) {
+                // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
                 if (block.type === 'tool_response') {
                   // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                   expect(typeof block.result).toBe('string');

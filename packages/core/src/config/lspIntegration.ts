@@ -70,6 +70,7 @@ export async function initializeLsp(
     ) {
       const streams = state.lspServiceClient.getMcpTransportStreams();
       if (streams) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           await Promise.race([
             registerMcpNavigationTools(state, host, streams),
@@ -175,7 +176,7 @@ async function registerMcpNavigationTools(
             typeof chunk === 'string' ? chunk : chunk.toString('utf8');
           readBuffer += text;
 
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
+          // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop, @typescript-eslint/no-unnecessary-condition -- Existing loop intentionally parses streamed LSP output across external server boundaries.
           while (true) {
             const newlineIndex = readBuffer.indexOf('\n');
             if (newlineIndex === -1) {

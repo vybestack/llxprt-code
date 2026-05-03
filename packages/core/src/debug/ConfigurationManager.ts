@@ -107,6 +107,7 @@ export class ConfigurationManager {
         try {
           const content = fs.readFileSync(configPath, 'utf8');
           const parsed = JSON.parse(content);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (typeof parsed.debug === 'object' && parsed.debug !== null) {
             this.userConfig = parsed.debug;
           }
@@ -131,6 +132,7 @@ export class ConfigurationManager {
         try {
           const content = fs.readFileSync(configPath, 'utf8');
           const parsed = JSON.parse(content);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (typeof parsed.debug === 'object' && parsed.debug !== null) {
             this.projectConfig = parsed.debug;
           }

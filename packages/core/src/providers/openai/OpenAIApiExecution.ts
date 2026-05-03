@@ -129,6 +129,7 @@ export async function executeApiRequest(
       const capturedErrorMessage =
         error instanceof Error ? error.message : String(error);
       const status =
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         typeof error === 'object' &&
         error !== null &&
         'status' in error &&
@@ -223,6 +224,7 @@ export async function executeApiRequest(
       const capturedErrorMessage =
         error instanceof Error ? error.message : String(error);
       const status =
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         typeof error === 'object' &&
         error !== null &&
         'status' in error &&

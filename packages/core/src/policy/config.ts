@@ -403,6 +403,7 @@ export async function createPolicyEngineConfig(
           toolName === 'ShellTool' ? 'run_shell_command' : toolName;
 
         // Extract command prefix from args
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (SHELL_TOOL_NAMES.includes(normalizedName) && argsStr) {
           const patterns = buildArgsPatterns(undefined, argsStr);
           for (const pattern of patterns) {
@@ -547,6 +548,7 @@ export function createPolicyUpdater(
               const fileContent = await fs.readFile(policyFile, 'utf-8');
               existingData = toml.parse(fileContent) as { rule?: TomlRule[] };
             } catch (error) {
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
                 debugLogger.warn(
                   `Failed to parse ${policyFile}, overwriting with new policy.`,

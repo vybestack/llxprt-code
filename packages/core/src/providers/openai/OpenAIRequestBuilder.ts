@@ -132,6 +132,7 @@ function processUserMessage(
         parts.push({ type: 'text', text: block.text });
       } else if (block.type === 'media') {
         const category = classifyMediaBlock(block);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (category === 'image') {
           parts.push({
             type: 'image_url',
@@ -482,6 +483,7 @@ export function validateToolMessageSequence(
         const removalReason =
           'tool_call_id not found in last assistant tool_calls';
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (logger) {
           logger.warn(
             `[validateToolMessageSequence] Invalid tool message sequence detected - removing orphaned tool message: ${removalReason}`,

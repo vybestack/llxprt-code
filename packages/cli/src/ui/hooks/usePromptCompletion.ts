@@ -81,6 +81,7 @@ export function usePromptCompletion({
     }
 
     if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       trimmedText.length < PROMPT_COMPLETION_MIN_LENGTH ||
       !geminiClient ||
       isSlashCommand(trimmedText) ||
@@ -135,6 +136,7 @@ export function usePromptCompletion({
         if (responseText) {
           const suggestionText = responseText.trim();
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (
             suggestionText.length > 0 &&
             suggestionText.startsWith(trimmedText)

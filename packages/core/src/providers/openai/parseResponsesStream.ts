@@ -129,7 +129,9 @@ export async function* parseResponsesStream(
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? ''; // Keep incomplete line in buffer
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const line of lines) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (line.startsWith('data: ')) {
           const data = line.substring(6);
 

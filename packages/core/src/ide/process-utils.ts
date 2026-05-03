@@ -132,6 +132,7 @@ async function getIdeProcessInfoForUnix(): Promise<{
   const shells = ['zsh', 'bash', 'sh', 'tcsh', 'csh', 'ksh', 'fish', 'dash'];
   let currentPid = process.pid;
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < MAX_TRAVERSAL_DEPTH; i++) {
     try {
       const { parentPid, name, command } = await getProcessInfo(currentPid);
@@ -153,6 +154,7 @@ async function getIdeProcessInfoForUnix(): Promise<{
         // Code's `ptyhost` process). To get the true IDE process, we need to
         // traverse one level higher to get the grandparent.
         let idePid = parentPid;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           const { parentPid: grandParentPid } = await getProcessInfo(parentPid);
           if (grandParentPid > 1) {

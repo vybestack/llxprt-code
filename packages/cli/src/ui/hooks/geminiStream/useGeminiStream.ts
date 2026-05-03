@@ -353,6 +353,7 @@ export const useGeminiStream = (
       isResponding ||
       toolCalls.some(
         (tc) =>
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           tc.status === 'executing' ||
           tc.status === 'scheduled' ||
           tc.status === 'validating' ||
@@ -503,6 +504,7 @@ export const useGeminiStream = (
         ? Object.keys(config.getMcpServers() ?? {}).length
         : 0;
       if (
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         options?.isContinuation !== true &&
         trimmedStr &&
         !isSlashCommand(trimmedStr) &&

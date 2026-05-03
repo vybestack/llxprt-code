@@ -115,6 +115,7 @@ export async function filterToolsAgainstRuntime(params: {
   );
 
   const filteredTools: ToolConfig['tools'] = [];
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const toolEntry of toolConfig.tools) {
     if (typeof toolEntry !== 'string') {
       // Non-string entries (e.g., FunctionDeclaration objects) are preserved
@@ -280,6 +281,7 @@ export function buildRuntimeFunctionDeclarations(
   const allowedNames = new Set(listedNames.map(canonicalizeToolName));
 
   const declarations: FunctionDeclaration[] = [];
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const entry of toolConfig.tools) {
     if (typeof entry !== 'string') {
       declarations.push(entry);

@@ -69,6 +69,7 @@ export function iContentToHistoryItems(contents: IContent[]): HistoryItem[] {
       const toolCallBlocks: ToolCallBlock[] = [];
 
       for (const block of content.blocks) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         switch (block.type) {
           case 'text':
             textParts.push(block.text);
@@ -111,7 +112,8 @@ export function iContentToHistoryItems(contents: IContent[]): HistoryItem[] {
               ? safeToolResultToString(response.result)
               : undefined,
             status: response
-              ? response.error
+              ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+                response.error
                 ? ToolCallStatus.Error
                 : ToolCallStatus.Success
               : ToolCallStatus.Pending,
