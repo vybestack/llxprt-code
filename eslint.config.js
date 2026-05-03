@@ -261,6 +261,10 @@ export default tseslint.config(
       'sonarjs/no-identical-functions': 'error',
       'sonarjs/no-inconsistent-returns': 'error',
       'sonarjs/no-collapsible-if': 'error',
+      'sonarjs/nested-control-flow': 'error',
+      'sonarjs/expression-complexity': 'error',
+      'sonarjs/no-nested-conditional': 'error',
+      'sonarjs/too-many-break-or-continue-in-loop': 'error',
 
       'sonarjs/function-return-type': 'off',
       'sonarjs/no-wildcard-import': 'off',
