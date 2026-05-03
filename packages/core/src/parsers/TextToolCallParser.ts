@@ -21,6 +21,12 @@
  */
 
 import { DebugLogger } from '../debug/index.js';
+import {
+  parseAttributeValue,
+  readQuotedAttributeValue,
+  toTruthyString,
+  truthyJsonValueOrEmptyObject,
+} from './tool-call-parser-utils.js';
 
 const logger = new DebugLogger('llxprt:parser:textToolCall');
 
@@ -212,32 +218,9 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
       try {
         const parsed = JSON.parse(jsonSegment.segment);
-        const parsedName = parsed.name;
-        const toolName = String(
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          parsedName !== undefined &&
-            parsedName !== null &&
-            parsedName !== false &&
-            parsedName !== 0 &&
-            parsedName !== '' &&
-            !(typeof parsedName === 'number' && Number.isNaN(parsedName))
-            ? parsedName
-            : '',
-        );
-        const parsedArguments = parsed.arguments;
+        const toolName = toTruthyString(parsed.name);
         const argsText = JSON.stringify(
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          parsedArguments !== undefined &&
-            parsedArguments !== null &&
-            parsedArguments !== false &&
-            parsedArguments !== 0 &&
-            parsedArguments !== '' &&
-            !(
-              typeof parsedArguments === 'number' &&
-              Number.isNaN(parsedArguments)
-            )
-            ? parsedArguments
-            : {},
+          truthyJsonValueOrEmptyObject(parsed.arguments),
         );
         const endMarkerIndex = content.indexOf(endMarker, jsonSegment.endIndex);
         if (toolName && endMarkerIndex !== -1) {
@@ -306,31 +289,8 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     try {
       const parsed = JSON.parse(innerContent);
       if (typeof parsed === 'object' && parsed !== null && 'name' in parsed) {
-        const parsedName = parsed.name;
-        const toolName = String(
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          parsedName !== undefined &&
-            parsedName !== null &&
-            parsedName !== false &&
-            parsedName !== 0 &&
-            parsedName !== '' &&
-            !(typeof parsedName === 'number' && Number.isNaN(parsedName))
-            ? parsedName
-            : '',
-        );
-        const parsedArguments = parsed.arguments;
-        const args =
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          parsedArguments !== undefined &&
-          parsedArguments !== null &&
-          parsedArguments !== false &&
-          parsedArguments !== 0 &&
-          parsedArguments !== '' &&
-          !(
-            typeof parsedArguments === 'number' && Number.isNaN(parsedArguments)
-          )
-            ? parsedArguments
-            : {};
+        const toolName = toTruthyString(parsed.name);
+        const args = truthyJsonValueOrEmptyObject(parsed.arguments);
         return {
           start,
           end,
@@ -945,52 +905,9 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       }
       index++;
 
-      let value = '';
-      let escaped = false;
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      while (index < length) {
-        const char = text.charAt(index);
-        index++;
-        if (escaped) {
-          value += char;
-          escaped = false;
-          continue;
-        }
-        if (char === '\\') {
-          escaped = true;
-          continue;
-        }
-        if (char === quote) {
-          break;
-        }
-        value += char;
-      }
-
-      const unescaped = value.trim();
-      if (!key) {
-        continue;
-      }
-
-      if (unescaped.startsWith('{') || unescaped.startsWith('[')) {
-        try {
-          args[key] = JSON.parse(unescaped);
-          continue;
-        } catch {
-          // fall through to scalar handling
-        }
-      }
-
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      if (/^-?\d+(\.\d+)?$/.test(unescaped)) {
-        args[key] = Number(unescaped);
-      } else if (
-        unescaped.toLowerCase() === 'true' ||
-        unescaped.toLowerCase() === 'false'
-      ) {
-        args[key] = unescaped.toLowerCase() === 'true';
-      } else {
-        args[key] = unescaped;
-      }
+      const { value, nextIndex } = readQuotedAttributeValue(text, index, quote);
+      index = nextIndex;
+      args[key] = parseAttributeValue(value);
     }
 
     return args;
