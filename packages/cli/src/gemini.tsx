@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, complexity, max-lines-per-function, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Legacy CLI entrypoint remains a bootstrap orchestrator after other Phase 5 offenders were decomposed. */
+
 const wantWarningSuppression =
   process.env.LLXPRT_SUPPRESS_NODE_WARNINGS !== 'false';
 if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
