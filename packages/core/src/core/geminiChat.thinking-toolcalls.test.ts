@@ -896,6 +896,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     ];
 
     // The isThoughtPart check from geminiChat.ts:
+
     const isThoughtPart = (
       part: unknown,
     ): part is {
@@ -1153,6 +1154,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     // 3. Attach thoughtBlocks to first output content
 
     // The isThoughtPart check:
+    // eslint-disable-next-line sonarjs/no-identical-functions -- Intentionally duplicated for test isolation; each test needs its own standalone predicate.
     const isThoughtPart = (part: unknown): boolean =>
       part != null &&
       typeof part === 'object' &&

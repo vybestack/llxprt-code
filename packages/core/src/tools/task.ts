@@ -45,6 +45,14 @@ const MAX_TASK_TIMEOUT_SECONDS = 1800;
 const normalizeToolNameForPolicy = (name: string): string =>
   canonicalizeToolName(name);
 
+function normalizeSubagentStreamingText(text: string): string {
+  if (!text) {
+    return '';
+  }
+  const lf = text.replace(/\r\n?/g, '\n');
+  return lf.endsWith('\n') ? lf : lf + '\n';
+}
+
 export interface TaskToolParams {
   subagent_name?: string;
   subagentName?: string;
@@ -469,15 +477,8 @@ class TaskToolInvocation extends BaseToolInvocation<
       // Ensure each streamed chunk renders on its own line in TTY/CLI UIs.
       // - Normalize CR/CRLF to LF
       // - Append a trailing newline if missing
-      const normalizeForStreaming = (text: string): string => {
-        if (!text) {
-          return '';
-        }
-        const lf = text.replace(/\r\n?/g, '\n');
-        return lf.endsWith('\n') ? lf : lf + '\n';
-      };
       scope.onMessage = (message: string) => {
-        const cleaned = normalizeForStreaming(message);
+        const cleaned = normalizeSubagentStreamingText(message);
         if (cleaned.trim().length > 0) {
           updateOutput(cleaned);
         }
@@ -960,15 +961,8 @@ class TaskToolInvocation extends BaseToolInvocation<
       asyncXmlOutputOpen = true;
 
       const existingHandler = scope.onMessage;
-      const normalizeForStreaming = (text: string): string => {
-        if (!text) {
-          return '';
-        }
-        const lf = text.replace(/\r\n?/g, '\n');
-        return lf.endsWith('\n') ? lf : lf + '\n';
-      };
       scope.onMessage = (message: string) => {
-        const cleaned = normalizeForStreaming(message);
+        const cleaned = normalizeSubagentStreamingText(message);
         if (cleaned.trim().length > 0) {
           updateOutput(cleaned);
         }

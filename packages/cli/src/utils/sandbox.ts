@@ -66,6 +66,44 @@ const PASSTHROUGH_VARIABLES = [
   'TERM_PROGRAM',
 ] as const;
 
+/**
+ * Creates an idempotent cleanup function that kills a tunnel process.
+ * Used by SSH agent and credential proxy tunnel setup functions.
+ */
+const createTunnelProcessCleanup = (tunnelProcess: ChildProcess) => {
+  let cleanedUp = false;
+  return () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch {
+      // ignore — process may already be dead
+    }
+  };
+};
+
+/**
+ * Creates an idempotent cleanup function that closes a TCP server.
+ * Used by Docker macOS setup functions that bridge TCP to Unix sockets.
+ */
+const createServerCleanup = (server: net.Server) => {
+  let cleanedUp = false;
+  return () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+    try {
+      server.close();
+    } catch {
+      // ignore
+    }
+  };
+};
+
 export function getPassthroughEnvVars(
   env: NodeJS.ProcessEnv,
 ): Record<string, string> {
@@ -353,19 +391,7 @@ async function setupSshAgentDockerBridge(
 
   args.push('--env', `SSH_AUTH_SOCK=${containerSshAgentSock}`);
 
-  let cleanedUp = false;
-  const cleanup = () => {
-    if (cleanedUp) {
-      return;
-    }
-    cleanedUp = true;
-
-    try {
-      server.close();
-    } catch {
-      // ignore
-    }
-  };
+  const cleanup = createServerCleanup(server);
 
   return {
     cleanup,
@@ -611,20 +637,7 @@ export async function setupSshAgentPodmanMacOS(
     `socat UNIX-LISTEN:${socatSocketPath},fork TCP4:127.0.0.1:${tunnelPort} &`;
 
   // R7.9, R7.10, R7.11: Create idempotent cleanup function
-  let cleanedUp = false;
-  const cleanup = () => {
-    if (cleanedUp) {
-      return;
-    }
-    cleanedUp = true;
-
-    // R7.9: Kill tunnel process
-    try {
-      tunnelProcess.kill('SIGTERM');
-    } catch {
-      // ignore — process may already be dead
-    }
-  };
+  const cleanup = createTunnelProcessCleanup(tunnelProcess);
 
   return { tunnelProcess, cleanup, entrypointPrefix };
 }
@@ -751,19 +764,7 @@ export async function setupCredentialProxyPodmanMacOS(
     `rm -f ${CONTAINER_CREDENTIAL_PROXY_SOCK}; ` +
     `socat UNIX-LISTEN:${CONTAINER_CREDENTIAL_PROXY_SOCK},fork TCP4:127.0.0.1:${tunnelPort} &`;
 
-  let cleanedUp = false;
-  const cleanup = () => {
-    if (cleanedUp) {
-      return;
-    }
-    cleanedUp = true;
-
-    try {
-      tunnelProcess.kill('SIGTERM');
-    } catch {
-      // ignore
-    }
-  };
+  const cleanup = createTunnelProcessCleanup(tunnelProcess);
 
   return {
     tunnelProcess,
@@ -890,20 +891,7 @@ export async function setupPortForwardingPodmanMacOS(
     throw error;
   }
 
-  // Create idempotent cleanup function
-  let cleanedUp = false;
-  const cleanup = () => {
-    if (cleanedUp) {
-      return;
-    }
-    cleanedUp = true;
-
-    try {
-      tunnelProcess.kill('SIGTERM');
-    } catch {
-      // ignore — process may already be dead
-    }
-  };
+  const cleanup = createTunnelProcessCleanup(tunnelProcess);
 
   return { tunnelProcess, cleanup };
 }
@@ -919,19 +907,7 @@ export async function setupCredentialProxyDockerMacOS(
     `rm -f ${CONTAINER_CREDENTIAL_PROXY_SOCK}; ` +
     `socat UNIX-LISTEN:${CONTAINER_CREDENTIAL_PROXY_SOCK},fork TCP4:host.docker.internal:${port} &`;
 
-  let cleanedUp = false;
-  const cleanup = () => {
-    if (cleanedUp) {
-      return;
-    }
-    cleanedUp = true;
-
-    try {
-      server.close();
-    } catch {
-      // ignore
-    }
-  };
+  const cleanup = createServerCleanup(server);
 
   return {
     cleanup,

@@ -155,6 +155,7 @@ class TestAnthropicProvider extends AnthropicProvider {
 }
 
 class TestAnthropicProviderOAuth extends AnthropicProvider {
+  // eslint-disable-next-line sonarjs/no-identical-functions -- Constructor intentionally matches TestAnthropicProvider for test consistency; getAuthToken/getAuthTokenForPrompt implementations differ.
   constructor() {
     super(undefined, 'https://api.anthropic.com', {
       getEphemeralSettings: () => ({ streaming: 'disabled' }),

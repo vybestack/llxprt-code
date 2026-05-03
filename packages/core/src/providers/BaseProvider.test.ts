@@ -129,24 +129,10 @@ class TestProvider extends BaseProvider {
   }
 }
 
-// Non-OAuth provider for testing
-class NonOAuthTestProvider extends BaseProvider {
-  protected supportsOAuth(): boolean {
+// Non-OAuth provider for testing.
+class NonOAuthTestProvider extends TestProvider {
+  protected override supportsOAuth(): boolean {
     return false;
-  }
-
-  constructor(
-    config: BaseProviderConfig,
-    runtimeConfig?: Config,
-    settingsOverride?: SettingsService,
-  ) {
-    const settingsService = settingsOverride ?? getSettingsService();
-    super(
-      config,
-      undefined,
-      runtimeConfig ?? createRuntimeConfigStub(settingsService),
-      settingsService,
-    );
   }
 
   async getModels(): Promise<IModel[]> {

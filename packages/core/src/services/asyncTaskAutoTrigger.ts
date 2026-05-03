@@ -46,14 +46,21 @@ export class AsyncTaskAutoTrigger {
   }
 
   /**
+   * Shared helper for scheduling an auto-trigger check after task events.
+   * Used by both onTaskCompleted and onTaskFailed.
+   */
+  private scheduleAutoTriggerCheck(): void {
+    setImmediate(() => {
+      void this.maybeAutoTrigger();
+    });
+  }
+
+  /**
    * Called when an async task completes.
    * Schedules an auto-trigger check.
    */
   onTaskCompleted(_task: AsyncTaskInfo): void {
-    // Schedule check (don't block the event handler)
-    setImmediate(() => {
-      void this.maybeAutoTrigger();
-    });
+    this.scheduleAutoTriggerCheck();
   }
 
   /**
@@ -61,10 +68,7 @@ export class AsyncTaskAutoTrigger {
    * Schedules an auto-trigger check (same logic as completion).
    */
   onTaskFailed(_task: AsyncTaskInfo): void {
-    // Same logic as completion
-    setImmediate(() => {
-      void this.maybeAutoTrigger();
-    });
+    this.scheduleAutoTriggerCheck();
   }
 
   /**

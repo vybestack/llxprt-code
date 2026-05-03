@@ -132,7 +132,7 @@ export class ProxyOAuthAdapter {
         settleResolve(String(chunk));
       };
 
-      const onEnd = (): void => {
+      const onStdinClosed = (): void => {
         settleReject(
           new Error(
             'Authorization cancelled — stdin closed without providing a code',
@@ -140,13 +140,9 @@ export class ProxyOAuthAdapter {
         );
       };
 
-      const onClose = (): void => {
-        settleReject(
-          new Error(
-            'Authorization cancelled — stdin closed without providing a code',
-          ),
-        );
-      };
+      const onEnd = onStdinClosed;
+
+      const onClose = onStdinClosed;
 
       const onError = (error: Error): void => {
         settleReject(error);

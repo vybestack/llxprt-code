@@ -318,14 +318,13 @@ describe('useSelectionList', () => {
       const handler = activeKeypressHandler;
 
       const press = (name: string) => {
-        const key: Key = {
+        handler({
           name,
           sequence: name,
           ctrl: false,
           meta: false,
           shift: false,
-        };
-        handler(key);
+        });
       };
 
       // 1. Press Down. Should move 0 (A) -> 2 (C).

@@ -233,17 +233,18 @@ describe('textBufferReducer', () => {
     });
   });
 
-  describe('delete_word_left action', () => {
-    const createSingleLineState = (
-      text: string,
-      col: number,
-    ): TextBufferState => ({
-      ...initialState,
-      lines: [text],
-      cursorRow: 0,
-      cursorCol: col,
-    });
+  // Shared helper for single-line state creation (used by delete_word_left and delete_word_right tests)
+  const createSingleLineState = (
+    text: string,
+    col: number,
+  ): TextBufferState => ({
+    ...initialState,
+    lines: [text],
+    cursorRow: 0,
+    cursorCol: col,
+  });
 
+  describe('delete_word_left action', () => {
     it.each([
       {
         input: 'hello world',
@@ -295,16 +296,6 @@ describe('textBufferReducer', () => {
   });
 
   describe('delete_word_right action', () => {
-    const createSingleLineState = (
-      text: string,
-      col: number,
-    ): TextBufferState => ({
-      ...initialState,
-      lines: [text],
-      cursorRow: 0,
-      cursorCol: col,
-    });
-
     it.each([
       {
         input: 'hello world',

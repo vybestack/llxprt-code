@@ -2095,24 +2095,28 @@ describe('subagent.ts', () => {
             }
             signal.addEventListener('abort', abort, { once: true });
           });
-
         const schedulerFactory = vi.fn(() => ({
           schedule: vi.fn().mockImplementation(abortAwareHang),
-          awaitCompletedCalls: vi.fn().mockImplementation(
-            (signal?: AbortSignal) =>
-              new Promise<never>((_resolve, reject) => {
-                const abort = () => {
-                  const err = new Error('Aborted');
-                  err.name = 'AbortError';
-                  reject(err);
-                };
-                if (signal?.aborted === true) {
-                  abort();
-                  return;
-                }
-                signal?.addEventListener('abort', abort, { once: true });
-              }),
-          ),
+          awaitCompletedCalls: vi
+            .fn()
+            .mockImplementation((signal?: AbortSignal) => {
+              if (signal?.aborted === true) {
+                const err = new Error('Aborted');
+                err.name = 'AbortError';
+                return Promise.reject(err);
+              }
+              return new Promise<never>((_resolve, reject) => {
+                signal?.addEventListener(
+                  'abort',
+                  () => {
+                    const err = new Error('Aborted');
+                    err.name = 'AbortError';
+                    reject(err);
+                  },
+                  { once: true },
+                );
+              });
+            }),
         }));
 
         const runtimeBundle = createStatelessRuntimeBundle({

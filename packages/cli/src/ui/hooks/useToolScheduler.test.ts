@@ -496,6 +496,25 @@ const mockToolRequiresConfirmation = new MockTool({
   shouldConfirmExecute: vi.fn(),
 });
 
+/**
+ * Shared helper to render the useReactToolScheduler hook.
+ * Used across multiple test suites to avoid sonarjs/no-identical-functions.
+ */
+const renderScheduler = (
+  onComplete: Mock,
+  mockConfig: Partial<Config>,
+  setPendingHistoryItem: Mock,
+) =>
+  renderHook(() =>
+    useReactToolScheduler(
+      onComplete,
+      mockConfig as unknown as Config,
+      setPendingHistoryItem,
+      () => undefined,
+      () => {},
+    ),
+  );
+
 describe('useReactToolScheduler in YOLO Mode', () => {
   let onComplete: Mock;
   let setPendingHistoryItem: Mock;
@@ -523,17 +542,6 @@ describe('useReactToolScheduler in YOLO Mode', () => {
     DebugLogger.disposeAll();
   });
 
-  const renderScheduler = () =>
-    renderHook(() =>
-      useReactToolScheduler(
-        onComplete,
-        mockConfig as unknown as Config,
-        setPendingHistoryItem,
-        () => undefined,
-        () => {},
-      ),
-    );
-
   it('defaults agentId to primary when schedule is invoked without one', async () => {
     vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(mockTool);
@@ -542,7 +550,11 @@ describe('useReactToolScheduler in YOLO Mode', () => {
       returnDisplay: 'default output',
     } as ToolResult);
 
-    const { result } = renderScheduler();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
     const schedule = result.current[1];
     const requestWithoutAgent = buildRequest({
       callId: 'no-agent',
@@ -623,19 +635,12 @@ describe('useReactToolScheduler', () => {
     DebugLogger.disposeAll();
   });
 
-  const renderScheduler = () =>
-    renderHook(() =>
-      useReactToolScheduler(
-        onComplete,
-        mockConfig as unknown as Config,
-        setPendingHistoryItem,
-        () => undefined,
-        () => {},
-      ),
-    );
-
   it('initial state should be empty', () => {
-    const { result } = renderScheduler();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
     expect(result.current[0]).toStrictEqual([]);
   });
 
@@ -648,7 +653,11 @@ describe('useReactToolScheduler', () => {
     } as ToolResult);
     (mockTool.shouldConfirmExecute as Mock).mockResolvedValue(null);
 
-    const { result } = renderScheduler();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
     const schedule = result.current[1];
     const request = buildRequest({
       callId: 'call1',
@@ -708,7 +717,11 @@ describe('useReactToolScheduler', () => {
   it('should handle tool not found', async () => {
     vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(undefined);
-    const { result } = renderScheduler();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
     const schedule = result.current[1];
     const request = buildRequest({
       callId: 'call1',
@@ -749,7 +762,11 @@ describe('useReactToolScheduler', () => {
     const confirmError = new Error('Confirmation check failed');
     (mockTool.shouldConfirmExecute as Mock).mockRejectedValue(confirmError);
 
-    const { result } = renderScheduler();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
     const schedule = result.current[1];
     const request = buildRequest({
       callId: 'call1',
@@ -787,7 +804,11 @@ describe('useReactToolScheduler', () => {
     const execError = new Error('Execution failed');
     mockTool.executeFn.mockRejectedValue(execError);
 
-    const { result } = renderScheduler();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
     const schedule = result.current[1];
     const request = buildRequest({
       callId: 'call1',
@@ -827,7 +848,11 @@ describe('useReactToolScheduler', () => {
       returnDisplay: 'Confirmed display',
     } as ToolResult);
 
-    const { result } = renderScheduler();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
     const schedule = result.current[1];
     const request = buildRequest({
       callId: 'callConfirm',
@@ -909,7 +934,11 @@ describe('useReactToolScheduler', () => {
     vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(mockToolRequiresConfirmation);
 
-    const { result } = renderScheduler();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
     const schedule = result.current[1];
     const request = buildRequest({
       callId: 'callConfirmCancel',
@@ -1009,7 +1038,11 @@ describe('useReactToolScheduler', () => {
       null,
     );
 
-    const { result } = renderScheduler();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
     const schedule = result.current[1];
     const request = buildRequest({
       callId: 'liveCall',
@@ -1100,7 +1133,11 @@ describe('useReactToolScheduler', () => {
       return undefined;
     });
 
-    const { result } = renderScheduler();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
     const schedule = result.current[1];
     const requests = [
       buildRequest({ callId: 'multi1', name: 'tool1', args: { p: 1 } }),

@@ -370,7 +370,7 @@ export class ShellExecutionService {
         const inactivityTimeoutMs = shellExecutionConfig?.inactivityTimeoutMs;
         const inactivityAbortController = new AbortController();
 
-        const resetInactivityTimer = (): void => {
+        const resetInactivityTimer = () => {
           if (
             inactivityTimeoutMs === undefined ||
             inactivityTimeoutMs <= 0 ||
@@ -901,7 +901,8 @@ export class ShellExecutionService {
           }
         });
 
-        const resetInactivityTimer = (): void => {
+        // eslint-disable-next-line sonarjs/no-identical-functions -- Keep local closure state for child-process and PTY inactivity timers; extracting would change cleanup semantics.
+        const resetInactivityTimer = () => {
           if (
             inactivityTimeoutMs === undefined ||
             inactivityTimeoutMs <= 0 ||
