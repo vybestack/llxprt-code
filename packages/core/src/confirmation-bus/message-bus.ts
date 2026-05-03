@@ -143,14 +143,20 @@ export class MessageBus {
           if (response.correlationId === correlationId) {
             clearTimeout(timeout);
             unsubscribe();
-            const resolvedConfirmation =
-              response.confirmed ??
-              (response.outcome !== undefined
-                ? response.outcome !== ToolConfirmationOutcome.Cancel &&
-                  response.outcome !==
-                    ToolConfirmationOutcome.ModifyWithEditor &&
-                  response.outcome !== ToolConfirmationOutcome.SuggestEdit
-                : false);
+            let resolvedConfirmation: boolean;
+            if (response.confirmed !== undefined) {
+              resolvedConfirmation = response.confirmed;
+            } else if (response.outcome !== undefined) {
+              const isCancel =
+                response.outcome === ToolConfirmationOutcome.Cancel;
+              const isModify =
+                response.outcome === ToolConfirmationOutcome.ModifyWithEditor;
+              const isSuggest =
+                response.outcome === ToolConfirmationOutcome.SuggestEdit;
+              resolvedConfirmation = !isCancel && !isModify && !isSuggest;
+            } else {
+              resolvedConfirmation = false;
+            }
             resolve(resolvedConfirmation);
           }
         },

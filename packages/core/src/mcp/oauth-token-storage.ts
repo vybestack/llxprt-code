@@ -17,6 +17,28 @@ export type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
 const DEFAULT_SERVICE_NAME = 'llxprt-cli-mcp-oauth';
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 
+function isInvalidExpiry(expiresAt: unknown): boolean {
+  if (expiresAt === undefined) {
+    return true;
+  }
+  if (expiresAt === null) {
+    return true;
+  }
+  if (expiresAt === false) {
+    return true;
+  }
+  if (expiresAt === '') {
+    return true;
+  }
+  if (expiresAt === 0) {
+    return true;
+  }
+  if (typeof expiresAt === 'number' && Number.isNaN(expiresAt)) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Token storage wrapper that bridges the legacy static API with the new
  * shared TokenStorage interface used across the MCP stack. By default it
@@ -107,14 +129,7 @@ export class MCPOAuthTokenStorage implements TokenStorage {
    */
   static isTokenExpired(token: MCPOAuthToken): boolean {
     const expiresAt = token.expiresAt as unknown;
-    if (
-      expiresAt === undefined ||
-      expiresAt === null ||
-      expiresAt === false ||
-      expiresAt === '' ||
-      expiresAt === 0 ||
-      (typeof expiresAt === 'number' && Number.isNaN(expiresAt))
-    ) {
+    if (isInvalidExpiry(expiresAt)) {
       return false;
     }
     return Date.now() + EXPIRY_BUFFER_MS >= (expiresAt as number);

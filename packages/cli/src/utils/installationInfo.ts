@@ -31,6 +31,55 @@ export interface InstallationInfo {
   updateMessage?: string;
 }
 
+function checkHomebrewInstall(
+  realPath: string,
+  isAutoUpdateEnabled: boolean,
+): InstallationInfo | null {
+  if (process.platform !== 'darwin') {
+    return null;
+  }
+
+  try {
+    const brewPrefix = childProcess
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
+      .execSync('brew --prefix llxprt-code', {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      .trim();
+    const brewRealPath = fs.realpathSync(brewPrefix);
+
+    if (realPath.startsWith(brewRealPath)) {
+      const updateCommand = 'brew upgrade llxprt-code';
+      return {
+        packageManager: PackageManager.HOMEBREW,
+        isGlobal: true,
+        updateCommand,
+        updateMessage: !isAutoUpdateEnabled
+          ? `Please run "${updateCommand}" to update`
+          : `Installed via Homebrew. Attempting to automatically update via "${updateCommand}"...`,
+      };
+    }
+  } catch {
+    // Brew not installed or llxprt-code not installed via brew - continue to next check
+  }
+
+  // Check for Homebrew-managed npm global install
+  if (
+    realPath.includes('/opt/homebrew/lib/node_modules/') ||
+    realPath.includes('/usr/local/lib/node_modules/')
+  ) {
+    return {
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateMessage:
+        'Installed in Homebrew-managed npm global directory. Auto-update disabled. Please update Node.js via "brew upgrade node" or manually reinstall with "npm install -g @vybestack/llxprt-code@latest".',
+    };
+  }
+
+  return null;
+}
+
 export function getInstallationInfo(
   projectRoot: string,
   isAutoUpdateEnabled: boolean,
@@ -78,44 +127,9 @@ export function getInstallationInfo(
     }
 
     // Check for Homebrew
-    if (process.platform === 'darwin') {
-      try {
-        const brewPrefix = childProcess
-          // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
-          .execSync('brew --prefix llxprt-code', {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'ignore'],
-          })
-          .trim();
-        const brewRealPath = fs.realpathSync(brewPrefix);
-
-        if (realPath.startsWith(brewRealPath)) {
-          const updateCommand = 'brew upgrade llxprt-code';
-          return {
-            packageManager: PackageManager.HOMEBREW,
-            isGlobal: true,
-            updateCommand,
-            updateMessage: !isAutoUpdateEnabled
-              ? `Please run "${updateCommand}" to update`
-              : `Installed via Homebrew. Attempting to automatically update via "${updateCommand}"...`,
-          };
-        }
-      } catch {
-        // Brew not installed or llxprt-code not installed via brew - continue to next check
-      }
-
-      // Check for Homebrew-managed npm global install
-      if (
-        realPath.includes('/opt/homebrew/lib/node_modules/') ||
-        realPath.includes('/usr/local/lib/node_modules/')
-      ) {
-        return {
-          packageManager: PackageManager.NPM,
-          isGlobal: true,
-          updateMessage:
-            'Installed in Homebrew-managed npm global directory. Auto-update disabled. Please update Node.js via "brew upgrade node" or manually reinstall with "npm install -g @vybestack/llxprt-code@latest".',
-        };
-      }
+    const homebrewInfo = checkHomebrewInstall(realPath, isAutoUpdateEnabled);
+    if (homebrewInfo) {
+      return homebrewInfo;
     }
 
     // Check for pnpm

@@ -209,22 +209,19 @@ export class AnthropicDeviceFlow {
 
         const error = await response.json();
 
-        // Check for pending authorization
+        // Handle polling errors
+        let sleepMs = interval;
         if (error.error === 'authorization_pending') {
-          await new Promise((resolve) => setTimeout(resolve, interval));
-          continue;
+          // Continue polling
+        } else if (error.error === 'slow_down') {
+          sleepMs = interval * 2;
+        } else {
+          // Handle other errors
+          throw new Error(
+            `Token polling failed: ${error.error_description ?? error.error}`,
+          );
         }
-
-        // Check for slow down request
-        if (error.error === 'slow_down') {
-          await new Promise((resolve) => setTimeout(resolve, interval * 2));
-          continue;
-        }
-
-        // Handle other errors
-        throw new Error(
-          `Token polling failed: ${error.error_description ?? error.error}`,
-        );
+        await new Promise((resolve) => setTimeout(resolve, sleepMs));
       } catch (error) {
         if (
           error instanceof Error &&

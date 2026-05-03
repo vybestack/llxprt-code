@@ -494,14 +494,17 @@ export async function initInteractiveScheduler(
     throw error;
   }
 
-  const schedulerDispose = options?.schedulerFactory
-    ? typeof scheduler.dispose === 'function'
-      ? async () => scheduler.dispose?.()
-      : async () => {}
-    : async () =>
-        ctx.schedulerConfig.disposeScheduler(
-          ctx.schedulerConfig.getSessionId(),
-        );
+  let schedulerDispose: () => Promise<void>;
+  if (options?.schedulerFactory) {
+    if (typeof scheduler.dispose === 'function') {
+      schedulerDispose = async () => scheduler.dispose?.();
+    } else {
+      schedulerDispose = async () => {};
+    }
+  } else {
+    schedulerDispose = async () =>
+      ctx.schedulerConfig.disposeScheduler(ctx.schedulerConfig.getSessionId());
+  }
 
   return {
     scheduler: {

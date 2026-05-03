@@ -109,57 +109,67 @@ export async function estimatePendingTokens(
   try {
     return await historyService.estimateTokensForContents(contents, model);
   } catch (error) {
-    logger.debug(
-      'Failed to estimate pending tokens with tokenizer, using fallback',
-      error,
-    );
+    logger.debug('Falling back to local token estimate', error);
+
     let fallback = 0;
     for (const content of contents) {
-      try {
-        const serialized = JSON.stringify(content);
-        fallback += estimateTextTokens(serialized);
-      } catch (stringifyError) {
-        logger.debug(
-          'Failed to stringify content for fallback token estimate',
-          stringifyError,
-        );
-        try {
-          const blockStrings = content.blocks
-            .map((block) => {
-              switch (block.type) {
-                case 'text':
-                  return block.text;
-                case 'tool_call':
-                  return JSON.stringify({
-                    name: block.name,
-                    parameters: block.parameters,
-                  });
-                case 'tool_response':
-                  return JSON.stringify({
-                    callId: block.callId,
-                    toolName: block.toolName,
-                    result: block.result,
-                    error: block.error,
-                  });
-                case 'thinking':
-                  return block.thought;
-                case 'code':
-                  return block.code;
-                case 'media':
-                  return block.caption ?? '';
-                default:
-                  return '';
-              }
-            })
-            .join('\n');
-          if (blockStrings) {
-            fallback += estimateTextTokens(blockStrings);
-          }
-        } catch (blockError) {
-          logger.debug('Failed to estimate tokens from blocks', blockError);
-        }
-      }
+      fallback += estimateFallbackContentTokens(content, logger);
     }
     return fallback;
   }
+}
+
+function estimateFallbackContentTokens(
+  content: IContent,
+  fallbackLogger: DebugLogger,
+): number {
+  try {
+    const serialized = JSON.stringify(content);
+    return estimateTextTokens(serialized);
+  } catch (stringifyError) {
+    fallbackLogger.debug(
+      'Failed to stringify content for fallback token estimate',
+      stringifyError,
+    );
+    return estimateBlockTokens(content);
+  }
+}
+
+function estimateBlockTokens(content: IContent): number {
+  try {
+    const blockStrings = content.blocks
+      .map((block) => {
+        switch (block.type) {
+          case 'text':
+            return block.text;
+          case 'tool_call':
+            return JSON.stringify({
+              name: block.name,
+              parameters: block.parameters,
+            });
+          case 'tool_response':
+            return JSON.stringify({
+              callId: block.callId,
+              toolName: block.toolName,
+              result: block.result,
+              error: block.error,
+            });
+          case 'thinking':
+            return block.thought;
+          case 'code':
+            return block.code;
+          case 'media':
+            return block.caption ?? '';
+          default:
+            return '';
+        }
+      })
+      .join('\n');
+    if (blockStrings) {
+      return estimateTextTokens(blockStrings);
+    }
+  } catch (blockError) {
+    logger.debug('Failed to estimate tokens from blocks', blockError);
+  }
+  return 0;
 }

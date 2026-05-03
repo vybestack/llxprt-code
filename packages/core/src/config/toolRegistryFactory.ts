@@ -70,6 +70,20 @@ export interface ToolRegistryHost {
   getAsyncTaskManager(): AsyncTaskManager | undefined;
 }
 
+function getTaskToolMissingReason(
+  profileManager: ProfileManager | undefined,
+  subagentManager: SubagentManager | undefined,
+): string {
+  if (profileManager === undefined && subagentManager === undefined) {
+    return 'requires profile manager and subagent manager';
+  }
+
+  if (profileManager === undefined) {
+    return 'requires profile manager';
+  }
+  return 'requires subagent manager';
+}
+
 /**
  * Creates and populates a ToolRegistry with all core tools.
  *
@@ -228,14 +242,7 @@ export async function createToolRegistry(
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries; Name is static but fallback preserves defensive semantics.
       displayName: TaskTool.Name || 'TaskTool',
       isRegistered: false,
-      reason:
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
-        profileManager === undefined && subagentManager === undefined
-          ? 'requires profile manager and subagent manager'
-          : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
-            profileManager === undefined
-            ? 'requires profile manager'
-            : 'requires subagent manager',
+      reason: getTaskToolMissingReason(profileManager, subagentManager),
       args: [config, taskToolArgs],
     };
     allPotentialTools.push(taskToolRecord);

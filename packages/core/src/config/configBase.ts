@@ -229,15 +229,16 @@ export abstract class ConfigBase extends ConfigBaseCore {
     }
 
     // Clear provider caches when auth settings or base-url change
-    if (
-      key === 'auth-key' ||
-      key === 'auth-keyfile' ||
-      key === 'base-url' ||
-      key === 'socket-timeout' ||
-      key === 'socket-keepalive' ||
-      key === 'socket-nodelay' ||
-      key === 'streaming'
-    ) {
+    const cacheClearKeys = new Set([
+      'auth-key',
+      'auth-keyfile',
+      'base-url',
+      'socket-timeout',
+      'socket-keepalive',
+      'socket-nodelay',
+      'streaming',
+    ]);
+    if (cacheClearKeys.has(key)) {
       if (!this.providerManager) {
         return;
       }

@@ -22,6 +22,7 @@ import { DebugLogger } from '../debug/index.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type {
   AgentRuntimeContext,
+  AgentRuntimeProviderAdapter,
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
@@ -252,32 +253,48 @@ export class GeminiChat {
     }
   }
 
+  private lookupProviderByName(
+    adapter: AgentRuntimeProviderAdapter,
+    desiredProviderName: string,
+    contextLabel: string,
+  ): IProvider | undefined {
+    if (typeof adapter.getProviderByName !== 'function') {
+      return undefined;
+    }
+    try {
+      const candidate = adapter.getProviderByName(desiredProviderName);
+      if (candidate !== undefined) {
+        const active = this.getActiveProvider();
+        if (active !== undefined && active.name !== desiredProviderName) {
+          this.logger.debug(
+            () =>
+              `[GeminiChat] selected provider '${desiredProviderName}' via getProviderByName (active remains '${active.name}') [${contextLabel}]`,
+          );
+        }
+        return candidate;
+      }
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `[GeminiChat] provider lookup skipped (${contextLabel}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return undefined;
+  }
+
   resolveProviderForRuntime(contextLabel: string): IProvider {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
     const desiredProviderName = this.runtimeState.provider?.trim();
     const adapter = this.runtimeContext.provider;
 
     if (desiredProviderName) {
-      try {
-        const candidate =
-          typeof adapter.getProviderByName === 'function'
-            ? adapter.getProviderByName(desiredProviderName)
-            : undefined;
-        if (candidate) {
-          const active = this.getActiveProvider();
-          if (active && active.name !== desiredProviderName) {
-            this.logger.debug(
-              () =>
-                `[GeminiChat] selected provider '${desiredProviderName}' via getProviderByName (active remains '${active.name}') [${contextLabel}]`,
-            );
-          }
-          return candidate;
-        }
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `[GeminiChat] provider lookup skipped (${contextLabel}): ${error instanceof Error ? error.message : String(error)}`,
-        );
+      const candidate = this.lookupProviderByName(
+        adapter,
+        desiredProviderName,
+        contextLabel,
+      );
+      if (candidate) {
+        return candidate;
       }
     }
 

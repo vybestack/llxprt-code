@@ -440,6 +440,65 @@ export class MessageStreamOrchestrator {
     };
   }
 
+  private async *_handle413Error(
+    ctx: StreamContext,
+    deferredEvents: ServerGeminiStreamEvent[],
+    state: {
+      hadToolCallsThisTurn: boolean;
+      todoPauseSeen: boolean;
+      hadThinking: boolean;
+      hadContent: boolean;
+    },
+    initialRequest: PartListUnion,
+    signal: AbortSignal,
+    boundedTurns: number,
+    sendMessageStream: MessageStreamDeps['sendMessageStream'],
+  ): AsyncGenerator<ServerGeminiStreamEvent, IterationResult | undefined> {
+    if (ctx.is413Retry) {
+      this.deps.logger.warn(
+        () =>
+          `[stream:orchestrator] received repeated 413 after retry; ending iteration`,
+        {
+          deferredEventCount: deferredEvents.length,
+          hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+        },
+      );
+      for (const d of deferredEvents) yield d;
+      await this._fireAfterHook(ctx);
+      return this._earlyIterResult(state.hadToolCallsThisTurn, {
+        ...state,
+        deferredEvents,
+      });
+    }
+    const toolNames = this._extractToolNamesFromRequest(initialRequest);
+    const toolList =
+      toolNames.length > 0
+        ? ` The tools involved were: ${toolNames.join(', ')}.`
+        : '';
+    const message = `System: The previous tool calls produced a response that was too large (HTTP 413).${toolList} Please retry with fewer or more focused queries.`;
+    this.deps.logger.warn(
+      () => `[stream:orchestrator] retrying after 413 tool-response overflow`,
+      {
+        toolNames,
+        deferredEventCount: deferredEvents.length,
+        hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+      },
+    );
+    yield* sendMessageStream(
+      [{ text: message }],
+      signal,
+      ctx.prompt_id,
+      boundedTurns - 1,
+      false,
+      true,
+    );
+    await this._fireAfterHook(ctx);
+    return this._earlyIterResult(state.hadToolCallsThisTurn, {
+      ...state,
+      deferredEvents,
+    });
+  }
+
   private async *_handleTerminalEvent(
     event: ServerGeminiStreamEvent,
     signal: AbortSignal,
@@ -476,50 +535,16 @@ export class MessageStreamOrchestrator {
       );
 
       if (errorStatus === 413 && config.getContinueOnFailedApiCall()) {
-        if (ctx.is413Retry) {
-          this.deps.logger.warn(
-            () =>
-              `[stream:orchestrator] received repeated 413 after retry; ending iteration`,
-            {
-              deferredEventCount: deferredEvents.length,
-              hadToolCallsThisTurn: state.hadToolCallsThisTurn,
-            },
-          );
-          for (const d of deferredEvents) yield d;
-          await this._fireAfterHook(ctx);
-          return this._earlyIterResult(state.hadToolCallsThisTurn, {
-            ...state,
-            deferredEvents,
-          });
-        }
-        const toolNames = this._extractToolNamesFromRequest(initialRequest);
-        const toolList =
-          toolNames.length > 0
-            ? ` The tools involved were: ${toolNames.join(', ')}.`
-            : '';
-        const message = `System: The previous tool calls produced a response that was too large (HTTP 413).${toolList} Please retry with fewer or more focused queries.`;
-        this.deps.logger.warn(
-          () =>
-            `[stream:orchestrator] retrying after 413 tool-response overflow`,
-          {
-            toolNames,
-            deferredEventCount: deferredEvents.length,
-            hadToolCallsThisTurn: state.hadToolCallsThisTurn,
-          },
-        );
-        yield* sendMessageStream(
-          [{ text: message }],
-          signal,
-          ctx.prompt_id,
-          boundedTurns - 1,
-          false,
-          true,
-        );
-        await this._fireAfterHook(ctx);
-        return this._earlyIterResult(state.hadToolCallsThisTurn, {
-          ...state,
+        const result = yield* this._handle413Error(
+          ctx,
           deferredEvents,
-        });
+          state,
+          initialRequest,
+          signal,
+          boundedTurns,
+          sendMessageStream,
+        );
+        if (result) return result;
       }
 
       this.deps.logger.warn(

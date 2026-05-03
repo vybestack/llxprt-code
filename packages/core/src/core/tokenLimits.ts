@@ -9,6 +9,25 @@ type TokenCount = number;
 
 export const DEFAULT_TOKEN_LIMIT = 1_048_576;
 
+function isOpenAi128kModel(modelWithoutPrefix: string): boolean {
+  if (modelWithoutPrefix.startsWith('o4-mini')) {
+    return true;
+  }
+  if (modelWithoutPrefix.startsWith('gpt-4o-mini')) {
+    return true;
+  }
+  if (modelWithoutPrefix.startsWith('gpt-4o-realtime')) {
+    return true;
+  }
+  if (modelWithoutPrefix.startsWith('gpt-4o')) {
+    return true;
+  }
+  if (modelWithoutPrefix.startsWith('gpt-4-turbo')) {
+    return true;
+  }
+  return false;
+}
+
 export function tokenLimit(
   model: Model,
   userContextLimit?: number,
@@ -40,13 +59,7 @@ export function tokenLimit(
   ) {
     return 200_000;
   }
-  if (
-    modelWithoutPrefix.startsWith('o4-mini') ||
-    modelWithoutPrefix.startsWith('gpt-4o-mini') ||
-    modelWithoutPrefix.startsWith('gpt-4o-realtime') ||
-    modelWithoutPrefix.startsWith('gpt-4o') ||
-    modelWithoutPrefix.startsWith('gpt-4-turbo')
-  ) {
+  if (isOpenAi128kModel(modelWithoutPrefix)) {
     return 128_000;
   }
   if (modelWithoutPrefix.startsWith('gpt-3.5-turbo')) {

@@ -53,6 +53,33 @@ const moduleDebugLogger = DebugLogger.getLogger(
   'llxprt:core:hooks:eventHandler',
 );
 
+function extractPayload(rawMessage: unknown): Record<string, unknown> | null {
+  if (
+    rawMessage !== null &&
+    typeof rawMessage === 'object' &&
+    'payload' in rawMessage
+  ) {
+    const payload = (rawMessage as { payload: unknown }).payload;
+    if (payload !== null && typeof payload === 'object') {
+      return payload as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function extractCorrelationIdFromPayload(
+  payload: Record<string, unknown>,
+): string | null {
+  if (
+    'correlationId' in payload &&
+    typeof payload.correlationId === 'string' &&
+    payload.correlationId.length > 0
+  ) {
+    return payload.correlationId;
+  }
+  return null;
+}
+
 /**
  * Metadata for failure envelopes
  * @plan PLAN-20250218-HOOKSYSTEM.P03
@@ -905,22 +932,11 @@ export class HookEventHandler {
    */
   private extractCorrelationId = (rawMessage: unknown): string => {
     // Lines 261-263: IF rawMessage.payload.correlationId is non-empty string → return it
-    if (
-      rawMessage !== null &&
-      typeof rawMessage === 'object' &&
-      'payload' in rawMessage
-    ) {
-      const payload = (rawMessage as { payload: unknown }).payload;
-      if (
-        payload !== null &&
-        typeof payload === 'object' &&
-        'correlationId' in payload &&
-        typeof (payload as Record<string, unknown>).correlationId ===
-          'string' &&
-        ((payload as Record<string, unknown>).correlationId as string).length >
-          0
-      ) {
-        return (payload as Record<string, unknown>).correlationId as string;
+    const payload = extractPayload(rawMessage);
+    if (payload !== null) {
+      const correlationId = extractCorrelationIdFromPayload(payload);
+      if (correlationId !== null) {
+        return correlationId;
       }
     }
     // Line 264: RETURN crypto.randomUUID()

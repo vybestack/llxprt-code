@@ -96,6 +96,40 @@ interface PKCEParams {
 const REDIRECT_PATH = '/oauth/callback';
 const HTTP_OK = 200;
 
+async function applyWWWAuthenticateDiscovery(
+  wwwAuthenticate: string,
+  mcpServerUrl: string,
+  config: MCPOAuthConfig,
+): Promise<MCPOAuthConfig> {
+  const discoveredConfig = await OAuthUtils.discoverOAuthFromWWWAuthenticate(
+    wwwAuthenticate,
+    mcpServerUrl,
+  );
+  if (!discoveredConfig) {
+    return config;
+  }
+  return {
+    ...config,
+    authorizationUrl: discoveredConfig.authorizationUrl,
+    tokenUrl: discoveredConfig.tokenUrl,
+    scopes: config.scopes ?? discoveredConfig.scopes ?? [],
+    clientId: config.clientId,
+    clientSecret: config.clientSecret,
+  };
+}
+
+async function applyAuthenticateHeaderDiscovery(
+  response: Response,
+  mcpServerUrl: string,
+  config: MCPOAuthConfig,
+): Promise<MCPOAuthConfig> {
+  const wwwAuthenticate = response.headers.get('www-authenticate');
+  if (wwwAuthenticate === null || wwwAuthenticate === '') {
+    return config;
+  }
+  return applyWWWAuthenticateDiscovery(wwwAuthenticate, mcpServerUrl, config);
+}
+
 /**
  * Provider for handling OAuth authentication for MCP servers.
  */
@@ -780,27 +814,11 @@ export class MCPOAuthProvider {
         });
 
         if (response.status === 401 || response.status === 307) {
-          const wwwAuthenticate = response.headers.get('www-authenticate');
-
-          if (wwwAuthenticate) {
-            const discoveredConfig =
-              await OAuthUtils.discoverOAuthFromWWWAuthenticate(
-                wwwAuthenticate,
-                mcpServerUrl,
-              );
-            if (discoveredConfig) {
-              // Merge discovered config with existing config, preserving clientId and clientSecret
-              config = {
-                ...config,
-                authorizationUrl: discoveredConfig.authorizationUrl,
-                tokenUrl: discoveredConfig.tokenUrl,
-                scopes: config.scopes ?? discoveredConfig.scopes ?? [],
-                // Preserve existing client credentials
-                clientId: config.clientId,
-                clientSecret: config.clientSecret,
-              };
-            }
-          }
+          config = await applyAuthenticateHeaderDiscovery(
+            response,
+            mcpServerUrl,
+            config,
+          );
         }
       } catch (error) {
         // Re-throw security validation errors

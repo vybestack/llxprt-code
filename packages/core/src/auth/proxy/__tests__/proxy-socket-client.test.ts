@@ -294,6 +294,35 @@ describe('ProxySocketClient', () => {
    * @scenario Multiple concurrent requests correlate responses by ID
    */
   it('correlates concurrent responses by request ID', async () => {
+    const handleServerFrame = (
+      msg: Record<string, unknown>,
+      socket: net.Socket,
+      pendingResponses: Array<{ id: string; op: string }>,
+    ): void => {
+      if (msg.op === 'handshake') {
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+        return;
+      }
+      pendingResponses.push({
+        id: msg.id as string,
+        op: msg.op as string,
+      });
+
+      // Respond in reverse order to test correlation
+      if (pendingResponses.length === 3) {
+        const reversed = pendingResponses.toReversed();
+        for (const pending of reversed) {
+          socket.write(
+            encodeFrame({
+              ok: true,
+              id: pending.id,
+              data: { echo: pending.op },
+            }),
+          );
+        }
+      }
+    };
+
     server = net.createServer((socket) => {
       const decoder = new FrameDecoder();
       const pendingResponses: Array<{ id: string; op: string }> = [];
@@ -301,28 +330,7 @@ describe('ProxySocketClient', () => {
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
         for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          } else {
-            pendingResponses.push({
-              id: msg.id as string,
-              op: msg.op as string,
-            });
-
-            // Respond in reverse order to test correlation
-            if (pendingResponses.length === 3) {
-              for (const pending of pendingResponses.reverse()) {
-                socket.write(
-                  encodeFrame({
-                    ok: true,
-                    id: pending.id,
-                    data: { echo: pending.op },
-                  }),
-                );
-              }
-            }
-          }
+          handleServerFrame(frame, socket, pendingResponses);
         }
       });
     });

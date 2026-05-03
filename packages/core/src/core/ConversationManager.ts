@@ -30,6 +30,15 @@ import {
   validateHistory,
 } from './MessageConverter.js';
 
+function appendTextContentParts(lastContent: Content, content: Content): void {
+  const lastParts = lastContent.parts ?? [];
+  const contentParts = content.parts ?? [];
+  lastParts[0].text += contentParts[0].text ?? '';
+  if (contentParts.length > 1) {
+    lastParts.push(...contentParts.slice(1));
+  }
+}
+
 /**
  * ConversationManager handles conversation history management for GeminiChat.
  * It provides methods for recording turns, converting Content to IContent,
@@ -314,10 +323,7 @@ export class ConversationManager {
         const lastContent =
           consolidatedOutputContents[consolidatedOutputContents.length - 1];
         if (hasTextContent(lastContent) && hasTextContent(content)) {
-          lastContent.parts[0].text += content.parts[0].text || '';
-          if (content.parts.length > 1) {
-            lastContent.parts.push(...content.parts.slice(1));
-          }
+          appendTextContentParts(lastContent, content);
         } else {
           consolidatedOutputContents.push(content);
         }
@@ -355,7 +361,7 @@ export class ConversationManager {
       }
 
       // Add usage metadata if available
-      if (usageMetadata) {
+      if (usageMetadata !== undefined && usageMetadata !== null) {
         iContent.metadata = {
           ...iContent.metadata,
           usage: usageMetadata,
@@ -373,7 +379,7 @@ export class ConversationManager {
         blocks: thoughtBlocks,
         metadata: { turnId: turnKey },
       };
-      if (usageMetadata) {
+      if (usageMetadata !== undefined && usageMetadata !== null) {
         iContent.metadata = {
           ...iContent.metadata,
           usage: usageMetadata,

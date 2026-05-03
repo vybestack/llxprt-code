@@ -36,6 +36,20 @@ const ERROR_MESSAGES = {
     "Subagent filename mismatch: expected '{expected}', found '{actual}'",
 };
 
+function validateSettingsSubagent(
+  name: string,
+  def: { profile: string; systemPrompt: string },
+  validNameRegex: RegExp,
+): string | null {
+  if (!validNameRegex.test(name)) {
+    return `Settings subagent '${name}' has invalid name format (must be alphanumeric, hyphens, and underscores only). Skipping.`;
+  }
+  if (!def.profile || !def.systemPrompt) {
+    return `Settings subagent '${name}' is missing required fields (profile and systemPrompt). Skipping.`;
+  }
+  return null;
+}
+
 /**
  * Manages subagent configuration files in ~/.llxprt/subagents/
  *
@@ -121,19 +135,13 @@ export class SubagentManager {
     const sentinelTimestamp = '1970-01-01T00:00:00.000Z';
 
     for (const [name, def] of Object.entries(definitions)) {
-      // Validate name format
-      if (!validNameRegex.test(name)) {
-        console.warn(
-          `Settings subagent '${name}' has invalid name format (must be alphanumeric, hyphens, and underscores only). Skipping.`,
-        );
-        continue;
-      }
-
-      // Validate required fields
-      if (!def.profile || !def.systemPrompt) {
-        console.warn(
-          `Settings subagent '${name}' is missing required fields (profile and systemPrompt). Skipping.`,
-        );
+      const validationError = validateSettingsSubagent(
+        name,
+        def,
+        validNameRegex,
+      );
+      if (validationError !== null) {
+        console.warn(validationError);
         continue;
       }
 

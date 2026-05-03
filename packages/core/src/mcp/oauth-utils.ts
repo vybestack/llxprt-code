@@ -52,6 +52,25 @@ export interface OAuthProtectedResourceMetadata {
 
 export const FIVE_MIN_BUFFER_MS = 5 * 60 * 1000;
 
+async function tryAuthServerDiscovery(
+  authServerUrl: string,
+): Promise<MCPOAuthConfig | null> {
+  const authServerMetadata =
+    await OAuthUtils.discoverAuthorizationServerMetadata(authServerUrl);
+
+  if (authServerMetadata) {
+    const config = OAuthUtils.metadataToOAuthConfig(authServerMetadata);
+    if (authServerMetadata.registration_endpoint) {
+      debugLogger.log(
+        'Dynamic client registration is supported at:',
+        authServerMetadata.registration_endpoint,
+      );
+    }
+    return config;
+  }
+  return null;
+}
+
 /**
  * Utility class for common OAuth operations.
  */
@@ -273,17 +292,8 @@ export class OAuthUtils {
       ) {
         // Use the first authorization server
         const authServerUrl = resourceMetadata.authorization_servers[0];
-        const authServerMetadata =
-          await this.discoverAuthorizationServerMetadata(authServerUrl);
-
-        if (authServerMetadata) {
-          const config = this.metadataToOAuthConfig(authServerMetadata);
-          if (authServerMetadata.registration_endpoint) {
-            debugLogger.log(
-              'Dynamic client registration is supported at:',
-              authServerMetadata.registration_endpoint,
-            );
-          }
+        const config = await tryAuthServerDiscovery(authServerUrl);
+        if (config) {
           return config;
         }
       }

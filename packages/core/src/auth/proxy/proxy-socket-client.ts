@@ -203,18 +203,23 @@ export class ProxySocketClient {
           continue;
         }
 
-        const id = frame.id as string | undefined;
-        if (id) {
-          const pending = this.pendingRequests.get(id);
-          if (pending) {
-            clearTimeout(pending.timer);
-            this.pendingRequests.delete(id);
-            pending.resolve(frame as unknown as ProxyResponse);
-          }
-        }
+        this.resolvePendingRequest(frame);
       }
     } catch {
       this.destroy('Frame decode error');
+    }
+  }
+
+  private resolvePendingRequest(frame: Record<string, unknown>): void {
+    const id = frame.id as string | undefined;
+    if (!id) {
+      return;
+    }
+    const pending = this.pendingRequests.get(id);
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.pendingRequests.delete(id);
+      pending.resolve(frame as unknown as ProxyResponse);
     }
   }
 

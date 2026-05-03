@@ -153,14 +153,32 @@ const createCombinedCallbacks = (
 const shouldRefreshCallbacks = (
   entryCallbacks: SchedulerCallbacks | undefined,
   callbacks: SchedulerCallbacks,
-): boolean =>
-  !entryCallbacks ||
-  entryCallbacks.outputUpdateHandler !== callbacks.outputUpdateHandler ||
-  entryCallbacks.onAllToolCallsComplete !== callbacks.onAllToolCallsComplete ||
-  entryCallbacks.onToolCallsUpdate !== callbacks.onToolCallsUpdate ||
-  entryCallbacks.getPreferredEditor !== callbacks.getPreferredEditor ||
-  entryCallbacks.onEditorClose !== callbacks.onEditorClose ||
-  entryCallbacks.onEditorOpen !== callbacks.onEditorOpen;
+): boolean => {
+  if (!entryCallbacks) {
+    return true;
+  }
+  if (entryCallbacks.outputUpdateHandler !== callbacks.outputUpdateHandler) {
+    return true;
+  }
+  if (
+    entryCallbacks.onAllToolCallsComplete !== callbacks.onAllToolCallsComplete
+  ) {
+    return true;
+  }
+  if (entryCallbacks.onToolCallsUpdate !== callbacks.onToolCallsUpdate) {
+    return true;
+  }
+  if (entryCallbacks.getPreferredEditor !== callbacks.getPreferredEditor) {
+    return true;
+  }
+  if (entryCallbacks.onEditorClose !== callbacks.onEditorClose) {
+    return true;
+  }
+  if (entryCallbacks.onEditorOpen !== callbacks.onEditorOpen) {
+    return true;
+  }
+  return false;
+};
 
 /**
  * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05

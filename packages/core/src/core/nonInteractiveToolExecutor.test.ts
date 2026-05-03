@@ -419,9 +419,15 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     const messageBus =
       options?.messageBus ?? new MessageBus(policyEngine, false);
     const includePolicyEngine = options?.includePolicyEngine ?? true;
-    const includeMessageBus = options?.includeMessageBus ?? true;
     const policyEngineReturnsUndefined =
       options?.policyEngineReturnsUndefined ?? false;
+
+    const getPolicyEngineFunc = (): PolicyEngine => {
+      if (includePolicyEngine && policyEngineReturnsUndefined) {
+        return undefined as unknown as PolicyEngine;
+      }
+      return policyEngine;
+    };
 
     // Create base config first, then add scheduler methods that reference it
     const baseConfig = {
@@ -431,12 +437,8 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       getExcludeTools: () => [],
       getEphemeralSettings: () => ephemerals,
       getEphemeralSetting: (key: string) => ephemerals[key],
-      getPolicyEngine: includePolicyEngine
-        ? policyEngineReturnsUndefined
-          ? () => undefined as unknown as PolicyEngine
-          : () => policyEngine
-        : () => policyEngine,
-      getMessageBus: includeMessageBus ? () => messageBus : () => messageBus,
+      getPolicyEngine: getPolicyEngineFunc,
+      getMessageBus: () => messageBus,
       getApprovalMode: () => options?.approvalMode ?? ApprovalMode.DEFAULT,
       getAllowedTools: () => options?.allowedTools,
     };

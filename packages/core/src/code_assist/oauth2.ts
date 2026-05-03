@@ -57,6 +57,40 @@ const SIGN_IN_FAILURE_URL =
  * as well as a promise that will resolve when the credentials have
  * been refreshed (or which throws error when refreshing credentials failed).
  */
+
+async function handleAuthCodeExchange(
+  client: OAuth2Client,
+  code: string,
+  redirectUri: string,
+  res: http.ServerResponse,
+  resolve: () => void,
+  reject: (error: Error) => void,
+): Promise<void> {
+  try {
+    const success = await authWithCode(client, code, undefined, redirectUri);
+
+    if (!success) {
+      throw new FatalAuthenticationError(
+        'Failed to exchange authorization code for tokens.',
+      );
+    }
+
+    res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_SUCCESS_URL });
+    res.end();
+    resolve();
+  } catch (error) {
+    res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
+    res.end();
+    reject(
+      error instanceof FatalAuthenticationError
+        ? error
+        : new FatalAuthenticationError(
+            `Failed to exchange authorization code for tokens: ${getErrorMessage(error)}`,
+          ),
+    );
+  }
+}
+
 export interface OauthWebLogin {
   authUrl: string;
   loginCompletePromise: Promise<void>;
@@ -456,34 +490,14 @@ async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
             return;
           }
           if (qs.get('code')) {
-            try {
-              const success = await authWithCode(
-                client,
-                qs.get('code')!,
-                undefined,
-                redirectUri,
-              );
-
-              if (!success) {
-                throw new FatalAuthenticationError(
-                  'Failed to exchange authorization code for tokens.',
-                );
-              }
-
-              res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_SUCCESS_URL });
-              res.end();
-              resolve();
-            } catch (error) {
-              res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
-              res.end();
-              reject(
-                error instanceof FatalAuthenticationError
-                  ? error
-                  : new FatalAuthenticationError(
-                      `Failed to exchange authorization code for tokens: ${getErrorMessage(error)}`,
-                    ),
-              );
-            }
+            await handleAuthCodeExchange(
+              client,
+              qs.get('code')!,
+              redirectUri,
+              res,
+              resolve,
+              reject,
+            );
           } else {
             reject(
               new FatalAuthenticationError(

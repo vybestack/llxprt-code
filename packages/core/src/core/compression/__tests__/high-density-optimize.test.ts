@@ -40,6 +40,26 @@ function nextCallId(): string {
   return `call-${++callIdCounter}`;
 }
 
+function countUnprunedAtIndex(
+  index: number,
+  prunedIndices: Set<number>,
+  result: ReturnType<HighDensityStrategy['optimize']>,
+): number {
+  if (!prunedIndices.has(index)) {
+    return 1;
+  }
+  if (!result.replacements.has(index)) {
+    return 0;
+  }
+  // Check if replacement still has non-pruned result
+  const replacement = result.replacements.get(index)!;
+  const responseBlocks = replacement.blocks.filter(
+    (b): b is ToolResponseBlock => b.type === 'tool_response',
+  );
+  const hasUnpruned = responseBlocks.some((b) => b.result !== PRUNED_POINTER);
+  return hasUnpruned ? 1 : 0;
+}
+
 function resetCallIds(): void {
   callIdCounter = 0;
 }
@@ -1511,23 +1531,14 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
           ]);
           let unprunedToolResponses = 0;
           for (let i = 0; i < history.length; i++) {
-            if (history[i].speaker === 'tool') {
-              if (!prunedIndices.has(i)) {
-                unprunedToolResponses++;
-              } else if (result.replacements.has(i)) {
-                // Check if replacement still has non-pruned result
-                const replacement = result.replacements.get(i)!;
-                const responseBlocks = replacement.blocks.filter(
-                  (b): b is ToolResponseBlock => b.type === 'tool_response',
-                );
-                const hasUnpruned = responseBlocks.some(
-                  (b) => b.result !== PRUNED_POINTER,
-                );
-                if (hasUnpruned) {
-                  unprunedToolResponses++;
-                }
-              }
+            if (history[i].speaker !== 'tool') {
+              continue;
             }
+            unprunedToolResponses += countUnprunedAtIndex(
+              i,
+              prunedIndices,
+              result,
+            );
           }
           const expectedPreserved = Math.min(retention, totalResults);
           expect(unprunedToolResponses).toBeGreaterThanOrEqual(
