@@ -154,10 +154,13 @@ export const useGeminiStream = (
   const thinkingBlocksRef = useRef<ThinkingBlock[]>([]);
 
   const emojiFilter = useMemo(() => {
-    const emojiFilterMode = config.getEphemeralSetting('emojifilter');
+    const getEphemeralSetting = config.getEphemeralSetting as
+      | ((key: string) => unknown)
+      | undefined;
+    const rawMode = getEphemeralSetting?.('emojifilter');
     const mode: EmojiFilterMode =
-      typeof emojiFilterMode === 'string' && emojiFilterMode.length > 0
-        ? (emojiFilterMode as EmojiFilterMode)
+      typeof rawMode === 'string' && rawMode.length > 0
+        ? (rawMode as EmojiFilterMode)
         : 'auto';
 
     return mode !== 'allowed' ? new EmojiFilter({ mode }) : undefined;
@@ -248,10 +251,13 @@ export const useGeminiStream = (
     [addItem, pendingHistoryItemRef, sanitizeContent, setPendingHistoryItem],
   );
   const logger = useLogger(storage);
-  const gitService = useMemo(
-    () => new GitService(config.getProjectRoot(), storage),
-    [config, storage],
-  );
+  const gitService = useMemo(() => {
+    const projectRoot = config.getProjectRoot();
+    if (projectRoot.length === 0) {
+      return undefined;
+    }
+    return new GitService(projectRoot, storage);
+  }, [config, storage]);
 
   const [
     toolCalls,

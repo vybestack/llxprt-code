@@ -292,8 +292,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockUseReactToolScheduler.mockReturnValue([
       [],
       mockScheduleToolCalls,
-      mockCancelAllToolCalls,
       mockMarkToolsAsSubmitted,
+      mockCancelAllToolCalls,
     ]);
 
     mockStartChat.mockClear().mockResolvedValue({
@@ -325,8 +325,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockUseReactToolScheduler.mockImplementation(() => [
       currentToolCalls,
       mockScheduleToolCalls,
-      mockCancelAllToolCalls,
       mockMarkToolsAsSubmitted,
+      mockCancelAllToolCalls,
     ]);
 
     const client = geminiClient ?? mockConfig.getGeminiClient();

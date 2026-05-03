@@ -148,7 +148,7 @@ export async function activate(context: vscode.ExtensionContext) {
     detectIdeFromEnv().name,
   );
 
-  void checkForUpdates(context, log, isManagedExtensionSurface);
+  await checkForUpdates(context, log, isManagedExtensionSurface);
 
   const diffContentProvider = new DiffContentProvider();
   const diffManager = new DiffManager(log, diffContentProvider);

@@ -68,6 +68,12 @@ describe('ReadManyFilesTool', () => {
   let tempDirOutsideRoot: string;
   let mockReadFileFn: Mock;
 
+  const createFileInTempRoot = (filePath: string, content = '') => {
+    const fullPath = path.join(tempRootDir, filePath);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, content);
+  };
+
   beforeEach(async () => {
     tempRootDir = fs.realpathSync(
       fs.mkdtempSync(path.join(os.tmpdir(), 'read-many-files-root-')),
@@ -220,11 +226,6 @@ describe('ReadManyFilesTool', () => {
   });
 
   describe('execute', () => {
-    const createFileInTempRoot = (filePath: string, content = '') => {
-      const fullPath = path.join(tempRootDir, filePath);
-      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-      fs.writeFileSync(fullPath, content);
-    };
     const createBinaryFile = (filePath: string, data: Uint8Array) => {
       const fullPath = path.join(tempRootDir, filePath);
       fs.mkdirSync(path.dirname(fullPath), { recursive: true });
