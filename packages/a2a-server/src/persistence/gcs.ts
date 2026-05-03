@@ -106,127 +106,158 @@ export class GCSTaskStore implements TaskStore {
     const metadataObjectPath = this.getObjectPath(taskId, 'metadata');
     const workspaceObjectPath = this.getObjectPath(taskId, 'workspace');
 
-    const dataToStore = task.metadata;
-
     try {
-      const jsonString = JSON.stringify(dataToStore);
-      const compressedMetadata = gzipSync(Buffer.from(jsonString));
-      const metadataFile = this.storage
-        .bucket(this.bucketName)
-        .file(metadataObjectPath);
-      await metadataFile.save(compressedMetadata, {
-        contentType: 'application/gzip',
-      });
-      logger.info(
-        `Task ${taskId} metadata saved to GCS: gs://${this.bucketName}/${metadataObjectPath}`,
-      );
-
-      if (await fse.pathExists(workDir)) {
-        const entries = await fsPromises.readdir(workDir);
-        if (entries.length > 0) {
-          const tmpArchiveFile = join(tmpdir(), getTmpArchiveFilename(taskId));
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            await tar.c(
-              {
-                gzip: true,
-                file: tmpArchiveFile,
-                cwd: workDir,
-                portable: true,
-              },
-              entries,
-            );
-
-            if (!(await fse.pathExists(tmpArchiveFile))) {
-              throw new Error(
-                `tar.c command failed to create ${tmpArchiveFile}`,
-              );
-            }
-
-            const workspaceFile = this.storage
-              .bucket(this.bucketName)
-              .file(workspaceObjectPath);
-            const sourceStream = createReadStream(tmpArchiveFile);
-            const destStream = workspaceFile.createWriteStream({
-              contentType: 'application/gzip',
-              resumable: true,
-            });
-
-            await new Promise<void>((resolve, reject) => {
-              sourceStream.on('error', (err) => {
-                logger.error(
-                  `Error in source stream for ${tmpArchiveFile}:`,
-                  err,
-                );
-                // Attempt to close destStream if source fails
-                if (!destStream.destroyed) {
-                  destStream.destroy(err);
-                }
-                reject(err);
-              });
-
-              destStream.on('error', (err) => {
-                logger.error(
-                  `Error in GCS dest stream for ${workspaceObjectPath}:`,
-                  err,
-                );
-                reject(err);
-              });
-
-              destStream.on('finish', () => {
-                logger.info(
-                  `GCS destStream finished for ${workspaceObjectPath}`,
-                );
-                resolve();
-              });
-
-              logger.info(
-                `Piping ${tmpArchiveFile} to GCS object ${workspaceObjectPath}`,
-              );
-              sourceStream.pipe(destStream);
-            });
-            logger.info(
-              `Task ${taskId} workspace saved to GCS: gs://${this.bucketName}/${workspaceObjectPath}`,
-            );
-          } catch (error) {
-            logger.error(
-              `Error during workspace save process for ${taskId}:`,
-              error,
-            );
-            throw error;
-          } finally {
-            logger.info(`Cleaning up temporary file: ${tmpArchiveFile}`);
-            try {
-              if (await fse.pathExists(tmpArchiveFile)) {
-                await fse.remove(tmpArchiveFile);
-                logger.info(
-                  `Successfully removed temporary file: ${tmpArchiveFile}`,
-                );
-              } else {
-                logger.warn(
-                  `Temporary file not found for cleanup: ${tmpArchiveFile}`,
-                );
-              }
-            } catch (removeError) {
-              logger.error(
-                `Error removing temporary file ${tmpArchiveFile}:`,
-                removeError,
-              );
-            }
-          }
-        } else {
-          logger.info(
-            `Workspace directory ${workDir} is empty, skipping workspace save for task ${taskId}.`,
-          );
-        }
-      } else {
-        logger.info(
-          `Workspace directory ${workDir} not found, skipping workspace save for task ${taskId}.`,
-        );
-      }
+      await this.saveMetadata(taskId, task.metadata, metadataObjectPath);
+      await this.saveWorkspace(taskId, workDir, workspaceObjectPath);
     } catch (error) {
       logger.error(`Failed to save task ${taskId} to GCS:`, error);
       throw error;
+    }
+  }
+
+  private async saveMetadata(
+    taskId: string,
+    metadata: SDKTask['metadata'],
+    metadataObjectPath: string,
+  ): Promise<void> {
+    const jsonString = JSON.stringify(metadata);
+    const compressedMetadata = gzipSync(Buffer.from(jsonString));
+    const metadataFile = this.storage
+      .bucket(this.bucketName)
+      .file(metadataObjectPath);
+    await metadataFile.save(compressedMetadata, {
+      contentType: 'application/gzip',
+    });
+    logger.info(
+      `Task ${taskId} metadata saved to GCS: gs://${this.bucketName}/${metadataObjectPath}`,
+    );
+  }
+
+  private async saveWorkspace(
+    taskId: string,
+    workDir: string,
+    workspaceObjectPath: string,
+  ): Promise<void> {
+    if (!(await fse.pathExists(workDir))) {
+      logger.info(
+        `Workspace directory ${workDir} not found, skipping workspace save for task ${taskId}.`,
+      );
+      return;
+    }
+
+    const entries = await fsPromises.readdir(workDir);
+    if (entries.length === 0) {
+      logger.info(
+        `Workspace directory ${workDir} is empty, skipping workspace save for task ${taskId}.`,
+      );
+      return;
+    }
+
+    await this.archiveAndUploadWorkspace(
+      taskId,
+      workDir,
+      entries,
+      workspaceObjectPath,
+    );
+  }
+
+  private async archiveAndUploadWorkspace(
+    taskId: string,
+    workDir: string,
+    entries: string[],
+    workspaceObjectPath: string,
+  ): Promise<void> {
+    const tmpArchiveFile = join(tmpdir(), getTmpArchiveFilename(taskId));
+    try {
+      await this.createWorkspaceArchive(tmpArchiveFile, workDir, entries);
+      await this.uploadWorkspaceArchive(tmpArchiveFile, workspaceObjectPath);
+      logger.info(
+        `Task ${taskId} workspace saved to GCS: gs://${this.bucketName}/${workspaceObjectPath}`,
+      );
+    } catch (error) {
+      logger.error(`Error during workspace save process for ${taskId}:`, error);
+      throw error;
+    } finally {
+      await this.cleanupTemporaryArchive(tmpArchiveFile);
+    }
+  }
+
+  private async createWorkspaceArchive(
+    tmpArchiveFile: string,
+    workDir: string,
+    entries: string[],
+  ): Promise<void> {
+    await tar.c(
+      {
+        gzip: true,
+        file: tmpArchiveFile,
+        cwd: workDir,
+        portable: true,
+      },
+      entries,
+    );
+
+    if (!(await fse.pathExists(tmpArchiveFile))) {
+      throw new Error(`tar.c command failed to create ${tmpArchiveFile}`);
+    }
+  }
+
+  private async uploadWorkspaceArchive(
+    tmpArchiveFile: string,
+    workspaceObjectPath: string,
+  ): Promise<void> {
+    const workspaceFile = this.storage
+      .bucket(this.bucketName)
+      .file(workspaceObjectPath);
+    const sourceStream = createReadStream(tmpArchiveFile);
+    const destStream = workspaceFile.createWriteStream({
+      contentType: 'application/gzip',
+      resumable: true,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      sourceStream.on('error', (err) => {
+        logger.error(`Error in source stream for ${tmpArchiveFile}:`, err);
+        if (!destStream.destroyed) {
+          destStream.destroy(err);
+        }
+        reject(err);
+      });
+
+      destStream.on('error', (err) => {
+        logger.error(
+          `Error in GCS dest stream for ${workspaceObjectPath}:`,
+          err,
+        );
+        reject(err);
+      });
+
+      destStream.on('finish', () => {
+        logger.info(`GCS destStream finished for ${workspaceObjectPath}`);
+        resolve();
+      });
+
+      logger.info(
+        `Piping ${tmpArchiveFile} to GCS object ${workspaceObjectPath}`,
+      );
+      sourceStream.pipe(destStream);
+    });
+  }
+
+  private async cleanupTemporaryArchive(tmpArchiveFile: string): Promise<void> {
+    logger.info(`Cleaning up temporary file: ${tmpArchiveFile}`);
+    try {
+      if (await fse.pathExists(tmpArchiveFile)) {
+        await fse.remove(tmpArchiveFile);
+        logger.info(`Successfully removed temporary file: ${tmpArchiveFile}`);
+      } else {
+        logger.warn(`Temporary file not found for cleanup: ${tmpArchiveFile}`);
+      }
+    } catch (removeError) {
+      logger.error(
+        `Error removing temporary file ${tmpArchiveFile}:`,
+        removeError,
+      );
     }
   }
 
