@@ -132,11 +132,7 @@ export const PermissionsModifyTrustDialog: React.FC<
   useKeypress(
     (key) => {
       if (key.name === 'escape') {
-        if (showRestartPrompt) {
-          onExit();
-        } else {
-          onExit();
-        }
+        onExit();
       }
       if (key.name === 'r' && showRestartPrompt) {
         onRestart?.();

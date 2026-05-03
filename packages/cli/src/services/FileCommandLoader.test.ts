@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import * as glob from 'glob';
 import * as path from 'node:path';
 import type { Config } from '@vybestack/llxprt-code-core';

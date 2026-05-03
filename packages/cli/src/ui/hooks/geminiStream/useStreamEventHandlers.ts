@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 /**
  * Extracted stream event handler hooks from useGeminiStream.
  * Contains all event handler useCallbacks for stream event processing,

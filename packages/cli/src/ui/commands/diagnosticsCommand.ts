@@ -7,6 +7,8 @@
  * @requirement REQ-INT-001.3
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import type {
   SlashCommand,
   CommandContext,

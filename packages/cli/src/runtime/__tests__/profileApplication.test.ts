@@ -3,6 +3,8 @@
  * @requirement REQ-SP3-002
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
 import path from 'node:path';

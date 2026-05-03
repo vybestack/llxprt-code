@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 /**
  * Performs session resume - resolves session reference and swaps recording infrastructure.
  * Used by both browser-based resume and direct /continue command.

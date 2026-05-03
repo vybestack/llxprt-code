@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 import { DebugLogger, type Profile } from '@vybestack/llxprt-code-core';
 import {
   applyProfileSnapshot,

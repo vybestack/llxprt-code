@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: behavioral coverage boundary retained while larger decomposition continues. */
+
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Text } from 'ink';

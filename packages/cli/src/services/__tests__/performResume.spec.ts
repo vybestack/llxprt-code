@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P10
  * @requirement REQ-PR-001, REQ-PR-002, REQ-PR-003, REQ-SW-001, REQ-SW-002, REQ-SW-003, REQ-SW-004, REQ-SW-005, REQ-RC-008, REQ-RC-009, REQ-EH-004, REQ-RS-012

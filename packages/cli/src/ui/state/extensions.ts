@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import type { ExtensionUpdateInfo } from '../../config/extension.js';
 import { checkExhaustive } from '../../utils/checks.js';
 

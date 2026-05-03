@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P15
  * @requirement REQ-SP2-003

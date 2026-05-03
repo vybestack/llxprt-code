@@ -285,9 +285,7 @@ describe('ShellProcessor', () => {
     const prompt = 'Allowed: !{ls -l}, Disallowed: !{rm -rf /}';
 
     mockCheckCommandPermissions.mockImplementation((cmd: string) => ({
-      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original includes() truthiness in this mock.
       allAllowed: !cmd.includes('rm'),
-      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original includes() truthiness in this mock.
       disallowedCommands: cmd.includes('rm') ? [cmd] : [],
     }));
 

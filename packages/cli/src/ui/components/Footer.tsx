@@ -7,6 +7,8 @@
  * @requirement REQ-INT-001.1
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 /* eslint-disable react/prop-types */
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';

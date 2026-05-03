@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 /**
  * @plan PLAN-20260129-TODOPERSIST.P06
  * @requirement REQ-003, REQ-004, REQ-005, REQ-006, REQ-007
