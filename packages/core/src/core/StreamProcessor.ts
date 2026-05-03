@@ -463,23 +463,23 @@ export class StreamProcessor {
       toolConfig !== undefined &&
       toolConfig !== null &&
       typeof toolConfig === 'object' &&
-      'allowedFunctionNames' in toolConfig
+      'allowedFunctionNames' in toolConfig &&
+      Array.isArray(toolConfig.allowedFunctionNames) &&
+      toolConfig.allowedFunctionNames.length > 0
     ) {
       const allowedFunctions = toolConfig.allowedFunctionNames;
-      if (Array.isArray(allowedFunctions) && allowedFunctions.length > 0) {
-        return toolsFromConfig
-          .map((toolGroup) => ({
-            ...toolGroup,
-            functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
-              ? toolGroup.functionDeclarations.filter(
-                  (fn) =>
-                    typeof fn.name === 'string' &&
-                    allowedFunctions.includes(fn.name),
-                )
-              : [],
-          }))
-          .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
-      }
+      return toolsFromConfig
+        .map((toolGroup) => ({
+          ...toolGroup,
+          functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
+            ? toolGroup.functionDeclarations.filter(
+                (fn) =>
+                  typeof fn.name === 'string' &&
+                  allowedFunctions.includes(fn.name),
+              )
+            : [],
+        }))
+        .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
     }
 
     return toolsFromConfig;
@@ -975,10 +975,11 @@ export class StreamProcessor {
       // Check each tool's metadata for cyclic schemas
       for (const toolName of toolNames) {
         const metadata = this.runtimeContext.tools.getToolMetadata(toolName);
-        if (metadata?.parameterSchema) {
-          if (hasCycleInSchema(metadata.parameterSchema)) {
-            cyclicSchemaTools.push(toolName);
-          }
+        if (
+          metadata?.parameterSchema &&
+          hasCycleInSchema(metadata.parameterSchema)
+        ) {
+          cyclicSchemaTools.push(toolName);
         }
       }
 

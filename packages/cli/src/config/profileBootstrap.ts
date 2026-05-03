@@ -319,10 +319,11 @@ ${baseProfile.error}`);
    * @requirement REQ-PROF-003.3
    * @pseudocode parse-bootstrap-args.md lines 070-074
    */
-  if (bootstrapArgs.profileJson !== null) {
-    if (bootstrapArgs.profileJson.length > 10240) {
-      throw new Error('Profile JSON exceeds maximum size of 10KB');
-    }
+  if (
+    bootstrapArgs.profileJson !== null &&
+    bootstrapArgs.profileJson.length > 10240
+  ) {
+    throw new Error('Profile JSON exceeds maximum size of 10KB');
   }
 
   // Debug: log what we parsed
@@ -453,7 +454,11 @@ export function parseInlineProfile(
   const obj = parsed as Record<string, unknown>;
 
   // Step 4: Validate required fields (provider and model must be strings)
-  if (obj.provider === undefined || obj.provider === null || typeof obj.provider !== 'string') {
+  if (
+    obj.provider === undefined ||
+    obj.provider === null ||
+    typeof obj.provider !== 'string'
+  ) {
     return {
       providerName: '',
       modelName: '',
@@ -462,7 +467,11 @@ export function parseInlineProfile(
     };
   }
 
-  if (obj.model === undefined || obj.model === null || typeof obj.model !== 'string') {
+  if (
+    obj.model === undefined ||
+    obj.model === null ||
+    typeof obj.model !== 'string'
+  ) {
     return {
       providerName: '',
       modelName: '',
@@ -558,10 +567,12 @@ function hasDangerousField(obj: unknown, dangerousFields: string[]): boolean {
   // Recursively check nested objects and arrays
   for (const key of Object.keys(record)) {
     const value = record[key];
-    if (typeof value === 'object' && value !== null) {
-      if (hasDangerousField(value, dangerousFields)) {
-        return true;
-      }
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      hasDangerousField(value, dangerousFields)
+    ) {
+      return true;
     }
   }
 

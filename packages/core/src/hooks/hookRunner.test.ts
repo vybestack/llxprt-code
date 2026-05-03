@@ -504,13 +504,11 @@ describe('HookRunner', () => {
       let hookCallCount = 0;
       mockSpawn.mockStdoutOn.mockImplementation(
         (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            if (hookCallCount === 0) {
-              setTimeout(
-                () => callback(Buffer.from(JSON.stringify(mockOutput1))),
-                10,
-              );
-            }
+          if (event === 'data' && hookCallCount === 0) {
+            setTimeout(
+              () => callback(Buffer.from(JSON.stringify(mockOutput1))),
+              10,
+            );
           }
         },
       );
@@ -568,13 +566,11 @@ describe('HookRunner', () => {
       let hookCallCount = 0;
       mockSpawn.mockStdoutOn.mockImplementation(
         (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            if (hookCallCount === 0) {
-              setTimeout(
-                () => callback(Buffer.from(JSON.stringify(mockOutput1))),
-                10,
-              );
-            }
+          if (event === 'data' && hookCallCount === 0) {
+            setTimeout(
+              () => callback(Buffer.from(JSON.stringify(mockOutput1))),
+              10,
+            );
           }
         },
       );

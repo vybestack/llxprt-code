@@ -86,10 +86,12 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   useKeypress(
     (key) => {
       // Handle 'ctrl' + 'r' key for full-command toggle while executing
-      if (key.ctrl === true && key.name === 'r') {
-        if (status === ToolCallStatus.Executing) {
-          setIsDetailsVisible((prev) => !prev);
-        }
+      if (
+        key.ctrl === true &&
+        key.name === 'r' &&
+        status === ToolCallStatus.Executing
+      ) {
+        setIsDetailsVisible((prev) => !prev);
       }
     },
     { isActive: isFocused },

@@ -299,20 +299,22 @@ export function updateAgentRuntimeState(
   }
 
   // Validate updated fields (lines 219-225)
-  if (updates.provider !== undefined) {
-    if (!updates.provider || typeof updates.provider !== 'string') {
-      throw new RuntimeStateError(RuntimeStateErrorCode.PROVIDER_INVALID, {
-        provider: updates.provider,
-      });
-    }
+  if (
+    updates.provider !== undefined &&
+    (!updates.provider || typeof updates.provider !== 'string')
+  ) {
+    throw new RuntimeStateError(RuntimeStateErrorCode.PROVIDER_INVALID, {
+      provider: updates.provider,
+    });
   }
 
-  if (updates.model !== undefined) {
-    if (!updates.model || typeof updates.model !== 'string') {
-      throw new RuntimeStateError(RuntimeStateErrorCode.MODEL_INVALID, {
-        model: updates.model,
-      });
-    }
+  if (
+    updates.model !== undefined &&
+    (!updates.model || typeof updates.model !== 'string')
+  ) {
+    throw new RuntimeStateError(RuntimeStateErrorCode.MODEL_INVALID, {
+      model: updates.model,
+    });
   }
 
   // Get timestamp ensuring it's > oldState.updatedAt (lines 226)

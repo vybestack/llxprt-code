@@ -409,11 +409,13 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       let toolUseMessageIndex = -1;
       for (let i = 0; i < request.messages.length; i++) {
         const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          if (msg.content.some((b) => b.type === 'tool_use')) {
-            toolUseMessageIndex = i;
-            break;
-          }
+        if (
+          msg.role === 'assistant' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((b) => b.type === 'tool_use')
+        ) {
+          toolUseMessageIndex = i;
+          break;
         }
       }
 
@@ -620,11 +622,13 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       let toolUseMessageIndex = -1;
       for (let i = 0; i < request.messages.length; i++) {
         const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          if (msg.content.some((b) => b.type === 'tool_use')) {
-            toolUseMessageIndex = i;
-            break;
-          }
+        if (
+          msg.role === 'assistant' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((b) => b.type === 'tool_use')
+        ) {
+          toolUseMessageIndex = i;
+          break;
         }
       }
 
@@ -737,10 +741,12 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       const toolUseIndices: number[] = [];
       for (let i = 0; i < request.messages.length; i++) {
         const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          if (msg.content.some((b) => b.type === 'tool_use')) {
-            toolUseIndices.push(i);
-          }
+        if (
+          msg.role === 'assistant' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((b) => b.type === 'tool_use')
+        ) {
+          toolUseIndices.push(i);
         }
       }
 
@@ -1145,11 +1151,13 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       let toolUseIdx = -1;
       for (let i = 0; i < request.messages.length; i++) {
         const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          if (msg.content.some((b) => b.type === 'tool_use')) {
-            toolUseIdx = i;
-            break;
-          }
+        if (
+          msg.role === 'assistant' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((b) => b.type === 'tool_use')
+        ) {
+          toolUseIdx = i;
+          break;
         }
       }
 

@@ -35,25 +35,24 @@ export function extractImports(content: string, language: string): Import[] {
 
   lines.forEach((line, index) => {
     const trimmed = line.trim();
-    if (language === 'typescript' || language === 'javascript') {
-      if (trimmed.startsWith(KEYWORDS.IMPORT)) {
-        imports.push({
-          module: extractImportModule(trimmed),
-          items: extractImportItems(trimmed),
-          line: index + 1,
-        });
-      }
-    } else if (language === 'python') {
-      if (
-        trimmed.startsWith(KEYWORDS.IMPORT) ||
-        trimmed.startsWith(KEYWORDS.FROM)
-      ) {
-        imports.push({
-          module: extractPythonImportModule(trimmed),
-          items: extractPythonImportItems(trimmed),
-          line: index + 1,
-        });
-      }
+    if (
+      (language === 'typescript' || language === 'javascript') &&
+      trimmed.startsWith(KEYWORDS.IMPORT)
+    ) {
+      imports.push({
+        module: extractImportModule(trimmed),
+        items: extractImportItems(trimmed),
+        line: index + 1,
+      });
+    } else if (
+      language === 'python' &&
+      (trimmed.startsWith(KEYWORDS.IMPORT) || trimmed.startsWith(KEYWORDS.FROM))
+    ) {
+      imports.push({
+        module: extractPythonImportModule(trimmed),
+        items: extractPythonImportItems(trimmed),
+        line: index + 1,
+      });
     }
   });
 
@@ -109,11 +108,13 @@ function extractPythonImportItems(line: string): string[] {
   // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const fromImportMatch = line.match(/^from\s+[\w.]+\s+import\s+(.+)/);
   if (fromImportMatch) {
-    return fromImportMatch[1]
-      .split(',')
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      .map((item) => item.trim().replace(/\s+as\s+\w+$/, ''))
-      .filter((item) => item);
+    return (
+      fromImportMatch[1]
+        .split(',')
+        // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
+        .map((item) => item.trim().replace(/\s+as\s+\w+$/, ''))
+        .filter((item) => item)
+    );
   }
   return [];
 }

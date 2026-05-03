@@ -365,10 +365,11 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
   }
   if (event.error) {
     attributes['error.message'] = event.error;
-  } else if (event.status_code !== undefined) {
-    if (typeof event.status_code === 'number') {
-      attributes[SemanticAttributes.HTTP_STATUS_CODE] = event.status_code;
-    }
+  } else if (
+    event.status_code !== undefined &&
+    typeof event.status_code === 'number'
+  ) {
+    attributes[SemanticAttributes.HTTP_STATUS_CODE] = event.status_code;
   }
 
   const logger = logs.getLogger(SERVICE_NAME);

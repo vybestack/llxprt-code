@@ -441,10 +441,11 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       }
 
       // Reset ESC count and hide prompt on any non-ESC key
-      if (key.name !== 'escape') {
-        if (escPressCount.current > 0 || showEscapePrompt) {
-          resetEscapeState();
-        }
+      if (
+        key.name !== 'escape' &&
+        (escPressCount.current > 0 || showEscapePrompt)
+      ) {
+        resetEscapeState();
       }
 
       if (
@@ -1137,15 +1138,14 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                 const currentLineGhost = isOnCursorLine ? inlineGhost : '';
                 if (
                   isOnCursorLine &&
-                  cursorVisualColAbsolute === cpLen(lineText)
+                  cursorVisualColAbsolute === cpLen(lineText) &&
+                  !currentLineGhost
                 ) {
-                  if (!currentLineGhost) {
-                    renderedLine.push(
-                      <Text key="cursor-end" color={Colors.Foreground}>
-                        {chalk.inverse(' ')}
-                      </Text>,
-                    );
-                  }
+                  renderedLine.push(
+                    <Text key="cursor-end" color={Colors.Foreground}>
+                      {chalk.inverse(' ')}
+                    </Text>,
+                  );
                 }
 
                 const showCursorBeforeGhost =

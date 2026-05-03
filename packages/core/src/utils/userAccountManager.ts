@@ -106,10 +106,12 @@ export class UserAccountManager {
 
     const accounts = await this.readAccounts(filePath);
 
-    if (accounts.active && accounts.active !== email) {
-      if (!accounts.old.includes(accounts.active)) {
-        accounts.old.push(accounts.active);
-      }
+    if (
+      accounts.active &&
+      accounts.active !== email &&
+      !accounts.old.includes(accounts.active)
+    ) {
+      accounts.old.push(accounts.active);
     }
 
     // If the new email was in the old list, remove it

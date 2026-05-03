@@ -55,11 +55,14 @@ export function detectBOM(buf: Buffer): BOMInfo | null {
       return { encoding: 'utf32be', bomLength: 4 };
     }
   }
-  if (buf.length >= 3) {
-    // UTF-8: EF BB BF
-    if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
-      return { encoding: 'utf8', bomLength: 3 };
-    }
+  // UTF-8: EF BB BF
+  if (
+    buf.length >= 3 &&
+    buf[0] === 0xef &&
+    buf[1] === 0xbb &&
+    buf[2] === 0xbf
+  ) {
+    return { encoding: 'utf8', bomLength: 3 };
   }
   if (buf.length >= 2) {
     // UTF-16 LE: FF FE  (but not UTF-32 LE already matched above)

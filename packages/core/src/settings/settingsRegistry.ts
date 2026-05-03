@@ -1334,10 +1334,13 @@ export function separateSettings(
       continue;
     }
 
-    if (spec.category === 'model-param' && spec.providers && providerName) {
-      if (!spec.providers.includes(providerName)) {
-        continue;
-      }
+    if (
+      spec.category === 'model-param' &&
+      spec.providers &&
+      providerName &&
+      !spec.providers.includes(providerName)
+    ) {
+      continue;
     }
 
     switch (spec.category) {

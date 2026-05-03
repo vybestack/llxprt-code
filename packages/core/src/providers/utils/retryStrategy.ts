@@ -67,11 +67,10 @@ export function shouldRetryOnStatus(
 
   if (
     (status === undefined || status === 0 || Number.isNaN(status)) &&
-    error instanceof Error
+    error instanceof Error &&
+    error.message.includes('429')
   ) {
-    if (error.message.includes('429')) {
-      status = 429;
-    }
+    status = 429;
   }
 
   logger?.debug(() => `shouldRetryOnStatus checking error:`, {

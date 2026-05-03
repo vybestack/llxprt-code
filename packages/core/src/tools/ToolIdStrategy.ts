@@ -251,12 +251,10 @@ export const mistralStrategy: ToolIdStrategy = {
       if (content.speaker !== 'ai') continue;
 
       for (const block of content.blocks) {
-        if (isToolCallBlock(block)) {
-          if (!idToMistralId.has(block.id)) {
-            const mistralId = toMistralToolId(block.id, usedIds);
-            idToMistralId.set(block.id, mistralId);
-            usedIds.add(mistralId);
-          }
+        if (isToolCallBlock(block) && !idToMistralId.has(block.id)) {
+          const mistralId = toMistralToolId(block.id, usedIds);
+          idToMistralId.set(block.id, mistralId);
+          usedIds.add(mistralId);
         }
       }
     }

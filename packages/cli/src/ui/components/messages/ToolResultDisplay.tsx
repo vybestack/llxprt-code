@@ -55,11 +55,12 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
   const childWidth = terminalWidth;
 
   let displayContent = resultDisplay;
-  if (typeof displayContent === 'string') {
-    if (displayContent.length > MAXIMUM_RESULT_DISPLAY_CHARACTERS) {
-      displayContent =
-        '...' + displayContent.slice(-MAXIMUM_RESULT_DISPLAY_CHARACTERS);
-    }
+  if (
+    typeof displayContent === 'string' &&
+    displayContent.length > MAXIMUM_RESULT_DISPLAY_CHARACTERS
+  ) {
+    displayContent =
+      '...' + displayContent.slice(-MAXIMUM_RESULT_DISPLAY_CHARACTERS);
   }
 
   if (displayContent === undefined) {

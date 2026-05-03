@@ -176,12 +176,13 @@ export async function createApp() {
 
         const commandToExecute = commandRegistry.get(command);
 
-        if (commandToExecute?.requiresWorkspace === true) {
-          if (!process.env['CODER_AGENT_WORKSPACE_PATH']) {
-            return res.status(400).json({
-              error: `Command "${command}" requires a workspace, but CODER_AGENT_WORKSPACE_PATH is not set.`,
-            });
-          }
+        if (
+          commandToExecute?.requiresWorkspace === true &&
+          !process.env['CODER_AGENT_WORKSPACE_PATH']
+        ) {
+          return res.status(400).json({
+            error: `Command "${command}" requires a workspace, but CODER_AGENT_WORKSPACE_PATH is not set.`,
+          });
         }
 
         if (!commandToExecute) {

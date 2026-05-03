@@ -140,18 +140,18 @@ export abstract class BaseToolInvocation<
     outcome: ToolConfirmationOutcome,
   ): Promise<void> {
     if (
-      outcome === ToolConfirmationOutcome.ProceedAlways ||
-      outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave
+      (outcome === ToolConfirmationOutcome.ProceedAlways ||
+        outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave) &&
+      this.messageBus &&
+      this._toolName
     ) {
-      if (this.messageBus && this._toolName) {
-        const options = this.getPolicyUpdateOptions(outcome);
-        this.messageBus.publish({
-          type: MessageBusType.UPDATE_POLICY,
-          toolName: this._toolName,
-          persist: outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave,
-          ...options,
-        });
-      }
+      const options = this.getPolicyUpdateOptions(outcome);
+      this.messageBus.publish({
+        type: MessageBusType.UPDATE_POLICY,
+        toolName: this._toolName,
+        persist: outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave,
+        ...options,
+      });
     }
   }
 
@@ -679,16 +679,11 @@ export function hasCycleInSchema(schema: object): boolean {
 
     // Crawl all the properties of node
     for (const key in node) {
-      if (Object.prototype.hasOwnProperty.call(node, key)) {
-        if (
-          traverse(
-            (node as Record<string, unknown>)[key],
-            visitedRefs,
-            pathRefs,
-          )
-        ) {
-          return true;
-        }
+      if (
+        Object.prototype.hasOwnProperty.call(node, key) &&
+        traverse((node as Record<string, unknown>)[key], visitedRefs, pathRefs)
+      ) {
+        return true;
       }
     }
 

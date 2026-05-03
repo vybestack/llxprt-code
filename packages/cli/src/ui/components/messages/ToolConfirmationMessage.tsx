@@ -81,15 +81,17 @@ export const ToolConfirmationMessage: React.FC<
   }, [config]);
 
   const handleConfirm = async (outcome: ToolConfirmationOutcome) => {
-    if (confirmationDetails.type === 'edit') {
-      if (config.getIdeMode() && isDiffingEnabled === true) {
-        const cliOutcome =
-          outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
-        await ideClient?.resolveDiffFromCli(
-          confirmationDetails.filePath,
-          cliOutcome,
-        );
-      }
+    if (
+      confirmationDetails.type === 'edit' &&
+      config.getIdeMode() &&
+      isDiffingEnabled === true
+    ) {
+      const cliOutcome =
+        outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
+      await ideClient?.resolveDiffFromCli(
+        confirmationDetails.filePath,
+        cliOutcome,
+      );
     }
     await onConfirm(outcome);
   };
@@ -418,25 +420,26 @@ export const ToolConfirmationMessage: React.FC<
     allowPermanentApproval,
   ]);
 
-  if (confirmationDetails.type === 'edit') {
-    if (confirmationDetails.isModifying === true) {
-      return (
-        <Box
-          width={terminalWidth}
-          borderStyle="round"
-          borderColor={theme.border.default}
-          justifyContent="space-around"
-          paddingTop={1}
-          paddingBottom={1}
-          overflow="hidden"
-        >
-          <Text color={theme.text.primary}>Modify in progress: </Text>
-          <Text color={theme.status.success}>
-            Save and close external editor to continue
-          </Text>
-        </Box>
-      );
-    }
+  if (
+    confirmationDetails.type === 'edit' &&
+    confirmationDetails.isModifying === true
+  ) {
+    return (
+      <Box
+        width={terminalWidth}
+        borderStyle="round"
+        borderColor={theme.border.default}
+        justifyContent="space-around"
+        paddingTop={1}
+        paddingBottom={1}
+        overflow="hidden"
+      >
+        <Text color={theme.text.primary}>Modify in progress: </Text>
+        <Text color={theme.status.success}>
+          Save and close external editor to continue
+        </Text>
+      </Box>
+    );
   }
 
   return (

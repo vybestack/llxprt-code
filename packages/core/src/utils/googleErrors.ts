@@ -206,7 +206,11 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
     const details: GoogleApiErrorDetail[] = [];
     if (Array.isArray(errorDetails)) {
       for (const detail of errorDetails) {
-        if (detail !== null && detail !== undefined && typeof detail === 'object') {
+        if (
+          detail !== null &&
+          detail !== undefined &&
+          typeof detail === 'object'
+        ) {
           const detailObj = detail as Record<string, unknown>;
           const typeKey = Object.keys(detailObj).find(
             (key) => key.trim() === '@type',
@@ -265,10 +269,8 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object') {
-      if ('error' in data) {
-        outerError = (data as { error?: ErrorShape }).error;
-      }
+    if (typeof data === 'object' && 'error' in data) {
+      outerError = (data as { error?: ErrorShape }).error;
     }
   }
 
@@ -325,10 +327,8 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object') {
-      if ('error' in data) {
-        outerError = (data as { error?: ErrorShape }).error;
-      }
+    if (typeof data === 'object' && 'error' in data) {
+      outerError = (data as { error?: ErrorShape }).error;
     }
   }
   return outerError;

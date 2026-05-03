@@ -454,12 +454,8 @@ export async function runNonInteractive({
                 ? filterResult.filtered
                 : '';
 
-            if (filterResult.systemFeedback) {
-              if (!jsonOutput) {
-                process.stderr.write(
-                  `Warning: ${filterResult.systemFeedback}\n`,
-                );
-              }
+            if (filterResult.systemFeedback && !jsonOutput) {
+              process.stderr.write(`Warning: ${filterResult.systemFeedback}\n`);
             }
           }
 

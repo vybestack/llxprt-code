@@ -151,56 +151,54 @@ export function buildResponsesRequest(
 
   // Handle message trimming for stateful mode
   let processedMessages = messages;
-  if (messages && conversationId) {
-    // For stateful mode, we need to be smarter about trimming to preserve tool call/response pairs
-    if (messages.length > 2) {
-      // Find the last complete interaction (user message -> assistant response/tool calls -> tool responses -> user message)
-      let startIndex = messages.length - 1;
+  // For stateful mode, we need to be smarter about trimming to preserve tool call/response pairs
+  if (messages && conversationId && messages.length > 2) {
+    // Find the last complete interaction (user message -> assistant response/tool calls -> tool responses -> user message)
+    let startIndex = messages.length - 1;
 
-      // Work backwards to find a complete interaction
-      while (startIndex > 0) {
-        const msg = messages[startIndex];
+    // Work backwards to find a complete interaction
+    while (startIndex > 0) {
+      const msg = messages[startIndex];
 
-        // If we find a tool message, we need to include the AI message with the tool call
-        if (msg.speaker === 'tool') {
-          // Find the AI message that contains this tool call
-          for (let i = startIndex - 1; i >= 0; i--) {
-            const prevMsg = messages[i];
-            if (prevMsg.speaker === 'ai') {
-              // Check if this AI message contains the tool call for our tool response
-              const toolResponseBlocks = msg.blocks.filter(
-                (block) => block.type === 'tool_response',
-              );
-              const hasMatchingCall = prevMsg.blocks.some((block) => {
-                if (block.type === 'tool_call') {
-                  const toolCallBlock = block;
-                  return toolResponseBlocks.some(
-                    (respBlock) => respBlock.callId === toolCallBlock.id,
-                  );
-                }
-                return false;
-              });
-              if (hasMatchingCall) {
-                startIndex = i;
-                break;
+      // If we find a tool message, we need to include the AI message with the tool call
+      if (msg.speaker === 'tool') {
+        // Find the AI message that contains this tool call
+        for (let i = startIndex - 1; i >= 0; i--) {
+          const prevMsg = messages[i];
+          if (prevMsg.speaker === 'ai') {
+            // Check if this AI message contains the tool call for our tool response
+            const toolResponseBlocks = msg.blocks.filter(
+              (block) => block.type === 'tool_response',
+            );
+            const hasMatchingCall = prevMsg.blocks.some((block) => {
+              if (block.type === 'tool_call') {
+                const toolCallBlock = block;
+                return toolResponseBlocks.some(
+                  (respBlock) => respBlock.callId === toolCallBlock.id,
+                );
               }
+              return false;
+            });
+            if (hasMatchingCall) {
+              startIndex = i;
+              break;
             }
           }
         }
-
-        // If we find a user message after going through tool responses, this is a good starting point
-        if (msg.speaker === 'human' && startIndex < messages.length - 1) {
-          break;
-        }
-
-        startIndex--;
       }
 
-      // Ensure we don't trim too aggressively
-      startIndex = Math.max(0, Math.min(startIndex, messages.length - 2));
+      // If we find a user message after going through tool responses, this is a good starting point
+      if (msg.speaker === 'human' && startIndex < messages.length - 1) {
+        break;
+      }
 
-      processedMessages = messages.slice(startIndex);
+      startIndex--;
     }
+
+    // Ensure we don't trim too aggressively
+    startIndex = Math.max(0, Math.min(startIndex, messages.length - 2));
+
+    processedMessages = messages.slice(startIndex);
   }
 
   // Transform messages for Responses API format
@@ -363,15 +361,11 @@ export function buildResponsesRequest(
   }
 
   // Map conversation fields
-  if (model) {
-    if (conversationId) {
-      // Note: The API uses previous_response_id, not a conversation_id.
-      // We are mapping our internal parentId to this field.
-      if (parentId) {
-        request.previous_response_id = parentId;
-        request.store = true;
-      }
-    }
+  // Note: The API uses previous_response_id, not a conversation_id.
+  // We are mapping our internal parentId to this field.
+  if (model && conversationId && parentId) {
+    request.previous_response_id = parentId;
+    request.store = true;
   }
 
   // Add tools if provided

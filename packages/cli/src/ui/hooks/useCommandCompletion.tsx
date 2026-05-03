@@ -233,14 +233,13 @@ export function useCommandCompletion(
       }
 
       let suggestionText = suggestion;
-      if (completionMode === CompletionMode.SLASH) {
-        if (
-          start === end &&
-          start > 1 &&
-          (buffer.lines[cursorRow] || '')[start - 1] !== ' '
-        ) {
-          suggestionText = ' ' + suggestionText;
-        }
+      if (
+        completionMode === CompletionMode.SLASH &&
+        start === end &&
+        start > 1 &&
+        (buffer.lines[cursorRow] || '')[start - 1] !== ' '
+      ) {
+        suggestionText = ' ' + suggestionText;
       }
 
       const lineCodePoints = toCodePoints(buffer.lines[cursorRow] || '');

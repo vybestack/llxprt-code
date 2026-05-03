@@ -693,11 +693,12 @@ export class ToolRegistry {
     // If still not found and the name includes '__', try fallback lookup by fully qualified name
     if (!tool && name.includes('__')) {
       for (const t of this.tools.values()) {
-        if (t instanceof DiscoveredMCPTool) {
-          if (t.getFullyQualifiedName() === name) {
-            tool = t;
-            break;
-          }
+        if (
+          t instanceof DiscoveredMCPTool &&
+          t.getFullyQualifiedName() === name
+        ) {
+          tool = t;
+          break;
         }
       }
     }
@@ -713,11 +714,9 @@ export class ToolRegistry {
       return inactiveTool;
     }
 
-    if (context) {
-      // Inject context into tool instance
-      if ('context' in tool) {
-        (tool as unknown as { context: ToolContext }).context = context;
-      }
+    // Inject context into tool instance
+    if (context && 'context' in tool) {
+      (tool as unknown as { context: ToolContext }).context = context;
     }
     return tool;
   }
@@ -735,16 +734,14 @@ export class ToolRegistry {
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string tool name should fall through to original name
     const normalizedName = normalizeToolName(tool.name) || tool.name;
 
-    if (targetMap.has(normalizedName)) {
+    if (targetMap.has(normalizedName) && !(tool instanceof DiscoveredMCPTool)) {
       // For non-MCP tools, log warning and overwrite
-      if (!(tool instanceof DiscoveredMCPTool)) {
-        this.logger.warn(
-          () =>
-            `Tool with name "${tool.name}" (normalized: "${normalizedName}") is already registered. Overwriting.`,
-        );
-      }
       // For MCP tools, we assume they already have unique names from generateMcpToolName(serverName, toolName)
       // so we simply overwrite (this should not happen in normal operation)
+      this.logger.warn(
+        () =>
+          `Tool with name "${tool.name}" (normalized: "${normalizedName}") is already registered. Overwriting.`,
+      );
     }
 
     // Store the tool with the normalized name for consistent lookup

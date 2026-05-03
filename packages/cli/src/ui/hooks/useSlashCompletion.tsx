@@ -624,22 +624,21 @@ export function useSlashCompletion(
           if (
             entry.isDirectory() &&
             entry.name !== 'node_modules' &&
-            !entry.name.startsWith('.')
+            !entry.name.startsWith('.') &&
+            foundSuggestions.length < maxResults
           ) {
-            if (foundSuggestions.length < maxResults) {
-              foundSuggestions = foundSuggestions.concat(
-                await findFilesRecursively(
-                  path.join(startDir, entry.name),
-                  searchPrefix, // Pass original searchPrefix for recursive calls
-                  fileDiscovery,
-                  filterOptions,
-                  entryPathRelative,
-                  depth + 1,
-                  maxDepth,
-                  maxResults - foundSuggestions.length,
-                ),
-              );
-            }
+            foundSuggestions = foundSuggestions.concat(
+              await findFilesRecursively(
+                path.join(startDir, entry.name),
+                searchPrefix, // Pass original searchPrefix for recursive calls
+                fileDiscovery,
+                filterOptions,
+                entryPathRelative,
+                depth + 1,
+                maxDepth,
+                maxResults - foundSuggestions.length,
+              ),
+            );
           }
         }
       } catch {
@@ -910,15 +909,14 @@ export function useSlashCompletion(
 
       const isSlash = (buffer.lines[cursorRow] || '')[commandIndex] === '/';
       let suggestionText = suggestion;
-      if (isSlash) {
-        // If we are inserting (not replacing), and the preceding character is not a space, add one.
-        if (
-          completionStart.current === completionEnd.current &&
-          completionStart.current > commandIndex + 1 &&
-          (buffer.lines[cursorRow] || '')[completionStart.current - 1] !== ' '
-        ) {
-          suggestionText = ' ' + suggestionText;
-        }
+      // If we are inserting (not replacing), and the preceding character is not a space, add one.
+      if (
+        isSlash &&
+        completionStart.current === completionEnd.current &&
+        completionStart.current > commandIndex + 1 &&
+        (buffer.lines[cursorRow] || '')[completionStart.current - 1] !== ' '
+      ) {
+        suggestionText = ' ' + suggestionText;
       }
 
       suggestionText += ' ';

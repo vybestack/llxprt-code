@@ -553,19 +553,17 @@ function* emitKeys(
         }
       } else {
         name = 'undefined';
-        if (ctrl || meta) {
-          // CSI-u or tilde-coded functional keys: ESC [ <code> ; <mods> (u|~)
-          if (code.endsWith('u') || code.endsWith('~')) {
-            const codeNumber = parseInt(code.slice(1, -1), 10);
-            if (
-              codeNumber >= 'a'.charCodeAt(0) &&
-              codeNumber <= 'z'.charCodeAt(0)
-            ) {
-              name = String.fromCharCode(codeNumber);
-            } else if (codeNumber === '\\'.charCodeAt(0)) {
-              // Ctrl+Backslash arrives as CSI 92;5u under Kitty protocol
-              name = '\\';
-            }
+        // CSI-u or tilde-coded functional keys: ESC [ <code> ; <mods> (u|~)
+        if ((ctrl || meta) && (code.endsWith('u') || code.endsWith('~'))) {
+          const codeNumber = parseInt(code.slice(1, -1), 10);
+          if (
+            codeNumber >= 'a'.charCodeAt(0) &&
+            codeNumber <= 'z'.charCodeAt(0)
+          ) {
+            name = String.fromCharCode(codeNumber);
+          } else if (codeNumber === '\\'.charCodeAt(0)) {
+            // Ctrl+Backslash arrives as CSI 92;5u under Kitty protocol
+            name = '\\';
           }
         }
       }

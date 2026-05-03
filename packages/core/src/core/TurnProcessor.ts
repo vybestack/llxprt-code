@@ -677,15 +677,13 @@ export class TurnProcessor {
       }
     } else if (
       this.lastPromptTokenCount != null &&
-      this.lastPromptTokenCount !== 0 &&
+      this.lastPromptTokenCount > 0 &&
       !Number.isNaN(this.lastPromptTokenCount)
     ) {
       // lastPromptTokenCount is already cache-adjusted (includes
       // cache_read + cache_creation tokens) from the provider call path
-      if (this.lastPromptTokenCount > 0) {
-        this.historyService.syncTotalTokens(this.lastPromptTokenCount);
-        await this.historyService.waitForTokenUpdates();
-      }
+      this.historyService.syncTotalTokens(this.lastPromptTokenCount);
+      await this.historyService.waitForTokenUpdates();
     }
   }
 
@@ -718,10 +716,12 @@ export class TurnProcessor {
             const name = funcDecl.name ?? 'unknown';
             toolNames.push(name);
             const schema = funcDecl.parametersJsonSchema;
-            if (schema != null && typeof schema === 'object') {
-              if (hasCycleInSchema(schema as Record<string, unknown>)) {
-                cyclicSchemaTools.push(name);
-              }
+            if (
+              schema != null &&
+              typeof schema === 'object' &&
+              hasCycleInSchema(schema as Record<string, unknown>)
+            ) {
+              cyclicSchemaTools.push(name);
             }
           }
         }

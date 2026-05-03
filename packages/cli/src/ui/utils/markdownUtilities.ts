@@ -79,10 +79,11 @@ const findEnclosingCodeBlockStart = (
       break;
     }
     const blockEndIndex = content.indexOf('```', blockStartIndex + 3);
-    if (blockStartIndex < index) {
-      if (blockEndIndex === -1 || index < blockEndIndex + 3) {
-        return blockStartIndex;
-      }
+    if (
+      blockStartIndex < index &&
+      (blockEndIndex === -1 || index < blockEndIndex + 3)
+    ) {
+      return blockStartIndex;
     }
     if (blockEndIndex === -1) break;
     currentSearchPos = blockEndIndex + 3;

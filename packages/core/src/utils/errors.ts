@@ -156,13 +156,12 @@ export function isAuthenticationError(error: unknown): boolean {
   }
 
   // Cross-realm duck-typing (check both constructor name and error name)
-  if (error instanceof Error) {
-    if (
-      error.constructor.name === 'UnauthorizedError' ||
-      error.name === 'UnauthorizedError'
-    ) {
-      return true;
-    }
+  if (
+    error instanceof Error &&
+    (error.constructor.name === 'UnauthorizedError' ||
+      error.name === 'UnauthorizedError')
+  ) {
+    return true;
   }
 
   // Anchored message pattern — must not match '401' appearing in model names, IDs, etc.

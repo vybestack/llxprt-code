@@ -501,16 +501,18 @@ export async function retryWithBackoff<T>(
         errorStatus !== undefined && errorStatus >= 500 && errorStatus < 600;
 
       // Handle RetryableQuotaError and 500 errors with max attempts check
-      if (classifiedError instanceof RetryableQuotaError || is500) {
-        if (attempt >= maxAttempts && shouldAttemptRefreshRetry !== true) {
-          const errorMessage =
-            classifiedError instanceof Error ? classifiedError.message : '';
-          logger.warn(
-            () =>
-              `Attempt ${attempt} failed${errorMessage ? `: ${errorMessage}` : ''}. Max attempts reached`,
-          );
-          throw is500 ? error : classifiedError;
-        }
+      if (
+        (classifiedError instanceof RetryableQuotaError || is500) &&
+        attempt >= maxAttempts &&
+        shouldAttemptRefreshRetry !== true
+      ) {
+        const errorMessage =
+          classifiedError instanceof Error ? classifiedError.message : '';
+        logger.warn(
+          () =>
+            `Attempt ${attempt} failed${errorMessage ? `: ${errorMessage}` : ''}. Max attempts reached`,
+        );
+        throw is500 ? error : classifiedError;
       }
 
       if (attempt >= maxAttempts && shouldAttemptRefreshRetry !== true) {
@@ -635,38 +637,38 @@ export function getErrorStatus(error: unknown): number | undefined {
  * @returns The delay in milliseconds, or 0 if not found or invalid.
  */
 function getRetryAfterDelayMs(error: unknown): number {
-  if (typeof error === 'object' && error !== null) {
-    // Check for error.response.headers (common in axios errors)
+  // Check for error.response.headers (common in axios errors)
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    typeof (error as { response?: unknown }).response === 'object' &&
+    (error as { response?: unknown }).response !== null
+  ) {
+    const response = (error as { response: { headers?: unknown } }).response;
     if (
-      'response' in error &&
-      typeof (error as { response?: unknown }).response === 'object' &&
-      (error as { response?: unknown }).response !== null
+      'headers' in response &&
+      typeof response.headers === 'object' &&
+      response.headers !== null
     ) {
-      const response = (error as { response: { headers?: unknown } }).response;
-      if (
-        'headers' in response &&
-        typeof response.headers === 'object' &&
-        response.headers !== null
-      ) {
-        const headers = response.headers as {
-          'retry-after'?: unknown;
-          get?: (name: string) => string | null;
-        };
-        // Support both plain object and Fetch Headers API
-        const retryAfterHeader =
-          typeof headers.get === 'function'
-            ? headers.get('retry-after')
-            : headers['retry-after'];
-        if (typeof retryAfterHeader === 'string') {
-          const retryAfterSeconds = parseInt(retryAfterHeader, 10);
-          if (!isNaN(retryAfterSeconds)) {
-            return retryAfterSeconds * 1000;
-          }
-          // It might be an HTTP date
-          const retryAfterDate = new Date(retryAfterHeader);
-          if (!isNaN(retryAfterDate.getTime())) {
-            return Math.max(0, retryAfterDate.getTime() - Date.now());
-          }
+      const headers = response.headers as {
+        'retry-after'?: unknown;
+        get?: (name: string) => string | null;
+      };
+      // Support both plain object and Fetch Headers API
+      const retryAfterHeader =
+        typeof headers.get === 'function'
+          ? headers.get('retry-after')
+          : headers['retry-after'];
+      if (typeof retryAfterHeader === 'string') {
+        const retryAfterSeconds = parseInt(retryAfterHeader, 10);
+        if (!isNaN(retryAfterSeconds)) {
+          return retryAfterSeconds * 1000;
+        }
+        // It might be an HTTP date
+        const retryAfterDate = new Date(retryAfterHeader);
+        if (!isNaN(retryAfterDate.getTime())) {
+          return Math.max(0, retryAfterDate.getTime() - Date.now());
         }
       }
     }

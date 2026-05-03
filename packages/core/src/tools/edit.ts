@@ -104,21 +104,19 @@ export function applyReplacement(
     expectedReplacements > 1,
   );
 
-  if (fuzzyResult) {
-    // Verify the number of replacements matches expectations
-    if (fuzzyResult.occurrences === expectedReplacements) {
-      const result = fuzzyResult.result;
-      if (
-        preserveTrailingNewline &&
-        result.length > 0 &&
-        !result.endsWith('\n')
-      ) {
-        return `${result}\n`;
-      }
-      return result;
+  // Verify the number of replacements matches expectations
+  // If fuzzy matching found a different number of occurrences,
+  // fall through to the strict matching below which will properly report the error
+  if (fuzzyResult && fuzzyResult.occurrences === expectedReplacements) {
+    const result = fuzzyResult.result;
+    if (
+      preserveTrailingNewline &&
+      result.length > 0 &&
+      !result.endsWith('\n')
+    ) {
+      return `${result}\n`;
     }
-    // If fuzzy matching found a different number of occurrences,
-    // fall through to the strict matching below which will properly report the error
+    return result;
   }
 
   // Fall back to strict matching (original behavior)
@@ -925,14 +923,13 @@ Expectation for required parameters:
     }
 
     const replaceLine = params.replaceBeginLineNumber;
-    if (replaceLine !== undefined) {
-      if (
-        !Number.isFinite(replaceLine) ||
+    if (
+      replaceLine !== undefined &&
+      (!Number.isFinite(replaceLine) ||
         !Number.isInteger(replaceLine) ||
-        replaceLine <= 0
-      ) {
-        return `replaceBeginLineNumber must be a positive integer (1-based)`;
-      }
+        replaceLine <= 0)
+    ) {
+      return `replaceBeginLineNumber must be a positive integer (1-based)`;
     }
 
     return null;

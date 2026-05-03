@@ -412,11 +412,9 @@ export function hasRedirection(command: string): boolean {
       inDoubleQuotes = !inDoubleQuotes;
     }
 
-    if (!inSingleQuotes && !inDoubleQuotes) {
-      // Redirection: >, >>, <, <<, <<<, 2>, &>, >&
-      if (char === '>' || char === '<') {
-        return true;
-      }
+    // Redirection: >, >>, <, <<, <<<, 2>, &>, >&
+    if (!inSingleQuotes && !inDoubleQuotes && (char === '>' || char === '<')) {
+      return true;
     }
 
     i++;

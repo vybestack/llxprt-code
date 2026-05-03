@@ -180,11 +180,13 @@ function getSchemaDefaults(): Partial<Settings> {
     target: Record<string, unknown>,
   ): void {
     for (const [key, schemaEntry] of Object.entries(schema)) {
-      if ('default' in schemaEntry && schemaEntry.default !== undefined) {
+      if (
+        'default' in schemaEntry &&
+        schemaEntry.default !== undefined &&
+        key !== 'coreToolSettings'
+      ) {
         // Skip coreToolSettings default to allow proper merging
-        if (key !== 'coreToolSettings') {
-          target[key] = schemaEntry.default;
-        }
+        target[key] = schemaEntry.default;
       }
 
       // Recursively extract defaults from nested object schemas

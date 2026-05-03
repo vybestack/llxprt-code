@@ -70,10 +70,11 @@ export function doesToolInvocationMatch(
       command = String((invocation.params as { command: string }).command);
     }
 
-    if (toolNames.some((name) => SHELL_TOOL_NAMES.includes(name))) {
-      if (command === argPattern || command.startsWith(argPattern + ' ')) {
-        return true;
-      }
+    if (
+      toolNames.some((name) => SHELL_TOOL_NAMES.includes(name)) &&
+      (command === argPattern || command.startsWith(argPattern + ' '))
+    ) {
+      return true;
     }
   }
 

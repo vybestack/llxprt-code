@@ -69,11 +69,9 @@ function findNextWordBoundary(line: string, cursorCol: number): number {
   for (const seg of segmenter.segment(line)) {
     const segEnd = seg.index + seg.segment.length;
 
-    if (segEnd > cursorIdx) {
-      if (seg.isWordLike === true) {
-        targetIdx = segEnd;
-        break;
-      }
+    if (segEnd > cursorIdx && seg.isWordLike === true) {
+      targetIdx = segEnd;
+      break;
     }
   }
 

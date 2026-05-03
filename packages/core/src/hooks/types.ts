@@ -245,13 +245,13 @@ export class BeforeToolHookOutput extends DefaultHookOutput {
    */
   override getEffectiveReason(): string {
     // Check for compatibility fields first
-    if (this.hookSpecificOutput) {
-      if ('permissionDecisionReason' in this.hookSpecificOutput) {
-        const compatReason =
-          this.hookSpecificOutput['permissionDecisionReason'];
-        if (typeof compatReason === 'string') {
-          return compatReason;
-        }
+    if (
+      this.hookSpecificOutput &&
+      'permissionDecisionReason' in this.hookSpecificOutput
+    ) {
+      const compatReason = this.hookSpecificOutput['permissionDecisionReason'];
+      if (typeof compatReason === 'string') {
+        return compatReason;
       }
     }
 

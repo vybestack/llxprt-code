@@ -367,10 +367,11 @@ function validateRetentionConfig(
   }
 
   // Validate maxCount if provided
-  if (retentionConfig.maxCount !== undefined) {
-    if (retentionConfig.maxCount < MIN_MAX_COUNT) {
-      return `maxCount must be at least ${MIN_MAX_COUNT}`;
-    }
+  if (
+    retentionConfig.maxCount !== undefined &&
+    retentionConfig.maxCount < MIN_MAX_COUNT
+  ) {
+    return `maxCount must be at least ${MIN_MAX_COUNT}`;
   }
 
   // At least one retention method must be specified
