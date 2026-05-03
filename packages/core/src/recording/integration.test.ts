@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * @plan PLAN-20260211-SESSIONRECORDING.P25
  * @requirement REQ-INT-FULL-001, REQ-INT-FULL-002, REQ-INT-FULL-003, REQ-INT-FULL-004, REQ-INT-FULL-005

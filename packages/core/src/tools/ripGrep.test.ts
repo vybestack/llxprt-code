@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { RipGrepToolParams } from './ripGrep.js';
 import { RipGrepTool } from './ripGrep.js';

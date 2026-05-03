@@ -9,6 +9,8 @@
  * BEHAVIORAL TESTS - No mocks, testing actual retry and failover behavior
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect } from 'vitest';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';

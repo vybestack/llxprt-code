@@ -14,6 +14,8 @@
  * 4. Constructor accepts ProviderManager dependency
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';

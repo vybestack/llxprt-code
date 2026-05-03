@@ -8,6 +8,8 @@
  * causing /stats model to show "No API calls" even after making requests.
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';

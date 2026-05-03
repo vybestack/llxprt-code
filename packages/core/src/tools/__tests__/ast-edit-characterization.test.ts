@@ -8,6 +8,8 @@
  * Phase 0, Step 0.1: Core characterization tests
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   ASTEditTool,

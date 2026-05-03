@@ -36,6 +36,8 @@
  * recordHistory's thoughtBlocks logic, but we need to verify the full flow.
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiChat } from './geminiChat.js';
 import { HistoryService } from '../services/history/HistoryService.js';

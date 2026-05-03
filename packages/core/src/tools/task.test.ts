@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '../config/config.js';

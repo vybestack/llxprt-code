@@ -10,6 +10,8 @@
  * These tests verify the failover policy for load balancing.
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '../../settings/SettingsService.js';
