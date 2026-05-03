@@ -15,18 +15,8 @@
  * 5. OAuth (if enabled)
  */
 
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import * as os from 'node:os';
 import type { SettingsService } from '../settings/SettingsService.js';
-import {
-  getActiveProviderRuntimeContext,
-  type ProviderRuntimeContext,
-} from '../runtime/providerRuntimeContext.js';
-import { DebugLogger } from '../debug/index.js';
-import { getProviderKeyStorage } from '../storage/provider-key-storage.js';
-
-const logger = new DebugLogger('llxprt:auth:precedence');
+import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 export interface AuthPrecedenceConfig {
   // Constructor/direct API key
@@ -76,18 +66,13 @@ export interface OAuthManager {
   ): Promise<OAuthToken | null>;
 }
 
-interface ResolveAuthOptions {
-  settingsService?: SettingsService | null;
-  includeOAuth?: boolean;
-}
-
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P18
  * @requirement REQ-SP2-004
  * @pseudocode auth-runtime-scope.md lines 1-6
  * Runtime-scoped credential bookkeeping keyed by runtime, provider, and profile identifiers.
  */
-interface RuntimeScopedAuthEntry {
+export interface RuntimeScopedAuthEntry {
   key: string;
   providerId: string;
   profileId: string;
@@ -124,7 +109,7 @@ interface RuntimeAuthScopeMetadataRecord {
   };
 }
 
-interface RuntimeScopedState {
+export interface RuntimeScopedState {
   runtimeAuthScopeId: string;
   entries: Map<string, RuntimeScopedAuthEntry>;
   metadata: RuntimeAuthScopeMetadataRecord;
@@ -132,7 +117,7 @@ interface RuntimeScopedState {
   settingsSubscriptions: Array<() => void>;
 }
 
-const runtimeScopedStates = new Map<string, RuntimeScopedState>();
+export const runtimeScopedStates = new Map<string, RuntimeScopedState>();
 let legacyRuntimeScopeWarningEmitted = false;
 
 function maskToken(token: string): string {
@@ -156,7 +141,9 @@ function normalizeExpiry(expiry?: number | null): number | undefined {
   return expiry > 1_000_000_000_000 ? expiry : expiry * 1000;
 }
 
-function resolveProfileId(settingsService: SettingsService): string | null {
+export function resolveProfileId(
+  settingsService: SettingsService,
+): string | null {
   // Prefer explicit profile tracking, fall back to stored value.
   // IMPORTANT: Returning null means "no profile loaded" and callers must avoid
   // passing a synthetic "default" profileId into OAuth metadata.
@@ -178,7 +165,7 @@ function resolveProfileId(settingsService: SettingsService): string | null {
   return null;
 }
 
-function buildCacheKey(
+export function buildCacheKey(
   runtimeId: string,
   providerId: string,
   profileId: string,
@@ -220,7 +207,7 @@ function updateMetadataEntry(
   state.metadata.metrics.lastUpdated = Date.now();
 }
 
-function ensureRuntimeState(
+export function ensureRuntimeState(
   context: ProviderRuntimeContext,
 ): RuntimeScopedState {
   const runtimeId = context.runtimeId ?? 'legacy-singleton';
@@ -263,17 +250,17 @@ function ensureRuntimeState(
   return state;
 }
 
-function recordCacheHit(state: RuntimeScopedState): void {
+export function recordCacheHit(state: RuntimeScopedState): void {
   state.metadata.metrics.hits += 1;
   state.metadata.metrics.lastUpdated = Date.now();
 }
 
-function recordCacheMiss(state: RuntimeScopedState): void {
+export function recordCacheMiss(state: RuntimeScopedState): void {
   state.metadata.metrics.misses += 1;
   state.metadata.metrics.lastUpdated = Date.now();
 }
 
-function getValidCachedEntry(
+export function getValidCachedEntry(
   state: RuntimeScopedState,
   providerId: string,
   profileId: string,
@@ -299,7 +286,7 @@ function getValidCachedEntry(
   return entry;
 }
 
-function registerSettingsSubscriptions(
+export function registerSettingsSubscriptions(
   state: RuntimeScopedState,
   settingsService: SettingsService,
   providerId: string,
@@ -362,7 +349,7 @@ function registerSettingsSubscriptions(
   );
 }
 
-function invalidateMatchingEntries(
+export function invalidateMatchingEntries(
   state: RuntimeScopedState,
   predicate: (entry: RuntimeScopedAuthEntry) => boolean,
   reason: string,
@@ -376,7 +363,7 @@ function invalidateMatchingEntries(
   return summaries;
 }
 
-function storeRuntimeScopedToken(
+export function storeRuntimeScopedToken(
   state: RuntimeScopedState,
   providerId: string,
   profileId: string,
@@ -427,7 +414,7 @@ function storeRuntimeScopedToken(
   updateMetadataEntry(state, entry, toPublicEntry(entry));
 }
 
-function invalidateEntry(
+export function invalidateEntry(
   state: RuntimeScopedState,
   cacheKey: string,
   reason: string,
@@ -524,604 +511,4 @@ export function flushRuntimeAuthScope(
   return { runtimeId, revokedTokens };
 }
 
-/**
- * Check if authOnly mode is enabled (OAuth-only authentication)
- * @param value The authOnly setting value from SettingsService
- * @returns true if authOnly is enabled, false otherwise
- */
-function isAuthOnlyEnabled(value: unknown): boolean {
-  if (typeof value === 'boolean') {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === 'true') {
-      return true;
-    }
-    if (normalized === 'false') {
-      return false;
-    }
-  }
-  return false;
-}
-
-export class AuthPrecedenceResolver {
-  private config: AuthPrecedenceConfig;
-  private oauthManager?: OAuthManager;
-  private settingsService?: SettingsService;
-
-  constructor(
-    config: AuthPrecedenceConfig,
-    oauthManager?: OAuthManager,
-    settingsService?: SettingsService,
-  ) {
-    this.config = config;
-    this.oauthManager = oauthManager;
-    this.settingsService = settingsService;
-  }
-
-  /**
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
-   * @requirement REQ-SP2-001
-   * @pseudocode base-provider-call-contract.md lines 1-2
-   */
-  setSettingsService(
-    settingsService: SettingsService | null | undefined,
-  ): void {
-    if (!settingsService) {
-      this.settingsService = undefined;
-      return;
-    }
-    this.settingsService = settingsService;
-  }
-
-  /**
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
-   * @requirement REQ-SP2-001
-   * @pseudocode base-provider-call-contract.md lines 1-2
-   */
-  private resolveSettingsService(
-    override?: SettingsService | null,
-  ): SettingsService {
-    if (override != null) {
-      return override;
-    }
-    if (this.settingsService != null) {
-      return this.settingsService;
-    }
-    const context = getActiveProviderRuntimeContext();
-    const settingsService = (
-      context as { settingsService?: SettingsService | null }
-    ).settingsService;
-    if (settingsService === null || settingsService === undefined) {
-      throw new Error('Active provider runtime context not available');
-    }
-    this.settingsService = settingsService;
-    return this.settingsService;
-  }
-
-  /**
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
-   * @requirement REQ-SP2-001
-   * @pseudocode base-provider-call-contract.md lines 1-3
-   * Resolves authentication using the full precedence chain
-   * Returns the first available authentication method or null if none found
-   */
-  async resolveAuthentication(
-    options?: ResolveAuthOptions,
-  ): Promise<string | null> {
-    const includeOAuth = options?.includeOAuth ?? false;
-    const settingsService = this.resolveSettingsService(
-      options?.settingsService ?? undefined,
-    );
-    const providerKey = this.normalizeProviderId(this.config.providerId);
-
-    const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
-
-    if (!authOnly) {
-      const providerSettings =
-        providerKey && typeof settingsService.getProviderSettings === 'function'
-          ? settingsService.getProviderSettings(providerKey)
-          : undefined;
-
-      const providerAuthKey = this.normalizeAuthValue(
-        providerSettings?.['auth-key'] ?? providerSettings?.apiKey,
-      );
-      if (providerAuthKey) {
-        return providerAuthKey;
-      }
-
-      const providerAuthKeyfile = this.normalizeAuthValue(
-        providerSettings?.['auth-keyfile'] ?? providerSettings?.apiKeyfile,
-      );
-      if (providerAuthKeyfile) {
-        const keyFromFile = await this.readKeyFile(providerAuthKeyfile);
-        if (keyFromFile) {
-          return keyFromFile;
-        }
-      }
-
-      const normalizedConfigKey = this.normalizeAuthValue(
-        this.config.apiKey ?? null,
-      );
-      if (normalizedConfigKey) {
-        return normalizedConfigKey;
-      }
-
-      if (this.shouldUseGlobalAuth(settingsService, providerKey)) {
-        const authKey = this.normalizeAuthValue(
-          settingsService.get('auth-key'),
-        );
-        if (authKey) {
-          return authKey;
-        }
-
-        const authKeyName = this.normalizeAuthValue(
-          settingsService.get('auth-key-name'),
-        );
-        if (authKeyName) {
-          return this.resolveNamedKey(authKeyName);
-        }
-
-        const authKeyfile = this.normalizeAuthValue(
-          settingsService.get('auth-keyfile'),
-        );
-        if (authKeyfile) {
-          const keyFromFile = await this.readKeyFile(authKeyfile);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (keyFromFile) {
-            return keyFromFile;
-          }
-        }
-      }
-
-      if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
-        for (const envVarName of this.config.envKeyNames) {
-          const envValue = this.normalizeAuthValue(process.env[envVarName]);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (envValue) {
-            return envValue;
-          }
-        }
-      }
-    }
-
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      includeOAuth &&
-      this.config.isOAuthEnabled === true &&
-      this.config.supportsOAuth === true &&
-      this.oauthManager != null &&
-      this.config.oauthProvider != null
-    ) {
-      const providerId = this.resolveProviderIdentifier(providerKey);
-      const profileId = resolveProfileId(settingsService);
-      const profileScopeId = profileId ?? 'no-profile';
-
-      let runtimeContext: ProviderRuntimeContext | null = null;
-      let runtimeState: RuntimeScopedState | null = null;
-
-      try {
-        runtimeContext = getActiveProviderRuntimeContext();
-        runtimeState = ensureRuntimeState(runtimeContext);
-        registerSettingsSubscriptions(
-          runtimeState,
-          settingsService,
-          providerId,
-        );
-      } catch {
-        runtimeContext = null;
-        runtimeState = null;
-      }
-
-      const managerWithCheck = this.oauthManager as OAuthManager & {
-        isOAuthEnabled?(
-          provider: string,
-        ): boolean | Promise<boolean | undefined>;
-      };
-      if (
-        managerWithCheck.isOAuthEnabled &&
-        typeof managerWithCheck.isOAuthEnabled === 'function'
-      ) {
-        let isEnabledByManager: boolean | undefined;
-        try {
-          const enabledResult = managerWithCheck.isOAuthEnabled(
-            this.config.oauthProvider,
-          );
-          isEnabledByManager =
-            typeof enabledResult === 'boolean'
-              ? enabledResult
-              : await enabledResult;
-        } catch (error) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (process.env.DEBUG) {
-            debugLogger.debug(
-              `Failed to determine OAuth enablement for ${this.config.oauthProvider}:`,
-              error,
-            );
-          }
-          isEnabledByManager = undefined;
-        }
-
-        if (isEnabledByManager === false) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (runtimeState) {
-            const cacheKey = buildCacheKey(
-              runtimeState.runtimeAuthScopeId,
-              providerId,
-              profileScopeId,
-            );
-            if (runtimeState.entries.has(cacheKey)) {
-              invalidateEntry(runtimeState, cacheKey, 'oauth-disabled');
-            }
-          }
-          return null;
-        }
-      }
-
-      if (runtimeState) {
-        const cachedEntry = getValidCachedEntry(
-          runtimeState,
-          providerId,
-          profileScopeId,
-        );
-        if (cachedEntry) {
-          recordCacheHit(runtimeState);
-          return cachedEntry.token;
-        }
-
-        recordCacheMiss(runtimeState);
-      }
-
-      try {
-        const requestMetadata: OAuthTokenRequestMetadata = {
-          runtimeAuthScopeId: runtimeState?.runtimeAuthScopeId ?? 'no-runtime',
-          providerId,
-          profileId: profileId ?? undefined,
-          cliScope:
-            runtimeContext?.metadata &&
-            typeof runtimeContext.metadata === 'object'
-              ? runtimeContext.metadata
-              : undefined,
-          runtimeMetadata:
-            runtimeContext?.metadata &&
-            typeof runtimeContext.metadata === 'object'
-              ? runtimeContext.metadata
-              : undefined,
-        };
-
-        const token = await this.oauthManager.getToken(
-          this.config.oauthProvider,
-          requestMetadata,
-        );
-        if (token) {
-          let oauthToken: OAuthToken | null | undefined;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (typeof this.oauthManager.getOAuthToken === 'function') {
-            try {
-              oauthToken = await this.oauthManager.getOAuthToken(
-                this.config.oauthProvider,
-                requestMetadata,
-              );
-            } catch (tokenError) {
-              if (process.env.DEBUG) {
-                debugLogger.debug(
-                  `Failed to fetch OAuth token metadata for ${this.config.oauthProvider}:`,
-                  tokenError,
-                );
-              }
-              oauthToken = null;
-            }
-          }
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (runtimeState) {
-            storeRuntimeScopedToken(
-              runtimeState,
-              providerId,
-              profileScopeId,
-              token,
-              oauthToken ?? null,
-            );
-          }
-          return token;
-        }
-      } catch (error) {
-        if (process.env.DEBUG) {
-          debugLogger.warn(
-            `Failed to get OAuth token for ${this.config.oauthProvider}:`,
-            error,
-          );
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
-   * @requirement REQ-SP2-001
-   * @pseudocode base-provider-call-contract.md lines 1-3
-   * Check if any authentication method is available without triggering OAuth
-   */
-  async hasNonOAuthAuthentication(
-    options?: ResolveAuthOptions,
-  ): Promise<boolean> {
-    const auth = await this.resolveAuthentication({
-      ...options,
-      includeOAuth: false,
-    });
-    return auth !== null;
-  }
-
-  /**
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
-   * @requirement REQ-SP2-001
-   * @pseudocode base-provider-call-contract.md lines 1-3
-   * Check if OAuth is the only available authentication method
-   */
-  async isOAuthOnlyAvailable(options?: ResolveAuthOptions): Promise<boolean> {
-    const hasNonOAuth = await this.hasNonOAuthAuthentication(options);
-    return (
-      !hasNonOAuth &&
-      this.config.isOAuthEnabled === true &&
-      this.config.supportsOAuth === true
-    );
-  }
-
-  /**
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
-   * @requirement REQ-SP2-001
-   * @pseudocode base-provider-call-contract.md lines 1-3
-   * Get authentication method name for debugging/logging
-   */
-  async getAuthMethodName(
-    options?: ResolveAuthOptions,
-  ): Promise<string | null> {
-    const settingsService = this.resolveSettingsService(
-      options?.settingsService ?? undefined,
-    );
-
-    // Check precedence levels and return method name
-    const authKey = settingsService.get('auth-key');
-    if (
-      authKey != null &&
-      typeof authKey === 'string' &&
-      authKey.trim() !== ''
-    ) {
-      return 'command-key';
-    }
-
-    const authKeyName = this.normalizeAuthValue(
-      settingsService.get('auth-key-name'),
-    );
-    if (authKeyName !== undefined && authKeyName !== '') {
-      return 'named-key';
-    }
-
-    const authKeyfile = settingsService.get('auth-keyfile');
-    if (typeof authKeyfile === 'string' && authKeyfile) {
-      try {
-        const keyFromFile = await this.readKeyFile(authKeyfile);
-        if (keyFromFile) {
-          return 'command-keyfile';
-        }
-      } catch {
-        // Ignore errors for method detection
-      }
-    }
-
-    if (
-      this.config.apiKey &&
-      typeof this.config.apiKey === 'string' &&
-      this.config.apiKey.trim() !== ''
-    ) {
-      return 'constructor-apikey';
-    }
-
-    if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
-      for (const envVarName of this.config.envKeyNames) {
-        const envValue = process.env[envVarName];
-        if (envValue && envValue.trim() !== '') {
-          return `env-${envVarName.toLowerCase()}`;
-        }
-      }
-    }
-
-    if (
-      this.config.isOAuthEnabled === true &&
-      this.config.supportsOAuth === true &&
-      this.oauthManager != null &&
-      this.config.oauthProvider != null
-    ) {
-      try {
-        const isAuthenticated = await this.oauthManager.isAuthenticated(
-          this.config.oauthProvider,
-        );
-        if (isAuthenticated) {
-          return `oauth-${this.config.oauthProvider}`;
-        }
-      } catch {
-        // Ignore errors for method detection
-      }
-    }
-
-    return null;
-  }
-
-  private normalizeAuthValue(value: unknown): string | undefined {
-    if (typeof value !== 'string') {
-      return undefined;
-    }
-    const trimmed = value.trim();
-    if (!trimmed || trimmed.toLowerCase() === 'none') {
-      return undefined;
-    }
-    return trimmed;
-  }
-
-  private normalizeProviderId(value?: string | null): string | undefined {
-    if (typeof value !== 'string') {
-      return undefined;
-    }
-    const trimmed = value.trim();
-    return trimmed === '' ? undefined : trimmed;
-  }
-
-  private resolveProviderIdentifier(preferredProviderId?: string): string {
-    if (preferredProviderId?.trim()) {
-      return preferredProviderId.trim();
-    }
-    const oauthProvider = this.normalizeProviderId(this.config.oauthProvider);
-    if (oauthProvider) {
-      return oauthProvider;
-    }
-    if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
-      return this.config.envKeyNames[0] ?? 'unknown-provider';
-    }
-    return 'unknown-provider';
-  }
-
-  private shouldUseGlobalAuth(
-    settingsService: SettingsService,
-    providerId?: string,
-  ): boolean {
-    if (!providerId) {
-      return true;
-    }
-    const activeProvider = settingsService.get('activeProvider');
-    if (typeof activeProvider !== 'string') {
-      return true;
-    }
-    const trimmed = activeProvider.trim();
-    if (!trimmed) {
-      return true;
-    }
-    return trimmed === providerId;
-  }
-
-  private async resolveNamedKey(name: string): Promise<string> {
-    const trimmedName = this.normalizeAuthValue(name);
-    if (!trimmedName) {
-      throw new Error('Named key reference is empty');
-    }
-
-    const storage = getProviderKeyStorage();
-    const key = this.normalizeAuthValue(await storage.getKey(trimmedName));
-    if (!key) {
-      throw new Error(
-        `Named key '${trimmedName}' not found. Save it with /key save ${trimmedName} <api-key> before retrying.`,
-      );
-    }
-
-    return key;
-  }
-
-  /**
-   * Reads API key from a file path, handling tilde expansion, absolute and relative paths
-   */
-  private async readKeyFile(filePath: string): Promise<string | null> {
-    try {
-      // Handle tilde expansion for home directory
-      const expandedPath = filePath.startsWith('~')
-        ? path.join(os.homedir(), filePath.slice(1))
-        : filePath;
-
-      // Handle relative paths from current working directory
-      const resolvedPath = path.isAbsolute(expandedPath)
-        ? expandedPath
-        : path.resolve(process.cwd(), expandedPath);
-
-      const content = await fs.readFile(resolvedPath, 'utf-8');
-      const key = content.trim();
-
-      if (key === '') {
-        if (process.env.DEBUG) {
-          debugLogger.warn(`Key file ${filePath} is empty`);
-        }
-        return null;
-      }
-
-      return key;
-    } catch (error) {
-      if (process.env.DEBUG) {
-        debugLogger.warn(`Failed to read key file ${filePath}:`, error);
-      }
-      return null;
-    }
-  }
-
-  /**
-   * Updates the configuration
-   */
-  updateConfig(newConfig: Partial<AuthPrecedenceConfig>): void {
-    this.config = { ...this.config, ...newConfig };
-  }
-
-  /**
-   * Updates the OAuth manager
-   */
-  updateOAuthManager(oauthManager: OAuthManager): void {
-    this.oauthManager = oauthManager;
-  }
-
-  /**
-   * Invalidates the cached OAuth tokens for this resolver.
-   * This should be called during logout to ensure fresh tokens are fetched
-   * on the next authentication attempt.
-   *
-   * @plan PLAN-20251023-STATELESS-HARDENING
-   * @requirement Issue #975 - OAuth logout cache invalidation
-   */
-  invalidateCache(): void {
-    // Flush known runtime scopes that may have cached tokens for this provider
-    const knownRuntimeIds = ['legacy-singleton', 'provider-manager-singleton'];
-
-    try {
-      const context = getActiveProviderRuntimeContext();
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Auth precedence consumes persisted/runtime credentials despite declared types.
-      if (context?.runtimeId && !knownRuntimeIds.includes(context.runtimeId)) {
-        knownRuntimeIds.push(context.runtimeId);
-      }
-    } catch {
-      // Context not available, proceed with known IDs
-    }
-
-    for (const runtimeId of knownRuntimeIds) {
-      try {
-        flushRuntimeAuthScope(runtimeId);
-      } catch (error) {
-        logger.debug(
-          () => `Failed to flush runtime auth scope ${runtimeId}: ${error}`,
-        );
-      }
-    }
-  }
-
-  /**
-   * Invalidates cached OAuth tokens for a specific provider.
-   * This enables surgical cache invalidation for a single provider rather than
-   * the all-or-nothing invalidateCache() behavior.
-   *
-   * @param providerId - The provider ID to invalidate cache entries for
-   * @param profileId - Optional profile ID to invalidate only that specific profile
-   * @fix issue1861 - Token revocation handling
-   */
-  invalidateProviderCache(providerId: string, profileId?: string): void {
-    // Iterate all runtime-scoped states to ensure revoked tokens are
-    // invalidated across every active runtime scope
-    for (const [, state] of runtimeScopedStates) {
-      invalidateMatchingEntries(
-        state,
-        (entry) => {
-          if (entry.providerId !== providerId) return false;
-          if (profileId !== undefined && entry.profileId !== profileId) {
-            return false;
-          }
-          return true;
-        },
-        'token-revoked',
-      );
-    }
-  }
-}
+export { AuthPrecedenceResolver } from './auth-precedence-resolver.js';
