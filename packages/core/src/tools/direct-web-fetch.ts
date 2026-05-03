@@ -28,6 +28,12 @@ import { ensureJsonSafe } from '../utils/unicodeUtils.js';
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000; // 30 seconds
 const MAX_TIMEOUT = 120 * 1000; // 2 minutes
+const ACCEPT_HEADERS: Record<DirectWebFetchToolParams['format'], string> = {
+  markdown:
+    'text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1',
+  text: 'text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1',
+  html: 'text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1',
+};
 
 export interface DirectWebFetchToolParams {
   url: string;
@@ -98,166 +104,168 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
-    const { url, format, timeout: timeoutSec } = this.params;
-
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      return {
-        llmContent: 'URL must start with http:// or https://',
-        returnDisplay: 'Invalid URL',
-        error: {
-          message: 'Invalid URL protocol',
-          type: ToolErrorType.INVALID_ARGUMENT,
-        },
-      };
-    }
-
-    const timeout = Math.min(
-      (timeoutSec ?? DEFAULT_TIMEOUT / 1000) * 1000,
-      MAX_TIMEOUT,
-    );
-
-    // Build Accept header
-    let acceptHeader = '*/*';
-    switch (format) {
-      case 'markdown':
-        acceptHeader =
-          'text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1';
-        break;
-      case 'text':
-        acceptHeader =
-          'text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1';
-        break;
-      case 'html':
-        acceptHeader =
-          'text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1';
-        break;
-      default:
-        acceptHeader =
-          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
-    }
+    const protocolError = this.validateUrlProtocol();
+    if (protocolError) return protocolError;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-    // If the parent signal aborts, we should also abort our controller
+    const timeoutId = setTimeout(() => controller.abort(), this.getTimeoutMs());
     const onAbort = () => controller.abort();
     signal.addEventListener('abort', onAbort);
 
     try {
-      // Check if already aborted before attempting fetch
-      if (signal.aborted) {
-        return {
-          llmContent: 'Request was aborted before it could start',
-          returnDisplay: 'Request aborted',
-          error: {
-            message: 'Request was aborted before it could start',
-            type: ToolErrorType.FETCH_ERROR,
-          },
-        };
-      }
+      if (signal.aborted) return this.createAbortResult();
 
-      const response = await retryWithBackoff(
-        async () => {
-          const resp = await fetch(url, {
-            signal: controller.signal,
-            headers: {
-              'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              Accept: acceptHeader,
-              'Accept-Language': 'en-US,en;q=0.9',
-            },
-          } as RequestInit);
-
-          if (!resp.ok) {
-            const error = new Error(
-              `Request failed with status code: ${resp.status}`,
-            ) as Error & { status: number };
-            error.status = resp.status;
-            throw error;
-          }
-
-          return resp;
-        },
-        {
-          maxAttempts: 3,
-          initialDelayMs: 500,
-          retryFetchErrors: true,
-          signal: controller.signal,
-        },
-      );
-
-      // Check content length
-      const contentLength = response.headers.get('content-length');
-      if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_SIZE) {
-        throw new Error('Response too large (exceeds 5MB limit)');
-      }
-
-      const arrayBuffer = await response.arrayBuffer();
-      if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
-        throw new Error('Response too large (exceeds 5MB limit)');
-      }
-
+      const response = await this.fetchResponse(controller.signal);
+      const arrayBuffer = await this.readBoundedResponse(response);
       const content = new TextDecoder().decode(arrayBuffer);
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: content-type header may be empty string
-      const contentType = response.headers.get('content-type') || '';
-
-      let output = content;
-
-      switch (format) {
-        case 'markdown':
-          if (contentType.includes('text/html')) {
-            output = this.convertHTMLToMarkdown(content);
-          }
-          break;
-
-        case 'text':
-          if (contentType.includes('text/html')) {
-            output = this.extractTextFromHTML(content);
-          }
-          break;
-        default:
-          break;
-      }
+      const output = this.convertContent(
+        content,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Preserve prior empty-string fallback for missing/blank content-type.
+        response.headers.get('content-type') || '',
+      );
 
       return {
         llmContent: ensureJsonSafe(output),
-        returnDisplay: `Fetched ${url} as ${format}`,
+        returnDisplay: `Fetched ${this.params.url} as ${this.params.format}`,
       };
     } catch (error) {
-      let errorMessage: string;
-      if (error instanceof Error) {
-        errorMessage = error.message;
-        // Preserve the cause chain (cause is ES2022+, so check with 'in' operator)
-        const err = error as Error & { cause?: unknown };
-        if (
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          'cause' in err &&
-          err.cause !== undefined &&
-          err.cause !== null &&
-          err.cause !== false &&
-          err.cause !== 0 &&
-          err.cause !== '' &&
-          !Number.isNaN(err.cause)
-        ) {
-          const causeMessage =
-            err.cause instanceof Error ? err.cause.message : String(err.cause);
-          errorMessage += `: ${causeMessage}`;
-        }
-      } else {
-        errorMessage = String(error);
-      }
-      return {
-        llmContent: `Error fetching URL: ${errorMessage}`,
-        returnDisplay: `Error: ${errorMessage}`,
-        error: {
-          message: errorMessage,
-          type: ToolErrorType.FETCH_ERROR,
-        },
-      };
+      return this.createFetchErrorResult(error);
     } finally {
       clearTimeout(timeoutId);
       signal.removeEventListener('abort', onAbort);
     }
+  }
+
+  private validateUrlProtocol(): ToolResult | undefined {
+    if (
+      this.params.url.startsWith('http://') ||
+      this.params.url.startsWith('https://')
+    ) {
+      return undefined;
+    }
+
+    return {
+      llmContent: 'URL must start with http:// or https://',
+      returnDisplay: 'Invalid URL',
+      error: {
+        message: 'Invalid URL protocol',
+        type: ToolErrorType.INVALID_ARGUMENT,
+      },
+    };
+  }
+
+  private getTimeoutMs(): number {
+    return Math.min(
+      (this.params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000,
+      MAX_TIMEOUT,
+    );
+  }
+
+  private createAbortResult(): ToolResult {
+    return {
+      llmContent: 'Request was aborted before it could start',
+      returnDisplay: 'Request aborted',
+      error: {
+        message: 'Request was aborted before it could start',
+        type: ToolErrorType.FETCH_ERROR,
+      },
+    };
+  }
+
+  private async fetchResponse(signal: AbortSignal) {
+    return retryWithBackoff(
+      async () => {
+        const resp = await fetch(this.params.url, {
+          signal,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            Accept: ACCEPT_HEADERS[this.params.format],
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+        } as RequestInit);
+
+        if (!resp.ok) {
+          const error = new Error(
+            `Request failed with status code: ${resp.status}`,
+          ) as Error & { status: number };
+          error.status = resp.status;
+          throw error;
+        }
+
+        return resp;
+      },
+      {
+        maxAttempts: 3,
+        initialDelayMs: 500,
+        retryFetchErrors: true,
+        signal,
+      },
+    );
+  }
+
+  private async readBoundedResponse(
+    response: Awaited<ReturnType<typeof fetch>>,
+  ): Promise<ArrayBuffer> {
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_SIZE) {
+      throw new Error('Response too large (exceeds 5MB limit)');
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
+      throw new Error('Response too large (exceeds 5MB limit)');
+    }
+    return arrayBuffer;
+  }
+
+  private convertContent(content: string, contentType: string): string {
+    if (
+      this.params.format === 'markdown' &&
+      contentType.includes('text/html')
+    ) {
+      return this.convertHTMLToMarkdown(content);
+    }
+    if (this.params.format === 'text' && contentType.includes('text/html')) {
+      return this.extractTextFromHTML(content);
+    }
+    return content;
+  }
+
+  private createFetchErrorResult(error: unknown): ToolResult {
+    const errorMessage = this.formatErrorMessage(error);
+    return {
+      llmContent: `Error fetching URL: ${errorMessage}`,
+      returnDisplay: `Error: ${errorMessage}`,
+      error: {
+        message: errorMessage,
+        type: ToolErrorType.FETCH_ERROR,
+      },
+    };
+  }
+
+  private formatErrorMessage(error: unknown): string {
+    if (!(error instanceof Error)) return String(error);
+
+    let errorMessage = error.message;
+    const err = error as Error & { cause?: unknown };
+    if (this.hasTruthyCause(err)) {
+      const causeMessage =
+        err.cause instanceof Error ? err.cause.message : String(err.cause);
+      errorMessage += `: ${causeMessage}`;
+    }
+    return errorMessage;
+  }
+
+  private hasTruthyCause(error: Error & { cause?: unknown }): boolean {
+    if (!('cause' in error)) return false;
+    return this.isTruthyCause(error.cause);
+  }
+
+  private isTruthyCause(cause: unknown): boolean {
+    if (cause === undefined || cause === null) return false;
+    if (cause === false || cause === 0 || cause === '') return false;
+    return !Number.isNaN(cause);
   }
 
   private extractTextFromHTML(html: string): string {
