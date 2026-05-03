@@ -116,6 +116,56 @@ export const MultiProviderPrivacyNotice = ({
     providerInfo?.displayName === 'Local Model' ||
     PROVIDER_ALIASES[providerName.toLowerCase()] === 'local';
 
+  const renderProviderContent = () => {
+    if (isLocal) {
+      return (
+        <Box flexDirection="column">
+          <Text color={Colors.AccentGreen}>
+            Local models keep all data on your machine.
+          </Text>
+          {providerInfo?.keyPoints.map((point, index) => (
+            <Text key={index} color={Colors.Foreground}>
+              {'  '}- {point}
+            </Text>
+          ))}
+        </Box>
+      );
+    }
+    if (providerInfo) {
+      return (
+        <Box flexDirection="column">
+          <Text color={Colors.Foreground}>
+            <Text color={Colors.AccentBlue}>[Terms]</Text> {providerInfo.tosUrl}
+          </Text>
+          <Text color={Colors.Foreground}>
+            <Text color={Colors.AccentGreen}>[Privacy]</Text>{' '}
+            {providerInfo.privacyUrl}
+          </Text>
+          <Newline />
+          <Text bold color={Colors.Foreground}>
+            Key points:
+          </Text>
+          {providerInfo.keyPoints.map((point, index) => (
+            <Text key={index} color={Colors.Foreground}>
+              {'  '}- {point}
+            </Text>
+          ))}
+        </Box>
+      );
+    }
+    return (
+      <Box flexDirection="column">
+        <Text color={Colors.Foreground}>
+          Please refer to {displayName}&apos;s terms of service and privacy
+          policy
+        </Text>
+        <Text color={Colors.Foreground}>
+          for information about how your data is handled.
+        </Text>
+      </Box>
+    );
+  };
+
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text bold color={Colors.AccentPurple}>
@@ -140,47 +190,7 @@ export const MultiProviderPrivacyNotice = ({
       </Text>
       <Newline />
 
-      {isLocal ? (
-        <Box flexDirection="column">
-          <Text color={Colors.AccentGreen}>
-            Local models keep all data on your machine.
-          </Text>
-          {providerInfo?.keyPoints.map((point, index) => (
-            <Text key={index} color={Colors.Foreground}>
-              {'  '}- {point}
-            </Text>
-          ))}
-        </Box>
-      ) : providerInfo ? (
-        <Box flexDirection="column">
-          <Text color={Colors.Foreground}>
-            <Text color={Colors.AccentBlue}>[Terms]</Text> {providerInfo.tosUrl}
-          </Text>
-          <Text color={Colors.Foreground}>
-            <Text color={Colors.AccentGreen}>[Privacy]</Text>{' '}
-            {providerInfo.privacyUrl}
-          </Text>
-          <Newline />
-          <Text bold color={Colors.Foreground}>
-            Key points:
-          </Text>
-          {providerInfo.keyPoints.map((point, index) => (
-            <Text key={index} color={Colors.Foreground}>
-              {'  '}- {point}
-            </Text>
-          ))}
-        </Box>
-      ) : (
-        <Box flexDirection="column">
-          <Text color={Colors.Foreground}>
-            Please refer to {displayName}&apos;s terms of service and privacy
-            policy
-          </Text>
-          <Text color={Colors.Foreground}>
-            for information about how your data is handled.
-          </Text>
-        </Box>
-      )}
+      {renderProviderContent()}
 
       <Newline />
       <Text color={Colors.Gray}>

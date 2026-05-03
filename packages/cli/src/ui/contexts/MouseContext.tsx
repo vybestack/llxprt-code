@@ -106,22 +106,14 @@ export function MouseProvider({
         if (parsed) {
           broadcast(parsed.event);
           mouseBuffer = mouseBuffer.slice(parsed.length);
-          continue;
-        }
-
-        if (isIncompleteMouseSequence(mouseBuffer)) {
-          break; // Wait for more data
-        }
-
-        // Not a valid sequence at start, and not waiting for more data.
-        // Discard garbage until next possible sequence start.
-        const nextEsc = mouseBuffer.indexOf(ESC, 1);
-        if (nextEsc !== -1) {
-          mouseBuffer = mouseBuffer.slice(nextEsc);
-          // Loop continues to try parsing at new location
-        } else {
-          mouseBuffer = '';
+        } else if (isIncompleteMouseSequence(mouseBuffer)) {
+          // Wait for more data - exit loop
           break;
+        } else {
+          // Not a valid sequence at start, and not waiting for more data.
+          // Discard garbage until next possible sequence start.
+          const nextEsc = mouseBuffer.indexOf(ESC, 1);
+          mouseBuffer = nextEsc !== -1 ? mouseBuffer.slice(nextEsc) : '';
         }
       }
     };

@@ -96,14 +96,13 @@ export const useTodoContinuation = (
         return false;
       }
 
-      return (
+      const baseConditionsMet =
         conditions.streamCompleted &&
         conditions.noToolCallsMade &&
-        conditions.hasActiveTodos &&
-        conditions.continuationEnabled &&
-        conditions.notAlreadyContinuing &&
-        !conditions.todoPaused
-      );
+        conditions.hasActiveTodos;
+      const continuationReady =
+        conditions.continuationEnabled && conditions.notAlreadyContinuing;
+      return baseConditionsMet && continuationReady && !conditions.todoPaused;
     },
     [isResponding],
   );

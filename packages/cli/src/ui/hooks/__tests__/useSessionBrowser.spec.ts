@@ -2421,10 +2421,15 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
           ),
           (keys) => {
             for (const keyName of keys) {
-              result.current.handleKeypress(
-                keyName === 'a' ? 'a' : keyName === 'tab' ? '\t' : 's',
-                makeKey(keyName),
-              );
+              let keyChar: string;
+              if (keyName === 'a') {
+                keyChar = 'a';
+              } else if (keyName === 'tab') {
+                keyChar = '\t';
+              } else {
+                keyChar = 's';
+              }
+              result.current.handleKeypress(keyChar, makeKey(keyName));
             }
 
             const sessions = result.current.filteredSessions;

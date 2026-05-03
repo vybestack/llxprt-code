@@ -52,6 +52,17 @@ function isLockStale(lockFilePath: string): boolean {
   }
 }
 
+/**
+ * Removes a lock file if it exists, handling errors silently.
+ */
+function removeLockFile(lockFilePath: string): void {
+  try {
+    fs.unlinkSync(lockFilePath);
+  } catch {
+    // Ignore errors removing lock file
+  }
+}
+
 function tryAcquireLock(): string | null {
   const homeDir = os.homedir();
   const locksDir = path.join(homeDir, '.llxprt', 'locks');
@@ -62,17 +73,12 @@ function tryAcquireLock(): string | null {
 
     // Check if lock exists and is stale
     if (fs.existsSync(lockFilePath)) {
-      if (isLockStale(lockFilePath)) {
-        // Remove stale lock
-        try {
-          fs.unlinkSync(lockFilePath);
-        } catch {
-          // Ignore errors removing stale lock
-        }
-      } else {
+      if (!isLockStale(lockFilePath)) {
         // Lock exists and is valid
         return null;
       }
+      // Remove stale lock
+      removeLockFile(lockFilePath);
     }
 
     // Try to create lock file atomically using O_EXCL flag
@@ -102,13 +108,7 @@ function tryAcquireLock(): string | null {
   }
 }
 
-function releaseLock(lockFilePath: string): void {
-  try {
-    fs.unlinkSync(lockFilePath);
-  } catch {
-    // Ignore errors releasing lock
-  }
-}
+const releaseLock = removeLockFile;
 
 function checkForTempDirectories(): string[] {
   const cliPath = process.argv[1];

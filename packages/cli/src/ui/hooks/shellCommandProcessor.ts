@@ -165,11 +165,12 @@ export const useShellCommandProcessor = (
             commandToExecute,
             targetDir,
             (event) => {
+              // Early return for binary stream data - no further processing needed
+              if (event.type === 'data' && isBinaryStream) return;
+
               let shouldUpdate = false;
               switch (event.type) {
                 case 'data':
-                  // Do not process text data if we've already switched to binary mode.
-                  if (isBinaryStream) break;
                   // PTY provides the full screen state, so we just replace.
                   // Child process provides chunks, so we append.
                   if (config.getShouldUseNodePtyShell()) {
@@ -197,17 +198,17 @@ export const useShellCommandProcessor = (
                 }
               }
 
+              if (!shouldUpdate) return;
+
               // Compute the display string based on the *current* state.
               let currentDisplayOutput: string | AnsiOutput;
-              if (isBinaryStream) {
-                if (binaryBytesReceived > 0) {
-                  currentDisplayOutput = `[Receiving binary output... ${formatMemoryUsage(
-                    binaryBytesReceived,
-                  )} received]`;
-                } else {
-                  currentDisplayOutput =
-                    '[Binary output detected. Halting stream...]';
-                }
+              if (isBinaryStream && binaryBytesReceived > 0) {
+                currentDisplayOutput = `[Receiving binary output... ${formatMemoryUsage(
+                  binaryBytesReceived,
+                )} received]`;
+              } else if (isBinaryStream) {
+                currentDisplayOutput =
+                  '[Binary output detected. Halting stream...]';
               } else {
                 currentDisplayOutput = cumulativeStdout;
               }
@@ -219,34 +220,34 @@ export const useShellCommandProcessor = (
                 Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS;
               const isPtyData =
                 event.type === 'data' && config.getShouldUseNodePtyShell();
-              if (shouldUpdate && (isPtyData || pastThrottle)) {
-                setLastShellOutputTime(Date.now());
-                const updateItem = (
-                  baseItem: HistoryItemWithoutId | null,
-                ): HistoryItemWithoutId | null =>
-                  baseItem?.type === 'tool_group'
-                    ? {
-                        ...baseItem,
-                        tools: baseItem.tools.map((tool) =>
-                          tool.callId === callId
-                            ? { ...tool, resultDisplay: currentDisplayOutput }
-                            : tool,
-                        ),
-                      }
-                    : baseItem;
+              if (!isPtyData && !pastThrottle) return;
 
-                if (pendingHistoryItemRef?.current?.type === 'tool_group') {
-                  const nextItem = updateItem(pendingHistoryItemRef.current);
-                  if (nextItem?.type === 'tool_group') {
-                    pendingHistoryItemRef.current = nextItem;
-                  }
-                  setPendingHistoryItem(nextItem);
-                } else {
-                  setPendingHistoryItem((prevItem) => updateItem(prevItem));
+              setLastShellOutputTime(Date.now());
+              const updateItem = (
+                baseItem: HistoryItemWithoutId | null,
+              ): HistoryItemWithoutId | null =>
+                baseItem?.type === 'tool_group'
+                  ? {
+                      ...baseItem,
+                      tools: baseItem.tools.map((tool) =>
+                        tool.callId === callId
+                          ? { ...tool, resultDisplay: currentDisplayOutput }
+                          : tool,
+                      ),
+                    }
+                  : baseItem;
+
+              if (pendingHistoryItemRef?.current?.type === 'tool_group') {
+                const nextItem = updateItem(pendingHistoryItemRef.current);
+                if (nextItem?.type === 'tool_group') {
+                  pendingHistoryItemRef.current = nextItem;
                 }
-
-                lastUpdateTime = Date.now();
+                setPendingHistoryItem(nextItem);
+              } else {
+                setPendingHistoryItem((prevItem) => updateItem(prevItem));
               }
+
+              lastUpdateTime = Date.now();
             },
             abortSignal,
             config.getShouldUseNodePtyShell(),

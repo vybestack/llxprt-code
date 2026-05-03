@@ -46,6 +46,17 @@ export const SYSTEM_NOTICE_EVENT = 'system_notice' as const;
 // ─── Pure utility functions ───────────────────────────────────────────────────
 
 /**
+ * Adds a part (string or Part object) to the result array.
+ */
+function addPartToResult(part: string | Part, resultParts: Part[]): void {
+  if (typeof part === 'string') {
+    resultParts.push({ text: part });
+  } else {
+    resultParts.push(part);
+  }
+}
+
+/**
  * Merges an array of PartListUnions into a single flat Part[].
  */
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
@@ -53,16 +64,10 @@ export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   for (const item of list) {
     if (Array.isArray(item)) {
       for (const part of item) {
-        if (typeof part === 'string') {
-          resultParts.push({ text: part });
-        } else {
-          resultParts.push(part);
-        }
+        addPartToResult(part, resultParts);
       }
-    } else if (typeof item === 'string') {
-      resultParts.push({ text: item });
     } else {
-      resultParts.push(item);
+      addPartToResult(item, resultParts);
     }
   }
   return resultParts;

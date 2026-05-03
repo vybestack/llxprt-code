@@ -93,6 +93,40 @@ export const ProfileAttachmentWizard: React.FC<
     }
   }, [selectedProfile, onConfirm]);
 
+  const renderPreviewInfo = () => {
+    if (!previewInfo) {
+      return <Text color={Colors.Gray}>Profile: {selectedProfile}</Text>;
+    }
+    return (
+      <>
+        {previewInfo.provider && (
+          <Box>
+            <Text color={Colors.Gray}>Provider: </Text>
+            <Text color={Colors.Foreground}>{previewInfo.provider}</Text>
+          </Box>
+        )}
+        {previewInfo.model && (
+          <Box>
+            <Text color={Colors.Gray}>Model: </Text>
+            <Text color={Colors.Foreground}>{previewInfo.model}</Text>
+          </Box>
+        )}
+        {previewInfo.temperature !== undefined && (
+          <Box>
+            <Text color={Colors.Gray}>Temperature: </Text>
+            <Text color={Colors.Foreground}>{previewInfo.temperature}</Text>
+          </Box>
+        )}
+        {previewInfo.maxTokens !== undefined && (
+          <Box>
+            <Text color={Colors.Gray}>Max Tokens: </Text>
+            <Text color={Colors.Foreground}>{previewInfo.maxTokens}</Text>
+          </Box>
+        )}
+      </>
+    );
+  };
+
   useKeypress(
     (key) => {
       if (isConfirming) return;
@@ -190,36 +224,7 @@ export const ProfileAttachmentWizard: React.FC<
         <Text color={Colors.Gray}>
           ──────────────────────────────────────────────────────
         </Text>
-        {previewInfo ? (
-          <>
-            {previewInfo.provider && (
-              <Box>
-                <Text color={Colors.Gray}>Provider: </Text>
-                <Text color={Colors.Foreground}>{previewInfo.provider}</Text>
-              </Box>
-            )}
-            {previewInfo.model && (
-              <Box>
-                <Text color={Colors.Gray}>Model: </Text>
-                <Text color={Colors.Foreground}>{previewInfo.model}</Text>
-              </Box>
-            )}
-            {previewInfo.temperature !== undefined && (
-              <Box>
-                <Text color={Colors.Gray}>Temperature: </Text>
-                <Text color={Colors.Foreground}>{previewInfo.temperature}</Text>
-              </Box>
-            )}
-            {previewInfo.maxTokens !== undefined && (
-              <Box>
-                <Text color={Colors.Gray}>Max Tokens: </Text>
-                <Text color={Colors.Foreground}>{previewInfo.maxTokens}</Text>
-              </Box>
-            )}
-          </>
-        ) : (
-          <Text color={Colors.Gray}>Profile: {selectedProfile}</Text>
-        )}
+        {renderPreviewInfo()}
       </Box>
 
       {/* Controls */}

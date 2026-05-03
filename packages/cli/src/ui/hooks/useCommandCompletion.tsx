@@ -48,6 +48,35 @@ export interface UseCommandCompletionReturn {
   leafCommand: SlashCommand | null;
 }
 
+/**
+ * Counts consecutive backslashes before a position in the codepoints array.
+ */
+function countBackslashesBefore(
+  codePoints: string[],
+  position: number,
+): number {
+  let count = 0;
+  for (let j = position - 1; j >= 0 && codePoints[j] === '\\'; j--) {
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Finds the end position of an @ path by scanning for unescaped spaces.
+ */
+function findAtPathEnd(codePoints: string[], cursorCol: number): number {
+  for (let k = cursorCol; k < codePoints.length; k++) {
+    if (
+      codePoints[k] === ' ' &&
+      countBackslashesBefore(codePoints, k) % 2 === 0
+    ) {
+      return k;
+    }
+  }
+  return codePoints.length;
+}
+
 export function useCommandCompletion(
   buffer: TextBuffer,
   cwd: string,
@@ -96,28 +125,12 @@ export function useCommandCompletion(
         const char = codePoints[i];
 
         if (char === ' ') {
-          let backslashCount = 0;
-          for (let j = i - 1; j >= 0 && codePoints[j] === '\\'; j--) {
-            backslashCount++;
-          }
+          const backslashCount = countBackslashesBefore(codePoints, i);
           if (backslashCount % 2 === 0) {
             break;
           }
         } else if (char === '@') {
-          let end = codePoints.length;
-          for (let i = cursorCol; i < codePoints.length; i++) {
-            if (codePoints[i] === ' ') {
-              let backslashCount = 0;
-              for (let j = i - 1; j >= 0 && codePoints[j] === '\\'; j--) {
-                backslashCount++;
-              }
-
-              if (backslashCount % 2 === 0) {
-                end = i;
-                break;
-              }
-            }
-          }
+          const end = findAtPathEnd(codePoints, cursorCol);
           const pathStart = i + 1;
           const partialPath = currentLine.substring(pathStart, end);
           return {
@@ -233,12 +246,11 @@ export function useCommandCompletion(
       }
 
       let suggestionText = suggestion;
-      if (
-        completionMode === CompletionMode.SLASH &&
-        start === end &&
-        start > 1 &&
-        (buffer.lines[cursorRow] || '')[start - 1] !== ' '
-      ) {
+      const isSlashMode = completionMode === CompletionMode.SLASH;
+      const isEmptyRange = start === end;
+      const hasNonSpaceCharBefore =
+        start > 1 && (buffer.lines[cursorRow] || '')[start - 1] !== ' ';
+      if (isSlashMode && isEmptyRange && hasNonSpaceCharBefore) {
         suggestionText = ' ' + suggestionText;
       }
 

@@ -291,17 +291,17 @@ export function useReactToolScheduler(
           config.disposeScheduler(sessionId);
           return;
         }
-        if (pendingScheduleRequests.current.length > 0) {
-          for (const { request, signal } of pendingScheduleRequests.current) {
-            if (signal.aborted) {
-              continue;
-            }
-            instance.schedule(request, signal).catch(() => {
-              // Silently ignore cancellation rejections - this is expected behavior
-              // when the user presses ESC to cancel queued tool calls
-            });
+        // Process any pending schedule requests
+        const pending = pendingScheduleRequests.current;
+        pendingScheduleRequests.current = [];
+        for (const { request, signal } of pending) {
+          if (signal.aborted) {
+            continue;
           }
-          pendingScheduleRequests.current = [];
+          instance.schedule(request, signal).catch(() => {
+            // Silently ignore cancellation rejections - this is expected behavior
+            // when the user presses ESC to cancel queued tool calls
+          });
         }
 
         setScheduler(instance);

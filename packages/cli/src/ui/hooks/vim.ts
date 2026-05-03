@@ -250,13 +250,13 @@ export function useVim(buffer: TextBuffer, onSubmit?: (value: string) => void) {
       }
 
       // In INSERT mode, let InputPrompt handle completion keys and special commands
-      if (
-        normalizedKey.name === 'tab' ||
-        (normalizedKey.name === 'return' && !normalizedKey.ctrl) ||
-        normalizedKey.name === 'up' ||
-        normalizedKey.name === 'down' ||
-        (normalizedKey.ctrl && normalizedKey.name === 'r')
-      ) {
+      const isTabKey = normalizedKey.name === 'tab';
+      const isReturnWithoutCtrl =
+        normalizedKey.name === 'return' && !normalizedKey.ctrl;
+      const isArrowKey =
+        normalizedKey.name === 'up' || normalizedKey.name === 'down';
+      const isCtrlR = normalizedKey.ctrl && normalizedKey.name === 'r';
+      if (isTabKey || isReturnWithoutCtrl || isArrowKey || isCtrlR) {
         return false; // Let InputPrompt handle completion
       }
 

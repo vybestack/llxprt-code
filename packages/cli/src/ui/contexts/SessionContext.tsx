@@ -37,18 +37,16 @@ function areModelMetricsEqual(a: ModelMetrics, b: ModelMetrics): boolean {
   ) {
     return false;
   }
-  if (
+  const inputTokensChanged =
     a.tokens.input !== b.tokens.input ||
     a.tokens.prompt !== b.tokens.prompt ||
-    a.tokens.candidates !== b.tokens.candidates ||
+    a.tokens.candidates !== b.tokens.candidates;
+  const outputTokensChanged =
     a.tokens.total !== b.tokens.total ||
     a.tokens.cached !== b.tokens.cached ||
     a.tokens.thoughts !== b.tokens.thoughts ||
-    a.tokens.tool !== b.tokens.tool
-  ) {
-    return false;
-  }
-  return true;
+    a.tokens.tool !== b.tokens.tool;
+  return !inputTokensChanged && !outputTokensChanged;
 }
 
 function areToolCallStatsEqual(a: ToolCallStats, b: ToolCallStats): boolean {

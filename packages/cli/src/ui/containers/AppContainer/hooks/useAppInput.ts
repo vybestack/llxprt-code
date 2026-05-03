@@ -496,9 +496,11 @@ function useInputFinish(
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     handleSlashCommand('/quit');
   }, [handleSlashCommand]);
+  const isStreamingIdleOrResponding =
+    streamingState === StreamingState.Idle ||
+    streamingState === StreamingState.Responding;
   const isInputActive =
-    (streamingState === StreamingState.Idle ||
-      streamingState === StreamingState.Responding) &&
+    isStreamingIdleOrResponding &&
     !initError &&
     !isProcessing &&
     !!slashCommands;

@@ -84,6 +84,36 @@ export function sanitizeTranscript(text: string): string {
 }
 
 /**
+ * Formats a single part of a history item to markdown.
+ */
+function formatPartToMarkdown(
+  part: NonNullable<Content['parts']>[number],
+): string {
+  if (part.text) {
+    return `${part.text}\n\n`;
+  }
+  if (part.functionCall) {
+    let result = `**Function Call:** \`${part.functionCall.name}\`\n\n`;
+    if (part.functionCall.args) {
+      result += '```json\n';
+      result += JSON.stringify(part.functionCall.args, null, 2);
+      result += '\n```\n\n';
+    }
+    return result;
+  }
+  if (part.functionResponse) {
+    let result = `**Function Response:** \`${part.functionResponse.name}\`\n\n`;
+    if (part.functionResponse.response) {
+      result += '```json\n';
+      result += JSON.stringify(part.functionResponse.response, null, 2);
+      result += '\n```\n\n';
+    }
+    return result;
+  }
+  return '';
+}
+
+/**
  * Formats conversation history into a markdown transcript.
  *
  * @param history - Array of Content objects from @google/genai
@@ -98,27 +128,7 @@ function formatHistoryAsMarkdown(history: Content[]): string {
 
     if (item.parts) {
       for (const part of item.parts) {
-        if (part.text) {
-          transcript += `${part.text}\n\n`;
-        } else if (part.functionCall) {
-          transcript += `**Function Call:** \`${part.functionCall.name}\`\n\n`;
-          if (part.functionCall.args) {
-            transcript += '```json\n';
-            transcript += JSON.stringify(part.functionCall.args, null, 2);
-            transcript += '\n```\n\n';
-          }
-        } else if (part.functionResponse) {
-          transcript += `**Function Response:** \`${part.functionResponse.name}\`\n\n`;
-          if (part.functionResponse.response) {
-            transcript += '```json\n';
-            transcript += JSON.stringify(
-              part.functionResponse.response,
-              null,
-              2,
-            );
-            transcript += '\n```\n\n';
-          }
-        }
+        transcript += formatPartToMarkdown(part);
       }
     }
 

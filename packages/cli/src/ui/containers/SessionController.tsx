@@ -118,6 +118,20 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   // Transient warning timer ref
   const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  function scheduleWarningClear(
+    warningTimerRef: React.MutableRefObject<NodeJS.Timeout | null>,
+    dispatch: React.Dispatch<SessionAction>,
+  ): void {
+    if (warningTimerRef.current) {
+      clearTimeout(warningTimerRef.current);
+    }
+
+    warningTimerRef.current = setTimeout(() => {
+      dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
+      warningTimerRef.current = null;
+    }, 10000);
+  }
+
   // Check payment mode change function
   const checkPaymentModeChange = useCallback(
     (forcePreviousProvider?: string) => {
@@ -254,42 +268,28 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       }
 
       const paymentMode = status.isPaidMode;
-      if (paymentMode !== sessionState.isPaidMode) {
-        dispatch({ type: 'SET_PAID_MODE', payload: paymentMode });
+      if (paymentMode === sessionState.isPaidMode) return;
 
-        if (
-          paymentMode !== undefined &&
-          sessionState.isPaidMode !== undefined &&
-          history.length > 0
-        ) {
-          if (status.providerName === 'gemini') {
-            if (paymentMode === true) {
-              dispatch({
-                type: 'SET_TRANSIENT_WARNINGS',
-                payload: [
-                  `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
-                ],
-              });
-            } else {
-              dispatch({
-                type: 'SET_TRANSIENT_WARNINGS',
-                payload: [
-                  `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
-                ],
-              });
-            }
-          }
+      dispatch({ type: 'SET_PAID_MODE', payload: paymentMode });
 
-          if (warningTimerRef.current) {
-            clearTimeout(warningTimerRef.current);
-          }
+      const paymentModeJustChanged =
+        paymentMode !== undefined &&
+        sessionState.isPaidMode !== undefined &&
+        history.length > 0;
+      if (!paymentModeJustChanged) return;
 
-          warningTimerRef.current = setTimeout(() => {
-            dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
-            warningTimerRef.current = null;
-          }, 10000);
-        }
+      if (status.providerName === 'gemini') {
+        const warning =
+          paymentMode === true
+            ? `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`
+            : `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`;
+        dispatch({
+          type: 'SET_TRANSIENT_WARNINGS',
+          payload: [warning],
+        });
       }
+
+      scheduleWarningClear(warningTimerRef, dispatch);
     };
 
     checkModelChange();

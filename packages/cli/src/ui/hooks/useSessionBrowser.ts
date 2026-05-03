@@ -317,6 +317,51 @@ export function useSessionBrowser(
 
   // === Load Sessions ===
 
+  /**
+   * Processes a single session and returns either an enriched session or null (if skipped).
+   */
+  const processSession = useCallback(
+    async (
+      session: SessionSummary,
+      currentGen: number,
+      sessionId: string,
+    ): Promise<
+      { enriched: EnrichedSessionSummary } | { skipped: true } | null
+    > => {
+      // Skip current session
+      if (session.sessionId === sessionId) {
+        return { skipped: true };
+      }
+
+      const hasContent = await SessionDiscovery.hasContentEvents(
+        session.filePath,
+      );
+      if (currentGen !== generationRef.current) return null;
+      // Skip empty sessions
+      if (!hasContent) {
+        return { skipped: true };
+      }
+
+      // Check lock status (isLocked handles stale lock cleanup internally)
+      const locked = await SessionLockManager.isLocked(
+        chatsDir,
+        session.sessionId,
+      );
+      if (currentGen !== generationRef.current) return null;
+
+      // Check preview cache
+      const cached = previewCacheRef.current.get(session.sessionId);
+      const enriched: EnrichedSessionSummary = {
+        ...session,
+        isLocked: locked,
+        previewState: cached ? cached.state : 'loading',
+        firstUserMessage: cached?.text ?? undefined,
+      };
+      return { enriched };
+    },
+    [chatsDir],
+  );
+
   const loadSessions = useCallback(async () => {
     generationRef.current += 1;
     const currentGen = generationRef.current;
@@ -335,36 +380,17 @@ export function useSessionBrowser(
       // Filter out current session and empty sessions
       const filtered: EnrichedSessionSummary[] = [];
       for (const session of result.sessions) {
-        if (session.sessionId === currentSessionId) {
-          totalSkipped++;
-          continue;
-        }
-
-        const hasContent = await SessionDiscovery.hasContentEvents(
-          session.filePath,
+        const processResult = await processSession(
+          session,
+          currentGen,
+          currentSessionId,
         );
-        if (currentGen !== generationRef.current) return;
-        if (!hasContent) {
+        if (processResult === null) return; // Stale generation
+        if ('skipped' in processResult) {
           totalSkipped++;
-          continue;
+        } else {
+          filtered.push(processResult.enriched);
         }
-
-        // Check lock status (isLocked handles stale lock cleanup internally)
-        const locked = await SessionLockManager.isLocked(
-          chatsDir,
-          session.sessionId,
-        );
-        if (currentGen !== generationRef.current) return;
-
-        // Check preview cache
-        const cached = previewCacheRef.current.get(session.sessionId);
-        const enriched: EnrichedSessionSummary = {
-          ...session,
-          isLocked: locked,
-          previewState: cached ? cached.state : 'loading',
-          firstUserMessage: cached?.text ?? undefined,
-        };
-        filtered.push(enriched);
       }
 
       setSkippedCount(totalSkipped);
@@ -394,7 +420,13 @@ export function useSessionBrowser(
       );
       setIsLoading(false);
     }
-  }, [chatsDir, projectHash, currentSessionId, loadPreviewsForPage]);
+  }, [
+    chatsDir,
+    projectHash,
+    currentSessionId,
+    loadPreviewsForPage,
+    processSession,
+  ]);
 
   // Initial load
   useEffect(() => {

@@ -147,6 +147,29 @@ function getVSCodeStyleConfigDir(appName: string): string | null {
   return path.join(os.homedir(), '.config', appName, 'User');
 }
 
+/**
+ * Parses keybindings file content, stripping comments if present.
+ */
+type KeybindingsParseResult =
+  | { ok: true; value: unknown[] }
+  | { ok: false; error: unknown };
+
+function parseKeybindings(
+  content: string,
+  terminalName: string,
+  keybindingsFile: string,
+): KeybindingsParseResult {
+  try {
+    const cleanContent = stripJsonComments(content);
+    return { ok: true, value: JSON.parse(cleanContent) as unknown[] };
+  } catch (error) {
+    debugLogger.warn(
+      `Failed to parse ${terminalName} keybindings.json at ${keybindingsFile}`,
+    );
+    return { ok: false, error };
+  }
+}
+
 // Generic VS Code-style terminal configuration
 async function configureVSCodeStyle(
   terminalName: string,
@@ -167,34 +190,38 @@ async function configureVSCodeStyle(
     await fs.mkdir(configDir, { recursive: true });
 
     let keybindings: unknown[] = [];
-    try {
-      const content = await fs.readFile(keybindingsFile, 'utf8');
+
+    // Try to read existing keybindings file
+    const readResult = await fs
+      .readFile(keybindingsFile, 'utf8')
+      .catch(() => null);
+    if (readResult !== null) {
       await backupFile(keybindingsFile);
-      try {
-        const cleanContent = stripJsonComments(content);
-        const parsedContent = JSON.parse(cleanContent);
-        if (!Array.isArray(parsedContent)) {
-          return {
-            success: false,
-            message:
-              `${terminalName} keybindings.json exists but is not a valid JSON array. ` +
-              `Please fix the file manually or delete it to allow automatic configuration.\n` +
-              `File: ${keybindingsFile}`,
-          };
-        }
-        keybindings = parsedContent;
-      } catch (parseError) {
+      const parsed = parseKeybindings(
+        readResult,
+        terminalName,
+        keybindingsFile,
+      );
+      if (!parsed.ok) {
         return {
           success: false,
           message:
             `Failed to parse ${terminalName} keybindings.json. The file contains invalid JSON.\n` +
             `Please fix the file manually or delete it to allow automatic configuration.\n` +
             `File: ${keybindingsFile}\n` +
-            `Error: ${parseError}`,
+            `Error: ${parsed.error}`,
         };
       }
-    } catch {
-      // File doesn't exist, will create new one
+      if (!Array.isArray(parsed.value)) {
+        return {
+          success: false,
+          message:
+            `${terminalName} keybindings.json exists but is not a valid JSON array. ` +
+            `Please fix the file manually or delete it to allow automatic configuration.\n` +
+            `File: ${keybindingsFile}`,
+        };
+      }
+      keybindings = parsed.value;
     }
 
     const shiftEnterBinding = {

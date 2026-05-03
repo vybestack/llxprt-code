@@ -415,14 +415,16 @@ describe('formatRelativeTime', () => {
           });
 
           // Long mode should contain words
-          const hasWords =
+          const hasTimeWords =
             longResult.includes('just now') ||
             longResult.includes('minute') ||
-            longResult.includes('hour') ||
+            longResult.includes('hour');
+          const hasDateWords =
             longResult.includes('yesterday') ||
             longResult.includes('day') ||
-            longResult.includes('week') ||
-            /^[A-Z][a-z]{2}/.test(longResult);
+            longResult.includes('week');
+          const hasAbbreviatedMonth = /^[A-Z][a-z]{2}/.test(longResult);
+          const hasWords = hasTimeWords || hasDateWords || hasAbbreviatedMonth;
 
           // Short mode should be abbreviated or date
           const isShortFormat =
