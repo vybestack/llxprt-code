@@ -228,9 +228,7 @@ function handleSubcommandExit(result: Record<string, unknown>): void {
  * Parses process.argv and returns a typed CliArgs object.
  * Subcommand handlers (mcp, hooks, extensions, skills) call process.exit(0) when invoked.
  */
-export async function parseArguments(settings: Settings): Promise<CliArgs> {
-  const yargsInstance = buildRootYargs();
-
+function configureLaunchCommand(yargsInstance: Argv): void {
   yargsInstance.command(
     '$0 [promptWords...]',
     'Launch LLxprt CLI',
@@ -244,38 +242,60 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           type: 'string',
           array: true,
         })
-        .check((argv) => {
-          const pw = argv['promptWords'];
-          if (
-            typeof argv['prompt'] === 'string' &&
-            argv['prompt'].length > 0 &&
-            Array.isArray(pw) &&
-            pw.length > 0
-          ) {
-            throw new Error(
-              'Cannot use both a positional prompt and the --prompt (-p) flag together',
-            );
-          }
-          if (
-            typeof argv['prompt'] === 'string' &&
-            argv['prompt'].length > 0 &&
-            typeof argv['promptInteractive'] === 'string' &&
-            argv['promptInteractive'].length > 0
-          ) {
-            throw new Error(
-              'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
-            );
-          }
-          if (argv['yolo'] === true && argv['approvalMode'] != null) {
-            throw new Error(
-              'Cannot use both --yolo (-y) and --approval-mode together. Use --approval-mode=yolo instead.',
-            );
-          }
-          return true;
-        });
+        .check(validateLaunchArgs);
     },
   );
+}
 
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function validateLaunchArgs(argv: Record<string, unknown>): true {
+  const pw = argv['promptWords'];
+  if (hasNonEmptyString(argv['prompt']) && Array.isArray(pw) && pw.length > 0) {
+    throw new Error(
+      'Cannot use both a positional prompt and the --prompt (-p) flag together',
+    );
+  }
+  validatePromptModeArgs(argv);
+  if (argv['yolo'] === true && argv['approvalMode'] != null) {
+    throw new Error(
+      'Cannot use both --yolo (-y) and --approval-mode together. Use --approval-mode=yolo instead.',
+    );
+  }
+  return true;
+}
+
+function validatePromptModeArgs(argv: Record<string, unknown>): void {
+  if (
+    hasNonEmptyString(argv['prompt']) &&
+    hasNonEmptyString(argv['promptInteractive'])
+  ) {
+    throw new Error(
+      'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
+    );
+  }
+}
+
+function validateRootArgs(argv: Record<string, unknown>): true {
+  validatePromptModeArgs(argv);
+  if (
+    hasNonEmptyString(argv['profile']) &&
+    hasNonEmptyString(argv['profileLoad'])
+  ) {
+    throw new Error(
+      'Cannot use both --profile and --profile-load. Use one at a time.',
+    );
+  }
+  return true;
+}
+
+async function configureRootYargs(
+  yargsInstance: Argv,
+  settings: Settings,
+): Promise<void> {
+  configureLaunchCommand(yargsInstance);
   registerCommands(yargsInstance, settings);
   applyRootOptions(yargsInstance);
 
@@ -288,30 +308,16 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     .help()
     .alias('h', 'help')
     .strict()
-    .check((argv) => {
-      if (
-        typeof argv['prompt'] === 'string' &&
-        argv['prompt'].length > 0 &&
-        typeof argv['promptInteractive'] === 'string' &&
-        argv['promptInteractive'].length > 0
-      ) {
-        throw new Error(
-          'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
-        );
-      }
-      if (
-        typeof argv['profile'] === 'string' &&
-        argv['profile'].length > 0 &&
-        typeof argv['profileLoad'] === 'string' &&
-        argv['profileLoad'].length > 0
-      ) {
-        throw new Error(
-          'Cannot use both --profile and --profile-load. Use one at a time.',
-        );
-      }
-      return true;
-    });
+    .check(validateRootArgs);
+}
 
+/**
+ * Parses process.argv and returns a typed CliArgs object.
+ * Subcommand handlers (mcp, hooks, extensions, skills) call process.exit(0) when invoked.
+ */
+export async function parseArguments(settings: Settings): Promise<CliArgs> {
+  const yargsInstance = buildRootYargs();
+  await configureRootYargs(yargsInstance, settings);
   yargsInstance.wrap(yargsInstance.terminalWidth());
   const result = await yargsInstance.parseAsync();
 

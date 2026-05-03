@@ -57,23 +57,32 @@ export interface ConfigBuildInput {
 // ─── Sub-builders ────────────────────────────────────────────────────────────
 
 function buildTelemetryConfig(argv: CliArgs, settings: Settings) {
+  const telemetrySettings = settings.telemetry;
   return {
-    enabled: argv.telemetry ?? settings.telemetry?.enabled,
+    enabled: argv.telemetry ?? telemetrySettings?.enabled,
     target: (argv.telemetryTarget ??
-      settings.telemetry?.target) as TelemetryTarget,
+      telemetrySettings?.target) as TelemetryTarget,
     otlpEndpoint:
       argv.telemetryOtlpEndpoint ??
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
-      settings.telemetry?.otlpEndpoint,
-    logPrompts: argv.telemetryLogPrompts ?? settings.telemetry?.logPrompts,
-    outfile: argv.telemetryOutfile ?? settings.telemetry?.outfile,
-    logConversations: settings.telemetry?.logConversations,
-    logResponses: settings.telemetry?.logResponses,
-    redactSensitiveData: settings.telemetry?.redactSensitiveData,
-    redactFilePaths: settings.telemetry?.redactFilePaths,
-    redactUrls: settings.telemetry?.redactUrls,
-    redactEmails: settings.telemetry?.redactEmails,
-    redactPersonalInfo: settings.telemetry?.redactPersonalInfo,
+      telemetrySettings?.otlpEndpoint,
+    logPrompts: argv.telemetryLogPrompts ?? telemetrySettings?.logPrompts,
+    outfile: argv.telemetryOutfile ?? telemetrySettings?.outfile,
+    ...buildTelemetryRedactionConfig(telemetrySettings),
+  };
+}
+
+function buildTelemetryRedactionConfig(
+  telemetrySettings: Settings['telemetry'],
+) {
+  return {
+    logConversations: telemetrySettings?.logConversations,
+    logResponses: telemetrySettings?.logResponses,
+    redactSensitiveData: telemetrySettings?.redactSensitiveData,
+    redactFilePaths: telemetrySettings?.redactFilePaths,
+    redactUrls: telemetrySettings?.redactUrls,
+    redactEmails: telemetrySettings?.redactEmails,
+    redactPersonalInfo: telemetrySettings?.redactPersonalInfo,
   };
 }
 

@@ -398,6 +398,33 @@ export class TokenAccessCoordinator {
     }
   }
 
+  private resolveTokenRequestBucket(bucket: string | unknown): {
+    explicitBucket: boolean;
+    requestMetadata: OAuthTokenRequestMetadata | undefined;
+  } {
+    const explicitBucket = typeof bucket === 'string';
+    const requestMetadata =
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      !explicitBucket &&
+      bucket !== null &&
+      bucket !== undefined &&
+      typeof bucket === 'object'
+        ? (bucket as OAuthTokenRequestMetadata)
+        : undefined;
+    return { explicitBucket, requestMetadata };
+  }
+
+  private async peekImplicitTokenRequest(
+    providerName: string,
+    explicitBucket: boolean,
+    requestMetadata: OAuthTokenRequestMetadata | undefined,
+  ): Promise<string | null> {
+    if (explicitBucket) {
+      return null;
+    }
+    return this.peekOtherProfileBuckets(providerName, requestMetadata);
+  }
+
   // --------------------------------------------------------------------------
   // getToken — main public entry point used by consumers
   // --------------------------------------------------------------------------
@@ -436,16 +463,8 @@ export class TokenAccessCoordinator {
     logger.debug(
       () => `[FLOW] Attempting to get existing token for ${providerName}...`,
     );
-    const explicitBucket = typeof bucket === 'string';
-    const requestMetadata =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      !explicitBucket &&
-      bucket !== null &&
-      bucket !== undefined &&
-      typeof bucket === 'object'
-        ? (bucket as OAuthTokenRequestMetadata)
-        : undefined;
-
+    const { explicitBucket, requestMetadata } =
+      this.resolveTokenRequestBucket(bucket);
     const token = await this.getOAuthToken(providerName, bucket);
 
     if (token) {
@@ -459,14 +478,13 @@ export class TokenAccessCoordinator {
     // @fix issue1616: Peek other profile buckets before triggering full re-auth.
     // Only for implicit (session-resolved) requests — explicit bucket requests
     // must stay pinned to the requested bucket.
-    if (!explicitBucket) {
-      const peekResult = await this.peekOtherProfileBuckets(
-        providerName,
-        requestMetadata,
-      );
-      if (peekResult !== null) {
-        return peekResult;
-      }
+    const peekResult = await this.peekImplicitTokenRequest(
+      providerName,
+      explicitBucket,
+      requestMetadata,
+    );
+    if (peekResult !== null) {
+      return peekResult;
     }
 
     // Check if we should require OAuth to be enabled for new auth
@@ -820,6 +838,108 @@ export class TokenAccessCoordinator {
   // forceRefreshToken - Force refresh when token is known to be revoked
   // --------------------------------------------------------------------------
 
+  private async acquireForceRefreshLock(
+    providerName: string,
+    bucket: string | undefined,
+  ): Promise<boolean> {
+    const lockAcquired = await this.tokenStore.acquireRefreshLock(
+      providerName,
+      { waitMs: 10000, staleMs: 30000, bucket },
+    );
+
+    if (!lockAcquired) {
+      logger.debug(
+        () =>
+          `[FLOW] Failed to acquire refresh lock for forceRefreshToken() on ${providerName}`,
+      );
+    }
+
+    return lockAcquired;
+  }
+
+  private async loadTokenForForceRefresh(
+    providerName: string,
+    failedAccessToken: string,
+    bucket: string | undefined,
+  ): Promise<OAuthToken | null> {
+    const storedToken = await this.tokenStore.getToken(providerName, bucket);
+
+    if (!storedToken) {
+      logger.debug(
+        () =>
+          `[FLOW] No stored token found for forceRefreshToken() on ${providerName}`,
+      );
+      return null;
+    }
+
+    if (storedToken.access_token !== failedAccessToken) {
+      logger.debug(
+        () =>
+          `[FLOW] Token already refreshed by another process for ${providerName}`,
+      );
+      return storedToken;
+    }
+
+    if (
+      !storedToken.refresh_token ||
+      typeof storedToken.refresh_token !== 'string' ||
+      storedToken.refresh_token === ''
+    ) {
+      logger.debug(
+        () =>
+          `[FLOW] No refresh token available for forceRefreshToken() on ${providerName}`,
+      );
+      return null;
+    }
+
+    return storedToken;
+  }
+
+  private async refreshStoredToken(
+    providerName: string,
+    storedToken: OAuthToken,
+    bucket: string | undefined,
+  ): Promise<OAuthToken | null> {
+    const provider = this.providerRegistry.getProvider(providerName);
+    if (!provider) {
+      return null;
+    }
+
+    logger.debug(
+      () =>
+        `[FLOW] Executing force refresh for ${providerName} (token matches failed token)`,
+    );
+
+    const refreshedToken = await provider.refreshToken(storedToken);
+
+    if (!refreshedToken) {
+      logger.debug(
+        () => `[FLOW] Force refresh returned null for ${providerName}`,
+      );
+      return null;
+    }
+
+    const { mergeRefreshedToken } = await import('@vybestack/llxprt-code-core');
+    const mergedToken = mergeRefreshedToken(
+      storedToken as OAuthTokenWithExtras,
+      refreshedToken as Partial<OAuthTokenWithExtras>,
+    );
+
+    logger.debug(
+      () =>
+        `[FLOW] Force refresh successful for ${providerName}, saving token...`,
+    );
+
+    await this.tokenStore.saveToken(providerName, mergedToken, bucket);
+    this.proactiveRenewalManager.scheduleProactiveRenewal(
+      providerName,
+      bucket,
+      mergedToken,
+    );
+
+    return mergedToken;
+  }
+
   /**
    * Force refresh a token when we know it has been revoked (401/403 error).
    * Uses TOCTOU pattern with refresh lock to prevent race conditions.
@@ -848,98 +968,24 @@ export class TokenAccessCoordinator {
       return null;
     }
 
-    // Acquire refresh lock
-    const lockAcquired = await this.tokenStore.acquireRefreshLock(
+    const lockAcquired = await this.acquireForceRefreshLock(
       providerName,
-      { waitMs: 10000, staleMs: 30000, bucket },
+      bucket,
     );
-
     if (!lockAcquired) {
-      logger.debug(
-        () =>
-          `[FLOW] Failed to acquire refresh lock for forceRefreshToken() on ${providerName}`,
-      );
       return null;
     }
 
     try {
-      // TOCTOU: Re-read token from store after acquiring lock
-      const storedToken = await this.tokenStore.getToken(providerName, bucket);
-
-      if (!storedToken) {
-        logger.debug(
-          () =>
-            `[FLOW] No stored token found for forceRefreshToken() on ${providerName}`,
-        );
-        return null;
-      }
-
-      // If stored token differs from failed token, another process already refreshed
-      if (storedToken.access_token !== failedAccessToken) {
-        logger.debug(
-          () =>
-            `[FLOW] Token already refreshed by another process for ${providerName}`,
-        );
+      const storedToken = await this.loadTokenForForceRefresh(
+        providerName,
+        failedAccessToken,
+        bucket,
+      );
+      if (!storedToken || storedToken.access_token !== failedAccessToken) {
         return storedToken;
       }
-
-      // Check if we have a refresh token
-      if (
-        !storedToken.refresh_token ||
-        typeof storedToken.refresh_token !== 'string' ||
-        storedToken.refresh_token === ''
-      ) {
-        logger.debug(
-          () =>
-            `[FLOW] No refresh token available for forceRefreshToken() on ${providerName}`,
-        );
-        return null;
-      }
-
-      // Perform the actual refresh
-      const provider = this.providerRegistry.getProvider(providerName);
-      if (!provider) {
-        return null;
-      }
-
-      logger.debug(
-        () =>
-          `[FLOW] Executing force refresh for ${providerName} (token matches failed token)`,
-      );
-
-      const refreshedToken = await provider.refreshToken(storedToken);
-
-      if (!refreshedToken) {
-        logger.debug(
-          () => `[FLOW] Force refresh returned null for ${providerName}`,
-        );
-        return null;
-      }
-
-      // Merge and save the refreshed token
-      const { mergeRefreshedToken } = await import(
-        '@vybestack/llxprt-code-core'
-      );
-      const mergedToken = mergeRefreshedToken(
-        storedToken as OAuthTokenWithExtras,
-        refreshedToken as Partial<OAuthTokenWithExtras>,
-      );
-
-      logger.debug(
-        () =>
-          `[FLOW] Force refresh successful for ${providerName}, saving token...`,
-      );
-
-      await this.tokenStore.saveToken(providerName, mergedToken, bucket);
-
-      // Schedule proactive renewal for the new token
-      this.proactiveRenewalManager.scheduleProactiveRenewal(
-        providerName,
-        bucket,
-        mergedToken,
-      );
-
-      return mergedToken;
+      return await this.refreshStoredToken(providerName, storedToken, bucket);
     } catch (refreshError) {
       logger.debug(
         () =>
