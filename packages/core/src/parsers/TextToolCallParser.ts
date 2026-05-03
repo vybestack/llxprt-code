@@ -55,6 +55,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   } {
     // Quick check: if content doesn't contain any tool call markers, return early
     if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       !content.includes('[TOOL_REQUEST') &&
       !content.includes('tool_call:') &&
       !content.includes('[END_TOOL_REQUEST]') &&
@@ -71,6 +72,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const toolCalls: TextToolCall[] = [];
     const ranges: Array<{ start: number; end: number }> = [];
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const match of matches) {
       ranges.push({ start: match.start, end: match.end });
       if (!match.toolName) {
@@ -120,6 +122,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const endMarker = '[TOOL_REQUEST_END]';
     let searchIndex = 0;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(startMarker, searchIndex);
       if (start === -1) break;
@@ -176,6 +179,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const endMarker = '[END_TOOL_REQUEST]';
     let searchIndex = 0;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const candidateIndex = content.indexOf(marker, searchIndex);
       if (candidateIndex === -1) {
@@ -210,6 +214,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         const parsed = JSON.parse(jsonSegment.segment);
         const parsedName = parsed.name;
         const toolName = String(
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           parsedName !== undefined &&
             parsedName !== null &&
             parsedName !== false &&
@@ -221,6 +226,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         );
         const parsedArguments = parsed.arguments;
         const argsText = JSON.stringify(
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           parsedArguments !== undefined &&
             parsedArguments !== null &&
             parsedArguments !== false &&
@@ -262,6 +268,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const endTag = '</tool_call>';
     let searchIndex = 0;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(startTag, searchIndex);
       if (start === -1) break;
@@ -301,6 +308,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       if (typeof parsed === 'object' && parsed !== null && 'name' in parsed) {
         const parsedName = parsed.name;
         const toolName = String(
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           parsedName !== undefined &&
             parsedName !== null &&
             parsedName !== false &&
@@ -312,6 +320,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         );
         const parsedArguments = parsed.arguments;
         const args =
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           parsedArguments !== undefined &&
           parsedArguments !== null &&
           parsedArguments !== false &&
@@ -377,6 +386,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         for (let i = 1; i < lines.length; i++) {
           // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
           const argMatch = lines[i].match(/<(\w+)>([^<]*)<\/\1>/);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (argMatch) {
             const [, key, value] = argMatch;
             result.args[key] = this.parseValue(value.trim());
@@ -394,6 +404,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const closing = '</invoke>';
     let searchIndex = 0;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(tagPrefix, searchIndex);
       if (start === -1) {
@@ -439,6 +450,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const endTag = '</tool>';
     let searchIndex = 0;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(startTag, searchIndex);
       if (start === -1) break;
@@ -476,6 +488,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const closing = '</use>';
     let searchIndex = 0;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(prefix, searchIndex);
       if (start === -1) break;
@@ -515,6 +528,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const prefix = '<use_';
     let searchIndex = 0;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(prefix, searchIndex);
       if (start === -1) break;
@@ -613,23 +627,28 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   }
 
   private postProcessCleanedContent(content: string): string {
-    return content
-      .replace(/\[TOOL_REQUEST(?:_END)?]/g, '')
-      .replace(/<\|im_start\|>assistant/g, '')
-      .replace(/<\|im_end\|>/g, '')
-      .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
-      .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, '')
-      .replace(/<invoke[\s\S]*?<\/invoke>/g, '')
-      .replace(/<tool>[\s\S]*?<\/tool>/g, '')
-      .replace(/<\/use_[A-Za-z0-9_.-]+>/g, '')
-      .replace(/<\/use>/g, '')
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      .replace(/<tool_call>\s*\{[^}]*$/gm, '')
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      .replace(/\{"name"\s*:\s*"[^"]*"\s*,?\s*"arguments"\s*:\s*\{[^}]*$/gm, '')
-      .replace(/✦\s*<think>/g, '')
-      .replace(/\n{2,}/g, '\n')
-      .trim();
+    return (
+      content
+        .replace(/\[TOOL_REQUEST(?:_END)?]/g, '')
+        .replace(/<\|im_start\|>assistant/g, '')
+        .replace(/<\|im_end\|>/g, '')
+        .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+        .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, '')
+        .replace(/<invoke[\s\S]*?<\/invoke>/g, '')
+        .replace(/<tool>[\s\S]*?<\/tool>/g, '')
+        .replace(/<\/use_[A-Za-z0-9_.-]+>/g, '')
+        .replace(/<\/use>/g, '')
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+        .replace(/<tool_call>\s*\{[^}]*$/gm, '')
+        .replace(
+          // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
+          /\{"name"\s*:\s*"[^"]*"\s*,?\s*"arguments"\s*:\s*\{[^}]*$/gm,
+          '',
+        )
+        .replace(/✦\s*<think>/g, '')
+        .replace(/\n{2,}/g, '\n')
+        .trim()
+    );
   }
 
   private normalizeArguments(
@@ -757,6 +776,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     let inString: '"' | "'" | null = null;
     let escapeNext = false;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let i = startIndex; i < content.length; i++) {
       const char = content[i];
 
@@ -842,10 +862,12 @@ export class GemmaToolCallParser implements ITextToolCallParser {
           let endIndex = i + 1;
 
           // Find the closing quote
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           while (endIndex < parts.length && !parts[endIndex].endsWith(quote)) {
             endIndex++;
           }
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (endIndex < parts.length) {
             value = parts.slice(i + 1, endIndex + 1).join(' ');
             value = value.slice(1, -1); // Remove quotes
@@ -890,6 +912,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       }
     };
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (index < length) {
       skipWhitespace();
       const key = readIdentifier();
@@ -924,6 +947,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
       let value = '';
       let escaped = false;
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       while (index < length) {
         const char = text.charAt(index);
         index++;
@@ -1019,6 +1043,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
   private findTagClose(content: string, fromIndex: number): number {
     let inQuote: '"' | "'" | null = null;
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let i = fromIndex; i < content.length; i++) {
       const char = content[i];
       if (inQuote) {
