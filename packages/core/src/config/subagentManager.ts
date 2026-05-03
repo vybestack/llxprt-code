@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { type SubagentConfig } from '../config/types.js';
