@@ -135,6 +135,10 @@ interface Envelope {
   data: string;
 }
 
+type FindCredentialsFunction = (
+  service: string,
+) => Promise<Array<{ account: string; password: string }>>;
+
 function isValidEnvelope(envelope: unknown): envelope is Envelope {
   if (typeof envelope !== 'object' || envelope === null) return false;
   const env = envelope as Record<string, unknown>;
@@ -142,9 +146,27 @@ function isValidEnvelope(envelope: unknown): envelope is Envelope {
   if (typeof env.crypto !== 'object' || env.crypto === null) return false;
   const c = env.crypto as Record<string, unknown>;
   if (c.alg !== 'aes-256-gcm') return false;
+
   if (c.kdf !== 'scrypt') return false;
   if (typeof env.data !== 'string') return false;
   return true;
+}
+
+function withFindCredentials(
+  adapter: KeyringAdapter,
+  findCredentialsFn: FindCredentialsFunction | undefined,
+): KeyringAdapter {
+  if (findCredentialsFn !== undefined) {
+    adapter.findCredentials = async (service: string) => {
+      try {
+        return await findCredentialsFn(service);
+      } catch {
+        return [];
+      }
+    };
+  }
+
+  return adapter;
 }
 
 /**
@@ -167,15 +189,11 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
         setPassword(password: string): Promise<void>;
         deleteCredential(): Promise<boolean>;
       };
-      findCredentials?(
-        service: string,
-      ): Promise<Array<{ account: string; password: string }>>;
-      findCredentialsAsync?(
-        service: string,
-      ): Promise<Array<{ account: string; password: string }>>;
+      findCredentials?: FindCredentialsFunction;
+      findCredentialsAsync?: FindCredentialsFunction;
     };
     const findCredentialsFn = kr.findCredentials ?? kr.findCredentialsAsync;
-    return {
+    const adapter: KeyringAdapter = {
       getPassword: async (service: string, account: string) => {
         const entry = new kr.AsyncEntry(service, account);
         return entry.getPassword();
@@ -192,16 +210,9 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
         const entry = new kr.AsyncEntry(service, account);
         return entry.deleteCredential();
       },
-      findCredentials: findCredentialsFn
-        ? async (service: string) => {
-            try {
-              return await findCredentialsFn(service);
-            } catch {
-              return [];
-            }
-          }
-        : undefined,
     };
+
+    return withFindCredentials(adapter, findCredentialsFn);
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     const isModuleMissing =
@@ -401,7 +412,23 @@ export class SecureStore {
       } else {
         this.probeCache = { available: false, timestamp: Date.now() };
       }
+
       return false;
+    }
+  }
+
+  private async writeFallbackAfterKeyringSuccess(
+    key: string,
+    value: string,
+  ): Promise<void> {
+    try {
+      await this.writeFallbackFile(key, value);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.debug(
+        () =>
+          `[set] key='${key}' fallback backup failed after keyring success (${this.fallbackDir}): ${msg}`,
+      );
     }
   }
 
@@ -419,6 +446,7 @@ export class SecureStore {
         await adapter.setPassword(this.serviceName, key, value);
         this.recordKeyringSuccess();
         this.logger.debug(() => `[set] key='${key}' → keyring (OS keychain)`);
+
         keyringWriteSucceeded = true;
       } catch (error) {
         keyringWriteError = error;
@@ -474,15 +502,7 @@ export class SecureStore {
     );
 
     if (keyringWriteSucceeded) {
-      try {
-        await this.writeFallbackFile(key, value);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        this.logger.debug(
-          () =>
-            `[set] key='${key}' fallback backup failed after keyring success (${this.fallbackDir}): ${msg}`,
-        );
-      }
+      await this.writeFallbackAfterKeyringSuccess(key, value);
       return;
     }
 
