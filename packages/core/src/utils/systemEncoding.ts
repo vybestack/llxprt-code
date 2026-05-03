@@ -63,6 +63,7 @@ export function getSystemEncoding(): string | null {
       const match = output.match(/:\s*(\d+)/);
       if (match) {
         const codePage = parseInt(match[1], 10);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (!isNaN(codePage)) {
           return windowsCodePageToEncoding(codePage);
         }

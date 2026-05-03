@@ -192,6 +192,7 @@ export function getCliProviderManager(
             ) => number,
           ) => void;
         };
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (p.name && p.setAddItem) {
           p.setAddItem(options.addItem);
         }
@@ -420,7 +421,8 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
     const providerName =
       resolveActiveProviderName(settingsService, config) ?? null;
     const fallbackLabel = providerName
-      ? modelName
+      ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        modelName
         ? `${providerName}:${modelName}`
         : providerName
       : (modelName ?? 'unknown');

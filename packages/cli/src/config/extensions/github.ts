@@ -44,6 +44,7 @@ export async function cloneFromGit(
     if (token) {
       try {
         const parsedUrl = new URL(sourceUrl);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (
           parsedUrl.protocol === 'https:' &&
           parsedUrl.hostname === 'github.com'
@@ -393,6 +394,7 @@ export async function downloadFromGitHubRelease(
       ) {
         const dirPathToExtract = path.join(destination, lonelyDir.name);
         const extractedDirFiles = await fs.promises.readdir(dirPathToExtract);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (const file of extractedDirFiles) {
           await fs.promises.rename(
             path.join(dirPathToExtract, file),

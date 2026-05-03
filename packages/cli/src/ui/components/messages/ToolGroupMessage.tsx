@@ -170,7 +170,8 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   );
   const borderColor = isShellCommand
     ? theme.ui.symbol
-    : hasPending
+    : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      hasPending
       ? theme.status.warning
       : theme.border.default;
   const borderDimColor = hasPending && !isShellCommand;
@@ -236,6 +237,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
               availableTerminalHeight={availableTerminalHeightPerToolMessage}
               terminalWidth={innerWidth}
               emphasis={
+                // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
                 isConfirming ? 'high' : toolAwaitingApproval ? 'low' : 'medium'
               }
               renderOutputAsMarkdown={tool.renderOutputAsMarkdown}

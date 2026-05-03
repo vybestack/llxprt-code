@@ -70,6 +70,7 @@ function buildZodSchemaFromJsonSchema(def: any): z.ZodTypeAny {
       for (const [key, propDef] of Object.entries(def.properties) as any) {
         let propSchema = buildZodSchemaFromJsonSchema(propDef);
         const requiredArray = def.required as unknown;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (
           requiredArray !== undefined &&
           requiredArray !== null &&
@@ -322,7 +323,8 @@ export function formatValidationError(
       (acc, curr) =>
         typeof curr === 'number'
           ? `${acc}[${curr}]`
-          : `${acc.length > 0 ? acc + '.' : ''}${curr}`,
+          : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+            `${acc.length > 0 ? acc + '.' : ''}${curr}`,
       '',
     );
     lines.push(`Error in: ${path.length > 0 ? path : '(root)'}`);

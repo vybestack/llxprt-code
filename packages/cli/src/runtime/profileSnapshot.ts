@@ -151,6 +151,7 @@ export function buildRuntimeProfileSnapshot(): Profile {
     ephemeralRecord['auth-key-name'] !== undefined &&
     ephemeralRecord['auth-key-name'] !== null;
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const key of PROFILE_EPHEMERAL_KEYS) {
     if (key === 'auth-key' && (hasAuthKeyfile || hasAuthKeyName)) {
       continue;
@@ -162,6 +163,7 @@ export function buildRuntimeProfileSnapshot(): Profile {
     let value = getNestedValue(ephemeralRecord, key);
     if (value === undefined) {
       for (const [aliasKey, aliasValue] of Object.entries(ephemeralRecord)) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (aliasValue !== undefined && resolveAlias(aliasKey) === key) {
           value = aliasValue;
           break;

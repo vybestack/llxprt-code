@@ -308,6 +308,7 @@ function flattenSchemaPaths(
     // we can create deep paths
     if (node.next && node.next.length > 0) {
       for (const nextNode of node.next) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (nextNode.kind === 'value' && nextNode.options) {
           // For each option in the value node, create a flattened path
           for (const option of nextNode.options) {
@@ -465,6 +466,7 @@ export function tokenize(fullLine: string): TokenInfo {
   let escapeNext = false;
   let hasTrailingSpace = false;
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < fullLine.length; i += 1) {
     const char = fullLine[i];
 

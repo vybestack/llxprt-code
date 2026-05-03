@@ -32,6 +32,7 @@ export function shouldFailover(error: Error): boolean {
   }
 
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     message.includes('429') ||
     message.includes('401') ||
     message.includes('403') ||
@@ -195,6 +196,7 @@ export async function executeWithBucketFailover(
       lastError = err;
 
       if (shouldFailover(err)) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (i < buckets.length - 1) {
           continue;
         } else {

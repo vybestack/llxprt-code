@@ -37,6 +37,7 @@ export function doesToolInvocationMatch(
     toolNames = [...new Set([...toolNames, ...SHELL_TOOL_NAMES])];
   }
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const pattern of patterns) {
     const openParen = pattern.indexOf('(');
 

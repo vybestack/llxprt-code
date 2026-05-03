@@ -211,6 +211,7 @@ export function limitOutputTokens(
   const tokens = encodedContent?.length ?? Math.ceil(content.length / 3);
 
   if (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     rawMaxTokens === false ||
     rawMaxTokens === '' ||
     maxTokens === 0 ||

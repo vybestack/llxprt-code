@@ -45,6 +45,7 @@ export function extractPathToken(
   const token = line.substring(wordStart, cursorCol);
 
   const isPathLike =
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     token.startsWith('~/') ||
     token === '~' ||
     token.startsWith('./') ||

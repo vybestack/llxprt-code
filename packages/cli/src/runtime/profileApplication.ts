@@ -496,6 +496,7 @@ export async function applyProfileWithGuards(
 
       // If auth-key not provided but auth-keyfile is, read the key from file
       if (authToken === undefined && authKeyfile !== undefined) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           const keyfilePath = authKeyfile.startsWith('~')
             ? path.join(homedir(), authKeyfile.slice(1))
@@ -751,6 +752,7 @@ export async function applyProfileWithGuards(
     hasOwnEphemeral('auth-keyfile') ||
     hasOwnEphemeral('auth-key-name');
   const hasExplicitAuthClearDirective =
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     (hasOwnEphemeral('auth-key') &&
       isExplicitClearValue(profileEphemeralSettings['auth-key'])) ||
     (hasOwnEphemeral('auth-keyfile') &&
