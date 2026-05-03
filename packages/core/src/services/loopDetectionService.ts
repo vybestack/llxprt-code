@@ -178,6 +178,7 @@ export class LoopDetectionService {
     const isDivider = /^[+-_=*\u2500-\u257F]+$/.test(content);
 
     if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       numFences > 0 ||
       hasTable ||
       hasListItem ||

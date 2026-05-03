@@ -244,6 +244,7 @@ File: ${resolved.basename}
 
     const lines = output.split(EOL);
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const line of lines) {
       if (!line.trim()) continue;
 

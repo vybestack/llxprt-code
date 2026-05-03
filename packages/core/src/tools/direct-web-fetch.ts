@@ -230,6 +230,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
         // Preserve the cause chain (cause is ES2022+, so check with 'in' operator)
         const err = error as Error & { cause?: unknown };
         if (
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           'cause' in err &&
           err.cause !== undefined &&
           err.cause !== null &&

@@ -374,6 +374,7 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
 
   const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     body: `API response from ${event.model}. Status: ${event.status_code !== undefined && event.status_code !== '' && event.status_code !== 0 && !(typeof event.status_code === 'number' && Number.isNaN(event.status_code)) ? event.status_code : 'N/A'}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };

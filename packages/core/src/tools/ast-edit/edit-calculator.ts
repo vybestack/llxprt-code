@@ -70,6 +70,7 @@ export async function calculateEdit(
   const currentMtime = await getFileLastModified(params.file_path);
 
   if (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     params.last_modified != null &&
     ((fileExists && currentMtime == null) ||
       (currentMtime != null && currentMtime > params.last_modified))

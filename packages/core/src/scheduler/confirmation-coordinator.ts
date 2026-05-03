@@ -449,7 +449,8 @@ export class ConfirmationCoordinator {
     return (
       response.outcome ??
       (response.confirmed !== undefined
-        ? response.confirmed
+        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          response.confirmed
           ? ToolConfirmationOutcome.ProceedOnce
           : ToolConfirmationOutcome.Cancel
         : ToolConfirmationOutcome.Cancel)

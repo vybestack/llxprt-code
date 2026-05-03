@@ -105,6 +105,7 @@ export async function reportError(
       try {
         console.error('Original context:', context);
       } catch {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           console.error(
             'Original context (stringified, truncated):',

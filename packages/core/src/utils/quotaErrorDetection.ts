@@ -17,6 +17,7 @@ export interface ApiError {
 
 export function isApiError(error: unknown): error is ApiError {
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     typeof error === 'object' &&
     error !== null &&
     'error' in error &&

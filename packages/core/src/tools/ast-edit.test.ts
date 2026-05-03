@@ -318,13 +318,13 @@ describe('AST Tools', () => {
           // - import './foo.js' (side-effect)
           // - export ... from './foo.js'
           const localRefRegex =
-
             // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
             /(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]\.\/([^'"]+)['"]/g;
           let match;
           while ((match = localRefRegex.exec(content)) !== null) {
             const specifier = match[1];
             const moduleName = specifier.replace(/\.(ts|js)$/, '') + '.ts';
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (moduleNames.has(moduleName)) {
               imports.push(moduleName);
             }

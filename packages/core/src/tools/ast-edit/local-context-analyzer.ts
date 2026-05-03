@@ -120,6 +120,7 @@ export function buildLanguageContext(
 export function isSignificantLine(line: string, _language: string): boolean {
   const trimmed = line.trim();
   const isComment =
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     trimmed.startsWith('//') ||
     trimmed.startsWith('#') ||
     trimmed.startsWith('*') ||

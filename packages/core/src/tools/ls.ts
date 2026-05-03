@@ -187,6 +187,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
         };
       }
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const file of files) {
         if (this.shouldIgnore(file, this.params.ignore)) {
           continue;

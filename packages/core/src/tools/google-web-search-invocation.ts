@@ -177,6 +177,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
           const insertions: Array<{ index: number; marker: string }> = [];
 
           groundingSupports.forEach((support: GroundingSupportItem) => {
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (support.segment && support.groundingChunkIndices) {
               const citationMarker = support.groundingChunkIndices
                 .map((chunkIndex: number) => `[${chunkIndex + 1}]`)
