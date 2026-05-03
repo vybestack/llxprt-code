@@ -111,6 +111,7 @@ function loadMarkdownFile(filename: string): string {
         );
       }
       if (existsSync(directPath)) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (debugLog) {
           logger.debug(() => `[PROMPT_LOADER] Found at directPath`);
         }
@@ -205,6 +206,7 @@ function loadMarkdownFile(filename: string): string {
         typeof process !== 'undefined' ? dirname(process.argv[1] || '') : '',
       ].filter((dir) => dir !== '');
       for (const dir of checkDirs) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           const files = readdirSync(dir).filter(
             (f) =>
@@ -227,6 +229,7 @@ function loadMarkdownFile(filename: string): string {
       // Try direct path
       const directTry = join(base, filename);
       if (existsSync(directTry)) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (debugLog) {
           logger.debug(() => `[PROMPT_LOADER] Found at: ${directTry}`);
         }
@@ -236,6 +239,7 @@ function loadMarkdownFile(filename: string): string {
       // Try with bundle subdirectory
       const bundleTry = join(base, 'bundle', filename);
       if (existsSync(bundleTry)) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (debugLog) {
           logger.debug(() => `[PROMPT_LOADER] Found at: ${bundleTry}`);
         }
@@ -245,6 +249,7 @@ function loadMarkdownFile(filename: string): string {
       // Try if base itself is named bundle
       if (basename(base) === 'bundle') {
         const inBundleTry = join(base, filename);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (existsSync(inBundleTry)) {
           if (debugLog) {
             logger.debug(() => `[PROMPT_LOADER] Found at: ${inBundleTry}`);

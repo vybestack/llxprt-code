@@ -91,6 +91,7 @@ export function createUserContentWithFunctionResponseFix(
     } else {
       // Process mixed content
       for (const item of message) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (typeof item === 'string') {
           parts.push({ text: item });
         } else if (Array.isArray(item)) {
@@ -157,6 +158,7 @@ export function normalizeToolInteractionInput(
  */
 export function isValidNonThoughtTextPart(part: Part): boolean {
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     typeof part.text === 'string' &&
     part.thought !== true &&
     // Technically, the model should never generate parts that have text and
@@ -235,6 +237,7 @@ export function extractCuratedHistory(
       let isValid = true;
       while (i < length && comprehensiveHistory[i].role === 'model') {
         modelOutput.push(comprehensiveHistory[i]);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (isValid && !isValidContent(comprehensiveHistory[i])) {
           isValid = false;
         }
@@ -254,13 +257,14 @@ export function extractCuratedHistory(
 export function hasTextContent(
   content: Content | undefined,
 ): content is Content & { parts: [{ text: string }, ...Part[]] } {
-  return !!(
+  return Boolean(
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     content &&
-    content.role === 'model' &&
-    content.parts &&
-    content.parts.length > 0 &&
-    typeof content.parts[0].text === 'string' &&
-    content.parts[0].text !== ''
+      content.role === 'model' &&
+      content.parts &&
+      content.parts.length > 0 &&
+      typeof content.parts[0].text === 'string' &&
+      content.parts[0].text !== '',
   );
 }
 
@@ -301,6 +305,7 @@ export function convertMixedPartsToIContent(parts: Part[]): IContent {
   const { blocks, hasAIContent, hasToolContent } = classifyMixedParts(parts);
 
   return {
+    // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     speaker: hasToolContent ? 'tool' : hasAIContent ? 'ai' : 'human',
     blocks,
   };

@@ -373,6 +373,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       if (this.config.getConversationLoggingEnabled()) {
         const gitStatsService = getGitStatsService();
         if (gitStatsService) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           try {
             gitStats = await gitStatsService.trackFileEdit(
               filePath,
@@ -471,6 +472,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
           const blocks: string[] = [];
           let totalLines = 0;
 
+          // eslint-disable-next-line sonarjs/nested-control-flow, sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const file of filesToFormat) {
             if (totalLines >= maxTotalLines) {
               break;
@@ -530,6 +532,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
           }
 
           // Append formatted diagnostics if present
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (blocks.length > 0) {
             llmSuccessMessageParts.push(blocks.join('\n'));
           }

@@ -161,6 +161,7 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
   const maxDepth = 10;
   // Handle cases where the actual error object is stringified inside the message
   // by drilling down until we find an error that doesn't have a stringified message.
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   while (
     currentError &&
     typeof currentError.message === 'string' &&
@@ -171,6 +172,7 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
         currentError.message.replace(/\u00A0/g, '').replace(/\n/g, ' '),
       );
       if (
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         typeof parsedMessage === 'object' &&
         parsedMessage !== null &&
         'error' in parsedMessage &&
@@ -206,6 +208,7 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
     const details: GoogleApiErrorDetail[] = [];
     if (Array.isArray(errorDetails)) {
       for (const detail of errorDetails) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (
           detail !== null &&
           detail !== undefined &&
@@ -313,6 +316,7 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
         // Try one more fallback: look for the first '{' and last '}'
         const firstBrace = stringData.indexOf('{');
         const lastBrace = stringData.lastIndexOf('}');
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
           try {
             data = JSON.parse(stringData.substring(firstBrace, lastBrace + 1));

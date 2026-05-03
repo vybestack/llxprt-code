@@ -163,6 +163,7 @@ export function buildResponsesRequest(
       // If we find a tool message, we need to include the AI message with the tool call
       if (msg.speaker === 'tool') {
         // Find the AI message that contains this tool call
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (let i = startIndex - 1; i >= 0; i--) {
           const prevMsg = messages[i];
           if (prevMsg.speaker === 'ai') {
@@ -249,6 +250,7 @@ export function buildResponsesRequest(
                 output: payload.result,
               });
 
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               if (hasUnicodeReplacements(sanitizedContent)) {
                 logger.debug(
                   () =>
@@ -288,7 +290,8 @@ export function buildResponsesRequest(
         const role =
           msg.speaker === 'human'
             ? 'user'
-            : msg.speaker === 'ai'
+            : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+              msg.speaker === 'ai'
               ? 'assistant'
               : 'system';
 

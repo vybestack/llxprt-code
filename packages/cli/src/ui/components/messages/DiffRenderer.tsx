@@ -29,6 +29,7 @@ function parseDiffWithLineNumbers(diffContent: string): DiffLine[] {
   // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   const hunkHeaderRegex = /^@@ -(\d+),?\d* \+(\d+),?\d* @@/;
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const line of lines) {
     const hunkMatch = line.match(hunkHeaderRegex);
     if (hunkMatch) {
@@ -45,6 +46,7 @@ function parseDiffWithLineNumbers(diffContent: string): DiffLine[] {
     if (!inHunk) {
       // Skip standard Git header lines more robustly
       if (
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         line.startsWith('--- ') ||
         line.startsWith('+++ ') ||
         line.startsWith('diff --git') ||
@@ -138,6 +140,7 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({
   // Check if the diff represents a new file (only additions and header lines)
   const isNewFile = parsedLines.every(
     (line) =>
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       line.type === 'add' ||
       line.type === 'hunk' ||
       line.type === 'other' ||
@@ -309,7 +312,8 @@ const renderDiffContent = (
               backgroundColor={
                 line.type === 'add'
                   ? Colors.DiffAddedBackground
-                  : line.type === 'del'
+                  : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+                    line.type === 'del'
                     ? Colors.DiffRemovedBackground
                     : undefined
               }

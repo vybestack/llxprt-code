@@ -78,7 +78,8 @@ export async function initializeParser(): Promise<boolean> {
     const Parser =
       typeof parserCandidate === 'function'
         ? parserCandidate
-        : typeof defaultCandidate === 'function'
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          typeof defaultCandidate === 'function'
           ? defaultCandidate
           : TreeSitter;
 
@@ -170,6 +171,7 @@ export function extractCommandNames(tree: Tree): string[] {
         const cmdText = capture.node.text;
         // Extract just the command name (last path component if it's a path)
         const cmdName = cmdText.split(/[\\/]/).pop();
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (cmdName) {
           commands.push(cmdName);
         }
@@ -300,6 +302,7 @@ function hasPromptCommandTransform(root: Node): boolean {
         const operatorNode = current.child(i);
         const transformNode = current.child(i + 1);
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (
           operatorNode?.text === '@' &&
           transformNode?.text.toLowerCase() === 'p'
@@ -434,6 +437,7 @@ export function splitCommandsWithTree(
         if (splitOnPipes) {
           // Recurse into pipeline children to get individual commands
           for (const child of node.children) {
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (child) extractCommands(child);
           }
         } else {

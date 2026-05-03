@@ -96,6 +96,7 @@ function findImports(
   let i = 0;
   const len = content.length;
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   while (i < len) {
     // Find next @ symbol
     i = content.indexOf('@', i);
@@ -256,6 +257,7 @@ export async function processImports(
       const imports = findImports(fileContent);
 
       // Process imports in reverse order to handle indices correctly
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (let i = imports.length - 1; i >= 0; i--) {
         const { start, path: importPath } = imports[i];
 
@@ -301,6 +303,7 @@ export async function processImports(
           // Only log errors in debug mode, unless they're not ENOENT (file not found) errors
           // This prevents spurious error messages from cluttering the console when files
           // are intentionally missing, addressing issue #391
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (debugMode || !errorMessage.includes('ENOENT')) {
             logger.warn(`Failed to import ${fullPath}: ${errorMessage}`);
           }
@@ -338,6 +341,7 @@ export async function processImports(
   const imports: MemoryFile[] = [];
   const importsList = findImports(content);
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const { start, _end, path: importPath } of importsList) {
     // Add content before this import
     result += content.substring(lastIndex, start);
