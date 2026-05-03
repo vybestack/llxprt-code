@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 /**
  * @plan PLAN-20260211-SESSIONRECORDING.P08
  * @requirement REQ-RPL-002, REQ-RPL-003, REQ-RPL-005, REQ-RPL-006, REQ-RPL-007, REQ-RPL-008

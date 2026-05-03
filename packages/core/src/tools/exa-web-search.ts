@@ -8,6 +8,8 @@
  * Licensed under the MIT License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import {
   BaseDeclarativeTool,
   Kind,

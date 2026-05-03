@@ -4,6 +4,8 @@
  * Adapted for llxprt-code by Vybestack.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 // Similarity thresholds for block anchor fallback matching
 const SINGLE_CANDIDATE_SIMILARITY_THRESHOLD = 0.0;
 const MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD = 0.3;

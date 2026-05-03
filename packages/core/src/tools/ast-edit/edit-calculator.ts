@@ -7,6 +7,8 @@
  * Contains calculateEdit, validation, and helper functions.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { parse } from '@ast-grep/napi';

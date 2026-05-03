@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import path from 'path';
 import * as Diff from 'diff';
 import { makeRelative, shortenPath } from '../utils/paths.js';

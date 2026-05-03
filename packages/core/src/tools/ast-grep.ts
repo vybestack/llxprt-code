@@ -5,6 +5,8 @@
  * @plan PLAN-20260211-ASTGREP.P05
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import * as path from 'node:path';
 import { promises as fs, statSync, existsSync } from 'node:fs';
 import FastGlob from 'fast-glob';

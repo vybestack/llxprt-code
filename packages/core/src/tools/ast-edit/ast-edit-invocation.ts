@@ -6,6 +6,8 @@
  * AST Edit Tool Invocation - Handles execution of edit operations
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import * as path from 'path';
 import * as Diff from 'diff';
 import type {

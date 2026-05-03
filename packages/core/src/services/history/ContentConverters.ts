@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import { randomUUID } from 'crypto';
 import { type Content, type Part } from '@google/genai';
 import type { IContent, ContentBlock, ThinkingBlock } from './IContent.js';

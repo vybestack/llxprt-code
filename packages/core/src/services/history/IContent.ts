@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 /**
  * Universal content representation that is provider-agnostic.
  * All conversation content is represented as blocks within a speaker's turn.
