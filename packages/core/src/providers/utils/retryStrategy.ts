@@ -50,7 +50,7 @@ export function shouldRetryOnStatus(
   }
 
   if (
-    (status === undefined || status === 0 || Number.isNaN(status)) &&
+    isInvalidStatus(status) &&
     error !== null &&
     typeof error === 'object' &&
     'response' in error
@@ -66,7 +66,7 @@ export function shouldRetryOnStatus(
   }
 
   if (
-    (status === undefined || status === 0 || Number.isNaN(status)) &&
+    isInvalidStatus(status) &&
     error instanceof Error &&
     error.message.includes('429')
   ) {
@@ -110,4 +110,11 @@ export function shouldRetryOnStatus(
   }
 
   return shouldRetry;
+}
+
+/**
+ * Helper function to check if a status value is invalid (undefined, 0, or NaN).
+ */
+function isInvalidStatus(status: number | undefined): boolean {
+  return status === undefined || status === 0 || Number.isNaN(status);
 }

@@ -196,14 +196,7 @@ export class PromptService {
       await this.initialize();
     }
     const runtimeContext = context as unknown;
-    if (
-      runtimeContext === undefined ||
-      runtimeContext === null ||
-      runtimeContext === false ||
-      runtimeContext === 0 ||
-      (typeof runtimeContext === 'number' && Number.isNaN(runtimeContext)) ||
-      runtimeContext === ''
-    ) {
+    if (isFalsyLike(runtimeContext)) {
       throw new Error('Context is required');
     }
 
@@ -609,4 +602,17 @@ export class PromptService {
 
     return Math.round(estimate);
   }
+}
+
+/**
+ * Helper function to check if a value is falsy-like.
+ * Used for validating runtime context before processing.
+ */
+function isFalsyLike(value: unknown): boolean {
+  // Check undefined/null first
+  if (value === undefined || value === null) return true;
+  // Check false, 0, or empty string
+  if (value === false || value === 0 || value === '') return true;
+  // Check NaN for numbers
+  return typeof value === 'number' && Number.isNaN(value);
 }

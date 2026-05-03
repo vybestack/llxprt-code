@@ -25,7 +25,7 @@
 
 import * as path from 'node:path';
 import { type IContent } from '../services/history/IContent.js';
-import { type SessionMetadata } from './types.js';
+import { type SessionMetadata, type SessionSummary } from './types.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
@@ -113,25 +113,7 @@ export async function resumeSession(
   let lockedSession: LockedSession | null = null;
 
   if (request.continueRef === CONTINUE_LATEST) {
-    for (const session of sessions) {
-      const lockId = extractLockId(session.filePath);
-      const locked = await SessionLockManager.isLocked(
-        request.chatsDir,
-        lockId,
-      );
-      if (locked) continue;
-
-      try {
-        const lockHandle = await SessionLockManager.acquire(
-          request.chatsDir,
-          lockId,
-        );
-        lockedSession = { targetFilePath: session.filePath, lockHandle };
-        break;
-      } catch {
-        continue;
-      }
-    }
+    lockedSession = await findFirstUnlockedSession(request.chatsDir, sessions);
 
     if (!lockedSession) {
       return {
@@ -222,4 +204,40 @@ export async function resumeSession(
     lockHandle: lockedSession.lockHandle,
     warnings: replayResult.warnings,
   };
+}
+
+/**
+ * Helper function to try acquiring a lock.
+ * Returns the lock handle on success, null on failure.
+ */
+async function tryAcquireLock(
+  chatsDir: string,
+  lockId: string,
+): Promise<LockHandle | null> {
+  try {
+    return await SessionLockManager.acquire(chatsDir, lockId);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Find the first unlocked session and acquire its lock.
+ * Returns the locked session info, or null if all sessions are locked.
+ */
+async function findFirstUnlockedSession(
+  chatsDir: string,
+  sessions: SessionSummary[],
+): Promise<{ targetFilePath: string; lockHandle: LockHandle } | null> {
+  for (const session of sessions) {
+    const lockId = extractLockId(session.filePath);
+    const locked = await SessionLockManager.isLocked(chatsDir, lockId);
+    if (locked) continue;
+
+    const result = await tryAcquireLock(chatsDir, lockId);
+    if (result !== null) {
+      return { targetFilePath: session.filePath, lockHandle: result };
+    }
+  }
+  return null;
 }

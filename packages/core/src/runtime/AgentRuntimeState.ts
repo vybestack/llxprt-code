@@ -476,25 +476,38 @@ function invokeSubscribers(
 
   // Invoke each subscriber (lines 309-315)
   for (const subscription of subscribers.values()) {
-    try {
-      if (subscription.async) {
-        // Async callback - queue as microtask (line 311-312)
-        queueMicrotask(() => {
-          try {
-            subscription.callback(event);
-          } catch (error) {
-            // Error handling to prevent cascade failures (line 315)
-            debugLogger.error('Error in async runtime state callback:', error);
-          }
-        });
-      } else {
-        // Synchronous callback (line 313-314)
-        subscription.callback(event);
-      }
-    } catch (error) {
-      // Error handling to prevent cascade failures (line 315)
-      debugLogger.error('Error in runtime state callback:', error);
+    invokeSubscription(subscription, event);
+  }
+}
+
+/**
+ * Invoke a single subscription callback, handling both async and sync modes.
+ */
+function invokeSubscription(
+  subscription: {
+    async: boolean;
+    callback: (event: RuntimeStateChangedEvent) => void;
+  },
+  event: RuntimeStateChangedEvent,
+): void {
+  try {
+    if (subscription.async) {
+      // Async callback - queue as microtask (line 311-312)
+      queueMicrotask(() => {
+        try {
+          subscription.callback(event);
+        } catch (error) {
+          // Error handling to prevent cascade failures (line 315)
+          debugLogger.error('Error in async runtime state callback:', error);
+        }
+      });
+    } else {
+      // Synchronous callback (line 313-314)
+      subscription.callback(event);
     }
+  } catch (error) {
+    // Error handling to prevent cascade failures (line 315)
+    debugLogger.error('Error in runtime state callback:', error);
   }
 }
 

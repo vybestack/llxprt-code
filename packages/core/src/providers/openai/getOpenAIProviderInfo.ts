@@ -110,11 +110,7 @@ export function getOpenAIProviderInfo(
       typeof config?.getModel === 'function' ? config.getModel() : undefined;
 
     const normalizedModel =
-      (typeof ephemeralModel === 'string' && ephemeralModel.trim() !== ''
-        ? ephemeralModel.trim()
-        : undefined) ??
-      providerModel ??
-      configModel;
+      getValidString(ephemeralModel) ?? providerModel ?? configModel;
     result.currentModel = normalizedModel ?? null;
 
     const configuredMode =
@@ -143,6 +139,15 @@ export function getOpenAIProviderInfo(
   }
 
   return result;
+}
+
+/**
+ * Helper function to get a valid non-empty trimmed string, or undefined.
+ */
+function getValidString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed !== '' ? trimmed : undefined;
 }
 
 /**

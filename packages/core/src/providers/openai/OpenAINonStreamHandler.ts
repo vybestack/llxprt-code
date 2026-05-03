@@ -22,7 +22,10 @@ import {
 } from '../../services/history/IContent.js';
 import { type DebugLogger } from '../../debug/index.js';
 import { type ToolCallPipeline } from './ToolCallPipeline.js';
-import { type GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
+import {
+  type GemmaToolCallParser,
+  type TextToolCall,
+} from '../../parsers/TextToolCallParser.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';
@@ -195,44 +198,14 @@ export async function* handleNonStreamingResponse(
     );
   }
 
-  // Check for <tool_call> format in text content
+  // Check for InTheDocument format in text content
   if (pipelineKimiCleanContent) {
-    const cleanedSource = sanitizeProviderText(pipelineKimiCleanContent);
-    if (cleanedSource) {
-      try {
-        const parsedResult = deps.textToolParser.parse(cleanedSource);
-        if (parsedResult.toolCalls.length > 0) {
-          for (const call of parsedResult.toolCalls) {
-            blocks.push({
-              type: 'tool_call',
-              id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-              name: normalizeToolName(call.name),
-              parameters: call.arguments,
-            } as ToolCallBlock);
-          }
-
-          // Update the text content to remove the tool call parts
-          if (choice.message.content !== parsedResult.cleanedContent) {
-            const textBlockIndex = blocks.findIndex(
-              (block) => block.type === 'text',
-            );
-            if (textBlockIndex >= 0) {
-              (blocks[textBlockIndex] as TextBlock).text =
-                parsedResult.cleanedContent;
-            } else if (parsedResult.cleanedContent.trim()) {
-              blocks.unshift({
-                type: 'text',
-                text: parsedResult.cleanedContent,
-              } as TextBlock);
-            }
-          }
-        }
-      } catch (error) {
-        deps.logger.debug(
-          () => `TextToolCallParser failed on message content: ${error}`,
-        );
-      }
-    }
+    processTextToolCalls(
+      pipelineKimiCleanContent,
+      blocks,
+      choice.message.content,
+      deps,
+    );
   }
 
   // Emit the complete response
@@ -337,5 +310,61 @@ export async function* handleNonStreamingResponse(
       blocks: [],
       metadata: { stopReason },
     } as IContent;
+  }
+}
+
+/**
+ * Process text tool calls from Kimi format.
+ * Extracts tool calls and updates text blocks accordingly.
+ */
+function processTextToolCalls(
+  pipelineKimiCleanContent: string,
+  blocks: IContent['blocks'],
+  originalContent: string | null | undefined,
+  deps: {
+    textToolParser: {
+      parse: (source: string) => {
+        cleanedContent: string;
+        toolCalls: TextToolCall[];
+      };
+    };
+    logger: { debug: (msg: () => string) => void };
+  },
+): void {
+  const cleanedSource = sanitizeProviderText(pipelineKimiCleanContent);
+  if (!cleanedSource) return;
+
+  let parsedResult: { cleanedContent: string; toolCalls: TextToolCall[] };
+  try {
+    parsedResult = deps.textToolParser.parse(cleanedSource);
+  } catch (error) {
+    deps.logger.debug(
+      () => `TextToolCallParser failed on message content: ${error}`,
+    );
+    return;
+  }
+
+  if (parsedResult.toolCalls.length === 0) return;
+
+  for (const call of parsedResult.toolCalls) {
+    blocks.push({
+      type: 'tool_call',
+      id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      name: normalizeToolName(call.name),
+      parameters: call.arguments,
+    } as ToolCallBlock);
+  }
+
+  // Update the text content to remove the tool call parts
+  if (originalContent !== parsedResult.cleanedContent) {
+    const textBlockIndex = blocks.findIndex((block) => block.type === 'text');
+    if (textBlockIndex >= 0) {
+      (blocks[textBlockIndex] as TextBlock).text = parsedResult.cleanedContent;
+    } else if (parsedResult.cleanedContent.trim()) {
+      blocks.unshift({
+        type: 'text',
+        text: parsedResult.cleanedContent,
+      } as TextBlock);
+    }
   }
 }

@@ -47,71 +47,95 @@ export class TemplateEngine {
     let currentPosition = 0;
     const contentLength = content.length;
 
-    // Step 3: Process template
-    while (currentPosition < contentLength) {
+    // Step 3: Process template using a loop with single exit condition
+    let processing = true;
+    while (processing && currentPosition < contentLength) {
       // Find position of next "{{"
       const openBracketPos = content.indexOf('{{', currentPosition);
 
       if (openBracketPos === -1) {
-        // No more variables, append rest and break
+        // No more variables, append rest and finish
         result += content.substring(currentPosition);
-        break;
-      }
-
-      // Append content before "{{"
-      result += content.substring(currentPosition, openBracketPos);
-
-      // Find position of next "}}"
-      const closeBracketPos = content.indexOf('}}', openBracketPos + 2);
-
-      if (closeBracketPos === -1) {
-        // No closing brackets, append rest and break
-        result += content.substring(openBracketPos);
-        break;
-      }
-
-      // Extract variable name and trim whitespace
-      const variableName = content
-        .substring(openBracketPos + 2, closeBracketPos)
-        .trim();
-
-      // Handle empty variable names - leave as-is
-      if (variableName === '') {
-        result += content.substring(openBracketPos, closeBracketPos + 2);
-        currentPosition = closeBracketPos + 2;
-        continue;
-      }
-
-      // Check if variable name contains brackets (nested variables not supported)
-      if (variableName.includes('{{') || variableName.includes('}}')) {
-        // Leave the whole pattern as-is and move to next character
-        result += content.substring(openBracketPos, openBracketPos + 2);
-        currentPosition = openBracketPos + 2;
-        continue;
-      }
-
-      // Perform substitution
-      if (variableName in vars) {
-        const variableValue = vars[variableName];
-        if (variableValue === null || variableValue === undefined) {
-          // Append empty string
-          result += '';
-        } else {
-          result += String(variableValue);
-          // Log substitution if debug is enabled
-          this.logSubstitution(variableName, String(variableValue), options);
-        }
+        processing = false;
       } else {
-        // Variable not found, substitute with empty string
-        result += '';
-        this.logSubstitution(variableName, '', options);
-      }
+        // Append content before "{{"
+        result += content.substring(currentPosition, openBracketPos);
 
-      // Update position to after "}}"
-      currentPosition = closeBracketPos + 2;
+        // Find position of next "}}"
+        const closeBracketPos = content.indexOf('}}', openBracketPos + 2);
+
+        if (closeBracketPos === -1) {
+          // No closing brackets, append rest and finish
+          result += content.substring(openBracketPos);
+          processing = false;
+        } else {
+          // Extract variable name and trim whitespace
+          const variableName = content
+            .substring(openBracketPos + 2, closeBracketPos)
+            .trim();
+
+          // Process the variable substitution
+          const processResult = this.processVariable(
+            variableName,
+            vars,
+            content,
+            openBracketPos,
+            closeBracketPos,
+            options,
+          );
+          result += processResult.text;
+          currentPosition = processResult.nextPosition;
+        }
+      }
     }
 
     return result;
+  }
+
+  /**
+   * Process a single variable in the template.
+   * Handles empty names, nested brackets, and variable substitution.
+   */
+  private processVariable(
+    variableName: string,
+    vars: TemplateVariables,
+    content: string,
+    openBracketPos: number,
+    closeBracketPos: number,
+    options?: TemplateProcessingOptions,
+  ): { text: string; nextPosition: number } {
+    // Handle empty variable names - leave as-is
+    if (variableName === '') {
+      return {
+        text: content.substring(openBracketPos, closeBracketPos + 2),
+        nextPosition: closeBracketPos + 2,
+      };
+    }
+
+    // Check if variable name contains brackets (nested variables not supported)
+    if (variableName.includes('{{') || variableName.includes('}}')) {
+      // Leave the whole pattern as-is and move to next character
+      return {
+        text: content.substring(openBracketPos, openBracketPos + 2),
+        nextPosition: openBracketPos + 2,
+      };
+    }
+
+    // Perform substitution
+    if (variableName in vars) {
+      const variableValue = vars[variableName];
+      if (variableValue !== null && variableValue !== undefined) {
+        const stringValue = String(variableValue);
+        this.logSubstitution(variableName, stringValue, options);
+        return { text: stringValue, nextPosition: closeBracketPos + 2 };
+      }
+      // null/undefined -> empty string
+      return { text: '', nextPosition: closeBracketPos + 2 };
+    }
+
+    // Variable not found, substitute with empty string
+    this.logSubstitution(variableName, '', options);
+    return { text: '', nextPosition: closeBracketPos + 2 };
   }
 
   /**

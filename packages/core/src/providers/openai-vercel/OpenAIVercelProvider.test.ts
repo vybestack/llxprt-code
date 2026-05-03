@@ -27,6 +27,15 @@ import { createProviderCallOptions } from '../../test-utils/providerCallOptions.
 import { SettingsService } from '../../settings/SettingsService.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 
+/**
+ * Helper function to extract URL string from various input types.
+ */
+function extractUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
 describe('OpenAIVercelProvider', () => {
   describe('Provider Registration (REQ-OAV-001)', () => {
     it('should exist as a class', () => {
@@ -341,12 +350,7 @@ describe('OpenAIVercelProvider', () => {
       let observedRoles: string[] | undefined;
       const fetchMock = vi.fn(
         async (input: RequestInfo | URL, init?: RequestInit) => {
-          const url =
-            typeof input === 'string'
-              ? input
-              : input instanceof URL
-                ? input.toString()
-                : input.url;
+          const url = extractUrl(input);
 
           if (!url.includes('/chat/completions')) {
             throw new Error(`Unexpected URL: ${url}`);

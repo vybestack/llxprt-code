@@ -56,6 +56,22 @@ vi.mock('../../../core/prompts.js', () => ({
   ),
 }));
 
+/**
+ * Helper function to resolve user memory from various input types.
+ * Extracts the memory string or returns undefined.
+ */
+async function resolveUserMemory(
+  userMemoryInput: unknown,
+): Promise<string | undefined> {
+  if (typeof userMemoryInput === 'string') {
+    return userMemoryInput;
+  }
+  if (isUserMemoryProfileProvider(userMemoryInput)) {
+    return userMemoryInput.getProfile();
+  }
+  return undefined;
+}
+
 class TestResponsesProvider extends OpenAIResponsesProvider {
   private readonly cacheSizes: number[] = [];
 
@@ -76,12 +92,7 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
     >[0],
   ): AsyncGenerator<unknown> {
     // Extract memory and parameters from options for testing purposes
-    const userMemory =
-      typeof options.userMemory === 'string'
-        ? options.userMemory
-        : isUserMemoryProfileProvider(options.userMemory)
-          ? await options.userMemory.getProfile()
-          : undefined;
+    const userMemory = await resolveUserMemory(options.userMemory);
 
     const runtimeConfigEphemeralSettings = options.invocation.ephemerals;
 

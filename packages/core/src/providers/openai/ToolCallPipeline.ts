@@ -107,41 +107,12 @@ export class ToolCallPipeline {
         if (abortSignal !== undefined && abortSignal.aborted === true) {
           throw this.createAbortError();
         }
-        try {
-          // Create a mock validated call for normalization
-          const mockValidatedCall = {
-            index: candidate.index,
-            id: candidate.id,
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: name is optional string, empty string should fall through
-            name: candidate.name || '',
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: args is optional string, empty string should fall through
-            args: candidate.args || '',
-            isValid: true,
-            validationErrors: [],
-          };
 
-          const normalized = this.normalizer.normalize(mockValidatedCall);
-          if (normalized) {
-            normalizedCalls.push(normalized);
-          } else {
-            failedCalls.push({
-              index: candidate.index,
-              name: candidate.name,
-              args: candidate.args,
-              isValid: false,
-              validationErrors: ['Normalization failed'],
-            });
-          }
-        } catch (error) {
-          failedCalls.push({
-            index: candidate.index,
-            name: candidate.name,
-            args: candidate.args,
-            isValid: false,
-            validationErrors: [
-              error instanceof Error ? error.message : 'Unknown error',
-            ],
-          });
+        const result = this.normalizeCandidate(candidate);
+        if (result.success) {
+          normalizedCalls.push(result.call);
+        } else {
+          failedCalls.push(result.failure);
         }
       }
 
@@ -167,6 +138,58 @@ export class ToolCallPipeline {
       `Pipeline processing completed: ${JSON.stringify(result.stats)}`,
     );
     return result;
+  }
+
+  /**
+   * Normalize a single candidate tool call.
+   * Returns either a successful normalized call or a failure record.
+   */
+  private normalizeCandidate(
+    candidate: ToolCallCandidate,
+  ):
+    | { success: true; call: NormalizedToolCall }
+    | { success: false; failure: FailedToolCall } {
+    try {
+      // Create a mock validated call for normalization
+      const mockValidatedCall = {
+        index: candidate.index,
+        id: candidate.id,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: name is optional string, empty string should fall through
+        name: candidate.name || '',
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: args is optional string, empty string should fall through
+        args: candidate.args || '',
+        isValid: true,
+        validationErrors: [],
+      };
+
+      const normalized = this.normalizer.normalize(mockValidatedCall);
+      if (normalized) {
+        return { success: true, call: normalized };
+      }
+      return {
+        success: false,
+        failure: {
+          index: candidate.index,
+          name: candidate.name,
+          args: candidate.args,
+          isValid: false,
+          validationErrors: ['Normalization failed'],
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        failure: {
+          index: candidate.index,
+          name: candidate.name,
+          args: candidate.args,
+          isValid: false,
+          validationErrors: [
+            error instanceof Error ? error.message : 'Unknown error',
+          ],
+        },
+      };
+    }
   }
 
   /**
@@ -207,4 +230,7 @@ export class ToolCallPipeline {
 }
 
 // Import type from ToolCallCollector
-import { type ToolCallFragment } from './ToolCallCollector.js';
+import {
+  type ToolCallFragment,
+  type ToolCallCandidate,
+} from './ToolCallCollector.js';

@@ -1363,14 +1363,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
         try {
           // Make 3 calls to cycle through all providers
           for (let i = 0; i < 3; i++) {
-            const iterator = provider.generateChatCompletion({
-              contents: [{ role: 'user', parts: [{ text: `test ${i}` }] }],
-            });
-            for await (const chunk of iterator) {
-              if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
-                responses.push(chunk.parts[0].text as string);
-              }
-            }
+            await collectResponseFromProvider(provider, `test ${i}`, responses);
           }
 
           // Verify responses came from different providers in order
@@ -3862,3 +3855,36 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
     });
   });
 });
+
+/**
+ * Helper function to extract text from a chunk.
+ * Returns the text if present, or null if not.
+ */
+function extractTextFromChunk(chunk: unknown): string | null {
+  if (chunk === null || typeof chunk !== 'object') return null;
+  if (!('parts' in chunk)) return null;
+  const parts = (chunk as { parts: unknown[] }).parts;
+  if (!Array.isArray(parts) || parts[0] == null) return null;
+  if (!('text' in parts[0])) return null;
+  return (parts[0] as { text: string }).text;
+}
+
+/**
+ * Helper function to collect response text from a provider.
+ * Iterates through chunks and extracts text for testing.
+ */
+async function collectResponseFromProvider(
+  provider: IProvider,
+  testText: string,
+  responses: string[],
+): Promise<void> {
+  const iterator = provider.generateChatCompletion({
+    contents: [{ role: 'user', parts: [{ text: testText }] }],
+  });
+  for await (const chunk of iterator) {
+    const text = extractTextFromChunk(chunk);
+    if (text !== null) {
+      responses.push(text);
+    }
+  }
+}

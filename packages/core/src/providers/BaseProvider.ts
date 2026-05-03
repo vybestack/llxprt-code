@@ -999,13 +999,7 @@ export abstract class BaseProvider implements IProvider {
     try {
       const settings = await settingsService.getSettings(this.name);
       const value = settings[key];
-      const shouldUseFallback =
-        value === undefined ||
-        value === null ||
-        value === false ||
-        value === '' ||
-        value === 0 ||
-        (typeof value === 'number' && Number.isNaN(value));
+      const shouldUseFallback = isFalsyLikeValue(value);
       return shouldUseFallback ? fallback : (value as T);
     } catch (error) {
       if (process.env.DEBUG) {
@@ -1223,6 +1217,19 @@ export abstract class BaseProvider implements IProvider {
 }
 
 // Import ProviderSettings type to avoid circular dependency
+/**
+ * Helper function to check if a value is falsy-like.
+ * Used for determining when to use fallback values for provider settings.
+ */
+function isFalsyLikeValue(value: unknown): boolean {
+  // Check undefined/null first
+  if (value === undefined || value === null) return true;
+  // Check false, empty string, or 0
+  if (value === false || value === '' || value === 0) return true;
+  // Check NaN for numbers
+  return typeof value === 'number' && Number.isNaN(value);
+}
+
 interface ProviderSettings {
   enabled: boolean;
   apiKey?: string;

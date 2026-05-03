@@ -161,12 +161,7 @@ function createFilteredToolRegistryView(
       }
       const schema = (tool as unknown as { schema?: Record<string, unknown> })
         .schema;
-      const description =
-        typeof schema?.description === 'string'
-          ? schema.description
-          : typeof (tool as { description?: string }).description === 'string'
-            ? (tool as { description: string }).description
-            : '';
+      const description = resolveToolDescriptionFromSchema(tool, schema);
       const runtimeSchema = schema as
         | { parametersJsonSchema?: Record<string, unknown> }
         | undefined;
@@ -179,6 +174,22 @@ function createFilteredToolRegistryView(
       };
     },
   };
+}
+
+/**
+ * Helper function to resolve tool description from schema or tool object.
+ */
+function resolveToolDescriptionFromSchema(
+  tool: unknown,
+  schema: Record<string, unknown> | undefined,
+): string {
+  if (typeof schema?.description === 'string') {
+    return schema.description;
+  }
+  if (typeof (tool as { description?: string }).description === 'string') {
+    return (tool as { description: string }).description;
+  }
+  return '';
 }
 
 export async function loadAgentRuntime(

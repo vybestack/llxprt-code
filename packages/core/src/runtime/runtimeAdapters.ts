@@ -129,12 +129,7 @@ export function createToolRegistryViewFromRegistry(
       }
       const schema = (tool as unknown as { schema?: Record<string, unknown> })
         .schema;
-      const description =
-        typeof schema?.description === 'string'
-          ? schema.description
-          : typeof (tool as { description?: string }).description === 'string'
-            ? (tool as { description: string }).description
-            : '';
+      const description = resolveToolDescription(tool, schema);
       const parameterSchema = (
         schema as { parametersJsonSchema?: Record<string, unknown> }
       ).parametersJsonSchema;
@@ -146,4 +141,20 @@ export function createToolRegistryViewFromRegistry(
       };
     },
   };
+}
+
+/**
+ * Helper function to resolve tool description from schema or tool object.
+ */
+function resolveToolDescription(
+  tool: unknown,
+  schema: Record<string, unknown> | undefined,
+): string {
+  if (typeof schema?.description === 'string') {
+    return schema.description;
+  }
+  if (typeof (tool as { description?: string }).description === 'string') {
+    return (tool as { description: string }).description;
+  }
+  return '';
 }

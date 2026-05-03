@@ -36,6 +36,19 @@ vi.mock('@ai-sdk/openai', () => ({
   })),
 }));
 
+/**
+ * Helper function to check if a block contains a thinking block.
+ */
+function hasThinkingBlock(b: unknown): boolean {
+  if (typeof b !== 'object' || b === null) return false;
+  if (!('blocks' in b)) return false;
+  const blocks = (b as { blocks: unknown[] }).blocks;
+  if (!Array.isArray(blocks)) return false;
+  return (blocks as Array<{ type: string }>).some(
+    (inner) => inner.type === 'thinking',
+  );
+}
+
 describe('OpenAIVercelProvider reasoning support @issue:722', () => {
   let provider: OpenAIVercelProvider;
 
@@ -427,16 +440,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       }
 
       // Find thinking blocks - should have content from reasoning event
-      const thinkingBlocks = blocks.filter(
-        (b) =>
-          typeof b === 'object' &&
-          b !== null &&
-          'blocks' in b &&
-          Array.isArray((b as { blocks: unknown[] }).blocks) &&
-          (b as { blocks: Array<{ type: string }> }).blocks.some(
-            (inner) => inner.type === 'thinking',
-          ),
-      );
+      const thinkingBlocks = blocks.filter(hasThinkingBlock);
 
       // Should have at least one thinking block from the reasoning event
       expect(thinkingBlocks.length).toBeGreaterThan(0);

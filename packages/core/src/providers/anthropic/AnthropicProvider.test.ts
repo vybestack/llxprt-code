@@ -116,42 +116,11 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
         return undefined;
 
       if (format === 'anthropic') {
-        const tools = [];
-        for (const group of geminiTools) {
-          if (group.functionDeclarations != null) {
-            for (const func of group.functionDeclarations) {
-              tools.push({
-                name: func.name,
-                description: func.description ?? '',
-                input_schema: {
-                  type: 'object',
-                  properties: func.parametersJsonSchema?.properties ?? {},
-                  required: func.parametersJsonSchema?.required ?? [],
-                },
-              });
-            }
-          }
-        }
-        return tools;
+        return convertGeminiToolsToAnthropicFormat(geminiTools);
       }
 
       // For other formats (openai, etc.), return OpenAI format
-      const tools = [];
-      for (const group of geminiTools) {
-        if (group.functionDeclarations != null) {
-          for (const func of group.functionDeclarations) {
-            tools.push({
-              type: 'function',
-              function: {
-                name: func.name,
-                description: func.description ?? '',
-                parameters: func.parametersJsonSchema,
-              },
-            });
-          }
-        }
-      }
-      return tools;
+      return convertGeminiToolsToOpenAIFormat(geminiTools);
     }),
   })),
 }));
@@ -4418,3 +4387,86 @@ describe('AnthropicProvider', () => {
     });
   });
 });
+
+/**
+ * Helper function to convert Gemini tools to Anthropic format.
+ */
+function convertGeminiToolsToAnthropicFormat(
+  geminiTools: Array<{
+    functionDeclarations?: Array<{
+      name?: string;
+      description?: string;
+      parametersJsonSchema?: { properties?: unknown; required?: string[] };
+    }>;
+  }>,
+): Array<{
+  name: string | undefined;
+  description: string;
+  input_schema: { type: string; properties: unknown; required: string[] };
+}> {
+  const tools: Array<{
+    name: string | undefined;
+    description: string;
+    input_schema: { type: string; properties: unknown; required: string[] };
+  }> = [];
+  for (const group of geminiTools) {
+    if (group.functionDeclarations != null) {
+      for (const func of group.functionDeclarations) {
+        tools.push({
+          name: func.name,
+          description: func.description ?? '',
+          input_schema: {
+            type: 'object',
+            properties: func.parametersJsonSchema?.properties ?? {},
+            required: func.parametersJsonSchema?.required ?? [],
+          },
+        });
+      }
+    }
+  }
+  return tools;
+}
+
+/**
+ * Helper function to convert Gemini tools to OpenAI format.
+ */
+function convertGeminiToolsToOpenAIFormat(
+  geminiTools: Array<{
+    functionDeclarations?: Array<{
+      name?: string;
+      description?: string;
+      parametersJsonSchema?: unknown;
+    }>;
+  }>,
+): Array<{
+  type: string;
+  function: {
+    name: string | undefined;
+    description: string;
+    parameters: unknown;
+  };
+}> {
+  const tools: Array<{
+    type: string;
+    function: {
+      name: string | undefined;
+      description: string;
+      parameters: unknown;
+    };
+  }> = [];
+  for (const group of geminiTools) {
+    if (group.functionDeclarations != null) {
+      for (const func of group.functionDeclarations) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: func.name,
+            description: func.description ?? '',
+            parameters: func.parametersJsonSchema,
+          },
+        });
+      }
+    }
+  }
+  return tools;
+}
