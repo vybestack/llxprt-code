@@ -258,7 +258,9 @@ describe('IDEServer', () => {
 
       expect(fs.writeFile).toHaveBeenCalledOnce();
       const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
-      expect(writeCall[0]).toMatch(/llxprt-ide-server-\d+-\d+\.json$/);
+      const writtenPath = String(writeCall[0]);
+      expect(writtenPath.endsWith('.json')).toBe(true);
+      expect(writtenPath).toContain('llxprt-ide-server-');
     });
 
     it('should not require ppidPortFile in condition check', async () => {

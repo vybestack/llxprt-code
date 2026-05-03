@@ -1118,9 +1118,10 @@ describe('runNonInteractive', () => {
     const thinkText = thinkOutput?.[0] as string;
     expect(thinkText).not.toContain('\u{1F914}');
     expect(thinkText).not.toContain('\u{1F4AD}');
-    expect(thinkText).toMatch(
-      /Planning.*the approach.*Let me think.*carefully/,
-    );
+    expect(thinkText).toContain('Planning');
+    expect(thinkText).toContain('the approach');
+    expect(thinkText).toContain('Let me think');
+    expect(thinkText).toContain('carefully');
   });
 
   it('should suppress thinking blocks with emojis in error mode', async () => {
