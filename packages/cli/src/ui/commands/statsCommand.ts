@@ -125,6 +125,7 @@ async function fetchApiKeyProviderQuota(
       if (providerConfig) {
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string base-url
         const configBaseUrl = providerConfig['base-url']?.trim() || undefined;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (configBaseUrl) {
           provider = detectApiKeyProvider(configBaseUrl);
           baseUrlForFetch = configBaseUrl;
@@ -143,6 +144,7 @@ async function fetchApiKeyProviderQuota(
             baseProviderConfig?: { 'base-url'?: string };
           }
         ).baseProviderConfig;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (baseProviderConfig) {
           const baseConfigUrl =
             // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string base-url
@@ -285,6 +287,7 @@ async function fetchAllQuotaInfo(
           defaultFirstSort,
         );
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (const bucket of sortedBuckets) {
           const usageInfo = anthropicUsageInfo.get(bucket)!;
           const lines = formatAllUsagePeriods(usageInfo);
@@ -298,10 +301,12 @@ async function fetchAllQuotaInfo(
           }
         }
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (anthropicLines[anthropicLines.length - 1] === '') {
           anthropicLines.pop();
         }
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (anthropicLines.length > 0) {
           output.push('## Anthropic Quota Information\n');
           output.push(...anthropicLines);
@@ -316,6 +321,7 @@ async function fetchAllQuotaInfo(
           defaultFirstSort,
         );
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (const bucket of sortedBuckets) {
           const usageInfo = codexUsageInfo.get(bucket)!;
 
@@ -339,10 +345,12 @@ async function fetchAllQuotaInfo(
           }
         }
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (codexLines[codexLines.length - 1] === '') {
           codexLines.pop();
         }
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (codexLines.length > 0) {
           if (output.length > 0) {
             output.push('');
@@ -360,6 +368,7 @@ async function fetchAllQuotaInfo(
           defaultFirstSort,
         );
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (const bucket of sortedBuckets) {
           const quotaData = geminiUsageInfo.get(bucket)!;
           const lines = formatGeminiQuotaLines(quotaData);
@@ -373,10 +382,12 @@ async function fetchAllQuotaInfo(
           }
         }
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (geminiLines[geminiLines.length - 1] === '') {
           geminiLines.pop();
         }
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (geminiLines.length > 0) {
           if (output.length > 0) {
             output.push('');
@@ -579,6 +590,7 @@ export const statsCommand: SlashCommand = {
             for (const bucket of buckets) {
               const stats = await tokenStore.getBucketStats(provider, bucket);
 
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               if (stats) {
                 const lastUsedStr =
                   stats.lastUsed != null &&

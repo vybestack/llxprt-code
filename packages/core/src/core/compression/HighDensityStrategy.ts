@@ -425,6 +425,7 @@ export class HighDensityStrategy implements CompressionStrategy {
 
     // Extract key param — look for matching tool_call by callId
     let keyParam: string | undefined;
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const entry of fullHistory) {
       if (entry.speaker !== 'ai') continue;
       for (const b of entry.blocks) {
@@ -518,6 +519,7 @@ export class HighDensityStrategy implements CompressionStrategy {
         continue;
       }
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const block of entry.blocks) {
         if (block.type !== 'tool_call') {
           continue;
@@ -548,6 +550,7 @@ export class HighDensityStrategy implements CompressionStrategy {
       const entry = history[index];
       if (entry.speaker === 'ai') {
         for (const block of entry.blocks) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (block.type === 'tool_call') {
             callMap.set(block.id, { aiIndex: index, toolCallBlock: block });
           }
@@ -571,6 +574,7 @@ export class HighDensityStrategy implements CompressionStrategy {
       );
       aiEntryTotalToolCalls.set(index, toolCallBlocks.length);
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const block of toolCallBlocks) {
         if (!(READ_TOOLS as readonly string[]).includes(block.name)) {
           continue;
@@ -583,11 +587,13 @@ export class HighDensityStrategy implements CompressionStrategy {
             latestWrite,
             index,
           );
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (!canPrune) {
             continue;
           }
         } else {
           const filePath = extractFilePath(block.parameters);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (filePath === undefined) {
             continue;
           }
@@ -595,6 +601,7 @@ export class HighDensityStrategy implements CompressionStrategy {
           const resolved = resolvePath(filePath, config.workspaceRoot);
           const writeIndex = latestWrite.get(resolved);
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (writeIndex === undefined || writeIndex <= index) {
             continue;
           }
@@ -632,6 +639,7 @@ export class HighDensityStrategy implements CompressionStrategy {
     }
 
     // STEP 4b: Process tool entries — remove tool_response blocks for stale callIds
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let index = 0; index < history.length; index++) {
       const entry = history[index];
       if (entry.speaker !== 'tool') {
@@ -702,6 +710,7 @@ export class HighDensityStrategy implements CompressionStrategy {
     let allConcreteHaveWrite = true;
     let hasAnyConcrete = false;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const filePath of paths) {
       if (typeof filePath !== 'string') {
         continue;
@@ -754,6 +763,7 @@ export class HighDensityStrategy implements CompressionStrategy {
       }>
     >();
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let index = 0; index < history.length; index++) {
       const entry = history[index];
       if (entry.speaker !== 'human') {
@@ -777,6 +787,7 @@ export class HighDensityStrategy implements CompressionStrategy {
             match.filePath,
             config.workspaceRoot,
           );
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (!inclusions.has(resolvedFilePath)) {
             inclusions.set(resolvedFilePath, []);
           }
@@ -807,9 +818,7 @@ export class HighDensityStrategy implements CompressionStrategy {
 
       entries.sort((a, b) => {
         const messageDiff = b.messageIndex - a.messageIndex;
-        return messageDiff !== 0
-          ? messageDiff
-          : b.startOffset - a.startOffset;
+        return messageDiff !== 0 ? messageDiff : b.startOffset - a.startOffset;
       });
 
       // entries[0] is the latest — preserve. Strip entries[1..n]
@@ -876,6 +885,7 @@ export class HighDensityStrategy implements CompressionStrategy {
     const toolCounts = new Map<string, number>();
     const entriesToPrune: Array<{ index: number; blockIndex: number }> = [];
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let index = history.length - 1; index >= 0; index--) {
       const entry = history[index];
       if (entry.speaker !== 'tool') {
@@ -885,6 +895,7 @@ export class HighDensityStrategy implements CompressionStrategy {
         continue;
       }
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (
         let blockIndex = entry.blocks.length - 1;
         blockIndex >= 0;

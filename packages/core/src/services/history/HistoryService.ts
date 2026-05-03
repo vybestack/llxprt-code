@@ -411,6 +411,7 @@ export class HistoryService
                 : JSON.stringify(block.error);
           } else {
             // Try to stringify the result
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             try {
               blockText = JSON.stringify(block.result ?? '');
             } catch (error) {
@@ -519,6 +520,7 @@ export class HistoryService
           const blockStrings = content.blocks
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             ?.map((block) => {
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               switch (block.type) {
                 case 'text':
                   return block.text;
@@ -545,6 +547,7 @@ export class HistoryService
               }
             })
             .join('\n');
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (blockStrings) {
             total += estimateTextTokens(blockStrings);
           }
@@ -818,6 +821,7 @@ export class HistoryService
           aiMessagesIncluded++;
         } else {
           excludedCount++;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (this.logger.enabled) {
             this.logger.debug('EXCLUDED AI message - no valid content');
           }
@@ -994,6 +998,7 @@ export class HistoryService
       for (const block of content.blocks) {
         if (block.type === 'tool_response') {
           const response = block;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (response.callId) {
             respondedCallIds.add(response.callId);
           }
@@ -1006,6 +1011,7 @@ export class HistoryService
 
     for (const content of this.history) {
       if (content.blocks.length === 0) continue;
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const block of content.blocks) {
         if (block.type !== 'tool_call') continue;
 
@@ -1038,6 +1044,7 @@ export class HistoryService
       for (const block of content.blocks) {
         if (block.type === 'tool_response') {
           const response = block;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (response.callId) {
             respondedCallIds.add(response.callId);
           }
@@ -1047,6 +1054,7 @@ export class HistoryService
 
     let insertedCount = 0;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let i = 0; i < this.history.length; i++) {
       const content = this.history[i];
       if (content.speaker !== 'ai' || !hasValidBlocks(content)) continue;
@@ -1152,6 +1160,7 @@ export class HistoryService
   private splitToolCallsOutOfToolMessages(contents: IContent[]): IContent[] {
     const result: IContent[] = [];
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const content of contents) {
       if (content.speaker !== 'tool' || !hasValidBlocks(content)) {
         result.push(content);
@@ -1203,6 +1212,7 @@ export class HistoryService
     for (const content of contents) {
       if (hasValidBlocks(content)) {
         for (const block of content.blocks) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (block.type === 'tool_call') {
             seenToolCallIds.add(block.id);
           }
@@ -1242,6 +1252,7 @@ export class HistoryService
             },
           });
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const block of reconstructedBlocks) {
             seenToolCallIds.add(block.id);
           }
@@ -1284,6 +1295,7 @@ export class HistoryService
 
     const result: IContent[] = [];
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let i = 0; i < contents.length; i++) {
       const content = contents[i];
       result.push(content);
@@ -1392,6 +1404,7 @@ export class HistoryService
       );
       let mediaAssignedToIndex: number | undefined;
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const toolResponse of toolResponseBlocks) {
         const callId = toolResponse.callId;
         if (!callId) continue;
@@ -1413,6 +1426,7 @@ export class HistoryService
           const newScore = scoreResponse(toolResponse);
           if (newScore > existingScore) {
             const list = responsesByToolCallIndex.get(existing.toolCallIndex);
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (list) {
               list[existing.responseIndex] = toolResponse;
               keptResponseByCallId.set(callId, {

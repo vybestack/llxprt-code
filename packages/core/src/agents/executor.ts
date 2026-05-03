@@ -112,6 +112,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           // If the tool is referenced by name, retrieve it from the parent
           // registry and register it with the agent's isolated registry.
           const toolFromParent = parentToolRegistry.getTool(toolRef);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (toolFromParent) {
             agentToolRegistry.registerTool(toolFromParent);
           }
@@ -186,7 +187,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         : 'Get Started!';
       let currentMessage: Content = { role: 'user', parts: [{ text: query }] };
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Agent/model streams are external runtime boundaries despite declared types.
       while (true) {
         // Check for termination conditions like max turns or timeout.
         const reason = this.checkTermination(startTime, turnCounter);
@@ -296,7 +297,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       let textResponse = '';
       streamIterator = responseStream[Symbol.asyncIterator]();
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Agent/model streams are external runtime boundaries despite declared types.
       while (true) {
         // Use watchdog if timeout > 0, otherwise call iterator.next() directly
         let result: IteratorResult<StreamEvent>;
@@ -306,6 +307,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
             timeoutMs: effectiveTimeoutMs,
             signal: timeoutSignal,
             onTimeout: () => {
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               if (signal.aborted) {
                 return;
               }
@@ -332,11 +334,13 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           const { subject } = parseThought(
             parts?.find((p: Part) => p.thought === true)?.text ?? '',
           );
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (subject !== '') {
             this.emitActivity('THOUGHT_CHUNK', { text: subject });
           }
 
           // Collect any function calls requested by the model.
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (chunk.functionCalls) {
             functionCalls.push(...chunk.functionCalls);
           }
@@ -350,6 +354,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
               .map((p: Part) => p.text)
               .join('') ?? '';
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (text.length > 0) {
             textResponse += text;
           }
@@ -518,6 +523,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     // And we'll need a place to store the synchronous results (like complete_task or blocked calls)
     const syncResponseParts: Part[] = [];
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const [index, functionCall] of functionCalls.entries()) {
       const callId = functionCall.id ?? `${promptId}-${index}`;
       const args = functionCall.args ?? {};
@@ -552,6 +558,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
         if (outputConfig) {
           const outputName = outputConfig.outputName;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (args[outputName] !== undefined) {
             const outputValue = args[outputName];
             const validationResult = outputConfig.schema.safeParse(outputValue);

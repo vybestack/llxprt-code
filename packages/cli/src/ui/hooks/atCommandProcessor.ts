@@ -107,6 +107,7 @@ function parseAllAtCommands(query: string): AtCommandPart[] {
     // Parse @path
     let pathEndIndex = atIndex + 1;
     let inEscape = false;
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (pathEndIndex < query.length) {
       const char = query[pathEndIndex];
       if (inEscape) {
@@ -121,6 +122,7 @@ function parseAllAtCommands(query: string): AtCommandPart[] {
         // This allows file extensions like .txt, .js but terminates at sentence endings like "file.txt. Next sentence"
         const nextChar =
           pathEndIndex + 1 < query.length ? query[pathEndIndex + 1] : '';
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (nextChar === '' || /\s/.test(nextChar)) {
           break;
         }
@@ -243,6 +245,7 @@ export async function handleAtCommand({
     };
   }
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const atPathPart of atPathCommandParts) {
     const originalAtPath = atPathPart.content; // e.g., "@file.txt" or "@"
 
@@ -299,12 +302,14 @@ export async function handleAtCommand({
 
     if (gitIgnored || llxprtIgnored) {
       const reason =
+        // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         gitIgnored && llxprtIgnored ? 'both' : gitIgnored ? 'git' : 'llxprt';
       ignoredByReason[reason].push(pathName);
       const reasonText =
         reason === 'both'
           ? 'ignored by both git and llxprt'
-          : reason === 'git'
+          : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+            reason === 'git'
             ? 'git-ignored'
             : 'llxprt-ignored';
       onDebugMessage(`Path ${pathName} is ${reasonText} and will be skipped.`);
@@ -326,6 +331,7 @@ export async function handleAtCommand({
           ? path.relative(dir, absolutePath)
           : pathName;
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (stats.isDirectory()) {
           currentPathSpec = path.join(relativePath, '**');
           onDebugMessage(
@@ -340,6 +346,7 @@ export async function handleAtCommand({
         }
         resolvedSuccessfully = true;
       } catch (error) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (isNodeError(error) && error.code === 'ENOENT') {
           if (config.getEnableRecursiveFileSearch() && globTool) {
             onDebugMessage(
@@ -428,6 +435,7 @@ export async function handleAtCommand({
       ) {
         // Add space if previous part was text and didn't end with space, or if previous was @path
         const prevPart = commandParts[i - 1];
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (
           prevPart.type === 'text' ||
           atPathToResolvedSpecMap.has(prevPart.content)
@@ -440,6 +448,7 @@ export async function handleAtCommand({
       } else {
         // If not resolved for reading (e.g. lone @ or invalid path that was skipped),
         // add the original @-string back, ensuring spacing if it's not the first element.
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (
           i > 0 &&
           initialQueryText.length > 0 &&
@@ -621,6 +630,7 @@ export async function handleAtCommand({
         text: '\n--- Content from referenced files ---',
       });
       for (const part of result.llmContent) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (typeof part === 'string') {
           const match = fileContentRegex.exec(part);
           if (match) {

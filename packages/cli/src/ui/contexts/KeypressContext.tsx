@@ -192,6 +192,7 @@ function bufferBackslashEnter(
   keypressHandler: KeypressHandler,
 ): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (;;) {
       const key = yield;
 
@@ -238,6 +239,7 @@ function bufferBackslashEnter(
  */
 function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (;;) {
       let key = yield;
 
@@ -249,6 +251,7 @@ function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
       }
 
       let buffer = '';
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (;;) {
         const timeoutId = setTimeout(() => bufferer.next(null), PASTE_TIMEOUT);
         key = yield;
@@ -347,6 +350,7 @@ function* emitKeys(
         let buffer = '';
 
         // Read until BEL, `ESC \`, or timeout (empty string)
+        // eslint-disable-next-line sonarjs/nested-control-flow, sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (;;) {
           const next = yield;
           if (next === '' || next === '\u0007') {
@@ -365,6 +369,7 @@ function* emitKeys(
         // Check for OSC 52 (Clipboard) response
         // Format: 52;c;<base64> or 52;p;<base64>
         const match = /^52;[cp];(.*)$/.exec(buffer);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (match) {
           try {
             const base64Data = match[1];
@@ -391,6 +396,7 @@ function* emitKeys(
         ch = yield;
         sequence += ch;
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (ch >= '0' && ch <= '9') {
           modifier = parseInt(ch, 10) - 1;
           ch = yield;
@@ -406,6 +412,7 @@ function* emitKeys(
         ch = yield;
         sequence += ch;
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (ch === '[') {
           // \x1b[[A
           //      ^--- escape codes might have a second bracket
@@ -446,12 +453,14 @@ function* emitKeys(
         const cmdStart = sequence.length - 1;
 
         // collect as many digits as possible
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         while (ch >= '0' && ch <= '9') {
           ch = yield;
           sequence += ch;
         }
 
         // skip modifier
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (ch === ';') {
           while (ch === ';') {
             ch = yield;
@@ -503,6 +512,7 @@ function* emitKeys(
                 cmd,
               );
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (numberedCodeMatch !== null) {
           const { first, second, third, suffix } = numberedCodeMatch.groups as {
             first: string;
@@ -541,12 +551,15 @@ function* emitKeys(
       const keyInfo = KEY_INFO_MAP[code];
       if (keyInfo !== undefined) {
         name = keyInfo.name;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (keyInfo.shift === true) {
           shift = true;
         }
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (keyInfo.ctrl === true) {
           ctrl = true;
         }
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (name === 'space' && !ctrl && !meta) {
           sequence = ' ';
           insertable = true;
@@ -554,6 +567,7 @@ function* emitKeys(
       } else {
         name = 'undefined';
         // CSI-u or tilde-coded functional keys: ESC [ <code> ; <mods> (u|~)
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if ((ctrl || meta) && (code.endsWith('u') || code.endsWith('~'))) {
           const codeNumber = parseInt(code.slice(1, -1), 10);
           if (

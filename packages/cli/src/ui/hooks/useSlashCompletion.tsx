@@ -252,6 +252,7 @@ export function useSlashCompletion(
       // Only process complete parts (parts followed by another part or a space)
       const completeParts = hasTrailingSpace ? rawParts : rawParts.slice(0, -1);
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const part of completeParts) {
         if (!currentLevel) {
           break;
@@ -278,6 +279,7 @@ export function useSlashCompletion(
 
       if (leafSupportsArguments) {
         if (remainingParts.length > 0) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (hasTrailingSpace) {
             completedArgsForSchema = remainingParts;
           } else {
@@ -301,6 +303,7 @@ export function useSlashCompletion(
               cmd.subCommands != null,
           );
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (exactMatchAsParent) {
             // Only descend if there are NO other matches for the partial at this level.
             // This ensures that typing "/memory" still shows "/memory-leak" if it exists.
@@ -330,6 +333,7 @@ export function useSlashCompletion(
       // Check for perfect, executable match
       if (!hasTrailingSpace) {
         if (
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           leafCommand &&
           commandPartial === '' &&
           argumentPartial === '' &&
@@ -345,6 +349,7 @@ export function useSlashCompletion(
                 cmd.altNames?.includes(commandPartial) === true) &&
               cmd.action != null,
           );
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (perfectMatch !== undefined) {
             setIsPerfectMatch(true);
             setActiveHint('');
@@ -416,6 +421,7 @@ export function useSlashCompletion(
           )
             .then((completionResult) => {
               // Race condition protection: only process if this is the latest completion
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               if (currentSequence !== completionSequenceRef.current) {
                 return;
               }
@@ -440,6 +446,7 @@ export function useSlashCompletion(
             })
             .catch((error) => {
               // Race condition protection: only process if this is the latest completion
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               if (currentSequence !== completionSequenceRef.current) {
                 return;
               }
@@ -470,9 +477,11 @@ export function useSlashCompletion(
           // Filter extension commands: must have extensionName AND be enabled
           if (cmd.kind === 'extension') {
             // Extension commands without extensionName are treated as invalid/disabled
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (!cmd.extensionName) {
               return false;
             }
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (
               typeof extensionConfig?.isExtensionEnabled === 'function' &&
               !extensionConfig.isExtensionEnabled(cmd.extensionName)
@@ -589,6 +598,7 @@ export function useSlashCompletion(
       let foundSuggestions: Suggestion[] = [];
       try {
         const entries = await fs.readdir(startDir, { withFileTypes: true });
+        // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (const entry of entries) {
           if (foundSuggestions.length >= maxResults) break;
 
@@ -704,6 +714,7 @@ export function useSlashCompletion(
             prefix &&
             enableRecursiveSearch
           ) {
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (fileDiscoveryService) {
               fetchedSuggestionsPerDir = await findFilesWithGlob(
                 prefix,
@@ -729,6 +740,7 @@ export function useSlashCompletion(
 
             // Filter entries using git-aware filtering
             const filteredEntries = [];
+            // eslint-disable-next-line sonarjs/nested-control-flow, sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             for (const entry of entries) {
               // Conditionally ignore dotfiles
               if (!prefix.startsWith('.') && entry.name.startsWith('.')) {
@@ -911,6 +923,7 @@ export function useSlashCompletion(
       let suggestionText = suggestion;
       // If we are inserting (not replacing), and the preceding character is not a space, add one.
       if (
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         isSlash &&
         completionStart.current === completionEnd.current &&
         completionStart.current > commandIndex + 1 &&

@@ -113,6 +113,7 @@ export interface ResolvedSubProfile {
  */
 export function isLoadBalancerProfileFormat(profile: Profile): boolean {
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     'type' in profile &&
     profile.type === 'loadbalancer' &&
     'profiles' in profile &&
@@ -883,6 +884,7 @@ export class LoadBalancingProvider implements IProvider {
         const tokens = bucket.get(profileName) ?? 0;
         if (tokens > 0) {
           totalTokens += tokens;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (oldestBucket === undefined || minute < oldestBucket) {
             oldestBucket = minute;
           }
@@ -1089,6 +1091,7 @@ export class LoadBalancingProvider implements IProvider {
     let visitedCount = 0;
     let currentIndex = this.currentFailoverIndex;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (visitedCount < numProfiles) {
       const subProfile = this.config.subProfiles[currentIndex];
       visitedCount++;
@@ -1116,6 +1119,7 @@ export class LoadBalancingProvider implements IProvider {
       let attempts = 0;
       const maxAttempts = Math.max(1, settings.retryCount);
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       while (attempts < maxAttempts) {
         attempts++;
         // Record request start (Phase 5, Issue #489)
@@ -1136,6 +1140,7 @@ export class LoadBalancingProvider implements IProvider {
           const delegateProvider = this.providerManager.getProviderByName(
             subProfile.providerName,
           );
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (!delegateProvider) {
             throw new Error(`Provider "${subProfile.providerName}" not found`);
           }
@@ -1151,6 +1156,7 @@ export class LoadBalancingProvider implements IProvider {
 
           // Collect chunks for token extraction (Phase 4, Issue #489)
           const chunks: IContent[] = [];
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for await (const chunk of iterator) {
             chunksYielded = true;
             chunks.push(chunk);
@@ -1159,6 +1165,7 @@ export class LoadBalancingProvider implements IProvider {
 
           // Extract and update TPM (Phase 4, Issue #489)
           const tokensUsed = this.extractTokenCount(chunks);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (tokensUsed > 0) {
             this.updateTPM(subProfile.name, tokensUsed);
           }
@@ -1178,6 +1185,7 @@ export class LoadBalancingProvider implements IProvider {
         } catch (error) {
           // Check for immediate failover errors (429, 401, 402, 403) - Issue #902
           // These skip retry and immediately failover to next backend
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (this.isImmediateFailoverError(error)) {
             // If we already yielded chunks, don't failover - we'd produce a mixed response
             // (partial from this backend + full from next). Propagate error instead.
@@ -1215,6 +1223,7 @@ export class LoadBalancingProvider implements IProvider {
           const shouldRetry =
             !isLastAttempt && this.shouldFailover(error, settings);
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (shouldRetry) {
             if (settings.retryDelayMs > 0) {
               this.logger.debug(

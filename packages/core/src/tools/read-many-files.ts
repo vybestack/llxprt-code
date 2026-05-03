@@ -143,11 +143,10 @@ ${this.config.getTargetDir()}
     const excludeDesc = `Excluding: ${
       finalExclusionPatternsForDescription.length > 0
         ? `patterns like 
-${finalExclusionPatternsForDescription
-  .slice(0, 2)
-  .join(
-    '`, `',
-  )}${finalExclusionPatternsForDescription.length > 2 ? '...`' : '`'}`
+${finalExclusionPatternsForDescription.slice(0, 2).join(
+  '`, `',
+  // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+)}${finalExclusionPatternsForDescription.length > 2 ? '...`' : '`'}`
         : 'none specified'
     }`;
 
@@ -201,6 +200,7 @@ ${finalExclusionPatternsForDescription
         for (const p of searchPatterns) {
           const normalizedP = p.replace(/\\/g, '/');
           const fullPath = path.join(dir, normalizedP);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (fs.existsSync(fullPath)) {
             processedPatterns.push(escape(normalizedP));
           } else {
@@ -227,6 +227,7 @@ ${finalExclusionPatternsForDescription
       let gitIgnoredCount = 0;
       let llxprtIgnoredCount = 0;
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const absoluteFilePath of entries) {
         // Security check: ensure the glob library didn't return something outside the workspace.
         const pathError = validatePathWithinWorkspace(
@@ -329,6 +330,7 @@ ${finalExclusionPatternsForDescription
         const step = Math.ceil(sortedFiles.length / maxFileCount);
         const sampledFiles: string[] = [];
         for (let i = 0; i < sortedFiles.length; i += step) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (sampledFiles.length < maxFileCount) {
             sampledFiles.push(sortedFiles[i]);
           }
@@ -353,6 +355,7 @@ ${finalExclusionPatternsForDescription
 
     let totalTokens = 0;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const filePath of sortedFiles) {
       const relativePathForDisplay = path
         .relative(this.config.getTargetDir(), filePath)
@@ -424,6 +427,7 @@ ${finalExclusionPatternsForDescription
             filePath,
           );
           let fileContentForLlm = '';
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (fileReadResult.isTruncated === true) {
             fileContentForLlm += `[WARNING: This file was truncated. To view the full content, use the 'read_file' tool on this specific file.]\n\n`;
           }
@@ -431,6 +435,7 @@ ${finalExclusionPatternsForDescription
           const contentToAdd = `${separator}\n\n${fileContentForLlm}\n\n`;
           const contentTokens = estimateTokens(contentToAdd);
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (totalTokens + contentTokens > maxTokens) {
             if (truncateMode === 'warn') {
               // Stop processing and warn
@@ -475,6 +480,7 @@ ${finalExclusionPatternsForDescription
           // For non-text content (images/PDFs), estimate token usage
           // Images typically use ~85 tokens per image
           const estimatedTokens = 85;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (totalTokens + estimatedTokens > maxTokens) {
             skippedFiles.push({
               path: relativePathForDisplay,

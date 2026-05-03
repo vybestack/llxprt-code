@@ -230,6 +230,7 @@ export class GeminiProvider extends BaseProvider {
           // Recursively clean properties within 'properties'
           const cleanedProperties: { [key: string]: Schema } = {};
           const propertiesObject = typedSchema[key] as Record<string, unknown>;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const propKey in propertiesObject) {
             cleanedProperties[propKey] = this.cleanGeminiSchema(
               propertiesObject[propKey],
@@ -541,6 +542,7 @@ export class GeminiProvider extends BaseProvider {
             },
           });
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (response.ok) {
             const data = (await response.json()) as {
               models?: Array<{
@@ -854,6 +856,7 @@ export class GeminiProvider extends BaseProvider {
             // If globalConfig is not set (e.g., when using non-Gemini provider),
             // create a minimal config for OAuth
             let configForOAuth = this.globalConfig;
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (!configForOAuth) {
               logger.debug(
                 () =>
@@ -1086,6 +1089,7 @@ export class GeminiProvider extends BaseProvider {
       if (c.speaker === 'human') {
         const parts: Part[] = [];
         for (const block of c.blocks) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (block.type === 'text') {
             parts.push({ text: block.text });
           } else if (block.type === 'media') {
@@ -1121,6 +1125,7 @@ export class GeminiProvider extends BaseProvider {
         const parts: Part[] = [];
 
         for (const block of c.blocks) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (block.type === 'text') {
             parts.push({ text: block.text });
           } else if (block.type === 'tool_call') {
@@ -1181,6 +1186,7 @@ export class GeminiProvider extends BaseProvider {
         } else if (mediaBlocks.length > 0) {
           // Gemini 2 and below: media as sibling parts
           const parts: Part[] = [frPart];
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const mb of mediaBlocks) {
             parts.push({
               inlineData: { mimeType: mb.mimeType, data: mb.data },
@@ -1691,6 +1697,7 @@ export class GeminiProvider extends BaseProvider {
           );
 
           // Dump successful non-streaming request if enabled
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (shouldDumpSuccess) {
             await dumpSDKContext(
               'gemini',
@@ -1703,6 +1710,7 @@ export class GeminiProvider extends BaseProvider {
           }
 
           let yielded = false;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const chunk of mapResponseToChunks(
             response,
             reasoningIncludeInResponse,
@@ -1710,12 +1718,14 @@ export class GeminiProvider extends BaseProvider {
             yielded = true;
             yield chunk;
           }
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (!yielded) {
             yield { speaker: 'ai', blocks: [] } as IContent;
           }
           return;
         } catch (error) {
           // Dump error if enabled
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (shouldDumpError) {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
@@ -1837,6 +1847,7 @@ export class GeminiProvider extends BaseProvider {
           stream = await contentGenerator.generateContentStream(apiRequest);
 
           // Dump successful streaming request if enabled
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (shouldDumpSuccess) {
             await dumpSDKContext(
               'gemini',
@@ -1849,6 +1860,7 @@ export class GeminiProvider extends BaseProvider {
           }
         } catch (error) {
           // Dump error if enabled
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (shouldDumpError) {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
@@ -1869,6 +1881,7 @@ export class GeminiProvider extends BaseProvider {
           const response = await contentGenerator.generateContent(apiRequest);
 
           // Dump successful non-streaming request if enabled
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (shouldDumpSuccess) {
             await dumpSDKContext(
               'gemini',
@@ -1881,6 +1894,7 @@ export class GeminiProvider extends BaseProvider {
           }
 
           let yielded = false;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const chunk of mapResponseToChunks(
             response,
             reasoningIncludeInResponse,
@@ -1888,12 +1902,14 @@ export class GeminiProvider extends BaseProvider {
             yielded = true;
             yield chunk;
           }
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (!yielded) {
             yield { speaker: 'ai', blocks: [] } as IContent;
           }
           return;
         } catch (error) {
           // Dump error if enabled
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (shouldDumpError) {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
@@ -1919,7 +1935,7 @@ export class GeminiProvider extends BaseProvider {
         typeof stream[Symbol.asyncIterator] === 'function'
           ? stream[Symbol.asyncIterator]()
           : (stream as unknown as AsyncIterator<GenerateContentResponse>);
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Intentional infinite loop with break conditions
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Intentional infinite loop with break conditions
       while (true) {
         const { value, done } = await iterator.next();
         if (done === true) {

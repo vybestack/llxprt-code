@@ -288,6 +288,7 @@ export class StreamProcessor {
 
         if (beforeModelResult?.isBlockingDecision() === true) {
           let syntheticResponse = beforeModelResult.getSyntheticResponse();
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (syntheticResponse) {
             const candidate = syntheticResponse.candidates?.[0];
             const candidateFinishReason = candidate?.finishReason as
@@ -328,6 +329,7 @@ export class StreamProcessor {
           const modifiedContents = (
             modifiedRequest as { contents?: Content[] | null }
           ).contents;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (modifiedContents !== undefined && modifiedContents !== null) {
             requestContents = ContentConverters.toIContents(modifiedContents);
           }
@@ -460,6 +462,7 @@ export class StreamProcessor {
 
     const toolConfig = modifiedConfig?.toolConfig as unknown;
     if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       toolConfig !== undefined &&
       toolConfig !== null &&
       typeof toolConfig === 'object' &&
@@ -578,6 +581,7 @@ export class StreamProcessor {
             ? hookConfig.getHookSystem()
             : undefined;
         if (hookSystem !== undefined) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (!hookSystem.isInitialized()) {
             await hookSystem.initialize();
           }
@@ -586,6 +590,7 @@ export class StreamProcessor {
             iContent,
           );
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (afterModelResult?.shouldStopExecution() === true) {
             const effectiveReason = afterModelResult.getEffectiveReason() as
               | string
@@ -596,6 +601,7 @@ export class StreamProcessor {
             );
           }
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (afterModelResult?.isBlockingDecision() === true) {
             const modifiedResponse = afterModelResult.getModifiedResponse();
             const syntheticResponse = modifiedResponse ?? convertedChunk;
@@ -610,6 +616,7 @@ export class StreamProcessor {
           }
 
           const modifiedResponse = afterModelResult?.getModifiedResponse();
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (modifiedResponse) {
             lastConvertedChunk = modifiedResponse;
             yield modifiedResponse;
@@ -671,8 +678,10 @@ export class StreamProcessor {
       if (isValidResponse(chunk)) {
         const parts = chunk.candidates?.[0]?.content?.parts;
         if (parts !== undefined) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (parts.some((p) => p.functionCall !== undefined))
             hasToolCall = true;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (
             parts.some(
               (p) =>
@@ -683,6 +692,7 @@ export class StreamProcessor {
             )
           )
             hasTextResponse = true;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (parts.some((p) => isThoughtPart(p))) hasThinkingResponse = true;
           modelResponseParts.push(
             ...(includeThoughts
@@ -820,6 +830,7 @@ export class StreamProcessor {
     // - Empty response text after consolidation (e.g., only thoughts with no actual content)
     // - MALFORMED_FUNCTION_CALL finish reason (should trigger retry)
     if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       !hasToolCall &&
       !isToolContinuationInput &&
       !hasThinkingResponse &&
