@@ -28,50 +28,27 @@ type AddCommandArgs = {
   '--'?: string[];
 };
 
-async function addMcpServer(
-  name: string,
-  commandOrUrl: string,
-  args: Array<string | number> | undefined,
-  options: {
-    scope: string;
-    transport: string;
-    env: string[] | undefined;
-    header: string[] | undefined;
-    timeout?: number;
-    trust?: boolean;
-    description?: string;
-    includeTools?: string[];
-    excludeTools?: string[];
-  },
-) {
-  const {
-    scope,
-    transport,
-    env,
-    header,
-    timeout,
-    trust,
-    description,
-    includeTools,
-    excludeTools,
-  } = options;
+type AddMcpOptions = {
+  scope: string;
+  transport: string;
+  env: string[] | undefined;
+  header: string[] | undefined;
+  timeout?: number;
+  trust?: boolean;
+  description?: string;
+  includeTools?: string[];
+  excludeTools?: string[];
+};
 
-  const settings = loadSettings(process.cwd());
-  const inHome = settings.workspace.path === settings.user.path;
+type SharedServerOptions = Pick<
+  AddMcpOptions,
+  'timeout' | 'trust' | 'description' | 'includeTools' | 'excludeTools'
+>;
 
-  if (scope === 'project' && inHome) {
-    debugLogger.error(
-      'Error: Please use --scope user to edit settings in the home directory.',
-    );
-    await exitCli(1);
-  }
-
-  const settingsScope =
-    scope === 'user' ? SettingScope.User : SettingScope.Workspace;
-
-  let newServer: Partial<MCPServerConfig> = {};
-
-  const headers = header?.reduce(
+function parseHeaderEntries(
+  entries: string[] | undefined,
+): Record<string, string> | undefined {
+  return entries?.reduce(
     (acc, curr) => {
       const [key, ...valueParts] = curr.split(':');
       const value = valueParts.join(':').trim();
@@ -82,55 +59,120 @@ async function addMcpServer(
     },
     {} as Record<string, string>,
   );
+}
 
-  switch (transport) {
-    case 'sse':
-      newServer = {
-        url: commandOrUrl,
-        type: 'sse',
-        headers,
-        timeout,
-        trust,
-        description,
-        includeTools,
-        excludeTools,
-      };
-      break;
-    case 'http':
-      newServer = {
-        url: commandOrUrl,
-        type: 'http',
-        headers,
-        timeout,
-        trust,
-        description,
-        includeTools,
-        excludeTools,
-      };
-      break;
-    case 'stdio':
-    default:
-      newServer = {
-        command: commandOrUrl,
-        args: args?.map(String),
-        env: env?.reduce(
-          (acc, curr) => {
-            const [key, value] = curr.split('=');
-            if (key && value) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        ),
-        timeout,
-        trust,
-        description,
-        includeTools,
-        excludeTools,
-      };
-      break;
+function parseEnvEntries(
+  entries: string[] | undefined,
+): Record<string, string> | undefined {
+  return entries?.reduce(
+    (acc, curr) => {
+      const [key, value] = curr.split('=');
+      if (key && value) {
+        acc[key] = value;
+      }
+      return acc;
+    },
+    {} as Record<string, string>,
+  );
+}
+
+function createHttpServerConfig(
+  commandOrUrl: string,
+  type: 'sse' | 'http',
+  headers: Record<string, string> | undefined,
+  options: SharedServerOptions,
+): Partial<MCPServerConfig> {
+  return {
+    url: commandOrUrl,
+    type,
+    headers,
+    ...options,
+  };
+}
+
+function createStdioServerConfig(
+  commandOrUrl: string,
+  args: Array<string | number> | undefined,
+  env: string[] | undefined,
+  options: SharedServerOptions,
+): Partial<MCPServerConfig> {
+  return {
+    command: commandOrUrl,
+    args: args?.map(String),
+    env: parseEnvEntries(env),
+    ...options,
+  };
+}
+
+function createServerConfig(
+  commandOrUrl: string,
+  args: Array<string | number> | undefined,
+  options: AddMcpOptions,
+): Partial<MCPServerConfig> {
+  const sharedOptions = {
+    timeout: options.timeout,
+    trust: options.trust,
+    description: options.description,
+    includeTools: options.includeTools,
+    excludeTools: options.excludeTools,
+  };
+  const headers = parseHeaderEntries(options.header);
+  if (options.transport === 'sse' || options.transport === 'http') {
+    return createHttpServerConfig(
+      commandOrUrl,
+      options.transport,
+      headers,
+      sharedOptions,
+    );
   }
+  return createStdioServerConfig(
+    commandOrUrl,
+    args,
+    options.env,
+    sharedOptions,
+  );
+}
+
+async function validateProjectScope(scope: string, inHome: boolean) {
+  if (scope === 'project' && inHome) {
+    debugLogger.error(
+      'Error: Please use --scope user to edit settings in the home directory.',
+    );
+    await exitCli(1);
+  }
+}
+
+function logServerMutation(
+  name: string,
+  scope: string,
+  transport: string,
+  exists: boolean,
+) {
+  if (exists) {
+    debugLogger.log(
+      `MCP server "${name}" is already configured within ${scope} settings.`,
+    );
+    debugLogger.log(`MCP server "${name}" updated in ${scope} settings.`);
+    return;
+  }
+  debugLogger.log(
+    `MCP server "${name}" added to ${scope} settings. (${transport})`,
+  );
+}
+
+async function addMcpServer(
+  name: string,
+  commandOrUrl: string,
+  args: Array<string | number> | undefined,
+  options: AddMcpOptions,
+) {
+  const settings = loadSettings(process.cwd());
+  const inHome = settings.workspace.path === settings.user.path;
+  await validateProjectScope(options.scope, inHome);
+
+  const settingsScope =
+    options.scope === 'user' ? SettingScope.User : SettingScope.Workspace;
+  const newServer = createServerConfig(commandOrUrl, args, options);
 
   const existingSettings = settings.forScope(settingsScope).settings;
   const mcpServers: Settings['mcpServers'] = existingSettings.mcpServers ?? {};
@@ -139,23 +181,10 @@ async function addMcpServer(
     mcpServers,
     name,
   );
-  if (isExistingServer) {
-    debugLogger.log(
-      `MCP server "${name}" is already configured within ${scope} settings.`,
-    );
-  }
-
   mcpServers[name] = newServer as MCPServerConfig;
 
   settings.setValue(settingsScope, 'mcpServers', mcpServers);
-
-  if (isExistingServer) {
-    debugLogger.log(`MCP server "${name}" updated in ${scope} settings.`);
-  } else {
-    debugLogger.log(
-      `MCP server "${name}" added to ${scope} settings. (${transport})`,
-    );
-  }
+  logServerMutation(name, options.scope, options.transport, isExistingServer);
 }
 
 export const addCommand: CommandModule = {
