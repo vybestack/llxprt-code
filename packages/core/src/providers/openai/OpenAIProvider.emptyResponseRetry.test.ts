@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';

@@ -25,6 +25,8 @@
  *
  * These tests document the exact bugs that need to be fixed.
  */
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {

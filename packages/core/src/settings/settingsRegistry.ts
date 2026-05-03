@@ -1,5 +1,7 @@
 export const PLAN_MARKER = '@plan:PLAN-20260126-SETTINGS-SEPARATION.P05';
 /** @plan PLAN-20260211-COMPRESSION.P12 */
+/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import { COMPRESSION_STRATEGIES } from '../core/compression/types.js';
 
 export type SettingCategory =

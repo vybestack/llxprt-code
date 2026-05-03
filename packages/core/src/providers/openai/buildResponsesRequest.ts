@@ -2,6 +2,8 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 import {
   buildToolResponsePayload,
   formatToolResponseText,

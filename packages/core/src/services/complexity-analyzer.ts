@@ -1,3 +1,5 @@
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 export interface ComplexityAnalysisResult {
   /** Complexity score from 0 to 1 */
   complexityScore: number;
