@@ -94,13 +94,8 @@ const vimReducer = (state: VimState, action: VimAction): VimState => {
       return { ...state, lastCommand: action.command };
 
     case 'CLEAR_PENDING_STATES':
-      return {
-        ...state,
-        ...createClearPendingState(),
-      };
-
     case 'ESCAPE_TO_NORMAL':
-      // Handle escape - clear all pending states (mode is updated via context)
+      // Handle escape/clear - clear all pending states (mode is updated via context for ESCAPE_TO_NORMAL)
       return {
         ...state,
         ...createClearPendingState(),

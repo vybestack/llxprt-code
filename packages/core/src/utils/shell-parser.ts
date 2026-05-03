@@ -441,21 +441,15 @@ export function splitCommandsWithTree(
         }
         break;
       case 'list':
-        // Lists are command chains (&&, ||, ;) - recurse into children
-        for (const child of node.children) {
-          if (child) extractCommands(child);
-        }
-        break;
+      // Lists are command chains (&&, ||, ;) - recurse into children
+      // falls through to program/default
       case 'program':
+      default:
+        // For other node types (and program), check children
         for (const child of node.children) {
           if (child) extractCommands(child);
         }
         break;
-      default:
-        // For other node types, check children
-        for (const child of node.children) {
-          if (child) extractCommands(child);
-        }
     }
   }
 

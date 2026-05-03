@@ -232,9 +232,10 @@ function recomputeAndApplyModelDefaultsDiff(
   // Apply new defaults: only if key is undefined or current value matches old default.
   for (const [key, newValue] of Object.entries(newDefaults)) {
     const currentValue = config.getEphemeralSetting(key);
-    if (currentValue === undefined) {
-      config.setEphemeralSetting(key, newValue);
-    } else if (key in oldDefaults && currentValue === oldDefaults[key]) {
+    if (
+      currentValue === undefined ||
+      (key in oldDefaults && currentValue === oldDefaults[key])
+    ) {
       config.setEphemeralSetting(key, newValue);
     }
   }

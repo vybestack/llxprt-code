@@ -113,12 +113,6 @@ export function mapToDisplay(
           };
         }
         case 'error':
-          return {
-            ...baseDisplayProperties,
-            status: mapCoreStatusToDisplayStatus(trackedCall.status),
-            resultDisplay: trackedCall.response.resultDisplay,
-            confirmationDetails: undefined,
-          };
         case 'cancelled':
           return {
             ...baseDisplayProperties,

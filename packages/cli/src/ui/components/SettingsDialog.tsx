@@ -989,20 +989,12 @@ export function SettingsDialog({
           const currentDefinition = getSettingDefinition(currentSettingKey);
 
           // Check if this item has sub-settings (special case for coreToolSettings)
-          let hasSubSettings = false;
-          if (
-            currentDefinition?.subSettings &&
-            Object.keys(currentDefinition.subSettings).length > 0
-          ) {
-            hasSubSettings = true;
-          } else if (
-            currentSettingKey === 'coreToolSettings' &&
-            config !== undefined
-          ) {
-            // Special case: coreToolSettings always has sub-settings
-            // Avoid unnecessary computation by directly setting to true
-            hasSubSettings = true;
-          }
+          const hasSubSettingsDef =
+            currentDefinition?.subSettings !== undefined &&
+            Object.keys(currentDefinition.subSettings).length > 0;
+          const isCoreToolSettings =
+            currentSettingKey === 'coreToolSettings' && config !== undefined;
+          const hasSubSettings = hasSubSettingsDef || isCoreToolSettings;
 
           if (hasSubSettings) {
             // Save current state for navigation back

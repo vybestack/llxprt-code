@@ -449,16 +449,9 @@ export class ToolFormatter implements IToolFormatter {
           },
         }));
       case 'hermes':
-        // Hermes uses text-based format, tools are provided as system prompt
-        // Return a text description of tools for the system prompt
-        return tools.map((tool) => ({
-          name: tool.function.name,
-          description: tool.function.description ?? '',
-          parameters: tool.function.parameters,
-        }));
       case 'xml':
-        // XML format also uses text-based format similar to Hermes
-        // Tools are typically described in the system prompt
+        // Hermes and XML use text-based format, tools are provided as system prompt
+        // Return a text description of tools for the system prompt
         return tools.map((tool) => ({
           name: tool.function.name,
           description: tool.function.description ?? '',

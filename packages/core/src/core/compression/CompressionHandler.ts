@@ -95,13 +95,7 @@ export class CompressionHandler {
 
     let thinkingTokensToStrip = 0;
 
-    if (stripPolicy === 'all') {
-      // Sum up all thinking tokens
-      for (const content of allContents) {
-        const thinkingBlocks = extractThinkingBlocks(content);
-        thinkingTokensToStrip += estimateThinkingTokens(thinkingBlocks);
-      }
-    } else if (stripPolicy === 'allButLast') {
+    if (stripPolicy === 'allButLast') {
       // Find last content with thinking blocks
       let lastIndexWithThinking = -1;
       for (let i = allContents.length - 1; i >= 0; i--) {
@@ -119,8 +113,8 @@ export class CompressionHandler {
         }
       }
     } else {
-      // stripPolicy === 'none': but includeInContext=false means they won't be sent
-      // Strip ALL thinking for effective count
+      // stripPolicy === 'all' explicitly strips all thinking; stripPolicy === 'none'
+      // also removes all thinking from the effective count when includeInContext=false.
       for (const content of allContents) {
         const thinkingBlocks = extractThinkingBlocks(content);
         thinkingTokensToStrip += estimateThinkingTokens(thinkingBlocks);

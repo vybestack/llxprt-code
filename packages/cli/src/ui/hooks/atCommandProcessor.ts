@@ -480,11 +480,12 @@ export async function handleAtCommand({
   // Fallback for lone "@" or completely invalid @-commands resulting in empty initialQueryText
   if (pathSpecsToRead.length === 0 && resourceAttachments.length === 0) {
     onDebugMessage('No valid file paths found in @ commands to read.');
-    if (initialQueryText === '@' && query.trim() === '@') {
-      // If the only thing was a lone @, pass original query (which might have spaces)
-      return { processedQuery: [{ text: query }] };
-    } else if (!initialQueryText && query) {
-      // If all @-commands were invalid and no surrounding text, pass original query
+    if (
+      (initialQueryText === '@' && query.trim() === '@') ||
+      (!initialQueryText && query)
+    ) {
+      // If the only thing was a lone @, or all @-commands were invalid with no surrounding text,
+      // pass original query
       return { processedQuery: [{ text: query }] };
     }
     // Otherwise, proceed with the (potentially modified) query text that doesn't involve file reading

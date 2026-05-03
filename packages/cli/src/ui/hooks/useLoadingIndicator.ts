@@ -37,17 +37,17 @@ export const useLoadingIndicator = (
   const prevStreamingStateRef = useRef<StreamingState | null>(null);
 
   useEffect(() => {
-    if (
-      prevStreamingStateRef.current === StreamingState.WaitingForConfirmation &&
-      streamingState === StreamingState.Responding
-    ) {
+    const prevState = prevStreamingStateRef.current;
+
+    // Timer reset needed when transitioning from states with accumulated time
+    const needsTimerReset =
+      (prevState === StreamingState.WaitingForConfirmation &&
+        streamingState === StreamingState.Responding) ||
+      (streamingState === StreamingState.Idle &&
+        prevState === StreamingState.Responding);
+
+    if (needsTimerReset) {
       setTimerResetKey((prevKey) => prevKey + 1);
-      setRetainedElapsedTime(0); // Clear retained time when going back to responding
-    } else if (
-      streamingState === StreamingState.Idle &&
-      prevStreamingStateRef.current === StreamingState.Responding
-    ) {
-      setTimerResetKey((prevKey) => prevKey + 1); // Reset timer when becoming idle from responding
       setRetainedElapsedTime(0);
     } else if (streamingState === StreamingState.WaitingForConfirmation) {
       // Capture the time when entering WaitingForConfirmation

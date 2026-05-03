@@ -569,12 +569,8 @@ function* emitKeys(
           }
         }
       }
-    } else if (ch === '\r') {
-      // carriage return
-      name = 'return';
-      meta = escaped;
-    } else if (escaped && ch === '\n') {
-      // Alt+Enter (linefeed), should be consistent with carriage return
+    } else if (ch === '\r' || (escaped && ch === '\n')) {
+      // carriage return, or Alt+Enter (linefeed)
       name = 'return';
       meta = escaped;
     } else if (ch === '\t') {

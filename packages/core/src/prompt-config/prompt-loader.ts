@@ -283,32 +283,20 @@ export class PromptLoader {
     }
 
     // Step 2: Detect sandbox environment
-    let isSandboxed = false;
-
-    if (process.env.SANDBOX === '1' || process.env.SANDBOX === 'true') {
-      isSandboxed = true;
-    } else if (
+    const isSandboxed =
+      process.env.SANDBOX === '1' ||
+      process.env.SANDBOX === 'true' ||
       process.env.CONTAINER === '1' ||
-      process.env.CONTAINER === 'true'
-    ) {
-      isSandboxed = true;
-    } else if (existsSync('/sandbox') || existsSync('/.dockerenv')) {
-      isSandboxed = true;
-    }
+      process.env.CONTAINER === 'true' ||
+      existsSync('/sandbox') ||
+      existsSync('/.dockerenv');
 
     // Step 3: Detect IDE companion
-    let hasIdeCompanion = false;
-
-    if (
+    const hasIdeCompanion =
       process.env.IDE_COMPANION === '1' ||
-      process.env.IDE_COMPANION === 'true'
-    ) {
-      hasIdeCompanion = true;
-    } else if (existsSync(path.join(workingDirectory, '.vscode'))) {
-      hasIdeCompanion = true;
-    } else if (existsSync(path.join(workingDirectory, '.idea'))) {
-      hasIdeCompanion = true;
-    }
+      process.env.IDE_COMPANION === 'true' ||
+      existsSync(path.join(workingDirectory, '.vscode')) ||
+      existsSync(path.join(workingDirectory, '.idea'));
 
     return {
       isGitRepository,
