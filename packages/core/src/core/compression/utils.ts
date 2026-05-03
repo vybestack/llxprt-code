@@ -110,6 +110,7 @@ export function findForwardValidSplitPoint(
           );
         });
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (!hasMatchingResponses) {
           return index - 1;
         }
@@ -130,6 +131,7 @@ export function findBackwardValidSplitPoint(
   history: IContent[],
   startIndex: number,
 ): number {
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = startIndex - 1; i >= 0; i--) {
     const current = history[i];
 
@@ -152,6 +154,7 @@ export function findBackwardValidSplitPoint(
           );
         });
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (allCallsHaveResponses) {
           return i + 1;
         }

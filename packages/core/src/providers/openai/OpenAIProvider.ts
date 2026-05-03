@@ -464,6 +464,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard - providerSettings is object type but we guard against null/undefined from external sources
       if (providerSettings != null) {
         for (const [key, value] of Object.entries(providerSettings)) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (reservedKeys.has(key) || value === undefined || value === null) {
             continue;
           }
@@ -711,6 +712,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       let accumulatedText = '';
 
       // Process the continuation response
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for await (const chunk of continuationResponse as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
         if (abortSignal?.aborted === true) {
           break;
@@ -727,6 +729,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         );
         if (deltaContent !== undefined && deltaContent !== '') {
           const sanitized = sanitizeProviderText(deltaContent);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (sanitized !== '') {
             accumulatedText += sanitized;
             yield {

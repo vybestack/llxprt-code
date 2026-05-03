@@ -77,6 +77,7 @@ export class SessionLockManager {
       if (code === 'EEXIST') {
         const isStale = await SessionLockManager.checkStale(lockPath);
         if (isStale) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           try {
             await fs.unlink(lockPath);
           } catch (unlinkErr: unknown) {
@@ -84,6 +85,7 @@ export class SessionLockManager {
               throw unlinkErr;
             }
           }
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           try {
             await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
           } catch {
@@ -97,6 +99,7 @@ export class SessionLockManager {
         try {
           await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
         } catch (writeErr: unknown) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if ((writeErr as NodeJS.ErrnoException).code === 'EEXIST') {
             throw new Error('Session is in use by another process');
           }

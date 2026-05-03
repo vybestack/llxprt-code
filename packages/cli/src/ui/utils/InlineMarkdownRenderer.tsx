@@ -68,6 +68,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
           </Text>
         );
       } else if (
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         fullMatch.length > ITALIC_MARKER_LENGTH * 2 &&
         ((fullMatch.startsWith('*') && fullMatch.endsWith('*')) ||
           (fullMatch.startsWith('_') && fullMatch.endsWith('_'))) &&
@@ -114,6 +115,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
         // Static regex for inline code matching - no dynamic parts
         // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
         const codeMatch = fullMatch.match(/^(`+)(.+?)\1$/s);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (codeMatch?.[2]) {
           renderedNode = (
             <Text key={key} color={theme.text.accent}>
@@ -129,6 +131,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
         // Static regex for link matching - no dynamic parts
         // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
         const linkMatch = fullMatch.match(/\[(.*?)\]\((.*?)\)/);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (linkMatch) {
           const linkText = linkMatch[1];
           const url = linkMatch[2];

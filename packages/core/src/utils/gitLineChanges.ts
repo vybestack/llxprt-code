@@ -124,6 +124,7 @@ function parseUnifiedZeroDiff(diffText: string): {
   // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const hunkHeaderRe = /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/;
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const line of lines) {
     const m = hunkHeaderRe.exec(line);
     if (!m) continue;
@@ -226,6 +227,7 @@ export async function getGitLineChanges(
           gitRoot,
         ).catch(() => '');
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (content === '') {
           return {
             markersByLine: new Map(),
@@ -244,6 +246,7 @@ export async function getGitLineChanges(
           number,
           Exclude<GitLineChangeMarker, '░'>
         >();
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (let i = 1; i <= lineCount; i++) {
           markersByLine.set(i, 'N');
         }

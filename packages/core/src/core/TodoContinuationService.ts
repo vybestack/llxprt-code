@@ -158,6 +158,7 @@ export class TodoContinuationService {
 
     const suffixAlreadyPresent = parts.some(
       (part) =>
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         typeof part === 'object' &&
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
         part !== null &&
@@ -270,6 +271,7 @@ export class TodoContinuationService {
     const parts = toPartArray(request);
     const alreadyPresent = parts.some(
       (part) =>
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         typeof part === 'object' &&
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
         part !== null &&
@@ -298,6 +300,7 @@ export class TodoContinuationService {
     return response.responseParts.some((part) => {
       if (
         /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads */
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         typeof part === 'object' &&
         part !== null &&
         'functionResponse' in part &&
