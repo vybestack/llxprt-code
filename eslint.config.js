@@ -256,6 +256,11 @@ export default tseslint.config(
       'sonarjs/slow-regex': 'error',
       'sonarjs/os-command': 'error',
       'sonarjs/no-os-command-from-path': 'error',
+      'sonarjs/no-all-duplicated-branches': 'error',
+      'sonarjs/no-duplicated-branches': 'error',
+      'sonarjs/no-identical-functions': 'error',
+      'sonarjs/no-inconsistent-returns': 'error',
+      'sonarjs/no-collapsible-if': 'error',
 
       'sonarjs/function-return-type': 'off',
       'sonarjs/no-wildcard-import': 'off',
