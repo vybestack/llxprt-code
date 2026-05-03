@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, max-lines -- Profile bootstrap coverage intentionally keeps many focused behavioral cases together. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
