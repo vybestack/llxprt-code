@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 /**
  * StreamProcessor - Handles API stream requests and response processing.
  * Extracted from geminiChat.ts Phase 05.

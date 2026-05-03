@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 /**
  * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P15,P16,P17
  * @requirement:HOOK-092,HOOK-093,HOOK-094,HOOK-095,HOOK-096,HOOK-097,HOOK-098,HOOK-099,HOOK-100,HOOK-101,HOOK-102,HOOK-103,HOOK-104,HOOK-105

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 /**
  * MessageConverter - Pure functions for Gemini SDK ↔ IContent format translation.
  * Handles format conversion, speaker semantics, finish-reason mapping, and validation.

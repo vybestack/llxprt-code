@@ -2,6 +2,8 @@
 /* @requirement:REQ-ARCH-060, REQ-GRACE-020, REQ-GRACE-040 */
 /* pseudocode: project-plans/issue438/pseudocode/P30-lsp-service-client-functional.md */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import { spawn } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { once } from 'node:events';

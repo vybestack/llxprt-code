@@ -9,6 +9,8 @@
  * Integrates bucket failover logic into GeminiChat provider execution flow
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import type { IContent, ContentBlock } from '../services/history/IContent.js';
 import type { IProvider, GenerateChatOptions } from '../providers/IProvider.js';
 import { DebugLogger } from '../debug/index.js';
