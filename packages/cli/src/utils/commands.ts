@@ -42,8 +42,7 @@ export function parseSlashCommand(
   const commandToExecute = commands.find(
     (cmd) =>
       cmd.name.toLowerCase() === commandName ||
-      (cmd.altNames?.some((alt) => alt.toLowerCase() === commandName) ??
-        false),
+      (cmd.altNames?.some((alt) => alt.toLowerCase() === commandName) ?? false),
   );
 
   if (!commandToExecute) {

@@ -344,7 +344,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     const token = makeMinimalToken();
     await expect(
       tokenStore.saveToken('anthropic', token, 'bad/bucket'),
-    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     ).rejects.toThrow(/invalid.*bucket.*name/i);
   });
 

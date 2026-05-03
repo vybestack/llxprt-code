@@ -72,7 +72,9 @@ export function computeTerminalTitle({
   } else {
     // Active/Working state
     const rawSubject =
-      showThoughts === true ? thoughtSubject?.replace(/[\r\n]+/g, ' ').trim() : undefined;
+      showThoughts === true
+        ? thoughtSubject?.replace(/[\r\n]+/g, ' ').trim()
+        : undefined;
     const cleanSubject =
       rawSubject !== undefined && rawSubject !== '' ? rawSubject : undefined;
 

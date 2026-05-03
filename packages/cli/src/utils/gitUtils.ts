@@ -15,12 +15,11 @@ import { debugLogger } from '@vybestack/llxprt-code-core';
  */
 export const isGitHubRepository = (): boolean => {
   try {
-    const remotes = (
-      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
-      execSync('git remote -v', {
-        encoding: 'utf-8',
-      }) || ''
-    ).trim();
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
+    const gitRemoteOutput = execSync('git remote -v', {
+      encoding: 'utf-8',
+    });
+    const remotes = (gitRemoteOutput || '').trim();
 
     const pattern = /github\.com/;
 
@@ -38,12 +37,11 @@ export const isGitHubRepository = (): boolean => {
  * @throws error if the exec command fails.
  */
 export const getGitRepoRoot = (): string => {
-  const gitRepoRoot = (
-    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
-    execSync('git rev-parse --show-toplevel', {
-      encoding: 'utf-8',
-    }) || ''
-  ).trim();
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
+  const gitRepoRootOutput = execSync('git rev-parse --show-toplevel', {
+    encoding: 'utf-8',
+  });
+  const gitRepoRoot = (gitRepoRootOutput || '').trim();
 
   if (!gitRepoRoot) {
     throw new Error(`Git repo returned empty value`);

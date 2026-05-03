@@ -36,9 +36,7 @@ export class PersistentState {
         const content = fs.readFileSync(filePath, 'utf-8');
         const parsed = JSON.parse(content);
         this.cache =
-          parsed != null &&
-          typeof parsed === 'object' &&
-          !Array.isArray(parsed)
+          parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)
             ? parsed
             : {};
       } else {

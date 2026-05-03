@@ -319,7 +319,11 @@ export class FileTokenStore extends BaseTokenStore {
   private isValidCredentials(
     credentials: unknown,
   ): credentials is MCPOAuthCredentials {
-    if (credentials === null || credentials === undefined || typeof credentials !== 'object') {
+    if (
+      credentials === null ||
+      credentials === undefined ||
+      typeof credentials !== 'object'
+    ) {
       return false;
     }
 
@@ -330,7 +334,11 @@ export class FileTokenStore extends BaseTokenStore {
       return false;
     }
 
-    if (cred.token === null || cred.token === undefined || typeof cred.token !== 'object') {
+    if (
+      cred.token === null ||
+      cred.token === undefined ||
+      typeof cred.token !== 'object'
+    ) {
       return false;
     }
 

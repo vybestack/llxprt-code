@@ -29,10 +29,7 @@ export function validateVariables(
   for (const key in schema) {
     const definition = schema[key];
     const value = variables[key as keyof VariableContext];
-    if (
-      definition.required === true &&
-      (value === undefined || value === '')
-    ) {
+    if (definition.required === true && (value === undefined || value === '')) {
       throw new Error(`Missing required variable: ${key}`);
     }
   }

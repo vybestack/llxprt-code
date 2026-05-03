@@ -314,7 +314,10 @@ async function extensionConsentString(
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }
   }
-  if (sanitizedConfig.contextFileName !== undefined && sanitizedConfig.contextFileName !== '') {
+  if (
+    sanitizedConfig.contextFileName !== undefined &&
+    sanitizedConfig.contextFileName !== ''
+  ) {
     output.push(
       `This extension will append info to your LLXPRT.md context using ${sanitizedConfig.contextFileName}`,
     );
