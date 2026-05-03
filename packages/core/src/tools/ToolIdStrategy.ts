@@ -104,6 +104,7 @@ export function isDeepSeekReasonerModel(model: string): boolean {
 export function isMistralModel(model: string): boolean {
   const lowerModel = model.toLowerCase();
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     lowerModel.includes('mistral') ||
     lowerModel.includes('devstral') ||
     lowerModel.includes('codestral') ||

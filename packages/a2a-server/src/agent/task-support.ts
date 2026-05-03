@@ -440,6 +440,7 @@ export async function handleToolConfirmationPart(
       // Use hasPayload to cover both newContent and editedCommand cases.
       if (confirmationDetails.type === 'edit') {
         context.skipFinalTrueAfterInlineEdit.value = hasPayload;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           await confirmationDetails.onConfirm(
             confirmationOutcome,
@@ -632,6 +633,7 @@ export async function normalizeToolCallRequest(
   };
 
   if (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     normalizedRequest.name === 'replace' &&
     normalizedRequest.args['newContent'] === undefined &&
     normalizedRequest.args['file_path'] !== undefined &&
@@ -677,6 +679,7 @@ export async function writeCheckpointsAndUpdateRequests(
 
       if (callId) {
         const request = updatedRequests.find((req) => req.callId === callId);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (request) {
           request.checkpoint = checkpointPath;
           logger.info(

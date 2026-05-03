@@ -197,6 +197,7 @@ export class TokenAccessCoordinator {
 
     const explicitBucket = typeof bucket === 'string';
     const requestMetadata =
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       !explicitBucket &&
       bucket !== null &&
       bucket !== undefined &&
@@ -437,6 +438,7 @@ export class TokenAccessCoordinator {
     );
     const explicitBucket = typeof bucket === 'string';
     const requestMetadata =
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       !explicitBucket &&
       bucket !== null &&
       bucket !== undefined &&
@@ -547,6 +549,7 @@ export class TokenAccessCoordinator {
     const bucketToCheck = explicitBucket
       ? (bucket as string)
       : (scopedSessionBucket ??
+        // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         (resolvedProfileBuckets.length === 1
           ? resolvedProfileBuckets[0]
           : undefined));

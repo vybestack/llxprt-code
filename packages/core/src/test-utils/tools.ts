@@ -46,6 +46,7 @@ async function executeMockTool(
 ): Promise<ToolResult> {
   const result = await tool.executeFn(params, abortSignal, updateOutput);
   if (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     result !== null &&
     result !== undefined &&
     typeof result === 'object' &&

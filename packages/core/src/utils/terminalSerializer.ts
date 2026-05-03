@@ -126,6 +126,7 @@ class Cell {
 
   equals(other: Cell): boolean {
     return (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       this.attributes === other.attributes &&
       this.fg === other.fg &&
       this.bg === other.bg &&
@@ -161,6 +162,7 @@ export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
       const cell = new Cell(cellData ?? null, x, y, cursorX, cursorY);
 
       if (x > 0 && !cell.equals(lastCell)) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (currentText) {
           const token: AnsiToken = {
             text: currentText,

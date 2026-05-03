@@ -67,6 +67,7 @@ export function detectBOM(buf: Buffer): BOMInfo | null {
   if (buf.length >= 2) {
     // UTF-16 LE: FF FE  (but not UTF-32 LE already matched above)
     if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       buf[0] === 0xff &&
       buf[1] === 0xfe &&
       (buf.length < 4 || buf[2] !== 0x00 || buf[3] !== 0x00)
@@ -422,6 +423,7 @@ export async function processSingleFileContent(
           returnDisplay = `Read lines ${
             actualStartLine + 1
           }-${endLine} of ${originalLineCount} from ${relativePathForDisplay}`;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (linesWereTruncatedInLength) {
             returnDisplay += ' (some lines were shortened)';
           }

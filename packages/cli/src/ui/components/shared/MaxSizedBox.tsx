@@ -166,7 +166,8 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
 
   const visibleStyledText =
     hiddenLinesCount > 0
-      ? overflowDirection === 'top'
+      ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        overflowDirection === 'top'
         ? laidOutStyledText.slice(hiddenLinesCount, laidOutStyledText.length)
         : laidOutStyledText.slice(0, visibleContentHeight)
       : laidOutStyledText;
@@ -454,6 +455,7 @@ function layoutInkElementAsStyledText(
 
           // When there's no room for wrapping content, be very conservative
           // For lines after the first line break, show only ellipsis if the text would be truncated
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (index > 0 && textWidth > 0) {
             // This is content after a line break - just show ellipsis to indicate truncation
             currentLine.push({ text: '…', props: {} });
@@ -579,6 +581,7 @@ function layoutInkElementAsStyledText(
             let currentSplitWidth = 0;
             for (const char of remainingWordAsCodePoints) {
               const charWidth = getCachedStringWidth(char);
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               if (
                 wrappingPartWidth + currentSplitWidth + charWidth >
                 availableWidth

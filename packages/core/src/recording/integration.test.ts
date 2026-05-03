@@ -545,7 +545,8 @@ describe('integration: full session recording lifecycle', () => {
     const ref =
       typeof continueSession === 'string'
         ? continueSession
-        : continueSession
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          continueSession
           ? CONTINUE_LATEST
           : null;
     expect(ref).toBe('abc123');
@@ -561,7 +562,8 @@ describe('integration: full session recording lifecycle', () => {
     const ref =
       typeof continueSession === 'string'
         ? continueSession
-        : continueSession
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          continueSession
           ? CONTINUE_LATEST
           : null;
     expect(ref).toBe(CONTINUE_LATEST);

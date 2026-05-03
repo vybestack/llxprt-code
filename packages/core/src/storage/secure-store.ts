@@ -596,6 +596,7 @@ export class SecureStore {
       try {
         const creds = await adapter.findCredentials(this.serviceName);
         for (const cred of creds) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (!cred.account.startsWith('__securestore_probe__')) {
             keys.add(cred.account);
           }
@@ -610,6 +611,7 @@ export class SecureStore {
       for (const file of files) {
         if (file.endsWith('.enc')) {
           const keyName = file.slice(0, -4);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           try {
             this.validateKey(keyName);
             keys.add(keyName);

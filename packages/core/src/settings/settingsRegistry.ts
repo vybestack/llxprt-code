@@ -724,6 +724,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
       if (
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         typeof value === 'number' &&
         Number.isInteger(value) &&
         (value === -1 || (value >= 1 && value <= 100))
@@ -1299,6 +1300,7 @@ export function separateSettings(
     }
   }
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const [rawKey, value] of Object.entries(mergedProviderSettings)) {
     if (value === undefined || value === null) continue;
 

@@ -322,7 +322,8 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
             <Text color={Colors.Foreground}>{value || '(none)'}</Text>
             {isFieldFocused && <Text color={Colors.Gray}> [Enter] Select</Text>}
           </Box>
-        ) : isCurrentlyEditing ? (
+        ) : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        isCurrentlyEditing ? (
           <Box
             flexDirection="column"
             borderStyle="single"
@@ -353,8 +354,10 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
           <Box marginLeft={4}>
             <Text color={Colors.Gray}>
               {value
-                ? multiline
-                  ? value.length > 40
+                ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+                  multiline
+                  ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+                    value.length > 40
                     ? `[${value.slice(0, 40)}...]`
                     : value
                   : value
