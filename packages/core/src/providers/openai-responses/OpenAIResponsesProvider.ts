@@ -233,6 +233,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
         // Add all models without filtering - let them all through
         for (const model of data.data) {
           // Skip non-chat models (embeddings, audio, image, etc.)
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (
             !/embedding|whisper|audio|tts|image|vision|dall[- ]?e|moderation/i.test(
               model.id,
@@ -614,6 +615,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
         if (hasMedia) {
           const parts: ResponsesContentPart[] = [];
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const block of c.blocks) {
             if (block.type === 'text' && block.text) {
               parts.push({ type: 'input_text', text: block.text });
@@ -641,6 +643,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
               }
             }
           }
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (parts.length > 0) {
             input.push({ role: 'user', content: parts });
           }
@@ -649,6 +652,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
             .filter((b): b is TextBlock => b.type === 'text')
             .map((b) => b.text)
             .join('\n');
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (text) {
             input.push({ role: 'user', content: text });
           }
@@ -662,6 +666,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
         // Add reasoning items if they have encrypted_content and reasoning should be included
         if (includeReasoningInContext) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const thinkingBlock of thinkingBlocks) {
             if (thinkingBlock.encryptedContent) {
               // Guard against malformed or persisted thinking data missing thought.
@@ -757,6 +762,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
               ),
           );
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (!hasMatchingCall) {
             this.logger.debug(
               () =>
@@ -775,6 +781,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
           // string.  When the tool response carried media blocks (e.g.
           // screenshots, images from read_file), emit them as a synthetic
           // user message so the model can still see the actual image data.
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (mediaBlocks.length > 0) {
             const mediaParts: ResponsesContentPart[] = [];
             for (const media of mediaBlocks) {

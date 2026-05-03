@@ -85,9 +85,11 @@ export function ensureActiveLoopHasThoughtSignatures(
     // Cast to unknown to satisfy strict-boolean while preserving guard.
 
     if (content.role === 'model' && (content.parts as unknown) != null) {
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const part of content.parts) {
         // Check for functionCall with truthy value (object with properties)
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if ('functionCall' in part && Boolean(part.functionCall)) {
           const partWithSig = part as PartWithThoughtSignature;
           // eslint-disable-next-line no-extra-boolean-cast -- Preserve old truthiness semantics: empty signatures are missing.
@@ -124,6 +126,7 @@ export function ensureActiveLoopHasThoughtSignatures(
         const part = newParts[j];
 
         // Check for functionCall with truthy value (object with properties)
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if ('functionCall' in part && Boolean(part.functionCall)) {
           const partWithSig = part as PartWithThoughtSignature;
           // eslint-disable-next-line no-extra-boolean-cast -- Preserve old truthiness semantics: empty signatures are missing.
@@ -193,6 +196,7 @@ export function stripThoughtsFromHistory(
   let needsModification = false;
 
   // Check if we need to modify anything
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
     // Defensive runtime check: parts could be null/undefined despite type.
@@ -228,6 +232,7 @@ export function stripThoughtsFromHistory(
   // Create new array with thoughts stripped
   const newContents: Content[] = [];
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
 

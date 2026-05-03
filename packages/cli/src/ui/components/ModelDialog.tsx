@@ -216,6 +216,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
       const term = state.searchTerm.toLowerCase();
       models = models.filter(
         (m) =>
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           m.id.toLowerCase().includes(term) ||
           m.name.toLowerCase().includes(term) ||
           (m.modelId?.toLowerCase().includes(term) ?? false) ||
@@ -389,6 +390,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
         }
         // Add printable characters to search
         if (
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           key.sequence &&
           key.sequence.length === 1 &&
           key.ctrl !== true &&
@@ -613,9 +615,12 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
       {/* Help bar */}
       <Box marginTop={1}>
         <Text color={SemanticColors.text.secondary}>
+          {/* eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice. */}
           {isNarrow
-            ? `\u2191/\u2193 Enter${currentProvider ? ' ^A' : ''} Tab Esc`
-            : `\u2191/\u2193 select  Enter copy ID${currentProvider ? `  ^A ${state.providerFilter === null ? currentProvider + ' only' : 'all providers'}` : ''}  Tab filters  Esc close`}
+            ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+              `\u2191/\u2193 Enter${currentProvider ? ' ^A' : ''} Tab Esc`
+            : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+              `\u2191/\u2193 select  Enter copy ID${currentProvider ? `  ^A ${state.providerFilter === null ? currentProvider + ' only' : 'all providers'}` : ''}  Tab filters  Esc close`}
         </Text>
       </Box>
     </Box>

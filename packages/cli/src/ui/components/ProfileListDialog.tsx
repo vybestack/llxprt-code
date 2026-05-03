@@ -67,6 +67,7 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
     });
   }, [filteredProfiles.length]);
 
+  // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   const columns = isNarrow ? 1 : isWide ? 3 : 2;
   const longest = filteredProfiles.reduce(
     (len, p) => Math.max(len, p.name.length + 10), // account for indicators
@@ -102,6 +103,7 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
       if (isSearching || isNarrow) {
         if (key.name === 'return') {
           if (filteredProfiles.length > 0) {
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (isNarrow) {
               onViewDetail(filteredProfiles[index].name);
               return;
@@ -113,6 +115,7 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
         } else if (key.name === 'backspace' || key.name === 'delete') {
           setSearchTerm((prev) => prev.slice(0, -1));
         } else if (
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           key.sequence &&
           typeof key.sequence === 'string' &&
           !key.ctrl &&
@@ -169,7 +172,8 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
     const maxNameLen = colWidth - 6 - indicatorText.length;
     const displayName = isWide
       ? profile.name
-      : profile.name.length > maxNameLen
+      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        profile.name.length > maxNameLen
         ? truncateEnd(profile.name, maxNameLen)
         : profile.name;
 
@@ -181,11 +185,14 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
       >
         <Text
           color={
+            // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             selected
               ? SemanticColors.text.accent
-              : isSearching && !isNarrow
+              : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+                isSearching && !isNarrow
                 ? SemanticColors.text.secondary
-                : isActiveProfile
+                : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+                  isActiveProfile
                   ? SemanticColors.status.success
                   : SemanticColors.text.primary
           }

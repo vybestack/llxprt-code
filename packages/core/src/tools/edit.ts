@@ -337,6 +337,7 @@ class EditToolInvocation extends BaseToolInvocation<
         if (replaceLine !== undefined && replaceLine > 0) {
           // Restrict search to the specified line only
           const lines = currentContent.split('\n');
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (replaceLine > lines.length) {
             error = {
               display: `Failed to edit: replaceBeginLineNumber is out of range.`,
@@ -367,6 +368,7 @@ class EditToolInvocation extends BaseToolInvocation<
             expectedReplacements > 1,
           );
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (fuzzyResult) {
             occurrences = fuzzyResult.occurrences;
           } else {
@@ -405,6 +407,7 @@ class EditToolInvocation extends BaseToolInvocation<
         if (replaceLine !== undefined && replaceLine > 0) {
           const lines = currentContent.split('\n');
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (replaceLine > lines.length) {
             error = {
               display: `Failed to edit: replaceBeginLineNumber is out of range.`,
@@ -480,6 +483,7 @@ class EditToolInvocation extends BaseToolInvocation<
           newContent = currentContent;
         } else {
           let offset = 0;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (let i = 0; i < replaceLine - 1; i++) {
             offset += lines[i].length + 1; // +1 for the '\n'
           }
@@ -711,6 +715,7 @@ class EditToolInvocation extends BaseToolInvocation<
       if (this.config.getConversationLoggingEnabled()) {
         const gitStatsService = getGitStatsService();
         if (gitStatsService) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           try {
             gitStats = await gitStatsService.trackFileEdit(
               filePath,

@@ -668,6 +668,7 @@ export class AuthPrecedenceResolver {
         );
         if (authKeyfile) {
           const keyFromFile = await this.readKeyFile(authKeyfile);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (keyFromFile) {
             return keyFromFile;
           }
@@ -677,6 +678,7 @@ export class AuthPrecedenceResolver {
       if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
         for (const envVarName of this.config.envKeyNames) {
           const envValue = this.normalizeAuthValue(process.env[envVarName]);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (envValue) {
             return envValue;
           }
@@ -685,6 +687,7 @@ export class AuthPrecedenceResolver {
     }
 
     if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       includeOAuth &&
       this.config.isOAuthEnabled === true &&
       this.config.supportsOAuth === true &&
@@ -730,6 +733,7 @@ export class AuthPrecedenceResolver {
               ? enabledResult
               : await enabledResult;
         } catch (error) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (process.env.DEBUG) {
             debugLogger.debug(
               `Failed to determine OAuth enablement for ${this.config.oauthProvider}:`,
@@ -740,6 +744,7 @@ export class AuthPrecedenceResolver {
         }
 
         if (isEnabledByManager === false) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (runtimeState) {
             const cacheKey = buildCacheKey(
               runtimeState.runtimeAuthScopeId,
@@ -791,6 +796,7 @@ export class AuthPrecedenceResolver {
         );
         if (token) {
           let oauthToken: OAuthToken | null | undefined;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (typeof this.oauthManager.getOAuthToken === 'function') {
             try {
               oauthToken = await this.oauthManager.getOAuthToken(
@@ -807,6 +813,7 @@ export class AuthPrecedenceResolver {
               oauthToken = null;
             }
           }
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (runtimeState) {
             storeRuntimeScopedToken(
               runtimeState,

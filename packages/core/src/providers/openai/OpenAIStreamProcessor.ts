@@ -360,6 +360,7 @@ export async function* processStreamingResponse(
     // Process chunks inline as they arrive from the HTTP stream.
     // CRITICAL: Do NOT collect all chunks first — that blocks the entire pipeline,
     // prevents abort signal checks, and causes indefinite hangs. See #1846.
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for await (const chunk of response) {
       if (abortSignal?.aborted === true) {
         break;
@@ -371,6 +372,7 @@ export async function* processStreamingResponse(
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const rawData = chunkRecord?.data;
       if (typeof rawData === 'string') {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           parsedData = JSON.parse(rawData) as Record<string, unknown>;
         } catch {
@@ -431,6 +433,7 @@ export async function* processStreamingResponse(
         const stats = deps.toolCallPipeline.getStats();
         let baseIndex = stats.collector.totalCalls;
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (const toolCall of reasoningToolCalls) {
           deps.toolCallPipeline.addFragment(baseIndex, {
             id: `call_kimi_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -457,6 +460,7 @@ export async function* processStreamingResponse(
           },
         );
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (choice.finish_reason === 'length') {
           deps.logger.debug(
             () => `Response truncated due to length limit for model ${model}`,
@@ -471,12 +475,14 @@ export async function* processStreamingResponse(
       );
       if (rawDeltaContent) {
         const deltaContent = sanitizeProviderText(rawDeltaContent);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (!deltaContent) {
           continue;
         }
 
         state.accumulatedText += deltaContent;
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (shouldBufferText) {
           deps.logger.debug(
             () => `[Streaming] Chunk content for ${detectedFormat} format:`,
@@ -557,6 +563,7 @@ export async function* processStreamingResponse(
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const deltaToolCalls = choice.delta?.tool_calls;
       if (deltaToolCalls && deltaToolCalls.length > 0) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (const deltaToolCall of deltaToolCalls) {
           const deltaToolCallIndex = deltaToolCall.index as number | undefined;
           if (deltaToolCallIndex === undefined) continue;
@@ -583,6 +590,7 @@ export async function* processStreamingResponse(
             toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
             index: number,
           ) => {
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (toolCall.type !== 'function') {
               return;
             }

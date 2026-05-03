@@ -362,6 +362,7 @@ function mergeSettings(
   };
 
   const prioritizedTheme =
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     safeWorkspace.ui?.theme ??
     user.ui?.theme ??
     system.ui?.theme ??
@@ -657,6 +658,7 @@ export function loadEnvironment(settings: Settings): void {
       const isProjectEnvFile = !envFilePath.includes(LLXPRT_DIR);
 
       for (const key in parsedEnv) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (Object.hasOwn(parsedEnv, key)) {
           // If it's a project .env file, skip loading excluded variables.
           if (isProjectEnvFile && excludedVars.includes(key)) {
@@ -800,6 +802,7 @@ export function loadSettings(
         workspaceSettings = JSON.parse(
           stripJsonComments(projectContent),
         ) as Settings;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (
           workspaceSettings.ui?.theme &&
           workspaceSettings.ui.theme === 'VS'
@@ -933,6 +936,7 @@ function deepMergeWithComments(target: unknown, source: unknown): unknown {
   // Add or update keys from source
   Object.keys(sourceObj).forEach((key) => {
     if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       typeof result[key] === 'object' &&
       result[key] !== null &&
       !Array.isArray(result[key]) &&
@@ -1125,6 +1129,7 @@ export function migrateDeprecatedSettings(
         };
         if (typeof uiAccessibility['enableLoadingPhrases'] === 'boolean') {
           // Both exist, trust the new one
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (removeDeprecated) {
             delete newUiAccessibility['disableLoadingPhrases'];
             loadedSettings.setValue(scope, 'ui', {
@@ -1136,6 +1141,7 @@ export function migrateDeprecatedSettings(
         } else {
           newUiAccessibility['enableLoadingPhrases'] =
             !uiAccessibility['disableLoadingPhrases'];
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (removeDeprecated) {
             delete newUiAccessibility['disableLoadingPhrases'];
           }

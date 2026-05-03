@@ -67,6 +67,7 @@ export class PolicyEngine {
           const subCommands = splitCommands(command);
 
           // Parse failure: empty array for non-empty command → fail-safe to ASK_USER
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (subCommands.length === 0 && command.trim().length > 0) {
             return this.nonInteractive
               ? PolicyDecision.DENY
@@ -74,9 +75,11 @@ export class PolicyEngine {
           }
 
           // Compound command: recursively validate each sub-command
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (subCommands.length > 1) {
             let aggregateDecision = PolicyDecision.ALLOW;
 
+            // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             for (const rawSubCmd of subCommands) {
               const subCmd = rawSubCmd.trim();
               // Prevent infinite recursion
@@ -106,6 +109,7 @@ export class PolicyEngine {
           }
 
           // Check for redirections in allowed commands
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (
             matchingRule.allowRedirection !== true &&
             hasRedirection(command)
@@ -143,6 +147,7 @@ export class PolicyEngine {
         const subCommands = splitCommands(command);
 
         if (subCommands.length > 1) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const rawSubCmd of subCommands) {
             const subCmd = rawSubCmd.trim();
             if (subCmd === command) continue;
@@ -183,6 +188,7 @@ export class PolicyEngine {
   ): PolicyRule | undefined {
     const argsString = stableStringify(args);
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const rule of this.rules) {
       // Check tool name match
       const toolMatches = !rule.toolName || rule.toolName === toolName;

@@ -115,6 +115,7 @@ class ConfigBasedRedactor implements ConversationDataRedactor {
 
   private shouldRedact(): boolean {
     return (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       this.redactionConfig.redactApiKeys ||
       this.redactionConfig.redactCredentials ||
       this.redactionConfig.redactFilePaths ||
@@ -738,17 +739,20 @@ export class LoggingProviderWrapper implements IProvider {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Preserve defensive runtime boundary guard despite current static types.
         if (typeof chunk === 'object' && chunk !== null) {
           const content = chunk;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (content.metadata?.usage) {
             latestTokenUsage = content.metadata.usage;
           }
           const metaFinishReason =
             (content.metadata as Record<string, unknown> | undefined)
               ?.finishReason ?? content.metadata?.stopReason;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (typeof metaFinishReason === 'string') {
             lastFinishReason = metaFinishReason;
           }
 
           // Accumulate text content for token estimation fallback (only when no real usage yet)
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (latestTokenUsage === undefined && Array.isArray(content.blocks)) {
             for (const block of content.blocks) {
               if (block.type === 'text') {
@@ -876,12 +880,14 @@ export class LoggingProviderWrapper implements IProvider {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Preserve defensive runtime boundary guard despite current static types.
         if (typeof chunk === 'object' && chunk !== null) {
           const content = chunk;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (content.metadata?.usage) {
             latestTokenUsage = content.metadata.usage;
           }
           const metaFinishReason =
             (content.metadata as Record<string, unknown> | undefined)
               ?.finishReason ?? content.metadata?.stopReason;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (typeof metaFinishReason === 'string') {
             lastFinishReason = metaFinishReason;
           }
@@ -1260,6 +1266,7 @@ export class LoggingProviderWrapper implements IProvider {
         // Check for anthropic-style headers
         if (obj.headers != null && typeof obj.headers === 'object') {
           const headers = obj.headers as Record<string, string>;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (headers['anthropic-input-tokens']) {
             const parsedValue = parseInt(headers['anthropic-input-tokens'], 10);
             input_token_count =
@@ -1267,6 +1274,7 @@ export class LoggingProviderWrapper implements IProvider {
                 ? parsedValue
                 : input_token_count;
           }
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (headers['anthropic-output-tokens']) {
             const parsedValue = parseInt(
               headers['anthropic-output-tokens'],

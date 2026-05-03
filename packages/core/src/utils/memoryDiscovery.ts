@@ -67,6 +67,7 @@ async function findProjectRoot(startDir: string): Promise<string | null> {
         process.env['VITEST'] !== undefined;
 
       if (isENOENT === false && isTestEnv === false) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (typeof error === 'object' && error !== null && 'code' in error) {
           const fsError = error as { code: string; message: string };
           logger.warn(
@@ -193,12 +194,15 @@ async function getGeminiMdFilePathsInternalForEachDir(
         ? path.dirname(projectRoot)
         : path.dirname(resolvedHome);
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       while (currentDir && currentDir !== path.dirname(currentDir)) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (currentDir === path.join(resolvedHome, GEMINI_DIR)) {
           break;
         }
 
         const potentialPath = path.join(currentDir, geminiMdFilename);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           await fs.access(potentialPath, fsSync.constants.R_OK);
           if (potentialPath !== globalMemoryPath) {
@@ -213,6 +217,7 @@ async function getGeminiMdFilePathsInternalForEachDir(
           GEMINI_DIR,
           geminiMdFilename,
         );
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           await fs.access(llxprtDirPath, fsSync.constants.R_OK);
           if (llxprtDirPath !== globalMemoryPath) {
@@ -222,6 +227,7 @@ async function getGeminiMdFilePathsInternalForEachDir(
           // Not found, continue.
         }
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (currentDir === ultimateStopDir) {
           break;
         }
@@ -411,7 +417,7 @@ async function findUpwardGeminiFiles(
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Upward memory search terminates on explicit directory/root checks.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Upward memory search terminates on explicit directory/root checks.
   while (true) {
     if (currentDir === globalGeminiDir) {
       break;
