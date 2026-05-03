@@ -154,7 +154,8 @@ export class IDEServer {
           `127.0.0.1:${this.port}`,
         ];
         if (!allowedHosts.includes(host)) {
-          return res.status(403).json({ error: 'Invalid Host header' });
+          res.status(403).json({ error: 'Invalid Host header' });
+          return;
         }
         next();
       });
@@ -432,7 +433,8 @@ export class IDEServer {
         this.server!.close((err?: Error) => {
           if (err) {
             this.log(`Error shutting down IDE server: ${err.message}`);
-            return reject(err);
+            reject(err);
+            return;
           }
           this.log(`IDE server shut down`);
           resolve();

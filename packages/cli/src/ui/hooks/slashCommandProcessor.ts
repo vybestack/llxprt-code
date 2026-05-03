@@ -159,7 +159,7 @@ export const useSlashCommandProcessor = (
   );
   const gitService = useMemo(() => {
     if (!config?.getProjectRoot()) {
-      return;
+      return undefined;
     }
     return new GitService(config.getProjectRoot(), config.storage);
   }, [config]);
@@ -351,7 +351,7 @@ export const useSlashCommandProcessor = (
 
   useEffect(() => {
     if (!config) {
-      return;
+      return undefined;
     }
 
     const listener = () => {

@@ -210,7 +210,7 @@ export function useSlashCompletion(
         setActiveHint('');
         previousInput.current = '';
       }
-      return;
+      return undefined;
     }
 
     debugLogger.debug(
@@ -218,7 +218,7 @@ export function useSlashCompletion(
         `useEffect triggered - commandIndex: ${commandIndex}, reverseSearchActive: ${reverseSearchActive}`,
     );
 
-    if (!memoizedInput) return;
+    if (!memoizedInput) return undefined;
 
     const currentLine = memoizedInput.line;
 
@@ -227,7 +227,7 @@ export function useSlashCompletion(
     const currentInputKey = `${currentLine}:${commandIndex}:${cursorCol}:${slashCommands.length}`;
     if (previousInput.current === currentInputKey) {
       debugLogger.debug(() => 'Input unchanged, skipping re-computation');
-      return;
+      return undefined;
     }
     previousInput.current = currentInputKey;
 
@@ -451,7 +451,7 @@ export function useSlashCompletion(
               setActiveHint('');
               setIsLoadingSuggestions(false);
             });
-          return;
+          return undefined;
         }
       }
 
@@ -523,7 +523,7 @@ export function useSlashCompletion(
         setShowSuggestions(finalSuggestions.length > 0);
         setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
         // Don't set loading state - we never showed loading for command completions
-        return;
+        return undefined;
       }
 
       // If we fall through, no suggestions are available.
@@ -532,7 +532,7 @@ export function useSlashCompletion(
       setShowSuggestions(false);
       setActiveSuggestionIndex(-1);
       setActiveHint('');
-      return;
+      return undefined;
     }
 
     // Handle At Command Completion - this needs async file operations

@@ -94,15 +94,17 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
         if (isSearching && searchTerm.length > 0) {
           setSearchTerm('');
         } else {
-          return onClose();
+          onClose();
         }
+        return;
       }
 
       if (isSearching || isNarrow) {
         if (key.name === 'return') {
           if (filteredProfiles.length > 0) {
             if (isNarrow) {
-              return onViewDetail(filteredProfiles[index].name);
+              onViewDetail(filteredProfiles[index].name);
+              return;
             }
             setIsSearching(false);
           }
@@ -122,7 +124,8 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
       } else {
         // Navigation mode
         if (key.name === 'return' && filteredProfiles.length > 0) {
-          return onViewDetail(filteredProfiles[index].name);
+          onViewDetail(filteredProfiles[index].name);
+          return;
         }
         if (key.name === 'tab') {
           setIsSearching(true);
@@ -132,7 +135,8 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
         }
         // Quick actions
         if (key.sequence === 'l' && filteredProfiles.length > 0) {
-          return onSelect(filteredProfiles[index].name);
+          onSelect(filteredProfiles[index].name);
+          return;
         }
         // Navigation
         if (key.name === 'left') move(-1);

@@ -41,5 +41,6 @@ export class AcpFileSystemService implements FileSystemService {
       content,
       sessionId: this.sessionId,
     });
+    return undefined;
   }
 }

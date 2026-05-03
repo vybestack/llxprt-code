@@ -76,15 +76,17 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
         if (isSearching && searchTerm.length > 0) {
           setSearchTerm('');
         } else {
-          return onClose();
+          onClose();
         }
+        return;
       }
 
       if (isSearching || isNarrow) {
         if (key.name === 'return') {
           if (filteredProviders.length > 0) {
             if (isNarrow) {
-              return onSelect(filteredProviders[index]);
+              onSelect(filteredProviders[index]);
+              return;
             }
             setIsSearching(false);
           }
@@ -103,7 +105,8 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
         }
       } else {
         if (key.name === 'return' && filteredProviders.length > 0) {
-          return onSelect(filteredProviders[index]);
+          onSelect(filteredProviders[index]);
+          return;
         }
         if (key.name === 'tab') {
           setIsSearching(true);

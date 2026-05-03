@@ -134,6 +134,7 @@ export function parseShellCommand(
           parseState.timedOut = true;
           return true as unknown as void; // Returning true cancels parsing
         }
+        return undefined;
       },
     });
 

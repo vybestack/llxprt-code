@@ -24,7 +24,7 @@ export function useHookDisplayState(messageBus?: MessageBus): ActiveHook[] {
 
   useEffect(() => {
     if (!messageBus) {
-      return;
+      return undefined;
     }
 
     const requestSubscription = messageBus.subscribe(

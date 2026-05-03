@@ -51,7 +51,7 @@ export const directoryCommand: SlashCommand = {
             },
             Date.now(),
           );
-          return;
+          return undefined;
         }
 
         const workspaceContext = config.getWorkspaceContext();
@@ -68,7 +68,7 @@ export const directoryCommand: SlashCommand = {
             },
             Date.now(),
           );
-          return;
+          return undefined;
         }
 
         if (config.isRestrictiveSandbox()) {
@@ -165,7 +165,7 @@ export const directoryCommand: SlashCommand = {
             Date.now(),
           );
         }
-        return;
+        return undefined;
       },
     },
     {

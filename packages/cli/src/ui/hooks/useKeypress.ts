@@ -25,7 +25,7 @@ export function useKeypress(
 
   useEffect(() => {
     if (!isActive) {
-      return;
+      return undefined;
     }
 
     subscribe(onKeypress);

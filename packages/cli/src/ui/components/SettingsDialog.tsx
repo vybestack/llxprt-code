@@ -212,13 +212,13 @@ export function SettingsDialog({
     let active = true;
     if (searchQuery.trim() === '') {
       setFilteredKeys(getDialogSettingKeys());
-      return;
+      return undefined;
     }
 
     const doSearch = async () => {
       const results = await fzfInstance.find(searchQuery);
 
-      if (!active) return;
+      if (!active) return undefined;
 
       const matchedKeys = new Set<string>();
       results.forEach((res: FzfResult) => {
@@ -228,6 +228,7 @@ export function SettingsDialog({
       setFilteredKeys(Array.from(matchedKeys));
       setActiveSettingIndex(0); // Reset cursor
       setScrollOffset(0);
+      return undefined;
     };
 
     void doSearch();
@@ -581,7 +582,7 @@ export function SettingsDialog({
   useEffect(() => {
     if (!editingKey) {
       setCursorVisible(true);
-      return;
+      return undefined;
     }
     const id = setInterval(() => setCursorVisible((v) => !v), 500);
     return () => clearInterval(id);

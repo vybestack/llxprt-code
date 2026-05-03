@@ -75,11 +75,11 @@ export class TerminalCapabilityManager {
    * This should be called once at app startup.
    */
   async detectCapabilities(): Promise<void> {
-    if (this.detectionComplete) return;
+    if (this.detectionComplete) return undefined;
 
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       this.detectionComplete = true;
-      return;
+      return undefined;
     }
 
     return new Promise((resolve) => {

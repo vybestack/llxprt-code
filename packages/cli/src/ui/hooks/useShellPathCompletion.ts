@@ -79,8 +79,9 @@ export function useShellPathCompletion(
   useEffect(() => {
     if (!shellModeActive || reverseSearchActive) {
       resetCompletionState();
-      return;
+      return undefined;
     }
+    return undefined;
   }, [shellModeActive, reverseSearchActive, resetCompletionState]);
 
   useEffect(() => {
@@ -91,7 +92,7 @@ export function useShellPathCompletion(
 
     if (!pathToken) {
       resetCompletionState();
-      return;
+      return undefined;
     }
 
     const generation = ++generationRef.current;

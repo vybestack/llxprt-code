@@ -112,18 +112,19 @@ export function useSessionInitialization({
   // loadHistory replaces (not appends), and StrictMode double-mount is harmless.
   useEffect(() => {
     if (!resumedHistory || resumedHistory.length === 0) {
-      return;
+      return undefined;
     }
     const uiItems = iContentToHistoryItems(resumedHistory);
     if (uiItems.length > 0) {
       loadHistory(uiItems);
     }
+    return undefined;
   }, [loadHistory, resumedHistory]);
 
   // Effect: Trigger SessionStart hook on initialization
   useEffect(() => {
     if (hasTriggeredSessionStart.current) {
-      return;
+      return undefined;
     }
     hasTriggeredSessionStart.current = true;
 

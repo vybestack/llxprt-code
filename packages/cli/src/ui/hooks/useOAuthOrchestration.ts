@@ -31,9 +31,7 @@ export function useOAuthOrchestration({
   // Check for OAuth code needed flag
   useEffect(() => {
     const checkOAuthFlag = setInterval(() => {
-      if (
-        (global as Record<string, unknown>).__oauth_needs_code === true
-      ) {
+      if ((global as Record<string, unknown>).__oauth_needs_code === true) {
         // Clear the flag
         (global as Record<string, unknown>).__oauth_needs_code = false;
         // Open the OAuth code dialog
@@ -47,7 +45,7 @@ export function useOAuthOrchestration({
   // Auto-dismiss OAuth dialog when auth completes via browser callback
   // Issue #1404: Dialog should automatically hide after auth completes
   useEffect(() => {
-    if (!isOAuthCodeDialogOpen) return;
+    if (!isOAuthCodeDialogOpen) return undefined;
     // Poll for the browser-auth-success signal (global flag, not React state)
     // This polling approach is necessary because the global flag is set outside React
     const interval = setInterval(() => {

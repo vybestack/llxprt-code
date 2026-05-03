@@ -59,7 +59,7 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
     });
     if (!messageBus) {
       logger.debug('No message bus available, skipping subscription');
-      return;
+      return undefined;
     }
 
     logger.debug('Subscribing to BUCKET_AUTH_CONFIRMATION_REQUEST');

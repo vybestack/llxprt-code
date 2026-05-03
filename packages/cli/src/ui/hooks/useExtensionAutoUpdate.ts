@@ -26,7 +26,7 @@ export function useExtensionAutoUpdate({
 
   useEffect(() => {
     if (autoUpdateSettings?.enabled !== true) {
-      return;
+      return undefined;
     }
 
     const updater = new ExtensionAutoUpdater({

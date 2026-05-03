@@ -104,7 +104,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
   }
 
   private async ensureInitialized(): Promise<void> {
-    return this.initGuard.ensureInitialized(() => this.initializeToken());
+    await this.initGuard.ensureInitialized(() => this.initializeToken());
+    return;
   }
 
   async initializeToken(): Promise<void> {
@@ -112,7 +113,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
       return;
     }
 
-    return this.errorHandler.handleGracefully(
+    await this.errorHandler.handleGracefully(
       async () => {
         // Try to load from new location first
         let savedToken = await this.tokenStore!.getToken('gemini');
@@ -123,6 +124,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
         if (savedToken) {
           this.currentToken = savedToken;
         }
+        return undefined;
       },
       undefined, // No fallback needed - graceful failure is acceptable
       this.name,
@@ -496,7 +498,10 @@ export class GeminiOAuthProvider implements OAuthProvider {
    */
   private installPersistentAuthCodeHook(): void {
     const globalObj = global as Record<string, unknown>;
-    if (globalObj.__oauth_wait_for_code === undefined || globalObj.__oauth_wait_for_code === null) {
+    if (
+      globalObj.__oauth_wait_for_code === undefined ||
+      globalObj.__oauth_wait_for_code === null
+    ) {
       globalObj.__oauth_wait_for_code = () => this.waitForAuthCode();
       globalObj.__oauth_provider = this.name;
     }

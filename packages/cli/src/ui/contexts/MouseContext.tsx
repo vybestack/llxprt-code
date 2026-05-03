@@ -47,7 +47,7 @@ export function useMouse(handler: MouseHandler, { isActive = true } = {}) {
 
   useEffect(() => {
     if (!isActive) {
-      return;
+      return undefined;
     }
 
     subscribe(handler);
@@ -81,7 +81,7 @@ export function MouseProvider({
 
   useEffect(() => {
     if (mouseEventsEnabled !== true) {
-      return;
+      return undefined;
     }
 
     let mouseBuffer = '';

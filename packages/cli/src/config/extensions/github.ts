@@ -476,9 +476,10 @@ async function fetchJson<T>(url: string): Promise<T> {
     https
       .get(url, { headers }, (res) => {
         if (res.statusCode !== 200) {
-          return reject(
+          reject(
             new Error(`Request failed with status code ${res.statusCode}`),
           );
+          return;
         }
         const chunks: Buffer[] = [];
         res.on('data', (chunk) => chunks.push(chunk));
@@ -530,13 +531,13 @@ export async function downloadFile(
       .get(url, { headers }, (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
           if (redirectCount >= 10) {
-            return reject(new Error('Too many redirects'));
+            reject(new Error('Too many redirects'));
+            return;
           }
 
           if (!res.headers.location) {
-            return reject(
-              new Error('Redirect response missing Location header'),
-            );
+            reject(new Error('Redirect response missing Location header'));
+            return;
           }
           downloadFile(res.headers.location, dest, options, redirectCount + 1)
             .then(resolve)
@@ -544,9 +545,10 @@ export async function downloadFile(
           return;
         }
         if (res.statusCode !== 200) {
-          return reject(
+          reject(
             new Error(`Request failed with status code ${res.statusCode}`),
           );
+          return;
         }
         const file = fs.createWriteStream(dest);
 

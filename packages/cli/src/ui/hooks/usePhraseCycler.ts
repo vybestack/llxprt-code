@@ -58,7 +58,7 @@ export const usePhraseCycler = (
         clearInterval(phraseIntervalRef.current);
         phraseIntervalRef.current = null;
       }
-      return;
+      return undefined;
     }
 
     if (isWaiting) {
@@ -67,7 +67,10 @@ export const usePhraseCycler = (
         clearInterval(phraseIntervalRef.current);
         phraseIntervalRef.current = null;
       }
-    } else if (isActive) {
+      return undefined;
+    }
+
+    if (isActive) {
       if (phraseIntervalRef.current) {
         clearInterval(phraseIntervalRef.current);
       }

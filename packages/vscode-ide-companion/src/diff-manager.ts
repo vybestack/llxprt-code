@@ -159,7 +159,7 @@ export class DiffManager {
       }
       return modifiedContent;
     }
-    return;
+    return undefined;
   }
 
   /**

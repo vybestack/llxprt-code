@@ -1213,6 +1213,7 @@ describe('mcp-client', () => {
         // Mock listTools to simulate a long running process that respects the abort signal
         listTools: vi.fn().mockImplementation(
           async (params, options) =>
+            // eslint-disable-next-line sonarjs/no-inconsistent-returns -- Test intentionally simulates non-resolution to test timeout behavior
             new Promise((resolve, reject) => {
               if (options?.signal?.aborted === true) {
                 return reject(new Error('Operation aborted'));

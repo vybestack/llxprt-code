@@ -381,19 +381,21 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       return;
     }
 
-    return this.errorHandler.handleGracefully(
+    await this.errorHandler.handleGracefully(
       async () => {
         // @pseudocode line 19: Load saved token from store
         const savedToken = await this._tokenStore!.getToken('anthropic');
         // @pseudocode lines 20-22: Check if token exists and not expired
         if (savedToken && !isTokenExpired(savedToken)) {
-          return; // Token is valid, ready to use
+          return undefined; // Token is valid, ready to use
         }
+        return undefined;
       },
       undefined, // No fallback needed - graceful failure is acceptable
       this.name,
       'initializeToken',
     );
+    return;
   }
 
   /**

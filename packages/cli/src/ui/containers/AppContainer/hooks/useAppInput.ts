@@ -113,7 +113,7 @@ function useInputCoreCallbacks(p: AppInputParams) {
     const editorType = settings.merged.ui.preferredEditor;
     if (!isEditorAvailable(editorType)) {
       openEditorDialog();
-      return;
+      return undefined;
     }
     return editorType as EditorType;
   }, [settings, openEditorDialog]);

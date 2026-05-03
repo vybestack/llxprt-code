@@ -458,19 +458,21 @@ export class ToolRegistry {
           stderr += stderrDecoder.end();
 
           if (sizeLimitExceeded) {
-            return reject(
+            reject(
               new Error(
                 `Tool discovery command output exceeded size limit of ${MAX_STDOUT_SIZE} bytes.`,
               ),
             );
+            return;
           }
 
           if (code !== 0) {
             this.logger.error(() => `Command failed with code ${code}`);
             this.logger.error(() => stderr);
-            return reject(
+            reject(
               new Error(`Tool discovery command failed with exit code ${code}`),
             );
+            return;
           }
           resolve();
         });

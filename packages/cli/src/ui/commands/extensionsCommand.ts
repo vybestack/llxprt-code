@@ -223,7 +223,7 @@ async function restartAction(
       },
       Date.now(),
     );
-    return Promise.resolve();
+    return;
   }
 
   let extensionsToRestart = extensionLoader
@@ -304,6 +304,7 @@ async function restartAction(
       Date.now(),
     );
   }
+  return;
 }
 
 async function completeExtensions(

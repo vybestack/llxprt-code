@@ -407,7 +407,7 @@ export function useReactToolScheduler(
       typeof configWithFactory.setInteractiveSubagentSchedulerFactory !==
       'function'
     ) {
-      return;
+      return undefined;
     }
 
     configWithFactory.setInteractiveSubagentSchedulerFactory(

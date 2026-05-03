@@ -100,8 +100,9 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
         if (confirmDelete) {
           setConfirmDelete(false);
         } else {
-          return onClose();
+          onClose();
         }
+        return;
       }
 
       // On error / missing profile screens, only Esc should do anything.
@@ -120,16 +121,19 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
 
       // Quick actions
       if (key.sequence === 'l') {
-        return onLoad(profileName);
+        onLoad(profileName);
+        return;
       }
       if (key.sequence === 'e') {
-        return onEdit(profileName);
+        onEdit(profileName);
+        return;
       }
       if (key.sequence === 'd') {
         setConfirmDelete(true);
       }
       if (key.sequence === 's') {
-        return onSetDefault(profileName);
+        onSetDefault(profileName);
+        return;
       }
     },
     { isActive: !isLoading },

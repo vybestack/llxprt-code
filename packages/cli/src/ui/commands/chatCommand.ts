@@ -414,6 +414,7 @@ const clearCommand: SlashCommand = {
     context.ui.clear();
     // Note: context.ui.clear() clears the screen, so we don't return a message
     // The clear is visible to the user through the UI reset itself
+    return undefined;
   },
 };
 

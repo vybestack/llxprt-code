@@ -36,7 +36,7 @@ export const handleSlashCommand = async (
 ): Promise<PartListUnion | undefined> => {
   const trimmed = rawQuery.trim();
   if (!trimmed.startsWith('/')) {
-    return;
+    return undefined;
   }
 
   // Only custom commands are supported for now.
@@ -109,5 +109,5 @@ export const handleSlashCommand = async (
     }
   }
 
-  return;
+  return undefined;
 };

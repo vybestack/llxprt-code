@@ -126,7 +126,8 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
   useKeypress(
     (key) => {
       if (key.name === 'escape' || key.sequence === 'q') {
-        return onClose();
+        onClose();
+        return;
       }
 
       if (reversedEntries.length === 0) {

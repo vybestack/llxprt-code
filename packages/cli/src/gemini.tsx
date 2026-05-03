@@ -1099,7 +1099,7 @@ export async function main() {
       recordingService,
       resumedLockHandle,
     );
-    return;
+    return undefined;
   }
   // If not a TTY, read from stdin
   // This is for cases where the user pipes input directly into the command

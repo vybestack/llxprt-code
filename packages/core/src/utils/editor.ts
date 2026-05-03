@@ -215,7 +215,7 @@ export async function openDiff(
   const diffCommand = getDiffCommand(oldPath, newPath, editor);
   if (!diffCommand) {
     debugLogger.error('No diff tool available. Install a supported editor.');
-    return;
+    return undefined;
   }
 
   if (isTerminalEditor(editor)) {
@@ -233,10 +233,10 @@ export async function openDiff(
       coreEvents.emit(CoreEvent.ExternalEditorClosed);
       onEditorClose?.();
     }
-    return;
+    return undefined;
   }
 
-  return new Promise<void>((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const childProcess = spawn(diffCommand.command, diffCommand.args, {
       stdio: 'inherit',
       shell: process.platform === 'win32',
@@ -256,4 +256,5 @@ export async function openDiff(
       reject(error);
     });
   });
+  return undefined;
 }

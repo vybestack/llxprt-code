@@ -72,7 +72,10 @@ export class ModelRegistry {
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    if (this.initPromise) return this.initPromise;
+    if (this.initPromise) {
+      await this.initPromise;
+      return;
+    }
 
     this.initPromise = (async () => {
       await this.loadModels();

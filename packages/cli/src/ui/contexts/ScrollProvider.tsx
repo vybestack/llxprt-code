@@ -374,7 +374,7 @@ export const useScrollable = (
 
   useEffect(() => {
     if (!isActive) {
-      return;
+      return undefined;
     }
 
     context.register({ ...entry, id });

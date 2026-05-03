@@ -114,7 +114,10 @@ describe('Agent Server Endpoints', () => {
   afterAll(async () => {
     await new Promise<void>((resolve, reject) => {
       server.close((err) => {
-        if (err) return reject(err);
+        if (err) {
+          reject(err);
+          return;
+        }
         resolve();
       });
     });

@@ -11,7 +11,7 @@ import { updateEventEmitter } from './updateEventEmitter.js';
 import type { HistoryItem } from '../ui/types.js';
 import { MessageType } from '../ui/types.js';
 import { spawnWrapper } from './spawnWrapper.js';
-import type { spawn } from 'child_process';
+import type { spawn, ChildProcess } from 'child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -140,13 +140,13 @@ export function handleAutoUpdate(
   settings: LoadedSettings,
   projectRoot: string,
   spawnFn: typeof spawn = spawnWrapper,
-) {
+): ChildProcess | undefined {
   if (info == null) {
-    return;
+    return undefined;
   }
 
   if (settings.merged.enableAutoUpdateNotification !== true) {
-    return;
+    return undefined;
   }
 
   const installationInfo = getInstallationInfo(
@@ -159,7 +159,7 @@ export function handleAutoUpdate(
       installationInfo.packageManager,
     )
   ) {
-    return;
+    return undefined;
   }
 
   let combinedMessage = info.message;
@@ -175,7 +175,7 @@ export function handleAutoUpdate(
     installationInfo.updateCommand == null ||
     settings.merged.enableAutoUpdate !== true
   ) {
-    return;
+    return undefined;
   }
 
   // Check for temp directories
@@ -183,7 +183,7 @@ export function handleAutoUpdate(
   if (tempDirs.length > 0) {
     const cliPath = process.argv[1];
     if (!cliPath) {
-      return;
+      return undefined;
     }
     const realPath = fs.realpathSync(cliPath);
     // Cross-platform regex for node_modules path
@@ -202,7 +202,7 @@ export function handleAutoUpdate(
     updateEventEmitter.emit('update-info', {
       message: `Temporary directories from a previous failed update were detected. Please clean them up manually:\n  ${cleanupCommand}`,
     });
-    return;
+    return undefined;
   }
 
   // Try to acquire lock atomically
@@ -211,7 +211,7 @@ export function handleAutoUpdate(
     updateEventEmitter.emit('update-info', {
       message: 'Another update is already in progress. Skipping auto-update.',
     });
-    return;
+    return undefined;
   }
 
   // Set up signal handlers to release lock on process termination

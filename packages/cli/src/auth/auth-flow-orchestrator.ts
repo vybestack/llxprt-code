@@ -137,7 +137,8 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     });
 
     if (!lockAcquired) {
-      return this.handleAuthLockTimeout(providerName, bucket);
+      await this.handleAuthLockTimeout(providerName, bucket);
+      return;
     }
 
     try {
