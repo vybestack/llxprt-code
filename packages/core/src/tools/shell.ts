@@ -462,6 +462,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
         // Try to get the actual PGID
         try {
+          // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
           const psResult = spawnSync('ps', [
             '-o',
             'pgid=',

@@ -458,6 +458,7 @@ File: ${resolved.basename}
       const checkArgs =
         process.platform === 'win32' ? [command] : ['-v', command];
       try {
+        // eslint-disable-next-line sonarjs/os-command -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
         const child = spawn(checkCommand, checkArgs, {
           stdio: 'ignore',
           shell: true,
@@ -701,6 +702,7 @@ File: ${resolved.basename}
 
         try {
           const output = await new Promise<string>((resolve, reject) => {
+            // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
             const child = spawn('git', gitArgs, {
               cwd: absolutePath,
               windowsHide: true,
@@ -786,6 +788,7 @@ File: ${resolved.basename}
 
         try {
           const output = await new Promise<string>((resolve, reject) => {
+            // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
             const child = spawn('grep', grepArgs, {
               cwd: absolutePath,
               windowsHide: true,

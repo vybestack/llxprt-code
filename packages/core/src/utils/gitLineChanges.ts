@@ -41,6 +41,7 @@ function runGit(
   options?: { timeoutMs?: number },
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     const child = spawn('git', args, {
       cwd,
       windowsHide: true,

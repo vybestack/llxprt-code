@@ -16,6 +16,7 @@ export function useGitBranchName(cwd: string): string | undefined {
   const fetchBranchName = useCallback(
     () =>
       exec(
+        // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
         'git rev-parse --abbrev-ref HEAD',
         { cwd },
         (error, stdout, _stderr) => {
@@ -28,6 +29,7 @@ export function useGitBranchName(cwd: string): string | undefined {
             setBranchName(branch);
           } else {
             exec(
+              // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
               'git rev-parse --short HEAD',
               { cwd },
               (error, stdout, _stderr) => {

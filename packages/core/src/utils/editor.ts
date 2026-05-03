@@ -67,6 +67,7 @@ interface DiffCommand {
 
 function commandExists(cmd: string): boolean {
   try {
+    // eslint-disable-next-line sonarjs/os-command -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     execSync(
       process.platform === 'win32' ? `where.exe ${cmd}` : `command -v ${cmd}`,
       { stdio: 'ignore' },

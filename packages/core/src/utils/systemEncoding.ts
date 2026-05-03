@@ -57,6 +57,7 @@ export function getSystemEncoding(): string | null {
   // Windows
   if (os.platform() === 'win32') {
     try {
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       const output = execSync('chcp', { encoding: 'utf8' });
       // eslint-disable-next-line sonarjs/regular-expr -- Static regex parses bounded Windows chcp output; behavior preserved.
       const match = output.match(/:\s*(\d+)/);
@@ -90,6 +91,7 @@ export function getSystemEncoding(): string | null {
   // Fallback to querying the system directly when environment variables are missing
   if (!locale) {
     try {
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       locale = execSync('locale charmap', { encoding: 'utf8' })
         .toString()
         .trim();

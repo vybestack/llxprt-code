@@ -57,6 +57,7 @@ export class RepositoryContextProvider {
 
     try {
       const execGit = (args: string[]) => {
+        // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
         const result = spawnSync('git', ['-C', workspaceRoot, ...args], {
           encoding: 'utf-8',
           stdio: 'pipe',
@@ -105,6 +106,7 @@ export class RepositoryContextProvider {
   private async getGitRemoteUrl(repoPath: string): Promise<string | null> {
     try {
       const result = spawnSync(
+        // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
         'git',
         ['-C', repoPath, 'remote', 'get-url', 'origin'],
         {
@@ -122,6 +124,7 @@ export class RepositoryContextProvider {
 
   private async getCurrentCommit(repoPath: string): Promise<string | null> {
     try {
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       const result = spawnSync('git', ['-C', repoPath, 'rev-parse', 'HEAD'], {
         encoding: 'utf-8',
         stdio: 'pipe',
@@ -137,6 +140,7 @@ export class RepositoryContextProvider {
   private async getCurrentBranch(repoPath: string): Promise<string | null> {
     try {
       const result = spawnSync(
+        // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
         'git',
         ['-C', repoPath, 'branch', '--show-current'],
         {

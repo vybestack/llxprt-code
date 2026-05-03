@@ -399,6 +399,7 @@ export class ShellExecutionService {
                 if (child.pid !== undefined && child.pid !== 0 && !exited) {
                   const pid = child.pid;
                   if (isWindows) {
+                    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
                     cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
                   } else {
                     try {
@@ -547,6 +548,7 @@ export class ShellExecutionService {
             // Old code: if (child.pid && !exited)
             if (child.pid !== undefined && child.pid !== 0 && !exited) {
               if (isWindows) {
+                // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
                 cpSpawn('taskkill', ['/pid', child.pid.toString(), '/f', '/t']);
               } else {
                 try {
@@ -928,6 +930,7 @@ export class ShellExecutionService {
                 if (ptyProcess.pid !== 0 && !exited) {
                   const pid = ptyProcess.pid;
                   if (isWindows) {
+                    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
                     cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
                   } else {
                     try {
@@ -1072,6 +1075,7 @@ export class ShellExecutionService {
             ) {
               const pid = ptyProcess.pid;
               if (isWindows) {
+                // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
                 cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
                 cleanupActivePty();
                 resolveResult({

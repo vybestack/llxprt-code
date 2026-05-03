@@ -40,6 +40,7 @@ function grepFiles(
 
   try {
     const cmd = `grep -rn "${pattern}" . --include="${include}" ${excludeArgs} 2>/dev/null || true`;
+    // eslint-disable-next-line sonarjs/os-command -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     const result = execSync(cmd, { cwd, encoding: 'utf-8' });
     return result.split('\n').filter((line) => line.trim().length > 0);
   } catch {

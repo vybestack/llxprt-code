@@ -29,6 +29,7 @@ async function runCli(
   return new Promise((resolve) => {
     const cliPath = path.join(process.cwd(), 'dist', 'index.js');
 
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     const child = spawn('node', [cliPath, ...args], {
       env: {
         ...process.env,

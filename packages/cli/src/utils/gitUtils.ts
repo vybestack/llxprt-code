@@ -16,6 +16,7 @@ import { debugLogger } from '@vybestack/llxprt-code-core';
 export const isGitHubRepository = (): boolean => {
   try {
     const remotes = (
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       execSync('git remote -v', {
         encoding: 'utf-8',
       }) || ''
@@ -38,6 +39,7 @@ export const isGitHubRepository = (): boolean => {
  */
 export const getGitRepoRoot = (): string => {
   const gitRepoRoot = (
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     execSync('git rev-parse --show-toplevel', {
       encoding: 'utf-8',
     }) || ''
@@ -103,6 +105,7 @@ export const getLatestGitHubRelease = async (
  * @throws error if the exec command fails.
  */
 export function getGitHubRepoInfo(): { owner: string; repo: string } {
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
   const remoteUrl = execSync('git remote get-url origin', {
     encoding: 'utf-8',
   }).trim();
@@ -134,6 +137,7 @@ export function getGitHubRepoInfo(): { owner: string; repo: string } {
 export function getWorkspaceIdentity(cwd?: string): string {
   const effectiveCwd = cwd ?? process.cwd();
   try {
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     const gitRoot = execSync('git rev-parse --show-toplevel', {
       encoding: 'utf-8',
       cwd: effectiveCwd,

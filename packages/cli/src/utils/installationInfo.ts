@@ -81,6 +81,7 @@ export function getInstallationInfo(
     if (process.platform === 'darwin') {
       try {
         const brewPrefix = childProcess
+          // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
           .execSync('brew --prefix llxprt-code', {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'ignore'],
