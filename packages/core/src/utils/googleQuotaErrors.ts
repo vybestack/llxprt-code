@@ -78,6 +78,240 @@ function parseDurationInSeconds(duration: string): number | null {
   return null;
 }
 
+interface QuotaContext {
+  quotaFailure: QuotaFailure | undefined;
+  errorInfo: ErrorInfo | undefined;
+  retryInfo: RetryInfo | undefined;
+}
+
+function isValidDelay(delaySeconds: number | null): delaySeconds is number {
+  return (
+    delaySeconds !== null && delaySeconds !== 0 && !Number.isNaN(delaySeconds)
+  );
+}
+
+function createFallbackGoogleApiError(message: string): GoogleApiError {
+  return {
+    code: 429,
+    message,
+    details: [],
+  };
+}
+
+function getErrorMessage(
+  error: unknown,
+  googleApiError: GoogleApiError | null | undefined,
+): string {
+  return (
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall through to stringified error
+    googleApiError?.message ||
+    (error instanceof Error ? error.message : String(error))
+  );
+}
+
+function createModelNotFoundError(
+  error: unknown,
+  googleApiError: GoogleApiError | null | undefined,
+  status: number,
+): ModelNotFoundError {
+  const message =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall through to generic message
+    googleApiError?.message ||
+    (error instanceof Error ? error.message : 'Model not found');
+  return new ModelNotFoundError(message, status);
+}
+
+function hasStructuredQuotaDetails(
+  googleApiError: GoogleApiError | null | undefined,
+): googleApiError is GoogleApiError {
+  return (
+    googleApiError !== null &&
+    googleApiError !== undefined &&
+    googleApiError.code === 429 &&
+    googleApiError.details.length > 0
+  );
+}
+
+function classifyFallbackQuotaError(
+  error: unknown,
+  googleApiError: GoogleApiError | null | undefined,
+  status: number | undefined,
+): unknown {
+  const errorMessage = getErrorMessage(error, googleApiError);
+  const match = errorMessage.match(/Please retry in ([0-9.]+(?:ms|s))/);
+  if (match?.[1]) {
+    const retryDelaySeconds = parseDurationInSeconds(match[1]);
+    if (retryDelaySeconds !== null) {
+      return new RetryableQuotaError(
+        errorMessage,
+        googleApiError ?? createFallbackGoogleApiError(errorMessage),
+        retryDelaySeconds,
+      );
+    }
+  } else if (status === 429) {
+    return new RetryableQuotaError(
+      errorMessage,
+      googleApiError ?? createFallbackGoogleApiError(errorMessage),
+    );
+  }
+
+  return error;
+}
+
+function buildQuotaContext(googleApiError: GoogleApiError): QuotaContext {
+  return {
+    quotaFailure: googleApiError.details.find(
+      (d): d is QuotaFailure =>
+        d['@type'] === 'type.googleapis.com/google.rpc.QuotaFailure',
+    ),
+    errorInfo: googleApiError.details.find(
+      (d): d is ErrorInfo =>
+        d['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo',
+    ),
+    retryInfo: googleApiError.details.find(
+      (d): d is RetryInfo =>
+        d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo',
+    ),
+  };
+}
+
+function hasQuotaLimit(
+  quotaFailure: QuotaFailure | undefined,
+  keywords: string[],
+): boolean {
+  return (
+    quotaFailure?.violations.some((violation) => {
+      const quotaId = violation.quotaId ?? '';
+      return keywords.some((keyword) => quotaId.includes(keyword));
+    }) === true
+  );
+}
+
+function metadataQuotaLimit(errorInfo: ErrorInfo | undefined): string {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Google quota errors are external provider payloads despite declared types.
+  return errorInfo?.metadata?.['quota_limit'] ?? '';
+}
+
+function classifyCloudCodeQuota(
+  googleApiError: GoogleApiError,
+  errorInfo: ErrorInfo,
+  retryInfo: RetryInfo | undefined,
+): TerminalQuotaError | RetryableQuotaError | undefined {
+  const validDomains = [
+    'cloudcode-pa.googleapis.com',
+    'staging-cloudcode-pa.googleapis.com',
+    'autopush-cloudcode-pa.googleapis.com',
+  ];
+  if (!validDomains.includes(errorInfo.domain)) {
+    return undefined;
+  }
+
+  if (errorInfo.reason === 'RATE_LIMIT_EXCEEDED') {
+    const parsedDelay = retryInfo?.retryDelay
+      ? parseDurationInSeconds(retryInfo.retryDelay)
+      : null;
+    return new RetryableQuotaError(
+      `${googleApiError.message}`,
+      googleApiError,
+      isValidDelay(parsedDelay) ? parsedDelay : 10,
+    );
+  }
+
+  if (errorInfo.reason === 'QUOTA_EXHAUSTED') {
+    return new TerminalQuotaError(`${googleApiError.message}`, googleApiError);
+  }
+
+  return undefined;
+}
+
+function classifyLongTermQuota(
+  googleApiError: GoogleApiError,
+  context: QuotaContext,
+): TerminalQuotaError | RetryableQuotaError | undefined {
+  if (hasQuotaLimit(context.quotaFailure, ['PerDay', 'Daily'])) {
+    return new TerminalQuotaError(
+      `You have exhausted your daily quota on this model.`,
+      googleApiError,
+    );
+  }
+
+  if (context.errorInfo !== undefined) {
+    const cloudCodeQuota = classifyCloudCodeQuota(
+      googleApiError,
+      context.errorInfo,
+      context.retryInfo,
+    );
+    if (cloudCodeQuota !== undefined) {
+      return cloudCodeQuota;
+    }
+    const quotaLimit = metadataQuotaLimit(context.errorInfo);
+    if (quotaLimit.includes('PerDay') || quotaLimit.includes('Daily')) {
+      return new TerminalQuotaError(
+        `You have exhausted your daily quota on this model.`,
+        googleApiError,
+      );
+    }
+  }
+
+  return undefined;
+}
+
+function classifyRetryDelayQuota(
+  googleApiError: GoogleApiError,
+  retryInfo: RetryInfo | undefined,
+): TerminalQuotaError | RetryableQuotaError | undefined {
+  if (retryInfo?.retryDelay === undefined) {
+    return undefined;
+  }
+
+  const delaySeconds = parseDurationInSeconds(retryInfo.retryDelay);
+  if (!isValidDelay(delaySeconds)) {
+    return undefined;
+  }
+
+  const message = `${googleApiError.message}\nSuggested retry after ${retryInfo.retryDelay}.`;
+  return delaySeconds > 120
+    ? new TerminalQuotaError(message, googleApiError)
+    : new RetryableQuotaError(message, googleApiError, delaySeconds);
+}
+
+function classifyShortTermQuota(
+  googleApiError: GoogleApiError,
+  context: QuotaContext,
+): RetryableQuotaError | undefined {
+  if (hasQuotaLimit(context.quotaFailure, ['PerMinute'])) {
+    return new RetryableQuotaError(
+      `${googleApiError.message}\nSuggested retry after 60s.`,
+      googleApiError,
+      60,
+    );
+  }
+
+  const quotaLimit = metadataQuotaLimit(context.errorInfo);
+  if (quotaLimit.includes('PerMinute')) {
+    return new RetryableQuotaError(
+      `${context.errorInfo?.reason}\nSuggested retry after 60s.`,
+      googleApiError,
+      60,
+    );
+  }
+
+  return undefined;
+}
+
+function createDefaultRetryableQuota(
+  error: unknown,
+  googleApiError: GoogleApiError,
+  status: number,
+): RetryableQuotaError | unknown {
+  if (status !== 429) {
+    return error;
+  }
+
+  const errorMessage = getErrorMessage(error, googleApiError);
+  return new RetryableQuotaError(errorMessage, googleApiError);
+}
+
 /**
  * Analyzes a caught error and classifies it as a specific quota-related error if applicable.
  *
@@ -96,195 +330,23 @@ export function classifyGoogleError(error: unknown): unknown {
   const googleApiError = parseGoogleApiError(error);
   const status = googleApiError?.code ?? getErrorStatus(error);
 
+  if (status === undefined) {
+    return classifyFallbackQuotaError(error, googleApiError, status);
+  }
+
   if (status === 404) {
-    const message =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall through to generic message
-      googleApiError?.message ||
-      (error instanceof Error ? error.message : 'Model not found');
-    return new ModelNotFoundError(message, status);
+    return createModelNotFoundError(error, googleApiError, status);
   }
 
-  if (
-    !googleApiError ||
-    googleApiError.code !== 429 ||
-    googleApiError.details.length === 0
-  ) {
-    // Fallback: try to parse the error message for a retry delay
-    const errorMessage =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall through to stringified error
-      googleApiError?.message ||
-      (error instanceof Error ? error.message : String(error));
-    const match = errorMessage.match(/Please retry in ([0-9.]+(?:ms|s))/);
-    if (match?.[1]) {
-      const retryDelaySeconds = parseDurationInSeconds(match[1]);
-      if (retryDelaySeconds !== null) {
-        return new RetryableQuotaError(
-          errorMessage,
-          googleApiError ?? {
-            code: 429,
-            message: errorMessage,
-            details: [],
-          },
-          retryDelaySeconds,
-        );
-      }
-    } else if (status === 429) {
-      // Fallback: If it is a 429 but doesn't have a specific "retry in" message,
-      // return without explicit delay to allow exponential backoff.
-      return new RetryableQuotaError(
-        errorMessage,
-        googleApiError ?? {
-          code: 429,
-          message: errorMessage,
-          details: [],
-        },
-      );
-    }
-
-    return error; // Not a 429 error we can handle with structured details or a parsable retry message.
+  if (!hasStructuredQuotaDetails(googleApiError)) {
+    return classifyFallbackQuotaError(error, googleApiError, status);
   }
 
-  const quotaFailure = googleApiError.details.find(
-    (d): d is QuotaFailure =>
-      d['@type'] === 'type.googleapis.com/google.rpc.QuotaFailure',
+  const context = buildQuotaContext(googleApiError);
+  return (
+    classifyLongTermQuota(googleApiError, context) ??
+    classifyRetryDelayQuota(googleApiError, context.retryInfo) ??
+    classifyShortTermQuota(googleApiError, context) ??
+    createDefaultRetryableQuota(error, googleApiError, status)
   );
-
-  const errorInfo = googleApiError.details.find(
-    (d): d is ErrorInfo =>
-      d['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo',
-  );
-
-  const retryInfo = googleApiError.details.find(
-    (d): d is RetryInfo =>
-      d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo',
-  );
-
-  // 1. Check for long-term limits in QuotaFailure or ErrorInfo
-  if (quotaFailure) {
-    for (const violation of quotaFailure.violations) {
-      const quotaId = violation.quotaId ?? '';
-      if (quotaId.includes('PerDay') || quotaId.includes('Daily')) {
-        return new TerminalQuotaError(
-          `You have exhausted your daily quota on this model.`,
-          googleApiError,
-        );
-      }
-    }
-  }
-
-  if (errorInfo) {
-    // New Cloud Code API quota handling
-    if (errorInfo.domain) {
-      const validDomains = [
-        'cloudcode-pa.googleapis.com',
-        'staging-cloudcode-pa.googleapis.com',
-        'autopush-cloudcode-pa.googleapis.com',
-      ];
-      if (validDomains.includes(errorInfo.domain)) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (errorInfo.reason === 'RATE_LIMIT_EXCEEDED') {
-          let delaySeconds = 10; // Default retry of 10s
-          if (retryInfo?.retryDelay) {
-            const parsedDelay = parseDurationInSeconds(retryInfo.retryDelay);
-            if (
-              parsedDelay !== null &&
-              parsedDelay !== 0 &&
-              !Number.isNaN(parsedDelay)
-            ) {
-              delaySeconds = parsedDelay;
-            }
-          }
-          return new RetryableQuotaError(
-            `${googleApiError.message}`,
-            googleApiError,
-            delaySeconds,
-          );
-        }
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (errorInfo.reason === 'QUOTA_EXHAUSTED') {
-          return new TerminalQuotaError(
-            `${googleApiError.message}`,
-            googleApiError,
-          );
-        }
-      }
-    }
-
-    // Existing Cloud Code API quota handling
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Google quota errors are external provider payloads despite declared types.
-    const quotaLimit = errorInfo.metadata?.['quota_limit'] ?? '';
-    if (quotaLimit.includes('PerDay') || quotaLimit.includes('Daily')) {
-      return new TerminalQuotaError(
-        `You have exhausted your daily quota on this model.`,
-        googleApiError,
-      );
-    }
-  }
-
-  // 2. Check for long delays in RetryInfo
-  if (retryInfo?.retryDelay) {
-    const delaySeconds = parseDurationInSeconds(retryInfo.retryDelay);
-    if (
-      delaySeconds !== null &&
-      delaySeconds !== 0 &&
-      !Number.isNaN(delaySeconds)
-    ) {
-      if (delaySeconds > 120) {
-        return new TerminalQuotaError(
-          `${googleApiError.message}\nSuggested retry after ${retryInfo.retryDelay}.`,
-          googleApiError,
-        );
-      }
-      // This is a retryable error with a specific delay.
-      return new RetryableQuotaError(
-        `${googleApiError.message}\nSuggested retry after ${retryInfo.retryDelay}.`,
-        googleApiError,
-        delaySeconds,
-      );
-    }
-  }
-
-  // 3. Check for short-term limits in QuotaFailure or ErrorInfo
-  if (quotaFailure) {
-    for (const violation of quotaFailure.violations) {
-      const quotaId = violation.quotaId ?? '';
-      if (quotaId.includes('PerMinute')) {
-        return new RetryableQuotaError(
-          `${googleApiError.message}\nSuggested retry after 60s.`,
-          googleApiError,
-          60,
-        );
-      }
-    }
-  }
-
-  if (errorInfo) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Google quota errors are external provider payloads despite declared types.
-    const quotaLimit = errorInfo.metadata?.['quota_limit'] ?? '';
-    if (quotaLimit.includes('PerMinute')) {
-      return new RetryableQuotaError(
-        `${errorInfo.reason}\nSuggested retry after 60s.`,
-        googleApiError,
-        60,
-      );
-    }
-  }
-
-  // If we reached this point and the status is still 429, we return retryable.
-  if (status === 429) {
-    const errorMessage =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Google quota errors are external provider payloads despite declared types.
-      googleApiError?.message ||
-      (error instanceof Error ? error.message : String(error));
-    return new RetryableQuotaError(
-      errorMessage,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Google quota errors are external provider payloads despite declared types.
-      googleApiError ?? {
-        code: 429,
-        message: errorMessage,
-        details: [],
-      },
-    );
-  }
-  return error; // Fallback to original error if no specific classification fits.
 }
