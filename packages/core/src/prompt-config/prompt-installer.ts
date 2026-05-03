@@ -5,6 +5,8 @@
  * This is a TDD stub implementation. All methods throw "Not implemented" errors.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import { z } from 'zod';
 import * as fs from 'fs/promises';
 import * as path from 'path';

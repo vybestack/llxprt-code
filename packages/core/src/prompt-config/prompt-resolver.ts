@@ -3,6 +3,8 @@
  * This is a stub implementation following TDD principles
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DebugLogger } from '../debug/DebugLogger.js';

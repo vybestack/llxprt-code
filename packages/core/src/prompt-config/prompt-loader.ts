@@ -2,6 +2,8 @@
  * Prompt Loader - Handles reading prompt files from disk with compression support
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';

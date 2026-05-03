@@ -3,6 +3,8 @@
  * Ensures consistent ordering of object keys and handling of special values.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 type JSONValue =
   | string
   | number
