@@ -15,6 +15,36 @@ import path from 'path';
 import { homedir } from 'os';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
+/**
+ * Searches for a keyfile for the given provider.
+ * Returns the first accessible keyfile path, or null if none found.
+ */
+async function findKeyfileForProvider(
+  providerName: string,
+): Promise<string | null> {
+  const keyfilePaths = [
+    path.join(homedir(), `.${providerName}_key`),
+    path.join(homedir(), `.${providerName}-key`),
+    path.join(homedir(), `.${providerName}_api_key`),
+  ];
+
+  if (providerName === 'openai') {
+    keyfilePaths.unshift(path.join(homedir(), '.openai_key'));
+  } else if (providerName === 'anthropic') {
+    keyfilePaths.unshift(path.join(homedir(), '.anthropic_key'));
+  }
+
+  for (const candidate of keyfilePaths) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // continue searching
+    }
+  }
+  return null;
+}
+
 export const keyfileCommand: SlashCommand = {
   name: 'keyfile',
   description: 'manage API key file for the current provider',
@@ -39,28 +69,7 @@ export const keyfileCommand: SlashCommand = {
 
     try {
       if (!filePath || filePath === '') {
-        const keyfilePaths = [
-          path.join(homedir(), `.${providerName}_key`),
-          path.join(homedir(), `.${providerName}-key`),
-          path.join(homedir(), `.${providerName}_api_key`),
-        ];
-
-        if (providerName === 'openai') {
-          keyfilePaths.unshift(path.join(homedir(), '.openai_key'));
-        } else if (providerName === 'anthropic') {
-          keyfilePaths.unshift(path.join(homedir(), '.anthropic_key'));
-        }
-
-        let foundKeyfile: string | null = null;
-        for (const candidate of keyfilePaths) {
-          try {
-            await fs.access(candidate);
-            foundKeyfile = candidate;
-            break;
-          } catch {
-            // continue searching
-          }
-        }
+        const foundKeyfile = await findKeyfileForProvider(providerName);
 
         if (foundKeyfile) {
           return {

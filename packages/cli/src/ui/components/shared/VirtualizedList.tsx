@@ -239,10 +239,12 @@ function VirtualizedList<T>(
     const containerChanged =
       prevContainerHeight.current !== scrollableContainerHeight;
 
-    if (
-      (listGrew && (isStickingToBottom || wasAtBottom)) ||
-      (isStickingToBottom && containerChanged)
-    ) {
+    const shouldStickToBottom = isStickingToBottom || wasAtBottom;
+    const shouldScrollToBottom =
+      (listGrew && shouldStickToBottom) ||
+      (isStickingToBottom && containerChanged);
+
+    if (shouldScrollToBottom) {
       setScrollAnchor({
         index: data.length > 0 ? data.length - 1 : 0,
         offset: SCROLL_TO_ITEM_END,

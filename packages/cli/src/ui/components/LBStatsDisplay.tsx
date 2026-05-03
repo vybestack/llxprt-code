@@ -13,6 +13,15 @@ import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
+/**
+ * Get the color for circuit breaker state display.
+ */
+function getCircuitBreakerColor(state: string): string {
+  if (state === 'open') return Colors.AccentRed;
+  if (state === 'half-open') return Colors.AccentYellow;
+  return Colors.Foreground;
+}
+
 const METRIC_COL_WIDTH = 35;
 const VALUE_COL_WIDTH = 20;
 
@@ -232,15 +241,7 @@ export const LBStatsDisplay: React.FC = () => {
             <StatRow
               title="Circuit Breaker"
               value={
-                <Text
-                  color={
-                    cbState.state === 'open'
-                      ? Colors.AccentRed
-                      : cbState.state === 'half-open'
-                        ? Colors.AccentYellow
-                        : Colors.Foreground
-                  }
-                >
+                <Text color={getCircuitBreakerColor(cbState.state)}>
                   {cbState.state.toUpperCase()}
                 </Text>
               }

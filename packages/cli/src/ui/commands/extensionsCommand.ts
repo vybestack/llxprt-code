@@ -92,6 +92,30 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
     ? listExtensions(context.services.config)
     : [];
 
+  function reportMissingExtensions(
+    context: CommandContext,
+    names: string[] | null,
+  ): void {
+    if (names == null || names.length === 0) {
+      return;
+    }
+
+    const extensions = listExtensions(context.services.config!);
+    for (const name of names) {
+      const extension = extensions.find((extension) => extension.name === name);
+      if (!extension) {
+        context.ui.addItem(
+          {
+            type: MessageType.ERROR,
+            text: `Extension ${name} not found.`,
+          },
+          Date.now(),
+        );
+        continue;
+      }
+    }
+  }
+
   if (showMessageIfNoExtensions(context, extensions)) {
     return Promise.resolve();
   }
@@ -130,24 +154,7 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
         },
       },
     });
-    if (names != null && names.length > 0) {
-      const extensions = listExtensions(context.services.config!);
-      for (const name of names) {
-        const extension = extensions.find(
-          (extension) => extension.name === name,
-        );
-        if (!extension) {
-          context.ui.addItem(
-            {
-              type: MessageType.ERROR,
-              text: `Extension ${name} not found.`,
-            },
-            Date.now(),
-          );
-          continue;
-        }
-      }
-    }
+    reportMissingExtensions(context, names);
   } catch (error) {
     resolveUpdateComplete!([]);
     context.ui.addItem(

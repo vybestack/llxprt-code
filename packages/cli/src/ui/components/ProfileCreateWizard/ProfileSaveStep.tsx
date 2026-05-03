@@ -197,72 +197,98 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
       <Text color={Colors.Gray}>Enter a name for this profile</Text>
       <Text color={Colors.Foreground}> </Text>
 
-      {focusedComponent === 'input' && (
-        <>
-          <Text color={Colors.Foreground}>Profile name:</Text>
-          <TextInput
-            value={profileNameInput}
-            onChange={handleProfileNameChange}
-            onSubmit={handleProfileNameSubmit}
-            isFocused={true}
-            placeholder="my-profile"
-          />
-          {saveError && <Text color={Colors.AccentRed}>✗ {saveError}</Text>}
-          {validationError && (
-            <Text color={Colors.AccentRed}>✗ {validationError}</Text>
-          )}
-          {!validationError && !saveError && profileNameInput && (
-            <Text color={Colors.AccentGreen}>✓ Name is available</Text>
-          )}
-          <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Gray}>ℹ Suggested names:</Text>
-          {suggestions.map((suggestion) => (
-            <Text key={suggestion} color={Colors.Gray}>
-              • {suggestion}
-            </Text>
-          ))}
-          <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Gray}>
-            ← → Move cursor Enter Continue Esc Back
-          </Text>
-        </>
-      )}
-
-      {focusedComponent === 'saving' && (
-        <Text color={Colors.Gray}>Saving profile...</Text>
-      )}
-
-      {focusedComponent === 'conflict' && (
-        <>
-          <Text color={Colors.AccentYellow}>Profile Name Conflict</Text>
-          <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Foreground}>
-            A profile named &apos;{profileNameInput}&apos; already exists.
-          </Text>
-          <Text color={Colors.Gray}>
-            Choose a different name or overwrite the existing profile:
-          </Text>
-          <Text color={Colors.Foreground}> </Text>
-          <RadioButtonSelect
-            items={[
-              {
-                label: 'Choose different name',
-                value: 'rename',
-                key: 'rename',
-              },
-              {
-                label: 'Overwrite existing profile',
-                value: 'overwrite',
-                key: 'overwrite',
-              },
-              { label: 'Back', value: 'back', key: 'back' },
-              { label: 'Cancel', value: 'cancel', key: 'cancel' },
-            ]}
-            onSelect={handleConflictResolution}
-            isFocused={true}
-          />
-        </>
+      {renderFocusedContent(
+        focusedComponent,
+        profileNameInput,
+        saveError,
+        validationError,
+        suggestions,
+        handleProfileNameChange,
+        handleProfileNameSubmit,
+        handleConflictResolution,
       )}
     </Box>
   );
 };
+
+/**
+ * Renders the content based on focused component state.
+ */
+function renderFocusedContent(
+  focusedComponent: 'input' | 'saving' | 'conflict',
+  profileNameInput: string,
+  saveError: string | null,
+  validationError: string | null,
+  suggestions: string[],
+  handleProfileNameChange: (value: string) => void,
+  handleProfileNameSubmit: (forceSave?: boolean) => void,
+  handleConflictResolution: (value: string) => void,
+): React.ReactNode {
+  if (focusedComponent === 'saving') {
+    return <Text color={Colors.Gray}>Saving profile...</Text>;
+  }
+
+  if (focusedComponent === 'conflict') {
+    return (
+      <>
+        <Text color={Colors.AccentYellow}>Profile Name Conflict</Text>
+        <Text color={Colors.Foreground}> </Text>
+        <Text color={Colors.Foreground}>
+          A profile named &apos;{profileNameInput}&apos; already exists.
+        </Text>
+        <Text color={Colors.Gray}>
+          Choose a different name or overwrite the existing profile:
+        </Text>
+        <Text color={Colors.Foreground}> </Text>
+        <RadioButtonSelect
+          items={[
+            {
+              label: 'Choose different name',
+              value: 'rename',
+              key: 'rename',
+            },
+            {
+              label: 'Overwrite existing profile',
+              value: 'overwrite',
+              key: 'overwrite',
+            },
+            { label: 'Back', value: 'back', key: 'back' },
+            { label: 'Cancel', value: 'cancel', key: 'cancel' },
+          ]}
+          onSelect={handleConflictResolution}
+          isFocused={true}
+        />
+      </>
+    );
+  }
+
+  // focusedComponent === 'input'
+  return (
+    <>
+      <Text color={Colors.Foreground}>Profile name:</Text>
+      <TextInput
+        value={profileNameInput}
+        onChange={handleProfileNameChange}
+        onSubmit={handleProfileNameSubmit}
+        isFocused={true}
+        placeholder="my-profile"
+      />
+      {saveError && <Text color={Colors.AccentRed}>✗ {saveError}</Text>}
+      {validationError && (
+        <Text color={Colors.AccentRed}>✗ {validationError}</Text>
+      )}
+      {!validationError && !saveError && profileNameInput && (
+        <Text color={Colors.AccentGreen}>✓ Name is available</Text>
+      )}
+      <Text color={Colors.Foreground}> </Text>
+      <Text color={Colors.Gray}>ℹ Suggested names:</Text>
+      {suggestions.map((suggestion) => (
+        <Text key={suggestion} color={Colors.Gray}>
+          • {suggestion}
+        </Text>
+      ))}
+      <Text color={Colors.Foreground}> </Text>
+      <Text color={Colors.Gray}>← → Move cursor Enter Continue Esc Back</Text>
+    </>
+  );
+}

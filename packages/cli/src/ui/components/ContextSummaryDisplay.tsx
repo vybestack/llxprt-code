@@ -26,6 +26,26 @@ interface ContextSummaryDisplayProps {
   showToolDescriptions?: boolean;
 }
 
+function hasNoContextSummary(counts: {
+  effectiveMdFileCount: number;
+  effectiveCoreCount: number;
+  mcpServerCount: number;
+  blockedMcpServerCount: number;
+  openFileCount: number;
+  skillCount: number | undefined;
+}): boolean {
+  const nonSkillCounts = [
+    counts.effectiveMdFileCount,
+    counts.effectiveCoreCount,
+    counts.mcpServerCount,
+    counts.blockedMcpServerCount,
+    counts.openFileCount,
+  ];
+  return (
+    nonSkillCounts.every((count) => count === 0) && counts.skillCount === 0
+  );
+}
+
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   llxprtMdFileCount,
   geminiMdFileCount,
@@ -45,12 +65,14 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   const openFileCount = ideContext?.workspaceState?.openFiles?.length ?? 0;
 
   if (
-    effectiveMdFileCount === 0 &&
-    effectiveCoreCount === 0 &&
-    mcpServerCount === 0 &&
-    blockedMcpServerCount === 0 &&
-    openFileCount === 0 &&
-    skillCount === 0
+    hasNoContextSummary({
+      effectiveMdFileCount,
+      effectiveCoreCount,
+      mcpServerCount,
+      blockedMcpServerCount,
+      openFileCount,
+      skillCount,
+    })
   ) {
     return <Text color={theme.text.primary}> </Text>; // Render an empty space to reserve height
   }
@@ -59,18 +81,16 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     if (openFileCount === 0) {
       return '';
     }
-    return `${openFileCount} open file${
-      openFileCount > 1 ? 's' : ''
-    } (ctrl+g to view)`;
+    const suffix = openFileCount > 1 ? 's' : '';
+    return `${openFileCount} open file${suffix} (ctrl+g to view)`;
   })();
 
   const coreMemoryText = (() => {
     if (effectiveCoreCount === 0) {
       return '';
     }
-    return `${effectiveCoreCount} .LLXPRT_SYSTEM file${
-      effectiveCoreCount > 1 ? 's' : ''
-    }`;
+    const suffix = effectiveCoreCount > 1 ? 's' : '';
+    return `${effectiveCoreCount} .LLXPRT_SYSTEM file${suffix}`;
   })();
 
   const geminiMdText = (() => {

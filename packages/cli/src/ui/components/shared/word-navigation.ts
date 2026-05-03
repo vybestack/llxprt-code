@@ -321,22 +321,44 @@ export const findNextWordAcrossLines = (
   }
 
   for (let row = cursorRow + 1; row < lines.length; row++) {
-    const line = lines[row] || '';
-    if (line.length === 0) {
-      if (!hasWordsInLaterLines(lines, row + 1)) return { row, col: 0 };
-      continue;
+    const result = findWordInLine(lines, row, searchForWordStart);
+    if (result.found) {
+      return { row, col: result.col };
     }
-
-    const firstNonWs = findFirstNonWhitespaceCol(line);
-    if (firstNonWs >= cpLen(line)) continue;
-
-    if (searchForWordStart) return { row, col: firstNonWs };
-    const endCol = findWordEndInLine(line, firstNonWs);
-    if (endCol !== null) return { row, col: endCol };
+    if (result.isEmpty && !hasWordsInLaterLines(lines, row + 1)) {
+      return { row, col: 0 };
+    }
+    // Skip this line and continue searching
   }
 
   return null;
 };
+
+/**
+ * Find word position in a specific line.
+ */
+function findWordInLine(
+  lines: string[],
+  row: number,
+  searchForWordStart: boolean,
+): { found: boolean; col: number; isEmpty: boolean } {
+  const line = lines[row] || '';
+  if (line.length === 0) {
+    return { found: false, col: 0, isEmpty: true };
+  }
+
+  const firstNonWs = findFirstNonWhitespaceCol(line);
+  if (firstNonWs >= cpLen(line)) {
+    return { found: false, col: 0, isEmpty: false };
+  }
+
+  if (searchForWordStart) {
+    return { found: true, col: firstNonWs, isEmpty: false };
+  }
+
+  const endCol = findWordEndInLine(line, firstNonWs);
+  return { found: endCol !== null, col: endCol ?? 0, isEmpty: false };
+}
 
 /**
  * Finds the previous word across multiple lines.

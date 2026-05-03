@@ -10,12 +10,63 @@ import {
   getProjectCoreMemoryFilePath,
   loadCoreMemoryContent,
   MemoryTool,
+  type Config,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs/promises';
 import { MessageType } from '../types.js';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 import type { SlashCommand, SlashCommandActionReturn } from './types.js';
 import { CommandKind } from './types.js';
+import type { LoadedSettings } from '../../config/settings.js';
+
+/**
+ * Refreshes memory content based on JIT context setting.
+ */
+async function refreshMemoryContent(
+  config: Config,
+  settings: LoadedSettings,
+): Promise<{ memoryContent: string; fileCount: number }> {
+  if (config.isJitContextEnabled()) {
+    const contextManager = config.getContextManager();
+    if (contextManager) {
+      await contextManager.refresh();
+    }
+    return {
+      memoryContent: config.getUserMemory(),
+      fileCount: config.getLlxprtMdFileCount(),
+    };
+  }
+
+  const result = await loadHierarchicalLlxprtMemory(
+    config.getWorkingDir(),
+    config.shouldLoadMemoryFromIncludeDirectories()
+      ? config.getWorkspaceContext().getDirectories()
+      : [],
+    config.getDebugMode(),
+    config.getFileService(),
+    settings.merged,
+    config.getExtensions(),
+    config.isTrustedFolder(),
+    settings.merged.ui.memoryImportFormat ?? 'tree',
+    config.getFileFilteringOptions(),
+  );
+  config.setUserMemory(result.memoryContent);
+  config.setLlxprtMdFileCount(result.fileCount);
+  config.setLlxprtMdFilePaths(result.filePaths);
+  return { memoryContent: result.memoryContent, fileCount: result.fileCount };
+}
+
+/**
+ * Refreshes core memory with fail-open behavior.
+ */
+async function refreshCoreMemory(config: Config): Promise<void> {
+  try {
+    const coreContent = await loadCoreMemoryContent(config.getWorkingDir());
+    config.setCoreMemory(coreContent);
+  } catch {
+    // Non-fatal: keep existing core memory
+  }
+}
 
 export const memoryCommand: SlashCommand = {
   name: 'memory',
@@ -218,47 +269,13 @@ export const memoryCommand: SlashCommand = {
           const config = context.services.config;
           const settings = context.services.settings;
           if (config) {
-            let memoryContent = '';
-            let fileCount = 0;
-
-            if (config.isJitContextEnabled()) {
-              const contextManager = config.getContextManager();
-              if (contextManager) {
-                await contextManager.refresh();
-              }
-              memoryContent = config.getUserMemory();
-              fileCount = config.getLlxprtMdFileCount();
-            } else {
-              const result = await loadHierarchicalLlxprtMemory(
-                config.getWorkingDir(),
-                config.shouldLoadMemoryFromIncludeDirectories()
-                  ? config.getWorkspaceContext().getDirectories()
-                  : [],
-                config.getDebugMode(),
-                config.getFileService(),
-                settings.merged,
-                config.getExtensions(),
-                config.isTrustedFolder(),
-                context.services.settings.merged.ui.memoryImportFormat ??
-                  'tree', // Use setting or default to 'tree'
-                config.getFileFilteringOptions(),
-              );
-              memoryContent = result.memoryContent;
-              fileCount = result.fileCount;
-              config.setUserMemory(memoryContent);
-              config.setLlxprtMdFileCount(fileCount);
-              config.setLlxprtMdFilePaths(result.filePaths);
-            }
+            const { memoryContent, fileCount } = await refreshMemoryContent(
+              config,
+              settings,
+            );
 
             // Refresh core (system) memory from .LLXPRT_SYSTEM files
-            try {
-              const coreContent = await loadCoreMemoryContent(
-                config.getWorkingDir(),
-              );
-              config.setCoreMemory(coreContent);
-            } catch {
-              // Non-fatal: keep existing core memory
-            }
+            await refreshCoreMemory(config);
 
             try {
               await config.updateSystemInstructionIfInitialized();

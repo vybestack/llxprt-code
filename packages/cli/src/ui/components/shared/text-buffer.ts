@@ -486,14 +486,11 @@ export function useTextBuffer({
         return;
       }
 
-      if (
-        !singleLine &&
-        (key.name === 'return' ||
-          input === '\r' ||
-          input === '\n' ||
-          input === '\\r') // VSCode terminal represents shift + enter this way
-      )
-        newline();
+      const isReturnKey =
+        key.name === 'return' || input === '\r' || input === '\n';
+      const isVsCodeShiftEnter = input === '\\r'; // VSCode terminal represents shift + enter this way
+
+      if (!singleLine && (isReturnKey || isVsCodeShiftEnter)) newline();
       else if (keyMatchers[Command.MOVE_LEFT](key)) move('left');
       else if (keyMatchers[Command.MOVE_RIGHT](key)) move('right');
       else if (keyMatchers[Command.MOVE_UP](key)) move('up');

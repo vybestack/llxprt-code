@@ -220,14 +220,15 @@ export const replaceRangeInternal = (
   const clamp = (value: number, min: number, max: number) =>
     Math.min(Math.max(value, min), max);
 
-  if (
-    startRow > endRow ||
-    (startRow === endRow && startCol > endCol) ||
-    startRow < 0 ||
-    startCol < 0 ||
-    endRow >= state.lines.length ||
-    (endRow < state.lines.length && endCol > currentLineLen(endRow))
-  ) {
+  // Validate range bounds
+  const rowsInvalid =
+    startRow > endRow || startRow < 0 || endRow >= state.lines.length;
+  const colsInvalid = startRow === endRow && startCol > endCol;
+  const startInvalid = startCol < 0;
+  const endInvalid =
+    endRow < state.lines.length && endCol > currentLineLen(endRow);
+
+  if (rowsInvalid || colsInvalid || startInvalid || endInvalid) {
     return state; // Invalid range
   }
 

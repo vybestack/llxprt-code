@@ -185,6 +185,40 @@ export class ShellProcessor implements IPromptProcessor {
   }
 
   /**
+   * Finds the closing brace for a shell injection starting at startIndex.
+   * Returns the end index and command content, or null if not found.
+   */
+  private findInjectionEnd(
+    prompt: string,
+    startIndex: number,
+  ): { endIndex: number; command: string } | null {
+    let currentIndex = startIndex + SHELL_INJECTION_TRIGGER.length;
+    let braceCount = 1;
+
+    while (currentIndex < prompt.length) {
+      const char = prompt[currentIndex];
+
+      if (char === '{') {
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          const commandContent = prompt.substring(
+            startIndex + SHELL_INJECTION_TRIGGER.length,
+            currentIndex,
+          );
+          return {
+            endIndex: currentIndex + 1,
+            command: commandContent.trim(),
+          };
+        }
+      }
+      currentIndex++;
+    }
+    return null;
+  }
+
+  /**
    * Iteratively parses the prompt string to extract shell injections (!{...}),
    * correctly handling nested braces within the command.
    *
@@ -203,45 +237,21 @@ export class ShellProcessor implements IPromptProcessor {
         break;
       }
 
-      let currentIndex = startIndex + SHELL_INJECTION_TRIGGER.length;
-      let braceCount = 1;
-      let foundEnd = false;
+      const result = this.findInjectionEnd(prompt, startIndex);
 
-      while (currentIndex < prompt.length) {
-        const char = prompt[currentIndex];
-
-        // We count literal braces. This parser does not interpret shell quoting/escaping.
-        if (char === '{') {
-          braceCount++;
-        } else if (char === '}') {
-          braceCount--;
-          if (braceCount === 0) {
-            const commandContent = prompt.substring(
-              startIndex + SHELL_INJECTION_TRIGGER.length,
-              currentIndex,
-            );
-            const endIndex = currentIndex + 1;
-
-            injections.push({
-              command: commandContent.trim(),
-              startIndex,
-              endIndex,
-            });
-
-            index = endIndex;
-            foundEnd = true;
-            break;
-          }
-        }
-        currentIndex++;
-      }
-
-      // Check if the inner loop finished without finding the closing brace.
-      if (!foundEnd) {
+      if (result === null) {
         throw new Error(
           `Invalid syntax in command '${this.commandName}': Unclosed shell injection starting at index ${startIndex} ('!{'). Ensure braces are balanced.`,
         );
       }
+
+      injections.push({
+        command: result.command,
+        startIndex,
+        endIndex: result.endIndex,
+      });
+
+      index = result.endIndex;
     }
 
     return injections;

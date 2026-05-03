@@ -152,13 +152,20 @@ export function extractProviderBaseUrl(
   }
   visited.add(provider);
 
-  return (
-    extractWrappedProviderBaseUrl(provider, visited) ??
-    extractDirectProviderBaseUrl(provider) ??
-    extractConfiguredProviderBaseUrl(provider) ??
-    extractBaseProviderConfigUrl(provider) ??
-    extractProviderGetBaseUrl(provider)
-  );
+  for (const extractor of [
+    () => extractWrappedProviderBaseUrl(provider, visited),
+    () => extractDirectProviderBaseUrl(provider),
+    () => extractConfiguredProviderBaseUrl(provider),
+    () => extractBaseProviderConfigUrl(provider),
+    () => extractProviderGetBaseUrl(provider),
+  ]) {
+    const baseUrl = extractor();
+    if (baseUrl !== undefined) {
+      return baseUrl;
+    }
+  }
+
+  return undefined;
 }
 
 export interface ApiKeyUpdateResult {

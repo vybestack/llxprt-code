@@ -38,7 +38,9 @@ export { calculateLayout, calculateVisualCursorFromLayout };
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
 
 function clamp(v: number, min: number, max: number): number {
-  return v < min ? min : v > max ? max : v;
+  if (v < min) return min;
+  if (v > max) return max;
+  return v;
 }
 
 function findPrevWordBoundary(line: string, cursorCol: number): number {

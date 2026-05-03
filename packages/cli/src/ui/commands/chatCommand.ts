@@ -32,6 +32,24 @@ import { type CommandArgumentSchema } from './schema/types.js';
 import { type Part } from '@google/genai';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
+/**
+ * Resolve emoji filter mode setting, defaulting to 'auto' for invalid values.
+ */
+function resolveEmojiFilterMode(setting: unknown): EmojiFilterMode {
+  // Check for invalid/falsy values that should default to 'auto'
+  const isInvalid =
+    setting === undefined ||
+    setting === null ||
+    setting === false ||
+    setting === '';
+  const isNumericInvalid = setting === 0 || Number.isNaN(setting);
+
+  if (isInvalid || isNumericInvalid) {
+    return 'auto';
+  }
+  return setting as EmojiFilterMode;
+}
+
 const getSavedChatTags = async (
   context: CommandContext,
   mtSortDesc: boolean,
@@ -197,16 +215,8 @@ const resumeCommand: SlashCommand = {
 
     // Get emoji filter mode from settings
     const emojiFilterSetting = config?.getEphemeralSetting('emojifilter');
-    const emojiFilterMode = (
-      emojiFilterSetting === undefined ||
-      emojiFilterSetting === null ||
-      emojiFilterSetting === false ||
-      emojiFilterSetting === '' ||
-      emojiFilterSetting === 0 ||
-      Number.isNaN(emojiFilterSetting)
-        ? 'auto'
-        : emojiFilterSetting
-    ) as EmojiFilterMode;
+    // Determine emoji filter mode - use 'auto' for falsy/invalid values
+    const emojiFilterMode = resolveEmojiFilterMode(emojiFilterSetting);
 
     // Create emoji filter if not in 'allowed' mode
     const emojiFilter =

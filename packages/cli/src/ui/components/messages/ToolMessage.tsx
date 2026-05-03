@@ -31,6 +31,16 @@ import { ToolResultDisplay } from './ToolResultDisplay.js';
 
 export type { TextEmphasis } from './ToolShared.js';
 
+/**
+ * Find the first delimiter position between paren and bracket.
+ * Returns the position of whichever delimiter comes first, or -1 if neither found.
+ */
+function findFirstDelimiter(paren: number, bracket: number): number {
+  if (paren === -1) return bracket;
+  if (bracket === -1) return paren;
+  return Math.min(paren, bracket);
+}
+
 export interface ToolMessageProps extends IndividualToolCallDisplay {
   availableTerminalHeight?: number;
   terminalWidth: number;
@@ -106,12 +116,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     let raw = description;
     const paren = raw.indexOf(' (');
     const bracket = raw.indexOf(' [in ');
-    const cut =
-      paren === -1
-        ? bracket
-        : bracket === -1
-          ? paren
-          : Math.min(paren, bracket);
+    const cut = findFirstDelimiter(paren, bracket);
     if (cut > 0) raw = raw.slice(0, cut);
 
     const segments = splitCommands(raw).filter((s) => s.length > 0);

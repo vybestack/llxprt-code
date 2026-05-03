@@ -32,6 +32,105 @@ import {
   REDIRECTION_WARNING_TIP_TEXT,
 } from '../../textConstants.js';
 
+/**
+ * Build options for edit-type confirmation.
+ */
+function buildEditOptions(
+  isTrustedFolder: boolean,
+  allowPermanentApproval: boolean,
+  config: Config,
+  isDiffingEnabled: boolean | null,
+): Array<RadioSelectItem<ToolConfirmationOutcome>> {
+  const options: Array<RadioSelectItem<ToolConfirmationOutcome>> = [];
+
+  options.push({
+    label: 'Allow once',
+    value: ToolConfirmationOutcome.ProceedOnce,
+    key: 'Allow once',
+  });
+
+  if (isTrustedFolder) {
+    options.push({
+      label: 'Allow for this session',
+      value: ToolConfirmationOutcome.ProceedAlways,
+      key: 'Allow for this session',
+    });
+    if (allowPermanentApproval) {
+      options.push({
+        label: 'Allow for all future sessions',
+        value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
+        key: 'Allow for all future sessions',
+      });
+    }
+  }
+
+  if (!config.getIdeMode() || isDiffingEnabled === false) {
+    options.push({
+      label: 'Modify with external editor',
+      value: ToolConfirmationOutcome.ModifyWithEditor,
+      key: 'Modify with external editor',
+    });
+  }
+
+  options.push({
+    label: 'No, suggest changes (esc)',
+    value: ToolConfirmationOutcome.Cancel,
+    key: 'No, suggest changes (esc)',
+  });
+
+  return options;
+}
+
+/**
+ * Build options for exec/info-type confirmation.
+ * Both exec and info types use the same option structure.
+ */
+function buildExecOptions(
+  isTrustedFolder: boolean,
+  allowPermanentApproval: boolean,
+): Array<RadioSelectItem<ToolConfirmationOutcome>> {
+  const options: Array<RadioSelectItem<ToolConfirmationOutcome>> = [];
+
+  options.push({
+    label: 'Allow once',
+    value: ToolConfirmationOutcome.ProceedOnce,
+    key: 'Allow once',
+  });
+
+  if (isTrustedFolder) {
+    options.push({
+      label: 'Allow for this session',
+      value: ToolConfirmationOutcome.ProceedAlways,
+      key: 'Allow for this session',
+    });
+    if (allowPermanentApproval) {
+      options.push({
+        label: 'Allow for all future sessions',
+        value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
+        key: 'Allow for all future sessions',
+      });
+    }
+  }
+
+  options.push({
+    label: 'No, suggest changes (esc)',
+    value: ToolConfirmationOutcome.Cancel,
+    key: 'No, suggest changes (esc)',
+  });
+
+  return options;
+}
+
+/**
+ * Build options for info-type confirmation.
+ */
+function buildInfoOptions(
+  isTrustedFolder: boolean,
+  allowPermanentApproval: boolean,
+): Array<RadioSelectItem<ToolConfirmationOutcome>> {
+  return buildExecOptions(isTrustedFolder, allowPermanentApproval);
+}
+
 export interface ToolConfirmationMessageProps {
   confirmationDetails: ToolCallConfirmationDetails;
   config: Config;
@@ -115,43 +214,17 @@ export const ToolConfirmationMessage: React.FC<
   const { question, bodyContent, options } = useMemo(() => {
     let bodyContent: React.ReactNode | null = null;
     let question = '';
-    const options: Array<RadioSelectItem<ToolConfirmationOutcome>> = [];
+    let options: Array<RadioSelectItem<ToolConfirmationOutcome>> = [];
 
     if (confirmationDetails.type === 'edit') {
       if (confirmationDetails.isModifying !== true) {
         question = `Apply this change?`;
-        options.push({
-          label: 'Allow once',
-          value: ToolConfirmationOutcome.ProceedOnce,
-          key: 'Allow once',
-        });
-        if (isTrustedFolder) {
-          options.push({
-            label: 'Allow for this session',
-            value: ToolConfirmationOutcome.ProceedAlways,
-            key: 'Allow for this session',
-          });
-          if (allowPermanentApproval) {
-            options.push({
-              label: 'Allow for all future sessions',
-              value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
-              key: 'Allow for all future sessions',
-            });
-          }
-        }
-        if (!config.getIdeMode() || isDiffingEnabled === false) {
-          options.push({
-            label: 'Modify with external editor',
-            value: ToolConfirmationOutcome.ModifyWithEditor,
-            key: 'Modify with external editor',
-          });
-        }
-
-        options.push({
-          label: 'No, suggest changes (esc)',
-          value: ToolConfirmationOutcome.Cancel,
-          key: 'No, suggest changes (esc)',
-        });
+        options = buildEditOptions(
+          isTrustedFolder,
+          allowPermanentApproval,
+          config,
+          isDiffingEnabled,
+        );
       }
     } else if (confirmationDetails.type === 'exec') {
       const executionProps = confirmationDetails;
@@ -161,56 +234,10 @@ export const ToolConfirmationMessage: React.FC<
       } else {
         question = `Allow execution of: '${executionProps.rootCommand}'?`;
       }
-      options.push({
-        label: 'Allow once',
-        value: ToolConfirmationOutcome.ProceedOnce,
-        key: 'Allow once',
-      });
-      if (isTrustedFolder) {
-        options.push({
-          label: `Allow for this session`,
-          value: ToolConfirmationOutcome.ProceedAlways,
-          key: `Allow for this session`,
-        });
-        if (allowPermanentApproval) {
-          options.push({
-            label: `Allow for all future sessions`,
-            value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
-            key: `Allow for all future sessions`,
-          });
-        }
-      }
-      options.push({
-        label: 'No, suggest changes (esc)',
-        value: ToolConfirmationOutcome.Cancel,
-        key: 'No, suggest changes (esc)',
-      });
+      options = buildExecOptions(isTrustedFolder, allowPermanentApproval);
     } else if (confirmationDetails.type === 'info') {
       question = `Do you want to proceed?`;
-      options.push({
-        label: 'Allow once',
-        value: ToolConfirmationOutcome.ProceedOnce,
-        key: 'Allow once',
-      });
-      if (isTrustedFolder) {
-        options.push({
-          label: 'Allow for this session',
-          value: ToolConfirmationOutcome.ProceedAlways,
-          key: 'Allow for this session',
-        });
-        if (allowPermanentApproval) {
-          options.push({
-            label: 'Allow for all future sessions',
-            value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
-            key: 'Allow for all future sessions',
-          });
-        }
-      }
-      options.push({
-        label: 'No, suggest changes (esc)',
-        value: ToolConfirmationOutcome.Cancel,
-        key: 'No, suggest changes (esc)',
-      });
+      options = buildInfoOptions(isTrustedFolder, allowPermanentApproval);
     } else {
       // mcp tool confirmation
       const mcpProps = confirmationDetails;

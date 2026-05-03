@@ -12,6 +12,18 @@ import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import type { Profile } from '@vybestack/llxprt-code-core';
 
+/**
+ * Get border color based on editor state.
+ */
+function getEditorBorderColor(
+  validationMessage: string | null,
+  hasChanges: boolean,
+): string {
+  if (validationMessage !== null) return SemanticColors.status.error;
+  if (hasChanges) return SemanticColors.status.warning;
+  return SemanticColors.border.default;
+}
+
 interface ProfileInlineEditorProps {
   profileName: string;
   profile: Profile;
@@ -245,13 +257,7 @@ export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
   return (
     <Box
       borderStyle="round"
-      borderColor={
-        validateJson
-          ? SemanticColors.status.error
-          : hasChanges
-            ? SemanticColors.status.warning
-            : SemanticColors.border.default
-      }
+      borderColor={getEditorBorderColor(validateJson, hasChanges)}
       flexDirection="column"
       padding={1}
       width={dialogWidth}

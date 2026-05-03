@@ -81,6 +81,46 @@ export type PerformResumeResult =
   | { ok: false; error: string };
 
 /**
+ * Checks whether a session can be resumed, preserving the original short-circuit order.
+ */
+async function isResumableSession(
+  session: SessionSummary,
+  chatsDir: string,
+  currentSessionId: string,
+): Promise<boolean> {
+  if (session.sessionId === currentSessionId) {
+    return false;
+  }
+
+  const isLocked = await SessionLockManager.isLocked(
+    chatsDir,
+    session.sessionId,
+  );
+  if (isLocked) {
+    return false;
+  }
+
+  return SessionDiscovery.hasContentEvents(session.filePath);
+}
+
+/**
+ * Finds the first resumable session (non-locked, non-current, non-empty).
+ * Extracted to reduce break statements in loop.
+ */
+async function findResumableSession(
+  sessions: SessionSummary[],
+  chatsDir: string,
+  currentSessionId: string,
+): Promise<SessionSummary | undefined> {
+  for (const session of sessions) {
+    if (await isResumableSession(session, chatsDir, currentSessionId)) {
+      return session;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Performs session resume with all side effects.
  *
  * Resolves the session reference (ID, prefix, index, or "latest"),
@@ -111,15 +151,11 @@ export async function performResume(
 
   if (sessionRef === 'latest') {
     // Find newest non-locked, non-current, non-empty session
-    for (const session of sessions) {
-      if (session.sessionId === currentSessionId) continue;
-      if (await SessionLockManager.isLocked(chatsDir, session.sessionId))
-        continue;
-      if (!(await SessionDiscovery.hasContentEvents(session.filePath)))
-        continue;
-      targetSession = session;
-      break;
-    }
+    targetSession = await findResumableSession(
+      sessions,
+      chatsDir,
+      currentSessionId,
+    );
     if (!targetSession) {
       return {
         ok: false,

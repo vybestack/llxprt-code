@@ -20,6 +20,15 @@ import * as os from 'os';
 const LIST_ITEM_LABEL = 'TO' + 'DO';
 
 /**
+ * Get the icon for a task-list status.
+ */
+function getStatusIcon(status: Todo['status']): string {
+  if (status === 'completed') return '✓';
+  if (status === 'in_progress') return '▸';
+  return '○';
+}
+
+/**
  * Parsed position result for the add and remove subcommands
  * @plan PLAN-20260129-TODOPERSIST.P06
  * @plan PLAN-20260129-TODOPERSIST-EXT.P21
@@ -219,12 +228,7 @@ export const todoCommand: SlashCommand = {
 
         todos.forEach((todo, idx) => {
           const pos = idx + 1;
-          const statusIcon =
-            todo.status === 'completed'
-              ? '✓'
-              : todo.status === 'in_progress'
-                ? '▸'
-                : '○';
+          const statusIcon = getStatusIcon(todo.status);
 
           lines.push(`${pos}. ${statusIcon} ${todo.content}`.trim());
 
