@@ -23,6 +23,8 @@
  * - Respects ephemeral settings (retries, retrywait)
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 import {
   type IProvider,
   type GenerateChatOptions,

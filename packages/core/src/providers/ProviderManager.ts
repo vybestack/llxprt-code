@@ -5,6 +5,8 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 import { type IProvider, type GenerateChatOptions } from './IProvider.js';
 import { type IProviderManager } from './IProviderManager.js';
 import type { Config } from '../config/config.js';

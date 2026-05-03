@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 /**
  * @plan PLAN-20251127-OPENAIVERCEL.P06
  * @requirement REQ-OAV-MC-001 - Convert IContent to Vercel CoreMessage

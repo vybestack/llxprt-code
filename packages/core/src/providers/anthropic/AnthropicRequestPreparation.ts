@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 /**
  * Anthropic Request Preparation Module
  * Encapsulates the full request preparation pipeline from content to API-ready request body

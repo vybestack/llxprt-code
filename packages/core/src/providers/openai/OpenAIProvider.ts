@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 /**
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1

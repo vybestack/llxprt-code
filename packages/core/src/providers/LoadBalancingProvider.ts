@@ -11,6 +11,8 @@
  * Selection happens at REQUEST TIME, not profile load time.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 import type {
   IProvider,
   GenerateChatOptions,

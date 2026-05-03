@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 /**
  * @plan PLAN-20250218-STATELESSPROVIDER.P04
  * @requirement REQ-SP-001

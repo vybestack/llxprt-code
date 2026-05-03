@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 import type OpenAI from 'openai';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { type DebugLogger } from '../../debug/index.js';

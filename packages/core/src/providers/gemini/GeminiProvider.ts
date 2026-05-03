@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
 // createHash import removed - no longer needed without client caching
 import { DebugLogger } from '../../debug/index.js';
