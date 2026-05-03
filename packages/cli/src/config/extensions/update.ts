@@ -16,6 +16,7 @@ import {
   loadInstallMetadata,
   ExtensionStorage,
   loadExtensionConfig,
+  type ExtensionInstallMetadata,
 } from '../extension.js';
 import { checkForExtensionUpdate } from './github.js';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
@@ -27,6 +28,77 @@ export interface ExtensionUpdateInfo {
   name: string;
   originalVersion: string;
   updatedVersion: string;
+}
+function setExtensionUpdateState(
+  extension: GeminiCLIExtension,
+  state: ExtensionUpdateState,
+  dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void,
+): void {
+  dispatchExtensionStateUpdate({
+    type: 'SET_STATE',
+    payload: { name: extension.name, state },
+  });
+}
+
+function validateInstallMetadata(
+  extension: GeminiCLIExtension,
+  installMetadata: ExtensionInstallMetadata | undefined,
+  dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void,
+): ExtensionInstallMetadata {
+  if (!installMetadata?.type) {
+    setExtensionUpdateState(
+      extension,
+      ExtensionUpdateState.ERROR,
+      dispatchExtensionStateUpdate,
+    );
+    throw new Error(
+      `Extension ${extension.name} cannot be updated, type is unknown.`,
+    );
+  }
+  if (installMetadata.type === 'link') {
+    setExtensionUpdateState(
+      extension,
+      ExtensionUpdateState.UP_TO_DATE,
+      dispatchExtensionStateUpdate,
+    );
+    throw new Error(`Extension is linked so does not need to be updated`);
+  }
+  return installMetadata;
+}
+
+function setExtensionUpdatedState(
+  extension: GeminiCLIExtension,
+  enableExtensionReloading: boolean | undefined,
+  dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void,
+): void {
+  setExtensionUpdateState(
+    extension,
+    enableExtensionReloading === true
+      ? ExtensionUpdateState.UPDATED
+      : ExtensionUpdateState.UPDATED_NEEDS_RESTART,
+    dispatchExtensionStateUpdate,
+  );
+}
+
+function getUpdatedExtension(
+  extension: GeminiCLIExtension,
+  cwd: string,
+  dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void,
+): GeminiCLIExtension {
+  const updatedExtensionStorage = new ExtensionStorage(extension.name);
+  const updatedExtension = loadExtension({
+    extensionDir: updatedExtensionStorage.getExtensionDir(),
+    workspaceDir: cwd,
+  });
+  if (!updatedExtension) {
+    setExtensionUpdateState(
+      extension,
+      ExtensionUpdateState.ERROR,
+      dispatchExtensionStateUpdate,
+    );
+    throw new Error('Updated extension not found after installation.');
+  }
+  return updatedExtension;
 }
 
 export async function updateExtension(
@@ -40,28 +112,16 @@ export async function updateExtension(
   if (currentState === ExtensionUpdateState.UPDATING) {
     return undefined;
   }
-  dispatchExtensionStateUpdate({
-    type: 'SET_STATE',
-    payload: { name: extension.name, state: ExtensionUpdateState.UPDATING },
-  });
-  const installMetadata = loadInstallMetadata(extension.path);
-
-  if (!installMetadata?.type) {
-    dispatchExtensionStateUpdate({
-      type: 'SET_STATE',
-      payload: { name: extension.name, state: ExtensionUpdateState.ERROR },
-    });
-    throw new Error(
-      `Extension ${extension.name} cannot be updated, type is unknown.`,
-    );
-  }
-  if (installMetadata.type === 'link') {
-    dispatchExtensionStateUpdate({
-      type: 'SET_STATE',
-      payload: { name: extension.name, state: ExtensionUpdateState.UP_TO_DATE },
-    });
-    throw new Error(`Extension is linked so does not need to be updated`);
-  }
+  setExtensionUpdateState(
+    extension,
+    ExtensionUpdateState.UPDATING,
+    dispatchExtensionStateUpdate,
+  );
+  const installMetadata = validateInstallMetadata(
+    extension,
+    loadInstallMetadata(extension.path),
+    dispatchExtensionStateUpdate,
+  );
   const originalVersion = extension.version;
 
   const tempDir = await ExtensionStorage.createTmpDir();
@@ -78,29 +138,17 @@ export async function updateExtension(
       previousExtensionConfig ?? undefined,
     );
 
-    const updatedExtensionStorage = new ExtensionStorage(extension.name);
-    const updatedExtension = loadExtension({
-      extensionDir: updatedExtensionStorage.getExtensionDir(),
-      workspaceDir: cwd,
-    });
-    if (!updatedExtension) {
-      dispatchExtensionStateUpdate({
-        type: 'SET_STATE',
-        payload: { name: extension.name, state: ExtensionUpdateState.ERROR },
-      });
-      throw new Error('Updated extension not found after installation.');
-    }
+    const updatedExtension = getUpdatedExtension(
+      extension,
+      cwd,
+      dispatchExtensionStateUpdate,
+    );
     const updatedVersion = updatedExtension.version;
-    dispatchExtensionStateUpdate({
-      type: 'SET_STATE',
-      payload: {
-        name: extension.name,
-        state:
-          enableExtensionReloading === true
-            ? ExtensionUpdateState.UPDATED
-            : ExtensionUpdateState.UPDATED_NEEDS_RESTART,
-      },
-    });
+    setExtensionUpdatedState(
+      extension,
+      enableExtensionReloading,
+      dispatchExtensionStateUpdate,
+    );
     return {
       name: extension.name,
       originalVersion,
@@ -110,10 +158,11 @@ export async function updateExtension(
     debugLogger.error(
       `Error updating extension, rolling back. ${getErrorMessage(e)}`,
     );
-    dispatchExtensionStateUpdate({
-      type: 'SET_STATE',
-      payload: { name: extension.name, state: ExtensionUpdateState.ERROR },
-    });
+    setExtensionUpdateState(
+      extension,
+      ExtensionUpdateState.ERROR,
+      dispatchExtensionStateUpdate,
+    );
     await copyExtension(tempDir, extension.path);
     throw e;
   } finally {

@@ -281,6 +281,58 @@ function pickAvailableSandboxCommand(): SandboxConfig['command'] | '' {
   return '';
 }
 
+function resolveSandboxOption(
+  sandbox?: boolean | string,
+): boolean | string | undefined {
+  const environmentConfiguredSandbox =
+    process.env.LLXPRT_SANDBOX?.toLowerCase().trim() ?? '';
+  const resolvedSandbox =
+    environmentConfiguredSandbox.length > 0
+      ? environmentConfiguredSandbox
+      : sandbox;
+  if (resolvedSandbox === '1' || resolvedSandbox === 'true') {
+    return true;
+  }
+  if (isFalseySandboxValue(resolvedSandbox)) {
+    return false;
+  }
+  return resolvedSandbox;
+}
+
+function validateExplicitSandboxCommand(
+  sandbox: string,
+): SandboxConfig['command'] | '' {
+  if (!isSandboxCommand(sandbox)) {
+    throw new FatalSandboxError(
+      `Invalid sandbox command '${sandbox}'. Must be one of ${VALID_SANDBOX_COMMANDS.join(
+        ', ',
+      )}`,
+    );
+  }
+  if (commandExists.sync(sandbox)) {
+    return sandbox;
+  }
+  throw new FatalSandboxError(
+    `Missing sandbox command '${sandbox}' (from LLXPRT_SANDBOX)`,
+  );
+}
+
+function pickRequestedSandboxCommand(): SandboxConfig['command'] | '' {
+  if (os.platform() === 'darwin' && commandExists.sync('sandbox-exec')) {
+    return 'sandbox-exec';
+  }
+  if (commandExists.sync('docker')) {
+    return 'docker';
+  }
+  if (commandExists.sync('podman')) {
+    return 'podman';
+  }
+  throw new FatalSandboxError(
+    'LLXPRT_SANDBOX is true but failed to determine command for sandbox; ' +
+      'install docker or podman or specify command in LLXPRT_SANDBOX',
+  );
+}
+
 function getSandboxCommand(
   sandbox?: boolean | string,
 ): SandboxConfig['command'] | '' {
@@ -289,61 +341,16 @@ function getSandboxCommand(
     return '';
   }
 
-  // note environment variable takes precedence over argument (from command line or settings)
-  const environmentConfiguredSandbox =
-    process.env.LLXPRT_SANDBOX?.toLowerCase().trim() ?? '';
-  sandbox =
-    environmentConfiguredSandbox.length > 0
-      ? environmentConfiguredSandbox
-      : sandbox;
-  if (sandbox === '1' || sandbox === 'true') {
-    sandbox = true;
-  } else if (isFalseySandboxValue(sandbox)) {
-    sandbox = false;
-  }
-
-  if (sandbox === false) {
+  const resolvedSandbox = resolveSandboxOption(sandbox);
+  if (resolvedSandbox === false) {
     return '';
   }
-
-  if (typeof sandbox === 'string' && sandbox.length > 0) {
-    if (!isSandboxCommand(sandbox)) {
-      throw new FatalSandboxError(
-        `Invalid sandbox command '${sandbox}'. Must be one of ${VALID_SANDBOX_COMMANDS.join(
-          ', ',
-        )}`,
-      );
-    }
-    // confirm that specified command exists
-    if (commandExists.sync(sandbox)) {
-      return sandbox;
-    }
-    throw new FatalSandboxError(
-      `Missing sandbox command '${sandbox}' (from LLXPRT_SANDBOX)`,
-    );
+  if (typeof resolvedSandbox === 'string' && resolvedSandbox.length > 0) {
+    return validateExplicitSandboxCommand(resolvedSandbox);
   }
-
-  // All sandbox types require explicit opt-in (sandbox === true)
-  if (
-    sandbox === true &&
-    os.platform() === 'darwin' &&
-    commandExists.sync('sandbox-exec')
-  ) {
-    return 'sandbox-exec';
-  } else if (commandExists.sync('docker') && sandbox === true) {
-    return 'docker';
-  } else if (commandExists.sync('podman') && sandbox === true) {
-    return 'podman';
+  if (resolvedSandbox === true) {
+    return pickRequestedSandboxCommand();
   }
-
-  // throw an error if user requested sandbox but no command was found
-  if (sandbox === true) {
-    throw new FatalSandboxError(
-      'LLXPRT_SANDBOX is true but failed to determine command for sandbox; ' +
-        'install docker or podman or specify command in LLXPRT_SANDBOX',
-    );
-  }
-
   return '';
 }
 
@@ -479,6 +486,58 @@ function normalizeProfileName(profileName: string): string {
   return profileName.replace(/\.json$/i, '');
 }
 
+async function loadRequestedSandboxProfile(
+  profileName: string | undefined,
+  packageImage: string | undefined,
+): Promise<SandboxProfile | undefined> {
+  if (!profileName) {
+    return undefined;
+  }
+  await ensureDefaultSandboxProfiles(packageImage);
+  try {
+    return normalizeSandboxProfile(
+      await loadSandboxProfile(normalizeProfileName(profileName)),
+    );
+  } catch (error) {
+    throw new FatalSandboxError(
+      `Failed to load sandbox profile '${profileName}': ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function commandFromSandboxOption(
+  sandboxOption: boolean | string | undefined,
+  cliEngine: SandboxProfileEngine | undefined,
+  sandboxProfile: SandboxProfile | undefined,
+): SandboxConfig['command'] | '' {
+  try {
+    return getSandboxCommand(sandboxOption);
+  } catch (error) {
+    // If the user is driving sandbox selection via --sandbox-engine or a profile engine,
+    // allow sandboxOption parsing to fail without aborting.
+    if (!cliEngine && !sandboxProfile?.engine) {
+      throw error;
+    }
+    return '';
+  }
+}
+
+function resolveBaseSandboxCommand(
+  sandboxOption: boolean | string | undefined,
+  cliEngine: SandboxProfileEngine | undefined,
+  sandboxProfile: SandboxProfile | undefined,
+): SandboxConfig['command'] | '' {
+  const baseCommand = commandFromSandboxOption(
+    sandboxOption,
+    cliEngine,
+    sandboxProfile,
+  );
+  if (!baseCommand && sandboxProfile) {
+    return pickAvailableSandboxCommand();
+  }
+  return baseCommand;
+}
+
 export async function loadSandboxConfig(
   settings: Settings,
   argv: SandboxCliArgs,
@@ -491,37 +550,16 @@ export async function loadSandboxConfig(
   const packageJson = await getPackageJson(__dirname);
   const packageImage = packageJson?.config?.sandboxImageUri;
 
-  let sandboxProfile: SandboxProfile | undefined;
-  const profileName = resolveSandboxProfileName(argv.sandboxProfileLoad);
-  if (profileName) {
-    await ensureDefaultSandboxProfiles(packageImage);
-    try {
-      sandboxProfile = normalizeSandboxProfile(
-        await loadSandboxProfile(normalizeProfileName(profileName)),
-      );
-    } catch (error) {
-      throw new FatalSandboxError(
-        `Failed to load sandbox profile '${profileName}': ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
+  const sandboxProfile = await loadRequestedSandboxProfile(
+    resolveSandboxProfileName(argv.sandboxProfileLoad),
+    packageImage,
+  );
 
-  const sandboxOption = argv.sandbox ?? settings.sandbox;
-  let baseCommand: SandboxConfig['command'] | '' = '';
-  try {
-    baseCommand = getSandboxCommand(sandboxOption);
-  } catch (error) {
-    // If the user is driving sandbox selection via --sandbox-engine or a profile engine,
-    // allow sandboxOption parsing to fail without aborting.
-    if (!cliEngine && !sandboxProfile?.engine) {
-      throw error;
-    }
-  }
-
-  // Loading a sandbox profile implies sandboxing intent, even if --sandbox isn't set.
-  if (!baseCommand && sandboxProfile) {
-    baseCommand = pickAvailableSandboxCommand();
-  }
+  const baseCommand = resolveBaseSandboxCommand(
+    argv.sandbox ?? settings.sandbox,
+    cliEngine,
+    sandboxProfile,
+  );
 
   const command = resolveSandboxEngine(
     cliEngine ?? sandboxProfile?.engine,
