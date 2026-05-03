@@ -680,11 +680,12 @@ describe('Task-list Continuation Integration Tests', () => {
       // Given: Large number of todos
       const largeTodoSet: Todo[] = [];
       for (let i = 0; i < 1000; i++) {
+        const status = resolveTodoStatus(i);
         largeTodoSet.push(
           createTodo(
             `${LOWER_LIST_ITEM_LABEL}-${i}`,
             `Task number ${i}`,
-            i % 3 === 0 ? 'completed' : i % 3 === 1 ? 'in_progress' : 'pending',
+            status,
           ),
         );
       }
@@ -746,4 +747,20 @@ describe('Task-list Continuation Integration Tests', () => {
       todoEvents.offTodoUpdated(eventHandler);
     });
   });
+
+  /**
+   * Resolves task status based on index for test data generation.
+   */
+  function resolveTodoStatus(
+    index: number,
+  ): 'completed' | 'in_progress' | 'pending' {
+    const mod = index % 3;
+    if (mod === 0) {
+      return 'completed';
+    }
+    if (mod === 1) {
+      return 'in_progress';
+    }
+    return 'pending';
+  }
 });

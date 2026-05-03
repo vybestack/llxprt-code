@@ -98,13 +98,13 @@ export async function applyProfileToRuntime(
       `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
   );
 
-  if (
-    argv.provider &&
-    (bootstrapArgs.keyOverride ||
-      bootstrapArgs.keyfileOverride ||
-      bootstrapArgs.keyNameOverride ||
-      bootstrapArgs.baseurlOverride)
-  ) {
+  const hasAnyAuthOverride =
+    Boolean(bootstrapArgs.keyOverride) ||
+    Boolean(bootstrapArgs.keyfileOverride) ||
+    Boolean(bootstrapArgs.keyNameOverride) ||
+    Boolean(bootstrapArgs.baseurlOverride);
+
+  if (argv.provider && hasAnyAuthOverride) {
     // CRITICAL FIX for #492: synthetic profile for CLI auth args
     logger.debug(
       () => '[bootstrap] Creating synthetic profile for CLI auth args',

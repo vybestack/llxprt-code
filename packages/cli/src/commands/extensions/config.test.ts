@@ -41,19 +41,27 @@ vi.mock('node:readline', () => ({
   createInterface: vi.fn(() => ({
     question: vi.fn((prompt: string, callback: (answer: string) => void) => {
       // Call the mocked confirmOverwrite function and resolve based on its return value
-      const shouldOverwrite = mockConfirmOverwrite(
-        prompt.includes('API Key')
-          ? 'API Key'
-          : prompt.includes('Database URL')
-            ? 'Database URL'
-            : 'unknown',
-      );
+      const promptType = resolvePromptType(prompt);
+      const shouldOverwrite = mockConfirmOverwrite(promptType);
       // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original mock truthiness; tests intentionally pass a Promise here.
       callback(shouldOverwrite ? 'y' : 'n');
     }),
     close: vi.fn(),
   })),
 }));
+
+/**
+ * Resolves the prompt type from the prompt string.
+ */
+function resolvePromptType(prompt: string): string {
+  if (prompt.includes('API Key')) {
+    return 'API Key';
+  }
+  if (prompt.includes('Database URL')) {
+    return 'Database URL';
+  }
+  return 'unknown';
+}
 
 vi.mock('../../config/extensions/settingsIntegration.js', async () => {
   const actual = await vi.importActual<typeof settingsIntegrationModule>(

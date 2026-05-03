@@ -382,19 +382,23 @@ export class GeminiOAuthProvider implements OAuthProvider {
       return null;
     }
 
+    // Google OAuth uses expiry_date (milliseconds), we need expiry (seconds)
+    // Explicitly check for valid timestamp (non-nullish, non-zero, non-NaN)
+    const expiryDate = creds.expiry_date;
+    const hasValidExpiryDate =
+      expiryDate !== null &&
+      expiryDate !== undefined &&
+      expiryDate > 0 &&
+      !Number.isNaN(expiryDate);
+    const expiry = hasValidExpiryDate
+      ? Math.floor(expiryDate / 1000)
+      : Math.floor(Date.now() / 1000) + 3600;
+
     const token: OAuthToken = {
       access_token: creds.access_token,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalize null/undefined/empty-string to undefined
       refresh_token: creds.refresh_token || undefined,
-      // Google OAuth uses expiry_date (milliseconds), we need expiry (seconds)
-      // Explicitly check for valid timestamp (non-nullish, non-zero, non-NaN)
-      expiry:
-        creds.expiry_date !== null &&
-        creds.expiry_date !== undefined &&
-        creds.expiry_date > 0 &&
-        !Number.isNaN(creds.expiry_date)
-          ? Math.floor(creds.expiry_date / 1000)
-          : Math.floor(Date.now() / 1000) + 3600,
+      expiry,
       token_type: 'Bearer' as const,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalize null/undefined/empty-string to undefined
       scope: creds.scope || undefined,

@@ -49,15 +49,12 @@ export async function resolveIntermediateConfig(
     profileMergedSettings.accessibility?.screenReader ??
     false;
 
-  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty array should fall back to next source */
-  const allowedTools =
-    argv.allowedTools ||
-    profileMergedSettings.tools?.allowed ||
-    profileMergedSettings.allowedTools ||
-    settings.tools?.allowed ||
-    settings.allowedTools ||
-    [];
-  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+  const allowedTools = resolveAllowedTools(
+    argv,
+    profileMergedSettings,
+    settings,
+  );
+
   const allowedToolsSet = buildNormalizedToolSet(allowedTools);
 
   let profileSettingsWithTools = profileMergedSettings;
@@ -123,4 +120,23 @@ export async function resolveIntermediateConfig(
     excludeTools,
     question,
   };
+}
+
+/**
+ * Resolves allowed tools from CLI args, profile settings, and global settings.
+ * Priority: CLI > profile.tools.allowed > profile.allowedTools > settings.tools.allowed > settings.allowedTools
+ * Intentionally uses falsy coalescing to preserve the existing precedence chain.
+ */
+function resolveAllowedTools(
+  argv: CliArgs,
+  profileMergedSettings: Settings,
+  settings: Settings,
+): string[] {
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing preserves existing precedence for legacy settings */
+  const profileTools =
+    profileMergedSettings.tools?.allowed || profileMergedSettings.allowedTools;
+  const globalTools = settings.tools?.allowed || settings.allowedTools;
+  const tools = argv.allowedTools || profileTools || globalTools;
+  return [...(tools ?? [])];
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 }

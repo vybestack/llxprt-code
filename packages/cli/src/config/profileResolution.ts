@@ -138,13 +138,7 @@ export function resolveProfileToLoad(
   const profileToLoad =
     normaliseProfileName(bootstrapArgs.profileName) ??
     normaliseProfileName(process.env.LLXPRT_PROFILE) ??
-    (cliProvider === undefined
-      ? normaliseProfileName(
-          typeof settings.defaultProfile === 'string'
-            ? settings.defaultProfile
-            : undefined,
-        )
-      : undefined);
+    resolveDefaultProfile(cliProvider, settings);
 
   const profileExplicitlySpecified =
     bootstrapArgs.profileName != null &&
@@ -323,4 +317,21 @@ export async function loadAndPrepareProfile(input: {
     profileWarnings,
     profileToLoad,
   };
+}
+
+/**
+ * Resolves the default profile based on CLI provider and settings.
+ */
+function resolveDefaultProfile(
+  cliProvider: string | undefined,
+  settings: Settings,
+): string | undefined {
+  if (cliProvider !== undefined) {
+    return undefined;
+  }
+  return normaliseProfileName(
+    typeof settings.defaultProfile === 'string'
+      ? settings.defaultProfile
+      : undefined,
+  );
 }

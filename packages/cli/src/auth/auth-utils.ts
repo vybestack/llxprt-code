@@ -83,12 +83,12 @@ export function unwrapLoggingProvider<T extends { name: string } | undefined>(
 
   while (isLoggingWrapperCandidate(current)) {
     if (visited.has(current)) {
-      break;
+      return current as T;
     }
     visited.add(current);
     const next = current.wrappedProvider;
     if (next === null || next === undefined) {
-      break;
+      return current as T;
     }
     current = next;
   }

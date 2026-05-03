@@ -282,10 +282,11 @@ export class ExtensionAutoUpdater {
     state: ExtensionUpdateStateFile,
     extensionsByName: Map<string, GeminiCLIExtension>,
   ): Promise<void> {
-    for (const [name, entry] of Object.entries(state)) {
-      if (entry.pendingInstall !== true) {
-        continue;
-      }
+    const pendingEntries = Object.entries(state).filter(
+      ([, entry]) => entry.pendingInstall === true,
+    );
+
+    for (const [name, entry] of pendingEntries) {
       const extension = extensionsByName.get(name);
       if (extension?.installMetadata === undefined) {
         entry.pendingInstall = false;

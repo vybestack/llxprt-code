@@ -60,13 +60,13 @@ function createMockTokenStore(
     listBuckets: vi.fn(async () => []),
     getBucketStats: vi.fn(async () => null),
     acquireRefreshLock: vi.fn(async (_provider: string, _opts?: unknown) => {
+      const optsRecord =
+        typeof _opts === 'object' && _opts
+          ? (_opts as Record<string, unknown>)
+          : null;
+      const bucketCandidate = optsRecord?.bucket;
       const bucket =
-        typeof _opts === 'object' &&
-        _opts &&
-        'bucket' in _opts &&
-        typeof (_opts as { bucket?: unknown }).bucket === 'string'
-          ? ((_opts as { bucket?: string }).bucket as string)
-          : undefined;
+        typeof bucketCandidate === 'string' ? bucketCandidate : undefined;
       const key = bucket ? `${_provider}::${bucket}` : _provider;
       if (locks.get(key) === true) return false;
       locks.set(key, true);

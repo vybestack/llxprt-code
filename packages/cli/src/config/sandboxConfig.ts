@@ -296,14 +296,9 @@ function getSandboxCommand(
     environmentConfiguredSandbox.length > 0
       ? environmentConfiguredSandbox
       : sandbox;
-  if (sandbox === '1' || sandbox === 'true') sandbox = true;
-  else if (
-    sandbox === '0' ||
-    sandbox === 'false' ||
-    sandbox === false ||
-    sandbox === undefined ||
-    sandbox === ''
-  ) {
+  if (sandbox === '1' || sandbox === 'true') {
+    sandbox = true;
+  } else if (isFalseySandboxValue(sandbox)) {
     sandbox = false;
   }
 
@@ -311,7 +306,7 @@ function getSandboxCommand(
     return '';
   }
 
-  if (typeof sandbox === 'string' && sandbox) {
+  if (typeof sandbox === 'string' && sandbox.length > 0) {
     if (!isSandboxCommand(sandbox)) {
       throw new FatalSandboxError(
         `Invalid sandbox command '${sandbox}'. Must be one of ${VALID_SANDBOX_COMMANDS.join(
@@ -550,4 +545,17 @@ export async function loadSandboxConfig(
   applySandboxProfileEnv(sandboxProfile);
 
   return { command, image };
+}
+
+/**
+ * Checks if a sandbox value should be treated as false/disabled.
+ */
+function isFalseySandboxValue(sandbox: unknown): boolean {
+  if (sandbox === '0' || sandbox === 'false' || sandbox === false) {
+    return true;
+  }
+  if (sandbox === undefined || sandbox === '') {
+    return true;
+  }
+  return false;
 }

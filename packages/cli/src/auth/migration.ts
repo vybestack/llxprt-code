@@ -28,22 +28,33 @@ export async function migrateInMemoryTokens(
   tokenStore: TokenStore,
 ): Promise<void> {
   for (const [name, provider] of providers) {
-    try {
-      // Check for in-memory token
-      const token = await provider.getToken();
-      if (token) {
-        const stored = await tokenStore.getToken(name);
-        if (!stored) {
-          // Migrate to storage
-          await tokenStore.saveToken(name, token);
-          debugLogger.log(`Migrated ${name} token to persistent storage`);
-        }
-      }
-    } catch {
-      // Skip providers that don't have valid tokens
-      // This is expected during normal operation
-      continue;
+    await migrateProviderToken(name, provider, tokenStore);
+  }
+}
+
+/**
+ * Migrate a single provider's token to persistent storage if needed.
+ */
+async function migrateProviderToken(
+  name: string,
+  provider: OAuthProvider,
+  tokenStore: TokenStore,
+): Promise<void> {
+  try {
+    // Check for in-memory token
+    const token = await provider.getToken();
+    if (!token) {
+      return;
     }
+    const stored = await tokenStore.getToken(name);
+    if (!stored) {
+      // Migrate to storage
+      await tokenStore.saveToken(name, token);
+      debugLogger.log(`Migrated ${name} token to persistent storage`);
+    }
+  } catch {
+    // Skip providers that don't have valid tokens
+    // This is expected during normal operation
   }
 }
 

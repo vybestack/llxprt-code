@@ -863,8 +863,7 @@ function extensionConsentString(extensionConfig: ExtensionConfig): string {
         typeof mcpServer.command === 'string' && mcpServer.command.length > 0;
       const isLocal = hasCommand;
       const source =
-        mcpServer.httpUrl ??
-        `${hasCommand ? mcpServer.command : ''}${Array.isArray(mcpServer.args) && mcpServer.args.length > 0 ? ' ' + mcpServer.args.join(' ') : ''}`;
+        mcpServer.httpUrl ?? buildMcpServerSource(mcpServer, hasCommand);
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }
   }
@@ -1144,4 +1143,17 @@ export function enableExtension(
   );
   const scopePath = scope === SettingScope.Workspace ? cwd : os.homedir();
   manager.enable(name, true, scopePath);
+}
+
+/**
+ * Builds the source string for an MCP server entry (command + args).
+ */
+function buildMcpServerSource(
+  mcpServer: { command?: string; args?: string[] },
+  hasCommand: boolean,
+): string {
+  const cmd = hasCommand ? (mcpServer.command ?? '') : '';
+  const hasArgs = Array.isArray(mcpServer.args) && mcpServer.args.length > 0;
+  const args = hasArgs ? ' ' + mcpServer.args!.join(' ') : '';
+  return `${cmd}${args}`;
 }

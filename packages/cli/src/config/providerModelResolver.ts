@@ -82,13 +82,11 @@ export function resolveProviderAndModel(
   const aliasDefaultModel = getAliasDefaultModel(provider);
 
   /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty model string should fall back to next source */
-  const model: string =
-    cliModel ||
-    profileModel ||
-    settingsModel ||
-    envDefaultModel ||
-    envGeminiModel ||
-    (provider === 'gemini' ? DEFAULT_GEMINI_MODEL : aliasDefaultModel || '');
+  const providerDefault =
+    provider === 'gemini' ? DEFAULT_GEMINI_MODEL : aliasDefaultModel || '';
+  const cliOrProfileModel =
+    cliModel || profileModel || settingsModel || envDefaultModel;
+  const model: string = cliOrProfileModel || envGeminiModel || providerDefault;
   /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
   return { provider, model };

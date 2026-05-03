@@ -200,14 +200,9 @@ function buildSessionBaseArgs(
     checkpointing:
       argv.checkpointing ?? profileSettingsWithTools.checkpointing?.enabled,
     dumpOnError: argv.dumponerror ?? false,
-    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall back to env vars, and env vars should fall back to next var */
-    proxy:
-      argv.proxy ||
-      process.env.HTTPS_PROXY ||
-      process.env.https_proxy ||
-      process.env.HTTP_PROXY ||
-      process.env.http_proxy,
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+
+    proxy: resolveProxy(argv.proxy),
+
     cwd,
     fileDiscoveryService: context.fileService,
     bugCommand: profileSettingsWithTools.bugCommand,
@@ -315,4 +310,17 @@ export function buildConfig(input: ConfigBuildInput): Config {
     ...buildSessionBaseArgs(input, toolConfig, telemetry, sanitizationConfig),
     ...buildFeatureArgs(input, hooksConfig),
   });
+}
+
+/**
+ * Resolves proxy URL from CLI arg or environment variables.
+ * Priority: CLI arg > HTTPS_PROXY > https_proxy > HTTP_PROXY > http_proxy
+ * Intentionally uses falsy coalescing (empty string should fall back to env vars).
+ */
+function resolveProxy(cliProxy: string | undefined): string | undefined {
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall back to env vars, and env vars should fall back to next var */
+  const httpsProxy = process.env.HTTPS_PROXY || process.env.https_proxy;
+  const httpProxy = process.env.HTTP_PROXY || process.env.http_proxy;
+  return cliProxy || httpsProxy || httpProxy;
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 }

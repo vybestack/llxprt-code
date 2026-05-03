@@ -260,22 +260,33 @@ function resolveAuthOnlyFlag(
     }
   }
 
-  if (typeof getSettingsService === 'function') {
-    try {
-      const settingsService = getSettingsService();
-      const serviceValue = settingsService.get('authOnly');
-      if (serviceValue !== undefined) {
-        const coerced = coerceAuthOnly(serviceValue);
-        if (typeof coerced === 'boolean') {
-          return coerced;
-        }
-      }
-    } catch {
-      // Ignore SettingsService lookup failures and fall back to default
-    }
+  const settingsServiceAuthOnly = tryGetSettingsServiceAuthOnly();
+  if (settingsServiceAuthOnly !== undefined) {
+    return settingsServiceAuthOnly;
   }
 
   return false;
+}
+
+/**
+ * Attempts to get authOnly from SettingsService, returning undefined on failure.
+ */
+function tryGetSettingsServiceAuthOnly(): boolean | undefined {
+  if (typeof getSettingsService !== 'function') {
+    return undefined;
+  }
+  try {
+    const settingsService = getSettingsService();
+    const serviceValue = settingsService.get('authOnly');
+    if (serviceValue === undefined) {
+      return undefined;
+    }
+    const coerced = coerceAuthOnly(serviceValue);
+    return typeof coerced === 'boolean' ? coerced : undefined;
+  } catch {
+    // Ignore SettingsService lookup failures and fall back to default
+    return undefined;
+  }
 }
 
 export function createProviderManager(

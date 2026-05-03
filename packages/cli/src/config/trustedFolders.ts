@@ -163,17 +163,12 @@ export function loadTrustedFolders(): LoadedTrustedFolders {
           path: userPath,
         });
       } else {
-        for (const [path, trustLevel] of Object.entries(parsed)) {
-          if (isTrustLevel(trustLevel)) {
-            userConfig[path] = trustLevel;
-          } else {
-            const possibleValues = Object.values(TrustLevel).join(', ');
-            errors.push({
-              message: `Invalid trust level "${trustLevel}" for path "${path}". Possible values are: ${possibleValues}.`,
-              path: userPath,
-            });
-          }
-        }
+        processTrustedFoldersEntries(
+          parsed as Record<string, unknown>,
+          userConfig,
+          errors,
+          userPath,
+        );
       }
     }
   } catch (error: unknown) {
@@ -240,4 +235,26 @@ export function isWorkspaceTrusted(settings: Settings): boolean | undefined {
 
   // Fall back to the local user configuration
   return getWorkspaceTrustFromLocalConfig();
+}
+
+/**
+ * Process entries from parsed trusted folders JSON.
+ */
+function processTrustedFoldersEntries(
+  parsed: Record<string, unknown>,
+  userConfig: Record<string, TrustLevel>,
+  errors: TrustedFoldersError[],
+  userPath: string,
+): void {
+  for (const [folderPath, trustLevel] of Object.entries(parsed)) {
+    if (isTrustLevel(trustLevel)) {
+      userConfig[folderPath] = trustLevel;
+    } else {
+      const possibleValues = Object.values(TrustLevel).join(', ');
+      errors.push({
+        message: `Invalid trust level "${trustLevel}" for path "${folderPath}". Possible values are: ${possibleValues}.`,
+        path: userPath,
+      });
+    }
+  }
 }

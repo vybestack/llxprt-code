@@ -54,17 +54,23 @@ export async function createProfileManager(): Promise<
 export function isLoadBalancerProfileLike(
   profile: unknown,
 ): profile is { type: 'loadbalancer'; profiles: string[] } {
-  return (
-    profile !== null &&
-    profile !== undefined &&
-    typeof profile === 'object' &&
-    'type' in profile &&
-    (profile as { type?: unknown }).type === 'loadbalancer' &&
-    'profiles' in profile &&
-    Array.isArray((profile as { profiles?: unknown }).profiles) &&
-    (profile as { profiles: unknown[] }).profiles.every(
-      (name) => typeof name === 'string' && name.trim() !== '',
-    )
+  if (
+    profile === null ||
+    profile === undefined ||
+    typeof profile !== 'object'
+  ) {
+    return false;
+  }
+  const p = profile as Record<string, unknown>;
+  if (p.type !== 'loadbalancer' || !('profiles' in p)) {
+    return false;
+  }
+  const profiles = p.profiles;
+  if (!Array.isArray(profiles)) {
+    return false;
+  }
+  return profiles.every(
+    (name) => typeof name === 'string' && name.trim() !== '',
   );
 }
 
@@ -75,7 +81,11 @@ export function isLoadBalancerProfileLike(
 export function getOAuthBucketsFromProfile(
   profile: unknown,
 ): { providerName: string; buckets: string[] } | null {
-  if (profile === null || profile === undefined || typeof profile !== 'object') {
+  if (
+    profile === null ||
+    profile === undefined ||
+    typeof profile !== 'object'
+  ) {
     return null;
   }
 

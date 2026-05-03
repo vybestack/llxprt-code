@@ -190,11 +190,11 @@ function resolveExtensions(
 
 function resolveInteractiveMode(argv: CliArgs): boolean {
   const hasPromptWords = argv.promptWords?.some((word) => word.trim() !== '');
-  return (
-    argv.promptInteractive !== undefined ||
-    argv.experimentalAcp === true ||
-    (process.stdin.isTTY && hasPromptWords !== true && argv.prompt === undefined)
-  );
+  const hasExplicitPromptArg =
+    argv.promptInteractive !== undefined || argv.experimentalAcp === true;
+  const isTtyWithoutPrompt =
+    process.stdin.isTTY && hasPromptWords !== true && argv.prompt === undefined;
+  return hasExplicitPromptArg || isTtyWithoutPrompt;
 }
 
 // ─── Main orchestrator ────────────────────────────────────────────────────────
