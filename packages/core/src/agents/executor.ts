@@ -23,6 +23,7 @@ import type {
   Part,
   FunctionCall,
   GenerateContentConfig,
+  GenerateContentResponse,
   FunctionDeclaration,
   Schema,
 } from '@google/genai';
@@ -176,70 +177,28 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
    */
   async run(inputs: AgentInputs, signal: AbortSignal): Promise<OutputObject> {
     const startTime = Date.now();
-    let turnCounter = 0;
+    const turnCounter = 0;
 
     try {
       const chat = await this.createChatObject(inputs);
       const tools = this.prepareToolsList();
-      let terminateReason = AgentTerminateMode.ERROR;
-      let finalResult: string | null = null;
 
       const query = this.definition.promptConfig.query
         ? templateString(this.definition.promptConfig.query, inputs)
         : 'Get Started!';
-      let currentMessage: Content = { role: 'user', parts: [{ text: query }] };
+      const initialMessage: Content = {
+        role: 'user',
+        parts: [{ text: query }],
+      };
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Agent/model streams are external runtime boundaries despite declared types.
-      while (true) {
-        // Check for termination conditions like max turns or timeout.
-        const reason = this.checkTermination(startTime, turnCounter);
-        if (reason !== null) {
-          terminateReason = reason;
-          break;
-        }
-        if (signal.aborted) {
-          terminateReason = AgentTerminateMode.ABORTED;
-          break;
-        }
-
-        // Call model
-        const promptId = `${this.runtimeContext.getSessionId()}#${this.agentId}#${turnCounter++}`;
-        const { functionCalls } = await this.callModel(
-          chat,
-          currentMessage,
-          tools,
-          signal,
-          promptId,
-        );
-
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
-        if (signal.aborted) {
-          terminateReason = AgentTerminateMode.ABORTED;
-          break;
-        }
-
-        // If the model stops calling tools without calling complete_task, it's an error.
-        if (functionCalls.length === 0) {
-          terminateReason = AgentTerminateMode.ERROR;
-          finalResult = `Agent stopped calling tools but did not call '${TASK_COMPLETE_TOOL_NAME}' to finalize the session.`;
-          this.emitActivity('ERROR', {
-            error: finalResult,
-            context: 'protocol_violation',
-          });
-          break;
-        }
-
-        const { nextMessage, submittedOutput, taskCompleted } =
-          await this.processFunctionCalls(functionCalls, signal, promptId);
-
-        if (taskCompleted) {
-          finalResult = submittedOutput ?? 'Task completed successfully.';
-          terminateReason = AgentTerminateMode.GOAL;
-          break;
-        }
-
-        currentMessage = nextMessage;
-      }
+      const { terminateReason, finalResult } = await this.runAgentLoop(
+        chat,
+        tools,
+        initialMessage,
+        signal,
+        startTime,
+        turnCounter,
+      );
 
       if (terminateReason === AgentTerminateMode.GOAL) {
         return {
@@ -255,8 +214,76 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       };
     } catch (error) {
       this.emitActivity('ERROR', { error: String(error) });
-      throw error; // Re-throw the error for the parent context to handle.
+      throw error;
     }
+  }
+
+  /** Runs the agent loop until termination, returning the reason and result. */
+  private async runAgentLoop(
+    chat: GeminiChat,
+    tools: FunctionDeclaration[],
+    initialMessage: Content,
+    signal: AbortSignal,
+    startTime: number,
+    turnCounter: number,
+  ): Promise<{
+    terminateReason: AgentTerminateMode;
+    finalResult: string | null;
+  }> {
+    let terminateReason = AgentTerminateMode.ERROR;
+    let finalResult: string | null = null;
+    let currentMessage = initialMessage;
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Agent/model streams are external runtime boundaries despite declared types.
+    while (true) {
+      const reason = this.checkTermination(startTime, turnCounter);
+      if (reason !== null) {
+        terminateReason = reason;
+        break;
+      }
+      if (signal.aborted) {
+        terminateReason = AgentTerminateMode.ABORTED;
+        break;
+      }
+
+      const promptId = `${this.runtimeContext.getSessionId()}#${this.agentId}#${turnCounter++}`;
+      const { functionCalls } = await this.callModel(
+        chat,
+        currentMessage,
+        tools,
+        signal,
+        promptId,
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
+      if (signal.aborted) {
+        terminateReason = AgentTerminateMode.ABORTED;
+        break;
+      }
+
+      if (functionCalls.length === 0) {
+        terminateReason = AgentTerminateMode.ERROR;
+        finalResult = `Agent stopped calling tools but did not call '${TASK_COMPLETE_TOOL_NAME}' to finalize the session.`;
+        this.emitActivity('ERROR', {
+          error: finalResult,
+          context: 'protocol_violation',
+        });
+        break;
+      }
+
+      const { nextMessage, submittedOutput, taskCompleted } =
+        await this.processFunctionCalls(functionCalls, signal, promptId);
+
+      if (taskCompleted) {
+        finalResult = submittedOutput ?? 'Task completed successfully.';
+        terminateReason = AgentTerminateMode.GOAL;
+        break;
+      }
+
+      currentMessage = nextMessage;
+    }
+
+    return { terminateReason, finalResult };
   }
 
   /**
@@ -285,8 +312,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     };
 
     let streamIterator: AsyncIterator<StreamEvent> | undefined;
-
-    // Resolve the effective idle timeout from config
     const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(this.runtimeContext);
 
     try {
@@ -299,75 +324,99 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       let textResponse = '';
       streamIterator = responseStream[Symbol.asyncIterator]();
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Agent/model streams are external runtime boundaries despite declared types.
-      while (true) {
-        // Use watchdog if timeout > 0, otherwise call iterator.next() directly
-        let result: IteratorResult<StreamEvent>;
-        if (effectiveTimeoutMs > 0) {
-          result = await nextStreamEventWithIdleTimeout({
-            iterator: streamIterator,
-            timeoutMs: effectiveTimeoutMs,
-            signal: timeoutSignal,
-            onTimeout: () => {
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (signal.aborted) {
-                return;
-              }
-              timeoutController.abort();
-            },
-            createTimeoutError: () => createAbortError(),
-          });
-        } else {
-          // Watchdog disabled: call iterator.next() directly
-          result = await streamIterator.next();
-        }
-        if (result.done === true) {
-          break;
-        }
-
-        const resp = result.value;
-        if (signal.aborted) break;
-
-        if (resp.type === StreamEventType.CHUNK) {
-          const chunk = resp.value;
-          const parts = chunk.candidates?.[0]?.content?.parts;
-
-          // Extract and emit any subject "thought" content from the model.
-          const { subject } = parseThought(
-            parts?.find((p: Part) => p.thought === true)?.text ?? '',
-          );
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (subject !== '') {
-            this.emitActivity('THOUGHT_CHUNK', { text: subject });
-          }
-
-          // Collect any function calls requested by the model.
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (chunk.functionCalls) {
-            functionCalls.push(...chunk.functionCalls);
-          }
-
-          // Handle text response (non-thought text)
-          const text =
-            parts
-              ?.filter(
-                (p: Part) => p.thought !== true && typeof p.text === 'string',
-              )
-              .map((p: Part) => p.text)
-              .join('') ?? '';
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (text.length > 0) {
-            textResponse += text;
-          }
-        }
-      }
+      await this.consumeStream(
+        streamIterator,
+        effectiveTimeoutMs,
+        signal,
+        timeoutSignal,
+        timeoutController,
+        functionCalls,
+        (text) => {
+          textResponse += text;
+        },
+      );
 
       return { functionCalls, textResponse };
     } finally {
       streamIterator?.return?.().catch(() => {});
       timeoutController.abort();
       signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  /** Consumes a response stream, accumulating function calls and text. */
+  private async consumeStream(
+    streamIterator: AsyncIterator<StreamEvent>,
+    effectiveTimeoutMs: number,
+    signal: AbortSignal,
+    timeoutSignal: AbortSignal,
+    timeoutController: AbortController,
+    functionCalls: FunctionCall[],
+    onText: (text: string) => void,
+  ): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Agent/model streams are external runtime boundaries despite declared types.
+    while (true) {
+      let result: IteratorResult<StreamEvent>;
+      if (effectiveTimeoutMs > 0) {
+        result = await nextStreamEventWithIdleTimeout({
+          iterator: streamIterator,
+          timeoutMs: effectiveTimeoutMs,
+          signal: timeoutSignal,
+          onTimeout: () => {
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+            if (signal.aborted) {
+              return;
+            }
+            timeoutController.abort();
+          },
+          createTimeoutError: () => createAbortError(),
+        });
+      } else {
+        result = await streamIterator.next();
+      }
+      if (result.done === true) {
+        break;
+      }
+
+      const resp = result.value;
+      if (signal.aborted) break;
+
+      if (resp.type === StreamEventType.CHUNK) {
+        this.processStreamChunk(resp.value, functionCalls, onText);
+      }
+    }
+  }
+
+  /** Processes a single stream chunk, extracting thoughts, function calls, and text. */
+  private processStreamChunk(
+    chunk: GenerateContentResponse,
+    functionCalls: FunctionCall[],
+    onText: (text: string) => void,
+  ): void {
+    const parts = chunk.candidates?.[0]?.content?.parts;
+
+    const { subject } = parseThought(
+      parts?.find((p: Part) => p.thought === true)?.text ?? '',
+    );
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (subject !== '') {
+      this.emitActivity('THOUGHT_CHUNK', { text: subject });
+    }
+
+    // eslint-disable-next-line sonarjs/nested-control-flow, @typescript-eslint/strict-boolean-expressions -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (chunk.functionCalls) {
+      functionCalls.push(...chunk.functionCalls);
+    }
+
+    const text =
+      parts
+        ?.filter((p: Part) => p.thought !== true && typeof p.text === 'string')
+        .map((p: Part) => p.text)
+        .join('') ?? '';
+
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (text.length > 0) {
+      onText(text);
     }
   }
 
@@ -386,100 +435,16 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       inputs,
     );
 
-    // Build system instruction from the templated prompt string.
     const systemInstruction = promptConfig.systemPrompt
       ? await this.buildSystemPrompt(inputs)
       : undefined;
 
     try {
-      const generationConfig: GenerateContentConfig = {
-        temperature: modelConfig.temp,
-        topP: modelConfig.top_p,
-        thinkingConfig: {
-          includeThoughts: true,
-          thinkingBudget: modelConfig.thinkingBudget ?? -1,
-        },
-      };
-
-      if (systemInstruction) {
-        generationConfig.systemInstruction = systemInstruction;
-      }
-
-      // Create runtime context similar to how GeminiClient does it
-      const rawCompressionThreshold = this.runtimeContext.getEphemeralSetting(
-        'compression-threshold',
+      const generationConfig = this.buildGenerationConfig(
+        modelConfig,
+        systemInstruction,
       );
-      const compressionThreshold =
-        typeof rawCompressionThreshold === 'number'
-          ? rawCompressionThreshold
-          : 0.8;
-
-      const rawContextLimit =
-        this.runtimeContext.getEphemeralSetting('context-limit');
-      const contextLimit =
-        typeof rawContextLimit === 'number' &&
-        Number.isFinite(rawContextLimit) &&
-        rawContextLimit > 0
-          ? rawContextLimit
-          : undefined;
-
-      const rawPreserveThreshold = this.runtimeContext.getEphemeralSetting(
-        'compression-preserve-threshold',
-      );
-      const preserveThreshold =
-        typeof rawPreserveThreshold === 'number' ? rawPreserveThreshold : 0.2;
-
-      const settings: ReadonlySettingsSnapshot = {
-        compressionThreshold,
-        contextLimit,
-        preserveThreshold,
-        telemetry: {
-          enabled: true,
-          target: null,
-        },
-      };
-
-      // Create runtime state from config
-      const runtimeState = createAgentRuntimeStateFromConfig(
-        this.runtimeContext,
-      );
-
-      const providerRuntime = createProviderRuntimeContext({
-        settingsService: this.runtimeContext.getSettingsService(),
-        config: this.runtimeContext,
-        runtimeId: runtimeState.runtimeId,
-        metadata: { source: 'AgentExecutor.createChatObject' },
-      });
-
-      const runtimeBundle = await loadAgentRuntime({
-        profile: {
-          config: this.runtimeContext,
-          state: runtimeState,
-          settings,
-          providerRuntime,
-          contentGeneratorConfig:
-            this.runtimeContext.getContentGeneratorConfig(),
-          toolRegistry: this.toolRegistry,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
-          providerManager: this.runtimeContext.getProviderManager?.(),
-        },
-        overrides: {
-          contentGenerator: (() => {
-            try {
-              return (
-                this.runtimeContext
-                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
-                  .getGeminiClient?.()
-                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
-                  ?.getContentGenerator()
-              );
-            } catch {
-              const unavailableContentGenerator = void 0;
-              return unavailableContentGenerator;
-            }
-          })(),
-        },
-      });
+      const runtimeBundle = await this.buildRuntimeBundle();
 
       return new GeminiChat(
         runtimeBundle.runtimeContext,
@@ -494,8 +459,108 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         startHistory,
         'startChat',
       );
-      // Re-throw as a more specific error after reporting.
       throw new Error(`Failed to create chat object: ${error}`);
+    }
+  }
+
+  /** Builds the generation config from model config and optional system instruction. */
+  private buildGenerationConfig(
+    modelConfig: AgentDefinition<z.ZodTypeAny>['modelConfig'],
+    systemInstruction?: string,
+  ): GenerateContentConfig {
+    const generationConfig: GenerateContentConfig = {
+      temperature: modelConfig.temp,
+      topP: modelConfig.top_p,
+      thinkingConfig: {
+        includeThoughts: true,
+        thinkingBudget: modelConfig.thinkingBudget ?? -1,
+      },
+    };
+
+    if (systemInstruction) {
+      generationConfig.systemInstruction = systemInstruction;
+    }
+
+    return generationConfig;
+  }
+
+  /** Builds the runtime bundle for the GeminiChat instance. */
+  private async buildRuntimeBundle() {
+    const settings = this.resolveSettingsSnapshot();
+    const runtimeState = createAgentRuntimeStateFromConfig(this.runtimeContext);
+
+    const providerRuntime = createProviderRuntimeContext({
+      settingsService: this.runtimeContext.getSettingsService(),
+      config: this.runtimeContext,
+      runtimeId: runtimeState.runtimeId,
+      metadata: { source: 'AgentExecutor.createChatObject' },
+    });
+
+    return loadAgentRuntime({
+      profile: {
+        config: this.runtimeContext,
+        state: runtimeState,
+        settings,
+        providerRuntime,
+        contentGeneratorConfig: this.runtimeContext.getContentGeneratorConfig(),
+        toolRegistry: this.toolRegistry,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
+        providerManager: this.runtimeContext.getProviderManager?.(),
+      },
+      overrides: {
+        contentGenerator: this.tryGetContentGenerator(),
+      },
+    });
+  }
+
+  /** Resolves the settings snapshot from ephemeral config. */
+  private resolveSettingsSnapshot(): ReadonlySettingsSnapshot {
+    const rawCompressionThreshold = this.runtimeContext.getEphemeralSetting(
+      'compression-threshold',
+    );
+    const compressionThreshold =
+      typeof rawCompressionThreshold === 'number'
+        ? rawCompressionThreshold
+        : 0.8;
+
+    const rawContextLimit =
+      this.runtimeContext.getEphemeralSetting('context-limit');
+    const contextLimit =
+      typeof rawContextLimit === 'number' &&
+      Number.isFinite(rawContextLimit) &&
+      rawContextLimit > 0
+        ? rawContextLimit
+        : undefined;
+
+    const rawPreserveThreshold = this.runtimeContext.getEphemeralSetting(
+      'compression-preserve-threshold',
+    );
+    const preserveThreshold =
+      typeof rawPreserveThreshold === 'number' ? rawPreserveThreshold : 0.2;
+
+    return {
+      compressionThreshold,
+      contextLimit,
+      preserveThreshold,
+      telemetry: {
+        enabled: true,
+        target: null,
+      },
+    };
+  }
+
+  /** Attempts to get the content generator from the runtime context. */
+  private tryGetContentGenerator() {
+    try {
+      return (
+        this.runtimeContext
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
+          .getGeminiClient?.()
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
+          ?.getContentGenerator()
+      );
+    } catch {
+      return undefined;
     }
   }
 
@@ -514,15 +579,12 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     taskCompleted: boolean;
   }> {
     const allowedToolNames = new Set(this.toolRegistry.getAllToolNames());
-    // Always allow the completion tool
     allowedToolNames.add(TASK_COMPLETE_TOOL_NAME);
 
     let submittedOutput: string | null = null;
     let taskCompleted = false;
 
-    // We'll collect promises for the tool executions
     const toolExecutionPromises: Array<Promise<Part[] | void>> = [];
-    // And we'll need a place to store the synchronous results (like complete_task or blocked calls)
     const syncResponseParts: Part[] = [];
 
     // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
@@ -530,181 +592,278 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       const callId = functionCall.id ?? `${promptId}-${index}`;
       const args = functionCall.args ?? {};
 
-      this.emitActivity('TOOL_CALL_START', {
-        name: functionCall.name,
-        args,
-      });
+      this.emitActivity('TOOL_CALL_START', { name: functionCall.name, args });
 
       if (functionCall.name === TASK_COMPLETE_TOOL_NAME) {
-        if (taskCompleted) {
-          // We already have a completion from this turn. Ignore subsequent ones.
-          const error =
-            'Task already marked complete in this turn. Ignoring duplicate call.';
-          syncResponseParts.push({
-            functionResponse: {
-              name: TASK_COMPLETE_TOOL_NAME,
-              response: { error },
-              id: callId,
-            },
-          });
-          this.emitActivity('ERROR', {
-            context: 'tool_call',
-            name: functionCall.name,
-            error,
-          });
-          continue;
-        }
-
-        const { outputConfig } = this.definition;
-        taskCompleted = true; // Signal completion regardless of output presence
-
-        if (outputConfig) {
-          const outputName = outputConfig.outputName;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (args[outputName] !== undefined) {
-            const outputValue = args[outputName];
-            const validationResult = outputConfig.schema.safeParse(outputValue);
-
-            if (!validationResult.success) {
-              taskCompleted = false; // Validation failed, revoke completion
-              const error = `Output validation failed: ${JSON.stringify(validationResult.error.flatten())}`;
-              syncResponseParts.push({
-                functionResponse: {
-                  name: TASK_COMPLETE_TOOL_NAME,
-                  response: { error },
-                  id: callId,
-                },
-              });
-              this.emitActivity('ERROR', {
-                context: 'tool_call',
-                name: functionCall.name,
-                error,
-              });
-              continue;
-            }
-
-            const validatedOutput = validationResult.data;
-            if (this.definition.processOutput) {
-              submittedOutput = this.definition.processOutput(validatedOutput);
-            } else {
-              submittedOutput =
-                typeof outputValue === 'string'
-                  ? outputValue
-                  : JSON.stringify(outputValue, null, 2);
-            }
-            syncResponseParts.push({
-              functionResponse: {
-                name: TASK_COMPLETE_TOOL_NAME,
-                response: { result: 'Output submitted and task completed.' },
-                id: callId,
-              },
-            });
-            this.emitActivity('TOOL_CALL_END', {
-              name: functionCall.name,
-              output: 'Output submitted and task completed.',
-            });
-          } else {
-            // Failed to provide required output.
-            taskCompleted = false; // Revoke completion status
-            const error = `Missing required argument '${outputName}' for completion.`;
-            syncResponseParts.push({
-              functionResponse: {
-                name: TASK_COMPLETE_TOOL_NAME,
-                response: { error },
-                id: callId,
-              },
-            });
-            this.emitActivity('ERROR', {
-              context: 'tool_call',
-              name: functionCall.name,
-              error,
-            });
-          }
-        } else {
-          // No output expected. Just signal completion.
-          submittedOutput = 'Task completed successfully.';
-          syncResponseParts.push({
-            functionResponse: {
-              name: TASK_COMPLETE_TOOL_NAME,
-              response: { status: 'Task marked complete.' },
-              id: callId,
-            },
-          });
-          this.emitActivity('TOOL_CALL_END', {
-            name: functionCall.name,
-            output: 'Task marked complete.',
-          });
-        }
-        continue;
-      }
-
-      // Handle standard tools
-      if (!allowedToolNames.has(functionCall.name as string)) {
-        const error = `Unauthorized tool call: '${functionCall.name}' is not available to this agent.`;
-
-        debugLogger.warn(`[AgentExecutor] Blocked call: ${error}`);
-
-        syncResponseParts.push({
-          functionResponse: {
-            name: functionCall.name as string,
-            id: callId,
-            response: { error },
-          },
-        });
-
-        this.emitActivity('ERROR', {
-          context: 'tool_call_unauthorized',
-          name: functionCall.name,
+        const result = this.handleCompleteTaskCall(
+          functionCall,
           callId,
-          error,
-        });
-
+          args,
+          taskCompleted,
+          submittedOutput,
+        );
+        taskCompleted = result.taskCompleted;
+        submittedOutput = result.submittedOutput;
+        syncResponseParts.push(...result.syncParts);
         continue;
       }
 
-      const requestInfo: ToolCallRequestInfo = {
-        callId,
-        name: functionCall.name as string,
-        args,
-        isClientInitiated: true,
-        prompt_id: promptId,
-      };
-
-      // Create a promise for the tool execution
-      const executionPromise = (async () => {
-        const completed = await executeToolCall(
-          this.runtimeContext,
-          requestInfo,
-          signal,
-          {
-            messageBus: this.messageBus,
-          },
+      if (!allowedToolNames.has(functionCall.name as string)) {
+        this.handleUnauthorizedToolCall(
+          functionCall,
+          callId,
+          syncResponseParts,
         );
-        const toolResponse = completed.response;
+        continue;
+      }
 
-        if (toolResponse.error) {
-          this.emitActivity('ERROR', {
-            context: 'tool_call',
-            name: functionCall.name,
-            error: toolResponse.error.message,
-          });
-        } else {
-          this.emitActivity('TOOL_CALL_END', {
-            name: functionCall.name,
-            output: toolResponse.resultDisplay,
-          });
-        }
-
-        return toolResponse.responseParts;
-      })();
-
-      toolExecutionPromises.push(executionPromise);
+      toolExecutionPromises.push(
+        this.createToolExecutionPromise(
+          functionCall,
+          callId,
+          args,
+          signal,
+          promptId,
+        ),
+      );
     }
 
-    // Wait for all tool executions to complete
+    return this.assembleToolResponses(
+      functionCalls,
+      syncResponseParts,
+      toolExecutionPromises,
+      submittedOutput,
+      taskCompleted,
+    );
+  }
+
+  /** Handles a `complete_task` function call, returning updated state and response parts. */
+  private handleCompleteTaskCall(
+    functionCall: FunctionCall,
+    callId: string,
+    args: Record<string, unknown>,
+    currentTaskCompleted: boolean,
+    currentSubmittedOutput: string | null,
+  ): {
+    taskCompleted: boolean;
+    submittedOutput: string | null;
+    syncParts: Part[];
+  } {
+    const syncParts: Part[] = [];
+
+    if (currentTaskCompleted) {
+      const error =
+        'Task already marked complete in this turn. Ignoring duplicate call.';
+      syncParts.push({
+        functionResponse: {
+          name: TASK_COMPLETE_TOOL_NAME,
+          response: { error },
+          id: callId,
+        },
+      });
+      this.emitActivity('ERROR', {
+        context: 'tool_call',
+        name: functionCall.name,
+        error,
+      });
+      return {
+        taskCompleted: currentTaskCompleted,
+        submittedOutput: currentSubmittedOutput,
+        syncParts,
+      };
+    }
+
+    const { outputConfig } = this.definition;
+    let taskCompleted = true;
+    let submittedOutput: string | null = currentSubmittedOutput;
+
+    if (outputConfig) {
+      const result = this.processCompleteTaskOutput(
+        functionCall,
+        callId,
+        args,
+        outputConfig,
+      );
+      taskCompleted = result.taskCompleted;
+      submittedOutput = result.submittedOutput;
+      syncParts.push(...result.syncParts);
+    } else {
+      submittedOutput = 'Task completed successfully.';
+      syncParts.push({
+        functionResponse: {
+          name: TASK_COMPLETE_TOOL_NAME,
+          response: { status: 'Task marked complete.' },
+          id: callId,
+        },
+      });
+      this.emitActivity('TOOL_CALL_END', {
+        name: functionCall.name,
+        output: 'Task marked complete.',
+      });
+    }
+
+    return { taskCompleted, submittedOutput, syncParts };
+  }
+
+  /** Processes the output argument of a `complete_task` call when outputConfig is present. */
+  private processCompleteTaskOutput(
+    functionCall: FunctionCall,
+    callId: string,
+    args: Record<string, unknown>,
+    outputConfig: NonNullable<AgentDefinition<z.ZodTypeAny>['outputConfig']>,
+  ): {
+    taskCompleted: boolean;
+    submittedOutput: string | null;
+    syncParts: Part[];
+  } {
+    const syncParts: Part[] = [];
+    const outputName = outputConfig.outputName;
+
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (args[outputName] !== undefined) {
+      const outputValue = args[outputName];
+      const validationResult = outputConfig.schema.safeParse(outputValue);
+
+      if (!validationResult.success) {
+        const error = `Output validation failed: ${JSON.stringify(validationResult.error.flatten())}`;
+        syncParts.push({
+          functionResponse: {
+            name: TASK_COMPLETE_TOOL_NAME,
+            response: { error },
+            id: callId,
+          },
+        });
+        this.emitActivity('ERROR', {
+          context: 'tool_call',
+          name: functionCall.name,
+          error,
+        });
+        return { taskCompleted: false, submittedOutput: null, syncParts };
+      }
+
+      const validatedOutput = validationResult.data;
+      let submittedOutput: string;
+      if (this.definition.processOutput) {
+        submittedOutput = this.definition.processOutput(validatedOutput);
+      } else if (typeof outputValue === 'string') {
+        submittedOutput = outputValue;
+      } else {
+        submittedOutput = JSON.stringify(outputValue, null, 2);
+      }
+
+      syncParts.push({
+        functionResponse: {
+          name: TASK_COMPLETE_TOOL_NAME,
+          response: { result: 'Output submitted and task completed.' },
+          id: callId,
+        },
+      });
+      this.emitActivity('TOOL_CALL_END', {
+        name: functionCall.name,
+        output: 'Output submitted and task completed.',
+      });
+      return { taskCompleted: true, submittedOutput, syncParts };
+    }
+
+    // Missing required output argument
+    const error = `Missing required argument '${outputName}' for completion.`;
+    syncParts.push({
+      functionResponse: {
+        name: TASK_COMPLETE_TOOL_NAME,
+        response: { error },
+        id: callId,
+      },
+    });
+    this.emitActivity('ERROR', {
+      context: 'tool_call',
+      name: functionCall.name,
+      error,
+    });
+    return { taskCompleted: false, submittedOutput: null, syncParts };
+  }
+
+  /** Handles an unauthorized tool call by pushing an error response. */
+  private handleUnauthorizedToolCall(
+    functionCall: FunctionCall,
+    callId: string,
+    syncResponseParts: Part[],
+  ): void {
+    const error = `Unauthorized tool call: '${functionCall.name}' is not available to this agent.`;
+
+    debugLogger.warn(`[AgentExecutor] Blocked call: ${error}`);
+
+    syncResponseParts.push({
+      functionResponse: {
+        name: functionCall.name as string,
+        id: callId,
+        response: { error },
+      },
+    });
+
+    this.emitActivity('ERROR', {
+      context: 'tool_call_unauthorized',
+      name: functionCall.name,
+      callId,
+      error,
+    });
+  }
+
+  /** Creates an async promise that executes a standard tool call. */
+  private createToolExecutionPromise(
+    functionCall: FunctionCall,
+    callId: string,
+    args: Record<string, unknown>,
+    signal: AbortSignal,
+    promptId: string,
+  ): Promise<Part[] | void> {
+    const requestInfo: ToolCallRequestInfo = {
+      callId,
+      name: functionCall.name as string,
+      args,
+      isClientInitiated: true,
+      prompt_id: promptId,
+    };
+
+    return (async () => {
+      const completed = await executeToolCall(
+        this.runtimeContext,
+        requestInfo,
+        signal,
+        { messageBus: this.messageBus },
+      );
+      const toolResponse = completed.response;
+
+      if (toolResponse.error) {
+        this.emitActivity('ERROR', {
+          context: 'tool_call',
+          name: functionCall.name,
+          error: toolResponse.error.message,
+        });
+      } else {
+        this.emitActivity('TOOL_CALL_END', {
+          name: functionCall.name,
+          output: toolResponse.resultDisplay,
+        });
+      }
+
+      return toolResponse.responseParts;
+    })();
+  }
+
+  /** Assembles all tool response parts and returns the final result. */
+  private async assembleToolResponses(
+    functionCalls: FunctionCall[],
+    syncResponseParts: Part[],
+    toolExecutionPromises: Array<Promise<Part[] | void>>,
+    submittedOutput: string | null,
+    taskCompleted: boolean,
+  ): Promise<{
+    nextMessage: Content;
+    submittedOutput: string | null;
+    taskCompleted: boolean;
+  }> {
     const asyncResults = await Promise.all(toolExecutionPromises);
 
-    // Combine all response parts
     const toolResponseParts: Part[] = [...syncResponseParts];
     for (const result of asyncResults) {
       if (result) {
@@ -712,7 +871,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       }
     }
 
-    // If all authorized tool calls failed (and task isn't complete), provide a generic error.
     if (
       functionCalls.length > 0 &&
       toolResponseParts.length === 0 &&
