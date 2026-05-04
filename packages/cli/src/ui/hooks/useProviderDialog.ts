@@ -27,6 +27,61 @@ interface UseProviderDialogParams {
   recordingIntegration?: RecordingIntegration;
 }
 
+type AddMessage = UseProviderDialogParams['addMessage'];
+type RuntimeApi = ReturnType<typeof useRuntimeApi>;
+type ProviderSwitchResult = Awaited<
+  ReturnType<RuntimeApi['switchActiveProvider']>
+>;
+
+interface ProviderSwitchNotificationParams {
+  addMessage: AddMessage;
+  prevProvider: string;
+  providerName: string;
+  result: ProviderSwitchResult;
+  runtime: RuntimeApi;
+  recordingIntegration?: RecordingIntegration;
+}
+
+function notifyProviderSwitch({
+  addMessage,
+  prevProvider,
+  providerName,
+  result,
+  runtime,
+  recordingIntegration,
+}: ProviderSwitchNotificationParams) {
+  addMessage({
+    type: MessageType.INFO,
+    content: `Switched from ${prevProvider || 'none'} to ${providerName}`,
+    timestamp: new Date(),
+  });
+
+  for (const info of result.infoMessages) {
+    addMessage({
+      type: MessageType.INFO,
+      content: info,
+      timestamp: new Date(),
+    });
+  }
+
+  recordingIntegration?.recordProviderSwitch(
+    result.nextProvider,
+    result.defaultModel ?? runtime.getActiveModelName(),
+  );
+}
+
+function addProviderError(
+  addMessage: AddMessage,
+  message: string,
+  error: unknown,
+) {
+  addMessage({
+    type: MessageType.ERROR,
+    content: `${message}: ${error instanceof Error ? error.message : String(error)}`,
+    timestamp: new Date(),
+  });
+}
+
 export const useProviderDialog = ({
   addMessage,
   onProviderChange,
@@ -47,11 +102,7 @@ export const useProviderDialog = ({
       setCurrentProvider(runtime.getActiveProviderName());
       appDispatch({ type: 'OPEN_DIALOG', payload: 'provider' });
     } catch (e) {
-      addMessage({
-        type: MessageType.ERROR,
-        content: `Failed to load providers: ${e instanceof Error ? e.message : String(e)}`,
-        timestamp: new Date(),
-      });
+      addProviderError(addMessage, 'Failed to load providers', e);
     }
   }, [addMessage, appDispatch, runtime]);
 
@@ -70,38 +121,19 @@ export const useProviderDialog = ({
          * @pseudocode:cli-runtime.md line 9
          */
         const result = await runtime.switchActiveProvider(providerName);
-
-        // Clear UI history to prevent tool call ID mismatches
-        if (onClear) {
-          onClear();
-        }
-
-        addMessage({
-          type: MessageType.INFO,
-          content: `Switched from ${prev || 'none'} to ${providerName}`,
-          timestamp: new Date(),
+        onClear?.();
+        notifyProviderSwitch({
+          addMessage,
+          prevProvider: prev,
+          providerName,
+          result,
+          runtime,
+          recordingIntegration,
         });
-
-        for (const info of result.infoMessages) {
-          addMessage({
-            type: MessageType.INFO,
-            content: info,
-            timestamp: new Date(),
-          });
-        }
-
         setCurrentProvider(result.nextProvider);
-        recordingIntegration?.recordProviderSwitch(
-          result.nextProvider,
-          result.defaultModel ?? runtime.getActiveModelName(),
-        );
         onProviderChange?.();
       } catch (e) {
-        addMessage({
-          type: MessageType.ERROR,
-          content: `Failed to switch provider: ${e instanceof Error ? e.message : String(e)}`,
-          timestamp: new Date(),
-        });
+        addProviderError(addMessage, 'Failed to switch provider', e);
       }
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'provider' });
     },

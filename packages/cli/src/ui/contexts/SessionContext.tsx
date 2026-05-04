@@ -277,20 +277,38 @@ const SessionStatsContext = createContext<SessionStatsContextValue | undefined>(
   undefined,
 );
 
-// --- Provider Component ---
-
-export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [stats, setStats] = useState<SessionStatsState>({
+function createInitialSessionStats(): SessionStatsState {
+  return {
     sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     sessionStartTime: new Date(),
     metrics: cloneSessionMetrics(uiTelemetryService.getMetrics()),
     lastPromptTokenCount: 0,
     historyTokenCount: 0,
     promptCount: 0,
-  });
+  };
+}
 
+function applyTelemetryUpdate(
+  prevState: SessionStatsState,
+  metrics: SessionMetrics,
+  lastPromptTokenCount: number,
+): SessionStatsState {
+  if (
+    prevState.lastPromptTokenCount === lastPromptTokenCount &&
+    areMetricsEqual(prevState.metrics, metrics)
+  ) {
+    return prevState;
+  }
+  return {
+    ...prevState,
+    metrics: cloneSessionMetrics(metrics),
+    lastPromptTokenCount,
+  };
+}
+
+function useTelemetryStatsUpdates(
+  setStats: React.Dispatch<React.SetStateAction<SessionStatsState>>,
+) {
   useEffect(() => {
     const handleUpdate = ({
       metrics,
@@ -299,23 +317,12 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
       metrics: SessionMetrics;
       lastPromptTokenCount: number;
     }) => {
-      setStats((prevState) => {
-        if (
-          prevState.lastPromptTokenCount === lastPromptTokenCount &&
-          areMetricsEqual(prevState.metrics, metrics)
-        ) {
-          return prevState;
-        }
-        return {
-          ...prevState,
-          metrics: cloneSessionMetrics(metrics),
-          lastPromptTokenCount,
-        };
-      });
+      setStats((prevState) =>
+        applyTelemetryUpdate(prevState, metrics, lastPromptTokenCount),
+      );
     };
 
     uiTelemetryService.on('update', handleUpdate);
-    // Set initial state
     handleUpdate({
       metrics: uiTelemetryService.getMetrics(),
       lastPromptTokenCount: uiTelemetryService.getLastPromptTokenCount(),
@@ -324,7 +331,18 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       uiTelemetryService.off('update', handleUpdate);
     };
-  }, []);
+  }, [setStats]);
+}
+
+// --- Provider Component ---
+
+export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [stats, setStats] = useState<SessionStatsState>(
+    createInitialSessionStats,
+  );
+  useTelemetryStatsUpdates(setStats);
 
   const startNewPrompt = useCallback(() => {
     setStats((prevState) => ({
