@@ -16,6 +16,40 @@ interface ErrorReportData {
   additionalInfo?: Record<string, unknown>;
 }
 
+/** Normalises an unknown error value into a structured { message, stack? } object. */
+function normaliseError(
+  error: Error | unknown,
+): { message: string; stack?: string } {
+  if (error instanceof Error) {
+    return { message: error.message, stack: error.stack };
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return { message: String((error as { message: unknown }).message) };
+  }
+  return { message: String(error) };
+}
+
+/** Writes a minimal error report (excluding context) as a fallback when context can't be stringified. */
+async function writeMinimalReport(
+  errorToReport: { message: string; stack?: string },
+  baseMessage: string,
+  reportPath: string,
+): Promise<void> {
+  try {
+    const minimalReportContent = { error: errorToReport };
+    const stringifiedContent = JSON.stringify(minimalReportContent, null, 2);
+    await fs.writeFile(reportPath, stringifiedContent);
+    console.error(
+      `${baseMessage} Partial report (excluding context) available at: ${reportPath}`,
+    );
+  } catch (minimalWriteError) {
+    console.error(
+      `${baseMessage} Failed to write even a minimal error report:`,
+      minimalWriteError,
+    );
+  }
+}
+
 /**
  * Generates an error report, writes it to a temporary file, and logs information to console.error.
  * @param error The error object.
@@ -34,20 +68,7 @@ export async function reportError(
   const reportFileName = `llxprt-client-error-${type}-${timestamp}.json`;
   const reportPath = path.join(reportingDir, reportFileName);
 
-  let errorToReport: { message: string; stack?: string };
-  if (error instanceof Error) {
-    errorToReport = { message: error.message, stack: error.stack };
-  } else if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error
-  ) {
-    errorToReport = {
-      message: String((error as { message: unknown }).message),
-    };
-  } else {
-    errorToReport = { message: String(error) };
-  }
+  const errorToReport = normaliseError(error);
 
   const reportContent: ErrorReportData = { error: errorToReport };
 
@@ -70,21 +91,7 @@ export async function reportError(
         'Original context could not be stringified or included in report.',
       );
     }
-    // Fallback: try to report only the error if context was the issue
-    try {
-      const minimalReportContent = { error: errorToReport };
-      stringifiedReportContent = JSON.stringify(minimalReportContent, null, 2);
-      // Still try to write the minimal report
-      await fs.writeFile(reportPath, stringifiedReportContent);
-      console.error(
-        `${baseMessage} Partial report (excluding context) available at: ${reportPath}`,
-      );
-    } catch (minimalWriteError) {
-      console.error(
-        `${baseMessage} Failed to write even a minimal error report:`,
-        minimalWriteError,
-      );
-    }
+    await writeMinimalReport(errorToReport, baseMessage, reportPath);
     return;
   }
 

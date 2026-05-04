@@ -54,6 +54,41 @@ export type ToolExecutionConfig = Pick<
  * Note: Emoji filtering is handled by the individual tools (edit.ts, write-file.ts)
  * so it is not duplicated here.
  */
+type SchedulerConfig = ToolExecutionConfig & {
+  getOrCreateScheduler(
+    sessionId: string,
+    callbacks: {
+      getPreferredEditor: () => undefined;
+      onEditorClose: () => void;
+      onAllToolCallsComplete: (
+        completedToolCalls: CompletedToolCall[],
+      ) => Promise<void>;
+    },
+    options?: { interactiveMode?: boolean },
+    extraDependencies?: { messageBus?: MessageBus },
+  ): Promise<CoreToolScheduler>;
+};
+
+async function createScheduler(
+  config: ToolExecutionConfig,
+  sessionId: string,
+  completionResolver: ((calls: CompletedToolCall[]) => void) | null,
+  dependencies?: { messageBus?: MessageBus },
+): Promise<CoreToolScheduler> {
+  return (config as SchedulerConfig).getOrCreateScheduler(
+    sessionId,
+    {
+      getPreferredEditor: () => undefined,
+      onEditorClose: () => {},
+      onAllToolCallsComplete: async (completedToolCalls) => {
+        completionResolver?.(completedToolCalls);
+      },
+    },
+    { interactiveMode: false },
+    dependencies,
+  );
+}
+
 export async function executeToolCall(
   config: ToolExecutionConfig,
   toolCallRequest: ToolCallRequestInfo,
@@ -85,32 +120,10 @@ export async function executeToolCall(
 
   const sessionId = config.getSessionId();
 
-  // Use the singleton scheduler factory with non-interactive mode
-  const scheduler = await (
-    config as ToolExecutionConfig & {
-      getOrCreateScheduler(
-        sessionId: string,
-        callbacks: {
-          getPreferredEditor: () => undefined;
-          onEditorClose: () => void;
-          onAllToolCallsComplete: (
-            completedToolCalls: CompletedToolCall[],
-          ) => Promise<void>;
-        },
-        options?: { interactiveMode?: boolean },
-        extraDependencies?: { messageBus?: MessageBus },
-      ): Promise<CoreToolScheduler>;
-    }
-  ).getOrCreateScheduler(
+  const scheduler = await createScheduler(
+    config,
     sessionId,
-    {
-      getPreferredEditor: () => undefined,
-      onEditorClose: () => {},
-      onAllToolCallsComplete: async (completedToolCalls) => {
-        completionResolver?.(completedToolCalls);
-      },
-    },
-    { interactiveMode: false },
+    completionResolver,
     dependencies,
   );
 

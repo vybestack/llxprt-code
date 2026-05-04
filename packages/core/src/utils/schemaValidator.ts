@@ -241,6 +241,63 @@ export class SchemaValidator {
    * Returns null if the data conforms to the schema described by schema (or if schema
    *  is null). Otherwise, returns a string describing the error.
    */
+  /** Formats a JSON Pointer–style path into a human-readable `params/…` string. */
+  private static formatPath(rawPath: string): string {
+    if (rawPath === '') {
+      return 'params';
+    }
+
+    const normalized = rawPath
+      .replace(/\[(\d+)\]/g, '/$1')
+      .replace(/\.+/g, '/')
+      .replace(/\/+/g, '/')
+      .replace(/^\/+/, '');
+
+    return `params/${normalized}`;
+  }
+
+  /** Extracts and normalises error messages from Ajv validation errors. */
+  private static formatErrors(errors: ErrorObject[]): string {
+    const formattedErrors = errors.map((err: ErrorObject) => {
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      const instancePath = (err as any).instancePath;
+      const dataPath = (err as any).dataPath;
+      /* eslint-enable @typescript-eslint/no-explicit-any */
+      const path =
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        (typeof instancePath === 'string' && instancePath !== ''
+          ? instancePath
+          : null) ??
+        (typeof dataPath === 'string' && dataPath !== '' ? dataPath : null) ??
+        '';
+      const basePath = SchemaValidator.formatPath(path);
+      const message = err.message ?? 'is invalid';
+      return `${basePath} ${message}`;
+    });
+
+    const errorTextRaw = formattedErrors.join('; ');
+    // Apply text replacements; nullish coalescing for optional chaining result
+    const replaced =
+      typeof errorTextRaw === 'string' && errorTextRaw !== ''
+        ? errorTextRaw.replace(/\bshould\b/gi, 'must')
+        : null;
+    let errorText = replaced ?? errorTextRaw;
+    // Only process non-empty error text
+    if (typeof errorText === 'string' && errorText !== '') {
+      errorText = errorText.replace(
+        /must NOT be shorter than (\d+) characters/gi,
+        'must NOT have fewer than $1 characters',
+      );
+      if (
+        /anyOf/i.test(errorText) &&
+        !/must match a schema in anyOf/i.test(errorText)
+      ) {
+        errorText = `${errorText}; must match a schema in anyOf`;
+      }
+    }
+    return errorText;
+  }
+
   static validate(schema: unknown | undefined, data: unknown): string | null {
     // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy no-schema behavior for malformed schemas.
     if (!schema) {
@@ -293,67 +350,12 @@ export class SchemaValidator {
     const validate = instance.compile(ajvSchema);
     const valid = validate(data);
 
-    // Check validation result - valid is boolean, errors may be undefined/null
     if (
       valid === false &&
       validate.errors != null &&
       validate.errors.length > 0
     ) {
-      const formatPath = (path: string): string => {
-        // Empty path should return 'params'
-        if (path === '') {
-          return 'params';
-        }
-
-        const normalized = path
-          .replace(/\[(\d+)\]/g, '/$1')
-          .replace(/\.+/g, '/')
-          .replace(/\/+/g, '/')
-          .replace(/^\/+/, '');
-
-        return `params/${normalized}`;
-      };
-
-      const formattedErrors = validate.errors.map((err: ErrorObject) => {
-        // Intentional falsy coalescing: empty path strings should fall through to next option
-        // instancePath and dataPath may be empty strings, '', null, or undefined
-        /* eslint-disable @typescript-eslint/no-explicit-any */
-        const instancePath = (err as any).instancePath;
-        const dataPath = (err as any).dataPath;
-        /* eslint-enable @typescript-eslint/no-explicit-any */
-        const path =
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          (typeof instancePath === 'string' && instancePath !== ''
-            ? instancePath
-            : null) ??
-          (typeof dataPath === 'string' && dataPath !== '' ? dataPath : null) ??
-          '';
-        const basePath = formatPath(path);
-        const message = err.message ?? 'is invalid';
-        return `${basePath} ${message}`;
-      });
-
-      const errorTextRaw = formattedErrors.join('; ');
-      // Apply text replacements; nullish coalescing for optional chaining result
-      const replaced =
-        typeof errorTextRaw === 'string' && errorTextRaw !== ''
-          ? errorTextRaw.replace(/\bshould\b/gi, 'must')
-          : null;
-      let errorText = replaced ?? errorTextRaw;
-      // Only process non-empty error text
-      if (typeof errorText === 'string' && errorText !== '') {
-        errorText = errorText.replace(
-          /must NOT be shorter than (\d+) characters/gi,
-          'must NOT have fewer than $1 characters',
-        );
-        if (
-          /anyOf/i.test(errorText) &&
-          !/must match a schema in anyOf/i.test(errorText)
-        ) {
-          errorText = `${errorText}; must match a schema in anyOf`;
-        }
-      }
-      return errorText;
+      return SchemaValidator.formatErrors(validate.errors);
     }
 
     return null;

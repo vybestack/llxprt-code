@@ -81,6 +81,40 @@ const CHUTES_USER_ENDPOINT = 'https://api.chutes.ai/users/me';
  * @param apiKey - Chutes API key
  * @returns Combined usage info if available, null on error
  */
+function parseChutesResponses(
+  quotasData: unknown,
+  userData: unknown,
+): ChutesUsageInfo | null {
+  const parsedQuotas = z.array(ChutesQuotaEntrySchema).safeParse(quotasData);
+  if (!parsedQuotas.success) {
+    logger.debug(
+      () =>
+        `Failed to parse quotas response: ${JSON.stringify(parsedQuotas.error)}`,
+    );
+    return null;
+  }
+
+  const parsedUser = ChutesUserInfoSchema.pick({
+    balance: true,
+    username: true,
+  })
+    .passthrough()
+    .safeParse(userData);
+  if (!parsedUser.success) {
+    logger.debug(
+      () =>
+        `Failed to parse user response: ${JSON.stringify(parsedUser.error)}`,
+    );
+    return null;
+  }
+
+  return {
+    quotas: parsedQuotas.data,
+    balance: parsedUser.data.balance,
+    username: parsedUser.data.username,
+  };
+}
+
 export async function fetchChutesUsage(
   apiKey: string,
 ): Promise<ChutesUsageInfo | null> {
@@ -127,34 +161,10 @@ export async function fetchChutesUsage(
     const quotasData = await quotasResponse.json();
     const userData = await userResponse.json();
 
-    const parsedQuotas = z.array(ChutesQuotaEntrySchema).safeParse(quotasData);
-    if (!parsedQuotas.success) {
-      logger.debug(
-        () =>
-          `Failed to parse quotas response: ${JSON.stringify(parsedQuotas.error)}`,
-      );
+    const result = parseChutesResponses(quotasData, userData);
+    if (!result) {
       return null;
     }
-
-    const parsedUser = ChutesUserInfoSchema.pick({
-      balance: true,
-      username: true,
-    })
-      .passthrough()
-      .safeParse(userData);
-    if (!parsedUser.success) {
-      logger.debug(
-        () =>
-          `Failed to parse user response: ${JSON.stringify(parsedUser.error)}`,
-      );
-      return null;
-    }
-
-    const result: ChutesUsageInfo = {
-      quotas: parsedQuotas.data,
-      balance: parsedUser.data.balance,
-      username: parsedUser.data.username,
-    };
 
     logger.debug(
       () =>

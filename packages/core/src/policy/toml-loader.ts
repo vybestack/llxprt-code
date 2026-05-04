@@ -192,6 +192,275 @@ function transformPriority(priority: number, tier: number): number {
  * @param getPolicyTier Function to determine tier (1-3) for a directory
  * @returns Object containing successfully parsed rules and any errors encountered
  */
+/** Parses a single TOML file, validates, and returns parsed data or pushes errors. */
+async function parseAndValidateTomlFile(
+  filePath: string,
+  file: string,
+  tierName: 'default' | 'user' | 'admin',
+  errors: PolicyFileError[],
+): Promise<z.infer<typeof PolicyFileSchema> | null> {
+  // Read file
+  const fileContent = await fs.readFile(filePath, 'utf-8');
+
+  // Parse TOML
+  let parsed: unknown;
+  try {
+    parsed = toml.parse(fileContent);
+  } catch (e) {
+    const error = e as Error;
+    errors.push({
+      filePath,
+      fileName: file,
+      tier: tierName,
+      errorType: 'toml_parse',
+      message: 'TOML parsing failed',
+      details: error.message,
+      suggestion:
+        'Check for syntax errors like missing quotes, brackets, or commas',
+    });
+    return null;
+  }
+
+  // Validate schema
+  const validationResult = PolicyFileSchema.safeParse(parsed);
+  if (!validationResult.success) {
+    errors.push({
+      filePath,
+      fileName: file,
+      tier: tierName,
+      errorType: 'schema_validation',
+      message: 'Schema validation failed',
+      details: formatSchemaError(validationResult.error, 0),
+      suggestion:
+        'Ensure all required fields (decision, priority) are present with correct types',
+    });
+    return null;
+  }
+
+  // Validate shell command convenience syntax
+  for (let i = 0; i < validationResult.data.rule.length; i++) {
+    const rule = validationResult.data.rule[i];
+    const validationError = validateShellCommandSyntax(rule, i);
+    if (validationError) {
+      errors.push({
+        filePath,
+        fileName: file,
+        tier: tierName,
+        ruleIndex: i,
+        errorType: 'rule_validation',
+        message: 'Invalid shell command syntax',
+        details: validationError,
+      });
+    }
+  }
+
+  return validationResult.data;
+}
+
+/** Builds a regex-compilation error entry for push into the errors array. */
+function buildRegexError(
+  filePath: string,
+  file: string,
+  tierName: 'default' | 'user' | 'admin',
+  patternDesc: string,
+  errorMessage: string,
+): PolicyFileError {
+  return {
+    filePath,
+    fileName: file,
+    tier: tierName,
+    errorType: 'regex_compilation',
+    message: 'Invalid regex pattern',
+    details: `Pattern: ${patternDesc}\nError: ${errorMessage}`,
+    suggestion:
+      'Check regex syntax for errors like unmatched brackets or invalid escape sequences',
+  };
+}
+
+/** Resolves argsPattern regex and built patterns for a single rule, returning [] on error. */
+function resolveRulePatterns(
+  rule: PolicyRuleToml,
+  filePath: string,
+  file: string,
+  tierName: 'default' | 'user' | 'admin',
+  errors: PolicyFileError[],
+): RegExp[] | null {
+  let argsPatternRegex: RegExp | undefined;
+  if (rule.argsPattern) {
+    try {
+      argsPatternRegex = new RegExp(rule.argsPattern);
+    } catch (e) {
+      const error = e as Error;
+      errors.push(
+        buildRegexError(filePath, file, tierName, rule.argsPattern, error.message),
+      );
+      return null;
+    }
+  }
+
+  try {
+    return buildArgsPatterns(
+      argsPatternRegex,
+      rule.commandPrefix,
+      rule.commandRegex,
+    );
+  } catch (e) {
+    const error = e as Error;
+    const patternStr =
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      (typeof rule.commandRegex === 'string' && rule.commandRegex !== ''
+        ? rule.commandRegex
+        : '') ||
+      (typeof rule.commandPrefix === 'string' && rule.commandPrefix !== ''
+        ? rule.commandPrefix
+        : '') ||
+      'unknown';
+    errors.push(
+      buildRegexError(filePath, file, tierName, patternStr, error.message),
+    );
+    return null;
+  }
+}
+
+/** Expands a single validated rule into PolicyRule objects, handling toolName/mcpName arrays. */
+function expandRuleToPolicyRules(
+  rule: PolicyRuleToml,
+  tier: number,
+  tierName: 'default' | 'user' | 'admin',
+  file: string,
+  patterns: RegExp[],
+): PolicyRule[] {
+  const argsPatterns: Array<RegExp | undefined> =
+    patterns.length > 0 ? patterns : [undefined];
+
+  return argsPatterns.flatMap((argsPattern) => {
+    const toolNames: Array<string | undefined> =
+      rule.toolName !== undefined
+        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          Array.isArray(rule.toolName)
+          ? rule.toolName
+          : [rule.toolName]
+        : [undefined];
+
+    return toolNames.map((toolName) => {
+      const hasMcpName = rule.mcpName !== undefined && rule.mcpName !== '';
+      const hasToolName = toolName !== undefined && toolName !== '';
+      let effectiveToolName: string | undefined;
+      if (hasMcpName && hasToolName) {
+        effectiveToolName = `${rule.mcpName}__${toolName}`;
+      } else if (hasMcpName) {
+        effectiveToolName = `${rule.mcpName}__*`;
+      } else {
+        effectiveToolName = toolName;
+      }
+
+      return {
+        toolName: effectiveToolName,
+        decision: rule.decision,
+        priority: transformPriority(rule.priority, tier),
+        argsPattern,
+        allowRedirection: rule.allowRedirection,
+        source: `${tierName.charAt(0).toUpperCase() + tierName.slice(1)}: ${file}`,
+      };
+    });
+  });
+}
+
+/** Transforms validated TOML rules into PolicyRule[], filtering by approval mode and handling errors. */
+function transformTomlRules(
+  data: z.infer<typeof PolicyFileSchema>,
+  approvalMode: ApprovalMode,
+  tier: number,
+  tierName: 'default' | 'user' | 'admin',
+  filePath: string,
+  file: string,
+  errors: PolicyFileError[],
+): PolicyRule[] {
+  return data.rule
+    .filter((rule) => {
+      if (!rule.modes || rule.modes.length === 0) {
+        return true;
+      }
+      return rule.modes.includes(approvalMode);
+    })
+    .flatMap((rule) => {
+      const patterns = resolveRulePatterns(rule, filePath, file, tierName, errors);
+      if (!patterns) {
+        return [];
+      }
+      return expandRuleToPolicyRules(rule, tier, tierName, file, patterns);
+    });
+}
+
+/** Scans a directory for .toml files, returning names or pushing a read error. */
+async function scanTomlDir(
+  dir: string,
+  tierName: 'default' | 'user' | 'admin',
+  errors: PolicyFileError[],
+): Promise<string[] | null> {
+  try {
+    const dirEntries = await fs.readdir(dir, { withFileTypes: true });
+    return dirEntries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.toml'))
+      .map((entry) => entry.name);
+  } catch (e) {
+    const error = e as NodeJS.ErrnoException;
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+    errors.push({
+      filePath: dir,
+      fileName: path.basename(dir),
+      tier: tierName,
+      errorType: 'file_read',
+      message: `Failed to read policy directory`,
+      details: error.message,
+    });
+    return null;
+  }
+}
+
+/** Processes a single .toml file: parse, validate, transform, and push rules. */
+async function processTomlFile(
+  file: string,
+  dir: string,
+  approvalMode: ApprovalMode,
+  tier: number,
+  tierName: 'default' | 'user' | 'admin',
+  rules: PolicyRule[],
+  errors: PolicyFileError[],
+): Promise<void> {
+  const filePath = path.join(dir, file);
+  try {
+    const data = await parseAndValidateTomlFile(filePath, file, tierName, errors);
+    if (!data) {
+      return;
+    }
+    const parsedRules = transformTomlRules(
+      data,
+      approvalMode,
+      tier,
+      tierName,
+      filePath,
+      file,
+      errors,
+    );
+    rules.push(...parsedRules);
+  } catch (e) {
+    const error = e as NodeJS.ErrnoException;
+    if (error.code !== 'ENOENT') {
+      errors.push({
+        filePath,
+        fileName: file,
+        tier: tierName,
+        errorType: 'file_read',
+        message: 'Failed to read policy file',
+        details: error.message,
+      });
+    }
+  }
+}
+
 export async function loadPoliciesFromToml(
   approvalMode: ApprovalMode,
   policyDirs: string[],
@@ -200,229 +469,101 @@ export async function loadPoliciesFromToml(
   const rules: PolicyRule[] = [];
   const errors: PolicyFileError[] = [];
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const dir of policyDirs) {
     const tier = getPolicyTier(dir);
     const tierName = getTierName(tier);
 
-    // Scan directory for all .toml files
-    let filesToLoad: string[];
-    try {
-      const dirEntries = await fs.readdir(dir, { withFileTypes: true });
-      filesToLoad = dirEntries
-        .filter((entry) => entry.isFile() && entry.name.endsWith('.toml'))
-        .map((entry) => entry.name);
-    } catch (e) {
-      const error = e as NodeJS.ErrnoException;
-      if (error.code === 'ENOENT') {
-        // Directory doesn't exist, skip it (not an error)
-        continue;
-      }
-      errors.push({
-        filePath: dir,
-        fileName: path.basename(dir),
-        tier: tierName,
-        errorType: 'file_read',
-        message: `Failed to read policy directory`,
-        details: error.message,
-      });
+    const filesToLoad = await scanTomlDir(dir, tierName, errors);
+    if (!filesToLoad) {
       continue;
     }
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const file of filesToLoad) {
-      const filePath = path.join(dir, file);
-
-      try {
-        // Read file
-        const fileContent = await fs.readFile(filePath, 'utf-8');
-
-        // Parse TOML
-        let parsed: unknown;
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        try {
-          parsed = toml.parse(fileContent);
-        } catch (e) {
-          const error = e as Error;
-          errors.push({
-            filePath,
-            fileName: file,
-            tier: tierName,
-            errorType: 'toml_parse',
-            message: 'TOML parsing failed',
-            details: error.message,
-            suggestion:
-              'Check for syntax errors like missing quotes, brackets, or commas',
-          });
-          continue;
-        }
-
-        // Validate schema
-        const validationResult = PolicyFileSchema.safeParse(parsed);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (!validationResult.success) {
-          errors.push({
-            filePath,
-            fileName: file,
-            tier: tierName,
-            errorType: 'schema_validation',
-            message: 'Schema validation failed',
-            details: formatSchemaError(validationResult.error, 0),
-            suggestion:
-              'Ensure all required fields (decision, priority) are present with correct types',
-          });
-          continue;
-        }
-
-        // Validate shell command convenience syntax
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        for (let i = 0; i < validationResult.data.rule.length; i++) {
-          const rule = validationResult.data.rule[i];
-          const validationError = validateShellCommandSyntax(rule, i);
-          if (validationError) {
-            errors.push({
-              filePath,
-              fileName: file,
-              tier: tierName,
-              ruleIndex: i,
-              errorType: 'rule_validation',
-              message: 'Invalid shell command syntax',
-              details: validationError,
-            });
-            // Continue to next rule, don't skip the entire file
-          }
-        }
-
-        // Transform rules
-        const parsedRules: PolicyRule[] = validationResult.data.rule
-          .filter((rule) => {
-            // Filter by mode
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (!rule.modes || rule.modes.length === 0) {
-              return true;
-            }
-            return rule.modes.includes(approvalMode);
-          })
-          .flatMap((rule) => {
-            // Build argsPatterns using utility function, with error handling
-            let argsPatternRegex: RegExp | undefined;
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (rule.argsPattern) {
-              try {
-                argsPatternRegex = new RegExp(rule.argsPattern);
-              } catch (e) {
-                const error = e as Error;
-                errors.push({
-                  filePath,
-                  fileName: file,
-                  tier: tierName,
-                  errorType: 'regex_compilation',
-                  message: 'Invalid regex pattern',
-                  details: `Pattern: ${rule.argsPattern}\nError: ${error.message}`,
-                  suggestion:
-                    'Check regex syntax for errors like unmatched brackets or invalid escape sequences',
-                });
-                return [];
-              }
-            }
-
-            let patterns: RegExp[];
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            try {
-              patterns = buildArgsPatterns(
-                argsPatternRegex,
-                rule.commandPrefix,
-                rule.commandRegex,
-              );
-            } catch (e) {
-              const error = e as Error;
-              const patternStr =
-                // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-                (typeof rule.commandRegex === 'string' &&
-                rule.commandRegex !== ''
-                  ? rule.commandRegex
-                  : '') ||
-                (typeof rule.commandPrefix === 'string' &&
-                rule.commandPrefix !== ''
-                  ? rule.commandPrefix
-                  : '') ||
-                'unknown';
-              errors.push({
-                filePath,
-                fileName: file,
-                tier: tierName,
-                errorType: 'regex_compilation',
-                message: 'Invalid regex pattern',
-                details: `Pattern: ${patternStr}\nError: ${error.message}`,
-                suggestion:
-                  'Check regex syntax for errors like unmatched brackets or invalid escape sequences',
-              });
-              return [];
-            }
-
-            // If no patterns, use undefined (wildcard)
-            const argsPatterns: Array<RegExp | undefined> =
-              patterns.length > 0 ? patterns : [undefined];
-
-            // For each argsPattern, expand toolName arrays
-            return argsPatterns.flatMap((argsPattern) => {
-              const toolNames: Array<string | undefined> =
-                rule.toolName !== undefined
-                  ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-                    Array.isArray(rule.toolName)
-                    ? rule.toolName
-                    : [rule.toolName]
-                  : [undefined];
-
-              // Create a policy rule for each tool name
-              return toolNames.map((toolName) => {
-                const hasMcpName =
-                  rule.mcpName !== undefined && rule.mcpName !== '';
-                const hasToolName = toolName !== undefined && toolName !== '';
-                let effectiveToolName: string | undefined;
-                // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-                if (hasMcpName && hasToolName) {
-                  effectiveToolName = `${rule.mcpName}__${toolName}`;
-                } else if (hasMcpName) {
-                  effectiveToolName = `${rule.mcpName}__*`;
-                } else {
-                  effectiveToolName = toolName;
-                }
-
-                const policyRule: PolicyRule = {
-                  toolName: effectiveToolName,
-                  decision: rule.decision,
-                  priority: transformPriority(rule.priority, tier),
-                  argsPattern,
-                  allowRedirection: rule.allowRedirection,
-                  source: `${tierName.charAt(0).toUpperCase() + tierName.slice(1)}: ${file}`,
-                };
-
-                return policyRule;
-              });
-            });
-          });
-
-        rules.push(...parsedRules);
-      } catch (e) {
-        const error = e as NodeJS.ErrnoException;
-        // Catch-all for unexpected errors
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (error.code !== 'ENOENT') {
-          errors.push({
-            filePath,
-            fileName: file,
-            tier: tierName,
-            errorType: 'file_read',
-            message: 'Failed to read policy file',
-            details: error.message,
-          });
-        }
-      }
+      await processTomlFile(file, dir, approvalMode, tier, tierName, rules, errors);
     }
   }
 
   return { rules, errors };
+}
+
+/** Expands a single TOML rule into PolicyRule objects (command prefix/regex, toolName arrays, mcpName). */
+function expandTomlRule(
+  rule: PolicyRuleToml,
+  tier: number,
+  _tierName: 'default' | 'user' | 'admin',
+  filePath: string,
+  _file: string,
+  _errors: PolicyFileError[],
+): PolicyRule[] {
+  // Transform commandPrefix/commandRegex to argsPattern
+  let effectiveArgsPattern = rule.argsPattern;
+  const commandPrefixes: string[] = [];
+
+  const hasCommandPrefix =
+    rule.commandPrefix !== undefined &&
+    (!Array.isArray(rule.commandPrefix) || rule.commandPrefix.length > 0) &&
+    rule.commandPrefix !== '';
+  const hasCommandRegex =
+    rule.commandRegex !== undefined && rule.commandRegex !== '';
+  if (hasCommandPrefix) {
+    const prefixes = Array.isArray(rule.commandPrefix)
+      ? rule.commandPrefix
+      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        rule.commandPrefix !== undefined
+        ? [rule.commandPrefix]
+        : [];
+    commandPrefixes.push(...prefixes);
+  } else if (hasCommandRegex) {
+    effectiveArgsPattern = `"command":"${rule.commandRegex}`;
+  }
+
+  // Expand command prefixes to multiple patterns
+  const argsPatterns: Array<string | undefined> =
+    commandPrefixes.length > 0
+      ? commandPrefixes.map(
+          (prefix) =>
+            '"command":"' + escapeRegex(prefix) + String.raw`(?:[\s"]|$)`,
+        )
+      : [effectiveArgsPattern];
+
+  // For each argsPattern, expand toolName arrays
+  return argsPatterns.flatMap((argsPattern) => {
+    const toolNames: Array<string | undefined> =
+      rule.toolName !== undefined
+        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          Array.isArray(rule.toolName)
+          ? rule.toolName
+          : [rule.toolName]
+        : [undefined];
+
+    // Create a policy rule for each tool name
+    return toolNames.map((toolName) => {
+      const hasMcpName = rule.mcpName !== undefined && rule.mcpName !== '';
+      const hasToolName = toolName !== undefined && toolName !== '';
+      let effectiveToolName: string | undefined;
+      if (hasMcpName && hasToolName) {
+        effectiveToolName = `${rule.mcpName}__${toolName}`;
+      } else if (hasMcpName) {
+        effectiveToolName = `${rule.mcpName}__*`;
+      } else {
+        effectiveToolName = toolName;
+      }
+
+      const policyRule: PolicyRule = {
+        toolName: effectiveToolName,
+        decision: rule.decision,
+        priority: transformPriority(rule.priority, tier),
+        source: `Policy: ${path.basename(filePath)}`,
+      };
+
+      // Compile regex pattern
+      if (argsPattern) {
+        policyRule.argsPattern = new RegExp(argsPattern);
+      }
+
+      return policyRule;
+    });
+  });
 }
 
 /**
@@ -467,78 +608,10 @@ export async function loadPolicyFromToml(
     }
   }
 
-  // Transform rules (no mode filtering for single file loading)
-  const rules: PolicyRule[] = validationResult.data.rule.flatMap((rule) => {
-    // Transform commandPrefix/commandRegex to argsPattern
-    let effectiveArgsPattern = rule.argsPattern;
-    const commandPrefixes: string[] = [];
-
-    const hasCommandPrefix =
-      rule.commandPrefix !== undefined &&
-      (!Array.isArray(rule.commandPrefix) || rule.commandPrefix.length > 0) &&
-      rule.commandPrefix !== '';
-    const hasCommandRegex =
-      rule.commandRegex !== undefined && rule.commandRegex !== '';
-    if (hasCommandPrefix) {
-      const prefixes = Array.isArray(rule.commandPrefix)
-        ? rule.commandPrefix
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          rule.commandPrefix !== undefined
-          ? [rule.commandPrefix]
-          : [];
-      commandPrefixes.push(...prefixes);
-    } else if (hasCommandRegex) {
-      effectiveArgsPattern = `"command":"${rule.commandRegex}`;
-    }
-
-    // Expand command prefixes to multiple patterns
-    const argsPatterns: Array<string | undefined> =
-      commandPrefixes.length > 0
-        ? commandPrefixes.map(
-            (prefix) =>
-              '"command":"' + escapeRegex(prefix) + String.raw`(?:[\s"]|$)`,
-          )
-        : [effectiveArgsPattern];
-
-    // For each argsPattern, expand toolName arrays
-    return argsPatterns.flatMap((argsPattern) => {
-      const toolNames: Array<string | undefined> =
-        rule.toolName !== undefined
-          ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            Array.isArray(rule.toolName)
-            ? rule.toolName
-            : [rule.toolName]
-          : [undefined];
-
-      // Create a policy rule for each tool name
-      return toolNames.map((toolName) => {
-        const hasMcpName = rule.mcpName !== undefined && rule.mcpName !== '';
-        const hasToolName = toolName !== undefined && toolName !== '';
-        let effectiveToolName: string | undefined;
-        if (hasMcpName && hasToolName) {
-          effectiveToolName = `${rule.mcpName}__${toolName}`;
-        } else if (hasMcpName) {
-          effectiveToolName = `${rule.mcpName}__*`;
-        } else {
-          effectiveToolName = toolName;
-        }
-
-        const policyRule: PolicyRule = {
-          toolName: effectiveToolName,
-          decision: rule.decision,
-          priority: transformPriority(rule.priority, tier),
-          source: `Policy: ${path.basename(filePath)}`,
-        };
-
-        // Compile regex pattern
-        if (argsPattern) {
-          policyRule.argsPattern = new RegExp(argsPattern);
-        }
-
-        return policyRule;
-      });
-    });
-  });
+  const tierName = getTierName(tier);
+  const rules: PolicyRule[] = validationResult.data.rule.flatMap((rule) =>
+    expandTomlRule(rule, tier, tierName, filePath, path.basename(filePath), []),
+  );
 
   return rules;
 }

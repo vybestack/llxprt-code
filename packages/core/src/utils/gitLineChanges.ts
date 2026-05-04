@@ -177,6 +177,42 @@ function parseUnifiedZeroDiff(diffText: string): {
  * - Uses `git diff HEAD --unified=0` to include both staged and unstaged changes.
  * - For files not in a git repo / git unavailable / errors: returns empty markers and a warning.
  */
+function buildUntrackedFileResult(
+  relToGitRoot: string,
+  gitRoot: string,
+): Promise<GitLineChangeResult> {
+  return runGit(['show', `:${relToGitRoot}`], gitRoot)
+    .catch(() => '')
+    .then((content) => {
+      if (content === '') {
+        return {
+          markersByLine: new Map(),
+          deletionAfterLines: new Set(),
+          warning:
+            'File is not present in HEAD (untracked), but failed to read its content from git index',
+        };
+      }
+
+      const normalizedContent = content.replace(/\r?\n$/, '');
+      const lineCount =
+        normalizedContent === '' ? 0 : normalizedContent.split(/\r?\n/).length;
+      const markersByLine = new Map<
+        number,
+        Exclude<GitLineChangeMarker, '░'>
+      >();
+      for (let i = 1; i <= lineCount; i++) {
+        markersByLine.set(i, 'N');
+      }
+
+      return {
+        markersByLine,
+        deletionAfterLines: new Set(),
+        warning:
+          'File is not present in HEAD (untracked); marked all lines as new',
+      };
+    });
+}
+
 export async function getGitLineChanges(
   absolutePath: string,
 ): Promise<GitLineChangeResult> {
@@ -220,43 +256,7 @@ export async function getGitLineChanges(
     if (diffText.trim() === '') {
       const existsInHead = await fileExistsInHead(relToGitRoot, gitRoot);
       if (!existsInHead) {
-        // Untracked (not in HEAD): treat all current lines as new.
-        // Best-effort line count: read from index if available.
-        const content = await runGit(
-          ['show', `:${relToGitRoot}`],
-          gitRoot,
-        ).catch(() => '');
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (content === '') {
-          return {
-            markersByLine: new Map(),
-            deletionAfterLines: new Set(),
-            warning:
-              'File is not present in HEAD (untracked), but failed to read its content from git index',
-          };
-        }
-
-        const normalizedContent = content.replace(/\r?\n$/, '');
-        const lineCount =
-          normalizedContent === ''
-            ? 0
-            : normalizedContent.split(/\r?\n/).length;
-        const markersByLine = new Map<
-          number,
-          Exclude<GitLineChangeMarker, '░'>
-        >();
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        for (let i = 1; i <= lineCount; i++) {
-          markersByLine.set(i, 'N');
-        }
-
-        return {
-          markersByLine,
-          deletionAfterLines: new Set(),
-          warning:
-            'File is not present in HEAD (untracked); marked all lines as new',
-        };
+        return await buildUntrackedFileResult(relToGitRoot, gitRoot);
       }
     }
 
