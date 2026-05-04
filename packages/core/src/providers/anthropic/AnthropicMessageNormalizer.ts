@@ -58,15 +58,17 @@ export type AnthropicToolResultContent =
       | AnthropicDocumentBlock
     >;
 
+type AnthropicToolResultBlock = {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: AnthropicToolResultContent;
+  is_error?: boolean;
+};
+
 export type AnthropicMessageBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | {
-      type: 'tool_result';
-      tool_use_id: string;
-      content: AnthropicToolResultContent;
-      is_error?: boolean;
-    }
+  | AnthropicToolResultBlock
   | AnthropicImageBlock
   | AnthropicDocumentBlock
   | { type: 'thinking'; thinking: string; signature?: string }
@@ -306,6 +308,69 @@ function blocksToText(blocks: ContentBlock[]): string {
   return combined.trimStart();
 }
 
+function appendLimitMessage(
+  contentPayload: string,
+  limitMessage: string | undefined,
+): string {
+  if (!limitMessage) {
+    return contentPayload;
+  }
+  return contentPayload ? `${contentPayload}\n${limitMessage}` : limitMessage;
+}
+
+function buildAnthropicToolResultContent(
+  contentPayload: string,
+  mediaBlocks: MediaBlock[],
+): AnthropicToolResultContent {
+  if (mediaBlocks.length === 0) {
+    return contentPayload;
+  }
+  return [
+    { type: 'text' as const, text: contentPayload },
+    ...mediaBlocks.map((mb) => {
+      const category = classifyMediaBlock(mb);
+      if (category === 'image') {
+        return mediaBlockToAnthropicImage(mb);
+      }
+      if (category === 'pdf') {
+        return mediaBlockToAnthropicDocument(mb);
+      }
+      return {
+        type: 'text' as const,
+        text: buildUnsupportedMediaPlaceholder(mb, 'Anthropic'),
+      };
+    }),
+  ];
+}
+
+function buildToolResult(
+  toolResponseBlock: ToolResponseBlock,
+  toolTextContent: string,
+  mediaBlocks: MediaBlock[],
+  config: unknown,
+): AnthropicToolResultBlock {
+  const payload = buildToolResponsePayload(
+    toolResponseBlock,
+    config as Parameters<typeof buildToolResponsePayload>[1],
+  );
+  let contentPayload = toolTextContent
+    ? `${toolTextContent}\n${payload.result}`
+    : payload.result;
+  contentPayload = appendLimitMessage(contentPayload, payload.limitMessage);
+  if (!contentPayload) {
+    contentPayload = '[empty tool result]';
+  }
+  const toolResult: AnthropicToolResultBlock = {
+    type: 'tool_result',
+    tool_use_id: normalizeToAnthropicToolId(toolResponseBlock.callId),
+    content: buildAnthropicToolResultContent(contentPayload, mediaBlocks),
+  };
+  if (payload.status === 'error') {
+    toolResult.is_error = true;
+  }
+  return toolResult;
+}
+
 function buildToolResults(
   c: IContent,
   toolResponseBlocks: ToolResponseBlock[],
@@ -314,18 +379,8 @@ function buildToolResults(
     config: unknown;
     logger: { debug: (fn: () => string) => void };
   },
-): Array<{
-  type: 'tool_result';
-  tool_use_id: string;
-  content: AnthropicToolResultContent;
-  is_error?: boolean;
-}> {
-  const results: Array<{
-    type: 'tool_result';
-    tool_use_id: string;
-    content: AnthropicToolResultContent;
-    is_error?: boolean;
-  }> = [];
+): AnthropicToolResultBlock[] {
+  const results: AnthropicToolResultBlock[] = [];
 
   if (toolResponseBlocks.length > 1) {
     options.logger.debug(
@@ -341,60 +396,14 @@ function buildToolResults(
   );
 
   for (const toolResponseBlock of toolResponseBlocks) {
-    const payload = buildToolResponsePayload(
-      toolResponseBlock,
-      options.config as Parameters<typeof buildToolResponsePayload>[1],
+    results.push(
+      buildToolResult(
+        toolResponseBlock,
+        toolTextContent,
+        mediaBlocks,
+        options.config,
+      ),
     );
-    let contentPayload = toolTextContent
-      ? `${toolTextContent}\n${payload.result}`
-      : payload.result;
-
-    if (payload.limitMessage) {
-      contentPayload = contentPayload
-        ? `${contentPayload}\n${payload.limitMessage}`
-        : payload.limitMessage;
-    }
-
-    if (!contentPayload) {
-      contentPayload = '[empty tool result]';
-    }
-
-    const toolResultContent: AnthropicToolResultContent =
-      mediaBlocks.length > 0
-        ? [
-            { type: 'text' as const, text: contentPayload },
-            ...mediaBlocks.map((mb) => {
-              const category = classifyMediaBlock(mb);
-              if (category === 'image') {
-                return mediaBlockToAnthropicImage(mb);
-              }
-              if (category === 'pdf') {
-                return mediaBlockToAnthropicDocument(mb);
-              }
-              return {
-                type: 'text' as const,
-                text: buildUnsupportedMediaPlaceholder(mb, 'Anthropic'),
-              };
-            }),
-          ]
-        : contentPayload;
-
-    const toolResult: {
-      type: 'tool_result';
-      tool_use_id: string;
-      content: AnthropicToolResultContent;
-      is_error?: boolean;
-    } = {
-      type: 'tool_result',
-      tool_use_id: normalizeToAnthropicToolId(toolResponseBlock.callId),
-      content: toolResultContent,
-    };
-
-    if (payload.status === 'error') {
-      toolResult.is_error = true;
-    }
-
-    results.push(toolResult);
   }
 
   return results;
@@ -419,6 +428,19 @@ function processHumanContent(
   return undefined;
 }
 
+function flushPendingToolResults(
+  messages: AnthropicMessage[],
+  pendingToolResults: AnthropicToolResultBlock[],
+): [] {
+  if (pendingToolResults.length > 0) {
+    messages.push({
+      role: 'user',
+      content: pendingToolResults,
+    });
+  }
+  return [];
+}
+
 function convertContentToMessages(
   contents: IContent[],
   redactedIndices: Set<number>,
@@ -431,22 +453,7 @@ function convertContentToMessages(
   },
 ): AnthropicMessage[] {
   const messages: AnthropicMessage[] = [];
-  let pendingToolResults: Array<{
-    type: 'tool_result';
-    tool_use_id: string;
-    content: AnthropicToolResultContent;
-    is_error?: boolean;
-  }> = [];
-
-  const flushToolResults = () => {
-    if (pendingToolResults.length > 0) {
-      messages.push({
-        role: 'user',
-        content: pendingToolResults,
-      });
-      pendingToolResults = [];
-    }
-  };
+  let pendingToolResults: AnthropicToolResultBlock[] = [];
 
   // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let contentIndex = 0; contentIndex < contents.length; contentIndex++) {
@@ -476,7 +483,10 @@ function convertContentToMessages(
 
     if (speaker === 'human') {
       const skipHumanMessage = onlyToolResponseContent;
-      flushToolResults();
+      pendingToolResults = flushPendingToolResults(
+        messages,
+        pendingToolResults,
+      );
 
       if (skipHumanMessage) {
         continue;
@@ -487,7 +497,10 @@ function convertContentToMessages(
         messages.push(message);
       }
     } else if (speaker === 'ai') {
-      flushToolResults();
+      pendingToolResults = flushPendingToolResults(
+        messages,
+        pendingToolResults,
+      );
       convertAIMessage(c, contentIndex, redactedIndices, messages, options);
     } else {
       if (speaker !== 'tool') {
@@ -502,7 +515,7 @@ function convertContentToMessages(
     }
   }
 
-  flushToolResults();
+  pendingToolResults = flushPendingToolResults(messages, pendingToolResults);
   return messages;
 }
 
