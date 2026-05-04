@@ -239,7 +239,7 @@ export default tseslint.config(
         { max: 800, skipBlankLines: true, skipComments: true },
       ],
       'max-lines-per-function': [
-        'warn',
+        'error',
         { max: 80, skipBlankLines: true, skipComments: true },
       ],
 
@@ -249,7 +249,7 @@ export default tseslint.config(
           ([rule, config]) => [rule, Array.isArray(config) ? ['warn', ...config.slice(1)] : 'warn'],
         ),
       ),
-      'sonarjs/cognitive-complexity': ['warn', 30],
+      'sonarjs/cognitive-complexity': ['error', 30],
       'sonarjs/todo-tag': 'error',
       'sonarjs/no-ignored-exceptions': 'error',
       'sonarjs/regular-expr': 'error',
@@ -931,7 +931,7 @@ export default tseslint.config(
         { max: 800, skipBlankLines: true, skipComments: true },
       ],
       'max-lines-per-function': [
-        'warn',
+        'error',
         { max: 80, skipBlankLines: true, skipComments: true },
       ],
     },

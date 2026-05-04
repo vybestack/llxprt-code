@@ -137,22 +137,11 @@ async function checkForUpdates(
   }
 }
 
-export async function activate(context: vscode.ExtensionContext) {
-  logger = vscode.window.createOutputChannel('LLxprt Code IDE Companion');
-  log = createLogger(context, logger);
-  log('Extension activated');
-
-  updateWorkspacePath(context);
-
-  const isManagedExtensionSurface = MANAGED_EXTENSION_SURFACES.has(
-    detectIdeFromEnv().name,
-  );
-
-  await checkForUpdates(context, log, isManagedExtensionSurface);
-
-  const diffContentProvider = new DiffContentProvider();
-  const diffManager = new DiffManager(log, diffContentProvider);
-
+function registerDiffCommands(
+  context: vscode.ExtensionContext,
+  diffContentProvider: DiffContentProvider,
+  diffManager: DiffManager,
+) {
   context.subscriptions.push(
     vscode.workspace.onDidCloseTextDocument((doc) => {
       if (doc.uri.scheme === DIFF_SCHEME) {
@@ -182,6 +171,81 @@ export async function activate(context: vscode.ExtensionContext) {
       },
     ),
   );
+}
+
+async function runLLxprtCodeCommand() {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders || workspaceFolders.length === 0) {
+    vscode.window.showInformationMessage(
+      'No folder open. Please open a folder to run LLxprt Code.',
+    );
+    return;
+  }
+
+  let selectedFolder: vscode.WorkspaceFolder | undefined;
+  if (workspaceFolders.length === 1) {
+    selectedFolder = workspaceFolders[0];
+  } else {
+    selectedFolder = await vscode.window.showWorkspaceFolderPick({
+      placeHolder: 'Select a folder to run LLxprt Code in',
+    });
+  }
+
+  if (selectedFolder) {
+    const llxprtCmd = 'llxprt';
+    const terminal = vscode.window.createTerminal({
+      name: `LLxprt Code (${selectedFolder.name})`,
+      cwd: selectedFolder.uri.fsPath,
+    });
+    terminal.show();
+    terminal.sendText(llxprtCmd);
+  }
+}
+
+async function showNoticesCommand(context: vscode.ExtensionContext) {
+  const noticePath = vscode.Uri.joinPath(context.extensionUri, 'NOTICES.txt');
+  await vscode.window.showTextDocument(noticePath);
+}
+
+function registerWorkspaceCommands(context: vscode.ExtensionContext) {
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      updateWorkspacePath(context);
+      if (ideServer) {
+        void ideServer.syncEnvVars();
+      }
+    }),
+    vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      if (ideServer) {
+        void ideServer.syncEnvVars();
+      }
+    }),
+    vscode.commands.registerCommand('llxprt-code.runLLxprtCode', () =>
+      runLLxprtCodeCommand(),
+    ),
+    vscode.commands.registerCommand('llxprt-code.showNotices', () =>
+      showNoticesCommand(context),
+    ),
+  );
+}
+
+export async function activate(context: vscode.ExtensionContext) {
+  logger = vscode.window.createOutputChannel('LLxprt Code IDE Companion');
+  log = createLogger(context, logger);
+  log('Extension activated');
+
+  updateWorkspacePath(context);
+
+  const isManagedExtensionSurface = MANAGED_EXTENSION_SURFACES.has(
+    detectIdeFromEnv().name,
+  );
+
+  await checkForUpdates(context, log, isManagedExtensionSurface);
+
+  const diffContentProvider = new DiffContentProvider();
+  const diffManager = new DiffManager(log, diffContentProvider);
+
+  registerDiffCommands(context, diffContentProvider, diffManager);
 
   ideServer = new IDEServer(log, diffManager);
   try {
@@ -201,54 +265,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.globalState.update(INFO_MESSAGE_SHOWN_KEY, true);
   }
 
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeWorkspaceFolders(() => {
-      updateWorkspacePath(context);
-      if (ideServer) {
-        void ideServer.syncEnvVars();
-      }
-    }),
-    vscode.workspace.onDidGrantWorkspaceTrust(() => {
-      if (ideServer) {
-        void ideServer.syncEnvVars();
-      }
-    }),
-    vscode.commands.registerCommand('llxprt-code.runLLxprtCode', async () => {
-      const workspaceFolders = vscode.workspace.workspaceFolders;
-      if (!workspaceFolders || workspaceFolders.length === 0) {
-        vscode.window.showInformationMessage(
-          'No folder open. Please open a folder to run LLxprt Code.',
-        );
-        return;
-      }
-
-      let selectedFolder: vscode.WorkspaceFolder | undefined;
-      if (workspaceFolders.length === 1) {
-        selectedFolder = workspaceFolders[0];
-      } else {
-        selectedFolder = await vscode.window.showWorkspaceFolderPick({
-          placeHolder: 'Select a folder to run LLxprt Code in',
-        });
-      }
-
-      if (selectedFolder) {
-        const llxprtCmd = 'llxprt';
-        const terminal = vscode.window.createTerminal({
-          name: `LLxprt Code (${selectedFolder.name})`,
-          cwd: selectedFolder.uri.fsPath,
-        });
-        terminal.show();
-        terminal.sendText(llxprtCmd);
-      }
-    }),
-    vscode.commands.registerCommand('llxprt-code.showNotices', async () => {
-      const noticePath = vscode.Uri.joinPath(
-        context.extensionUri,
-        'NOTICES.txt',
-      );
-      await vscode.window.showTextDocument(noticePath);
-    }),
-  );
+  registerWorkspaceCommands(context);
 }
 
 export async function deactivate(): Promise<void> {

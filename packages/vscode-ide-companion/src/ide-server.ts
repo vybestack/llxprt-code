@@ -11,6 +11,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express, {
+  type Express,
   type Request,
   type Response,
   type NextFunction,
@@ -128,272 +129,358 @@ export class IDEServer {
       this.context = context;
       this.authToken = randomUUID();
       const sessionsWithInitialNotification = new Set<string>();
-
       const app = express();
       app.use(express.json({ limit: '10mb' }));
 
-      app.use(
-        cors({
-          origin: (origin, callback) => {
-            // Only allow non-browser requests with no origin.
-            if (!origin) {
-              return callback(null, true);
-            }
-            return callback(
-              new CORSError('Request denied by CORS policy.'),
-              false,
-            );
-          },
-        }),
-      );
-
-      app.use((req, res, next) => {
-        const host = req.headers.host ?? '';
-        const allowedHosts = [
-          `localhost:${this.port}`,
-          `127.0.0.1:${this.port}`,
-        ];
-        if (!allowedHosts.includes(host)) {
-          res.status(403).json({ error: 'Invalid Host header' });
-          return;
-        }
-        next();
-      });
-
-      app.use((req, res, next) => {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-          this.log('Missing Authorization header. Rejecting request.');
-          res.status(401).send('Unauthorized');
-          return;
-        }
-        const parts = authHeader.split(' ');
-        if (parts.length !== 2 || parts[0] !== 'Bearer') {
-          this.log('Malformed Authorization header. Rejecting request.');
-          res.status(401).send('Unauthorized');
-          return;
-        }
-        const token = parts[1];
-        if (token !== this.authToken) {
-          this.log('Invalid auth token provided. Rejecting request.');
-          res.status(401).send('Unauthorized');
-          return;
-        }
-        next();
-      });
+      this.registerCors(app);
+      this.registerHostValidation(app);
+      this.registerAuthorization(app);
 
       const mcpServer = createMcpServer(this.diffManager, this.log);
-
       this.openFilesManager = new OpenFilesManager(context);
-      const onDidChangeSubscription = this.openFilesManager.onDidChange(() => {
-        this.broadcastIdeContextUpdate();
-      });
-      context.subscriptions.push(onDidChangeSubscription);
-      const onDidChangeDiffSubscription = this.diffManager.onDidChange(
-        (notification) => {
-          for (const transport of this.transports.values()) {
-            void transport.send(notification);
-          }
-        },
-      );
-      context.subscriptions.push(onDidChangeDiffSubscription);
-
-      app.post('/mcp', async (req: Request, res: Response) => {
-        const sessionId = req.headers[MCP_SESSION_ID_HEADER] as
-          | string
-          | undefined;
-        let transport: StreamableHTTPServerTransport;
-
-        // Preserve original behavior:
-        // - Known session ID → reuse existing transport
-        // - No existing transport for session (including stale/unknown session ID) + initialize request → create new transport
-        // - Anything else → 400
-        const transportForSession =
-          sessionId === undefined ? undefined : this.transports.get(sessionId);
-        if (transportForSession) {
-          transport = transportForSession;
-        } else if (isInitializeRequest(req.body)) {
-          transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => randomUUID(),
-            onsessioninitialized: (newSessionId) => {
-              this.log(`New session initialized: ${newSessionId}`);
-              this.transports.set(newSessionId, transport);
-            },
-          });
-          let missedPings = 0;
-          const keepAlive = setInterval(() => {
-            const sessionId = transport.sessionId ?? 'unknown';
-            transport
-              .send({ jsonrpc: '2.0', method: 'ping' })
-              .then(() => {
-                missedPings = 0;
-              })
-              .catch((error) => {
-                missedPings++;
-                this.log(
-                  `Failed to send keep-alive ping for session ${sessionId}. Missed pings: ${missedPings}. Error: ${error.message}`,
-                );
-                if (missedPings >= 3) {
-                  this.log(
-                    `Session ${sessionId} missed ${missedPings} pings. Closing connection and cleaning up interval.`,
-                  );
-                  clearInterval(keepAlive);
-                }
-              });
-          }, 60000); // 60 sec
-
-          transport.onclose = () => {
-            clearInterval(keepAlive);
-            if (transport.sessionId) {
-              this.log(`Session closed: ${transport.sessionId}`);
-              sessionsWithInitialNotification.delete(transport.sessionId);
-              this.transports.delete(transport.sessionId);
-            }
-          };
-          void mcpServer.connect(transport);
-        } else {
-          this.log(
-            'Bad Request: No valid session ID provided for non-initialize request.',
-          );
-          res.status(400).json({
-            jsonrpc: '2.0',
-            error: {
-              code: -32000,
-              message:
-                'Bad Request: No valid session ID provided for non-initialize request.',
-            },
-            id: null,
-          });
-          return;
-        }
-
-        try {
-          await transport.handleRequest(req, res, req.body);
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
-          this.log(`Error handling MCP request: ${errorMessage}`);
-          if (!res.headersSent) {
-            res.status(500).json({
-              jsonrpc: '2.0' as const,
-              error: {
-                code: -32603,
-                message: 'Internal server error',
-              },
-              id: null,
-            });
-          }
-        }
-
-        if (
-          this.openFilesManager &&
-          sessionId &&
-          !sessionsWithInitialNotification.has(sessionId)
-        ) {
-          sendIdeContextUpdateNotification(
-            transport,
-            this.log.bind(this),
-            this.openFilesManager,
-          );
-          sessionsWithInitialNotification.add(sessionId);
-        }
-      });
-
-      const handleSessionRequest = async (req: Request, res: Response) => {
-        const sessionId = req.headers[MCP_SESSION_ID_HEADER] as
-          | string
-          | undefined;
-        const transport = sessionId
-          ? this.transports.get(sessionId)
-          : undefined;
-        if (!sessionId || !transport) {
-          this.log('Invalid or missing session ID');
-          res.status(400).send('Invalid or missing session ID');
-          return;
-        }
-
-        try {
-          await transport.handleRequest(req, res);
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
-          this.log(`Error handling session request: ${errorMessage}`);
-          if (!res.headersSent) {
-            res.status(400).send('Bad Request');
-          }
-        }
-
-        if (
-          this.openFilesManager &&
-          sessionId &&
-          !sessionsWithInitialNotification.has(sessionId)
-        ) {
-          sendIdeContextUpdateNotification(
-            transport,
-            this.log.bind(this),
-            this.openFilesManager,
-          );
-          sessionsWithInitialNotification.add(sessionId);
-        }
-      };
-
-      app.get('/mcp', handleSessionRequest);
-
-      app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-        this.log(`Error processing request: ${err.message}`);
-        this.log(`Stack trace: ${err.stack}`);
-        if (err instanceof CORSError) {
-          res.status(403).json({ error: 'Request denied by CORS policy.' });
-        } else {
-          next(err);
-        }
-      });
-
-      this.server = app.listen(0, '127.0.0.1', () => {
-        void (async () => {
-          try {
-            const address = (this.server as HTTPServer).address();
-            if (address !== null && typeof address !== 'string') {
-              this.port = address.port;
-              this.log(`IDE server listening on http://127.0.0.1:${this.port}`);
-              let portFile: string | undefined;
-              try {
-                const portDir = path.join(os.tmpdir(), 'llxprt', 'ide');
-                await fs.mkdir(portDir, { recursive: true });
-                portFile = path.join(
-                  portDir,
-                  `llxprt-ide-server-${process.ppid}-${this.port}.json`,
-                );
-                this.portFile = portFile;
-              } catch (err) {
-                const message =
-                  err instanceof Error ? err.message : String(err);
-                this.log(`Failed to create IDE port file: ${message}`);
-              }
-
-              await writePortAndWorkspace({
-                context,
-                port: this.port,
-                portFile: this.portFile,
-                authToken: this.authToken ?? '',
-                log: this.log,
-              });
-            }
-            resolve();
-          } catch (err) {
-            reject(err instanceof Error ? err : new Error(String(err)));
-          }
-        })();
-      });
-
-      this.server.on('close', () => {
-        this.log('IDE server connection closed.');
-      });
-
-      this.server.on('error', (error) => {
-        this.log(`IDE server error: ${error.message}`);
-      });
+      this.registerIdeChangeSubscriptions(context);
+      this.registerMcpRoutes(app, mcpServer, sessionsWithInitialNotification);
+      this.registerErrorHandler(app);
+      this.startHttpServer(app, context, resolve, reject);
     });
+  }
+
+  private registerCors(app: Express) {
+    app.use(
+      cors({
+        origin: (origin, callback) => {
+          // Only allow non-browser requests with no origin.
+          if (!origin) {
+            return callback(null, true);
+          }
+          return callback(
+            new CORSError('Request denied by CORS policy.'),
+            false,
+          );
+        },
+      }),
+    );
+  }
+
+  private registerHostValidation(app: Express) {
+    app.use((req, res, next) => {
+      const host = req.headers.host ?? '';
+      const allowedHosts = [`localhost:${this.port}`, `127.0.0.1:${this.port}`];
+      if (!allowedHosts.includes(host)) {
+        res.status(403).json({ error: 'Invalid Host header' });
+        return;
+      }
+      next();
+    });
+  }
+
+  private registerAuthorization(app: Express) {
+    app.use((req, res, next) => {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        this.log('Missing Authorization header. Rejecting request.');
+        res.status(401).send('Unauthorized');
+        return;
+      }
+      const parts = authHeader.split(' ');
+      if (parts.length !== 2 || parts[0] !== 'Bearer') {
+        this.log('Malformed Authorization header. Rejecting request.');
+        res.status(401).send('Unauthorized');
+        return;
+      }
+      const token = parts[1];
+      if (token !== this.authToken) {
+        this.log('Invalid auth token provided. Rejecting request.');
+        res.status(401).send('Unauthorized');
+        return;
+      }
+      next();
+    });
+  }
+
+  private registerIdeChangeSubscriptions(context: vscode.ExtensionContext) {
+    const onDidChangeSubscription = this.openFilesManager!.onDidChange(() => {
+      this.broadcastIdeContextUpdate();
+    });
+    context.subscriptions.push(onDidChangeSubscription);
+    const onDidChangeDiffSubscription = this.diffManager.onDidChange(
+      (notification) => {
+        for (const transport of this.transports.values()) {
+          void transport.send(notification);
+        }
+      },
+    );
+    context.subscriptions.push(onDidChangeDiffSubscription);
+  }
+
+  private registerMcpRoutes(
+    app: Express,
+    mcpServer: McpServer,
+    sessionsWithInitialNotification: Set<string>,
+  ) {
+    app.post('/mcp', (req: Request, res: Response, next: NextFunction) => {
+      this.handleMcpPostRequest(
+        req,
+        res,
+        mcpServer,
+        sessionsWithInitialNotification,
+      ).catch(next);
+    });
+
+    app.get('/mcp', (req: Request, res: Response, next: NextFunction) => {
+      this.handleSessionRequest(
+        req,
+        res,
+        sessionsWithInitialNotification,
+      ).catch(next);
+    });
+  }
+
+  private async handleMcpPostRequest(
+    req: Request,
+    res: Response,
+    mcpServer: McpServer,
+    sessionsWithInitialNotification: Set<string>,
+  ) {
+    const sessionId = req.headers[MCP_SESSION_ID_HEADER] as string | undefined;
+    const transport = this.resolvePostTransport(
+      req,
+      res,
+      mcpServer,
+      sessionId,
+      sessionsWithInitialNotification,
+    );
+    if (transport === undefined) {
+      return;
+    }
+
+    try {
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.log(`Error handling MCP request: ${errorMessage}`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0' as const,
+          error: { code: -32603, message: 'Internal server error' },
+          id: null,
+        });
+      }
+    }
+
+    this.sendInitialSessionNotification(
+      transport,
+      sessionId,
+      sessionsWithInitialNotification,
+    );
+  }
+
+  private resolvePostTransport(
+    req: Request,
+    res: Response,
+    mcpServer: McpServer,
+    sessionId: string | undefined,
+    sessionsWithInitialNotification: Set<string>,
+  ): StreamableHTTPServerTransport | undefined {
+    const transportForSession =
+      sessionId === undefined ? undefined : this.transports.get(sessionId);
+    if (transportForSession !== undefined) {
+      return transportForSession;
+    }
+    if (isInitializeRequest(req.body)) {
+      return this.createSessionTransport(
+        mcpServer,
+        sessionsWithInitialNotification,
+      );
+    }
+
+    this.log(
+      'Bad Request: No valid session ID provided for non-initialize request.',
+    );
+    res.status(400).json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message:
+          'Bad Request: No valid session ID provided for non-initialize request.',
+      },
+      id: null,
+    });
+    return undefined;
+  }
+
+  private createSessionTransport(
+    mcpServer: McpServer,
+    sessionsWithInitialNotification: Set<string>,
+  ): StreamableHTTPServerTransport {
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (newSessionId) => {
+        this.log(`New session initialized: ${newSessionId}`);
+        this.transports.set(newSessionId, transport);
+      },
+    });
+
+    this.configureKeepAlive(transport, sessionsWithInitialNotification);
+    void mcpServer.connect(transport);
+    return transport;
+  }
+
+  private configureKeepAlive(
+    transport: StreamableHTTPServerTransport,
+    sessionsWithInitialNotification: Set<string>,
+  ) {
+    let missedPings = 0;
+    const keepAlive = setInterval(() => {
+      const sessionId = transport.sessionId ?? 'unknown';
+      transport
+        .send({ jsonrpc: '2.0', method: 'ping' })
+        .then(() => {
+          missedPings = 0;
+        })
+        .catch((error: Error) => {
+          missedPings++;
+          this.log(
+            `Failed to send keep-alive ping for session ${sessionId}. Missed pings: ${missedPings}. Error: ${error.message}`,
+          );
+          if (missedPings >= 3) {
+            this.log(
+              `Session ${sessionId} missed ${missedPings} pings. Closing connection and cleaning up interval.`,
+            );
+            clearInterval(keepAlive);
+          }
+        });
+    }, 60000); // 60 sec
+
+    transport.onclose = () => {
+      clearInterval(keepAlive);
+      if (transport.sessionId) {
+        this.log(`Session closed: ${transport.sessionId}`);
+        sessionsWithInitialNotification.delete(transport.sessionId);
+        this.transports.delete(transport.sessionId);
+      }
+    };
+  }
+
+  private async handleSessionRequest(
+    req: Request,
+    res: Response,
+    sessionsWithInitialNotification: Set<string>,
+  ) {
+    const sessionId = req.headers[MCP_SESSION_ID_HEADER] as string | undefined;
+    const transport = sessionId ? this.transports.get(sessionId) : undefined;
+    if (!sessionId || !transport) {
+      this.log('Invalid or missing session ID');
+      res.status(400).send('Invalid or missing session ID');
+      return;
+    }
+
+    try {
+      await transport.handleRequest(req, res);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.log(`Error handling session request: ${errorMessage}`);
+      if (!res.headersSent) {
+        res.status(400).send('Bad Request');
+      }
+    }
+
+    this.sendInitialSessionNotification(
+      transport,
+      sessionId,
+      sessionsWithInitialNotification,
+    );
+  }
+
+  private sendInitialSessionNotification(
+    transport: StreamableHTTPServerTransport,
+    sessionId: string | undefined,
+    sessionsWithInitialNotification: Set<string>,
+  ) {
+    if (
+      this.openFilesManager &&
+      sessionId &&
+      !sessionsWithInitialNotification.has(sessionId)
+    ) {
+      sendIdeContextUpdateNotification(
+        transport,
+        this.log.bind(this),
+        this.openFilesManager,
+      );
+      sessionsWithInitialNotification.add(sessionId);
+    }
+  }
+
+  private registerErrorHandler(app: Express) {
+    app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+      this.log(`Error processing request: ${err.message}`);
+      this.log(`Stack trace: ${err.stack}`);
+      if (err instanceof CORSError) {
+        res.status(403).json({ error: 'Request denied by CORS policy.' });
+      } else {
+        next(err);
+      }
+    });
+  }
+
+  private startHttpServer(
+    app: Express,
+    context: vscode.ExtensionContext,
+    resolve: () => void,
+    reject: (reason?: unknown) => void,
+  ) {
+    this.server = app.listen(0, '127.0.0.1', () => {
+      void this.writeInitialPortFile(context, resolve, reject);
+    });
+
+    this.server.on('close', () => {
+      this.log('IDE server connection closed.');
+    });
+
+    this.server.on('error', (error) => {
+      this.log(`IDE server error: ${error.message}`);
+    });
+  }
+
+  private async writeInitialPortFile(
+    context: vscode.ExtensionContext,
+    resolve: () => void,
+    reject: (reason?: unknown) => void,
+  ) {
+    try {
+      const address = (this.server as HTTPServer).address();
+      if (address !== null && typeof address !== 'string') {
+        this.port = address.port;
+        this.log(`IDE server listening on http://127.0.0.1:${this.port}`);
+        await this.createPortFile();
+        await writePortAndWorkspace({
+          context,
+          port: this.port,
+          portFile: this.portFile,
+          authToken: this.authToken ?? '',
+          log: this.log,
+        });
+      }
+      resolve();
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+
+  private async createPortFile() {
+    try {
+      const portDir = path.join(os.tmpdir(), 'llxprt', 'ide');
+      await fs.mkdir(portDir, { recursive: true });
+      this.portFile = path.join(
+        portDir,
+        `llxprt-ide-server-${process.ppid}-${this.port}.json`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.log(`Failed to create IDE port file: ${message}`);
+    }
   }
 
   broadcastIdeContextUpdate() {
