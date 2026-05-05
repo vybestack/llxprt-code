@@ -363,11 +363,68 @@ export class LoggingProviderWrapper implements IProvider {
     contentOrOptions: IContent[] | GenerateChatOptions,
     maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
+    const normalizedOptions = this.normalizeChatCompletionOptions(
+      contentOrOptions,
+      maybeTools,
+    );
+    this.ensureRuntimeContext(normalizedOptions);
+    const activeConfig = this.resolveAndValidateConfig(normalizedOptions);
+    this.setupRedactorAndLogging(normalizedOptions, activeConfig);
+    const promptId = this.generatePromptId();
+    this.turnNumber++;
+    this.debug.log(
+      () =>
+        `After promptId generation: promptId=${promptId}, turnNumber=${this.turnNumber}`,
+    );
+
+    const conversationLoggingEnabled =
+      this.checkConversationLoggingEnabled(activeConfig);
+
+    if (conversationLoggingEnabled) {
+      await this.logRequestIfEnabled(
+        activeConfig,
+        normalizedOptions,
+        promptId,
+      );
+    }
+
+    this.logApiRequestTelemetry(activeConfig, normalizedOptions, promptId);
+
+    this.debug.log(
+      () =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        `About to call wrapped provider: ${this.wrapped.name}, contentsLength=${normalizedOptions.contents?.length}`,
+    );
+    const stream = this.wrapped.generateChatCompletion(normalizedOptions);
+    this.debug.log(() => `Wrapped provider call completed, processing stream`);
+    const resolvedModelName =
+      normalizedOptions.resolved?.model ?? this.wrapped.getDefaultModel();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (!activeConfig?.getConversationLoggingEnabled()) {
+      yield* this.processStreamForMetrics(
+        activeConfig,
+        stream,
+        resolvedModelName,
+      );
+      return;
+    }
+    yield* this.logResponseStream(
+      activeConfig,
+      stream,
+      promptId,
+      resolvedModelName,
+    );
+  }
+
+  /** REQ-SP4-004: Normalize raw args into GenerateChatOptions, inject runtime, apply normalizer. */
+  private normalizeChatCompletionOptions(
+    contentOrOptions: IContent[] | GenerateChatOptions,
+    maybeTools?: ProviderToolset,
+  ): GenerateChatOptions {
     let normalizedOptions: GenerateChatOptions = Array.isArray(contentOrOptions)
       ? { contents: contentOrOptions, tools: maybeTools }
       : { ...contentOrOptions };
 
-    // REQ-SP4-004: Runtime context push - inject runtime from resolver if available
     const injectedRuntime = this.runtimeContextResolver?.();
     const providedRuntime = normalizedOptions.runtime;
 
@@ -408,8 +465,13 @@ export class LoggingProviderWrapper implements IProvider {
         this.wrapped.name,
       );
     }
+    return normalizedOptions;
+  }
 
-    // REQ-SP4-004: Guard - ensure runtime context is present for stateless hardening
+  /** REQ-SP4-004: Throw if runtime context is missing settings or config. */
+  private ensureRuntimeContext(
+    normalizedOptions: GenerateChatOptions,
+  ): void {
     const runtimeId = normalizedOptions.runtime?.runtimeId ?? 'unknown';
     this.debug.log(
       () =>
@@ -417,7 +479,6 @@ export class LoggingProviderWrapper implements IProvider {
     );
     this.debug.log(
       () =>
-        // contents is required on GenerateChatOptions, but defensive check for safety
         `Contents length at entry: ${normalizedOptions.contents.length}`,
     );
 
@@ -454,7 +515,12 @@ export class LoggingProviderWrapper implements IProvider {
         },
       });
     }
+  }
 
+  /** Resolve config and validate it has required prototype methods. */
+  private resolveAndValidateConfig(
+    normalizedOptions: GenerateChatOptions,
+  ): Config {
     // Resolve config from runtime or legacy fallback
     normalizedOptions.config =
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
@@ -466,74 +532,101 @@ export class LoggingProviderWrapper implements IProvider {
         `After config resolution: hasConfig=${activeConfig != null}, configType=${activeConfig?.constructor?.name}, hasMethod=${typeof activeConfig?.getConversationLoggingEnabled}`,
     );
 
-    // REQ-SP4-004: Validate that config is a proper Config instance with required methods
-    // FAST FAIL: Throw immediately if config is a plain object instead of a Config instance
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (activeConfig != null) {
-      let configHasLoggingMethod =
+      this.validateConfigInstance(activeConfig, normalizedOptions);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard; callers guard before use.
+    return activeConfig!;
+  }
+
+  /** FAST FAIL: Validate config has getConversationLoggingEnabled, attempt prototype restore. */
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+  private validateConfigInstance(
+    activeConfig: Config,
+    normalizedOptions: GenerateChatOptions,
+  ): void {
+    let configHasLoggingMethod =
+      typeof activeConfig.getConversationLoggingEnabled === 'function';
+
+    if (!configHasLoggingMethod) {
+      const configKeys = Object.keys(activeConfig);
+      const prototypeChain: string[] = [];
+      let proto = Object.getPrototypeOf(activeConfig);
+      while (proto != null && proto !== Object.prototype) {
+        prototypeChain.push(proto.constructor?.name ?? 'unknown');
+        proto = Object.getPrototypeOf(proto);
+      }
+
+      this.debug.warn(
+        () =>
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+          `Config instance missing getConversationLoggingEnabled() (type=${activeConfig?.constructor?.name ?? 'unknown'}, frozen=${Object.isFrozen(activeConfig)}, proto=${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object'}). Attempting to restore prototype.`,
+      );
+
+      try {
+        Object.setPrototypeOf(activeConfig, Config.prototype);
+      } catch (error) {
+        this.debug.error(
+          () =>
+            `Failed to restore Config prototype: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      configHasLoggingMethod =
         typeof activeConfig.getConversationLoggingEnabled === 'function';
 
       if (!configHasLoggingMethod) {
-        // Gather diagnostic info about the config object
-        const configKeys = Object.keys(activeConfig);
-        const prototypeChain: string[] = [];
-        let proto = Object.getPrototypeOf(activeConfig);
-        while (proto != null && proto !== Object.prototype) {
-          prototypeChain.push(proto.constructor?.name ?? 'unknown');
-          proto = Object.getPrototypeOf(proto);
-        }
-
-        this.debug.warn(
-          () =>
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            `Config instance missing getConversationLoggingEnabled() (type=${activeConfig?.constructor?.name ?? 'unknown'}, frozen=${Object.isFrozen(activeConfig)}, proto=${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object'}). Attempting to restore prototype.`,
+        throw this.buildConfigValidationError(
+          activeConfig,
+          configKeys,
+          prototypeChain,
+          normalizedOptions,
         );
-
-        try {
-          Object.setPrototypeOf(activeConfig, Config.prototype);
-        } catch (error) {
-          this.debug.error(
-            () =>
-              `Failed to restore Config prototype: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-
-        configHasLoggingMethod =
-          typeof activeConfig.getConversationLoggingEnabled === 'function';
-
-        if (!configHasLoggingMethod) {
-          throw new Error(
-            `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method.\n` +
-              `Config appears to be a plain object instead of a Config class instance.\n` +
-              `This typically happens when the Config is serialized (e.g., Object.freeze with spread, JSON.stringify/parse) and loses its prototype chain.\n` +
-              `Diagnostics:\n` +
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-              `- Type: ${activeConfig?.constructor?.name ?? 'unknown'}\n` +
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-              `- Has method: ${typeof activeConfig?.getConversationLoggingEnabled}\n` +
-              `- Is frozen: ${Object.isFrozen(activeConfig)}\n` +
-              `- Property count: ${configKeys.length}\n` +
-              `- Prototype chain: ${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object (direct)'}\n` +
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Preserve defensive diagnostic output for malformed normalized options.
-              `- From runtime: ${normalizedOptions.runtime !== undefined}\n` +
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive diagnostic output for malformed normalized options.
-              `- Runtime ID: ${normalizedOptions.runtime?.runtimeId ?? 'unknown'}\n` +
-              `Fix: Ensure Config instances are passed by reference, not serialized/deserialized.`,
-          );
-        }
       }
     }
+  }
 
+  /** Build the detailed FAST FAIL diagnostic error for an invalid config instance. */
+  private buildConfigValidationError(
+    activeConfig: Config,
+    configKeys: string[],
+    prototypeChain: string[],
+    normalizedOptions: GenerateChatOptions,
+  ): Error {
+    return new Error(
+      `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method.\n` +
+        `Config appears to be a plain object instead of a Config class instance.\n` +
+        `This typically happens when the Config is serialized (e.g., Object.freeze with spread, JSON.stringify/parse) and loses its prototype chain.\n` +
+        `Diagnostics:\n` +
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        `- Type: ${activeConfig?.constructor?.name ?? 'unknown'}\n` +
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        `- Has method: ${typeof activeConfig?.getConversationLoggingEnabled}\n` +
+        `- Is frozen: ${Object.isFrozen(activeConfig)}\n` +
+        `- Property count: ${configKeys.length}\n` +
+        `- Prototype chain: ${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object (direct)'}\n` +
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Preserve defensive diagnostic output for malformed normalized options.
+        `- From runtime: ${normalizedOptions.runtime !== undefined}\n` +
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive diagnostic output for malformed normalized options.
+        `- Runtime ID: ${normalizedOptions.runtime?.runtimeId ?? 'unknown'}\n` +
+        `Fix: Ensure Config instances are passed by reference, not serialized/deserialized.`,
+    );
+  }
+
+  /** Set up per-call redactor and check conversation logging flag. */
+  private setupRedactorAndLogging(
+    normalizedOptions: GenerateChatOptions,
+    activeConfig: Config,
+  ): void {
     const invocation = normalizedOptions.invocation;
 
-    // Prefer per-call redaction config from invocation context when available
     if (invocation?.redaction) {
       this.redactor = new ConfigBasedRedactor({
         ...invocation.redaction,
       });
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     } else if (this.redactor == null && activeConfig != null) {
-      // REQ-SP4-004: Create per-call redactor if not already set
       this.redactor = new ConfigBasedRedactor(
         activeConfig.getRedactionConfig(),
       );
@@ -541,25 +634,20 @@ export class LoggingProviderWrapper implements IProvider {
     this.debug.log(
       () => `After redactor setup: hasRedactor=${!!this.redactor}`,
     );
+  }
 
-    const promptId = this.generatePromptId();
-    this.turnNumber++;
-    this.debug.log(
-      () =>
-        `After promptId generation: promptId=${promptId}, turnNumber=${this.turnNumber}`,
-    );
-
-    // Log request if logging is enabled
-    let conversationLoggingEnabled = false;
+  /** Check whether conversation logging is enabled, re-throwing on failure. */
+  private checkConversationLoggingEnabled(activeConfig: Config): boolean {
     try {
       this.debug.log(() => `About to call getConversationLoggingEnabled()`);
-      conversationLoggingEnabled =
+      const enabled =
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         activeConfig?.getConversationLoggingEnabled() ?? false;
       this.debug.log(
         () =>
-          `getConversationLoggingEnabled() returned: ${conversationLoggingEnabled}`,
+          `getConversationLoggingEnabled() returned: ${enabled}`,
       );
+      return enabled;
     } catch (error) {
       this.debug.error(
         () =>
@@ -567,42 +655,47 @@ export class LoggingProviderWrapper implements IProvider {
       );
       throw error;
     }
-    this.debug.log(
-      () =>
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        `Conversation logging check: enabled=${conversationLoggingEnabled}, contents length=${normalizedOptions.contents?.length}`,
-    );
+  }
 
-    if (conversationLoggingEnabled) {
-      try {
-        this.debug.log(
-          () =>
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            `Before logRequest: contents length = ${normalizedOptions.contents?.length}`,
-        );
-        await this.logRequest(
-          activeConfig,
-          normalizedOptions.contents,
-          normalizedOptions.tools,
-          promptId,
-        );
-        this.debug.log(
-          () =>
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            `After logRequest: contents length = ${normalizedOptions.contents?.length}`,
-        );
-      } catch (error) {
-        this.debug.error(
-          () =>
-            `logRequest failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        throw error;
-      }
+  /** Log the request if conversation logging is enabled. */
+  private async logRequestIfEnabled(
+    activeConfig: Config,
+    normalizedOptions: GenerateChatOptions,
+    promptId: string,
+  ): Promise<void> {
+    try {
+      this.debug.log(
+        () =>
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+          `Before logRequest: contents length = ${normalizedOptions.contents?.length}`,
+      );
+      await this.logRequest(
+        activeConfig,
+        normalizedOptions.contents,
+        normalizedOptions.tools,
+        promptId,
+      );
+      this.debug.log(
+        () =>
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+          `After logRequest: contents length = ${normalizedOptions.contents?.length}`,
+      );
+    } catch (error) {
+      this.debug.error(
+        () =>
+          `logRequest failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
     }
+  }
 
+  /** Log API request telemetry event. */
+  private logApiRequestTelemetry(
+    activeConfig: Config,
+    normalizedOptions: GenerateChatOptions,
+    promptId: string,
+  ): void {
     this.debug.log(() => `Before API request telemetry section`);
-
-    // Log API request telemetry event
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (activeConfig != null) {
       this.debug.log(
@@ -631,40 +724,6 @@ export class LoggingProviderWrapper implements IProvider {
     } else {
       this.debug.error(() => `Cannot log API request: activeConfig is null`);
     }
-
-    this.debug.log(
-      () =>
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        `About to call wrapped provider: ${this.wrapped.name}, contentsLength=${normalizedOptions.contents?.length}`,
-    );
-
-    // Get stream from wrapped provider using normalized options object
-    const stream = this.wrapped.generateChatCompletion(normalizedOptions);
-
-    this.debug.log(() => `Wrapped provider call completed, processing stream`);
-
-    // Always process stream to extract token metrics
-    // If logging not enabled, process for metrics only
-    // Resolve the model name for telemetry - use resolved model, not provider default
-    const resolvedModelName =
-      normalizedOptions.resolved?.model ?? this.wrapped.getDefaultModel();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!activeConfig?.getConversationLoggingEnabled()) {
-      yield* this.processStreamForMetrics(
-        activeConfig,
-        stream,
-        resolvedModelName,
-      );
-      return;
-    }
-
-    // Log the response stream (which also processes metrics)
-    yield* this.logResponseStream(
-      activeConfig,
-      stream,
-      promptId,
-      resolvedModelName,
-    );
   }
 
   private async logRequest(
@@ -735,83 +794,33 @@ export class LoggingProviderWrapper implements IProvider {
         if (firstChunkTime === null && this.hasTokenBearingOutput(chunk)) {
           firstChunkTime = performance.now() - startTime;
         }
-
-        // Extract token usage and finishReason/stopReason from IContent metadata
-        // (issue #1844): providers may emit either field; honor both.
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Preserve defensive runtime boundary guard despite current static types.
-        if (typeof chunk === 'object' && chunk !== null) {
-          const content = chunk;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (content.metadata?.usage) {
-            latestTokenUsage = content.metadata.usage;
-          }
-          const metaFinishReason =
-            (content.metadata as Record<string, unknown> | undefined)
-              ?.finishReason ?? content.metadata?.stopReason;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (typeof metaFinishReason === 'string') {
-            lastFinishReason = metaFinishReason;
-          }
-
-          // Accumulate text content for token estimation fallback (only when no real usage yet)
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (latestTokenUsage === undefined && Array.isArray(content.blocks)) {
-            for (const block of content.blocks) {
-              if (block.type === 'text') {
-                streamedText += block.text;
-              }
-            }
-          }
-        }
-
+        this.extractChunkMetadata(
+          chunk,
+          (usage) => { latestTokenUsage = usage; },
+          (reason) => { lastFinishReason = reason; },
+          latestTokenUsage === undefined,
+          (text) => { streamedText += text; },
+        );
         yield chunk;
       }
 
-      // Process metrics if we have token usage
       const duration = performance.now() - startTime;
-      const tokenCounts = latestTokenUsage
-        ? this.extractTokenCountsFromTokenUsage(latestTokenUsage)
-        : {
-            input_token_count: 0,
-            output_token_count:
-              streamedText.length > 0 ? estimateTokens(streamedText) : 0,
-            cached_content_token_count: 0,
-            thoughts_token_count: 0,
-            tool_token_count: 0,
-            cache_read_input_tokens: 0,
-            cache_creation_input_tokens: null,
-          };
-
-      // Issue #684: Log API response telemetry for /stats model tracking
-      if (config) {
-        const finishReasons = lastFinishReason ? [lastFinishReason] : [];
-        // Create event and set token counts directly since constructor doesn't support raw counts
-        const event = new ApiResponseEvent(
-          modelName,
-          duration,
-          '', // promptId - not available in metrics-only path
-          undefined,
-          undefined,
-          undefined,
-          finishReasons,
-        );
-        event.input_token_count = tokenCounts.input_token_count;
-        event.output_token_count = tokenCounts.output_token_count;
-        event.cached_content_token_count =
-          tokenCounts.cached_content_token_count;
-        event.thoughts_token_count = tokenCounts.thoughts_token_count;
-        event.tool_token_count = tokenCounts.tool_token_count;
-        event.total_token_count =
-          tokenCounts.input_token_count + tokenCounts.output_token_count;
-        logApiResponse(config, event);
-      }
+      const tokenCounts = this.resolveTokenCounts(
+        latestTokenUsage,
+        streamedText,
+      );
+      this.emitMetricsTelemetry(
+        config,
+        tokenCounts,
+        modelName,
+        duration,
+        lastFinishReason,
+      );
 
       if (latestTokenUsage) {
-        // Accumulate token usage for session tracking (requires actual usage data)
         this.accumulateTokenUsage(tokenCounts, config);
       }
 
-      // Always record completion for performance tracking (TPM, latency, request count)
       const totalTokens =
         tokenCounts.input_token_count + tokenCounts.output_token_count;
       this.performanceTracker.recordCompletion(
@@ -821,32 +830,149 @@ export class LoggingProviderWrapper implements IProvider {
         chunkCount,
       );
     } catch (error) {
-      // Record error in performance tracker
-      const duration = performance.now() - startTime;
-      this.performanceTracker.recordError(
-        duration,
-        String(error),
+      this.handleMetricsStreamError(
+        error,
+        config,
+        modelName,
+        startTime,
         firstChunkTime,
         chunkCount,
       );
-
-      // Issue #684: Log API error telemetry
-      if (config) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        logApiError(
-          config,
-          new ApiErrorEvent(
-            modelName,
-            errorMessage,
-            duration,
-            '', // promptId
-            'stream_error', // error_type
-            undefined, // status_code
-          ),
-        );
-      }
       throw error;
+    }
+  }
+
+  /** Extract token usage, finish reason, and text from a stream chunk. */
+  private extractChunkMetadata(
+    chunk: IContent,
+    onUsage: (usage: UsageStats) => void,
+    onFinishReason: (reason: string) => void,
+    shouldAccumulateText: boolean,
+    onText: (text: string) => void,
+  ): void {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Preserve defensive runtime boundary guard despite current static types.
+    if (typeof chunk !== 'object' || chunk === null) {
+      return;
+    }
+    const content = chunk;
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (content.metadata?.usage) {
+      onUsage(content.metadata.usage);
+    }
+    const metaFinishReason =
+      (content.metadata as Record<string, unknown> | undefined)
+        ?.finishReason ?? content.metadata?.stopReason;
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (typeof metaFinishReason === 'string') {
+      onFinishReason(metaFinishReason);
+    }
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (shouldAccumulateText && Array.isArray(content.blocks)) {
+      for (const block of content.blocks) {
+        if (block.type === 'text') {
+          onText(block.text);
+        }
+      }
+    }
+  }
+
+  /** Resolve token counts from usage stats or estimate from streamed text. */
+  private resolveTokenCounts(
+    latestTokenUsage: UsageStats | undefined,
+    streamedText: string,
+  ): {
+    input_token_count: number;
+    output_token_count: number;
+    cached_content_token_count: number;
+    thoughts_token_count: number;
+    tool_token_count: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number | null;
+  } {
+    return latestTokenUsage
+      ? this.extractTokenCountsFromTokenUsage(latestTokenUsage)
+      : {
+          input_token_count: 0,
+          output_token_count:
+            streamedText.length > 0 ? estimateTokens(streamedText) : 0,
+          cached_content_token_count: 0,
+          thoughts_token_count: 0,
+          tool_token_count: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: null,
+        };
+  }
+
+  /** Issue #684: Emit API response telemetry for /stats model tracking. */
+  private emitMetricsTelemetry(
+    config: Config | undefined,
+    tokenCounts: {
+      input_token_count: number;
+      output_token_count: number;
+      cached_content_token_count: number;
+      thoughts_token_count: number;
+      tool_token_count: number;
+      cache_read_input_tokens: number;
+      cache_creation_input_tokens: number | null;
+    },
+    modelName: string,
+    duration: number,
+    lastFinishReason: string | undefined,
+  ): void {
+    if (!config) {
+      return;
+    }
+    const finishReasons = lastFinishReason ? [lastFinishReason] : [];
+    const event = new ApiResponseEvent(
+      modelName,
+      duration,
+      '',
+      undefined,
+      undefined,
+      undefined,
+      finishReasons,
+    );
+    event.input_token_count = tokenCounts.input_token_count;
+    event.output_token_count = tokenCounts.output_token_count;
+    event.cached_content_token_count =
+      tokenCounts.cached_content_token_count;
+    event.thoughts_token_count = tokenCounts.thoughts_token_count;
+    event.tool_token_count = tokenCounts.tool_token_count;
+    event.total_token_count =
+      tokenCounts.input_token_count + tokenCounts.output_token_count;
+    logApiResponse(config, event);
+  }
+
+  /** Handle stream error: record in performance tracker and log API error telemetry. */
+  private handleMetricsStreamError(
+    error: unknown,
+    config: Config | undefined,
+    modelName: string,
+    startTime: number,
+    firstChunkTime: number | null,
+    chunkCount: number,
+  ): void {
+    const duration = performance.now() - startTime;
+    this.performanceTracker.recordError(
+      duration,
+      String(error),
+      firstChunkTime,
+      chunkCount,
+    );
+    if (config) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      logApiError(
+        config,
+        new ApiErrorEvent(
+          modelName,
+          errorMessage,
+          duration,
+          '',
+          'stream_error',
+          undefined,
+        ),
+      );
     }
   }
 
@@ -871,29 +997,18 @@ export class LoggingProviderWrapper implements IProvider {
           firstChunkTime = performance.now() - startTime;
         }
 
-        // Simple content extraction - just try to get text from common chunk formats
         const content = this.extractSimpleContent(chunk);
         if (content) {
           responseContent += content;
         }
 
-        // Extract token usage and finishReason/stopReason from IContent metadata
-        // (issue #1844): providers may emit either field; honor both.
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Preserve defensive runtime boundary guard despite current static types.
-        if (typeof chunk === 'object' && chunk !== null) {
-          const content = chunk;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (content.metadata?.usage) {
-            latestTokenUsage = content.metadata.usage;
-          }
-          const metaFinishReason =
-            (content.metadata as Record<string, unknown> | undefined)
-              ?.finishReason ?? content.metadata?.stopReason;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (typeof metaFinishReason === 'string') {
-            lastFinishReason = metaFinishReason;
-          }
-        }
+        this.extractChunkMetadata(
+          chunk,
+          (usage) => { latestTokenUsage = usage; },
+          (reason) => { lastFinishReason = reason; },
+          false,
+          () => {},
+        );
 
         yield chunk;
       }
@@ -1002,15 +1117,12 @@ export class LoggingProviderWrapper implements IProvider {
         ? this.redactor.redactResponseContent(content, this.wrapped.name)
         : content;
 
-      // Extract token counts from the response or use provided tokenUsage
       const tokenCounts = tokenUsage
         ? this.extractTokenCountsFromTokenUsage(tokenUsage)
         : this.extractTokenCountsFromResponse(content);
 
-      // Accumulate token usage for session tracking
       this.accumulateTokenUsage(tokenCounts, config);
 
-      // Record performance metrics; failed streams are recorded as errors
       const perfTotalTokens =
         tokenCounts.input_token_count + tokenCounts.output_token_count;
       if (success) {
@@ -1029,80 +1141,124 @@ export class LoggingProviderWrapper implements IProvider {
         );
       }
 
-      // Calculate total for telemetry event
-      const totalTokens =
-        tokenCounts.input_token_count +
-        tokenCounts.output_token_count +
-        tokenCounts.cached_content_token_count +
-        tokenCounts.thoughts_token_count +
-        tokenCounts.tool_token_count;
-
-      // Log token usage to telemetry
-      logTokenUsage(
+      this.emitResponseTelemetry(
         config,
-        new TokenUsageEvent(
-          this.wrapped.name,
-          this.conversationId,
-          tokenCounts.input_token_count,
-          tokenCounts.output_token_count,
-          tokenCounts.cached_content_token_count,
-          tokenCounts.tool_token_count,
-          tokenCounts.thoughts_token_count,
-          totalTokens,
-        ),
-      );
-
-      // Issue #684: Log API response telemetry for /stats model tracking
-      const resolvedModelName = modelName ?? this.wrapped.getDefaultModel();
-      const apiResponseEvent = new ApiResponseEvent(
-        resolvedModelName,
-        duration,
+        tokenCounts,
+        modelName,
         promptId,
-        undefined,
-        undefined,
-        undefined,
+        duration,
         finishReasons,
+        success,
+        error,
       );
-      apiResponseEvent.input_token_count = tokenCounts.input_token_count;
-      apiResponseEvent.output_token_count = tokenCounts.output_token_count;
-      apiResponseEvent.cached_content_token_count =
-        tokenCounts.cached_content_token_count;
-      apiResponseEvent.thoughts_token_count = tokenCounts.thoughts_token_count;
-      apiResponseEvent.tool_token_count = tokenCounts.tool_token_count;
-      apiResponseEvent.total_token_count = totalTokens;
-      if (!success && error != null) {
-        apiResponseEvent.error = String(error);
-      }
-      logApiResponse(config, apiResponseEvent);
-
-      const event = new ConversationResponseEvent(
-        this.wrapped.name,
-        this.conversationId,
-        this.turnNumber,
-        promptId,
+      this.writeConversationLog(
+        config,
         redactedContent,
-        duration,
-        success,
-        error != null ? String(error) : undefined,
-      );
-
-      logConversationResponse(config, event);
-
-      // Also write to disk
-      const fileWriter = getConversationFileWriter(
-        config.getConversationLogPath(),
-      );
-      fileWriter.writeResponse(this.wrapped.name, redactedContent, {
-        conversationId: this.conversationId,
-        turnNumber: this.turnNumber,
         promptId,
         duration,
         success,
-        error: error != null ? String(error) : undefined,
-      });
+        error,
+      );
     } catch (logError) {
       this.debug.warn(() => `Failed to log conversation response: ${logError}`);
     }
+  }
+
+  /** Emit token usage and API response telemetry events. */
+  private emitResponseTelemetry(
+    config: Config,
+    tokenCounts: {
+      input_token_count: number;
+      output_token_count: number;
+      cached_content_token_count: number;
+      thoughts_token_count: number;
+      tool_token_count: number;
+      cache_read_input_tokens: number;
+      cache_creation_input_tokens: number | null;
+    },
+    modelName: string | undefined,
+    promptId: string,
+    duration: number,
+    finishReasons: string[] | undefined,
+    success: boolean,
+    error: unknown,
+  ): void {
+    const totalTokens =
+      tokenCounts.input_token_count +
+      tokenCounts.output_token_count +
+      tokenCounts.cached_content_token_count +
+      tokenCounts.thoughts_token_count +
+      tokenCounts.tool_token_count;
+
+    logTokenUsage(
+      config,
+      new TokenUsageEvent(
+        this.wrapped.name,
+        this.conversationId,
+        tokenCounts.input_token_count,
+        tokenCounts.output_token_count,
+        tokenCounts.cached_content_token_count,
+        tokenCounts.tool_token_count,
+        tokenCounts.thoughts_token_count,
+        totalTokens,
+      ),
+    );
+
+    const resolvedModelName = modelName ?? this.wrapped.getDefaultModel();
+    const apiResponseEvent = new ApiResponseEvent(
+      resolvedModelName,
+      duration,
+      promptId,
+      undefined,
+      undefined,
+      undefined,
+      finishReasons,
+    );
+    apiResponseEvent.input_token_count = tokenCounts.input_token_count;
+    apiResponseEvent.output_token_count = tokenCounts.output_token_count;
+    apiResponseEvent.cached_content_token_count =
+      tokenCounts.cached_content_token_count;
+    apiResponseEvent.thoughts_token_count = tokenCounts.thoughts_token_count;
+    apiResponseEvent.tool_token_count = tokenCounts.tool_token_count;
+    apiResponseEvent.total_token_count = totalTokens;
+    if (!success && error != null) {
+      apiResponseEvent.error = String(error);
+    }
+    logApiResponse(config, apiResponseEvent);
+  }
+
+  /** Write conversation response event to telemetry and disk. */
+  private writeConversationLog(
+    config: Config,
+    redactedContent: string,
+    promptId: string,
+    duration: number,
+    success: boolean,
+    error: unknown,
+  ): void {
+    const event = new ConversationResponseEvent(
+      this.wrapped.name,
+      this.conversationId,
+      this.turnNumber,
+      promptId,
+      redactedContent,
+      duration,
+      success,
+      error != null ? String(error) : undefined,
+    );
+    logConversationResponse(config, event);
+
+    const fileWriter = getConversationFileWriter(
+      config.getConversationLogPath(),
+    );
+    fileWriter.writeResponse(this.wrapped.name, redactedContent, {
+      conversationId: this.conversationId,
+      turnNumber: this.turnNumber,
+      promptId,
+      duration,
+      success,
+      error: error != null ? String(error) : undefined,
+    });
   }
 
   private generateConversationId(): string {
@@ -1202,116 +1358,156 @@ export class LoggingProviderWrapper implements IProvider {
     let cache_creation_input_tokens = 0;
 
     try {
-      // Check if response is a string and try to parse it as JSON
       if (typeof response === 'string') {
         const parsed = JSON.parse(response);
-        // Extract token usage from response object
         if (parsed.usage != null) {
-          const promptNum = Number(parsed.usage.prompt_tokens);
-          const completionNum = Number(parsed.usage.completion_tokens);
-          const cachedContentNum = Number(parsed.usage.cached_content_tokens);
-          const thoughtsNum = Number(parsed.usage.thoughts_tokens);
-          const toolNum = Number(parsed.usage.tool_tokens);
-          const cacheReadNum = Number(parsed.usage.cache_read_input_tokens);
-          const cacheCreationNum = Number(
-            parsed.usage.cache_creation_input_tokens,
-          );
-          input_token_count =
-            !isNaN(promptNum) && promptNum !== 0 ? promptNum : 0;
-          output_token_count =
-            !isNaN(completionNum) && completionNum !== 0 ? completionNum : 0;
-          cached_content_token_count =
-            !isNaN(cachedContentNum) && cachedContentNum !== 0
-              ? cachedContentNum
-              : 0;
-          thoughts_token_count =
-            !isNaN(thoughtsNum) && thoughtsNum !== 0 ? thoughtsNum : 0;
-          tool_token_count = !isNaN(toolNum) && toolNum !== 0 ? toolNum : 0;
-          cache_read_input_tokens =
-            !isNaN(cacheReadNum) && cacheReadNum !== 0 ? cacheReadNum : 0;
-          cache_creation_input_tokens =
-            !isNaN(cacheCreationNum) && cacheCreationNum !== 0
-              ? cacheCreationNum
-              : 0;
+          ({
+            input_token_count,
+            output_token_count,
+            cached_content_token_count,
+            thoughts_token_count,
+            tool_token_count,
+            cache_read_input_tokens,
+            cache_creation_input_tokens,
+          } = this.extractUsageNumbers(parsed.usage));
         }
       } else if (typeof response === 'object' && response !== null) {
-        // Extract token usage from response object
         const obj = response as Record<string, unknown>;
         if (obj.usage != null && typeof obj.usage === 'object') {
-          const usage = obj.usage as Record<string, unknown>;
-          const promptNum = Number(usage.prompt_tokens);
-          const completionNum = Number(usage.completion_tokens);
-          const cachedContentNum = Number(usage.cached_content_tokens);
-          const thoughtsNum = Number(usage.thoughts_tokens);
-          const toolNum = Number(usage.tool_tokens);
-          const cacheReadNum = Number(usage.cache_read_input_tokens);
-          const cacheCreationNum = Number(usage.cache_creation_input_tokens);
-          input_token_count =
-            !isNaN(promptNum) && promptNum !== 0 ? promptNum : 0;
-          output_token_count =
-            !isNaN(completionNum) && completionNum !== 0 ? completionNum : 0;
-          cached_content_token_count =
-            !isNaN(cachedContentNum) && cachedContentNum !== 0
-              ? cachedContentNum
-              : 0;
-          thoughts_token_count =
-            !isNaN(thoughtsNum) && thoughtsNum !== 0 ? thoughtsNum : 0;
-          tool_token_count = !isNaN(toolNum) && toolNum !== 0 ? toolNum : 0;
-          cache_read_input_tokens =
-            !isNaN(cacheReadNum) && cacheReadNum !== 0 ? cacheReadNum : 0;
-          cache_creation_input_tokens =
-            !isNaN(cacheCreationNum) && cacheCreationNum !== 0
-              ? cacheCreationNum
-              : 0;
+          ({
+            input_token_count,
+            output_token_count,
+            cached_content_token_count,
+            thoughts_token_count,
+            tool_token_count,
+            cache_read_input_tokens,
+            cache_creation_input_tokens,
+          } = this.extractUsageNumbers(obj.usage as Record<string, unknown>));
         }
-
-        // Check for anthropic-style headers
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (obj.headers != null && typeof obj.headers === 'object') {
-          const headers = obj.headers as Record<string, string>;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (headers['anthropic-input-tokens']) {
-            const parsedValue = parseInt(headers['anthropic-input-tokens'], 10);
-            input_token_count =
-              !isNaN(parsedValue) && parsedValue >= 0
-                ? parsedValue
-                : input_token_count;
-          }
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (headers['anthropic-output-tokens']) {
-            const parsedValue = parseInt(
-              headers['anthropic-output-tokens'],
-              10,
-            );
-            output_token_count =
-              !isNaN(parsedValue) && parsedValue >= 0
-                ? parsedValue
-                : output_token_count;
-          }
+          ({
+            input_token_count,
+            output_token_count,
+          } = this.extractAnthropicHeaderTokens(
+            obj.headers as Record<string, string>,
+            input_token_count,
+            output_token_count,
+          ));
         }
       }
 
-      // Ensure we return valid numbers, not NaN or negative values
-      return {
-        input_token_count: Math.max(0, input_token_count),
-        output_token_count: Math.max(0, output_token_count),
-        cached_content_token_count: Math.max(0, cached_content_token_count),
-        thoughts_token_count: Math.max(0, thoughts_token_count),
-        tool_token_count: Math.max(0, tool_token_count),
-        cache_read_input_tokens: Math.max(0, cache_read_input_tokens),
-        cache_creation_input_tokens: Math.max(0, cache_creation_input_tokens),
-      };
+      return this.clampTokenCounts({
+        input_token_count,
+        output_token_count,
+        cached_content_token_count,
+        thoughts_token_count,
+        tool_token_count,
+        cache_read_input_tokens,
+        cache_creation_input_tokens,
+      });
     } catch {
-      // Token extraction failed - return zero counts as fallback
-      return {
-        input_token_count: 0,
-        output_token_count: 0,
-        cached_content_token_count: 0,
-        thoughts_token_count: 0,
-        tool_token_count: 0,
-        cache_read_input_tokens: 0,
-        cache_creation_input_tokens: 0,
-      };
+      return this.zeroTokenCounts();
     }
+  }
+
+  /** Extract numeric token counts from a usage object. */
+  private extractUsageNumbers(usage: Record<string, unknown>): {
+    input_token_count: number;
+    output_token_count: number;
+    cached_content_token_count: number;
+    thoughts_token_count: number;
+    tool_token_count: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
+  } {
+    const safeNum = (v: unknown) => {
+      const n = Number(v);
+      return !isNaN(n) && n !== 0 ? n : 0;
+    };
+    return {
+      input_token_count: safeNum(usage.prompt_tokens),
+      output_token_count: safeNum(usage.completion_tokens),
+      cached_content_token_count: safeNum(usage.cached_content_tokens),
+      thoughts_token_count: safeNum(usage.thoughts_tokens),
+      tool_token_count: safeNum(usage.tool_tokens),
+      cache_read_input_tokens: safeNum(usage.cache_read_input_tokens),
+      cache_creation_input_tokens: safeNum(usage.cache_creation_input_tokens),
+    };
+  }
+
+  /** Extract anthropic-style header tokens, falling back to current values. */
+  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  private extractAnthropicHeaderTokens(
+    headers: Record<string, string>,
+    currentInput: number,
+    currentOutput: number,
+  ): { input_token_count: number; output_token_count: number } {
+    let input_token_count = currentInput;
+    let output_token_count = currentOutput;
+    if (headers['anthropic-input-tokens']) {
+      const parsedValue = parseInt(headers['anthropic-input-tokens'], 10);
+      input_token_count =
+        !isNaN(parsedValue) && parsedValue >= 0 ? parsedValue : input_token_count;
+    }
+    if (headers['anthropic-output-tokens']) {
+      const parsedValue = parseInt(headers['anthropic-output-tokens'], 10);
+      output_token_count =
+        !isNaN(parsedValue) && parsedValue >= 0
+          ? parsedValue
+          : output_token_count;
+    }
+    return { input_token_count, output_token_count };
+  }
+
+  /** Clamp all token counts to non-negative. */
+  private clampTokenCounts(counts: {
+    input_token_count: number;
+    output_token_count: number;
+    cached_content_token_count: number;
+    thoughts_token_count: number;
+    tool_token_count: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
+  }): {
+    input_token_count: number;
+    output_token_count: number;
+    cached_content_token_count: number;
+    thoughts_token_count: number;
+    tool_token_count: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
+  } {
+    return {
+      input_token_count: Math.max(0, counts.input_token_count),
+      output_token_count: Math.max(0, counts.output_token_count),
+      cached_content_token_count: Math.max(0, counts.cached_content_token_count),
+      thoughts_token_count: Math.max(0, counts.thoughts_token_count),
+      tool_token_count: Math.max(0, counts.tool_token_count),
+      cache_read_input_tokens: Math.max(0, counts.cache_read_input_tokens),
+      cache_creation_input_tokens: Math.max(0, counts.cache_creation_input_tokens),
+    };
+  }
+
+  /** Return zero token counts as fallback. */
+  private zeroTokenCounts(): {
+    input_token_count: number;
+    output_token_count: number;
+    cached_content_token_count: number;
+    thoughts_token_count: number;
+    tool_token_count: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
+  } {
+    return {
+      input_token_count: 0,
+      output_token_count: 0,
+      cached_content_token_count: 0,
+      thoughts_token_count: 0,
+      tool_token_count: 0,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    };
   }
 
   /**
