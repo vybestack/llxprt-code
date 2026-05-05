@@ -336,6 +336,23 @@ export class SubAgentScope {
    * shared CoreToolScheduler. Tests may supply a custom schedulerFactory to
    * observe scheduling behaviour without touching the real scheduler.
    */
+  private async runInteractiveGoalCheckLoop(
+    execCtx: ExecutionLoopContext,
+    startTime: number,
+    turnCounter: number,
+    currentTurn: number,
+  ): Promise<Content[] | null> {
+    const recheck = checkTerminationConditions(turnCounter, startTime, execCtx);
+    if (recheck.shouldStop) return null;
+
+    const todoReminder = await buildTodoCompletionPrompt(
+      this.runtimeContext,
+      this.subagentId,
+      this.logger,
+    );
+    return checkGoalCompletion(execCtx, todoReminder, currentTurn);
+  }
+
   async runInteractive(
     context: ContextState,
     options?: {
@@ -385,22 +402,10 @@ export class SubAgentScope {
           continue;
         }
 
-        // Post-turn timeout recheck
-        const recheck = checkTerminationConditions(
-          turnCounter,
+        const nextMessages = await this.runInteractiveGoalCheckLoop(
+          execCtx,
           startTime,
-          execCtx,
-        );
-        if (recheck.shouldStop) break;
-
-        const todoReminder = await buildTodoCompletionPrompt(
-          this.runtimeContext,
-          this.subagentId,
-          this.logger,
-        );
-        const nextMessages = await checkGoalCompletion(
-          execCtx,
-          todoReminder,
+          turnCounter,
           currentTurn,
         );
         if (!nextMessages) break;
@@ -696,6 +701,35 @@ export class SubAgentScope {
       `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`,
     );
 
+    const { functionCalls: rawCalls, textResponse } =
+      await this.consumeNonInteractiveStream(
+        responseStream,
+        abortController,
+        currentTurn,
+      );
+    if (abortController.signal.aborted === true) {
+      return { functionCalls: [], textResponse: '' };
+    }
+
+    let functionCalls = rawCalls;
+    if (textResponse) {
+      const result = processNonInteractiveTextResponse(
+        textResponse,
+        functionCalls,
+        execCtx,
+        resolveToolName,
+      );
+      functionCalls = result.functionCalls;
+    }
+
+    return { functionCalls, textResponse };
+  }
+
+  private async consumeNonInteractiveStream(
+    responseStream: AsyncIterable<StreamEvent>,
+    abortController: AbortController,
+    currentTurn: number,
+  ): Promise<{ functionCalls: FunctionCall[]; textResponse: string }> {
     const timeoutController = new AbortController();
     const timeoutSignal = timeoutController.signal;
     const onAbort = () => timeoutController.abort();
@@ -706,17 +740,14 @@ export class SubAgentScope {
       return { functionCalls: [], textResponse: '' };
     }
 
-    let functionCalls: FunctionCall[] = [];
+    const functionCalls: FunctionCall[] = [];
     let textResponse = '';
     const iterator = responseStream[Symbol.asyncIterator]();
-
-    // Resolve the effective idle timeout from config
     const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(this.config);
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
       while (true) {
-        // Use watchdog if timeout > 0, otherwise call iterator.next() directly
         let result: IteratorResult<StreamEvent, unknown>;
         if (effectiveTimeoutMs > 0) {
           result = await nextStreamEventWithIdleTimeout({
@@ -735,15 +766,14 @@ export class SubAgentScope {
             createTimeoutError: () => createAbortError(),
           });
         } else {
-          // Watchdog disabled: call iterator.next() directly
           result = await iterator.next();
         }
-        if (result.done === true) {
-          break;
-        }
+        if (result.done === true) break;
         const resp = result.value;
         const isRuntimeAborted = Boolean(abortController.signal.aborted);
-        if (isRuntimeAborted) return { functionCalls: [], textResponse: '' };
+        if (isRuntimeAborted) {
+          return { functionCalls: [], textResponse: '' };
+        }
         if (
           resp.type === StreamEventType.CHUNK &&
           resp.value.functionCalls != null
@@ -764,21 +794,9 @@ export class SubAgentScope {
         }
       }
     } finally {
-      // Close the stream iterator to release sendPromise in TurnProcessor.
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
       iterator.return?.(undefined).catch(() => {});
       timeoutController.abort();
       abortController.signal.removeEventListener('abort', onAbort);
-    }
-
-    if (textResponse) {
-      const result = processNonInteractiveTextResponse(
-        textResponse,
-        functionCalls,
-        execCtx,
-        resolveToolName,
-      );
-      functionCalls = result.functionCalls;
     }
 
     return { functionCalls, textResponse };

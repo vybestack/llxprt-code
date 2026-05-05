@@ -233,17 +233,10 @@ export async function loadCoreMemoryContent(cwd: string): Promise<string> {
 
   return parts.join('\n\n');
 }
-/**
- * Build PromptContext from current environment and parameters
- */
-async function buildPromptContext(
-  options: CoreSystemPromptOptions,
-): Promise<PromptContext> {
-  const { model, tools, provider, includeSubagentDelegation, interactionMode } =
-    options;
-  const cwd = process.cwd();
-
-  // Check if folder structure should be included (default: false for better cache hit rates)
+function resolveFolderStructureSettings(): {
+  includeFolderStructure: boolean;
+  enableToolPrompts: boolean;
+} {
   let includeFolderStructure = false;
   let enableToolPrompts = false;
   try {
@@ -263,23 +256,30 @@ async function buildPromptContext(
   } catch {
     // Settings unavailable; use defaults.
   }
+  return { includeFolderStructure, enableToolPrompts };
+}
 
-  // Generate folder structure for the current working directory
-  let folderStructure: string | undefined;
-  if (includeFolderStructure) {
-    try {
-      folderStructure = await getFolderStructure(cwd, {
-        maxItems: 100, // Limit for startup performance
-      });
-      folderStructure = compactFolderStructureSnapshot(folderStructure);
-    } catch (error) {
-      // If folder structure generation fails, continue without it
-      logger.debug(() => `Failed to generate folder structure: ${error}`);
-    }
+async function resolveFolderStructure(
+  cwd: string,
+  includeFolderStructure: boolean,
+): Promise<string | undefined> {
+  if (!includeFolderStructure) return undefined;
+  try {
+    const raw = await getFolderStructure(cwd, {
+      maxItems: 100,
+    });
+    return compactFolderStructureSnapshot(raw);
+  } catch (error) {
+    logger.debug(() => `Failed to generate folder structure: ${error}`);
+    return undefined;
   }
+}
 
-  const workspaceDirectories = [cwd];
-
+function buildEnvironment(
+  cwd: string,
+  folderStructure: string | undefined,
+  interactionMode: CoreSystemPromptOptions['interactionMode'],
+): PromptEnvironment {
   const environment: PromptEnvironment = {
     isGitRepository: isGitRepository(cwd),
     isSandboxed: !!process.env.SANDBOX,
@@ -288,113 +288,127 @@ async function buildPromptContext(
     workingDirectory: cwd,
     workspaceRoot: cwd,
     workspaceName: path.basename(cwd),
-    workspaceDirectories,
+    workspaceDirectories: [cwd],
     folderStructure,
     interactionMode,
   };
 
-  // Determine sandbox type
   if (process.env.SANDBOX === 'sandbox-exec') {
     environment.sandboxType = 'macos-seatbelt';
   } else if (process.env.SANDBOX) {
     environment.sandboxType = 'generic';
   }
 
-  // Add other environment flags
   if (process.env.IDE_COMPANION === 'true') {
     environment.hasIdeCompanion = true;
   }
 
-  // Map tools to PascalCase names
-  const toolMapping = getToolNameMapping();
-  let enabledTools: string[];
-  if (tools === undefined) {
-    enabledTools = [
-      'Ls',
-      'Edit',
-      'Glob',
-      'Grep',
-      'ReadFile',
-      'ReadManyFiles',
-      'Shell',
-      'WriteFile',
-      'Memory',
-      'TodoRead',
-      'TodoWrite',
-      'GoogleWebFetch',
-      'DirectWebFetch',
-      'GoogleWebSearch',
-      'ExaWebSearch',
-      'delete_line_range',
-      'insert_at_line',
-      'read_line_range',
-    ];
-  } else if (tools.length > 0) {
-    const mappedTools = tools
-      .map((toolName) => {
-        // First try direct mapping (handles existing snake_case tools)
-        if (toolMapping[toolName]) {
-          return toolMapping[toolName];
-        }
-        // Try mapping kebab-case versions (for new tools)
-        const snakeName = toolName.replace(/-/g, '_');
-        if (toolMapping[snakeName]) {
-          return toolMapping[snakeName];
-        }
-        // If no mapping, it might already be in the right format
-        return toolName;
-      })
-      .filter(Boolean);
-    enabledTools = Array.from(new Set(mappedTools));
-  } else {
-    enabledTools = [];
-  }
+  return environment;
+}
 
-  // Use provider if explicitly passed, otherwise get from settings or default to gemini
+const DEFAULT_ENABLED_TOOLS = [
+  'Ls',
+  'Edit',
+  'Glob',
+  'Grep',
+  'ReadFile',
+  'ReadManyFiles',
+  'Shell',
+  'WriteFile',
+  'Memory',
+  'TodoRead',
+  'TodoWrite',
+  'GoogleWebFetch',
+  'DirectWebFetch',
+  'GoogleWebSearch',
+  'ExaWebSearch',
+  'delete_line_range',
+  'insert_at_line',
+  'read_line_range',
+];
+
+function resolveEnabledTools(tools?: string[]): string[] {
+  const toolMapping = getToolNameMapping();
+  if (tools === undefined) return [...DEFAULT_ENABLED_TOOLS];
+  if (tools.length === 0) return [];
+  const mappedTools = tools
+    .map((toolName) => {
+      if (toolMapping[toolName]) return toolMapping[toolName];
+      const snakeName = toolName.replace(/-/g, '_');
+      if (toolMapping[snakeName]) return toolMapping[snakeName];
+      return toolName;
+    })
+    .filter(Boolean);
+  return Array.from(new Set(mappedTools));
+}
+
+function resolveProvider(provider?: string): string {
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider should fall through to 'gemini'
   let resolvedProvider = provider || 'gemini';
-
-  // If provider wasn't explicitly passed, try to get it from settings
   if (!provider) {
     try {
       const settingsService = getSettingsService();
       const activeProvider = settingsService.get('activeProvider') as string;
-      if (activeProvider) {
-        resolvedProvider = activeProvider;
-      }
+      if (activeProvider) resolvedProvider = activeProvider;
     } catch {
       // Settings unavailable (e.g., during tests); use default provider.
     }
   }
+  return resolvedProvider;
+}
 
-  // Determine async subagent settings (global and profile)
-  let asyncSubagentsEnabled = options.asyncSubagentsEnabled;
-  let profileAsyncEnabled = options.profileAsyncEnabled;
-  if (
-    asyncSubagentsEnabled === undefined ||
-    profileAsyncEnabled === undefined
-  ) {
+function resolveAsyncSubagentSettings(
+  asyncSubagentsEnabled?: boolean,
+  profileAsyncEnabled?: boolean,
+): { asyncSubagentsEnabled: boolean; profileAsyncEnabled: boolean } {
+  let a = asyncSubagentsEnabled;
+  let p = profileAsyncEnabled;
+  if (a === undefined || p === undefined) {
     try {
       const settingsService = getSettingsService();
-      if (asyncSubagentsEnabled === undefined) {
-        // Global setting from /settings (nested under subagents.asyncEnabled)
+      if (a === undefined) {
         const globalSettings = settingsService.getAllGlobalSettings();
         const subagentsSettings = globalSettings['subagents'] as
           | { asyncEnabled?: boolean }
           | undefined;
-        asyncSubagentsEnabled = subagentsSettings?.asyncEnabled !== false;
+        a = subagentsSettings?.asyncEnabled !== false;
       }
-      if (profileAsyncEnabled === undefined) {
-        // Profile setting from /set (subagents.async.enabled)
+      if (p === undefined) {
         const profileValue = settingsService.get('subagents.async.enabled');
-        profileAsyncEnabled = profileValue !== false;
+        p = profileValue !== false;
       }
     } catch {
-      // Settings unavailable; default to enabled.
-      asyncSubagentsEnabled = asyncSubagentsEnabled ?? true;
-      profileAsyncEnabled = profileAsyncEnabled ?? true;
+      a = a ?? true;
+      p = p ?? true;
     }
   }
+  return { asyncSubagentsEnabled: a, profileAsyncEnabled: p };
+}
+
+/**
+ * Build PromptContext from current environment and parameters
+ */
+async function buildPromptContext(
+  options: CoreSystemPromptOptions,
+): Promise<PromptContext> {
+  const { model, tools, provider, includeSubagentDelegation, interactionMode } =
+    options;
+  const cwd = process.cwd();
+
+  const { includeFolderStructure, enableToolPrompts } =
+    resolveFolderStructureSettings();
+  const folderStructure = await resolveFolderStructure(
+    cwd,
+    includeFolderStructure,
+  );
+  const environment = buildEnvironment(cwd, folderStructure, interactionMode);
+  const enabledTools = resolveEnabledTools(tools);
+  const resolvedProvider = resolveProvider(provider);
+  const { asyncSubagentsEnabled, profileAsyncEnabled } =
+    resolveAsyncSubagentSettings(
+      options.asyncSubagentsEnabled,
+      options.profileAsyncEnabled,
+    );
 
   return {
     provider: resolvedProvider,
@@ -413,72 +427,94 @@ async function buildPromptContext(
  * Async version of getCoreSystemPrompt that uses the new PromptService
  * Supports both legacy positional arguments and options object for backward compatibility
  */
-export async function getCoreSystemPromptAsync(
+function resolvePromptArgs(
   userMemoryOrOptions?: string | CoreSystemPromptOptions,
   model?: string,
   tools?: string[],
-): Promise<string> {
-  const service = await getPromptService();
-
-  // Handle both legacy positional args and options object
-  let userMemory: string | undefined = undefined;
-  let coreMemory: string | undefined = undefined;
-  let modelArg: string | undefined = undefined;
-  let toolsArg: string[] | undefined = undefined;
-  let providerArg: string | undefined = undefined;
-  let includeSubagentDelegation: boolean | undefined = undefined;
-  let asyncSubagentsEnabledArg: boolean | undefined = undefined;
-  let profileAsyncEnabledArg: boolean | undefined = undefined;
-  let interactionModeArg:
+): {
+  userMemory: string | undefined;
+  coreMemory: string | undefined;
+  mcpInstructions: string | undefined;
+  modelArg: string | undefined;
+  toolsArg: string[] | undefined;
+  providerArg: string | undefined;
+  includeSubagentDelegation: boolean | undefined;
+  asyncSubagentsEnabledArg: boolean | undefined;
+  profileAsyncEnabledArg: boolean | undefined;
+  interactionModeArg:
     | 'interactive'
     | 'non-interactive'
     | 'subagent'
-    | undefined = undefined;
-
-  let mcpInstructions: string | undefined = undefined;
+    | undefined;
+} {
+  const defaults = {
+    userMemory: undefined as string | undefined,
+    coreMemory: undefined as string | undefined,
+    mcpInstructions: undefined as string | undefined,
+    modelArg: undefined as string | undefined,
+    toolsArg: undefined as string[] | undefined,
+    providerArg: undefined as string | undefined,
+    includeSubagentDelegation: undefined as boolean | undefined,
+    asyncSubagentsEnabledArg: undefined as boolean | undefined,
+    profileAsyncEnabledArg: undefined as boolean | undefined,
+    interactionModeArg: undefined as
+      | 'interactive'
+      | 'non-interactive'
+      | 'subagent'
+      | undefined,
+  };
 
   if (typeof userMemoryOrOptions === 'object') {
-    // Options object mode
     const opts = userMemoryOrOptions;
-    userMemory = opts.userMemory;
-    coreMemory = opts.coreMemory;
-    mcpInstructions = opts.mcpInstructions;
-    modelArg = opts.model;
-    toolsArg = opts.tools;
-    providerArg = opts.provider;
-    includeSubagentDelegation = opts.includeSubagentDelegation;
-    asyncSubagentsEnabledArg = opts.asyncSubagentsEnabled;
-    profileAsyncEnabledArg = opts.profileAsyncEnabled;
-    interactionModeArg = opts.interactionMode;
-  } else {
-    // Legacy positional args mode
-    userMemory = userMemoryOrOptions;
-    modelArg = model;
-    toolsArg = tools;
+    return {
+      ...defaults,
+      userMemory: opts.userMemory,
+      coreMemory: opts.coreMemory,
+      mcpInstructions: opts.mcpInstructions,
+      modelArg: opts.model,
+      toolsArg: opts.tools,
+      providerArg: opts.provider,
+      includeSubagentDelegation: opts.includeSubagentDelegation,
+      asyncSubagentsEnabledArg: opts.asyncSubagentsEnabled,
+      profileAsyncEnabledArg: opts.profileAsyncEnabled,
+      interactionModeArg: opts.interactionMode,
+    };
   }
 
+  return {
+    ...defaults,
+    userMemory: userMemoryOrOptions,
+    modelArg: model,
+    toolsArg: tools,
+  };
+}
+
+async function resolveEffectiveMemories(
+  userMemory: string | undefined,
+  coreMemory: string | undefined,
+  mcpInstructions: string | undefined,
+): Promise<{
+  effectiveUserMemory: string | undefined;
+  effectiveCoreMemory: string | undefined;
+}> {
   // Load core memory from disk if not explicitly provided by caller.
-  // The interactive path (client.ts) caches and passes coreMemory;
-  // stateless provider paths don't, so we fall back to disk reads.
-  if (coreMemory === undefined) {
+  let loadedCoreMemory = coreMemory;
+  if (loadedCoreMemory === undefined) {
     try {
-      coreMemory = await loadCoreMemoryContent(process.cwd());
+      loadedCoreMemory = await loadCoreMemoryContent(process.cwd());
     } catch {
       // Non-fatal: proceed without core memory
     }
   }
 
-  // Handle allMemoriesAreCore: when enabled, user memory is promoted
-  // to core (system) memory so models treat it as directives
   let effectiveUserMemory = userMemory;
-  let effectiveCoreMemory = coreMemory;
+  let effectiveCoreMemory = loadedCoreMemory;
   try {
     const settingsService = getSettingsService();
     const allMemoriesAreCore = settingsService.get(
       'model.allMemoriesAreCore',
     ) as boolean | undefined;
     if (allMemoriesAreCore === true) {
-      // Merge user memory into core memory; leave user memory empty
       const parts = [effectiveCoreMemory, effectiveUserMemory].filter((p) =>
         p?.trim(),
       );
@@ -489,13 +525,38 @@ export async function getCoreSystemPromptAsync(
     // Settings service may not be available (e.g. during tests)
   }
 
-  // Append MCP instructions to core memory if available
   if (mcpInstructions?.trim()) {
     const parts = [effectiveCoreMemory, mcpInstructions.trim()].filter((p) =>
       p?.trim(),
     );
     effectiveCoreMemory = parts.join('\n\n') || undefined;
   }
+
+  return { effectiveUserMemory, effectiveCoreMemory };
+}
+
+export async function getCoreSystemPromptAsync(
+  userMemoryOrOptions?: string | CoreSystemPromptOptions,
+  model?: string,
+  tools?: string[],
+): Promise<string> {
+  const service = await getPromptService();
+
+  const {
+    userMemory,
+    coreMemory,
+    mcpInstructions,
+    modelArg,
+    toolsArg,
+    providerArg,
+    includeSubagentDelegation,
+    asyncSubagentsEnabledArg,
+    profileAsyncEnabledArg,
+    interactionModeArg,
+  } = resolvePromptArgs(userMemoryOrOptions, model, tools);
+
+  const { effectiveUserMemory, effectiveCoreMemory } =
+    await resolveEffectiveMemories(userMemory, coreMemory, mcpInstructions);
 
   const context = await buildPromptContext({
     model: modelArg,
@@ -523,7 +584,10 @@ export async function initializePromptSystem(): Promise<void> {
  * think in a scratchpad, and produce a structured XML summary.
  */
 export function getCompressionPrompt(): string {
-  return `
+  return COMPRESSION_PROMPT_TEMPLATE.trim();
+}
+
+const COMPRESSION_PROMPT_TEMPLATE = `
 You are the component that summarizes internal chat history into a given structure.
 
 When the conversation history grows too large, you will be invoked to compress the MIDDLE portion of the history into a structured XML snapshot, reducing it by approximately 50%. This snapshot will be combined with preserved messages from the top and bottom of the conversation. The agent will have access to the full context: summary + preserved top messages + preserved bottom messages.
@@ -608,5 +672,4 @@ The structure MUST be as follows:
         -->
     </code_references>
 </state_snapshot>
-`.trim();
-}
+`;
