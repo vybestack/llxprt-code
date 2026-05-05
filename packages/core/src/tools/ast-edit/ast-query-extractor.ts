@@ -9,7 +9,7 @@ import {
   LANGUAGE_MAP,
   JAVASCRIPT_FAMILY_EXTENSIONS,
 } from '../../utils/ast-grep-utils.js';
-import type { EnhancedDeclaration, Declaration, SgNode } from './types.js';
+import type { EnhancedDeclaration, Declaration } from './types.js';
 import { KEYWORDS, COMMENT_PREFIXES } from './constants.js';
 
 /**
@@ -34,129 +34,129 @@ export class ASTQueryExtractor {
       const declarations: EnhancedDeclaration[] = [];
       const sgRoot = root.root();
 
-      // Define extraction rules per language grouping
       if (JAVASCRIPT_FAMILY_EXTENSIONS.includes(extension)) {
-        // Functions
-        sgRoot
-          .findAll({ rule: { kind: 'function_declaration' } })
-          .forEach((n) => {
-            const nameNode = n.field('name');
-            const paramsNode = n.field('parameters');
-            const returnTypeNode = n.field('return_type'); // Typical TS naming
-            if (nameNode) {
-              let signature = paramsNode ? paramsNode.text() : '()';
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (returnTypeNode) {
-                signature += returnTypeNode.text();
-              }
-              declarations.push(
-                this.nodeToDeclaration(
-                  n,
-                  nameNode.text(),
-                  'function',
-                  signature,
-                ),
-              );
-            }
-          });
-
-        // Methods
-        sgRoot.findAll({ rule: { kind: 'method_definition' } }).forEach((n) => {
-          const nameNode = n.field('name');
-          const paramsNode = n.field('parameters');
-          const returnTypeNode = n.field('return_type');
-          if (nameNode) {
-            let signature = paramsNode ? paramsNode.text() : '()';
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (returnTypeNode) {
-              signature += returnTypeNode.text();
-            }
-            declarations.push(
-              this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
-            );
-          }
-        });
-
-        // Classes
-        sgRoot.findAll({ rule: { kind: 'class_declaration' } }).forEach((n) => {
-          const nameNode = n.field('name');
-          if (nameNode) {
-            declarations.push(
-              this.nodeToDeclaration(n, nameNode.text(), 'class'),
-            );
-          }
-        });
-
-        // Variables
-        sgRoot
-          .findAll({ rule: { kind: 'variable_declarator' } })
-          .forEach((n) => {
-            const nameNode = n.field('name');
-            if (nameNode) {
-              declarations.push(
-                this.nodeToDeclaration(n, nameNode.text(), 'variable'),
-              );
-            }
-          });
-
-        // Imports
-        sgRoot.findAll({ rule: { kind: 'import_statement' } }).forEach((n) => {
-          const sourceNode = n.field('source');
-          declarations.push(
-            this.nodeToDeclaration(
-              n,
-              sourceNode ? sourceNode.text() : 'import',
-              'import',
-            ),
-          );
-        });
+        this.extractJsFamilyDeclarations(sgRoot, declarations);
       } else if (extension === 'py') {
-        // Python
-        sgRoot
-          .findAll({ rule: { kind: 'function_definition' } })
-          .forEach((n) => {
-            const nameNode = n.field('name');
-            const paramsNode = n.field('parameters');
-            const returnTypeNode = n.field('return_type');
-            if (nameNode) {
-              let signature = paramsNode ? paramsNode.text() : '()';
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (returnTypeNode) {
-                signature += ` -> ${returnTypeNode.text()}`;
-              }
-              declarations.push(
-                this.nodeToDeclaration(
-                  n,
-                  nameNode.text(),
-                  'function',
-                  signature,
-                ),
-              );
-            }
-          });
-
-        sgRoot.findAll({ rule: { kind: 'class_definition' } }).forEach((n) => {
-          const nameNode = n.field('name');
-          if (nameNode) {
-            declarations.push(
-              this.nodeToDeclaration(n, nameNode.text(), 'class'),
-            );
-          }
-        });
+        this.extractPythonDeclarations(sgRoot, declarations);
       } else {
-        // Fallback for other languages: just find symbols that look like declarations
         return this.fallbackExtraction(content, extension);
       }
 
       return declarations;
     } catch {
-      // AST parsing failed - use fallback extraction
       return this.fallbackExtraction(content, extension);
     }
   }
 
+  private extractJsFamilyDeclarations(
+    sgRoot: ReturnType<ReturnType<typeof parse>['root']>,
+    declarations: EnhancedDeclaration[],
+  ): void {
+    // Functions
+    sgRoot.findAll({ rule: { kind: 'function_declaration' } }).forEach((n) => {
+      const nameNode = n.field('name');
+      const paramsNode = n.field('parameters');
+      const returnTypeNode = n.field('return_type');
+      if (nameNode != null) {
+        const signature = this.buildSignature(paramsNode, returnTypeNode);
+        declarations.push(
+          this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
+        );
+      }
+    });
+
+    // Methods
+    sgRoot.findAll({ rule: { kind: 'method_definition' } }).forEach((n) => {
+      const nameNode = n.field('name');
+      const paramsNode = n.field('parameters');
+      const returnTypeNode = n.field('return_type');
+      if (nameNode != null) {
+        const signature = this.buildSignature(paramsNode, returnTypeNode);
+        declarations.push(
+          this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
+        );
+      }
+    });
+
+    // Classes
+    sgRoot.findAll({ rule: { kind: 'class_declaration' } }).forEach((n) => {
+      const nameNode = n.field('name');
+      if (nameNode != null) {
+        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'class'));
+      }
+    });
+
+    // Variables
+    sgRoot.findAll({ rule: { kind: 'variable_declarator' } }).forEach((n) => {
+      const nameNode = n.field('name');
+      if (nameNode != null) {
+        declarations.push(
+          this.nodeToDeclaration(n, nameNode.text(), 'variable'),
+        );
+      }
+    });
+
+    // Imports
+    sgRoot.findAll({ rule: { kind: 'import_statement' } }).forEach((n) => {
+      const sourceNode = n.field('source');
+      declarations.push(
+        this.nodeToDeclaration(
+          n,
+          sourceNode != null ? sourceNode.text() : 'import',
+          'import',
+        ),
+      );
+    });
+  }
+
+  private extractPythonDeclarations(
+    sgRoot: ReturnType<ReturnType<typeof parse>['root']>,
+    declarations: EnhancedDeclaration[],
+  ): void {
+    sgRoot.findAll({ rule: { kind: 'function_definition' } }).forEach((n) => {
+      const nameNode = n.field('name');
+      const paramsNode = n.field('parameters');
+      const returnTypeNode = n.field('return_type');
+      if (nameNode != null) {
+        const signature = this.buildPythonSignature(paramsNode, returnTypeNode);
+        declarations.push(
+          this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
+        );
+      }
+    });
+
+    sgRoot.findAll({ rule: { kind: 'class_definition' } }).forEach((n) => {
+      const nameNode = n.field('name');
+      if (nameNode != null) {
+        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'class'));
+      }
+    });
+  }
+
+  private buildSignature(
+    paramsNode: ReturnType<ReturnType<typeof parse>['root']> | null,
+    returnTypeNode: ReturnType<ReturnType<typeof parse>['root']> | null,
+  ): string {
+    let signature = paramsNode != null ? paramsNode.text() : '()';
+    if (returnTypeNode != null) {
+      signature += returnTypeNode.text();
+    }
+    return signature;
+  }
+
+  private buildPythonSignature(
+    paramsNode: ReturnType<ReturnType<typeof parse>['root']> | null,
+    returnTypeNode: ReturnType<ReturnType<typeof parse>['root']> | null,
+  ): string {
+    let signature = paramsNode != null ? paramsNode.text() : '()';
+    if (returnTypeNode != null) {
+      signature += ` -> ${returnTypeNode.text()}`;
+    }
+    return signature;
+  }
+
   private nodeToDeclaration(
-    n: SgNode,
+    n: ReturnType<ReturnType<typeof parse>['root']>,
     name: string,
     type: Declaration['type'],
     signature?: string,

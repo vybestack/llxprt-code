@@ -485,125 +485,110 @@ export class ToolFormatter implements IToolFormatter {
       case 'deepseek':
       case 'qwen':
       case 'kimi':
-      case 'gemma': {
-        // Runtime boundary: rawToolCall comes from network response, may not match expected type
-        // Cast reflects that fields may be missing from malformed provider data
-        const openAiToolCall = rawToolCall as {
-          id: string;
-          type?: string;
-          function?: { name: string; arguments: string };
-        };
-
-        if (
-          !openAiToolCall.function?.name ||
-          !openAiToolCall.function.arguments
-        ) {
-          throw new Error(`Invalid ${format} tool call format`);
-        }
-
-        // Only log tool call conversions if debug is enabled to avoid performance overhead
-        if (this.logger.enabled) {
-          this.logger.debug(
-            () => `Converting ${format} tool call from provider format:`,
-            {
-              format,
-              toolName: openAiToolCall.function.name,
-              argumentsType: typeof openAiToolCall.function.arguments,
-              argumentsLength: openAiToolCall.function.arguments.length,
-            },
-          );
-        }
-
-        // Process parameters using doubleEscapeUtils for formats that need special handling
-        const parameters = doubleEscapeProcessToolParameters(
-          openAiToolCall.function.arguments,
-          openAiToolCall.function.name,
-          format,
-        );
-
-        return [
-          {
-            type: 'tool_call' as const,
-            id: openAiToolCall.id,
-            name: openAiToolCall.function.name,
-            parameters,
-          },
-        ];
-      }
-      case 'anthropic': {
-        const anthropicToolCall = rawToolCall as {
-          id: string;
-          type?: string;
-          name?: string;
-          input?: unknown;
-        };
-
-        // Runtime boundary: rawToolCall comes from provider API, may not match asserted type
-
-        if (!anthropicToolCall.id || !anthropicToolCall.name) {
-          throw new Error(`Invalid ${format} tool call format`);
-        }
-
-        return [
-          {
-            type: 'tool_call' as const,
-            id: anthropicToolCall.id,
-            name: anthropicToolCall.name,
-            parameters: anthropicToolCall.input ?? {},
-          },
-        ];
-      }
-      case 'hermes': {
-        // Hermes format comes from TextToolCallParser
-        const hermesToolCall = rawToolCall as {
-          name: string;
-          arguments: Record<string, unknown>;
-        };
-
-        // Runtime boundary: rawToolCall from parser may not match asserted type
-        if (!hermesToolCall.name) {
-          throw new Error(`Invalid ${format} tool call format`);
-        }
-
-        const hermesArguments = hermesToolCall.arguments as
-          | Record<string, unknown>
-          | undefined;
-        return [
-          {
-            type: 'tool_call' as const,
-            id: `hermes_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-            name: hermesToolCall.name,
-            parameters: hermesArguments ?? {},
-          },
-        ];
-      }
-      case 'xml': {
-        // XML format also comes from TextToolCallParser
-        const xmlToolCall = rawToolCall as {
-          name: string;
-          arguments: Record<string, unknown>;
-        };
-
-        // Runtime boundary: rawToolCall from parser may not match asserted type
-        if (!xmlToolCall.name) {
-          throw new Error(`Invalid ${format} tool call format`);
-        }
-
-        const xmlArguments = xmlToolCall.arguments as
-          | Record<string, unknown>
-          | undefined;
-        return [
-          {
-            type: 'tool_call' as const,
-            id: `xml_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-            name: xmlToolCall.name,
-            parameters: xmlArguments ?? {},
-          },
-        ];
-      }
+      case 'gemma':
+        return this.fromOpenAIFormat(rawToolCall, format);
+      case 'anthropic':
+        return this.fromAnthropicFormat(rawToolCall, format);
+      case 'hermes':
+        return this.fromTextParserFormat(rawToolCall, 'hermes');
+      case 'xml':
+        return this.fromTextParserFormat(rawToolCall, 'xml');
       default:
         throw new Error(`Tool format '${format}' not yet implemented`);
     }
+  }
+
+  private fromOpenAIFormat(
+    rawToolCall: unknown,
+    format: ToolFormat,
+  ): ToolCallBlock[] {
+    const openAiToolCall = rawToolCall as {
+      id: string;
+      type?: string;
+      function?: { name: string; arguments: string };
+    };
+
+    if (!openAiToolCall.function?.name || !openAiToolCall.function.arguments) {
+      throw new Error(`Invalid ${format} tool call format`);
+    }
+
+    if (this.logger.enabled) {
+      this.logger.debug(
+        () => `Converting ${format} tool call from provider format:`,
+        {
+          format,
+          toolName: openAiToolCall.function.name,
+          argumentsType: typeof openAiToolCall.function.arguments,
+          argumentsLength: openAiToolCall.function.arguments.length,
+        },
+      );
+    }
+
+    const parameters = doubleEscapeProcessToolParameters(
+      openAiToolCall.function.arguments,
+      openAiToolCall.function.name,
+      format,
+    );
+
+    return [
+      {
+        type: 'tool_call' as const,
+        id: openAiToolCall.id,
+        name: openAiToolCall.function.name,
+        parameters,
+      },
+    ];
+  }
+
+  private fromAnthropicFormat(
+    rawToolCall: unknown,
+    format: ToolFormat,
+  ): ToolCallBlock[] {
+    const anthropicToolCall = rawToolCall as {
+      id: string;
+      type?: string;
+      name?: string;
+      input?: unknown;
+    };
+
+    if (!anthropicToolCall.id || !anthropicToolCall.name) {
+      throw new Error(`Invalid ${format} tool call format`);
+    }
+
+    return [
+      {
+        type: 'tool_call' as const,
+        id: anthropicToolCall.id,
+        name: anthropicToolCall.name,
+        parameters: anthropicToolCall.input ?? {},
+      },
+    ];
+  }
+
+  private fromTextParserFormat(
+    rawToolCall: unknown,
+    prefix: 'hermes' | 'xml',
+  ): ToolCallBlock[] {
+    const textToolCall = rawToolCall as {
+      name: string;
+      arguments: Record<string, unknown>;
+    };
+
+    if (!textToolCall.name) {
+      throw new Error(`Invalid ${prefix} tool call format`);
+    }
+
+    const arguments_ = textToolCall.arguments as
+      | Record<string, unknown>
+      | undefined;
+    return [
+      {
+        type: 'tool_call' as const,
+        id: `${prefix}_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        name: textToolCall.name,
+        parameters: arguments_ ?? {},
+      },
+    ];
   }
 
   /**
@@ -629,80 +614,11 @@ export class ToolFormatter implements IToolFormatter {
       case 'qwen':
       case 'kimi':
       case 'gemma':
-        // All use same accumulation logic for now
-        if (deltaToolCall.index !== undefined) {
-          // Preserve old truthy behavior: overwrite any falsy slot (not just nullish)
-          const existingSlot = accumulatedToolCalls[deltaToolCall.index];
-          if (isMissingToolCallSlot(existingSlot)) {
-            accumulatedToolCalls[deltaToolCall.index] = {
-              type: 'tool_call',
-              id: deltaToolCall.id ?? '',
-              name: '',
-              parameters: {},
-            };
-          }
-          const tc = accumulatedToolCalls[deltaToolCall.index];
-          if (deltaToolCall.id) tc.id = deltaToolCall.id;
-          if (deltaToolCall.function?.name)
-            tc.name = deltaToolCall.function.name;
-          if (deltaToolCall.function?.arguments) {
-            // Enhanced debug logging for all formats, especially Qwen
-            // Store accumulated arguments as string first, will parse at the end
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (!('_argumentsString' in tc)) {
-              (tc as unknown as { _argumentsString: string })._argumentsString =
-                '';
-            }
-
-            // Only log argument accumulation in debug mode to prevent performance issues
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (this.logger.enabled) {
-              this.logger.debug(
-                () =>
-                  `[${format}] Accumulating argument chunk for tool ${tc.name}`,
-                {
-                  format,
-                  toolName: tc.name,
-                  index: deltaToolCall.index,
-                  chunkLength: deltaToolCall.function.arguments.length,
-                  currentAccumulatedLength: (
-                    tc as unknown as { _argumentsString: string }
-                  )._argumentsString.length,
-                },
-              );
-            }
-
-            // Use doubleEscapeUtils to detect potential double-stringification
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (format === 'qwen') {
-              logDoubleEscapingInChunk(
-                deltaToolCall.function.arguments || '',
-                tc.name || 'unknown',
-                format,
-              );
-            }
-
-            (tc as unknown as { _argumentsString: string })._argumentsString +=
-              deltaToolCall.function.arguments;
-
-            // Try to parse parameters using doubleEscapeUtils for special formats
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            try {
-              const argsStr = (tc as unknown as { _argumentsString: string })
-                ._argumentsString;
-              if (argsStr.trim()) {
-                // Process using doubleEscapeUtils for formats that need special handling
-                tc.parameters = doubleEscapeProcessToolParameters(
-                  argsStr,
-                  tc.name || 'unknown',
-                  format,
-                );
-              }
-            } catch {
-              // Keep accumulating, parameters will be set when complete
-            }
-          }
-        }
+        this.accumulateOpenAIStreamingToolCall(
+          deltaToolCall,
+          accumulatedToolCalls,
+          format,
+        );
         break;
       case 'hermes':
       case 'xml':
@@ -714,6 +630,88 @@ export class ToolFormatter implements IToolFormatter {
         throw new Error(
           `Streaming accumulation for format '${format}' not yet implemented`,
         );
+    }
+  }
+
+  private accumulateOpenAIStreamingToolCall(
+    deltaToolCall: {
+      index?: number;
+      id?: string;
+      type?: string;
+      function?: { name?: string; arguments?: string };
+    },
+    accumulatedToolCalls: ToolCallBlock[],
+    format: ToolFormat,
+  ): void {
+    if (deltaToolCall.index === undefined) return;
+
+    const existingSlot = accumulatedToolCalls[deltaToolCall.index];
+    if (isMissingToolCallSlot(existingSlot)) {
+      accumulatedToolCalls[deltaToolCall.index] = {
+        type: 'tool_call',
+        id: deltaToolCall.id ?? '',
+        name: '',
+        parameters: {},
+      };
+    }
+    const tc = accumulatedToolCalls[deltaToolCall.index];
+    if (deltaToolCall.id) tc.id = deltaToolCall.id;
+    if (deltaToolCall.function?.name) tc.name = deltaToolCall.function.name;
+    if (deltaToolCall.function?.arguments) {
+      this.accumulateStreamingArguments(
+        tc,
+        deltaToolCall.function.arguments,
+        deltaToolCall.index,
+        format,
+      );
+    }
+  }
+
+  private accumulateStreamingArguments(
+    tc: ToolCallBlock,
+    chunk: string,
+    index: number,
+    format: ToolFormat,
+  ): void {
+    if (!('_argumentsString' in tc)) {
+      (tc as unknown as { _argumentsString: string })._argumentsString = '';
+    }
+
+    if (this.logger.enabled) {
+      this.logger.debug(
+        () => `[${format}] Accumulating argument chunk for tool ${tc.name}`,
+        {
+          format,
+          toolName: tc.name,
+          index,
+          chunkLength: chunk.length,
+          currentAccumulatedLength: (
+            tc as unknown as { _argumentsString: string }
+          )._argumentsString.length,
+        },
+      );
+    }
+
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (format === 'qwen') {
+      logDoubleEscapingInChunk(chunk || '', tc.name || 'unknown', format);
+    }
+
+    (tc as unknown as { _argumentsString: string })._argumentsString += chunk;
+
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    try {
+      const argsStr = (tc as unknown as { _argumentsString: string })
+        ._argumentsString;
+      if (argsStr.trim()) {
+        tc.parameters = doubleEscapeProcessToolParameters(
+          argsStr,
+          tc.name || 'unknown',
+          format,
+        );
+      }
+    } catch {
+      // Keep accumulating, parameters will be set when complete
     }
   }
 

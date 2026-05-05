@@ -49,11 +49,68 @@ export async function calculateEdit(
   const normalizedOldString = params.old_string.replace(/\r\n/g, '\n');
   const normalizedNewString = params.new_string.replace(/\r\n/g, '\n');
 
+  const { currentContent, fileExists } = await readFileState(params, config);
+
+  // Freshness Check (moved before old_string validation to ensure it runs first)
+  const currentMtime = await getFileLastModified(params.file_path);
+
+  const freshnessError = checkFreshness(
+    params,
+    currentMtime,
+    fileExists,
+    currentContent,
+  );
+  if (freshnessError) {
+    return freshnessError;
+  }
+
+  const { occurrences, error, isNewFile } = validateEditParams(
+    params,
+    currentContent,
+    fileExists,
+    normalizedOldString,
+    normalizedNewString,
+  );
+
+  const newContent = !error
+    ? applyReplacement(
+        currentContent,
+        normalizedOldString,
+        normalizedNewString,
+        isNewFile,
+      )
+    : (currentContent ?? '');
+
+  const noChangeError = checkNoChange(
+    error,
+    fileExists,
+    currentContent,
+    newContent,
+    params.file_path,
+  );
+
+  let astValidation: { valid: boolean; errors: string[] } | undefined;
+  if (!noChangeError) {
+    astValidation = validateASTSyntax(params.file_path, newContent);
+  }
+
+  return {
+    currentContent,
+    newContent,
+    occurrences,
+    error: noChangeError,
+    isNewFile,
+    astValidation,
+    fileFreshness: currentMtime,
+  };
+}
+
+async function readFileState(
+  params: ASTEditToolParams,
+  config: Config,
+): Promise<{ currentContent: string | null; fileExists: boolean }> {
   let currentContent: string | null = null;
   let fileExists = false;
-  let isNewFile = false;
-  let error: { display: string; raw: string; type: ToolErrorType } | undefined =
-    undefined;
 
   try {
     currentContent = await config
@@ -68,36 +125,57 @@ export async function calculateEdit(
     fileExists = false;
   }
 
-  // Freshness Check (moved before old_string validation to ensure it runs first)
-  const currentMtime = await getFileLastModified(params.file_path);
+  return { currentContent, fileExists };
+}
 
+function checkFreshness(
+  params: ASTEditToolParams,
+  currentMtime: number | null,
+  fileExists: boolean,
+  currentContent: string | null,
+): CalculatedEdit | undefined {
   if (
     // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     params.last_modified != null &&
     ((fileExists && currentMtime == null) ||
       (currentMtime != null && currentMtime > params.last_modified))
   ) {
-    error = {
-      display: `File has been modified since it was last read. Please read the file again to get the latest content.`,
-      raw: JSON.stringify({
-        message: `File ${params.file_path} mismatch. Expected mtime <= ${params.last_modified}, but found ${currentMtime}.`,
-        current_mtime: currentMtime,
-        your_mtime: params.last_modified,
-      }),
-      type: ToolErrorType.FILE_MODIFIED_CONFLICT,
-    };
     return {
       currentContent,
       newContent: currentContent ?? '',
       occurrences: 0,
-      error,
-      isNewFile,
+      error: {
+        display: `File has been modified since it was last read. Please read the file again to get the latest content.`,
+        raw: JSON.stringify({
+          message: `File ${params.file_path} mismatch. Expected mtime <= ${params.last_modified}, but found ${currentMtime}.`,
+          current_mtime: currentMtime,
+          your_mtime: params.last_modified,
+        }),
+        type: ToolErrorType.FILE_MODIFIED_CONFLICT,
+      },
+      isNewFile: false,
       astValidation: undefined,
       fileFreshness: currentMtime,
     };
   }
+  return undefined;
+}
 
+function validateEditParams(
+  params: ASTEditToolParams,
+  currentContent: string | null,
+  fileExists: boolean,
+  normalizedOldString: string,
+  normalizedNewString: string,
+): {
+  occurrences: number;
+  error: { display: string; raw: string; type: ToolErrorType } | undefined;
+  isNewFile: boolean;
+} {
   let occurrences = 0;
+  let error: { display: string; raw: string; type: ToolErrorType } | undefined =
+    undefined;
+  let isNewFile = false;
 
   if (params.old_string === '' && !fileExists) {
     isNewFile = true;
@@ -125,38 +203,25 @@ export async function calculateEdit(
     }
   }
 
-  const newContent = !error
-    ? applyReplacement(
-        currentContent,
-        normalizedOldString,
-        normalizedNewString,
-        isNewFile,
-      )
-    : (currentContent ?? '');
+  return { occurrences, error, isNewFile };
+}
 
+function checkNoChange(
+  error: { display: string; raw: string; type: ToolErrorType } | undefined,
+  fileExists: boolean,
+  currentContent: string | null,
+  newContent: string,
+  filePath: string,
+): { display: string; raw: string; type: ToolErrorType } | undefined {
   if (!error && fileExists && currentContent === newContent) {
-    error = {
+    return {
       display:
         'No changes to apply. The new content is identical to the current content.',
-      raw: `No changes to apply. The new content is identical to the current content in file: ${params.file_path}`,
+      raw: `No changes to apply. The new content is identical to the current content in file: ${filePath}`,
       type: ToolErrorType.EDIT_NO_CHANGE,
     };
   }
-
-  let astValidation: { valid: boolean; errors: string[] } | undefined;
-  if (!error) {
-    astValidation = validateASTSyntax(params.file_path, newContent);
-  }
-
-  return {
-    currentContent,
-    newContent,
-    occurrences,
-    error,
-    isNewFile,
-    astValidation,
-    fileFreshness: currentMtime,
-  };
+  return error;
 }
 
 /**
