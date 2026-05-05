@@ -182,6 +182,36 @@ async function enableAction(
   );
 }
 
+function buildReloadSummary(
+  beforeNames: Set<string>,
+  afterSkills: Array<{ name: string }>,
+): string {
+  const afterNames = new Set(afterSkills.map((s) => s.name));
+  const added = afterSkills.filter((s) => !beforeNames.has(s.name));
+  const removedCount = [...beforeNames].filter(
+    (name) => !afterNames.has(name),
+  ).length;
+
+  let successText = 'Skills reloaded successfully.';
+  const details: string[] = [];
+
+  if (added.length > 0) {
+    details.push(
+      `${added.length} newly available skill${added.length > 1 ? 's' : ''}`,
+    );
+  }
+  if (removedCount > 0) {
+    details.push(
+      `${removedCount} skill${removedCount > 1 ? 's' : ''} no longer available`,
+    );
+  }
+
+  if (details.length > 0) {
+    successText += ` ${details.join(' and ')}.`;
+  }
+  return successText;
+}
+
 async function reloadAction(
   context: CommandContext,
 ): Promise<void | SlashCommandActionReturn> {
@@ -215,8 +245,6 @@ async function reloadAction(
 
     clearTimeout(pendingTimeout);
     if (pendingState.itemSet) {
-      // If we showed the pending item, make sure it stays for at least 500ms
-      // total to avoid a "flicker" where it appears and immediately disappears.
       const elapsed = Date.now() - startTime;
       const minVisibleDuration = 500;
       if (elapsed < minVisibleDuration) {
@@ -228,30 +256,7 @@ async function reloadAction(
     }
 
     const afterSkills = skillManager.getSkills();
-    const afterNames = new Set(afterSkills.map((s) => s.name));
-
-    const added = afterSkills.filter((s) => !beforeNames.has(s.name));
-    const removedCount = [...beforeNames].filter(
-      (name) => !afterNames.has(name),
-    ).length;
-
-    let successText = 'Skills reloaded successfully.';
-    const details: string[] = [];
-
-    if (added.length > 0) {
-      details.push(
-        `${added.length} newly available skill${added.length > 1 ? 's' : ''}`,
-      );
-    }
-    if (removedCount > 0) {
-      details.push(
-        `${removedCount} skill${removedCount > 1 ? 's' : ''} no longer available`,
-      );
-    }
-
-    if (details.length > 0) {
-      successText += ` ${details.join(' and ')}.`;
-    }
+    const successText = buildReloadSummary(beforeNames, afterSkills);
 
     context.ui.addItem(
       {

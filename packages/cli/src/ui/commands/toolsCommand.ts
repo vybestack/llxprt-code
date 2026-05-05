@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import {
   type CommandContext,
@@ -190,6 +190,80 @@ function resolveToolByName(
   return null;
 }
 
+async function handleToggleTool(
+  context: CommandContext,
+  subcommand: string,
+  remainder: string,
+  disabled: Set<string>,
+  allowed: Set<string>,
+  tools: AnyDeclarativeTool[],
+): Promise<void> {
+  const identifier = stripQuotes(remainder);
+  if (!identifier) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: `Usage: /tools ${subcommand} <tool name>`,
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  const target = resolveToolByName(identifier, tools);
+  if (!target || 'serverName' in target) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: `Tool "${identifier}" not found.`,
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  const canonical = normalizeToolName(target.name);
+  let feedback: string;
+
+  if (subcommand === 'disable') {
+    disabled.add(canonical);
+    allowed.delete(canonical);
+    feedback = `Disabled tool '${target.displayName}'.`;
+  } else {
+    disabled.delete(canonical);
+    if (allowed.size > 0) {
+      allowed.add(canonical);
+    }
+    feedback = `Enabled tool '${target.displayName}'.`;
+  }
+
+  persistToolLists(context, disabled, allowed);
+
+  const config = context.services.config;
+  const geminiClient =
+    typeof config?.getGeminiClient === 'function'
+      ? config.getGeminiClient()
+      : undefined;
+
+  if (geminiClient && typeof geminiClient.setTools === 'function') {
+    try {
+      await geminiClient.setTools();
+    } catch (error) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: `Warning: failed to refresh Gemini tool schema after ${
+            subcommand === 'disable' ? 'disabling' : 'enabling'
+          } '${target.displayName}': ${error instanceof Error ? error.message : String(error)}`,
+        },
+        Date.now(),
+      );
+    }
+  }
+
+  context.ui.addItem({ type: MessageType.INFO, text: feedback }, Date.now());
+}
+
 export const toolsCommand: SlashCommand = {
   name: 'tools',
   description: 'List, enable, or disable LLxprt Code tools',
@@ -239,74 +313,13 @@ export const toolsCommand: SlashCommand = {
     }
 
     if (subcommand === 'disable' || subcommand === 'enable') {
-      const identifier = stripQuotes(remainder);
-      if (!identifier) {
-        context.ui.addItem(
-          {
-            type: MessageType.ERROR,
-            text: `Usage: /tools ${subcommand} <tool name>`,
-          },
-          Date.now(),
-        );
-        return;
-      }
-
-      const target = resolveToolByName(identifier, tools);
-      if (!target || 'serverName' in target) {
-        context.ui.addItem(
-          {
-            type: MessageType.ERROR,
-            text: `Tool "${identifier}" not found.`,
-          },
-          Date.now(),
-        );
-        return;
-      }
-
-      const canonical = normalizeToolName(target.name);
-      let feedback: string;
-
-      if (subcommand === 'disable') {
-        disabled.add(canonical);
-        allowed.delete(canonical);
-        feedback = `Disabled tool '${target.displayName}'.`;
-      } else {
-        disabled.delete(canonical);
-        if (allowed.size > 0) {
-          allowed.add(canonical);
-        }
-        feedback = `Enabled tool '${target.displayName}'.`;
-      }
-
-      persistToolLists(context, disabled, allowed);
-
-      const geminiClient =
-        typeof config?.getGeminiClient === 'function'
-          ? config.getGeminiClient()
-          : undefined;
-
-      if (geminiClient && typeof geminiClient.setTools === 'function') {
-        try {
-          await geminiClient.setTools();
-        } catch (error) {
-          context.ui.addItem(
-            {
-              type: MessageType.INFO,
-              text: `Warning: failed to refresh Gemini tool schema after ${
-                subcommand === 'disable' ? 'disabling' : 'enabling'
-              } '${target.displayName}': ${error instanceof Error ? error.message : String(error)}`,
-            },
-            Date.now(),
-          );
-        }
-      }
-
-      context.ui.addItem(
-        {
-          type: MessageType.INFO,
-          text: feedback,
-        },
-        Date.now(),
+      await handleToggleTool(
+        context,
+        subcommand,
+        remainder,
+        disabled,
+        allowed,
+        tools,
       );
       return;
     }
