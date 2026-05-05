@@ -4,6 +4,7 @@ import {
   type TemplateVariables,
   type TemplateProcessingOptions,
   type PromptContext,
+  type PromptEnvironment,
 } from './types.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
@@ -171,77 +172,104 @@ export class TemplateEngine {
     // Add environment variables
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
     if (context.environment !== undefined && context.environment !== null) {
-      variables['IS_GIT_REPO'] = context.environment.isGitRepository
-        ? 'true'
-        : 'false';
-      variables['IS_SANDBOXED'] = context.environment.isSandboxed
-        ? 'true'
-        : 'false';
-      variables['HAS_IDE'] = context.environment.hasIdeCompanion
-        ? 'true'
-        : 'false';
-
-      if (context.environment.workingDirectory) {
-        variables['WORKING_DIRECTORY'] = context.environment.workingDirectory;
-      }
-      if (context.environment.folderStructure) {
-        variables['FOLDER_STRUCTURE'] = context.environment.folderStructure;
-      }
-
-      if (context.environment.sandboxType) {
-        variables['SANDBOX_TYPE'] = context.environment.sandboxType;
-      } else {
-        variables['SANDBOX_TYPE'] = context.environment.isSandboxed
-          ? 'unknown'
-          : 'none';
-      }
-
-      const workspaceName =
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceName is optional string, empty string should fall through to basename
-        context.environment.workspaceName ||
-        (context.environment.workingDirectory
-          ? path.basename(context.environment.workingDirectory)
-          : '');
-      if (workspaceName) {
-        variables['WORKSPACE_NAME'] = workspaceName;
-      } else {
-        variables['WORKSPACE_NAME'] = 'unknown';
-      }
-
-      const workspaceRoot =
-        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceRoot is optional string, empty string should fall through */
-        context.environment.workspaceRoot ||
-        context.environment.workingDirectory;
-      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
-      if (workspaceRoot) {
-        variables['WORKSPACE_ROOT'] = workspaceRoot;
-      } else {
-        variables['WORKSPACE_ROOT'] = 'unknown';
-      }
-
-      const workspaceDirectories =
-        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceDirectories is optional string[], empty array should fall through */
-        context.environment.workspaceDirectories ||
-        (context.environment.workingDirectory
-          ? [context.environment.workingDirectory]
-          : []);
-      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
-      if (workspaceDirectories.length > 0) {
-        variables['WORKSPACE_DIRECTORIES'] = workspaceDirectories.join(', ');
-      } else {
-        variables['WORKSPACE_DIRECTORIES'] = 'unknown';
-      }
+      this.addEnvironmentVariables(variables, context.environment);
     }
 
     // Add derived variables
+    this.addDerivedVariables(variables, context);
+
+    // Add current date and time
+    this.addDateTimeVariables(variables, context);
+
+    // Add subagent delegation variables
+    this.addSubagentVariables(variables, context);
+
+    // Add interaction mode variables
+    this.addInteractionModeVariables(variables, context);
+
+    return variables;
+  }
+
+  /** Add boolean environment flags and sandbox type */
+  private addEnvironmentVariables(
+    variables: TemplateVariables,
+    env: PromptEnvironment,
+  ): void {
+    variables['IS_GIT_REPO'] = env.isGitRepository ? 'true' : 'false';
+    variables['IS_SANDBOXED'] = env.isSandboxed ? 'true' : 'false';
+    variables['HAS_IDE'] = env.hasIdeCompanion ? 'true' : 'false';
+
+    if (env.workingDirectory) {
+      variables['WORKING_DIRECTORY'] = env.workingDirectory;
+    }
+    if (env.folderStructure) {
+      variables['FOLDER_STRUCTURE'] = env.folderStructure;
+    }
+
+    if (env.sandboxType) {
+      variables['SANDBOX_TYPE'] = env.sandboxType;
+    } else {
+      variables['SANDBOX_TYPE'] = env.isSandboxed ? 'unknown' : 'none';
+    }
+
+    this.addWorkspaceVariables(variables, env);
+  }
+
+  /** Add workspace name, root, and directories variables */
+  private addWorkspaceVariables(
+    variables: TemplateVariables,
+    env: PromptEnvironment,
+  ): void {
+    const workspaceName =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceName is optional string, empty string should fall through to basename
+      env.workspaceName ||
+      (env.workingDirectory ? path.basename(env.workingDirectory) : '');
+    if (workspaceName) {
+      variables['WORKSPACE_NAME'] = workspaceName;
+    } else {
+      variables['WORKSPACE_NAME'] = 'unknown';
+    }
+
+    const workspaceRoot =
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceRoot is optional string, empty string should fall through */
+      env.workspaceRoot || env.workingDirectory;
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    if (workspaceRoot) {
+      variables['WORKSPACE_ROOT'] = workspaceRoot;
+    } else {
+      variables['WORKSPACE_ROOT'] = 'unknown';
+    }
+
+    const workspaceDirectories =
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceDirectories is optional string[], empty array should fall through */
+      env.workspaceDirectories ||
+      (env.workingDirectory ? [env.workingDirectory] : []);
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    if (workspaceDirectories.length > 0) {
+      variables['WORKSPACE_DIRECTORIES'] = workspaceDirectories.join(', ');
+    } else {
+      variables['WORKSPACE_DIRECTORIES'] = 'unknown';
+    }
+  }
+
+  /** Add provider/model derived variables */
+  private addDerivedVariables(
+    variables: TemplateVariables,
+    context: PromptContext,
+  ): void {
     if (context.provider) {
       variables['PROVIDER_UPPER'] = context.provider.toUpperCase();
     }
     if (context.model) {
       variables['MODEL_SAFE'] = context.model.replace(/[^a-zA-Z0-9]/g, '_');
     }
+  }
 
-    // Add current date and time
+  /** Add date, time, session, and platform variables */
+  private addDateTimeVariables(
+    variables: TemplateVariables,
+    context: PromptContext,
+  ): void {
     const now = new Date();
     variables['CURRENT_DATE'] = now.toLocaleDateString(undefined, {
       weekday: 'long',
@@ -260,8 +288,13 @@ export class TemplateEngine {
     variables['SESSION_STARTED_AT'] =
       sessionStartedAt ?? variables['CURRENT_DATETIME'];
     variables['PLATFORM'] = process.platform;
+  }
 
-    // Add SUBAGENT_DELEGATION variable - empty unless includeSubagentDelegation is true and the required tools are available
+  /** Add subagent delegation and async subagent guidance variables */
+  private addSubagentVariables(
+    variables: TemplateVariables,
+    context: PromptContext,
+  ): void {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
     const enabledTools = context.enabledTools ?? [];
     const hasTaskTool =
@@ -275,20 +308,15 @@ export class TemplateEngine {
       hasListSubagentsTool;
 
     if (includeSubagentDelegation) {
-      // The content will be loaded from subagent-delegation.md file
-      // We load it here directly to include in template variables
       try {
-        const subagentDelegationContent = this.loadSubagentDelegationContent();
-        variables['SUBAGENT_DELEGATION'] = subagentDelegationContent;
+        variables['SUBAGENT_DELEGATION'] = this.loadSubagentDelegationContent();
       } catch {
-        // If loading fails, use empty string
         variables['SUBAGENT_DELEGATION'] = '';
       }
     } else {
       variables['SUBAGENT_DELEGATION'] = '';
     }
 
-    // Add ASYNC_SUBAGENT_GUIDANCE - only when subagent delegation is included AND async is globally and profile enabled
     const globalAsyncEnabled = context.asyncSubagentsEnabled !== false;
     const profileAsyncEnabled = context.profileAsyncEnabled !== false;
     if (
@@ -297,16 +325,21 @@ export class TemplateEngine {
       profileAsyncEnabled
     ) {
       try {
-        const asyncGuidanceContent = this.loadAsyncSubagentGuidanceContent();
-        variables['ASYNC_SUBAGENT_GUIDANCE'] = asyncGuidanceContent;
+        variables['ASYNC_SUBAGENT_GUIDANCE'] =
+          this.loadAsyncSubagentGuidanceContent();
       } catch {
         variables['ASYNC_SUBAGENT_GUIDANCE'] = '';
       }
     } else {
       variables['ASYNC_SUBAGENT_GUIDANCE'] = '';
     }
+  }
 
-    // Add interaction mode variables
+  /** Add interaction mode, label, confirm, and continue variables */
+  private addInteractionModeVariables(
+    variables: TemplateVariables,
+    context: PromptContext,
+  ): void {
     const interactionMode =
       /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: interactionMode is optional string, empty string should fall through to default */
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
@@ -314,7 +347,15 @@ export class TemplateEngine {
     /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
     variables['INTERACTION_MODE'] = interactionMode;
 
-    // Add interaction mode label
+    this.addInteractionModeLabel(variables, interactionMode);
+    this.addInteractiveConfirm(variables, interactionMode);
+    this.addNonInteractiveContinue(variables, interactionMode);
+  }
+
+  private addInteractionModeLabel(
+    variables: TemplateVariables,
+    interactionMode: string,
+  ): void {
     if (interactionMode === 'interactive') {
       variables['INTERACTION_MODE_LABEL'] = 'an interactive';
     } else if (interactionMode === 'non-interactive') {
@@ -323,8 +364,12 @@ export class TemplateEngine {
     } else if (interactionMode === 'subagent') {
       variables['INTERACTION_MODE_LABEL'] = 'a subagent';
     }
+  }
 
-    // Add interactive confirm variable
+  private addInteractiveConfirm(
+    variables: TemplateVariables,
+    interactionMode: string,
+  ): void {
     if (interactionMode === 'interactive') {
       variables['INTERACTIVE_CONFIRM'] =
         "- **Confirm Ambiguity/Expansion:** Do not take significant actions beyond the clear scope of the request without confirming with the user. If asked _how_ to do something, explain first, don't just do it.";
@@ -332,8 +377,12 @@ export class TemplateEngine {
       variables['INTERACTIVE_CONFIRM'] =
         '- **Handle Ambiguity:** Do not ask the user for clarification. Use your best judgment to interpret ambiguous requests and proceed with the most reasonable approach.';
     }
+  }
 
-    // Add non-interactive continue variable
+  private addNonInteractiveContinue(
+    variables: TemplateVariables,
+    interactionMode: string,
+  ): void {
     if (
       interactionMode === 'non-interactive' ||
       interactionMode === 'subagent'
@@ -343,8 +392,6 @@ export class TemplateEngine {
     } else {
       variables['NON_INTERACTIVE_CONTINUE'] = '';
     }
-
-    return variables;
   }
 
   /**

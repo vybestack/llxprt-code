@@ -310,6 +310,104 @@ export class PromptLoader {
   }
 
   /**
+   * Create a chokidar-based file watcher
+   */
+  private createChokidarWatcher(
+    baseDir: string,
+    handleChange: (eventType: string, filePath: string) => void,
+    timeouts: Map<string, NodeJS.Timeout>,
+  ): FileWatcher | null {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, no-restricted-syntax
+    const chokidar = require('chokidar');
+
+    const watcher = chokidar.watch(baseDir, {
+      persistent: true,
+      recursive: true,
+      ignoreInitial: true,
+      ignored: (watchPath: string) => !watchPath.endsWith('.md'),
+    });
+
+    watcher.on('add', (filePath: string) => handleChange('add', filePath));
+    watcher.on('change', (filePath: string) =>
+      handleChange('change', filePath),
+    );
+    watcher.on('unlink', (filePath: string) =>
+      handleChange('unlink', filePath),
+    );
+
+    return {
+      stop: () => {
+        for (const timeout of timeouts.values()) {
+          clearTimeout(timeout);
+        }
+        timeouts.clear();
+        watcher.close();
+      },
+    };
+  }
+
+  /** Handle a file change from fs.watch fallback with debouncing */
+  private handleFsWatchChange(
+    eventType: string | null,
+    filename: string | Buffer | null,
+    callback: FileChangeCallback,
+    timeouts: Map<string, NodeJS.Timeout>,
+  ): void {
+    if (filename === null) {
+      return;
+    }
+    const filenameStr =
+      typeof filename === 'string' ? filename : filename.toString();
+    if (!filenameStr.endsWith('.md')) {
+      return;
+    }
+    if (timeouts.has(filenameStr)) {
+      clearTimeout(timeouts.get(filenameStr));
+    }
+
+    timeouts.set(
+      filenameStr,
+      setTimeout(() => {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string event type should default to 'change'
+        callback(eventType || 'change', filenameStr);
+        timeouts.delete(filenameStr);
+      }, 100),
+    );
+  }
+
+  /**
+   * Create an fs.watch-based fallback file watcher
+   */
+  private createFsWatcher(
+    baseDir: string,
+    callback: FileChangeCallback,
+    timeouts: Map<string, NodeJS.Timeout>,
+  ): FileWatcher | null {
+    try {
+      const fsWatcher = fsSync.watch(baseDir, { recursive: true });
+
+      fsWatcher.on(
+        'change',
+        (eventType: string | null, filename: string | Buffer | null) => {
+          this.handleFsWatchChange(eventType, filename, callback, timeouts);
+        },
+      );
+
+      return {
+        stop: () => {
+          for (const timeout of timeouts.values()) {
+            clearTimeout(timeout);
+          }
+          timeouts.clear();
+          fsWatcher.close();
+        },
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Watch files for changes
    */
   watchFiles(
@@ -325,113 +423,43 @@ export class PromptLoader {
       return null;
     }
 
-    // Step 2: Set up file watcher
-    let watcher: {
-      close(): void;
-      on(event: string, handler: (path: string) => void): void;
-    };
+    // Step 2: Set up debounced change handler
     const timeouts = new Map<string, NodeJS.Timeout>();
 
-    try {
-      // Try to use chokidar if available
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, no-restricted-syntax
-      const chokidar = require('chokidar');
+    const handleChange = (eventType: string, filePath: string) => {
+      const relativePath = path.relative(baseDir, filePath);
 
-      watcher = chokidar.watch(baseDir, {
-        persistent: true,
-        recursive: true,
-        ignoreInitial: true,
-        ignored: (path: string) => !path.endsWith('.md'),
-      });
-
-      // Step 3: Handle file change events with debouncing
-      const handleChange = (eventType: string, filePath: string) => {
-        const relativePath = path.relative(baseDir, filePath);
-
-        // Only process .md files
-        if (!relativePath.endsWith('.md')) {
-          return;
-        }
-
-        // Debounce events
-        if (timeouts.has(relativePath)) {
-          clearTimeout(timeouts.get(relativePath));
-        }
-
-        timeouts.set(
-          relativePath,
-          setTimeout(() => {
-            callback(eventType, relativePath);
-            timeouts.delete(relativePath);
-          }, 100),
-        ); // 100ms debounce
-      };
-
-      watcher.on('add', (filePath: string) => handleChange('add', filePath));
-      watcher.on('change', (filePath: string) =>
-        handleChange('change', filePath),
-      );
-      watcher.on('unlink', (filePath: string) =>
-        handleChange('unlink', filePath),
-      );
-
-      // Step 4: Return watcher control object
-      return {
-        stop: () => {
-          // Clear all pending timeouts
-          for (const timeout of timeouts.values()) {
-            clearTimeout(timeout);
-          }
-          timeouts.clear();
-
-          // Close the watcher
-          watcher.close();
-        },
-      };
-    } catch {
-      // If chokidar is not available, use fs.watch as fallback
-      try {
-        const fsWatcher = fsSync.watch(baseDir, { recursive: true });
-
-        // Note: fs.watch has limitations but works as a fallback
-        fsWatcher.on(
-          'change',
-          (eventType: string | null, filename: string | Buffer | null) => {
-            if (filename !== null) {
-              const filenameStr =
-                typeof filename === 'string' ? filename : filename.toString();
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (filenameStr.endsWith('.md')) {
-                // Simple debouncing
-                if (timeouts.has(filenameStr)) {
-                  clearTimeout(timeouts.get(filenameStr));
-                }
-
-                timeouts.set(
-                  filenameStr,
-                  setTimeout(() => {
-                    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string event type should default to 'change'
-                    callback(eventType || 'change', filenameStr);
-                    timeouts.delete(filenameStr);
-                  }, 100),
-                );
-              }
-            }
-          },
-        );
-
-        return {
-          stop: () => {
-            for (const timeout of timeouts.values()) {
-              clearTimeout(timeout);
-            }
-            timeouts.clear();
-            fsWatcher.close();
-          },
-        };
-      } catch {
-        return null;
+      if (!relativePath.endsWith('.md')) {
+        return;
       }
+
+      if (timeouts.has(relativePath)) {
+        clearTimeout(timeouts.get(relativePath));
+      }
+
+      timeouts.set(
+        relativePath,
+        setTimeout(() => {
+          callback(eventType, relativePath);
+          timeouts.delete(relativePath);
+        }, 100),
+      );
+    };
+
+    // Step 3: Try chokidar first, then fallback to fs.watch
+    try {
+      const chokidarWatcher = this.createChokidarWatcher(
+        baseDir,
+        handleChange,
+        timeouts,
+      );
+      if (chokidarWatcher) {
+        return chokidarWatcher;
+      }
+    } catch {
+      // chokidar not available
     }
+
+    return this.createFsWatcher(baseDir, callback, timeouts);
   }
 }
