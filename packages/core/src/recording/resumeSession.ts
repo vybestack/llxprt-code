@@ -73,6 +73,8 @@ export interface ResumeError {
   error: string;
 }
 
+type LockedSession = { targetFilePath: string; lockHandle: LockHandle };
+
 /**
  * Extract the lock identifier from a session file path.
  * For `session-<id>.jsonl`, returns `<id>`.
@@ -84,6 +86,80 @@ function extractLockId(filePath: string): string {
     throw new Error(`Cannot extract session ID from path: ${filePath}`);
   }
   return match[1];
+}
+
+/**
+ * Resolve a specific continueRef to a locked session.
+ * Returns the locked session info, or a ResumeError if resolution/locking fails.
+ */
+async function resolveAndLockSession(
+  request: ResumeRequest,
+  sessions: SessionSummary[],
+): Promise<LockedSession | ResumeError> {
+  const resolved = SessionDiscovery.resolveSessionRef(
+    request.continueRef,
+    sessions,
+  );
+  if ('error' in resolved) {
+    return { ok: false, error: resolved.error };
+  }
+
+  const targetFilePath = resolved.session.filePath;
+  const lockId = extractLockId(targetFilePath);
+
+  try {
+    const lockHandle = await SessionLockManager.acquire(
+      request.chatsDir,
+      lockId,
+    );
+    return { targetFilePath, lockHandle };
+  } catch {
+    return { ok: false, error: 'Session is in use by another process' };
+  }
+}
+
+/**
+ * Initialize recording for append, record provider/model mismatch if needed,
+ * and record the resume event.
+ */
+function initializeRecordingForResume(
+  lockedSession: LockedSession,
+  request: ResumeRequest,
+  replayResult: { metadata: SessionMetadata; lastSeq: number },
+): SessionRecordingService {
+  const recording = new SessionRecordingService({
+    sessionId: replayResult.metadata.sessionId,
+    projectHash: request.projectHash,
+    chatsDir: request.chatsDir,
+    workspaceDirs: request.workspaceDirs,
+    provider: request.currentProvider,
+    model: request.currentModel,
+  });
+  recording.initializeForResume(
+    lockedSession.targetFilePath,
+    replayResult.lastSeq,
+  );
+
+  if (
+    request.currentProvider !== replayResult.metadata.provider ||
+    request.currentModel !== replayResult.metadata.model
+  ) {
+    recording.recordSessionEvent(
+      'warning',
+      `Provider/model changed from ${replayResult.metadata.provider}/${replayResult.metadata.model} to ${request.currentProvider}/${request.currentModel}`,
+    );
+    recording.recordProviderSwitch(
+      request.currentProvider,
+      request.currentModel,
+    );
+  }
+
+  recording.recordSessionEvent(
+    'info',
+    `Session resumed (originally started ${replayResult.metadata.startTime})`,
+  );
+
+  return recording;
 }
 
 /**
@@ -108,8 +184,6 @@ export async function resumeSession(
   }
 
   // Step 2: Resolve which session to resume
-  type LockedSession = { targetFilePath: string; lockHandle: LockHandle };
-
   let lockedSession: LockedSession | null = null;
 
   if (request.continueRef === CONTINUE_LATEST) {
@@ -122,29 +196,9 @@ export async function resumeSession(
       };
     }
   } else {
-    const resolved = SessionDiscovery.resolveSessionRef(
-      request.continueRef,
-      sessions,
-    );
-    if ('error' in resolved) {
-      return { ok: false, error: resolved.error };
-    }
-
-    const targetFilePath = resolved.session.filePath;
-    const lockId = extractLockId(targetFilePath);
-
-    try {
-      const lockHandle = await SessionLockManager.acquire(
-        request.chatsDir,
-        lockId,
-      );
-      lockedSession = { targetFilePath, lockHandle };
-    } catch {
-      return {
-        ok: false,
-        error: 'Session is in use by another process',
-      };
-    }
+    const result = await resolveAndLockSession(request, sessions);
+    if (!('targetFilePath' in result)) return result;
+    lockedSession = result;
   }
 
   // Step 4: Replay session
@@ -160,39 +214,11 @@ export async function resumeSession(
     };
   }
 
-  // Step 5: Initialize recording for append
-  const recording = new SessionRecordingService({
-    sessionId: replayResult.metadata.sessionId,
-    projectHash: request.projectHash,
-    chatsDir: request.chatsDir,
-    workspaceDirs: request.workspaceDirs,
-    provider: request.currentProvider,
-    model: request.currentModel,
-  });
-  recording.initializeForResume(
-    lockedSession.targetFilePath,
-    replayResult.lastSeq,
-  );
-
-  // Step 6: Handle provider/model mismatch
-  if (
-    request.currentProvider !== replayResult.metadata.provider ||
-    request.currentModel !== replayResult.metadata.model
-  ) {
-    recording.recordSessionEvent(
-      'warning',
-      `Provider/model changed from ${replayResult.metadata.provider}/${replayResult.metadata.model} to ${request.currentProvider}/${request.currentModel}`,
-    );
-    recording.recordProviderSwitch(
-      request.currentProvider,
-      request.currentModel,
-    );
-  }
-
-  // Step 7: Record resume event
-  recording.recordSessionEvent(
-    'info',
-    `Session resumed (originally started ${replayResult.metadata.startTime})`,
+  // Steps 5-7: Initialize recording for append
+  const recording = initializeRecordingForResume(
+    lockedSession,
+    request,
+    replayResult,
   );
 
   // Step 8: Return result

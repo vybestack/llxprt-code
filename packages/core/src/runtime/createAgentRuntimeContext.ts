@@ -36,9 +36,12 @@ const EPHEMERAL_DEFAULTS = {
   },
 } as const;
 
-export function createAgentRuntimeContext(
+/**
+ * Validate required top-level options and throw if any are missing.
+ */
+function validateRequiredOptions(
   options: AgentRuntimeContextFactoryOptions,
-): AgentRuntimeContext {
+): void {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
   if (options.provider == null) {
     throw new Error(
@@ -63,14 +66,16 @@ export function createAgentRuntimeContext(
       'AgentRuntimeContext requires a provider runtime context. Supply options.providerRuntime.',
     );
   }
+}
 
-  const history = options.history ?? new HistoryService();
-
-  const getLiveSetting = <T>(
-    key: string,
-    snapshotValue: T | undefined,
-  ): T | undefined => {
-    // First check the live settings service for runtime changes
+/**
+ * Create the getLiveSetting closure that checks the live settings service
+ * before falling back to snapshot values.
+ */
+function createGetLiveSetting(
+  options: AgentRuntimeContextFactoryOptions,
+): <T>(key: string, snapshotValue: T | undefined) => T | undefined {
+  return <T>(key: string, snapshotValue: T | undefined): T | undefined => {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
     const settingsService = options.providerRuntime?.settingsService;
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
@@ -80,11 +85,18 @@ export function createAgentRuntimeContext(
         return liveValue;
       }
     }
-    // Fall back to snapshot value if no live override
     return snapshotValue;
   };
+}
 
-  const ephemerals = {
+/**
+ * Build compression-related ephemeral accessors.
+ */
+function buildCompressionEphemerals(
+  getLiveSetting: ReturnType<typeof createGetLiveSetting>,
+  options: AgentRuntimeContextFactoryOptions,
+) {
+  return {
     compressionThreshold: (): number => {
       const liveThreshold = getLiveSetting<number>(
         'compression-threshold',
@@ -97,7 +109,6 @@ export function createAgentRuntimeContext(
       return normalized ?? EPHEMERAL_DEFAULTS.compressionThreshold;
     },
     contextLimit: (): number => {
-      // Check live settings first, then snapshot
       const liveLimit = getLiveSetting<number>(
         'context-limit',
         options.settings.contextLimit,
@@ -134,6 +145,28 @@ export function createAgentRuntimeContext(
         'compression.profile',
         options.settings.compressionProfile,
       ),
+    ...buildDensityEphemerals(getLiveSetting, options),
+    compressionVerification: (): boolean => {
+      const value = getLiveSetting<boolean>(
+        'compressionVerification',
+        options.settings.compressionVerification,
+      );
+      return typeof value === 'boolean' ? value : false;
+    },
+  };
+}
+
+/**
+ * Build density-related ephemeral accessors.
+ * @plan PLAN-20260211-HIGHDENSITY.P15
+ * @requirement REQ-HD-009.5
+ * @pseudocode settings-factory.md lines 90-121
+ */
+function buildDensityEphemerals(
+  getLiveSetting: ReturnType<typeof createGetLiveSetting>,
+  options: AgentRuntimeContextFactoryOptions,
+) {
+  return {
     /**
      * @plan PLAN-20260211-HIGHDENSITY.P15
      * @requirement REQ-HD-009.5
@@ -179,71 +212,81 @@ export function createAgentRuntimeContext(
         'compression.density.optimizeThreshold',
         options.settings['compression.density.optimizeThreshold'],
       );
-      // Return undefined if not set — caller should use strategy.trigger.defaultThreshold
-      // Allow 0 for testing (always run optimize) up to 1
       return typeof value === 'number' && value >= 0 && value <= 1
         ? value
         : undefined;
     },
-    compressionVerification: (): boolean => {
-      const value = getLiveSetting<boolean>(
-        'compressionVerification',
-        options.settings.compressionVerification,
+  };
+}
+
+/**
+ * Build reasoning ephemeral accessors.
+ * @plan PLAN-20251202-THINKING.P03b
+ * @requirement REQ-THINK-006
+ */
+function buildReasoningEphemerals(
+  getLiveSetting: ReturnType<typeof createGetLiveSetting>,
+  options: AgentRuntimeContextFactoryOptions,
+) {
+  return {
+    enabled: (): boolean =>
+      getLiveSetting(
+        'reasoning.enabled',
+        options.settings['reasoning.enabled'],
+      ) ?? EPHEMERAL_DEFAULTS.reasoning.enabled,
+    includeInContext: (): boolean =>
+      getLiveSetting(
+        'reasoning.includeInContext',
+        options.settings['reasoning.includeInContext'],
+      ) ?? EPHEMERAL_DEFAULTS.reasoning.includeInContext,
+    includeInResponse: (): boolean =>
+      getLiveSetting(
+        'reasoning.includeInResponse',
+        options.settings['reasoning.includeInResponse'],
+      ) ?? EPHEMERAL_DEFAULTS.reasoning.includeInResponse,
+    format: (): 'native' | 'field' =>
+      getLiveSetting(
+        'reasoning.format',
+        options.settings['reasoning.format'],
+      ) ?? EPHEMERAL_DEFAULTS.reasoning.format,
+    stripFromContext: (): 'all' | 'allButLast' | 'none' =>
+      getLiveSetting(
+        'reasoning.stripFromContext',
+        options.settings['reasoning.stripFromContext'],
+      ) ?? EPHEMERAL_DEFAULTS.reasoning.stripFromContext,
+    effort: (): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined =>
+      getLiveSetting('reasoning.effort', options.settings['reasoning.effort']),
+    maxTokens: (): number | undefined => {
+      const maxTokensValue = getLiveSetting(
+        'reasoning.maxTokens',
+        options.settings['reasoning.maxTokens'],
       );
-      return typeof value === 'boolean' ? value : false;
+      return typeof maxTokensValue === 'number' ? maxTokensValue : undefined;
     },
-    /**
-     * @plan PLAN-20251202-THINKING.P03b
-     * @requirement REQ-THINK-006
-     */
-    reasoning: {
-      enabled: (): boolean =>
-        getLiveSetting(
-          'reasoning.enabled',
-          options.settings['reasoning.enabled'],
-        ) ?? EPHEMERAL_DEFAULTS.reasoning.enabled,
-      includeInContext: (): boolean =>
-        getLiveSetting(
-          'reasoning.includeInContext',
-          options.settings['reasoning.includeInContext'],
-        ) ?? EPHEMERAL_DEFAULTS.reasoning.includeInContext,
-      includeInResponse: (): boolean =>
-        getLiveSetting(
-          'reasoning.includeInResponse',
-          options.settings['reasoning.includeInResponse'],
-        ) ?? EPHEMERAL_DEFAULTS.reasoning.includeInResponse,
-      format: (): 'native' | 'field' =>
-        getLiveSetting(
-          'reasoning.format',
-          options.settings['reasoning.format'],
-        ) ?? EPHEMERAL_DEFAULTS.reasoning.format,
-      stripFromContext: (): 'all' | 'allButLast' | 'none' =>
-        getLiveSetting(
-          'reasoning.stripFromContext',
-          options.settings['reasoning.stripFromContext'],
-        ) ?? EPHEMERAL_DEFAULTS.reasoning.stripFromContext,
-      effort: (): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined =>
-        getLiveSetting(
-          'reasoning.effort',
-          options.settings['reasoning.effort'],
-        ),
-      maxTokens: (): number | undefined => {
-        const maxTokensValue = getLiveSetting(
-          'reasoning.maxTokens',
-          options.settings['reasoning.maxTokens'],
-        );
-        return typeof maxTokensValue === 'number' ? maxTokensValue : undefined;
-      },
-      adaptiveThinking: (): boolean | undefined => {
-        const adaptiveThinkingValue = getLiveSetting(
-          'reasoning.adaptiveThinking',
-          options.settings['reasoning.adaptiveThinking'],
-        );
-        return typeof adaptiveThinkingValue === 'boolean'
-          ? adaptiveThinkingValue
-          : undefined;
-      },
+    adaptiveThinking: (): boolean | undefined => {
+      const adaptiveThinkingValue = getLiveSetting(
+        'reasoning.adaptiveThinking',
+        options.settings['reasoning.adaptiveThinking'],
+      );
+      return typeof adaptiveThinkingValue === 'boolean'
+        ? adaptiveThinkingValue
+        : undefined;
     },
+  };
+}
+
+export function createAgentRuntimeContext(
+  options: AgentRuntimeContextFactoryOptions,
+): AgentRuntimeContext {
+  validateRequiredOptions(options);
+
+  const history = options.history ?? new HistoryService();
+
+  const getLiveSetting = createGetLiveSetting(options);
+
+  const ephemerals = {
+    ...buildCompressionEphemerals(getLiveSetting, options),
+    reasoning: buildReasoningEphemerals(getLiveSetting, options),
   };
 
   const providerRuntime = Object.freeze({

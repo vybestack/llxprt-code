@@ -1256,19 +1256,12 @@ const INTERNAL_SETTINGS_KEYS = new Set([
   'tools',
 ]);
 
-export function separateSettings(
+/** Extract custom headers from both global and provider-level settings. */
+function extractCustomHeaders(
   mixed: Record<string, unknown>,
-  providerName?: string,
-): SeparatedSettings {
-  const cliSettings: Record<string, unknown> = {};
-  const modelBehavior: Record<string, unknown> = {};
-  const modelParams: Record<string, unknown> = {};
+  providerOverrides: Record<string, unknown>,
+): Record<string, string> {
   const customHeaders: Record<string, string> = {};
-
-  let providerOverrides: Record<string, unknown> = {};
-  if (providerName && isPlainObject(mixed[providerName])) {
-    providerOverrides = mixed[providerName];
-  }
 
   if (isPlainObject(mixed['custom-headers'])) {
     const globalHeaders = mixed['custom-headers'];
@@ -1288,85 +1281,133 @@ export function separateSettings(
     }
   }
 
-  const mergedProviderSettings = { ...mixed, ...providerOverrides };
+  return customHeaders;
+}
 
-  if (isPlainObject(mergedProviderSettings['reasoning'])) {
-    const reasoningObj = mergedProviderSettings['reasoning'];
+/** Flatten provider overrides and reasoning sub-keys into a merged settings object. */
+function mergeProviderSettings(
+  mixed: Record<string, unknown>,
+  providerOverrides: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged = { ...mixed, ...providerOverrides };
+
+  if (isPlainObject(merged['reasoning'])) {
+    const reasoningObj = merged['reasoning'];
 
     for (const [subKey, subValue] of Object.entries(reasoningObj)) {
       const fullKey = `reasoning.${subKey}`;
 
-      if (!(fullKey in mergedProviderSettings)) {
-        mergedProviderSettings[fullKey] = subValue;
+      if (!(fullKey in merged)) {
+        merged[fullKey] = subValue;
       }
     }
   }
 
+  return merged;
+}
+
+/** Categorize a single setting entry into the appropriate bucket. */
+function categorizeSettingEntry(
+  rawKey: string,
+  value: unknown,
+  providerName: string | undefined,
+  buckets: {
+    cliSettings: Record<string, unknown>;
+    modelBehavior: Record<string, unknown>;
+    modelParams: Record<string, unknown>;
+    customHeaders: Record<string, string>;
+  },
+): boolean {
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  if (value === undefined || value === null) return false;
+
+  if (
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    rawKey === providerName
+  ) {
+    return false;
+  }
+
+  if (rawKey === 'custom-headers') {
+    return false;
+  }
+
+  if (INTERNAL_SETTINGS_KEYS.has(rawKey)) {
+    buckets.cliSettings[rawKey] = value;
+    return false;
+  }
+
+  const resolvedKey = resolveAlias(rawKey);
+  const normalizedValue = normalizeSetting(resolvedKey, value);
+
+  if (normalizedValue === undefined) return false;
+
+  const spec = getSettingSpec(resolvedKey);
+
+  if (!spec) {
+    // Unknown settings default to model-param (pass-through to API).
+    buckets.modelParams[resolvedKey] = normalizedValue;
+    return false;
+  }
+
+  if (
+    spec.category === 'model-param' &&
+    spec.providers &&
+    providerName &&
+    !spec.providers.includes(providerName)
+  ) {
+    return false;
+  }
+
+  switch (spec.category) {
+    case 'provider-config':
+      break;
+    case 'cli-behavior':
+      buckets.cliSettings[resolvedKey] = normalizedValue;
+      break;
+    case 'model-behavior':
+      buckets.modelBehavior[resolvedKey] = normalizedValue;
+      break;
+    case 'model-param':
+      buckets.modelParams[resolvedKey] = normalizedValue;
+      break;
+    case 'custom-header':
+      if (typeof normalizedValue === 'string') {
+        buckets.customHeaders[resolvedKey] = normalizedValue;
+      }
+      break;
+    default:
+      break;
+  }
+
+  return false;
+}
+
+export function separateSettings(
+  mixed: Record<string, unknown>,
+  providerName?: string,
+): SeparatedSettings {
+  const cliSettings: Record<string, unknown> = {};
+  const modelBehavior: Record<string, unknown> = {};
+  const modelParams: Record<string, unknown> = {};
+
+  let providerOverrides: Record<string, unknown> = {};
+  if (providerName && isPlainObject(mixed[providerName])) {
+    providerOverrides = mixed[providerName];
+  }
+
+  const customHeaders = extractCustomHeaders(mixed, providerOverrides);
+  const mergedProviderSettings = mergeProviderSettings(
+    mixed,
+    providerOverrides,
+  );
+
+  const buckets = { cliSettings, modelBehavior, modelParams, customHeaders };
+
   // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const [rawKey, value] of Object.entries(mergedProviderSettings)) {
-    if (value === undefined || value === null) continue;
-
-    if (
-      typeof value === 'object' &&
-      !Array.isArray(value) &&
-      rawKey === providerName
-    ) {
-      continue;
-    }
-
-    if (rawKey === 'custom-headers') {
-      continue;
-    }
-
-    if (INTERNAL_SETTINGS_KEYS.has(rawKey)) {
-      cliSettings[rawKey] = value;
-      continue;
-    }
-
-    const resolvedKey = resolveAlias(rawKey);
-    const normalizedValue = normalizeSetting(resolvedKey, value);
-
-    if (normalizedValue === undefined) continue;
-
-    const spec = getSettingSpec(resolvedKey);
-
-    if (!spec) {
-      // Unknown settings default to model-param (pass-through to API).
-      // This allows /set modelparam <anything> <value> to work for
-      // provider-specific parameters not yet in the registry.
-      modelParams[resolvedKey] = normalizedValue;
-      continue;
-    }
-
-    if (
-      spec.category === 'model-param' &&
-      spec.providers &&
-      providerName &&
-      !spec.providers.includes(providerName)
-    ) {
-      continue;
-    }
-
-    switch (spec.category) {
-      case 'provider-config':
-        break;
-      case 'cli-behavior':
-        cliSettings[resolvedKey] = normalizedValue;
-        break;
-      case 'model-behavior':
-        modelBehavior[resolvedKey] = normalizedValue;
-        break;
-      case 'model-param':
-        modelParams[resolvedKey] = normalizedValue;
-        break;
-      case 'custom-header':
-        if (typeof normalizedValue === 'string') {
-          customHeaders[resolvedKey] = normalizedValue;
-        }
-        break;
-      default:
-        break;
-    }
+    categorizeSettingEntry(rawKey, value, providerName, buckets);
   }
 
   return { cliSettings, modelBehavior, modelParams, customHeaders };

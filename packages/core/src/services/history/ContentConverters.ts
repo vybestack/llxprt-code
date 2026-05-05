@@ -25,6 +25,10 @@ import {
   canonicalizeToolResponseId,
 } from './canonicalToolIds.js';
 
+function generateTurnKey(): string {
+  return `turn_${randomUUID()}`;
+}
+
 /**
  * Converts between Gemini Content format and IContent format
  */
@@ -48,6 +52,94 @@ export class ContentConverters {
     );
   }
 
+  /** Resolve the Gemini role from an IContent speaker. */
+  private static resolveRole(speaker: string): 'user' | 'model' {
+    if (speaker === 'tool' || speaker === 'human') {
+      return 'user';
+    }
+    return 'model';
+  }
+
+  /** Convert a single IContent block to a Gemini Part. */
+  private static blockToPart(block: ContentBlock): Part | null {
+    switch (block.type) {
+      case 'text': {
+        const textBlock = block;
+        return { text: textBlock.text };
+      }
+      case 'tool_call': {
+        const toolCall = block;
+        this.logger.debug('Converting tool_call block to functionCall:', {
+          id: toolCall.id,
+          name: toolCall.name,
+          hasParameters: ContentConverters.hasLegacyTruthyValue(
+            toolCall.parameters,
+          ),
+        });
+        return {
+          functionCall: {
+            name: toolCall.name,
+            args: toolCall.parameters as Record<string, unknown>,
+            id: toolCall.id,
+          },
+        };
+      }
+      case 'tool_response': {
+        const toolResponse = block;
+        this.logger.debug(
+          'Converting tool_response block to functionResponse:',
+          {
+            callId: toolResponse.callId,
+            toolName: toolResponse.toolName,
+            hasResult: ContentConverters.hasLegacyTruthyValue(
+              toolResponse.result,
+            ),
+            hasError: ContentConverters.hasLegacyTruthyValue(
+              toolResponse.error,
+            ),
+          },
+        );
+        return {
+          functionResponse: {
+            name: toolResponse.toolName,
+            response: toolResponse.result as Record<string, unknown>,
+            id: toolResponse.callId,
+          },
+        };
+      }
+      case 'thinking': {
+        const thinkingBlock = block;
+        const thinkingPart: Part = {
+          thought: true,
+          text: thinkingBlock.thought,
+        };
+        if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.signature)) {
+          thinkingPart.thoughtSignature = thinkingBlock.signature;
+        }
+        if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.sourceField)) {
+          (
+            thinkingPart as Part & {
+              llxprtSourceField?: ThinkingBlock['sourceField'];
+            }
+          ).llxprtSourceField = thinkingBlock.sourceField;
+        }
+        return thinkingPart;
+      }
+      case 'media': {
+        return null;
+      }
+      case 'code': {
+        const codeBlock = block;
+        const codeText = codeBlock.language
+          ? `\`\`\`${codeBlock.language}\n${codeBlock.code}\n\`\`\``
+          : codeBlock.code;
+        return { text: codeText };
+      }
+      default:
+        return null;
+    }
+  }
+
   /**
    * Convert IContent to Gemini Content format
    */
@@ -64,109 +156,16 @@ export class ContentConverters {
         .filter((b) => b.type === 'tool_response')
         .map((b) => b.callId),
     });
-    // Tool responses should have 'user' role in Gemini format
-    let role: 'user' | 'model';
-    if (iContent.speaker === 'tool') {
-      role = 'user';
-    } else if (iContent.speaker === 'human') {
-      role = 'user';
-    } else {
-      role = 'model';
-    }
+
+    const role = this.resolveRole(iContent.speaker);
     const parts: Part[] = [];
 
     for (const block of iContent.blocks) {
-      switch (block.type) {
-        case 'text': {
-          const textBlock = block;
-          parts.push({ text: textBlock.text });
-          break;
-        }
-        case 'tool_call': {
-          const toolCall = block;
-          this.logger.debug('Converting tool_call block to functionCall:', {
-            id: toolCall.id,
-            name: toolCall.name,
-            hasParameters: ContentConverters.hasLegacyTruthyValue(
-              toolCall.parameters,
-            ),
-          });
-          parts.push({
-            functionCall: {
-              name: toolCall.name,
-              args: toolCall.parameters as Record<string, unknown>,
-              id: toolCall.id,
-            },
-          });
-          break;
-        }
-        case 'tool_response': {
-          const toolResponse = block;
-          this.logger.debug(
-            'Converting tool_response block to functionResponse:',
-            {
-              callId: toolResponse.callId,
-              toolName: toolResponse.toolName,
-              hasResult: ContentConverters.hasLegacyTruthyValue(
-                toolResponse.result,
-              ),
-              hasError: ContentConverters.hasLegacyTruthyValue(
-                toolResponse.error,
-              ),
-            },
-          );
-          parts.push({
-            functionResponse: {
-              name: toolResponse.toolName,
-              response: toolResponse.result as Record<string, unknown>,
-              id: toolResponse.callId,
-            },
-          });
-          break;
-        }
-        case 'thinking': {
-          const thinkingBlock = block;
-          const thinkingPart: Part = {
-            thought: true,
-            text: thinkingBlock.thought,
-          };
-          if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.signature)) {
-            thinkingPart.thoughtSignature = thinkingBlock.signature;
-          }
-          if (
-            ContentConverters.hasLegacyTruthyValue(thinkingBlock.sourceField)
-          ) {
-            (
-              thinkingPart as Part & {
-                llxprtSourceField?: ThinkingBlock['sourceField'];
-              }
-            ).llxprtSourceField = thinkingBlock.sourceField;
-          }
-          parts.push(thinkingPart);
-          break;
-        }
-        case 'media': {
-          // Media blocks can be converted to inline data parts
-          // For now, we'll skip these as GeminiChat doesn't handle them yet
-          break;
-        }
-        case 'code': {
-          // Code blocks are treated as text in Gemini format
-          const codeBlock = block;
-          const codeText = codeBlock.language
-            ? `\`\`\`${codeBlock.language}\n${codeBlock.code}\n\`\`\``
-            : codeBlock.code;
-          parts.push({ text: codeText });
-          break;
-        }
-        default:
-          // Ignore unknown block types
-          break;
+      const part = this.blockToPart(block);
+      if (part !== null) {
+        parts.push(part);
       }
     }
-
-    // Keep empty parts array for empty model responses
-    // This is valid in Gemini Content format
 
     const result = { role, parts };
     this.logger.debug('Converted to Gemini Content:', {
@@ -191,6 +190,239 @@ export class ContentConverters {
     });
 
     return result;
+  }
+
+  /** Convert a thinking/thought Part into a ThinkingBlock. */
+  private static partToThinkingBlock(part: Part): ThinkingBlock {
+    const partWithMetadata = part as Part & {
+      llxprtSourceField?: ThinkingBlock['sourceField'];
+    };
+    const sourceField = partWithMetadata.llxprtSourceField ?? 'thought';
+    const thinkingBlock: ThinkingBlock = {
+      type: 'thinking',
+      thought: part.text ?? '',
+      isHidden: true,
+      sourceField,
+    };
+    if (part.thoughtSignature) {
+      thinkingBlock.signature = part.thoughtSignature;
+    }
+    return thinkingBlock;
+  }
+
+  /** Safely parse a functionResponse.response into a Record. */
+  private static parseFunctionResponseResult(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Gemini SDK types
+    response: any,
+    callId: string,
+  ): Record<string, unknown> {
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Gemini SDK response may be any type
+    if (!response) {
+      return {};
+    }
+    return ContentConverters.parseResponseValue(response, callId);
+  }
+
+  /** Parse a non-null/non-undefined response value into a Record. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Gemini SDK types
+  private static parseResponseValue(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Gemini SDK types
+    response: any,
+    callId: string,
+  ): Record<string, unknown> {
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    try {
+      if (
+        typeof response === 'object' &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
+        response !== null
+      ) {
+        return response;
+      }
+      if (typeof response === 'string') {
+        return ContentConverters.parseStringResponse(response);
+      }
+      return { output: String(response) };
+    } catch (error) {
+      this.logger.warn(
+        () =>
+          `Failed to process functionResponse.response for ${callId}: ${error}`,
+        {
+          originalResponse: response,
+          error,
+        },
+      );
+      return {
+        error: 'Failed to process tool response',
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing, @typescript-eslint/strict-boolean-expressions -- empty string is valid fallback; any-type response from Gemini SDK
+        output: String(response || ''),
+      };
+    }
+  }
+
+  /** Parse a string response value, trying JSON parse first. */
+  private static parseStringResponse(
+    response: string,
+  ): Record<string, unknown> {
+    try {
+      const parsed = JSON.parse(response);
+      return typeof parsed === 'object' && parsed !== null
+        ? parsed
+        : { output: response };
+    } catch {
+      return { output: response };
+    }
+  }
+
+  /** Convert a functionCall Part into tool_call ContentBlock(s). */
+  private static processFunctionCallPart(
+    part: Part,
+    context: {
+      turnKey: string;
+      providerName: string;
+      generateIdCb?: () => string;
+    },
+    callIndex: number,
+  ): { blocks: ContentBlock[]; callIndex: number } {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name
+    const toolName = part.functionCall!.name || '';
+    const rawId = part.functionCall!.id;
+    const generatedId =
+      !rawId && context.generateIdCb ? context.generateIdCb() : undefined;
+    const finalId =
+      generatedId ??
+      canonicalizeToolCallId({
+        providerName: context.providerName,
+        rawId,
+        toolName,
+        turnKey: context.turnKey,
+        callIndex,
+      });
+    this.logger.debug('Converting functionCall to tool_call block:', {
+      originalId: part.functionCall!.id,
+      finalId,
+      name: part.functionCall!.name,
+      usedCallback: generatedId != null,
+    });
+    const functionCallArgs = part.functionCall!.args as Record<string, unknown>;
+    const blocks: ContentBlock[] = [
+      {
+        type: 'tool_call',
+        id: finalId,
+        name: toolName,
+        parameters: ContentConverters.hasLegacyTruthyValue(functionCallArgs)
+          ? functionCallArgs
+          : {},
+      },
+    ];
+    return { blocks, callIndex: callIndex + 1 };
+  }
+
+  /** Convert a functionResponse Part into tool_response ContentBlock(s). */
+  private static processFunctionResponsePart(
+    part: Part,
+    context: {
+      turnKey: string;
+      providerName: string;
+      generateIdCb?: () => string;
+      getNextUnmatchedToolCall?: () => { historyId: string; toolName?: string };
+    },
+    responseIndex: number,
+  ): { blocks: ContentBlock[]; responseIndex: number } {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name
+    const toolName = part.functionResponse!.name || '';
+    const rawId = part.functionResponse!.id;
+    const matched = !rawId ? context.getNextUnmatchedToolCall?.() : undefined;
+    const generatedId =
+      !rawId && !matched && context.generateIdCb
+        ? context.generateIdCb()
+        : undefined;
+    const callId =
+      matched?.historyId ??
+      generatedId ??
+      canonicalizeToolResponseId({
+        providerName: context.providerName,
+        rawId,
+        toolName,
+        turnKey: context.turnKey,
+        callIndex: responseIndex,
+      });
+    this.logger.debug('Converting functionResponse to tool_response block:', {
+      originalId: part.functionResponse!.id,
+      finalId: callId,
+      toolName: part.functionResponse!.name,
+      matchedByPosition: !!matched,
+    });
+    const result = ContentConverters.parseFunctionResponseResult(
+      part.functionResponse!.response,
+      callId,
+    );
+
+    const blocks: ContentBlock[] = [
+      {
+        type: 'tool_response',
+        callId,
+        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name */
+        toolName: matched?.toolName || part.functionResponse!.name || '',
+        /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+        result,
+      },
+    ];
+    return { blocks, responseIndex: responseIndex + 1 };
+  }
+
+  /** Convert a single Gemini Part into ContentBlocks, returning any tool-call index counters. */
+  private static processPartToBlocks(
+    part: Part,
+    context: {
+      turnKey: string;
+      providerName: string;
+      generateIdCb?: () => string;
+      getNextUnmatchedToolCall?: () => { historyId: string; toolName?: string };
+    },
+    indices: { callIndex: number; responseIndex: number },
+  ): { blocks: ContentBlock[]; callIndex: number; responseIndex: number } {
+    const blocks: ContentBlock[] = [];
+    let { callIndex, responseIndex } = indices;
+
+    if ('text' in part && part.text !== undefined) {
+      // Check if this is a thinking block
+      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      if (
+        'thought' in part &&
+        ContentConverters.hasLegacyTruthyValue(part.thought)
+      ) {
+        blocks.push(ContentConverters.partToThinkingBlock(part));
+      } else {
+        blocks.push({
+          type: 'text',
+          text: part.text,
+        });
+      }
+    } else if ('functionCall' in part && part.functionCall) {
+      const fcResult = this.processFunctionCallPart(part, context, callIndex);
+      blocks.push(...fcResult.blocks);
+      callIndex = fcResult.callIndex;
+    } else if ('functionResponse' in part && part.functionResponse) {
+      const frResult = this.processFunctionResponsePart(
+        part,
+        context,
+        responseIndex,
+      );
+      blocks.push(...frResult.blocks);
+      responseIndex = frResult.responseIndex;
+    } else if ('inlineData' in part && part.inlineData) {
+      blocks.push({
+        type: 'media',
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for mimeType
+        mimeType: part.inlineData.mimeType || '',
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for data
+        data: part.inlineData.data || '',
+        encoding: 'base64',
+      });
+    }
+
+    return { blocks, callIndex, responseIndex };
   }
 
   /**
@@ -228,6 +460,7 @@ export class ContentConverters {
                 ?.id,
           ) ?? [],
     });
+
     const speaker = content.role === 'user' ? 'human' : 'ai';
     const blocks: ContentBlock[] = [];
     const metadata: IContent['metadata'] = {};
@@ -236,170 +469,25 @@ export class ContentConverters {
     let callIndex = 0;
     let responseIndex = 0;
 
-    // Handle empty parts array explicitly
-    if (content.parts == null || content.parts.length === 0) {
-      // Empty content - keep it empty
-      // This represents an empty model response
-    } else {
-      for (const part of content.parts) {
-        if ('text' in part && part.text !== undefined) {
-          // Check if this is a thinking block
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (
-            'thought' in part &&
-            ContentConverters.hasLegacyTruthyValue(part.thought)
-          ) {
-            const partWithMetadata = part as Part & {
-              llxprtSourceField?: ThinkingBlock['sourceField'];
-            };
-            const sourceField = partWithMetadata.llxprtSourceField ?? 'thought';
-            const thinkingBlock: ThinkingBlock = {
-              type: 'thinking',
-              thought: part.text,
-              isHidden: true,
-              sourceField,
-            };
-            if (part.thoughtSignature) {
-              thinkingBlock.signature = part.thoughtSignature;
-            }
-            blocks.push(thinkingBlock);
-          } else {
-            blocks.push({
-              type: 'text',
-              text: part.text,
-            });
-          }
-        } else if ('functionCall' in part && part.functionCall) {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name
-          const toolName = part.functionCall.name || '';
-          const rawId = part.functionCall.id;
-          const generatedId =
-            !rawId && generateIdCb ? generateIdCb() : undefined;
-          const finalId =
-            generatedId ??
-            canonicalizeToolCallId({
-              providerName,
-              rawId,
-              toolName,
-              turnKey,
-              callIndex,
-            });
-          this.logger.debug('Converting functionCall to tool_call block:', {
-            originalId: part.functionCall.id,
-            finalId,
-            name: part.functionCall.name,
-            usedCallback: generatedId != null,
-          });
-          const functionCallArgs = part.functionCall.args as Record<
-            string,
-            unknown
-          >;
-          blocks.push({
-            type: 'tool_call',
-            id: finalId,
-            name: toolName,
-            parameters: ContentConverters.hasLegacyTruthyValue(functionCallArgs)
-              ? functionCallArgs
-              : {},
-          });
-          callIndex += 1;
-        } else if ('functionResponse' in part && part.functionResponse) {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name
-          const toolName = part.functionResponse.name || '';
-          const rawId = part.functionResponse.id;
-          const matched = !rawId ? getNextUnmatchedToolCall?.() : undefined;
-          const generatedId =
-            !rawId && !matched && generateIdCb ? generateIdCb() : undefined;
-          const callId =
-            matched?.historyId ??
-            generatedId ??
-            canonicalizeToolResponseId({
-              providerName,
-              rawId,
-              toolName,
-              turnKey,
-              callIndex: responseIndex,
-            });
-          this.logger.debug(
-            'Converting functionResponse to tool_response block:',
-            {
-              originalId: part.functionResponse.id,
-              finalId: callId,
-              toolName: part.functionResponse.name,
-              matchedByPosition: !!matched,
-            },
-          );
-          // Safely handle the response field which might not be a valid Record
-          let result: Record<string, unknown> = {};
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            if (part.functionResponse.response) {
-              if (
-                typeof part.functionResponse.response === 'object' &&
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
-                part.functionResponse.response !== null
-              ) {
-                // If it's already an object, use it directly
-                result = part.functionResponse.response;
-              } else if (typeof part.functionResponse.response === 'string') {
-                // If it's a string, try to parse as JSON, otherwise wrap it
-                try {
-                  const parsed = JSON.parse(part.functionResponse.response);
-                  result =
-                    typeof parsed === 'object' && parsed !== null
-                      ? parsed
-                      : { output: part.functionResponse.response };
-                } catch {
-                  // Not valid JSON, wrap the string
-                  result = { output: part.functionResponse.response };
-                }
-              } else {
-                // For other types, stringify and wrap
-                result = { output: String(part.functionResponse.response) };
-              }
-            }
-          } catch (error) {
-            this.logger.warn(
-              () =>
-                `Failed to process functionResponse.response for ${callId}: ${error}`,
-              {
-                originalResponse: part.functionResponse.response,
-                error,
-              },
-            );
-            result = {
-              error: 'Failed to process tool response',
-              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback
-              output: String(part.functionResponse.response || ''),
-            };
-          }
+    const partContext = {
+      turnKey,
+      providerName,
+      generateIdCb,
+      getNextUnmatchedToolCall,
+    };
 
-          blocks.push({
-            type: 'tool_response',
-            callId,
-            /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name */
-            toolName: matched?.toolName || part.functionResponse.name || '',
-            /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
-            result,
-          });
-          responseIndex += 1;
-        } else if ('inlineData' in part && part.inlineData) {
-          // Handle inline data (media)
-          blocks.push({
-            type: 'media',
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for mimeType
-            mimeType: part.inlineData.mimeType || '',
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for data
-            data: part.inlineData.data || '',
-            encoding: 'base64',
-          });
-        }
+    if (content.parts != null && content.parts.length > 0) {
+      for (const part of content.parts) {
+        const result = this.processPartToBlocks(part, partContext, {
+          callIndex,
+          responseIndex,
+        });
+        blocks.push(...result.blocks);
+        callIndex = result.callIndex;
+        responseIndex = result.responseIndex;
       }
     }
 
-    // Handle tool responses specially - they should have 'tool' speaker
-    // Tool responses come from user role but are tool speaker in IContent
-    // Check if ANY block is a tool_response (not just if ALL are)
     const hasToolResponse = blocks.some((b) => b.type === 'tool_response');
     const finalSpeaker: 'human' | 'ai' | 'tool' =
       content.role === 'user' && hasToolResponse ? 'tool' : speaker;
@@ -485,8 +573,4 @@ export class ContentConverters {
 
     return results;
   }
-}
-
-function generateTurnKey(): string {
-  return `turn_${randomUUID()}`;
 }

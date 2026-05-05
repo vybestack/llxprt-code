@@ -1354,6 +1354,22 @@ export class HistoryService
    * must correspond to tool_use blocks in the previous assistant message).
    */
   private ensureToolResponseAdjacency(contents: IContent[]): IContent[] {
+    const toolCallIndexById = this.buildToolCallIndexById(contents);
+
+    const adjState = this.stripAndReassignToolResponses(
+      contents,
+      toolCallIndexById,
+    );
+
+    return this.reassembleAdjacencyResult(
+      adjState.strippedContents,
+      adjState.responsesByToolCallIndex,
+      adjState.mediaBlocksByToolCallIndex,
+    );
+  }
+
+  /** Build a map from tool call ID to the index of the content containing it. */
+  private buildToolCallIndexById(contents: IContent[]): Map<string, number> {
     const toolCallIndexById = new Map<string, number>();
 
     for (let i = 0; i < contents.length; i++) {
@@ -1368,6 +1384,31 @@ export class HistoryService
       }
     }
 
+    return toolCallIndexById;
+  }
+
+  /** Score a tool response for dedup preference (higher is better). */
+  private static scoreResponse(response: ToolResponseBlock): number {
+    let score = 0;
+    if (response.isComplete === true) score += 2;
+    if (response.error) score -= 1;
+    if (response.result !== undefined && response.result !== null) score += 1;
+    return score;
+  }
+
+  /**
+   * Strip tool_response blocks from contents and reassign them to the
+   * tool-call index they belong to. Returns the stripped contents and the
+   * response/media maps needed for reassembly.
+   */
+  private stripAndReassignToolResponses(
+    contents: IContent[],
+    toolCallIndexById: Map<string, number>,
+  ): {
+    strippedContents: Array<IContent | null>;
+    responsesByToolCallIndex: Map<number, ToolResponseBlock[]>;
+    mediaBlocksByToolCallIndex: Map<number, MediaBlock[]>;
+  } {
     const responsesByToolCallIndex = new Map<number, ToolResponseBlock[]>();
     const mediaBlocksByToolCallIndex = new Map<number, MediaBlock[]>();
     const keptResponseByCallId = new Map<
@@ -1379,109 +1420,159 @@ export class HistoryService
       }
     >();
 
-    const scoreResponse = (response: ToolResponseBlock): number => {
-      let score = 0;
-      if (response.isComplete === true) score += 2;
-      if (response.error) score -= 1;
-      if (response.result !== undefined && response.result !== null) score += 1;
-      return score;
+    const strippedContents: Array<IContent | null> = contents.map((content) =>
+      this.stripSingleContent(
+        content,
+        toolCallIndexById,
+        responsesByToolCallIndex,
+        mediaBlocksByToolCallIndex,
+        keptResponseByCallId,
+      ),
+    );
+
+    return {
+      strippedContents,
+      responsesByToolCallIndex,
+      mediaBlocksByToolCallIndex,
     };
+  }
 
-    const strippedContents: Array<IContent | null> = contents.map((content) => {
-      if (!hasValidBlocks(content)) return content;
-
-      const toolResponseBlocks = content.blocks.filter(
-        (b): b is ToolResponseBlock => b.type === 'tool_response',
-      );
-
-      if (toolResponseBlocks.length === 0) {
-        return content;
+  /** Strip tool responses from a single content entry and reassign to tool-call index. */
+  private stripSingleContent(
+    content: IContent,
+    toolCallIndexById: Map<string, number>,
+    responsesByToolCallIndex: Map<number, ToolResponseBlock[]>,
+    mediaBlocksByToolCallIndex: Map<number, MediaBlock[]>,
+    keptResponseByCallId: Map<
+      string,
+      {
+        toolCallIndex: number;
+        responseIndex: number;
+        response: ToolResponseBlock;
       }
+    >,
+  ): IContent | null {
+    if (!hasValidBlocks(content)) return content;
 
-      // Collect media blocks alongside tool_response blocks — associate once
-      // with the first resolved tool call index to avoid duplicating media
-      // when a single tool message has responses for multiple call IDs.
-      const mediaBlocks = content.blocks.filter(
-        (b): b is MediaBlock => b.type === 'media',
+    const toolResponseBlocks = content.blocks.filter(
+      (b): b is ToolResponseBlock => b.type === 'tool_response',
+    );
+
+    if (toolResponseBlocks.length === 0) {
+      return content;
+    }
+
+    const mediaBlocks = content.blocks.filter(
+      (b): b is MediaBlock => b.type === 'media',
+    );
+    let mediaAssignedToIndex: number | undefined;
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for (const toolResponse of toolResponseBlocks) {
+      mediaAssignedToIndex = this.reassignSingleResponse(
+        toolResponse,
+        toolCallIndexById,
+        responsesByToolCallIndex,
+        mediaBlocksByToolCallIndex,
+        keptResponseByCallId,
+        mediaBlocks,
+        mediaAssignedToIndex,
       );
-      let mediaAssignedToIndex: number | undefined;
+    }
 
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for (const toolResponse of toolResponseBlocks) {
-        const callId = toolResponse.callId;
-        if (!callId) continue;
+    const remainingBlocks = content.blocks.filter(
+      (b) => b.type !== 'tool_response' && b.type !== 'media',
+    );
 
-        const toolCallIndex = toolCallIndexById.get(callId);
-        if (toolCallIndex === undefined) {
-          // Should be rare after ensureToolCallContinuity. Keep the response in
-          // place (do not strip) to avoid silently losing tool output.
-          this.logger.warn('Tool response missing matching tool call', {
-            callId,
-            toolName: toolResponse.toolName,
+    if (content.speaker === 'tool') {
+      return null;
+    }
+
+    if (remainingBlocks.length === 0) {
+      return null;
+    }
+
+    return {
+      ...content,
+      blocks: remainingBlocks,
+    };
+  }
+
+  /** Reassign a single tool response to the correct tool-call index. */
+  private reassignSingleResponse(
+    toolResponse: ToolResponseBlock,
+    toolCallIndexById: Map<string, number>,
+    responsesByToolCallIndex: Map<number, ToolResponseBlock[]>,
+    mediaBlocksByToolCallIndex: Map<number, MediaBlock[]>,
+    keptResponseByCallId: Map<
+      string,
+      {
+        toolCallIndex: number;
+        responseIndex: number;
+        response: ToolResponseBlock;
+      }
+    >,
+    mediaBlocks: MediaBlock[],
+    mediaAssignedToIndex: number | undefined,
+  ): number | undefined {
+    const callId = toolResponse.callId;
+    if (!callId) return mediaAssignedToIndex;
+
+    const toolCallIndex = toolCallIndexById.get(callId);
+    if (toolCallIndex === undefined) {
+      this.logger.warn('Tool response missing matching tool call', {
+        callId,
+        toolName: toolResponse.toolName,
+      });
+      return mediaAssignedToIndex;
+    }
+
+    const existing = keptResponseByCallId.get(callId);
+    if (existing) {
+      const existingScore = HistoryService.scoreResponse(existing.response);
+      const newScore = HistoryService.scoreResponse(toolResponse);
+      if (newScore > existingScore) {
+        const list = responsesByToolCallIndex.get(existing.toolCallIndex);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (list) {
+          list[existing.responseIndex] = toolResponse;
+          keptResponseByCallId.set(callId, {
+            toolCallIndex: existing.toolCallIndex,
+            responseIndex: existing.responseIndex,
+            response: toolResponse,
           });
-          continue;
-        }
-
-        const existing = keptResponseByCallId.get(callId);
-        if (existing) {
-          const existingScore = scoreResponse(existing.response);
-          const newScore = scoreResponse(toolResponse);
-          if (newScore > existingScore) {
-            const list = responsesByToolCallIndex.get(existing.toolCallIndex);
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (list) {
-              list[existing.responseIndex] = toolResponse;
-              keptResponseByCallId.set(callId, {
-                toolCallIndex: existing.toolCallIndex,
-                responseIndex: existing.responseIndex,
-                response: toolResponse,
-              });
-            }
-          }
-          continue;
-        }
-
-        const list = responsesByToolCallIndex.get(toolCallIndex) ?? [];
-        list.push(toolResponse);
-        responsesByToolCallIndex.set(toolCallIndex, list);
-        keptResponseByCallId.set(callId, {
-          toolCallIndex,
-          responseIndex: list.length - 1,
-          response: toolResponse,
-        });
-
-        // Associate media blocks with the first resolved tool call index only
-        if (mediaBlocks.length > 0 && mediaAssignedToIndex === undefined) {
-          mediaAssignedToIndex = toolCallIndex;
-          const existingMedia =
-            mediaBlocksByToolCallIndex.get(toolCallIndex) ?? [];
-          mediaBlocksByToolCallIndex.set(toolCallIndex, [
-            ...existingMedia,
-            ...mediaBlocks,
-          ]);
         }
       }
+      return mediaAssignedToIndex;
+    }
 
-      const remainingBlocks = content.blocks.filter(
-        (b) => b.type !== 'tool_response' && b.type !== 'media',
-      );
-
-      // After stripping, drop tool-speaker messages entirely; providers will
-      // receive the consolidated tool results inserted after tool_call messages.
-      if (content.speaker === 'tool') {
-        return null;
-      }
-
-      if (remainingBlocks.length === 0) {
-        return null;
-      }
-
-      return {
-        ...content,
-        blocks: remainingBlocks,
-      };
+    const list = responsesByToolCallIndex.get(toolCallIndex) ?? [];
+    list.push(toolResponse);
+    responsesByToolCallIndex.set(toolCallIndex, list);
+    keptResponseByCallId.set(callId, {
+      toolCallIndex,
+      responseIndex: list.length - 1,
+      response: toolResponse,
     });
 
+    if (mediaBlocks.length > 0 && mediaAssignedToIndex === undefined) {
+      const existingMedia = mediaBlocksByToolCallIndex.get(toolCallIndex) ?? [];
+      mediaBlocksByToolCallIndex.set(toolCallIndex, [
+        ...existingMedia,
+        ...mediaBlocks,
+      ]);
+      return toolCallIndex;
+    }
+
+    return mediaAssignedToIndex;
+  }
+
+  /** Reassemble stripped contents with tool responses inserted after their tool-call messages. */
+  private reassembleAdjacencyResult(
+    strippedContents: Array<IContent | null>,
+    responsesByToolCallIndex: Map<number, ToolResponseBlock[]>,
+    mediaBlocksByToolCallIndex: Map<number, MediaBlock[]>,
+  ): IContent[] {
     const result: IContent[] = [];
 
     for (let i = 0; i < strippedContents.length; i++) {
