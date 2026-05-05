@@ -203,34 +203,54 @@ export class Config extends ConfigBase {
     void this._modelSwitchedDuringSession;
   }
 
-  initializeContentGeneratorConfig: () => Promise<void> = async () => {
-    const logger = new DebugLogger(
-      'llxprt:config:initializeContentGeneratorConfig',
-    );
+  private static stripThoughtSignatures(history: Content[]): Content[] {
+    return history.map((content) => {
+      const newContent = { ...content };
+      if (newContent.parts) {
+        newContent.parts = newContent.parts.map((part) => {
+          if (
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+            part !== null &&
+            typeof part === 'object' &&
+            'thoughtSignature' in part
+          ) {
+            const newPart = { ...part };
+            delete (newPart as { thoughtSignature?: string }).thoughtSignature;
+            return newPart;
+          }
+          return part;
+        });
+      }
+      return newContent;
+    });
+  }
 
-    // Save the current conversation history AND HistoryService before creating a new client
+  private async extractExistingState(logger: DebugLogger): Promise<{
+    history: Content[];
+    historyService: HistoryService | null;
+  }> {
     const previousGeminiClient = this.geminiClient;
-    let existingHistory: Content[] = [];
-    let existingHistoryService: HistoryService | null = null;
-
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (previousGeminiClient?.isInitialized()) {
-      existingHistory = await previousGeminiClient.getHistory();
-      existingHistoryService = previousGeminiClient.getHistoryService();
-      logger.debug('Retrieved existing state', {
-        historyLength: existingHistory.length,
-        hasHistoryService: !!existingHistoryService,
-      });
+    if (!previousGeminiClient?.isInitialized()) {
+      return { history: [], historyService: null };
     }
+    const existingHistory = await previousGeminiClient.getHistory();
+    const existingHistoryService = previousGeminiClient.getHistoryService();
+    logger.debug('Retrieved existing state', {
+      historyLength: existingHistory.length,
+      hasHistoryService: !!existingHistoryService,
+    });
+    return {
+      history: existingHistory,
+      historyService: existingHistoryService,
+    };
+  }
 
-    // Create new content generator config
+  private buildNewContentGeneratorConfig() {
     const newContentGeneratorConfig = createContentGeneratorConfig(this);
-
-    // Add provider manager to the config if available (llxprt multi-provider support)
     if (this.providerManager) {
       newContentGeneratorConfig.providerManager = this.providerManager;
     }
-
     const updatedRuntimeState = createAgentRuntimeStateFromConfig(this, {
       runtimeId: this.runtimeState.runtimeId,
       overrides: {
@@ -239,68 +259,65 @@ export class Config extends ConfigBase {
       },
     });
     this.runtimeState = updatedRuntimeState;
+    return newContentGeneratorConfig;
+  }
 
-    // Create new client in local variable first
-    const newGeminiClient = new GeminiClient(this, this.runtimeState);
-
-    // CRITICAL: Store both the history AND the HistoryService instance
-    // This preserves both the API conversation context and the UI's conversation display
+  private transferHistoryToNewClient(
+    logger: DebugLogger,
+    newGeminiClient: GeminiClient,
+    existingHistory: Content[],
+    existingHistoryService: HistoryService | null,
+    newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
+  ): void {
     if (existingHistoryService) {
       logger.debug('Storing existing HistoryService for reuse', {
         historyLength: existingHistory.length,
       });
       newGeminiClient.storeHistoryServiceForReuse(existingHistoryService);
     }
-
-    if (existingHistory.length > 0) {
-      // Vertex and Genai have incompatible encryption and sending history with
-      // throughtSignature from Genai to Vertex will fail, we need to strip them
-      const fromGenaiToVertex =
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        this.contentGeneratorConfig?.vertexai === false &&
-        newContentGeneratorConfig.vertexai === true;
-
-      logger.debug('Storing history for later use', {
-        historyLength: existingHistory.length,
-        fromGenaiToVertex,
-        willStripThoughts: fromGenaiToVertex,
-      });
-
-      // Use storeHistoryForLaterUse to ensure history is preserved through initialization
-      const historyToStore = fromGenaiToVertex
-        ? existingHistory.map((content) => {
-            const newContent = { ...content };
-            if (newContent.parts) {
-              newContent.parts = newContent.parts.map((part) => {
-                if (
-                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-                  part !== null &&
-                  typeof part === 'object' &&
-                  'thoughtSignature' in part
-                ) {
-                  const newPart = { ...part };
-                  delete (newPart as { thoughtSignature?: string })
-                    .thoughtSignature;
-                  return newPart;
-                }
-                return part;
-              });
-            }
-            return newContent;
-          })
-        : existingHistory;
-
-      newGeminiClient.storeHistoryForLaterUse(historyToStore);
-      logger.debug('History stored in new client', {
-        storedHistoryLength: historyToStore.length,
-      });
+    if (existingHistory.length === 0) {
+      return;
     }
+    const fromGenaiToVertex =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      this.contentGeneratorConfig?.vertexai === false &&
+      newContentGeneratorConfig.vertexai === true;
+    logger.debug('Storing history for later use', {
+      historyLength: existingHistory.length,
+      fromGenaiToVertex,
+      willStripThoughts: fromGenaiToVertex,
+    });
+    const historyToStore = fromGenaiToVertex
+      ? Config.stripThoughtSignatures(existingHistory)
+      : existingHistory;
+    newGeminiClient.storeHistoryForLaterUse(historyToStore);
+    logger.debug('History stored in new client', {
+      storedHistoryLength: historyToStore.length,
+    });
+  }
 
-    // Now initialize with the new config
+  initializeContentGeneratorConfig: () => Promise<void> = async () => {
+    const logger = new DebugLogger(
+      'llxprt:config:initializeContentGeneratorConfig',
+    );
+    const previousGeminiClient = this.geminiClient;
+    const { history: existingHistory, historyService: existingHistoryService } =
+      await this.extractExistingState(logger);
+
+    const newContentGeneratorConfig = this.buildNewContentGeneratorConfig();
+    const newGeminiClient = new GeminiClient(this, this.runtimeState);
+
+    this.transferHistoryToNewClient(
+      logger,
+      newGeminiClient,
+      existingHistory,
+      existingHistoryService,
+      newContentGeneratorConfig,
+    );
+
     await newGeminiClient.initialize(newContentGeneratorConfig);
     logger.debug('New client initialized');
 
-    // Only assign to instance properties after successful initialization
     this.contentGeneratorConfig = newContentGeneratorConfig;
     if (
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
@@ -320,7 +337,6 @@ export class Config extends ConfigBase {
     }
     this.geminiClient = newGeminiClient;
 
-    // Verify history was preserved
     const newHistory = await this.geminiClient.getHistory();
     const newHistoryService = this.geminiClient.getHistoryService();
     logger.debug('State verification after refreshAuth', {
@@ -329,8 +345,6 @@ export class Config extends ConfigBase {
       historyPreserved: newHistory.length > 0,
       historyServicePreserved: existingHistoryService === newHistoryService,
     });
-
-    // Reset the session flag since we're explicitly changing auth and using default model
     this.inFallbackMode = false;
   };
 

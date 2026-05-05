@@ -342,19 +342,12 @@ export class ProfileManager {
    * Apply profiles via the injected SettingsService rather than the singleton.
    * @pseudocode:cli-runtime.md lines 9-11
    */
-  async load(
-    profileName: string,
-    settingsService: SettingsService,
-  ): Promise<void> {
-    // Load profile from file
-    const profile = await this.loadProfile(profileName);
-
-    // Convert Profile format to SettingsService format
-    const settingsData: {
-      defaultProvider: string;
-      providers: Record<string, unknown>;
-      tools: { allowed: unknown[]; disabled: unknown[] };
-    } = {
+  private convertProfileToSettingsData(profile: Profile): {
+    defaultProvider: string;
+    providers: Record<string, unknown>;
+    tools: { allowed: unknown[]; disabled: unknown[] };
+  } {
+    return {
       defaultProvider: profile.provider,
       providers: {
         [profile.provider]: {
@@ -382,20 +375,14 @@ export class ProfileManager {
             : [],
       },
     };
+  }
 
-    // Update current profile name first
-
-    if (typeof settingsService.setCurrentProfileName === 'function') {
-      settingsService.setCurrentProfileName(profileName);
-    }
-
-    // Apply through SettingsService
-
-    if (typeof settingsService.importFromProfile !== 'function') {
-      throw new Error('SettingsService does not support profile import');
-    }
-    await settingsService.importFromProfile(settingsData);
-
+  private applyToolSettings(
+    settingsData: {
+      tools: { allowed: unknown[]; disabled: unknown[] };
+    },
+    settingsService: SettingsService,
+  ): void {
     const allowedList = Array.isArray(settingsData.tools.allowed)
       ? settingsData.tools.allowed
       : [];
@@ -405,53 +392,52 @@ export class ProfileManager {
     settingsService.set('tools.allowed', allowedList);
     settingsService.set('tools.disabled', disabledList);
     settingsService.set('disabled-tools', disabledList);
+  }
 
+  private applyReasoningSettings(
+    profile: Profile,
+    settingsService: SettingsService,
+  ): void {
     const reasoningSettings = profile.ephemeralSettings as unknown as Record<
       string,
       unknown
     >;
 
-    if (reasoningSettings['reasoning.enabled'] !== undefined) {
-      settingsService.set(
-        'reasoning.enabled',
-        reasoningSettings['reasoning.enabled'],
-      );
+    const reasoningKeys = [
+      'reasoning.enabled',
+      'reasoning.includeInContext',
+      'reasoning.includeInResponse',
+      'reasoning.format',
+      'reasoning.stripFromContext',
+      'reasoning.effort',
+      'reasoning.maxTokens',
+    ] as const;
+
+    for (const key of reasoningKeys) {
+      if (reasoningSettings[key] !== undefined) {
+        settingsService.set(key, reasoningSettings[key]);
+      }
     }
-    if (reasoningSettings['reasoning.includeInContext'] !== undefined) {
-      settingsService.set(
-        'reasoning.includeInContext',
-        reasoningSettings['reasoning.includeInContext'],
-      );
+  }
+
+  async load(
+    profileName: string,
+    settingsService: SettingsService,
+  ): Promise<void> {
+    const profile = await this.loadProfile(profileName);
+
+    const settingsData = this.convertProfileToSettingsData(profile);
+
+    if (typeof settingsService.setCurrentProfileName === 'function') {
+      settingsService.setCurrentProfileName(profileName);
     }
-    if (reasoningSettings['reasoning.includeInResponse'] !== undefined) {
-      settingsService.set(
-        'reasoning.includeInResponse',
-        reasoningSettings['reasoning.includeInResponse'],
-      );
+
+    if (typeof settingsService.importFromProfile !== 'function') {
+      throw new Error('SettingsService does not support profile import');
     }
-    if (reasoningSettings['reasoning.format'] !== undefined) {
-      settingsService.set(
-        'reasoning.format',
-        reasoningSettings['reasoning.format'],
-      );
-    }
-    if (reasoningSettings['reasoning.stripFromContext'] !== undefined) {
-      settingsService.set(
-        'reasoning.stripFromContext',
-        reasoningSettings['reasoning.stripFromContext'],
-      );
-    }
-    if (reasoningSettings['reasoning.effort'] !== undefined) {
-      settingsService.set(
-        'reasoning.effort',
-        reasoningSettings['reasoning.effort'],
-      );
-    }
-    if (reasoningSettings['reasoning.maxTokens'] !== undefined) {
-      settingsService.set(
-        'reasoning.maxTokens',
-        reasoningSettings['reasoning.maxTokens'],
-      );
-    }
+    await settingsService.importFromProfile(settingsData);
+
+    this.applyToolSettings(settingsData, settingsService);
+    this.applyReasoningSettings(profile, settingsService);
   }
 }

@@ -180,95 +180,95 @@ const shouldRefreshCallbacks = (
   return false;
 };
 
-/**
- * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
- * @requirement REQ-D01-001.1
- * @requirement REQ-D01-001.2
- * @pseudocode lines 56-72
- */
-export async function getOrCreateScheduler(
+function buildSetCallbacksArgs(
+  config: Config,
+  dependencies: SchedulerSingletonDependencies,
+  callbacks: SchedulerCallbacks,
+) {
+  return {
+    config,
+    messageBus: dependencies.messageBus,
+    toolRegistry: dependencies.toolRegistry,
+    outputUpdateHandler: callbacks.outputUpdateHandler,
+    onAllToolCallsComplete: callbacks.onAllToolCallsComplete,
+    onToolCallsUpdate: callbacks.onToolCallsUpdate,
+    getPreferredEditor: callbacks.getPreferredEditor,
+    onEditorClose: callbacks.onEditorClose,
+    onEditorOpen: callbacks.onEditorOpen,
+  };
+}
+
+function reuseExistingScheduler(
+  entry: SchedulerEntry,
+  sessionId: string,
+  interactiveMode: boolean,
+  config: Config,
+  dependencies: SchedulerSingletonDependencies,
+  callbacks: SchedulerCallbacks,
+): CoreToolScheduler {
+  entry.refCount += 1;
+  if (entry.interactiveMode !== interactiveMode) {
+    debugLog.debug(
+      `Scheduler reuse for sessionId=${sessionId} with different interactiveMode ` +
+        `(existing=${entry.interactiveMode}, requested=${interactiveMode}). ` +
+        `Using existing scheduler mode.`,
+    );
+  }
+  if (shouldRefreshCallbacks(entry.callbacks, callbacks)) {
+    entry.scheduler.setCallbacks(
+      buildSetCallbacksArgs(config, dependencies, callbacks),
+    );
+    entry.callbacks = callbacks;
+  }
+  return entry.scheduler;
+}
+
+async function awaitInFlightScheduler(
+  inFlight: SchedulerInitState,
+  sessionId: string,
+  interactiveMode: boolean,
+  config: Config,
+  dependencies: SchedulerSingletonDependencies,
+  callbacks: SchedulerCallbacks,
+): Promise<CoreToolScheduler> {
+  inFlight.refCount += 1;
+  if (inFlight.interactiveMode !== interactiveMode) {
+    debugLog.debug(
+      `Scheduler init-in-progress for sessionId=${sessionId} with different interactiveMode ` +
+        `(existing=${inFlight.interactiveMode}, requested=${interactiveMode}). ` +
+        `Using existing scheduler mode.`,
+    );
+  }
+  const combinedCallbacks = createCombinedCallbacks([
+    inFlight.callbacks,
+    callbacks,
+  ]);
+  inFlight.callbacks = combinedCallbacks;
+  const scheduler = await inFlight.promise;
+  scheduler.setCallbacks(
+    buildSetCallbacksArgs(config, dependencies, combinedCallbacks),
+  );
+  const existingEntry = schedulerEntries.get(sessionId);
+  if (existingEntry) {
+    existingEntry.callbacks = combinedCallbacks;
+    return existingEntry.scheduler;
+  }
+  schedulerEntries.set(sessionId, {
+    scheduler,
+    refCount: inFlight.refCount,
+    callbacks: combinedCallbacks,
+    interactiveMode: inFlight.interactiveMode,
+  });
+  return scheduler;
+}
+
+async function createNewScheduler(
   config: Config,
   sessionId: string,
-  callbacks: SchedulerCallbacks,
-  options: SchedulerOptions | undefined,
+  interactiveMode: boolean,
   dependencies: SchedulerSingletonDependencies,
+  callbacks: SchedulerCallbacks,
 ): Promise<CoreToolScheduler> {
-  const interactiveMode = options?.interactiveMode ?? true;
-  const entry = schedulerEntries.get(sessionId);
-
-  if (entry) {
-    entry.refCount += 1;
-    if (entry.interactiveMode !== interactiveMode) {
-      debugLog.debug(
-        `Scheduler reuse for sessionId=${sessionId} with different interactiveMode ` +
-          `(existing=${entry.interactiveMode}, requested=${interactiveMode}). ` +
-          `Using existing scheduler mode.`,
-      );
-    }
-    if (shouldRefreshCallbacks(entry.callbacks, callbacks)) {
-      entry.scheduler.setCallbacks({
-        config,
-        messageBus: dependencies.messageBus,
-        toolRegistry: dependencies.toolRegistry,
-        outputUpdateHandler: callbacks.outputUpdateHandler,
-        onAllToolCallsComplete: callbacks.onAllToolCallsComplete,
-        onToolCallsUpdate: callbacks.onToolCallsUpdate,
-        getPreferredEditor: callbacks.getPreferredEditor,
-        onEditorClose: callbacks.onEditorClose,
-        onEditorOpen: callbacks.onEditorOpen,
-      });
-
-      entry.callbacks = callbacks;
-    }
-    return entry.scheduler;
-  }
-
-  const inFlight = schedulerInitStates.get(sessionId);
-  if (inFlight) {
-    inFlight.refCount += 1;
-    if (inFlight.interactiveMode !== interactiveMode) {
-      debugLog.debug(
-        `Scheduler init-in-progress for sessionId=${sessionId} with different interactiveMode ` +
-          `(existing=${inFlight.interactiveMode}, requested=${interactiveMode}). ` +
-          `Using existing scheduler mode.`,
-      );
-    }
-    const combinedCallbacks = createCombinedCallbacks([
-      inFlight.callbacks,
-      callbacks,
-    ]);
-    inFlight.callbacks = combinedCallbacks;
-    const scheduler = await inFlight.promise;
-    scheduler.setCallbacks({
-      config,
-      messageBus: dependencies.messageBus,
-      toolRegistry: dependencies.toolRegistry,
-      outputUpdateHandler: combinedCallbacks.outputUpdateHandler,
-      onAllToolCallsComplete: combinedCallbacks.onAllToolCallsComplete,
-      onToolCallsUpdate: combinedCallbacks.onToolCallsUpdate,
-      getPreferredEditor: combinedCallbacks.getPreferredEditor,
-      onEditorClose: combinedCallbacks.onEditorClose,
-      onEditorOpen: combinedCallbacks.onEditorOpen,
-    });
-    const existingEntry = schedulerEntries.get(sessionId);
-    if (existingEntry) {
-      // Don't increment refCount here - our increment was already counted
-      // in initState.refCount (line 184) which was transferred to existingEntry
-      // when the original creator finished (line 250).
-      existingEntry.callbacks = combinedCallbacks;
-      return existingEntry.scheduler;
-    }
-    // Entry doesn't exist yet (shouldn't happen normally, but handle edge case)
-    // Use inFlight.refCount to preserve all callers' increments
-    schedulerEntries.set(sessionId, {
-      scheduler,
-      refCount: inFlight.refCount,
-      callbacks: combinedCallbacks,
-      interactiveMode: inFlight.interactiveMode,
-    });
-    return scheduler;
-  }
-
   const creationPromise = (async () => {
     const { CoreToolScheduler: CoreToolSchedulerClass } = await import(
       '../core/coreToolScheduler.js'
@@ -307,6 +307,54 @@ export async function getOrCreateScheduler(
   } finally {
     schedulerInitStates.delete(sessionId);
   }
+}
+
+/**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+ * @requirement REQ-D01-001.1
+ * @requirement REQ-D01-001.2
+ * @pseudocode lines 56-72
+ */
+export async function getOrCreateScheduler(
+  config: Config,
+  sessionId: string,
+  callbacks: SchedulerCallbacks,
+  options: SchedulerOptions | undefined,
+  dependencies: SchedulerSingletonDependencies,
+): Promise<CoreToolScheduler> {
+  const interactiveMode = options?.interactiveMode ?? true;
+  const entry = schedulerEntries.get(sessionId);
+
+  if (entry) {
+    return reuseExistingScheduler(
+      entry,
+      sessionId,
+      interactiveMode,
+      config,
+      dependencies,
+      callbacks,
+    );
+  }
+
+  const inFlight = schedulerInitStates.get(sessionId);
+  if (inFlight) {
+    return awaitInFlightScheduler(
+      inFlight,
+      sessionId,
+      interactiveMode,
+      config,
+      dependencies,
+      callbacks,
+    );
+  }
+
+  return createNewScheduler(
+    config,
+    sessionId,
+    interactiveMode,
+    dependencies,
+    callbacks,
+  );
 }
 
 export function disposeScheduler(sessionId: string): void {

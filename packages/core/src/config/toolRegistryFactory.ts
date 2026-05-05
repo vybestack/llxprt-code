@@ -84,54 +84,27 @@ function getTaskToolMissingReason(
   return 'requires subagent manager';
 }
 
-/**
- * Creates and populates a ToolRegistry with all core tools.
- *
- * Applies coreTools allow-list and excludeTools deny-list governance.
- * Returns the registry and the list of all potential tools (for settings UI).
- */
-export async function createToolRegistry(
-  host: ToolRegistryHost,
+const matchesToolIdentifier = (value: string, target: string): boolean =>
+  value === target || value.startsWith(`${target}(`);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RegisterCoreToolFn = (ToolClass: any, ...args: unknown[]) => void;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildRegisterCoreTool(
+  registry: ToolRegistry,
+  effectiveCoreTools: string[] | undefined,
+  excludeTools: string[] | undefined,
+  allPotentialTools: ToolRecord[],
+): RegisterCoreToolFn {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config: any,
-  messageBus: MessageBus,
-): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
-  const registry = new ToolRegistry(config, messageBus);
-  const allPotentialTools: ToolRecord[] = [];
-
-  const baseCoreTools = host.getCoreTools();
-  const effectiveCoreTools =
-    baseCoreTools && baseCoreTools.length > 0 ? [...baseCoreTools] : undefined;
-
-  const matchesToolIdentifier = (value: string, target: string): boolean =>
-    value === target || value.startsWith(`${target}(`);
-
-  const ensureCoreToolIncluded = (identifier: string) => {
-    if (!effectiveCoreTools) {
-      return;
-    }
-    if (
-      !effectiveCoreTools.some((tool) =>
-        matchesToolIdentifier(tool, identifier),
-      )
-    ) {
-      effectiveCoreTools.push(identifier);
-    }
-  };
-
-  ensureCoreToolIncluded('TaskTool');
-  ensureCoreToolIncluded(TaskTool.Name);
-  ensureCoreToolIncluded('ListSubagentsTool');
-  ensureCoreToolIncluded(ListSubagentsTool.Name);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const registerCoreTool = (ToolClass: any, ...args: unknown[]) => {
+  return (ToolClass: any, ...args: unknown[]) => {
     const className = ToolClass.name;
     const rawName = ToolClass.Name;
     const toolName =
       typeof rawName === 'string' && rawName !== '' ? rawName : className;
     const coreTools = effectiveCoreTools;
-    const excludeTools = host.getExcludeTools() ?? [];
+    const excludeList = excludeTools ?? [];
 
     let isEnabled = true;
     let reason: string | undefined;
@@ -146,7 +119,7 @@ export async function createToolRegistry(
       );
     }
 
-    const isExcluded = excludeTools.some(
+    const isExcluded = excludeList.some(
       (tool) => tool === className || tool === toolName,
     );
 
@@ -175,7 +148,28 @@ export async function createToolRegistry(
 
     allPotentialTools.push(toolRecord);
   };
+}
 
+function ensureCoreToolIncluded(
+  effectiveCoreTools: string[] | undefined,
+  identifier: string,
+): void {
+  if (!effectiveCoreTools) {
+    return;
+  }
+  if (
+    !effectiveCoreTools.some((tool) => matchesToolIdentifier(tool, identifier))
+  ) {
+    effectiveCoreTools.push(identifier);
+  }
+}
+
+function registerStandardTools(
+  registerCoreTool: RegisterCoreToolFn,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  config: any,
+  host: ToolRegistryHost,
+): void {
   registerCoreTool(LSTool, config);
   registerCoreTool(ReadFileTool, config);
 
@@ -208,7 +202,12 @@ export async function createToolRegistry(
   registerCoreTool(TodoPause);
   registerCoreTool(CodeSearchTool, config);
   registerCoreTool(DirectWebFetchTool, config);
+}
 
+function resolveManagers(host: ToolRegistryHost): {
+  profileManager: ProfileManager | undefined;
+  subagentManager: SubagentManager | undefined;
+} {
   let profileManager = host.getProfileManager();
   if (!profileManager) {
     const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
@@ -224,6 +223,19 @@ export async function createToolRegistry(
     host.setSubagentManager(subagentManager);
   }
 
+  return { profileManager, subagentManager };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function registerAgentTools(
+  registerCoreTool: RegisterCoreToolFn,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  config: any,
+  profileManager: ProfileManager | undefined,
+  subagentManager: SubagentManager | undefined,
+  host: ToolRegistryHost,
+  allPotentialTools: ToolRecord[],
+): void {
   const taskToolArgs = {
     profileManager,
     subagentManager,
@@ -272,6 +284,51 @@ export async function createToolRegistry(
     getAsyncTaskManager: () => host.getAsyncTaskManager(),
   };
   registerCoreTool(CheckAsyncTasksTool, checkAsyncTasksArgs);
+}
+
+/**
+ * Creates and populates a ToolRegistry with all core tools.
+ *
+ * Applies coreTools allow-list and excludeTools deny-list governance.
+ * Returns the registry and the list of all potential tools (for settings UI).
+ */
+export async function createToolRegistry(
+  host: ToolRegistryHost,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  config: any,
+  messageBus: MessageBus,
+): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
+  const registry = new ToolRegistry(config, messageBus);
+  const allPotentialTools: ToolRecord[] = [];
+
+  const baseCoreTools = host.getCoreTools();
+  const effectiveCoreTools =
+    baseCoreTools && baseCoreTools.length > 0 ? [...baseCoreTools] : undefined;
+
+  ensureCoreToolIncluded(effectiveCoreTools, 'TaskTool');
+  ensureCoreToolIncluded(effectiveCoreTools, TaskTool.Name);
+  ensureCoreToolIncluded(effectiveCoreTools, 'ListSubagentsTool');
+  ensureCoreToolIncluded(effectiveCoreTools, ListSubagentsTool.Name);
+
+  const registerCoreTool = buildRegisterCoreTool(
+    registry,
+    effectiveCoreTools,
+    host.getExcludeTools(),
+    allPotentialTools,
+  );
+
+  registerStandardTools(registerCoreTool, config, host);
+
+  const { profileManager, subagentManager } = resolveManagers(host);
+
+  registerAgentTools(
+    registerCoreTool,
+    config,
+    profileManager,
+    subagentManager,
+    host,
+    allPotentialTools,
+  );
 
   await registry.discoverAllTools();
   registry.sortTools();
