@@ -7,11 +7,78 @@
 import {
   CompressionStatus,
   PerformCompressionResult,
+  type GeminiChat,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItemCompression } from '../types.js';
 import { MessageType } from '../types.js';
 import type { SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
+
+function resolveCompressionStatus(
+  result: PerformCompressionResult,
+  originalTokenCount: number,
+  newTokenCount: number,
+  wasRecentlyCompressedBeforeCommand: boolean,
+): CompressionStatus {
+  switch (result) {
+    case PerformCompressionResult.FAILED:
+    case PerformCompressionResult.SKIPPED_COOLDOWN:
+      return CompressionStatus.COMPRESSION_FAILED;
+    case PerformCompressionResult.SKIPPED_EMPTY:
+      return CompressionStatus.NOOP;
+    case PerformCompressionResult.COMPRESSED:
+      if (newTokenCount < originalTokenCount) {
+        return CompressionStatus.COMPRESSED;
+      }
+      if (newTokenCount > originalTokenCount) {
+        return CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT;
+      }
+      if (wasRecentlyCompressedBeforeCommand) {
+        return CompressionStatus.ALREADY_COMPRESSED;
+      }
+      return CompressionStatus.NOOP;
+    default:
+      return CompressionStatus.NOOP;
+  }
+}
+
+function makePendingCompression(): HistoryItemCompression {
+  return {
+    type: MessageType.COMPRESSION,
+    compression: {
+      isPending: true,
+      originalTokenCount: null,
+      newTokenCount: null,
+      compressionStatus: null,
+    },
+  };
+}
+
+async function executeCompression(
+  chat: GeminiChat,
+  promptId: string,
+): Promise<HistoryItemCompression> {
+  const historyService = chat.getHistoryService();
+  const originalTokenCount = historyService.getTotalTokens();
+  const wasRecentlyCompressedBeforeCommand = chat.wasRecentlyCompressed();
+  const result = await chat.performCompression(promptId);
+  const newTokenCount = historyService.getTotalTokens();
+  const compressionStatus = resolveCompressionStatus(
+    result,
+    originalTokenCount,
+    newTokenCount,
+    wasRecentlyCompressedBeforeCommand,
+  );
+  return {
+    type: MessageType.COMPRESSION,
+    compression: {
+      isPending: false,
+      originalTokenCount,
+      newTokenCount,
+      compressionStatus,
+    },
+  };
+}
 
 export const compressCommand: SlashCommand = {
   name: 'compress',
@@ -32,18 +99,8 @@ export const compressCommand: SlashCommand = {
       return;
     }
 
-    const pendingMessage: HistoryItemCompression = {
-      type: MessageType.COMPRESSION,
-      compression: {
-        isPending: true,
-        originalTokenCount: null,
-        newTokenCount: null,
-        compressionStatus: null,
-      },
-    };
-
     try {
-      ui.setPendingItem(pendingMessage);
+      ui.setPendingItem(makePendingCompression());
       const promptId = `compress-${Date.now()}`;
       const geminiClient = context.services.config?.getGeminiClient();
       if (geminiClient == null || geminiClient.hasChatInitialized() !== true) {
@@ -57,10 +114,8 @@ export const compressCommand: SlashCommand = {
         return;
       }
       const chat = geminiClient.getChat();
-      const getHistoryService = (): ReturnType<
-        typeof chat.getHistoryService
-      > | null => chat.getHistoryService();
-      const historyService = getHistoryService();
+      const historyService = chat.getHistoryService();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard for test mocks that return null
       if (!historyService) {
         ui.addItem(
           {
@@ -71,44 +126,7 @@ export const compressCommand: SlashCommand = {
         );
         return;
       }
-      const originalTokenCount = historyService.getTotalTokens();
-      const wasRecentlyCompressedBeforeCommand = chat.wasRecentlyCompressed();
-      const result = await chat.performCompression(promptId);
-      const newTokenCount = historyService.getTotalTokens();
-
-      let compressionStatus: CompressionStatus;
-      switch (result) {
-        case PerformCompressionResult.FAILED:
-        case PerformCompressionResult.SKIPPED_COOLDOWN:
-          compressionStatus = CompressionStatus.COMPRESSION_FAILED;
-          break;
-        case PerformCompressionResult.SKIPPED_EMPTY:
-          compressionStatus = CompressionStatus.NOOP;
-          break;
-        case PerformCompressionResult.COMPRESSED:
-          if (newTokenCount < originalTokenCount) {
-            compressionStatus = CompressionStatus.COMPRESSED;
-          } else if (newTokenCount > originalTokenCount) {
-            compressionStatus =
-              CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT;
-          } else if (wasRecentlyCompressedBeforeCommand) {
-            compressionStatus = CompressionStatus.ALREADY_COMPRESSED;
-          } else {
-            compressionStatus = CompressionStatus.NOOP;
-          }
-          break;
-        default:
-          compressionStatus = CompressionStatus.NOOP;
-      }
-      const compressionResult: HistoryItemCompression = {
-        type: MessageType.COMPRESSION,
-        compression: {
-          isPending: false,
-          originalTokenCount,
-          newTokenCount,
-          compressionStatus,
-        },
-      };
+      const compressionResult = await executeCompression(chat, promptId);
       ui.addItem(compressionResult);
     } catch (e) {
       ui.addItem(
