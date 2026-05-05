@@ -102,29 +102,15 @@ const MAX_JSON_SIZE_KB = 32;
 // Create a single logger instance for the module (following singleton pattern)
 const logger = new DebugLogger('llxprt:openai:provider');
 
-export function buildResponsesRequest(
-  params: ResponsesRequestParams,
-): ResponsesRequest {
-  const {
-    messages,
-    prompt,
-    tools,
-    conversationId,
-    parentId,
-    tool_choice,
-    stateful,
-    model,
-    ...otherParams
-  } = params;
+function validateParams(params: ResponsesRequestParams): void {
+  const { messages, prompt, tools, model } = params;
 
-  // Validate prompt/messages ambiguity
   if (prompt && messages && messages.length > 0) {
     throw new Error(
       'Cannot specify both "prompt" and "messages". Use either prompt (for simple queries) or messages (for conversation history).',
     );
   }
 
-  // Validate required fields
   if (!prompt && (!messages || messages.length === 0)) {
     throw new Error('Either "prompt" or "messages" must be provided.');
   }
@@ -133,14 +119,12 @@ export function buildResponsesRequest(
     throw new Error('Model is required for Responses API.');
   }
 
-  // Validate tools limit
   if (tools && tools.length > MAX_TOOLS) {
     throw new Error(
       `Too many tools provided. Maximum allowed is ${MAX_TOOLS}, but ${tools.length} were provided.`,
     );
   }
 
-  // Validate JSON size for tools
   if (tools) {
     const toolsJson = JSON.stringify(tools);
     const sizeKb = new TextEncoder().encode(toolsJson).length / 1024;
@@ -150,135 +134,142 @@ export function buildResponsesRequest(
       );
     }
   }
+}
 
-  // Handle message trimming for stateful mode
-  let processedMessages = messages;
-  // For stateful mode, we need to be smarter about trimming to preserve tool call/response pairs
-  if (messages && conversationId && messages.length > 2) {
-    // Find the last complete interaction (user message -> assistant response/tool calls -> tool responses -> user message)
-    let startIndex = messages.length - 1;
+function findMatchingAiMessageIndex(
+  messages: IContent[],
+  toolMsg: IContent,
+  currentStart: number,
+): number {
+  const toolResponseBlocks = toolMsg.blocks.filter(
+    (block) => block.type === 'tool_response',
+  );
 
-    // Work backwards to find a complete interaction
-    while (startIndex > 0) {
-      const msg = messages[startIndex];
-
-      // If we find a tool message, we need to include the AI message with the tool call
-      if (msg.speaker === 'tool') {
-        // Find the AI message that contains this tool call
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        for (let i = startIndex - 1; i >= 0; i--) {
-          const prevMsg = messages[i];
-          if (prevMsg.speaker === 'ai') {
-            // Check if this AI message contains the tool call for our tool response
-            const toolResponseBlocks = msg.blocks.filter(
-              (block) => block.type === 'tool_response',
-            );
-            const hasMatchingCall = prevMsg.blocks.some((block) => {
-              if (block.type === 'tool_call') {
-                const toolCallBlock = block;
-                return toolResponseBlocks.some(
-                  (respBlock) => respBlock.callId === toolCallBlock.id,
-                );
-              }
-              return false;
-            });
-            if (hasMatchingCall) {
-              startIndex = i;
-              break;
-            }
-          }
+  for (let i = currentStart - 1; i >= 0; i--) {
+    const prevMsg = messages[i];
+    if (prevMsg.speaker === 'ai') {
+      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      const hasMatchingCall = prevMsg.blocks.some((block) => {
+        if (block.type === 'tool_call') {
+          const toolCallBlock = block;
+          return toolResponseBlocks.some(
+            (respBlock) => respBlock.callId === toolCallBlock.id,
+          );
         }
+        return false;
+      });
+      if (hasMatchingCall) {
+        return i;
       }
-
-      // If we find a user message after going through tool responses, this is a good starting point
-      if (msg.speaker === 'human' && startIndex < messages.length - 1) {
-        break;
-      }
-
-      startIndex--;
     }
+  }
+  return currentStart;
+}
 
-    // Ensure we don't trim too aggressively
-    startIndex = Math.max(0, Math.min(startIndex, messages.length - 2));
-
-    processedMessages = messages.slice(startIndex);
+function trimMessagesForStatefulMode(
+  messages: IContent[],
+  conversationId: string | undefined,
+): IContent[] {
+  if (!conversationId || messages.length <= 2) {
+    return messages;
   }
 
-  // Transform messages for Responses API format
-  let transformedMessages: ResponsesMessage[] | undefined;
-  const functionCallOutputs: FunctionCallOutput[] = [];
+  let startIndex = messages.length - 1;
+
+  while (startIndex > 0) {
+    const msg = messages[startIndex];
+
+    if (msg.speaker === 'tool') {
+      startIndex = findMatchingAiMessageIndex(messages, msg, startIndex);
+    }
+
+    if (msg.speaker === 'human' && startIndex < messages.length - 1) {
+      break;
+    }
+
+    startIndex--;
+  }
+
+  startIndex = Math.max(0, Math.min(startIndex, messages.length - 2));
+  return messages.slice(startIndex);
+}
+
+function extractFunctionCalls(messages: IContent[]): {
+  functionCalls: FunctionCall[];
+  functionCallOutputs: FunctionCallOutput[];
+} {
   const functionCalls: FunctionCall[] = [];
+  const functionCallOutputs: FunctionCallOutput[] = [];
 
-  if (processedMessages) {
-    // First, extract function calls from assistant messages and function call outputs from tool messages
-    processedMessages
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response input parts cross provider/runtime boundaries despite declared types.
-      .filter((msg): msg is IContent => msg !== undefined && msg !== null)
-      .forEach((msg) => {
-        // Extract function calls from AI messages
-        // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
-        if (msg.speaker === 'ai') {
-          msg.blocks.forEach((block) => {
-            if (block.type === 'tool_call') {
-              const toolCallBlock = block;
-              functionCalls.push({
-                type: 'function_call' as const,
-                call_id: normalizeToOpenAIToolId(toolCallBlock.id),
-                name: toolCallBlock.name,
-                arguments:
-                  typeof toolCallBlock.parameters === 'string'
-                    ? toolCallBlock.parameters
-                    : JSON.stringify(toolCallBlock.parameters),
-              });
-            }
-          });
-        }
+  messages
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response input parts cross provider/runtime boundaries despite declared types.
+    .filter((msg): msg is IContent => msg !== undefined && msg !== null)
+    .forEach((msg) => {
+      if (msg.speaker === 'ai') {
+        msg.blocks.forEach((block) => {
+          if (block.type === 'tool_call') {
+            const toolCallBlock = block;
+            functionCalls.push({
+              type: 'function_call' as const,
+              call_id: normalizeToOpenAIToolId(toolCallBlock.id),
+              name: toolCallBlock.name,
+              arguments:
+                typeof toolCallBlock.parameters === 'string'
+                  ? toolCallBlock.parameters
+                  : JSON.stringify(toolCallBlock.parameters),
+            });
+          }
+        });
+      }
 
-        // Extract function call outputs from tool messages
-        if (msg.speaker === 'tool') {
-          msg.blocks.forEach((block) => {
-            if (block.type === 'tool_response') {
-              const toolResponseBlock = block;
+      if (msg.speaker === 'tool') {
+        msg.blocks.forEach((block) => {
+          if (block.type === 'tool_response') {
+            const toolResponseBlock = block;
 
-              const payload = buildToolResponsePayload(
-                toolResponseBlock,
-                undefined,
-                true,
+            const payload = buildToolResponsePayload(
+              toolResponseBlock,
+              undefined,
+              true,
+            );
+            let sanitizedContent = formatToolResponseText({
+              status: payload.status,
+              toolName: payload.toolName ?? toolResponseBlock.toolName,
+              error: payload.error,
+              output: payload.result,
+            });
+
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+            if (hasUnicodeReplacements(sanitizedContent)) {
+              logger.debug(
+                () =>
+                  'Tool output contains Unicode replacement characters (U+FFFD), sanitizing...',
               );
-              let sanitizedContent = formatToolResponseText({
-                status: payload.status,
-                toolName: payload.toolName ?? toolResponseBlock.toolName,
-                error: payload.error,
-                output: payload.result,
-              });
-
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (hasUnicodeReplacements(sanitizedContent)) {
-                logger.debug(
-                  () =>
-                    'Tool output contains Unicode replacement characters (U+FFFD), sanitizing...',
-                );
-                sanitizedContent = ensureJsonSafe(sanitizedContent);
-              }
-
-              // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
-              functionCallOutputs.push({
-                type: 'function_call_output' as const,
-                call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
-                output: sanitizedContent,
-              });
+              sanitizedContent = ensureJsonSafe(sanitizedContent);
             }
-          });
-        }
-      });
 
-    // Then, create the regular messages array (excluding tool messages)
-    transformedMessages = processedMessages
+            functionCallOutputs.push({
+              type: 'function_call_output' as const,
+              call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
+              output: sanitizedContent,
+            });
+          }
+        });
+      }
+    });
+
+  return { functionCalls, functionCallOutputs };
+}
+
+function transformMessages(
+  messages: IContent[],
+): ResponsesMessage[] | undefined {
+  return (
+    messages
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response input parts cross provider/runtime boundaries despite declared types.
       .filter((msg): msg is IContent => msg !== undefined && msg !== null)
-      .filter((msg) => msg.speaker !== 'tool') // Exclude tool messages
+      .filter((msg) => msg.speaker !== 'tool')
       .map((msg) => {
-        // Extract text content from blocks
         const textBlocks = msg.blocks.filter(
           (block): block is Extract<typeof block, { type: 'text' }> =>
             block.type === 'text',
@@ -288,7 +279,6 @@ export function buildResponsesRequest(
             ? textBlocks.map((block) => block.text).join('\n')
             : '';
 
-        // Convert speaker to role for Responses API
         const role =
           msg.speaker === 'human'
             ? 'user'
@@ -297,7 +287,6 @@ export function buildResponsesRequest(
               ? 'assistant'
               : 'system';
 
-        // Sanitize content for safe API transmission
         let sanitizedContent = content;
         if (hasUnicodeReplacements(content)) {
           logger.debug(
@@ -315,12 +304,10 @@ export function buildResponsesRequest(
           role: role as 'user' | 'assistant' | 'system' | 'developer',
         };
 
-        // Only add content if it exists
         if (sanitizedContent) {
           result.content = sanitizedContent;
         }
 
-        // Preserve usage data if present in metadata
         if (msg.metadata?.usage) {
           result.usage = msg.metadata.usage;
         }
@@ -330,67 +317,118 @@ export function buildResponsesRequest(
       .filter(
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response input parts cross provider/runtime boundaries despite declared types.
         (msg): msg is NonNullable<typeof msg> => msg !== null,
-      ) as ResponsesMessage[];
-  }
+      ) as ResponsesMessage[]
+  );
+}
 
-  // Build the request object with conditional fields
-  const request: ResponsesRequest = {
-    model,
-    ...otherParams,
-    ...(prompt ? { prompt } : {}),
-  };
-
-  // Add input array if we have messages, function calls, or function call outputs
+function buildInputArray(
+  transformedMessages: ResponsesMessage[] | undefined,
+  functionCalls: FunctionCall[],
+  functionCallOutputs: FunctionCallOutput[],
+): ResponsesMessage[] | undefined {
   if (
-    transformedMessages ||
-    functionCalls.length > 0 ||
-    functionCallOutputs.length > 0
+    !transformedMessages &&
+    functionCalls.length === 0 &&
+    functionCallOutputs.length === 0
   ) {
-    const inputItems: ResponsesMessage[] = [];
-
-    // Add regular messages
-    if (transformedMessages) {
-      inputItems.push(...transformedMessages);
-    }
-
-    // Add function calls
-    if (functionCalls.length > 0) {
-      inputItems.push(...functionCalls);
-    }
-
-    // Add function call outputs
-    if (functionCallOutputs.length > 0) {
-      inputItems.push(...functionCallOutputs);
-    }
-    request.input = inputItems;
+    return undefined;
   }
 
-  // Map conversation fields
-  // Note: The API uses previous_response_id, not a conversation_id.
-  // We are mapping our internal parentId to this field.
+  const inputItems: ResponsesMessage[] = [];
+  if (transformedMessages) {
+    inputItems.push(...transformedMessages);
+  }
+  if (functionCalls.length > 0) {
+    inputItems.push(...functionCalls);
+  }
+  if (functionCallOutputs.length > 0) {
+    inputItems.push(...functionCallOutputs);
+  }
+  return inputItems;
+}
+
+function applyConversationFields(
+  request: ResponsesRequest,
+  model: string,
+  conversationId: string | undefined,
+  parentId: string | undefined,
+): void {
   if (model && conversationId && parentId) {
     request.previous_response_id = parentId;
     request.store = true;
   }
+}
 
-  // Add tools if provided
+function applyToolFields(
+  request: ResponsesRequest,
+  tools: ITool[] | ResponsesTool[] | undefined,
+  toolChoice: string | object | undefined,
+): void {
   if (tools && tools.length > 0) {
     request.tools = tools as ResponsesTool[];
     if (
-      (typeof tool_choice === 'string' && tool_choice !== '') ||
+      (typeof toolChoice === 'string' && toolChoice !== '') ||
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve old runtime-boundary falsy handling for malformed null tool choices.
-      (typeof tool_choice === 'object' && tool_choice !== null)
+      (typeof toolChoice === 'object' && toolChoice !== null)
     ) {
-      request.tool_choice = tool_choice;
+      request.tool_choice = toolChoice;
     }
   }
+}
 
-  // Add stateful flag if provided
+export function buildResponsesRequest(
+  params: ResponsesRequestParams,
+): ResponsesRequest {
+  validateParams(params);
+
+  const {
+    messages,
+    prompt,
+    tools,
+    conversationId,
+    parentId,
+    tool_choice,
+    stateful,
+    model,
+    ...otherParams
+  } = params;
+
+  const processedMessages = trimMessagesForStatefulMode(
+    messages ?? [],
+    conversationId,
+  );
+
+  const { functionCalls, functionCallOutputs } =
+    extractFunctionCalls(processedMessages);
+
+  const transformedMessages =
+    processedMessages.length > 0
+      ? transformMessages(processedMessages)
+      : undefined;
+
+  const request: ResponsesRequest = {
+    model: model ?? '',
+    ...otherParams,
+    ...(prompt ? { prompt } : {}),
+  };
+
+  const input = buildInputArray(
+    transformedMessages,
+    functionCalls,
+    functionCallOutputs,
+  );
+
+  if (input) {
+    request.input = input;
+  }
+
+  applyConversationFields(request, model ?? '', conversationId, parentId);
+  applyToolFields(request, tools, tool_choice);
+
   if (stateful !== undefined) {
     request.stateful = stateful;
   }
 
-  // Add stream flag if provided
   if (params.stream !== undefined) {
     request.stream = params.stream;
   }
