@@ -63,6 +63,16 @@ interface FunctionCallState {
   arguments: string;
 }
 
+interface DispatchState {
+  hasEmittedVisibleThinking: boolean;
+  reasoningText: string;
+  reasoningSummaryText: string;
+}
+
+interface DispatchResult extends DispatchState {
+  lastLoggedType: string | undefined;
+}
+
 function appendReasoningDelta(current: string, delta: string): string {
   if (!delta) {
     return current;
@@ -90,6 +100,562 @@ export interface ParseResponsesStreamOptions {
   includeThinkingInResponse?: boolean;
 }
 
+/**
+ * Handle a text delta event.
+ */
+function* handleTextDelta(event: ResponsesEvent): Generator<IContent> {
+  if (event.delta) {
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: event.delta }],
+    };
+  }
+}
+
+/**
+ * Yield a thinking block, tracking emitted state to prevent duplicates.
+ */
+function* yieldThinkingBlock(
+  thoughtText: string,
+  includeThinkingInResponse: boolean,
+  shouldHide: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+): Generator<IContent> {
+  yield {
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'thinking',
+        thought: thoughtText,
+        sourceField: 'reasoning_content',
+        isHidden: shouldHide,
+      },
+    ],
+  };
+  emittedThoughts.set(thoughtText, { hasEncrypted: false });
+}
+
+/**
+ * Handle reasoning_text.done and reasoning_summary_text.done events.
+ */
+function* handleReasoningDone(
+  event: ResponsesEvent,
+  reasoningSource: string,
+  includeThinkingInResponse: boolean,
+  hasEmittedVisibleThinking: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+): Generator<
+  IContent,
+  { hasEmittedVisibleThinking: boolean; reasoningCleared: string }
+> {
+  const content = (event.text ?? reasoningSource).trim();
+  if (content && !emittedThoughts.has(content) && !hasEmittedVisibleThinking) {
+    yield* yieldThinkingBlock(
+      content,
+      includeThinkingInResponse,
+      !includeThinkingInResponse,
+      emittedThoughts,
+    );
+    return {
+      hasEmittedVisibleThinking: true,
+      reasoningCleared: '',
+    };
+  }
+  return { hasEmittedVisibleThinking, reasoningCleared: '' };
+}
+
+/**
+ * Handle an output_item.added event for function calls.
+ */
+function handleOutputItemAdded(
+  event: ResponsesEvent,
+  functionCalls: Map<string, FunctionCallState>,
+): void {
+  if (event.item?.type === 'function_call' && event.item.id) {
+    functionCalls.set(event.item.id, {
+      id: event.item.id,
+      call_id: event.item.call_id,
+      name: event.item.name ?? '',
+      arguments: event.item.arguments ?? '',
+    });
+  }
+}
+
+/**
+ * Handle function_call_arguments.delta event.
+ */
+function handleArgumentsDelta(
+  event: ResponsesEvent,
+  functionCalls: Map<string, FunctionCallState>,
+): void {
+  if (event.item_id && event.delta) {
+    const call = functionCalls.get(event.item_id);
+    if (call) {
+      call.arguments += event.delta;
+    }
+  }
+}
+
+/**
+ * Extract thought text from a reasoning item.
+ */
+function extractThoughtText(
+  event: ResponsesEvent,
+  reasoningText: string,
+  reasoningSummaryText: string,
+): string {
+  let thoughtText =
+    event.item?.summary
+      ?.map((s: { text?: string }) => s.text)
+      .filter(Boolean)
+      .join(' ') ?? '';
+
+  if (!thoughtText && event.item?.content) {
+    thoughtText = event.item.content
+      .map((c: { text?: string }) => c.text)
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  const itemText = thoughtText.trim();
+
+  if (!itemText) {
+    if (reasoningSummaryText.trim()) {
+      thoughtText = reasoningSummaryText.trim();
+    } else if (reasoningText.trim()) {
+      thoughtText = reasoningText.trim();
+    }
+  }
+
+  return thoughtText.trim();
+}
+
+/**
+ * Handle a reasoning item from output_item.done event.
+ */
+function* handleReasoningItem(
+  event: ResponsesEvent,
+  includeThinkingInResponse: boolean,
+  hasEmittedVisibleThinking: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+): Generator<
+  IContent,
+  {
+    hasEmittedVisibleThinking: boolean;
+    reasoningCleared: string;
+    summaryCleared: string;
+  }
+> {
+  const finalThought = extractThoughtText(event, '', '');
+  const hasEncryptedContent = Boolean(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
+    event.item?.encrypted_content,
+  );
+  const prior = emittedThoughts.get(finalThought);
+
+  // Emit if:
+  // 1. Never emitted this thought before, OR
+  // 2. Previously emitted WITHOUT encrypted_content, but now we have it
+  const shouldEmit =
+    finalThought !== '' &&
+    (prior === undefined ||
+      (hasEncryptedContent && prior.hasEncrypted !== true));
+
+  if (shouldEmit) {
+    const shouldHide = !includeThinkingInResponse || Boolean(prior);
+
+    const newHasEmittedVisible = hasEmittedVisibleThinking || !shouldHide;
+
+    const baseReasoningBlock: ContentBlock = {
+      type: 'thinking',
+      thought: finalThought,
+      sourceField: 'reasoning_content',
+      isHidden: shouldHide,
+    };
+    const reasoningBlock: ContentBlock = hasEncryptedContent
+      ? {
+          ...baseReasoningBlock,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
+          encryptedContent: event.item?.encrypted_content,
+        }
+      : baseReasoningBlock;
+
+    yield {
+      speaker: 'ai',
+      blocks: [reasoningBlock],
+    };
+
+    // Update tracking
+    emittedThoughts.set(finalThought, {
+      hasEncrypted: Boolean(prior?.hasEncrypted) || hasEncryptedContent,
+    });
+
+    return {
+      hasEmittedVisibleThinking: newHasEmittedVisible,
+      reasoningCleared: '',
+      summaryCleared: '',
+    };
+  }
+
+  return {
+    hasEmittedVisibleThinking,
+    reasoningCleared: '',
+    summaryCleared: '',
+  };
+}
+
+/**
+ * Handle a completed function call from output_item.done or arguments.done.
+ */
+function* handleFunctionCallDone(
+  event: ResponsesEvent,
+  functionCalls: Map<string, FunctionCallState>,
+): Generator<IContent> {
+  const itemId = event.item?.id ?? event.item_id;
+  if (!itemId) return;
+  const call = functionCalls.get(itemId);
+  if (!call) return;
+
+  const finalArguments = event.arguments ?? call.arguments;
+
+  let parsedArguments: unknown = {};
+  if (finalArguments) {
+    try {
+      parsedArguments = JSON.parse(finalArguments);
+    } catch (parseError) {
+      throw createStreamInterruptionError(
+        'Streaming tool call arguments were malformed JSON.',
+        {
+          itemId,
+          snippet: finalArguments.slice(0, 200),
+        },
+        parseError,
+      );
+    }
+  }
+
+  yield {
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'tool_call',
+        id: call.call_id ?? call.id,
+        name: call.name,
+        parameters: parsedArguments,
+      },
+    ],
+  };
+
+  // Clean up
+  functionCalls.delete(itemId);
+}
+
+/**
+ * Handle response.completed / response.done events.
+ */
+function* handleResponseCompleted(
+  event: ResponsesEvent,
+  reasoningText: string,
+  reasoningSummaryText: string,
+  includeThinkingInResponse: boolean,
+  hasEmittedVisibleThinking: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+): Generator<
+  IContent,
+  {
+    hasEmittedVisibleThinking: boolean;
+    reasoningCleared: string;
+    summaryCleared: string;
+  }
+> {
+  let newHasEmitted = hasEmittedVisibleThinking;
+
+  // Fallback: emit any remaining reasoning
+  const remainingReasoning = reasoningText.trim();
+  if (
+    remainingReasoning &&
+    !emittedThoughts.has(remainingReasoning) &&
+    !newHasEmitted
+  ) {
+    yield* yieldThinkingBlock(
+      remainingReasoning,
+      includeThinkingInResponse,
+      !includeThinkingInResponse,
+      emittedThoughts,
+    );
+    newHasEmitted = true;
+  }
+  const remainingSummary = reasoningSummaryText.trim();
+  if (
+    remainingSummary &&
+    !emittedThoughts.has(remainingSummary) &&
+    !newHasEmitted
+  ) {
+    yield* yieldThinkingBlock(
+      remainingSummary,
+      includeThinkingInResponse,
+      !includeThinkingInResponse,
+      emittedThoughts,
+    );
+    newHasEmitted = true;
+  }
+
+  // Usage data
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
+  const terminalReason = event.response?.status ?? 'completed';
+  if (event.response?.usage) {
+    yield {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        usage: {
+          promptTokens: event.response.usage.input_tokens,
+          completionTokens: event.response.usage.output_tokens,
+          totalTokens: event.response.usage.total_tokens,
+          cachedTokens:
+            event.response.usage.input_tokens_details?.cached_tokens ?? 0,
+        },
+        stopReason: mapFinishReasonToStopReason(terminalReason),
+        finishReason: terminalReason,
+      },
+    };
+  }
+
+  return {
+    hasEmittedVisibleThinking: newHasEmitted,
+    reasoningCleared: '',
+    summaryCleared: '',
+  };
+}
+
+/**
+ * Log SSE event details for debugging.
+ */
+function logSseEvent(
+  event: ResponsesEvent,
+  lastLoggedType: string | undefined,
+): string | undefined {
+  const newLastLoggedType =
+    event.type !== lastLoggedType ? event.type : lastLoggedType;
+
+  logger.debug(
+    () =>
+      `SSE event: type=${event.type}, delta="${event.delta?.slice(0, 50) ?? ''}", text="${event.text?.slice(0, 50) ?? ''}", item_type=${event.item?.type ?? 'none'}, summary_index=${event.summary_index ?? 'none'}, content_index=${event.content_index ?? 'none'}`,
+  );
+  // Extra debug for any reasoning-related events
+  if (event.type.includes('reasoning') || event.item?.type === 'reasoning') {
+    logger.debug(() => `REASONING SSE: ${JSON.stringify(event).slice(0, 500)}`);
+  }
+
+  // Debug: Log raw reasoning items
+  if (event.item?.type === 'reasoning') {
+    logger.debug(
+      () =>
+        `Reasoning item received: summary=${JSON.stringify(event.item?.summary)}, content=${JSON.stringify(event.item?.content)}, encrypted_content_length=${event.item?.encrypted_content?.length ?? 0}`,
+    );
+  }
+
+  return newLastLoggedType;
+}
+
+/**
+ * Handle the switch dispatch for a single SSE event type.
+ */
+function handleReasoningDeltaEvent(
+  event: ResponsesEvent,
+  state: DispatchState,
+): DispatchState {
+  if (event.type === 'response.reasoning_text.delta' && event.delta) {
+    return {
+      ...state,
+      reasoningText: appendReasoningDelta(state.reasoningText, event.delta),
+    };
+  }
+  if (event.type === 'response.reasoning_summary_text.delta' && event.delta) {
+    return {
+      ...state,
+      reasoningSummaryText: appendReasoningDelta(
+        state.reasoningSummaryText,
+        event.delta,
+      ),
+    };
+  }
+  return state;
+}
+
+function* handleReasoningDoneEvent(
+  event: ResponsesEvent,
+  state: DispatchState,
+  includeThinkingInResponse: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+): Generator<IContent, DispatchState> {
+  const source =
+    event.type === 'response.reasoning_text.done'
+      ? state.reasoningText
+      : state.reasoningSummaryText;
+  const result = yield* handleReasoningDone(
+    event,
+    source,
+    includeThinkingInResponse,
+    state.hasEmittedVisibleThinking,
+    emittedThoughts,
+  );
+  return {
+    hasEmittedVisibleThinking: result.hasEmittedVisibleThinking,
+    reasoningText:
+      event.type === 'response.reasoning_text.done'
+        ? result.reasoningCleared
+        : state.reasoningText,
+    reasoningSummaryText:
+      event.type === 'response.reasoning_summary_text.done'
+        ? result.reasoningCleared
+        : state.reasoningSummaryText,
+  };
+}
+
+function* handleOutputItemDoneEvent(
+  event: ResponsesEvent,
+  state: DispatchState,
+  functionCalls: Map<string, FunctionCallState>,
+  includeThinkingInResponse: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+): Generator<IContent, DispatchState> {
+  if (event.item?.type === 'reasoning') {
+    const result = yield* handleReasoningItem(
+      event,
+      includeThinkingInResponse,
+      state.hasEmittedVisibleThinking,
+      emittedThoughts,
+    );
+    return {
+      hasEmittedVisibleThinking: result.hasEmittedVisibleThinking,
+      reasoningText: result.reasoningCleared,
+      reasoningSummaryText: result.summaryCleared,
+    };
+  }
+
+  if (event.item?.type === 'function_call' || event.item_id) {
+    yield* handleFunctionCallDone(event, functionCalls);
+  }
+  return state;
+}
+
+function* handleCompletedEvent(
+  event: ResponsesEvent,
+  state: DispatchState,
+  includeThinkingInResponse: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+): Generator<IContent, DispatchState> {
+  const result = yield* handleResponseCompleted(
+    event,
+    state.reasoningText,
+    state.reasoningSummaryText,
+    includeThinkingInResponse,
+    state.hasEmittedVisibleThinking,
+    emittedThoughts,
+  );
+  return {
+    hasEmittedVisibleThinking: result.hasEmittedVisibleThinking,
+    reasoningText: result.reasoningCleared,
+    reasoningSummaryText: result.summaryCleared,
+  };
+}
+
+function* dispatchEventCases(
+  event: ResponsesEvent,
+  reasoningText: string,
+  reasoningSummaryText: string,
+  functionCalls: Map<string, FunctionCallState>,
+  includeThinkingInResponse: boolean,
+  hasEmittedVisibleThinking: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+): Generator<IContent, DispatchState> {
+  let state: DispatchState = {
+    hasEmittedVisibleThinking,
+    reasoningText,
+    reasoningSummaryText,
+  };
+
+  switch (event.type) {
+    case 'response.output_text.delta':
+      yield* handleTextDelta(event);
+      break;
+    case 'response.reasoning_text.delta':
+    case 'response.reasoning_summary_text.delta':
+      state = handleReasoningDeltaEvent(event, state);
+      break;
+    case 'response.reasoning_text.done':
+    case 'response.reasoning_summary_text.done':
+      state = yield* handleReasoningDoneEvent(
+        event,
+        state,
+        includeThinkingInResponse,
+        emittedThoughts,
+      );
+      break;
+    case 'response.output_item.added':
+      handleOutputItemAdded(event, functionCalls);
+      break;
+    case 'response.function_call_arguments.delta':
+      handleArgumentsDelta(event, functionCalls);
+      break;
+    case 'response.function_call_arguments.done':
+    case 'response.output_item.done':
+      state = yield* handleOutputItemDoneEvent(
+        event,
+        state,
+        functionCalls,
+        includeThinkingInResponse,
+        emittedThoughts,
+      );
+      break;
+    case 'response.completed':
+    case 'response.done':
+      state = yield* handleCompletedEvent(
+        event,
+        state,
+        includeThinkingInResponse,
+        emittedThoughts,
+      );
+      break;
+    default:
+      break;
+  }
+
+  return state;
+}
+
+/**
+ * Dispatch a single SSE event to the appropriate handler.
+ */
+function* dispatchEvent(
+  event: ResponsesEvent,
+  reasoningText: string,
+  reasoningSummaryText: string,
+  functionCalls: Map<string, FunctionCallState>,
+  includeThinkingInResponse: boolean,
+  hasEmittedVisibleThinking: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  lastLoggedType: string | undefined,
+): Generator<IContent, DispatchResult> {
+  const newLastLoggedType = logSseEvent(event, lastLoggedType);
+
+  const result: DispatchState = yield* dispatchEventCases(
+    event,
+    reasoningText,
+    reasoningSummaryText,
+    functionCalls,
+    includeThinkingInResponse,
+    hasEmittedVisibleThinking,
+    emittedThoughts,
+  );
+
+  return {
+    ...result,
+    lastLoggedType: newLastLoggedType,
+  };
+}
+
 export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
   options: ParseResponsesStreamOptions = {},
@@ -103,14 +669,6 @@ export async function* parseResponsesStream(
   let reasoningSummaryText = '';
 
   // Track emitted thinking content to prevent duplicates (fixes #922).
-  // The API can send the same reasoning via multiple event types:
-  // - response.reasoning_text.done / response.reasoning_summary_text.done
-  // - response.output_item.done with item.type === 'reasoning'
-  // - response.completed / response.done (fallback)
-  // We use a Map to track both emission AND whether we've captured encrypted_content.
-  // This handles the case where reasoning_text.done arrives before output_item.done:
-  // - First event (reasoning_text.done): emit visible block, record hasEncrypted: false
-  // - Second event (output_item.done with encrypted_content): re-emit hidden block WITH encrypted_content
   const emittedThoughts = new Map<string, { hasEncrypted: boolean }>();
 
   let hasEmittedVisibleThinking = false;
@@ -143,368 +701,20 @@ export async function* parseResponsesStream(
           try {
             const event: ResponsesEvent = JSON.parse(data);
 
-            // SSE event visibility for debugging reasoning support.
-            // We log to stderr directly so it shows up in debug logs even if
-            // Track last logged type to avoid duplicate logs
-            if (event.type !== lastLoggedType) {
-              lastLoggedType = event.type;
-            }
-
-            // Debug: Log ALL events with full details
-            logger.debug(
-              () =>
-                `SSE event: type=${event.type}, delta="${event.delta?.slice(0, 50) ?? ''}", text="${event.text?.slice(0, 50) ?? ''}", item_type=${event.item?.type ?? 'none'}, summary_index=${event.summary_index ?? 'none'}, content_index=${event.content_index ?? 'none'}`,
+            const result: DispatchResult = yield* dispatchEvent(
+              event,
+              reasoningText,
+              reasoningSummaryText,
+              functionCalls,
+              includeThinkingInResponse,
+              hasEmittedVisibleThinking,
+              emittedThoughts,
+              lastLoggedType,
             );
-            // Extra debug for any reasoning-related events
-            if (
-              event.type.includes('reasoning') ||
-              event.item?.type === 'reasoning'
-            ) {
-              logger.debug(
-                () => `REASONING SSE: ${JSON.stringify(event).slice(0, 500)}`,
-              );
-            }
-
-            // Debug: Log raw reasoning items
-            if (event.item?.type === 'reasoning') {
-              logger.debug(
-                () =>
-                  `Reasoning item received: summary=${JSON.stringify(event.item?.summary)}, content=${JSON.stringify(event.item?.content)}, encrypted_content_length=${event.item?.encrypted_content?.length ?? 0}`,
-              );
-            }
-
-            // Handle different event types
-            switch (event.type) {
-              case 'response.output_text.delta':
-                // Text content chunk
-                if (event.delta) {
-                  yield {
-                    speaker: 'ai',
-                    blocks: [{ type: 'text', text: event.delta }],
-                  };
-                }
-                break;
-
-              case 'response.reasoning_text.delta': {
-                if (event.delta) {
-                  reasoningText = appendReasoningDelta(
-                    reasoningText,
-                    event.delta,
-                  );
-                }
-                break;
-              }
-
-              case 'response.reasoning_summary_text.delta': {
-                if (event.delta) {
-                  reasoningSummaryText = appendReasoningDelta(
-                    reasoningSummaryText,
-                    event.delta,
-                  );
-                }
-                break;
-              }
-
-              case 'response.reasoning_text.done': {
-                // Yield accumulated reasoning as a single block (if not already emitted)
-                // When includeThinkingInResponse is false, still emit but with isHidden: true
-                // This preserves encrypted content for round-trip while hiding UI display
-                const thoughtContent = (event.text ?? reasoningText).trim();
-                if (
-                  thoughtContent &&
-                  !emittedThoughts.has(thoughtContent) &&
-                  !hasEmittedVisibleThinking
-                ) {
-                  // Mark as emitted without encrypted content - output_item.done may follow with it
-                  emittedThoughts.set(thoughtContent, { hasEncrypted: false });
-                  hasEmittedVisibleThinking = true;
-                  yield {
-                    speaker: 'ai',
-                    blocks: [
-                      {
-                        type: 'thinking',
-                        thought: thoughtContent,
-                        sourceField: 'reasoning_content',
-                        isHidden: !includeThinkingInResponse,
-                      },
-                    ],
-                  };
-                }
-                reasoningText = '';
-                break;
-              }
-
-              case 'response.reasoning_summary_text.done': {
-                // Yield accumulated summary as a single block (if not already emitted)
-                // When includeThinkingInResponse is false, still emit but with isHidden: true
-                // This preserves encrypted content for round-trip while hiding UI display
-                const summaryContent = (
-                  event.text ?? reasoningSummaryText
-                ).trim();
-                if (
-                  summaryContent &&
-                  !emittedThoughts.has(summaryContent) &&
-                  !hasEmittedVisibleThinking
-                ) {
-                  // Mark as emitted without encrypted content - output_item.done may follow with it
-                  emittedThoughts.set(summaryContent, { hasEncrypted: false });
-                  hasEmittedVisibleThinking = true;
-                  yield {
-                    speaker: 'ai',
-                    blocks: [
-                      {
-                        type: 'thinking',
-                        thought: summaryContent,
-                        sourceField: 'reasoning_content',
-                        isHidden: !includeThinkingInResponse,
-                      },
-                    ],
-                  };
-                }
-                reasoningSummaryText = '';
-                break;
-              }
-
-              case 'response.output_item.added':
-                // New function call started
-                if (event.item?.type === 'function_call' && event.item.id) {
-                  functionCalls.set(event.item.id, {
-                    id: event.item.id,
-                    call_id: event.item.call_id,
-                    name: event.item.name ?? '',
-                    arguments: event.item.arguments ?? '',
-                  });
-                }
-                break;
-
-              case 'response.function_call_arguments.delta':
-                // Function call arguments chunk
-                if (event.item_id && event.delta) {
-                  const call = functionCalls.get(event.item_id);
-                  if (call) {
-                    call.arguments += event.delta;
-                  }
-                }
-                break;
-
-              case 'response.function_call_arguments.done':
-              case 'response.output_item.done':
-                // Handle reasoning items
-                // Per codex-rs: thinking text comes from summary array and content array
-                // The encrypted_content is NOT decoded client-side - it's stored and sent back to API
-                if (event.item?.type === 'reasoning') {
-                  let thoughtText =
-                    event.item.summary
-                      ?.map((s: { text?: string }) => s.text)
-                      .filter(Boolean)
-                      .join(' ') ?? '';
-
-                  if (!thoughtText && event.item.content) {
-                    thoughtText = event.item.content
-                      .map((c: { text?: string }) => c.text)
-                      .filter(Boolean)
-                      .join(' ');
-                  }
-
-                  const itemText = thoughtText.trim();
-
-                  if (!itemText) {
-                    if (reasoningSummaryText.trim()) {
-                      thoughtText = reasoningSummaryText.trim();
-                    } else if (reasoningText.trim()) {
-                      thoughtText = reasoningText.trim();
-                    }
-                  }
-
-                  logger.debug(
-                    () =>
-                      `Reasoning item: thoughtText=${thoughtText.length} chars, summary=${event.item?.summary?.length ?? 0}, content=${event.item?.content?.length ?? 0}, encrypted=${event.item?.encrypted_content?.length ?? 0}`,
-                  );
-
-                  const finalThought = thoughtText.trim();
-                  const hasEncryptedContent = Boolean(
-                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
-                    event.item?.encrypted_content,
-                  );
-                  const prior = emittedThoughts.get(finalThought);
-
-                  // Emit if:
-                  // 1. Never emitted this thought before, OR
-                  // 2. Previously emitted WITHOUT encrypted_content, but now we have it
-                  //    (reasoning_text.done arrived before output_item.done)
-                  const shouldEmit =
-                    finalThought !== '' &&
-                    (prior === undefined ||
-                      (hasEncryptedContent && prior.hasEncrypted !== true));
-
-                  if (shouldEmit) {
-                    // If re-emitting for encrypted_content, hide it so UI doesn't show duplicate
-                    const shouldHide =
-                      !includeThinkingInResponse || Boolean(prior);
-
-                    if (!shouldHide) {
-                      hasEmittedVisibleThinking = true;
-                    }
-
-                    const baseReasoningBlock: ContentBlock = {
-                      type: 'thinking',
-                      thought: finalThought,
-                      sourceField: 'reasoning_content',
-                      isHidden: shouldHide,
-                    };
-                    const reasoningBlock: ContentBlock = hasEncryptedContent
-                      ? {
-                          ...baseReasoningBlock,
-                          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
-                          encryptedContent: event.item?.encrypted_content,
-                        }
-                      : baseReasoningBlock;
-
-                    yield {
-                      speaker: 'ai',
-                      blocks: [reasoningBlock],
-                    };
-
-                    // Update tracking
-                    emittedThoughts.set(finalThought, {
-                      hasEncrypted:
-                        Boolean(prior?.hasEncrypted) || hasEncryptedContent,
-                    });
-                  }
-
-                  // Clear buffers regardless of whether we emitted
-                  reasoningText = '';
-                  reasoningSummaryText = '';
-
-                  break;
-                }
-
-                // Function call completed
-                if (event.item?.type === 'function_call' || event.item_id) {
-                  const itemId = event.item?.id ?? event.item_id;
-                  if (itemId) {
-                    const call = functionCalls.get(itemId);
-                    if (call) {
-                      // Use final arguments from event if available, otherwise use accumulated
-                      const finalArguments = event.arguments ?? call.arguments;
-
-                      let parsedArguments: unknown = {};
-                      if (finalArguments) {
-                        try {
-                          parsedArguments = JSON.parse(finalArguments);
-                        } catch (parseError) {
-                          throw createStreamInterruptionError(
-                            'Streaming tool call arguments were malformed JSON.',
-                            {
-                              itemId,
-                              snippet: finalArguments.slice(0, 200),
-                            },
-                            parseError,
-                          );
-                        }
-                      }
-
-                      yield {
-                        speaker: 'ai',
-                        blocks: [
-                          {
-                            type: 'tool_call',
-                            id: call.call_id ?? call.id,
-                            name: call.name,
-                            parameters: parsedArguments,
-                          },
-                        ],
-                      };
-
-                      // Clean up
-                      functionCalls.delete(itemId);
-                    }
-                  }
-                }
-                break;
-
-              case 'response.completed':
-              case 'response.done': {
-                // Fallback: emit any remaining reasoning that wasn't emitted via other events
-                // When includeThinkingInResponse is false, still emit but with isHidden: true
-                // This preserves encrypted content for round-trip while hiding UI display
-                const remainingReasoning = reasoningText.trim();
-                if (
-                  remainingReasoning &&
-                  !emittedThoughts.has(remainingReasoning) &&
-                  !hasEmittedVisibleThinking
-                ) {
-                  emittedThoughts.set(remainingReasoning, {
-                    hasEncrypted: false,
-                  });
-                  hasEmittedVisibleThinking = true;
-                  yield {
-                    speaker: 'ai',
-                    blocks: [
-                      {
-                        type: 'thinking',
-                        thought: remainingReasoning,
-                        sourceField: 'reasoning_content',
-                        isHidden: !includeThinkingInResponse,
-                      },
-                    ],
-                  };
-                }
-                const remainingSummary = reasoningSummaryText.trim();
-                if (
-                  remainingSummary &&
-                  !emittedThoughts.has(remainingSummary) &&
-                  !hasEmittedVisibleThinking
-                ) {
-                  emittedThoughts.set(remainingSummary, {
-                    hasEncrypted: false,
-                  });
-                  hasEmittedVisibleThinking = true;
-                  yield {
-                    speaker: 'ai',
-                    blocks: [
-                      {
-                        type: 'thinking',
-                        thought: remainingSummary,
-                        sourceField: 'reasoning_content',
-                        isHidden: !includeThinkingInResponse,
-                      },
-                    ],
-                  };
-                }
-                reasoningText = '';
-                reasoningSummaryText = '';
-
-                // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
-                if (event.response?.usage) {
-                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
-                  const terminalReason = event.response.status ?? 'completed';
-                  yield {
-                    speaker: 'ai',
-                    blocks: [],
-                    metadata: {
-                      usage: {
-                        promptTokens: event.response.usage.input_tokens,
-                        completionTokens: event.response.usage.output_tokens,
-                        totalTokens: event.response.usage.total_tokens,
-                        cachedTokens:
-                          event.response.usage.input_tokens_details
-                            ?.cached_tokens ?? 0,
-                      },
-                      // stopReason is normalized via mapFinishReasonToStopReason;
-                      // finishReason preserves the raw provider value for diagnostics.
-                      stopReason: mapFinishReasonToStopReason(terminalReason),
-                      finishReason: terminalReason,
-                    },
-                  };
-                }
-                break;
-              }
-
-              default:
-                // Ignore unknown event types
-                break;
-            }
+            hasEmittedVisibleThinking = result.hasEmittedVisibleThinking;
+            reasoningText = result.reasoningText;
+            reasoningSummaryText = result.reasoningSummaryText;
+            lastLoggedType = result.lastLoggedType;
           } catch {
             // Skip malformed JSON events
             continue;
