@@ -193,73 +193,77 @@ export function getOutputLimits(
   };
 }
 
-/**
- * Check if content exceeds token limit and handle according to truncate mode
- * Uses escape buffer to account for JSON stringification inflation
- */
-export function limitOutputTokens(
-  content: string,
-  config: ToolOutputSettingsProvider,
-  toolName: string,
-): TruncatedOutput {
-  const limits = getOutputLimits(config);
-  const maxTokens = limits.maxTokens ?? DEFAULT_MAX_TOKENS;
-  const rawMaxTokens = limits.maxTokens as unknown;
-  const effectiveLimit = getEffectiveTokenLimit(maxTokens);
+function isDisabledMaxTokens(
+  rawMaxTokens: unknown,
+  maxTokens: number,
+): boolean {
+  return rawMaxTokens === false || rawMaxTokens === '' || maxTokens === 0;
+}
 
-  const encodedContent = encodeText(content);
-  const tokens = encodedContent?.length ?? Math.ceil(content.length / 3);
-
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    rawMaxTokens === false ||
-    rawMaxTokens === '' ||
-    maxTokens === 0 ||
+function shouldSkipTruncation(
+  rawMaxTokens: unknown,
+  maxTokens: number,
+  tokens: number,
+  effectiveLimit: number,
+): boolean {
+  return (
+    isDisabledMaxTokens(rawMaxTokens, maxTokens) ||
     Number.isNaN(maxTokens) ||
     tokens <= effectiveLimit
-  ) {
-    return {
-      content,
-      wasTruncated: false,
-    };
-  }
+  );
+}
 
-  // Content exceeds limit (after accounting for escape buffer)
-  const originalTokens = tokens;
-
-  if (limits.truncateMode === 'warn') {
-    // Return empty content with warning message
-    return {
-      content: '',
-      wasTruncated: true,
-      originalTokens,
-      message: `${toolName} output exceeded token limit (${originalTokens} > ${effectiveLimit}). The results were found but are too large to display. Please:
+function truncateWarn(
+  originalTokens: number,
+  effectiveLimit: number,
+  toolName: string,
+): TruncatedOutput {
+  return {
+    content: '',
+    wasTruncated: true,
+    originalTokens,
+    message: `${toolName} output exceeded token limit (${originalTokens} > ${effectiveLimit}). The results were found but are too large to display. Please:
 1. Use more specific search patterns or file paths to narrow results
 2. Search for specific function/class names instead of generic terms
 3. Look in specific directories rather than the entire codebase
 4. Use exact match patterns when possible`,
-    };
-  } else if (limits.truncateMode === 'truncate') {
-    // Truncate content to fit within effective limit (accounting for escape buffer)
-    const targetTokenCount = Math.max(0, Math.min(effectiveLimit, tokens));
-    const { truncatedContent, truncatedTokenCount } = truncateToTokenCount(
-      content,
-      originalTokens,
-      targetTokenCount,
-      encodedContent,
-    );
+  };
+}
 
-    return {
-      content: `${truncatedContent}\n\n[Output truncated due to token limit]`,
-      wasTruncated: true,
-      originalTokens,
-      message: `Output truncated from ${originalTokens} to ${truncatedTokenCount} tokens`,
-    };
-  }
-  // 'sample' mode - for line-based content, sample evenly
+function truncateHard(
+  content: string,
+  originalTokens: number,
+  tokens: number,
+  effectiveLimit: number,
+  encodedContent: Uint32Array | null,
+): TruncatedOutput {
+  const targetTokenCount = Math.max(0, Math.min(effectiveLimit, tokens));
+  const { truncatedContent, truncatedTokenCount } = truncateToTokenCount(
+    content,
+    originalTokens,
+    targetTokenCount,
+    encodedContent,
+  );
+
+  return {
+    content: `${truncatedContent}\n\n[Output truncated due to token limit]`,
+    wasTruncated: true,
+    originalTokens,
+    message: `Output truncated from ${originalTokens} to ${truncatedTokenCount} tokens`,
+  };
+}
+
+function sampleLines(
+  content: string,
+  originalTokens: number,
+  effectiveLimit: number,
+  maxTokens: number | undefined,
+  tokens: number,
+  encodedContent: Uint32Array | null,
+): TruncatedOutput {
   const lines = content.split('\n');
   if (lines.length > 1) {
-    const targetLines = Math.max(1, Math.floor(effectiveLimit / 10)); // Rough estimate of tokens per line
+    const targetLines = Math.max(1, Math.floor(effectiveLimit / 10));
     const step = Math.ceil(lines.length / targetLines);
     const sampledLines: string[] = [];
 
@@ -278,25 +282,63 @@ export function limitOutputTokens(
           `\n\n[Sampled ${sampledLines.length} of ${lines.length} lines due to token limit]`,
         wasTruncated: true,
         originalTokens,
-        message: `Output sampled to fit within ${limits.maxTokens} token limit`,
+        message: `Output sampled to fit within ${maxTokens} token limit`,
       };
     }
   }
-  // Single line or non-line content, fall back to truncate with escape buffer
-  const targetTokenCount = Math.max(0, Math.min(effectiveLimit, tokens));
-  const { truncatedContent, truncatedTokenCount } = truncateToTokenCount(
+
+  return truncateHard(
     content,
     originalTokens,
-    targetTokenCount,
+    tokens,
+    effectiveLimit,
     encodedContent,
   );
+}
 
-  return {
-    content: `${truncatedContent}\n\n[Output truncated due to token limit]`,
-    wasTruncated: true,
+/**
+ * Check if content exceeds token limit and handle according to truncate mode
+ * Uses escape buffer to account for JSON stringification inflation
+ */
+export function limitOutputTokens(
+  content: string,
+  config: ToolOutputSettingsProvider,
+  toolName: string,
+): TruncatedOutput {
+  const limits = getOutputLimits(config);
+  const maxTokens = limits.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const rawMaxTokens = limits.maxTokens as unknown;
+  const effectiveLimit = getEffectiveTokenLimit(maxTokens);
+
+  const encodedContent = encodeText(content);
+  const tokens = encodedContent?.length ?? Math.ceil(content.length / 3);
+
+  if (shouldSkipTruncation(rawMaxTokens, maxTokens, tokens, effectiveLimit)) {
+    return { content, wasTruncated: false };
+  }
+
+  const originalTokens = tokens;
+
+  if (limits.truncateMode === 'warn') {
+    return truncateWarn(originalTokens, effectiveLimit, toolName);
+  } else if (limits.truncateMode === 'truncate') {
+    return truncateHard(
+      content,
+      originalTokens,
+      tokens,
+      effectiveLimit,
+      encodedContent,
+    );
+  }
+
+  return sampleLines(
+    content,
     originalTokens,
-    message: `Output truncated from ${originalTokens} to ${truncatedTokenCount} tokens`,
-  };
+    effectiveLimit,
+    limits.maxTokens,
+    tokens,
+    encodedContent,
+  );
 }
 
 /**
