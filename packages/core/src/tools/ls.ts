@@ -163,101 +163,15 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
       }
 
       const files = fs.readdirSync(dirPath);
-
-      const defaultFileIgnores = this.config.getFileFilteringOptions();
-
-      const fileFilteringOptions = {
-        respectGitIgnore:
-          this.params.file_filtering_options?.respect_git_ignore ??
-          defaultFileIgnores.respectGitIgnore,
-        respectLlxprtIgnore:
-          this.params.file_filtering_options?.respect_llxprt_ignore ??
-          defaultFileIgnores.respectLlxprtIgnore,
-      };
-
-      // Get centralized file discovery service
-      const fileDiscovery = this.config.getFileService();
-
-      const entries: FileEntry[] = [];
-      let ignoredCount = 0;
-
       if (files.length === 0) {
-        // Changed error message to be more neutral for LLM
         return {
           llmContent: `Directory ${dirPath} is empty.`,
           returnDisplay: `Directory is empty.`,
         };
       }
 
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for (const file of files) {
-        if (this.shouldIgnore(file, this.params.ignore)) {
-          continue;
-        }
-
-        const fullPath = path.join(dirPath, file);
-        const relativePath = path.relative(
-          this.config.getTargetDir(),
-          fullPath,
-        );
-
-        if (
-          fileFilteringOptions.respectGitIgnore &&
-          fileDiscovery.shouldGitIgnoreFile(relativePath)
-        ) {
-          ignoredCount++;
-          continue;
-        }
-        if (
-          fileFilteringOptions.respectLlxprtIgnore &&
-          fileDiscovery.shouldLlxprtIgnoreFile(relativePath)
-        ) {
-          ignoredCount++;
-          continue;
-        }
-
-        try {
-          const stats = fs.statSync(fullPath);
-          const isDir = stats.isDirectory();
-          entries.push({
-            name: file,
-            path: fullPath,
-            isDirectory: isDir,
-            size: isDir ? 0 : stats.size,
-            modifiedTime: stats.mtime,
-          });
-        } catch (error) {
-          // Log error internally but don't fail the whole listing
-          debugLogger.error(`Error accessing ${fullPath}: ${error}`);
-        }
-      }
-
-      // Sort entries (directories first, then alphabetically)
-      entries.sort((a, b) => {
-        if (a.isDirectory && !b.isDirectory) return -1;
-        if (!a.isDirectory && b.isDirectory) return 1;
-        return a.name.localeCompare(b.name);
-      });
-
-      // Create formatted content for LLM
-      const directoryContent = entries
-        .map((entry) => `${entry.isDirectory ? '[DIR] ' : ''}${entry.name}`)
-        .join('\n');
-
-      let resultMessage = `Directory listing for ${dirPath}:\n${directoryContent}`;
-      if (ignoredCount > 0) {
-        resultMessage += `\n\n(${ignoredCount} ignored)`;
-      }
-
-      let displayMessage = `Listed ${entries.length} item(s).`;
-      if (ignoredCount > 0) {
-        displayMessage += ` (${ignoredCount} ignored)`;
-      }
-
-      return {
-        llmContent: resultMessage,
-        returnDisplay: displayMessage,
-      };
+      const { entries, ignoredCount } = this.collectEntries(dirPath, files);
+      return this.formatListingResult(dirPath, entries, ignoredCount);
     } catch (error) {
       const errorMsg = `Error listing directory: ${error instanceof Error ? error.message : String(error)}`;
       return this.errorResult(
@@ -266,6 +180,96 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
         ToolErrorType.LS_EXECUTION_ERROR,
       );
     }
+  }
+
+  private collectEntries(
+    dirPath: string,
+    files: string[],
+  ): { entries: FileEntry[]; ignoredCount: number } {
+    const defaultFileIgnores = this.config.getFileFilteringOptions();
+    const fileFilteringOptions = {
+      respectGitIgnore:
+        this.params.file_filtering_options?.respect_git_ignore ??
+        defaultFileIgnores.respectGitIgnore,
+      respectLlxprtIgnore:
+        this.params.file_filtering_options?.respect_llxprt_ignore ??
+        defaultFileIgnores.respectLlxprtIgnore,
+    };
+    const fileDiscovery = this.config.getFileService();
+
+    const entries: FileEntry[] = [];
+    let ignoredCount = 0;
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for (const file of files) {
+      if (this.shouldIgnore(file, this.params.ignore)) {
+        continue;
+      }
+
+      const fullPath = path.join(dirPath, file);
+      const relativePath = path.relative(this.config.getTargetDir(), fullPath);
+
+      if (
+        fileFilteringOptions.respectGitIgnore &&
+        fileDiscovery.shouldGitIgnoreFile(relativePath)
+      ) {
+        ignoredCount++;
+        continue;
+      }
+      if (
+        fileFilteringOptions.respectLlxprtIgnore &&
+        fileDiscovery.shouldLlxprtIgnoreFile(relativePath)
+      ) {
+        ignoredCount++;
+        continue;
+      }
+
+      try {
+        const stats = fs.statSync(fullPath);
+        const isDir = stats.isDirectory();
+        entries.push({
+          name: file,
+          path: fullPath,
+          isDirectory: isDir,
+          size: isDir ? 0 : stats.size,
+          modifiedTime: stats.mtime,
+        });
+      } catch (error) {
+        debugLogger.error(`Error accessing ${fullPath}: ${error}`);
+      }
+    }
+    return { entries, ignoredCount };
+  }
+
+  private formatListingResult(
+    dirPath: string,
+    entries: FileEntry[],
+    ignoredCount: number,
+  ): ToolResult {
+    entries.sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    const directoryContent = entries
+      .map((entry) => `${entry.isDirectory ? '[DIR] ' : ''}${entry.name}`)
+      .join('\n');
+
+    let resultMessage = `Directory listing for ${dirPath}:\n${directoryContent}`;
+    if (ignoredCount > 0) {
+      resultMessage += `\n\n(${ignoredCount} ignored)`;
+    }
+
+    let displayMessage = `Listed ${entries.length} item(s).`;
+    if (ignoredCount > 0) {
+      displayMessage += ` (${ignoredCount} ignored)`;
+    }
+
+    return {
+      llmContent: resultMessage,
+      returnDisplay: displayMessage,
+    };
   }
 }
 

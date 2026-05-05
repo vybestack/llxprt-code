@@ -92,13 +92,34 @@ Signal: Signal number or \`(none)\` if no signal was received.
     child.stdin.write(JSON.stringify(params));
     child.stdin.end();
 
+    const { stdout, stderr, error, code, exitSignal } =
+      await this.runChildProcess(child, signal);
+
+    return this.buildChildProcessResult(
+      stdout,
+      stderr,
+      error,
+      code,
+      exitSignal,
+    );
+  }
+
+  private async runChildProcess(
+    child: ReturnType<typeof spawn>,
+    signal: AbortSignal,
+  ): Promise<{
+    stdout: string;
+    stderr: string;
+    error: Error | null;
+    code: number | null;
+    exitSignal: NodeJS.Signals | null;
+  }> {
     let stdout = '';
     let stderr = '';
     let error: Error | null = null;
     let code: number | null = null;
     let exitSignal: NodeJS.Signals | null = null;
 
-    // Handle abort signal to kill the child process
     const abortHandler = () => {
       if (!child.killed) {
         child.kill('SIGTERM');
@@ -133,8 +154,8 @@ Signal: Signal number or \`(none)\` if no signal was received.
         };
 
         const cleanup = () => {
-          child.stdout.removeListener('data', onStdout);
-          child.stderr.removeListener('data', onStderr);
+          child.stdout!.removeListener('data', onStdout);
+          child.stderr!.removeListener('data', onStderr);
           child.removeListener('error', onError);
           child.removeListener('close', onClose);
           if (child.connected) {
@@ -142,16 +163,24 @@ Signal: Signal number or \`(none)\` if no signal was received.
           }
         };
 
-        child.stdout.on('data', onStdout);
-        child.stderr.on('data', onStderr);
+        child.stdout!.on('data', onStdout);
+        child.stderr!.on('data', onStderr);
         child.on('error', onError);
         child.on('close', onClose);
       });
     } finally {
       signal.removeEventListener('abort', abortHandler);
     }
+    return { stdout, stderr, error, code, exitSignal };
+  }
 
-    // if there is any error, non-zero exit code, signal, or stderr, return error details instead of stdout
+  private buildChildProcessResult(
+    stdout: string,
+    stderr: string,
+    error: Error | null,
+    code: number | null,
+    exitSignal: NodeJS.Signals | null,
+  ): ToolResult {
     /* eslint-disable @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types. */
     if (
       error !== null ||
@@ -415,131 +444,146 @@ export class ToolRegistry {
     }
 
     try {
-      const cmdParts = parse(discoveryCmd);
-      if (cmdParts.length === 0) {
-        throw new Error(
-          'Tool discovery command is empty or contains only whitespace.',
-        );
-      }
-      const proc = spawn(cmdParts[0] as string, cmdParts.slice(1) as string[]);
-      let stdout = '';
-      const stdoutDecoder = new StringDecoder('utf8');
-      let stderr = '';
-      const stderrDecoder = new StringDecoder('utf8');
-      let sizeLimitExceeded = false;
-      const MAX_STDOUT_SIZE = 10 * 1024 * 1024; // 10MB limit
-      const MAX_STDERR_SIZE = 10 * 1024 * 1024; // 10MB limit
-
-      let stdoutByteLength = 0;
-      let stderrByteLength = 0;
-
-      proc.stdout.on('data', (data) => {
-        if (sizeLimitExceeded) return;
-        if (stdoutByteLength + data.length > MAX_STDOUT_SIZE) {
-          sizeLimitExceeded = true;
-          proc.kill();
-          return;
-        }
-        stdoutByteLength += data.length;
-        stdout += stdoutDecoder.write(data);
-      });
-
-      proc.stderr.on('data', (data) => {
-        if (sizeLimitExceeded) return;
-        if (stderrByteLength + data.length > MAX_STDERR_SIZE) {
-          sizeLimitExceeded = true;
-          proc.kill();
-          return;
-        }
-        stderrByteLength += data.length;
-        stderr += stderrDecoder.write(data);
-      });
-
-      await new Promise<void>((resolve, reject) => {
-        proc.on('error', reject);
-        proc.on('close', (code) => {
-          stdout += stdoutDecoder.end();
-          stderr += stderrDecoder.end();
-
-          if (sizeLimitExceeded) {
-            reject(
-              new Error(
-                `Tool discovery command output exceeded size limit of ${MAX_STDOUT_SIZE} bytes.`,
-              ),
-            );
-            return;
-          }
-
-          if (code !== 0) {
-            this.logger.error(() => `Command failed with code ${code}`);
-            this.logger.error(() => stderr);
-            reject(
-              new Error(`Tool discovery command failed with exit code ${code}`),
-            );
-            return;
-          }
-          resolve();
-        });
-      });
-
-      // execute discovery command and extract function declarations (w/ or w/o "tool" wrappers)
-      const functions: FunctionDeclaration[] = [];
-      const discoveredItems = JSON.parse(stdout.trim());
-
-      if (
-        discoveredItems === null ||
-        discoveredItems === undefined ||
-        !Array.isArray(discoveredItems)
-      ) {
-        throw new Error(
-          'Tool discovery command did not return a JSON array of tools.',
-        );
-      }
-
-      for (const tool of discoveredItems) {
-        if (tool !== null && typeof tool === 'object') {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (Array.isArray(tool['function_declarations'])) {
-            functions.push(...tool['function_declarations']);
-          } else if (Array.isArray(tool['functionDeclarations'])) {
-            functions.push(...tool['functionDeclarations']);
-          } else if (typeof tool['name'] === 'string' && tool['name'] !== '') {
-            functions.push(tool as FunctionDeclaration);
-          }
-        }
-      }
-      // register each function as a tool
-      for (const func of functions) {
-        if (func.name === undefined || func.name === '') {
-          this.logger.warn(() => 'Discovered a tool with no name. Skipping.');
-          continue;
-        }
-        const parameters =
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          func.parametersJsonSchema !== undefined &&
-          func.parametersJsonSchema !== null &&
-          typeof func.parametersJsonSchema === 'object' &&
-          !Array.isArray(func.parametersJsonSchema)
-            ? func.parametersJsonSchema
-            : {};
-        this.registerToolIntoMap(
-          new DiscoveredTool(
-            this.config,
-            `discovered_tool_${func.name}`,
-            func.description ?? '',
-            parameters as Record<string, unknown>,
-            this.messageBus,
-          ),
-
-          targetMap,
-        );
-      }
+      const stdout = await this.runDiscoveryCommand(discoveryCmd);
+      const functions = this.parseDiscoveredFunctions(stdout);
+      this.registerDiscoveredFunctions(functions, targetMap);
     } catch (e) {
       this.logger.error(
         () => `Tool discovery command "${discoveryCmd}" failed:`,
         { error: e },
       );
       throw e;
+    }
+  }
+
+  private async runDiscoveryCommand(discoveryCmd: string): Promise<string> {
+    const cmdParts = parse(discoveryCmd);
+    if (cmdParts.length === 0) {
+      throw new Error(
+        'Tool discovery command is empty or contains only whitespace.',
+      );
+    }
+    const proc = spawn(cmdParts[0] as string, cmdParts.slice(1) as string[]);
+    let stdout = '';
+    const stdoutDecoder = new StringDecoder('utf8');
+    let stderr = '';
+    const stderrDecoder = new StringDecoder('utf8');
+    let sizeLimitExceeded = false;
+    const MAX_STDOUT_SIZE = 10 * 1024 * 1024; // 10MB limit
+    const MAX_STDERR_SIZE = 10 * 1024 * 1024; // 10MB limit
+
+    let stdoutByteLength = 0;
+    let stderrByteLength = 0;
+
+    proc.stdout.on('data', (data) => {
+      if (sizeLimitExceeded) return;
+      if (stdoutByteLength + data.length > MAX_STDOUT_SIZE) {
+        sizeLimitExceeded = true;
+        proc.kill();
+        return;
+      }
+      stdoutByteLength += data.length;
+      stdout += stdoutDecoder.write(data);
+    });
+
+    proc.stderr.on('data', (data) => {
+      if (sizeLimitExceeded) return;
+      if (stderrByteLength + data.length > MAX_STDERR_SIZE) {
+        sizeLimitExceeded = true;
+        proc.kill();
+        return;
+      }
+      stderrByteLength += data.length;
+      stderr += stderrDecoder.write(data);
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      proc.on('error', reject);
+      proc.on('close', (code) => {
+        stdout += stdoutDecoder.end();
+        stderr += stderrDecoder.end();
+
+        if (sizeLimitExceeded) {
+          reject(
+            new Error(
+              `Tool discovery command output exceeded size limit of ${MAX_STDOUT_SIZE} bytes.`,
+            ),
+          );
+          return;
+        }
+
+        if (code !== 0) {
+          this.logger.error(() => `Command failed with code ${code}`);
+          this.logger.error(() => stderr);
+          reject(
+            new Error(`Tool discovery command failed with exit code ${code}`),
+          );
+          return;
+        }
+        resolve();
+      });
+    });
+
+    return stdout;
+  }
+
+  private parseDiscoveredFunctions(stdout: string): FunctionDeclaration[] {
+    const functions: FunctionDeclaration[] = [];
+    const discoveredItems = JSON.parse(stdout.trim());
+
+    if (
+      discoveredItems === null ||
+      discoveredItems === undefined ||
+      !Array.isArray(discoveredItems)
+    ) {
+      throw new Error(
+        'Tool discovery command did not return a JSON array of tools.',
+      );
+    }
+
+    for (const tool of discoveredItems) {
+      if (tool !== null && typeof tool === 'object') {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (Array.isArray(tool['function_declarations'])) {
+          functions.push(...tool['function_declarations']);
+        } else if (Array.isArray(tool['functionDeclarations'])) {
+          functions.push(...tool['functionDeclarations']);
+        } else if (typeof tool['name'] === 'string' && tool['name'] !== '') {
+          functions.push(tool as FunctionDeclaration);
+        }
+      }
+    }
+    return functions;
+  }
+
+  private registerDiscoveredFunctions(
+    functions: FunctionDeclaration[],
+    targetMap: Map<string, AnyDeclarativeTool>,
+  ): void {
+    for (const func of functions) {
+      if (func.name === undefined || func.name === '') {
+        this.logger.warn(() => 'Discovered a tool with no name. Skipping.');
+        continue;
+      }
+      const parameters =
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        func.parametersJsonSchema !== undefined &&
+        func.parametersJsonSchema !== null &&
+        typeof func.parametersJsonSchema === 'object' &&
+        !Array.isArray(func.parametersJsonSchema)
+          ? func.parametersJsonSchema
+          : {};
+      this.registerToolIntoMap(
+        new DiscoveredTool(
+          this.config,
+          `discovered_tool_${func.name}`,
+          func.description ?? '',
+          parameters as Record<string, unknown>,
+          this.messageBus,
+        ),
+
+        targetMap,
+      );
     }
   }
 
