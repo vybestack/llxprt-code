@@ -98,18 +98,27 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
     };
   }
 
-  async execute(signal: AbortSignal): Promise<ToolResult> {
+  private validateAndResolveParams():
+    | {
+        mode: string;
+        resolvedLang: string | Lang;
+        searchPath: string;
+        targetDir: string;
+        symbol: string | undefined;
+        depth: number;
+        maxNodes: number;
+        reverse: boolean;
+      }
+    | ToolResult {
     const { mode, language, symbol, depth, maxNodes, target, reverse } =
       this.params;
 
-    // Validate mode
     if (!VALID_MODES.includes(mode as Mode)) {
       return this.makeError(
         `Error: Invalid mode "${mode}". Valid modes: ${VALID_MODES.join(', ')}`,
       );
     }
 
-    // Validate language
     if (!language) {
       return this.makeError('Error: `language` parameter is required.');
     }
@@ -120,14 +129,12 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       );
     }
 
-    // Resolve search path
     const targetDir = this.config.getTargetDir();
     let searchPath = this.params.path ?? target ?? targetDir;
     if (!path.isAbsolute(searchPath)) {
       searchPath = path.resolve(targetDir, searchPath);
     }
 
-    // Workspace boundary (path.sep-aware to prevent sibling bypass)
     const normalizedTarget = targetDir.endsWith(path.sep)
       ? targetDir
       : targetDir + path.sep;
@@ -135,7 +142,6 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       return this.makeError('Error: Path resolves outside the workspace root.');
     }
 
-    // Symbol required for symbol-scoped modes
     const symbolModes: Mode[] = [
       'callers',
       'callees',
@@ -149,83 +155,121 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       );
     }
 
-    const effectiveDepth = Math.min(depth ?? DEFAULT_DEPTH, MAX_DEPTH);
-    const effectiveMaxNodes = maxNodes ?? DEFAULT_MAX_NODES;
+    return {
+      mode,
+      resolvedLang,
+      searchPath,
+      targetDir,
+      symbol,
+      depth: Math.min(depth ?? DEFAULT_DEPTH, MAX_DEPTH),
+      maxNodes: maxNodes ?? DEFAULT_MAX_NODES,
+      reverse: reverse === true,
+    };
+  }
+
+  private async dispatchMode(
+    mode: string,
+    resolvedLang: string | Lang,
+    searchPath: string,
+    targetDir: string,
+    symbol: string | undefined,
+    effectiveDepth: number,
+    effectiveMaxNodes: number,
+    reverse: boolean,
+    signal: AbortSignal,
+  ): Promise<AnalysisResult> {
+    switch (mode as Mode) {
+      case 'definitions':
+        return this.executeDefinitions(
+          symbol!,
+          resolvedLang,
+          searchPath,
+          targetDir,
+          signal,
+        );
+      case 'hierarchy':
+        return this.executeHierarchy(
+          symbol!,
+          resolvedLang,
+          searchPath,
+          targetDir,
+          signal,
+        );
+      case 'callers':
+        return this.executeCallers(
+          symbol!,
+          resolvedLang,
+          searchPath,
+          targetDir,
+          effectiveDepth,
+          effectiveMaxNodes,
+          signal,
+        );
+      case 'callees':
+        return this.executeCallees(
+          symbol!,
+          resolvedLang,
+          searchPath,
+          targetDir,
+          effectiveDepth,
+          effectiveMaxNodes,
+          signal,
+        );
+      case 'references':
+        return this.executeReferences(
+          symbol!,
+          resolvedLang,
+          searchPath,
+          targetDir,
+          signal,
+        );
+      case 'dependencies':
+        return this.executeDependencies(
+          searchPath,
+          resolvedLang,
+          targetDir,
+          reverse,
+          signal,
+        );
+      case 'exports':
+        return this.executeExports(searchPath, resolvedLang, targetDir, signal);
+      default:
+        throw new Error(`Mode "${mode}" is not implemented.`);
+    }
+  }
+
+  async execute(signal: AbortSignal): Promise<ToolResult> {
+    const params = this.validateAndResolveParams();
+    if ('llmContent' in params) return params;
+
+    const {
+      mode,
+      resolvedLang,
+      searchPath,
+      targetDir,
+      symbol,
+      depth: effectiveDepth,
+      maxNodes: effectiveMaxNodes,
+      reverse,
+    } = params;
 
     try {
-      let analysisResult: AnalysisResult;
-      switch (mode as Mode) {
-        case 'definitions':
-          analysisResult = await this.executeDefinitions(
-            symbol!,
-            resolvedLang,
-            searchPath,
-            targetDir,
-            signal,
-          );
-          break;
-        case 'hierarchy':
-          analysisResult = await this.executeHierarchy(
-            symbol!,
-            resolvedLang,
-            searchPath,
-            targetDir,
-            signal,
-          );
-          break;
-        case 'callers':
-          analysisResult = await this.executeCallers(
-            symbol!,
-            resolvedLang,
-            searchPath,
-            targetDir,
-            effectiveDepth,
-            effectiveMaxNodes,
-            signal,
-          );
-          break;
-        case 'callees':
-          analysisResult = await this.executeCallees(
-            symbol!,
-            resolvedLang,
-            searchPath,
-            targetDir,
-            effectiveDepth,
-            effectiveMaxNodes,
-            signal,
-          );
-          break;
-        case 'references':
-          analysisResult = await this.executeReferences(
-            symbol!,
-            resolvedLang,
-            searchPath,
-            targetDir,
-            signal,
-          );
-          break;
-        case 'dependencies':
-          analysisResult = await this.executeDependencies(
-            searchPath,
-            resolvedLang,
-            targetDir,
-            reverse === true,
-            signal,
-          );
-          break;
-        case 'exports':
-          analysisResult = await this.executeExports(
-            searchPath,
-            resolvedLang,
-            targetDir,
-            signal,
-          );
-          break;
-        default:
-          return this.makeError(`Error: Mode "${mode}" is not implemented.`);
-      }
+      const analysisResult = await this.dispatchMode(
+        mode,
+        resolvedLang,
+        searchPath,
+        targetDir,
+        symbol,
+        effectiveDepth,
+        effectiveMaxNodes,
+        reverse,
+        signal,
+      );
       return this.formatResult(analysisResult);
     } catch (err) {
+      if (err instanceof Error && err.message.endsWith('is not implemented.')) {
+        return this.makeError(`Error: ${err.message}`);
+      }
       const msg = err instanceof Error ? err.message : String(err);
       return this.makeError(`Error in ${mode}: ${msg}`);
     }
@@ -350,6 +394,100 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
   }
 
   // ===== DEFINITIONS =====
+  private searchDefinitionPatterns(
+    parsed: { root: SgNode },
+    symbol: string,
+    relPath: string,
+    definitions: Array<{
+      file: string;
+      line: number;
+      kind: string;
+      text: string;
+    }>,
+  ): void {
+    const patterns = [
+      { pat: `${symbol}($$$PARAMS) { $$$BODY }`, kind: 'method' },
+      { pat: `function ${symbol}($$$PARAMS) { $$$BODY }`, kind: 'function' },
+      { pat: `class ${symbol} { $$$BODY }`, kind: 'class' },
+      { pat: `class ${symbol} extends $PARENT { $$$BODY }`, kind: 'class' },
+    ];
+
+    for (const { pat, kind } of patterns) {
+      try {
+        const matches = parsed.root.findAll(pat);
+        for (const m of matches) {
+          const range = m.range();
+          definitions.push({
+            file: relPath,
+            line: range.start.line + 1,
+            kind,
+            text: m.text().substring(0, 200),
+          });
+        }
+      } catch {
+        // Pattern may not be valid for all languages
+      }
+    }
+  }
+
+  private searchDeclarationRules(
+    parsed: { root: SgNode },
+    symbol: string,
+    relPath: string,
+    definitions: Array<{
+      file: string;
+      line: number;
+      kind: string;
+      text: string;
+    }>,
+  ): void {
+    try {
+      const ruleMatches = parsed.root.findAll({
+        rule: {
+          any: [
+            {
+              kind: 'class_declaration',
+              has: {
+                kind: 'type_identifier',
+                regex: `^${this.escapeRegex(symbol)}$`,
+              },
+            },
+            {
+              kind: 'interface_declaration',
+              has: {
+                kind: 'type_identifier',
+                regex: `^${this.escapeRegex(symbol)}$`,
+              },
+            },
+            {
+              kind: 'type_alias_declaration',
+              has: {
+                kind: 'type_identifier',
+                regex: `^${this.escapeRegex(symbol)}$`,
+              },
+            },
+          ],
+        },
+      } as NapiConfig);
+      for (const m of ruleMatches) {
+        const range = m.range();
+        const exists = definitions.some(
+          (d) => d.file === relPath && d.line === range.start.line + 1,
+        );
+        if (!exists) {
+          definitions.push({
+            file: relPath,
+            line: range.start.line + 1,
+            kind: String(m.kind()),
+            text: m.text().substring(0, 200),
+          });
+        }
+      }
+    } catch {
+      // Rule may not apply
+    }
+  }
+
   private async executeDefinitions(
     symbol: string,
     lang: string | Lang,
@@ -372,83 +510,8 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       if (!parsed) continue;
 
       const relPath = makeRelative(file, workspaceRoot);
-
-      // Search for various definition forms
-      const patterns = [
-        // Method definitions
-        { pat: `${symbol}($$$PARAMS) { $$$BODY }`, kind: 'method' },
-        // Function declarations
-        { pat: `function ${symbol}($$$PARAMS) { $$$BODY }`, kind: 'function' },
-        // Class declarations
-        { pat: `class ${symbol} { $$$BODY }`, kind: 'class' },
-        { pat: `class ${symbol} extends $PARENT { $$$BODY }`, kind: 'class' },
-      ];
-
-      for (const { pat, kind } of patterns) {
-        try {
-          const matches = parsed.root.findAll(pat);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const m of matches) {
-            const range = m.range();
-            definitions.push({
-              file: relPath,
-              line: range.start.line + 1,
-              kind,
-              text: m.text().substring(0, 200),
-            });
-          }
-        } catch {
-          // Pattern may not be valid for all languages
-        }
-      }
-
-      // Also search by YAML rule for identifiers in declaration positions
-      try {
-        const ruleMatches = parsed.root.findAll({
-          rule: {
-            any: [
-              {
-                kind: 'class_declaration',
-                has: {
-                  kind: 'type_identifier',
-                  regex: `^${this.escapeRegex(symbol)}$`,
-                },
-              },
-              {
-                kind: 'interface_declaration',
-                has: {
-                  kind: 'type_identifier',
-                  regex: `^${this.escapeRegex(symbol)}$`,
-                },
-              },
-              {
-                kind: 'type_alias_declaration',
-                has: {
-                  kind: 'type_identifier',
-                  regex: `^${this.escapeRegex(symbol)}$`,
-                },
-              },
-            ],
-          },
-        } as NapiConfig);
-        for (const m of ruleMatches) {
-          const range = m.range();
-          const exists = definitions.some(
-            (d) => d.file === relPath && d.line === range.start.line + 1,
-          );
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (!exists) {
-            definitions.push({
-              file: relPath,
-              line: range.start.line + 1,
-              kind: String(m.kind()),
-              text: m.text().substring(0, 200),
-            });
-          }
-        }
-      } catch {
-        // Rule may not apply
-      }
+      this.searchDefinitionPatterns(parsed, symbol, relPath, definitions);
+      this.searchDeclarationRules(parsed, symbol, relPath, definitions);
     }
 
     return {
@@ -460,6 +523,81 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
   }
 
   // ===== HIERARCHY =====
+  private findSymbolParents(
+    parsed: { root: SgNode },
+    symbol: string,
+    extendsParent: string[],
+    implementsInterfaces: string[],
+  ): void {
+    try {
+      const extendsMatches = parsed.root.findAll(
+        `class ${symbol} extends $PARENT { $$$BODY }`,
+      );
+      for (const m of extendsMatches) {
+        const parent = m.getMatch('PARENT');
+        if (parent) extendsParent.push(parent.text());
+      }
+    } catch {
+      /* skip */
+    }
+
+    try {
+      const implMatches = parsed.root.findAll(
+        `class ${symbol} implements $IFACE { $$$BODY }`,
+      );
+      for (const m of implMatches) {
+        const iface = m.getMatch('IFACE');
+        if (iface) implementsInterfaces.push(iface.text());
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
+  private findSymbolChildren(
+    parsed: { root: SgNode },
+    symbol: string,
+    relPath: string,
+    extendedBy: Array<{ name: string; file: string; line: number }>,
+    implementedBy: Array<{ name: string; file: string; line: number }>,
+  ): void {
+    try {
+      const childMatches = parsed.root.findAll(
+        `class $NAME extends ${symbol} { $$$BODY }`,
+      );
+      for (const m of childMatches) {
+        const name = m.getMatch('NAME');
+        if (name) {
+          extendedBy.push({
+            name: name.text(),
+            file: relPath,
+            line: m.range().start.line + 1,
+          });
+        }
+      }
+    } catch {
+      /* skip */
+    }
+
+    try {
+      const implByMatches = parsed.root.findAll(
+        `class $NAME implements ${symbol} { $$$BODY }`,
+      );
+      for (const m of implByMatches) {
+        const name = m.getMatch('NAME');
+        if (name) {
+          implementedBy.push({
+            name: name.text(),
+            file: relPath,
+            line: m.range().start.line + 1,
+          });
+        }
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
   private async executeHierarchy(
     symbol: string,
     lang: string | Lang,
@@ -481,72 +619,19 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       if (!parsed) continue;
 
       const relPath = makeRelative(file, workspaceRoot);
-
-      // Find what the symbol extends/implements
-      try {
-        const extendsMatches = parsed.root.findAll(
-          `class ${symbol} extends $PARENT { $$$BODY }`,
-        );
-        for (const m of extendsMatches) {
-          const parent = m.getMatch('PARENT');
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (parent) extendsParent.push(parent.text());
-        }
-      } catch {
-        /* skip */
-      }
-
-      try {
-        const implMatches = parsed.root.findAll(
-          `class ${symbol} implements $IFACE { $$$BODY }`,
-        );
-        for (const m of implMatches) {
-          const iface = m.getMatch('IFACE');
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (iface) implementsInterfaces.push(iface.text());
-        }
-      } catch {
-        /* skip */
-      }
-
-      // Find what extends/implements the symbol
-      try {
-        const childMatches = parsed.root.findAll(
-          `class $NAME extends ${symbol} { $$$BODY }`,
-        );
-        for (const m of childMatches) {
-          const name = m.getMatch('NAME');
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (name) {
-            extendedBy.push({
-              name: name.text(),
-              file: relPath,
-              line: m.range().start.line + 1,
-            });
-          }
-        }
-      } catch {
-        /* skip */
-      }
-
-      try {
-        const implByMatches = parsed.root.findAll(
-          `class $NAME implements ${symbol} { $$$BODY }`,
-        );
-        for (const m of implByMatches) {
-          const name = m.getMatch('NAME');
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (name) {
-            implementedBy.push({
-              name: name.text(),
-              file: relPath,
-              line: m.range().start.line + 1,
-            });
-          }
-        }
-      } catch {
-        /* skip */
-      }
+      this.findSymbolParents(
+        parsed,
+        symbol,
+        extendsParent,
+        implementsInterfaces,
+      );
+      this.findSymbolChildren(
+        parsed,
+        symbol,
+        relPath,
+        extendedBy,
+        implementedBy,
+      );
     }
 
     return {
@@ -564,6 +649,192 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
 
   // ===== CALLERS =====
   // @plan PLAN-20260211-ASTGREP.P09
+
+  private findFunctionContainer(node: SgNode): SgNode | null {
+    let container: SgNode | null = node.parent();
+    while (
+      container &&
+      !StructuralAnalysisInvocation.FUNCTION_CONTAINER_KINDS.has(
+        String(container.kind()),
+      )
+    ) {
+      container = container.parent();
+    }
+    return container;
+  }
+
+  private getViaContext(callNode: SgNode): string {
+    let node: SgNode = callNode;
+    let parentNode = node.parent();
+    while (parentNode) {
+      const parentKind = String(parentNode.kind());
+      if (
+        parentKind.includes('statement') ||
+        StructuralAnalysisInvocation.FUNCTION_CONTAINER_KINDS.has(parentKind)
+      ) {
+        break;
+      }
+      node = parentNode;
+      parentNode = node.parent();
+    }
+    return node.text().trim().substring(0, 200);
+  }
+
+  private buildCallerEntry(
+    callNode: SgNode,
+    sym: string,
+    relPath: string,
+    visited: Set<string>,
+    via?: string,
+  ): { method: string; file: string; line: number; via: string } | undefined {
+    const container = this.findFunctionContainer(callNode);
+    if (container === null) {
+      return undefined;
+    }
+
+    const methodName = this.getContainerName(container);
+    if (methodName === null || methodName === '' || methodName === sym) {
+      return undefined;
+    }
+
+    const key = `${methodName}@${relPath}`;
+    if (visited.has(key)) {
+      return undefined;
+    }
+    visited.add(key);
+
+    return {
+      method: methodName,
+      file: relPath,
+      line: container.range().start.line + 1,
+      via: via ?? this.getViaContext(callNode),
+    };
+  }
+
+  private findMemberCallCallers(
+    parsed: { root: SgNode },
+    sym: string,
+    relPath: string,
+    visited: Set<string>,
+    ctx: {
+      nodesVisited: number;
+      maxNodes: number;
+      truncated: boolean;
+      signal: AbortSignal;
+    },
+  ): Array<{ method: string; file: string; line: number; via: string }> {
+    const results: Array<{
+      method: string;
+      file: string;
+      line: number;
+      via: string;
+    }> = [];
+    try {
+      const memberCalls = parsed.root.findAll({
+        rule: {
+          kind: 'member_expression',
+          has: {
+            kind: 'property_identifier',
+            regex: `^${this.escapeRegex(sym)}$`,
+          },
+        },
+      } as NapiConfig);
+
+      for (const callNode of memberCalls) {
+        if (ctx.nodesVisited >= ctx.maxNodes) {
+          ctx.truncated = true;
+          break;
+        }
+
+        const entry = this.buildCallerEntry(callNode, sym, relPath, visited);
+        if (entry !== undefined) {
+          ctx.nodesVisited++;
+          results.push(entry);
+        }
+      }
+    } catch {
+      /* skip */
+    }
+    return results;
+  }
+
+  private findDirectCallCallers(
+    parsed: { root: SgNode },
+    sym: string,
+    relPath: string,
+    visited: Set<string>,
+    ctx: {
+      nodesVisited: number;
+      maxNodes: number;
+      truncated: boolean;
+      signal: AbortSignal;
+    },
+  ): Array<{ method: string; file: string; line: number; via: string }> {
+    const results: Array<{
+      method: string;
+      file: string;
+      line: number;
+      via: string;
+    }> = [];
+    try {
+      const directCallNodes = parsed.root.findAll(`${sym}($$$ARGS)`);
+
+      for (const callNode of directCallNodes) {
+        const entry = this.buildCallerEntry(
+          callNode,
+          sym,
+          relPath,
+          visited,
+          `${sym}(...)`,
+        );
+        if (entry !== undefined) {
+          ctx.nodesVisited++;
+          results.push(entry);
+        }
+      }
+    } catch {
+      /* skip */
+    }
+    return results;
+  }
+
+  private async findCallersOfFile(
+    file: string,
+    lang: string | Lang,
+    sym: string,
+    workspaceRoot: string,
+    visited: Set<string>,
+    ctx: {
+      nodesVisited: number;
+      maxNodes: number;
+      truncated: boolean;
+      signal: AbortSignal;
+    },
+  ): Promise<
+    Array<{ method: string; file: string; line: number; via: string }>
+  > {
+    if (ctx.signal.aborted || ctx.nodesVisited >= ctx.maxNodes) return [];
+    const parsed = await this.parseFile(file, lang);
+    if (!parsed) return [];
+
+    const relPath = makeRelative(file, workspaceRoot);
+    const memberResults = this.findMemberCallCallers(
+      parsed,
+      sym,
+      relPath,
+      visited,
+      ctx,
+    );
+    const directResults = this.findDirectCallCallers(
+      parsed,
+      sym,
+      relPath,
+      visited,
+      ctx,
+    );
+    return [...memberResults, ...directResults];
+  }
+
   private async executeCallers(
     symbol: string,
     lang: string | Lang,
@@ -596,140 +867,41 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       }
 
       const callers: CallerEntry[] = [];
+      const ctx = { nodesVisited, maxNodes, truncated, signal };
+      const syncTraversalState = (): void => {
+        nodesVisited = ctx.nodesVisited;
+        truncated = ctx.truncated;
+      };
 
       // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const file of files) {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- AbortSignal can be triggered asynchronously while traversing files
-        if (signal.aborted || nodesVisited >= maxNodes) break;
-        const parsed = await this.parseFile(file, lang);
-        if (!parsed) continue;
-
-        const relPath = makeRelative(file, workspaceRoot);
-
-        // Find all member-expression calls to the symbol: $OBJ.sym(...)
-        try {
-          const memberCalls = parsed.root.findAll({
-            rule: {
-              kind: 'member_expression',
-              has: {
-                kind: 'property_identifier',
-                regex: `^${this.escapeRegex(sym)}$`,
-              },
-            },
-          } as NapiConfig);
-
-          // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const callNode of memberCalls) {
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (nodesVisited >= maxNodes) {
-              truncated = true;
-              break;
-            }
-
-            // Walk up to the nearest function-like container
-            let container: SgNode | null = callNode.parent();
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            while (
-              container &&
-              !StructuralAnalysisInvocation.FUNCTION_CONTAINER_KINDS.has(
-                String(container.kind()),
-              )
-            ) {
-              container = container.parent();
-            }
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (!container) continue;
-
-            const methodName = this.getContainerName(container);
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (!methodName || methodName === sym) continue;
-
-            const key = `${methodName}@${relPath}`;
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (visited.has(key)) continue;
-            visited.add(key);
-            nodesVisited++;
-
-            // Get via context from surrounding statement
-            let viaText = '';
-            let node: SgNode = callNode;
-            let parentNode = node.parent();
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            while (parentNode) {
-              const parentKind = String(parentNode.kind());
-              if (
-                parentKind.includes('statement') ||
-                StructuralAnalysisInvocation.FUNCTION_CONTAINER_KINDS.has(
-                  parentKind,
-                )
-              ) {
-                break;
-              }
-              node = parentNode;
-              parentNode = node.parent();
-            }
-            viaText = node.text().trim().substring(0, 200);
-
-            const entry: CallerEntry = {
-              method: methodName,
-              file: relPath,
-              line: container.range().start.line + 1,
-              via: viaText,
-            };
-
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (currentDepth > 1 && nodesVisited < maxNodes) {
-              entry.callers = await findCallersOf(methodName, currentDepth - 1);
-            }
-
-            callers.push(entry);
+        const fileResults = await this.findCallersOfFile(
+          file,
+          lang,
+          sym,
+          workspaceRoot,
+          visited,
+          ctx,
+        );
+        for (const r of fileResults) {
+          const entry: CallerEntry = {
+            method: r.method,
+            file: r.file,
+            line: r.line,
+            via: r.via,
+          };
+          if (currentDepth > 1 && ctx.nodesVisited < maxNodes) {
+            syncTraversalState();
+            entry.callers = await findCallersOf(r.method, currentDepth - 1);
+            ctx.nodesVisited = nodesVisited;
+            ctx.truncated = truncated;
           }
-        } catch {
-          /* skip */
-        }
-
-        // Also check for direct (non-member) calls: foo() rather than obj.foo()
-        try {
-          const directCallNodes = parsed.root.findAll(`${sym}($$$ARGS)`);
-
-          // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const callNode of directCallNodes) {
-            // Walk up to the nearest function-like container
-            let ancestor: SgNode | null = callNode.parent();
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            while (
-              ancestor &&
-              !StructuralAnalysisInvocation.FUNCTION_CONTAINER_KINDS.has(
-                String(ancestor.kind()),
-              )
-            ) {
-              ancestor = ancestor.parent();
-            }
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (!ancestor) continue;
-
-            const methodName = this.getContainerName(ancestor);
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (!methodName || methodName === sym) continue;
-
-            const key = `${methodName}@${relPath}`;
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (visited.has(key)) continue;
-            visited.add(key);
-            nodesVisited++;
-
-            callers.push({
-              method: methodName,
-              file: relPath,
-              line: ancestor.range().start.line + 1,
-              via: `${sym}(...)`,
-            });
-          }
-        } catch {
-          /* skip */
+          callers.push(entry);
         }
       }
 
+      nodesVisited = ctx.nodesVisited;
+      truncated = ctx.truncated;
       return callers;
     };
 
@@ -745,6 +917,92 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
 
   // ===== CALLEES =====
   // @plan PLAN-20260211-ASTGREP.P09
+
+  private deduplicateCallRanges(
+    callMatches: SgNode[],
+  ): Array<{ node: SgNode; start: number; end: number }> {
+    const ranges = callMatches.map((c: SgNode) => ({
+      node: c,
+      start: c.range().start.index,
+      end: c.range().end.index,
+    }));
+    ranges.sort(
+      (a: { start: number; end: number }, b: { start: number; end: number }) =>
+        a.start - b.start !== 0 ? a.start - b.start : b.end - a.end,
+    );
+
+    const outermost: typeof ranges = [];
+    for (const r of ranges) {
+      const isContained = outermost.some(
+        (o: { start: number; end: number }) =>
+          r.start >= o.start && r.end <= o.end,
+      );
+      if (!isContained) outermost.push(r);
+    }
+    return outermost;
+  }
+
+  private async findCalleesOfFile(
+    file: string,
+    lang: string | Lang,
+    sym: string,
+    workspaceRoot: string,
+    visited: Set<string>,
+    ctx: { nodesVisited: number; maxNodes: number },
+  ): Promise<
+    Array<{ text: string; file: string; line: number; calleeNode?: SgNode }>
+  > {
+    if (ctx.nodesVisited >= ctx.maxNodes) return [];
+    const parsed = await this.parseFile(file, lang);
+    if (!parsed) return [];
+
+    const relPath = makeRelative(file, workspaceRoot);
+    const results: Array<{
+      text: string;
+      file: string;
+      line: number;
+      calleeNode?: SgNode;
+    }> = [];
+
+    try {
+      const methodMatches = parsed.root.findAll({
+        rule: {
+          kind: 'method_definition',
+          has: {
+            kind: 'property_identifier',
+            regex: `^${this.escapeRegex(sym)}$`,
+          },
+        },
+      } as NapiConfig);
+
+      for (const methodNode of methodMatches) {
+        const callMatches = methodNode.findAll({
+          rule: { kind: 'call_expression' },
+        } as NapiConfig);
+        const outermost = this.deduplicateCallRanges(callMatches);
+
+        for (const { node } of outermost) {
+          const callText = node.text().substring(0, 200);
+          const key = `${callText}@${relPath}`;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Dedup check inside nested iteration over AST matches
+          if (visited.has(key)) continue;
+          visited.add(key);
+          ctx.nodesVisited++;
+
+          results.push({
+            text: callText,
+            file: relPath,
+            line: node.range().start.line + 1,
+            calleeNode: node,
+          });
+        }
+      }
+    } catch {
+      /* skip */
+    }
+    return results;
+  }
+
   private async executeCallees(
     symbol: string,
     lang: string | Lang,
@@ -776,91 +1034,34 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       }
 
       const callees: CalleeEntry[] = [];
+      const ctx = { nodesVisited, maxNodes };
 
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const file of files) {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- AbortSignal can be triggered asynchronously while traversing files
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Signal may be aborted asynchronously between recursive calls while scanning files.
         if (signal.aborted) break;
-        const parsed = await this.parseFile(file, lang);
-        if (!parsed) continue;
+        const calleeResults = await this.findCalleesOfFile(
+          file,
+          lang,
+          sym,
+          workspaceRoot,
+          visited,
+          ctx,
+        );
 
-        const relPath = makeRelative(file, workspaceRoot);
-
-        try {
-          // Find the method definition
-          const methodMatches = parsed.root.findAll({
-            rule: {
-              kind: 'method_definition',
-              has: {
-                kind: 'property_identifier',
-                regex: `^${this.escapeRegex(sym)}$`,
-              },
-            },
-          } as NapiConfig);
-
-          for (const methodNode of methodMatches) {
-            // Find all call expressions inside
-            const callMatches = methodNode.findAll({
-              rule: { kind: 'call_expression' },
-            } as NapiConfig);
-
-            // Byte-range deduplication: keep only outermost calls
-            const ranges = callMatches.map((c: SgNode) => ({
-              node: c,
-              start: c.range().start.index,
-              end: c.range().end.index,
-            }));
-            ranges.sort(
-              (
-                a: { start: number; end: number },
-                b: { start: number; end: number },
-              ) =>
-                a.start - b.start !== 0 ? a.start - b.start : b.end - a.end,
-            );
-
-            const outermost: typeof ranges = [];
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            for (const r of ranges) {
-              const isContained = outermost.some(
-                (o: { start: number; end: number }) =>
-                  r.start >= o.start && r.end <= o.end,
-              );
-              if (!isContained) outermost.push(r);
-            }
-
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            for (const { node } of outermost) {
-              const callText = node.text().substring(0, 200);
-              const key = `${callText}@${relPath}`;
-              if (visited.has(key)) continue;
-              visited.add(key);
-              nodesVisited++;
-
-              const entry: CalleeEntry = {
-                text: callText,
-                file: relPath,
-                line: node.range().start.line + 1,
-              };
-
-              // Recurse for depth > 1: extract callee name and follow it
-              if (currentDepth > 1 && nodesVisited < maxNodes) {
-                const calleeName = this.extractCalleeName(node);
-                if (calleeName && calleeName !== sym) {
-                  entry.callees = await findCalleesOf(
-                    calleeName,
-                    currentDepth - 1,
-                  );
-                }
-              }
-
-              callees.push(entry);
-            }
+        for (const r of calleeResults) {
+          const entry: CalleeEntry = { text: r.text, file: r.file, line: r.line };
+          const calleeName = r.calleeNode ? this.extractCalleeName(r.calleeNode) : null;
+          if (currentDepth > 1 && ctx.nodesVisited < maxNodes && calleeName && calleeName !== sym) {
+            nodesVisited = ctx.nodesVisited;
+            entry.callees = await findCalleesOf(calleeName, currentDepth - 1);
+            ctx.nodesVisited = nodesVisited;
           }
-        } catch {
-          /* skip */
+
+          callees.push(entry);
         }
       }
 
+      nodesVisited = ctx.nodesVisited;
       return callees;
     };
 
@@ -876,6 +1077,181 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
 
   // ===== REFERENCES =====
   // @plan PLAN-20260211-ASTGREP.P10
+
+  private searchDirectCallReferences(
+    parsed: { root: SgNode },
+    symbol: string,
+    relPath: string,
+    addResult: (
+      category: string,
+      file: string,
+      line: number,
+      text: string,
+    ) => void,
+  ): void {
+    try {
+      const memberCalls = parsed.root.findAll(`$OBJ.${symbol}($$$ARGS)`);
+      for (const m of memberCalls) {
+        addResult('Direct calls', relPath, m.range().start.line + 1, m.text());
+      }
+    } catch {
+      /* skip */
+    }
+
+    try {
+      const standaloneCalls = parsed.root.findAll(`${symbol}($$$ARGS)`);
+      for (const m of standaloneCalls) {
+        addResult('Direct calls', relPath, m.range().start.line + 1, m.text());
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
+  private searchInstantiationReferences(
+    parsed: { root: SgNode },
+    symbol: string,
+    relPath: string,
+    addResult: (
+      category: string,
+      file: string,
+      line: number,
+      text: string,
+    ) => void,
+  ): void {
+    try {
+      const news = parsed.root.findAll(`new ${symbol}($$$ARGS)`);
+      for (const m of news) {
+        addResult(
+          'Instantiations',
+          relPath,
+          m.range().start.line + 1,
+          m.text(),
+        );
+      }
+    } catch {
+      /* skip */
+    }
+
+    try {
+      const lowerSymbol = symbol.charAt(0).toLowerCase() + symbol.slice(1);
+      const instanceCalls = parsed.root.findAll({
+        rule: {
+          kind: 'call_expression',
+          has: {
+            kind: 'member_expression',
+            has: {
+              kind: 'identifier',
+              regex: `(?i)${this.escapeRegex(lowerSymbol)}|${this.escapeRegex(symbol)}`,
+            },
+          },
+        },
+      } as NapiConfig);
+      for (const m of instanceCalls) {
+        addResult(
+          'Instance method calls (heuristic)',
+          relPath,
+          m.range().start.line + 1,
+          m.text(),
+        );
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
+  private searchTypeAndHeritageReferences(
+    parsed: { root: SgNode },
+    symbol: string,
+    relPath: string,
+    addResult: (
+      category: string,
+      file: string,
+      line: number,
+      text: string,
+    ) => void,
+  ): void {
+    try {
+      const typeRefs = parsed.root.findAll({
+        rule: {
+          kind: 'type_annotation',
+          has: {
+            kind: 'type_identifier',
+            regex: `^${this.escapeRegex(symbol)}$`,
+          },
+        },
+      } as NapiConfig);
+      for (const m of typeRefs) {
+        addResult(
+          'Type annotations',
+          relPath,
+          m.range().start.line + 1,
+          m.text(),
+        );
+      }
+    } catch {
+      /* skip */
+    }
+
+    try {
+      const heritage = parsed.root.findAll(
+        `class $NAME extends ${symbol} { $$$BODY }`,
+      );
+      for (const m of heritage) {
+        addResult(
+          'Extends/Implements',
+          relPath,
+          m.range().start.line + 1,
+          `class ${m.getMatch('NAME')?.text()} extends ${symbol}`,
+        );
+      }
+    } catch {
+      /* skip */
+    }
+
+    try {
+      const implHeritage = parsed.root.findAll(
+        `class $NAME implements ${symbol} { $$$BODY }`,
+      );
+      for (const m of implHeritage) {
+        addResult(
+          'Extends/Implements',
+          relPath,
+          m.range().start.line + 1,
+          `class ${m.getMatch('NAME')?.text()} implements ${symbol}`,
+        );
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
+  private searchImportReferences(
+    parsed: { root: SgNode },
+    symbol: string,
+    relPath: string,
+    addResult: (
+      category: string,
+      file: string,
+      line: number,
+      text: string,
+    ) => void,
+  ): void {
+    try {
+      const imports = parsed.root.findAll({
+        rule: {
+          kind: 'import_specifier',
+          has: { kind: 'identifier', regex: `^${this.escapeRegex(symbol)}$` },
+        },
+      } as NapiConfig);
+      for (const m of imports) {
+        addResult('Imports', relPath, m.range().start.line + 1, m.text());
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
   private async executeReferences(
     symbol: string,
     lang: string | Lang,
@@ -916,152 +1292,12 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       if (!parsed) continue;
 
       const relPath = makeRelative(file, workspaceRoot);
-
-      // Member calls: obj.symbol()
-      try {
-        const memberCalls = parsed.root.findAll(`$OBJ.${symbol}($$$ARGS)`);
-        for (const m of memberCalls) {
-          addResult(
-            'Direct calls',
-            relPath,
-            m.range().start.line + 1,
-            m.text(),
-          );
-        }
-      } catch {
-        /* skip */
-      }
-
-      // Standalone calls: symbol()
-      try {
-        const standaloneCalls = parsed.root.findAll(`${symbol}($$$ARGS)`);
-        for (const m of standaloneCalls) {
-          addResult(
-            'Direct calls',
-            relPath,
-            m.range().start.line + 1,
-            m.text(),
-          );
-        }
-      } catch {
-        /* skip */
-      }
-
-      // Instantiations: new Symbol(...)
-      try {
-        const news = parsed.root.findAll(`new ${symbol}($$$ARGS)`);
-        for (const m of news) {
-          addResult(
-            'Instantiations',
-            relPath,
-            m.range().start.line + 1,
-            m.text(),
-          );
-        }
-      } catch {
-        /* skip */
-      }
-
-      // Instance method calls (heuristic): calls on variables named like the symbol
-      try {
-        const lowerSymbol = symbol.charAt(0).toLowerCase() + symbol.slice(1);
-        const instanceCalls = parsed.root.findAll({
-          rule: {
-            kind: 'call_expression',
-            has: {
-              kind: 'member_expression',
-              has: {
-                kind: 'identifier',
-                regex: `(?i)${this.escapeRegex(lowerSymbol)}|${this.escapeRegex(symbol)}`,
-              },
-            },
-          },
-        } as NapiConfig);
-        for (const m of instanceCalls) {
-          addResult(
-            'Instance method calls (heuristic)',
-            relPath,
-            m.range().start.line + 1,
-            m.text(),
-          );
-        }
-      } catch {
-        /* skip */
-      }
-
-      // Type annotations
-      try {
-        const typeRefs = parsed.root.findAll({
-          rule: {
-            kind: 'type_annotation',
-            has: {
-              kind: 'type_identifier',
-              regex: `^${this.escapeRegex(symbol)}$`,
-            },
-          },
-        } as NapiConfig);
-        for (const m of typeRefs) {
-          addResult(
-            'Type annotations',
-            relPath,
-            m.range().start.line + 1,
-            m.text(),
-          );
-        }
-      } catch {
-        /* skip */
-      }
-
-      // Extends/Implements
-      try {
-        const heritage = parsed.root.findAll(
-          `class $NAME extends ${symbol} { $$$BODY }`,
-        );
-        for (const m of heritage) {
-          addResult(
-            'Extends/Implements',
-            relPath,
-            m.range().start.line + 1,
-            `class ${m.getMatch('NAME')?.text()} extends ${symbol}`,
-          );
-        }
-      } catch {
-        /* skip */
-      }
-
-      try {
-        const implHeritage = parsed.root.findAll(
-          `class $NAME implements ${symbol} { $$$BODY }`,
-        );
-        for (const m of implHeritage) {
-          addResult(
-            'Extends/Implements',
-            relPath,
-            m.range().start.line + 1,
-            `class ${m.getMatch('NAME')?.text()} implements ${symbol}`,
-          );
-        }
-      } catch {
-        /* skip */
-      }
-
-      // Imports
-      try {
-        const imports = parsed.root.findAll({
-          rule: {
-            kind: 'import_specifier',
-            has: { kind: 'identifier', regex: `^${this.escapeRegex(symbol)}$` },
-          },
-        } as NapiConfig);
-        for (const m of imports) {
-          addResult('Imports', relPath, m.range().start.line + 1, m.text());
-        }
-      } catch {
-        /* skip */
-      }
+      this.searchDirectCallReferences(parsed, symbol, relPath, addResult);
+      this.searchInstantiationReferences(parsed, symbol, relPath, addResult);
+      this.searchTypeAndHeritageReferences(parsed, symbol, relPath, addResult);
+      this.searchImportReferences(parsed, symbol, relPath, addResult);
     }
 
-    // Build counts
     const counts: Record<string, number> = {};
     for (const [cat, items] of Object.entries(categories)) {
       counts[cat] = items.length;
@@ -1077,6 +1313,185 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
 
   // ===== DEPENDENCIES =====
   // @plan PLAN-20260211-ASTGREP.P10
+
+  private collectNamedAndDefaultImports(
+    parsed: { root: SgNode },
+    relPath: string,
+    imports: Array<{
+      file: string;
+      line: number;
+      source: string;
+      kind: string;
+    }>,
+  ): void {
+    try {
+      const named = parsed.root.findAll(`import { $$$NAMES } from $SOURCE`);
+      for (const m of named) {
+        const src = m.getMatch('SOURCE');
+        if (src) {
+          imports.push({
+            file: relPath,
+            line: m.range().start.line + 1,
+            source: src.text().replace(/['"]/g, ''),
+            kind: 'named',
+          });
+        }
+      }
+    } catch {
+      /* skip */
+    }
+
+    try {
+      const defaults = parsed.root.findAll(`import $DEFAULT from $SOURCE`);
+      for (const m of defaults) {
+        const src = m.getMatch('SOURCE');
+        if (src) {
+          imports.push({
+            file: relPath,
+            line: m.range().start.line + 1,
+            source: src.text().replace(/['"]/g, ''),
+            kind: 'default',
+          });
+        }
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
+  private collectDynamicAndReexports(
+    parsed: { root: SgNode },
+    relPath: string,
+    imports: Array<{
+      file: string;
+      line: number;
+      source: string;
+      kind: string;
+    }>,
+  ): void {
+    try {
+      const dynamic = parsed.root.findAll({
+        rule: {
+          kind: 'call_expression',
+          has: { kind: 'import' },
+        },
+      } as NapiConfig);
+      for (const m of dynamic) {
+        imports.push({
+          file: relPath,
+          line: m.range().start.line + 1,
+          source: m.text(),
+          kind: 'dynamic',
+        });
+      }
+    } catch {
+      /* skip */
+    }
+
+    try {
+      const reexports = parsed.root.findAll({
+        rule: {
+          kind: 'export_statement',
+          has: { kind: 'string', regex: '.' },
+        },
+      } as NapiConfig);
+      for (const m of reexports) {
+        if (m.text().includes('from')) {
+          imports.push({
+            file: relPath,
+            line: m.range().start.line + 1,
+            source: m.text().substring(0, 200),
+            kind: 'reexport',
+          });
+        }
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
+  private collectFileImports(
+    parsed: { root: SgNode },
+    relPath: string,
+    imports: Array<{
+      file: string;
+      line: number;
+      source: string;
+      kind: string;
+    }>,
+  ): void {
+    this.collectNamedAndDefaultImports(parsed, relPath, imports);
+    this.collectDynamicAndReexports(parsed, relPath, imports);
+  }
+
+  private async findReverseImports(
+    searchPath: string,
+    workspaceRoot: string,
+    lang: string | Lang,
+    signal: AbortSignal,
+  ): Promise<
+    Array<{ file: string; line: number; source: string; kind: string }>
+  > {
+    const reverseImports: Array<{
+      file: string;
+      line: number;
+      source: string;
+      kind: string;
+    }> = [];
+    const allFiles = await this.getFiles(workspaceRoot, lang);
+    const targetRel = makeRelative(searchPath, workspaceRoot);
+    const targetBasename = path.basename(searchPath).replace(/\.\w+$/, '');
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for (const file of allFiles) {
+      if (signal.aborted) break;
+      const parsed = await this.parseFile(file, lang);
+      if (!parsed) continue;
+      const relPath = makeRelative(file, workspaceRoot);
+      if (relPath === targetRel) continue;
+
+      const content = parsed.content || '';
+      if (content.includes(targetBasename)) {
+        reverseImports.push(
+          ...this.collectImportMatches(parsed, relPath, targetBasename),
+        );
+      }
+    }
+    return reverseImports;
+  }
+
+  private collectImportMatches(
+    parsed: { root: SgNode },
+    relPath: string,
+    targetBasename: string,
+  ): Array<{ file: string; line: number; source: string; kind: string }> {
+    const imports: Array<{
+      file: string;
+      line: number;
+      source: string;
+      kind: string;
+    }> = [];
+    try {
+      const allImports = parsed.root.findAll({
+        rule: { kind: 'import_statement' },
+      } as NapiConfig);
+      for (const m of allImports) {
+        const text = m.text();
+        if (text.includes(targetBasename)) {
+          imports.push({
+            file: relPath,
+            line: m.range().start.line + 1,
+            source: text.substring(0, 200),
+            kind: 'import',
+          });
+        }
+      }
+    } catch {
+      /* skip */
+    }
+    return imports;
+  }
+
   private async executeDependencies(
     searchPath: string,
     lang: string | Lang,
@@ -1099,128 +1514,12 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       if (!parsed) continue;
 
       const relPath = makeRelative(file, workspaceRoot);
-
-      // Named imports: import { X } from 'Y'
-      try {
-        const named = parsed.root.findAll(`import { $$$NAMES } from $SOURCE`);
-        for (const m of named) {
-          const src = m.getMatch('SOURCE');
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (src) {
-            imports.push({
-              file: relPath,
-              line: m.range().start.line + 1,
-              source: src.text().replace(/['"]/g, ''),
-              kind: 'named',
-            });
-          }
-        }
-      } catch {
-        /* skip */
-      }
-
-      // Default imports: import X from 'Y'
-      try {
-        const defaults = parsed.root.findAll(`import $DEFAULT from $SOURCE`);
-        for (const m of defaults) {
-          const src = m.getMatch('SOURCE');
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (src) {
-            imports.push({
-              file: relPath,
-              line: m.range().start.line + 1,
-              source: src.text().replace(/['"]/g, ''),
-              kind: 'default',
-            });
-          }
-        }
-      } catch {
-        /* skip */
-      }
-
-      // Dynamic imports: import('X')
-      try {
-        const dynamic = parsed.root.findAll({
-          rule: {
-            kind: 'call_expression',
-            has: { kind: 'import' },
-          },
-        } as NapiConfig);
-        for (const m of dynamic) {
-          imports.push({
-            file: relPath,
-            line: m.range().start.line + 1,
-            source: m.text(),
-            kind: 'dynamic',
-          });
-        }
-      } catch {
-        /* skip */
-      }
-
-      // Re-exports: export { X } from 'Y'
-      try {
-        const reexports = parsed.root.findAll({
-          rule: {
-            kind: 'export_statement',
-            has: { kind: 'string', regex: '.' },
-          },
-        } as NapiConfig);
-        for (const m of reexports) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (m.text().includes('from')) {
-            imports.push({
-              file: relPath,
-              line: m.range().start.line + 1,
-              source: m.text().substring(0, 200),
-              kind: 'reexport',
-            });
-          }
-        }
-      } catch {
-        /* skip */
-      }
+      this.collectFileImports(parsed, relPath, imports);
     }
 
-    const reverseImports: typeof imports = [];
-    if (reverse) {
-      // Find files that import the target
-      const allFiles = await this.getFiles(workspaceRoot, lang);
-      const targetRel = makeRelative(searchPath, workspaceRoot);
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for (const file of allFiles) {
-        if (signal.aborted) break;
-        const parsed = await this.parseFile(file, lang);
-        if (!parsed) continue;
-        const relPath = makeRelative(file, workspaceRoot);
-        if (relPath === targetRel) continue;
-
-        const content = parsed.content || '';
-        if (content.includes(path.basename(searchPath).replace(/\.\w+$/, ''))) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            const allImports = parsed.root.findAll({
-              rule: { kind: 'import_statement' },
-            } as NapiConfig);
-            for (const m of allImports) {
-              const text = m.text();
-              if (
-                text.includes(path.basename(searchPath).replace(/\.\w+$/, ''))
-              ) {
-                reverseImports.push({
-                  file: relPath,
-                  line: m.range().start.line + 1,
-                  source: text.substring(0, 200),
-                  kind: 'import',
-                });
-              }
-            }
-          } catch {
-            /* skip */
-          }
-        }
-      }
-    }
+    const reverseImports = reverse
+      ? await this.findReverseImports(searchPath, workspaceRoot, lang, signal)
+      : [];
 
     return {
       mode: 'dependencies',

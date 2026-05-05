@@ -138,6 +138,169 @@ export type DefaultsMap = z.infer<typeof DefaultsMapSchema>;
 export class PromptInstaller {
   private defaultSourceDirs: string[] | null = null;
 
+  private async createSingleDir(
+    fullPath: string,
+    dryRun: boolean | undefined,
+    verbose: boolean | undefined,
+  ): Promise<string | null> {
+    if (dryRun === true) {
+      if (verbose === true) {
+        logger.debug('Would create:', fullPath);
+      }
+      return null;
+    }
+
+    try {
+      await fs.mkdir(fullPath, { recursive: true, mode: 0o755 });
+      if (verbose === true) {
+        logger.debug('Created directory:', fullPath);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (
+        errorMsg.includes('EACCES') ||
+        errorMsg.includes('permission denied')
+      ) {
+        return `Permission denied: ${fullPath}`;
+      }
+      return `Failed to create directory ${fullPath}: ${errorMsg}`;
+    }
+    return null;
+  }
+
+  private async createDirectoryStructure(
+    expandedBaseDir: string,
+    options?: InstallOptions,
+  ): Promise<string[]> {
+    const errors: string[] = [];
+
+    for (const dir of REQUIRED_DIRECTORIES) {
+      const fullPath = path.join(expandedBaseDir, dir);
+      const error = await this.createSingleDir(
+        fullPath,
+        options?.dryRun,
+        options?.verbose,
+      );
+      if (error) errors.push(error);
+    }
+
+    return errors;
+  }
+
+  private async loadOrCreateManifest(
+    expandedBaseDir: string,
+    dryRun: boolean,
+  ): Promise<InstalledManifest | null> {
+    let manifest: InstalledManifest | null = null;
+    if (!dryRun && existsSync(expandedBaseDir)) {
+      manifest = await this.loadManifest(expandedBaseDir);
+    }
+    if (!manifest && !dryRun) {
+      manifest = { version: MANIFEST_VERSION, files: {} };
+    }
+    return manifest;
+  }
+
+  private async writeInstallFile(
+    expandedBaseDir: string,
+    relativePath: string,
+    content: string,
+    manifest: InstalledManifest | null,
+    options?: InstallOptions,
+  ): Promise<{ installed: boolean; skipped: boolean; error?: string }> {
+    const fullPath = path.join(expandedBaseDir, relativePath);
+
+    if (options?.dryRun === true) {
+      if (options.verbose === true) {
+        logger.debug('Would write:', fullPath);
+      }
+      return { installed: true, skipped: false };
+    }
+
+    const tempPath = `${fullPath}.tmp.${Date.now()}.${Math.random().toString(36).substring(7)}`;
+    try {
+      await fs.writeFile(tempPath, content, { mode: 0o644 });
+      try {
+        await fs.rename(tempPath, fullPath);
+        if (manifest !== null) {
+          this.updateManifestEntry(
+            manifest,
+            relativePath,
+            this.hashContent(content),
+          );
+        }
+        if (options?.verbose === true) {
+          logger.debug('Installed:', relativePath);
+        }
+        return { installed: true, skipped: false };
+      } catch (renameError) {
+        const renameMsg =
+          renameError instanceof Error
+            ? renameError.message
+            : String(renameError);
+        if (renameMsg.includes('EEXIST') || existsSync(fullPath)) {
+          await fs.unlink(tempPath);
+          return { installed: false, skipped: true };
+        }
+        throw renameError;
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      try {
+        await fs.unlink(tempPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      return {
+        installed: false,
+        skipped: false,
+        error: this.classifyWriteError(fullPath, errorMsg),
+      };
+    }
+  }
+
+  private classifyWriteError(fullPath: string, errorMsg: string): string {
+    if (errorMsg.includes('EACCES') || errorMsg.includes('Permission denied')) {
+      return `Permission denied: ${fullPath}. Try running with elevated permissions or changing the directory ownership.`;
+    }
+    if (errorMsg.includes('ENOSPC')) {
+      return `Disk full: Cannot write ${fullPath}. Free up some disk space and try again.`;
+    }
+    return `Failed to write ${fullPath}: ${errorMsg}`;
+  }
+
+  private async setInstalledPermissions(
+    expandedBaseDir: string,
+    installed: string[],
+    verbose?: boolean,
+  ): Promise<void> {
+    try {
+      await fs.chmod(expandedBaseDir, 0o755);
+
+      for (const dir of REQUIRED_DIRECTORIES) {
+        if (dir === '') {
+          continue;
+        }
+        const dirPath = path.join(expandedBaseDir, dir);
+        if (existsSync(dirPath)) {
+          await fs.chmod(dirPath, 0o755);
+        }
+      }
+
+      for (const file of installed) {
+        const filePath = path.join(expandedBaseDir, file);
+        if (existsSync(filePath)) {
+          await fs.chmod(filePath, 0o644);
+        }
+      }
+    } catch (error) {
+      if (verbose === true) {
+        logger.debug('Could not set permissions:', error);
+      }
+    }
+  }
+
   /**
    * Install default prompt files
    * @param baseDir - Base directory for prompts (defaults to DEFAULT_BASE_DIR)
@@ -145,21 +308,137 @@ export class PromptInstaller {
    * @param options - Installation options
    * @returns Installation result with success status and details
    */
-  async install(
-    baseDir: string | null,
+  private async handleExistingFileDecision(
+    expandedBaseDir: string,
+    relativePath: string,
+    fullPath: string,
+    content: string,
+    options: InstallOptions | undefined,
+    manifest: InstalledManifest | null,
+  ): Promise<{
+    skip: boolean;
+    conflict?: PromptConflictSummary;
+    notice?: string;
+    error?: string;
+  } | null> {
+    if (!existsSync(fullPath) || options?.force === true) {
+      return null;
+    }
+
+    const decision = await this.handleExistingFile(
+      expandedBaseDir,
+      relativePath,
+      fullPath,
+      content,
+      options?.dryRun !== true,
+      manifest,
+    ).catch((error) => ({
+      action: 'same' as const,
+      errorMsg: error instanceof Error ? error.message : String(error),
+    }));
+
+    if ('errorMsg' in decision) {
+      return {
+        skip: true,
+        error: `Failed to evaluate ${relativePath}: ${decision.errorMsg}`,
+      };
+    }
+
+    if (decision.action === 'same') {
+      return { skip: true };
+    }
+
+    if (decision.action === 'resolved') {
+      return { skip: true };
+    }
+
+    if (decision.action === 'keep') {
+      return {
+        skip: true,
+        conflict: decision.conflict,
+        notice: decision.notice ?? undefined,
+      };
+    }
+
+    // overwrite — not a skip
+    if (options?.verbose === true) {
+      logger.debug('Updating unmodified file:', relativePath);
+    }
+    return null;
+  }
+
+  private async installFiles(
+    expandedBaseDir: string,
     defaults: DefaultsMap,
+    manifest: InstalledManifest | null,
     options?: InstallOptions,
-  ): Promise<InstallResult> {
+  ): Promise<{
+    installed: string[];
+    skipped: string[];
+    errors: string[];
+    conflicts: PromptConflictSummary[];
+    notices: string[];
+  }> {
     const installed: string[] = [];
     const skipped: string[] = [];
     const errors: string[] = [];
     const conflicts: PromptConflictSummary[] = [];
     const notices: string[] = [];
 
-    // Prepare installation
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for (const [relativePath, content] of Object.entries(defaults)) {
+      const fullPath = path.join(expandedBaseDir, relativePath);
+      const fileDir = path.dirname(fullPath);
+
+      if (!existsSync(fileDir) && options?.dryRun !== true) {
+        try {
+          await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
+        } catch (error) {
+          errors.push(
+            `Failed to create directory ${fileDir}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          continue;
+        }
+      }
+
+      const existing = await this.handleExistingFileDecision(
+        expandedBaseDir,
+        relativePath,
+        fullPath,
+        content,
+        options,
+        manifest,
+      );
+      if (existing?.skip === true) {
+        skipped.push(relativePath);
+        if (existing.conflict) conflicts.push(existing.conflict);
+        if (existing.notice) notices.push(existing.notice);
+        if (existing.error) errors.push(existing.error);
+        continue;
+      }
+
+      const result = await this.writeInstallFile(
+        expandedBaseDir,
+        relativePath,
+        content,
+        manifest,
+        options,
+      );
+      if (result.installed) installed.push(relativePath);
+      else if (result.skipped) skipped.push(relativePath);
+      else if (result.error) errors.push(result.error);
+    }
+
+    return { installed, skipped, errors, conflicts, notices };
+  }
+
+  async install(
+    baseDir: string | null,
+    defaults: DefaultsMap,
+    options?: InstallOptions,
+  ): Promise<InstallResult> {
     const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
 
-    // Validate baseDir
     if (expandedBaseDir.includes('..') || !path.isAbsolute(expandedBaseDir)) {
       return {
         success: false,
@@ -172,227 +451,38 @@ export class PromptInstaller {
       };
     }
 
-    // Create directory structure
-    for (const dir of REQUIRED_DIRECTORIES) {
-      const fullPath = path.join(expandedBaseDir, dir);
+    const dirErrors = await this.createDirectoryStructure(
+      expandedBaseDir,
+      options,
+    );
+    const manifest = await this.loadOrCreateManifest(
+      expandedBaseDir,
+      options?.dryRun === true,
+    );
+    const fileResults = await this.installFiles(
+      expandedBaseDir,
+      defaults,
+      manifest,
+      options,
+    );
+    const errors = [...dirErrors, ...fileResults.errors];
 
-      if (options?.dryRun === true) {
-        if (options.verbose === true) {
-          logger.debug('Would create:', fullPath);
-        }
-      } else {
-        try {
-          await fs.mkdir(fullPath, { recursive: true, mode: 0o755 });
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (options?.verbose === true) {
-            logger.debug('Created directory:', fullPath);
-          }
-        } catch (error) {
-          const errorMsg =
-            error instanceof Error ? error.message : String(error);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (
-            errorMsg.includes('EACCES') ||
-            errorMsg.includes('permission denied')
-          ) {
-            errors.push(`Permission denied: ${fullPath}`);
-          } else {
-            errors.push(`Failed to create directory ${fullPath}: ${errorMsg}`);
-          }
-        }
-      }
-    }
-
-    // Load manifest for hash-based modification tracking
-    let manifest: InstalledManifest | null = null;
-    if (options?.dryRun !== true && existsSync(expandedBaseDir)) {
-      manifest = await this.loadManifest(expandedBaseDir);
-    }
-    // Initialize manifest if it doesn't exist
-    if (!manifest && options?.dryRun !== true) {
-      manifest = { version: MANIFEST_VERSION, files: {} };
-    }
-
-    // Install default files
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const [relativePath, content] of Object.entries(defaults)) {
-      const fullPath = path.join(expandedBaseDir, relativePath);
-      const fileDir = path.dirname(fullPath);
-
-      // Create parent directory if needed
-      if (!existsSync(fileDir) && options?.dryRun !== true) {
-        try {
-          await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
-        } catch (error) {
-          errors.push(
-            `Failed to create directory ${fileDir}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          continue;
-        }
-      }
-
-      // Check existing file
-      if (existsSync(fullPath) && options?.force !== true) {
-        const decision = await this.handleExistingFile(
-          expandedBaseDir,
-          relativePath,
-          fullPath,
-          content,
-          options?.dryRun !== true,
-          manifest,
-        ).catch((error) => {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          errors.push(`Failed to evaluate ${relativePath}: ${message}`);
-          return { action: 'same' } as ExistingFileDecision;
-        });
-
-        if (decision.action === 'same') {
-          skipped.push(relativePath);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (options?.verbose === true) {
-            logger.debug('Preserving existing:', relativePath);
-          }
-          continue;
-        }
-
-        if (decision.action === 'resolved') {
-          skipped.push(relativePath);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (options?.verbose === true) {
-            logger.debug(
-              'Default update already provided for review:',
-              relativePath,
-            );
-          }
-          continue;
-        }
-
-        if (decision.action === 'keep') {
-          conflicts.push(decision.conflict);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (decision.notice != null && decision.notice !== '') {
-            notices.push(decision.notice);
-          }
-          skipped.push(relativePath);
-          continue;
-        }
-
-        if (options?.verbose === true) {
-          logger.debug('Updating unmodified file:', relativePath);
-        }
-      } else {
-        // File doesn't exist or force mode - write it
-      }
-
-      if (options?.dryRun === true) {
-        if (options.verbose === true) {
-          logger.debug('Would write:', fullPath);
-        }
-        installed.push(relativePath);
-      } else {
-        const tempPath = `${fullPath}.tmp.${Date.now()}.${Math.random().toString(36).substring(7)}`;
-        try {
-          // Write to temp file first (atomic write)
-          await fs.writeFile(tempPath, content, { mode: 0o644 });
-          // Rename temp to final - this is atomic and will fail if file exists
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            await fs.rename(tempPath, fullPath);
-            installed.push(relativePath);
-            // Update manifest with new hash
-            if (manifest !== null) {
-              this.updateManifestEntry(
-                manifest,
-                relativePath,
-                this.hashContent(content),
-              );
-            }
-            if (options?.verbose === true) {
-              logger.debug('Installed:', relativePath);
-            }
-          } catch (renameError) {
-            // If rename failed because file already exists, it's OK (race condition)
-            const renameMsg =
-              renameError instanceof Error
-                ? renameError.message
-                : String(renameError);
-            if (renameMsg.includes('EEXIST') || existsSync(fullPath)) {
-              skipped.push(relativePath);
-              // Clean up temp file
-              await fs.unlink(tempPath);
-            } else {
-              throw renameError;
-            }
-          }
-        } catch (error) {
-          const errorMsg =
-            error instanceof Error ? error.message : String(error);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (
-            errorMsg.includes('EACCES') ||
-            errorMsg.includes('Permission denied')
-          ) {
-            errors.push(
-              `Permission denied: ${fullPath}. Try running with elevated permissions or changing the directory ownership.`,
-            );
-          } else if (errorMsg.includes('ENOSPC')) {
-            errors.push(
-              `Disk full: Cannot write ${fullPath}. Free up some disk space and try again.`,
-            );
-          } else {
-            errors.push(`Failed to write ${fullPath}: ${errorMsg}`);
-          }
-          // Clean up temp file if it exists
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            await fs.unlink(tempPath);
-          } catch {
-            // Ignore cleanup errors
-          }
-        }
-      }
-    }
-
-    // Set permissions on all files (if not dry run)
     if (options?.dryRun !== true && errors.length === 0) {
-      try {
-        // Set base directory permissions
-        await fs.chmod(expandedBaseDir, 0o755);
-
-        // Set permissions on all subdirectories
-        for (const dir of REQUIRED_DIRECTORIES) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (dir !== '') {
-            const dirPath = path.join(expandedBaseDir, dir);
-            if (existsSync(dirPath)) {
-              await fs.chmod(dirPath, 0o755);
-            }
-          }
-        }
-
-        // Set permissions on all installed files
-        for (const file of installed) {
-          const filePath = path.join(expandedBaseDir, file);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (existsSync(filePath)) {
-            await fs.chmod(filePath, 0o644);
-          }
-        }
-      } catch (error) {
-        // Non-critical error, don't fail the installation
-        if (options?.verbose === true) {
-          logger.debug('Could not set permissions:', error);
-        }
-      }
+      await this.setInstalledPermissions(
+        expandedBaseDir,
+        fileResults.installed,
+        options?.verbose,
+      );
     }
 
-    // Save manifest (if not dry run and we have a manifest)
-    if (options?.dryRun !== true && manifest !== null && installed.length > 0) {
+    if (
+      options?.dryRun !== true &&
+      manifest !== null &&
+      fileResults.installed.length > 0
+    ) {
       try {
         await this.saveManifest(expandedBaseDir, manifest);
       } catch (error) {
-        // Non-critical error, don't fail the installation
         if (options?.verbose === true) {
           logger.debug('Could not save manifest:', error);
         }
@@ -401,12 +491,12 @@ export class PromptInstaller {
 
     return {
       success: errors.length === 0,
-      installed,
-      skipped,
+      installed: fileResults.installed,
+      skipped: fileResults.skipped,
       errors,
       baseDir: expandedBaseDir,
-      conflicts,
-      notices,
+      conflicts: fileResults.conflicts,
+      notices: fileResults.notices,
     };
   }
 
@@ -583,6 +673,50 @@ export class PromptInstaller {
     return `Warning: this version includes a newer version of ${userPath} which you customized. We put ${reviewPath} next to it for your review.`;
   }
 
+  private async buildRemovalList(
+    expandedBaseDir: string,
+    removeUserFiles: boolean,
+  ): Promise<string[]> {
+    if (removeUserFiles) {
+      const toRemove: string[] = [];
+      await this.collectAllFiles(expandedBaseDir, expandedBaseDir, toRemove);
+      return toRemove;
+    }
+
+    const defaultPaths = [
+      'core.md',
+      'env/development.md',
+      'env/dev.md',
+      'tools/git.md',
+      'providers/openai.md',
+    ];
+    return Promise.resolve(
+      defaultPaths.filter((p) => existsSync(path.join(expandedBaseDir, p))),
+    );
+  }
+
+  private async removeEmptyDirs(expandedBaseDir: string): Promise<string[]> {
+    const removed: string[] = [];
+    const dirsToCheck = [...REQUIRED_DIRECTORIES].reverse();
+
+    for (const dir of dirsToCheck) {
+      const fullPath =
+        dir === '' ? expandedBaseDir : path.join(expandedBaseDir, dir);
+
+      try {
+        const contents = await fs.readdir(fullPath);
+        if (contents.length === 0) {
+          await fs.rmdir(fullPath);
+          removed.push(dir === '' ? 'base directory' : dir);
+        }
+      } catch {
+        // Ignore errors when removing directories
+      }
+    }
+
+    return removed;
+  }
+
   /**
    * Uninstall prompt files
    * @param baseDir - Base directory for prompts
@@ -596,49 +730,24 @@ export class PromptInstaller {
     const removed: string[] = [];
     const errors: string[] = [];
 
-    // Validate inputs
     const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
 
-    // If base directory doesn't exist, return success with empty arrays
     if (!existsSync(expandedBaseDir)) {
-      return {
-        success: true,
-        removed: [],
-        errors: [],
-      };
+      return { success: true, removed: [], errors: [] };
     }
 
-    // Build removal list
-    const toRemove: string[] = [];
-
-    if (options?.removeUserFiles === true) {
-      // Remove all files
-      try {
-        await this.collectAllFiles(expandedBaseDir, expandedBaseDir, toRemove);
-      } catch (error) {
-        errors.push(
-          `Failed to list files: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    } else {
-      // Remove only default files (core.md and files in standard directories)
-      const defaultPaths = [
-        'core.md',
-        'env/development.md',
-        'env/dev.md',
-        'tools/git.md',
-        'providers/openai.md',
-      ];
-
-      for (const filePath of defaultPaths) {
-        const fullPath = path.join(expandedBaseDir, filePath);
-        if (existsSync(fullPath)) {
-          toRemove.push(filePath);
-        }
-      }
+    let toRemove: string[] = [];
+    try {
+      toRemove = await this.buildRemovalList(
+        expandedBaseDir,
+        options?.removeUserFiles === true,
+      );
+    } catch (error) {
+      errors.push(
+        `Failed to list files: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
-    // Remove files
     for (const file of toRemove) {
       const fullPath = path.join(expandedBaseDir, file);
 
@@ -652,7 +761,7 @@ export class PromptInstaller {
         } catch (error) {
           const errorMsg =
             error instanceof Error ? error.message : String(error);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Error classification inside catch is intentionally inline
           if (errorMsg.includes('EBUSY')) {
             errors.push(
               `File in use: ${file}. Close any programs using this file and try again.`,
@@ -663,39 +772,18 @@ export class PromptInstaller {
           ) {
             errors.push(`Permission denied: ${file}`);
           } else if (!errorMsg.includes('ENOENT')) {
-            // Ignore "file not found" errors
             errors.push(`Failed to remove ${file}: ${errorMsg}`);
           }
         }
       }
     }
 
-    // Remove empty directories (in reverse order to remove children first)
     if (options?.dryRun !== true) {
-      const dirsToCheck = [...REQUIRED_DIRECTORIES].reverse();
-
-      for (const dir of dirsToCheck) {
-        const fullPath =
-          dir === '' ? expandedBaseDir : path.join(expandedBaseDir, dir);
-
-        try {
-          const contents = await fs.readdir(fullPath);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (contents.length === 0) {
-            await fs.rmdir(fullPath);
-            removed.push(dir === '' ? 'base directory' : dir);
-          }
-        } catch {
-          // Ignore errors when removing directories
-        }
-      }
+      const dirRemovals = await this.removeEmptyDirs(expandedBaseDir);
+      removed.push(...dirRemovals);
     }
 
-    return {
-      success: errors.length === 0,
-      removed,
-      errors,
-    };
+    return { success: errors.length === 0, removed, errors };
   }
 
   /**
@@ -720,36 +808,14 @@ export class PromptInstaller {
     }
   }
 
-  /**
-   * Validate prompt installation
-   * @param baseDir - Base directory to validate
-   * @returns Validation result with issues found
-   */
-  async validate(baseDir: string | null): Promise<ValidationResult> {
-    // Setup validation
-    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
-
-    let isValid = true;
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const missing: string[] = [];
-
-    // Check base directory
-    if (!existsSync(expandedBaseDir)) {
-      errors.push('Base directory does not exist');
-      isValid = false;
-      return {
-        isValid,
-        errors,
-        warnings,
-        missing,
-        baseDir: expandedBaseDir,
-      };
-    }
-
-    // Check directory structure
+  private validateDirectoryStructure(
+    expandedBaseDir: string,
+    errors: string[],
+    warnings: string[],
+    missing: string[],
+  ): void {
     for (const dir of REQUIRED_DIRECTORIES) {
-      if (dir === '') continue; // Skip base directory itself
+      if (dir === '') continue;
 
       const fullPath = path.join(expandedBaseDir, dir);
       if (!existsSync(fullPath)) {
@@ -758,88 +824,201 @@ export class PromptInstaller {
       }
     }
 
-    // Check required files
     const corePath = path.join(expandedBaseDir, 'core.md');
     if (!existsSync(corePath)) {
       missing.push('core.md');
       errors.push('Missing required core.md');
-      isValid = false;
     }
+  }
 
-    // Check permissions
+  private async validatePermissions(
+    expandedBaseDir: string,
+    errors: string[],
+    warnings: string[],
+  ): Promise<void> {
     try {
-      // Check read permission
       await fs.access(expandedBaseDir, fs.constants.R_OK);
     } catch {
       errors.push('Cannot read from directory');
-      isValid = false;
     }
 
     try {
-      // Check write permission
       await fs.access(expandedBaseDir, fs.constants.W_OK);
     } catch {
       warnings.push('Cannot write to directory');
     }
+  }
 
-    // Check file integrity
-    if (existsSync(corePath)) {
+  private async validateFileIntegrity(
+    filePath: string,
+    fileName: string,
+    errors: string[],
+    warnings: string[],
+    isRequired: boolean,
+  ): Promise<void> {
+    if (!existsSync(filePath)) return;
+
+    try {
+      const stats = await fs.stat(filePath);
+      if (stats.size === 0) {
+        warnings.push(`Empty file: ${fileName}`);
+      }
+
       try {
-        const stats = await fs.stat(corePath);
-        if (stats.size === 0) {
-          warnings.push('Empty file: core.md');
-        }
-
-        // Check if file is readable
-        try {
-          await fs.access(corePath, fs.constants.R_OK);
-        } catch {
-          errors.push('Cannot read: core.md');
-        }
-      } catch (error) {
+        await fs.access(filePath, fs.constants.R_OK);
+      } catch {
+        errors.push(`Cannot read: ${fileName}`);
+      }
+    } catch (error) {
+      if (isRequired) {
         errors.push(
-          `Error checking core.md: ${error instanceof Error ? error.message : String(error)}`,
+          `Error checking ${fileName}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
+  }
 
-    // Check other default files if they exist
+  /**
+   * Validate prompt installation
+   * @param baseDir - Base directory to validate
+   * @returns Validation result with issues found
+   */
+  async validate(baseDir: string | null): Promise<ValidationResult> {
+    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
+
+    let isValid = true;
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const missing: string[] = [];
+
+    if (!existsSync(expandedBaseDir)) {
+      errors.push('Base directory does not exist');
+      isValid = false;
+      return { isValid, errors, warnings, missing, baseDir: expandedBaseDir };
+    }
+
+    this.validateDirectoryStructure(expandedBaseDir, errors, warnings, missing);
+    if (errors.length > 0) isValid = false;
+
+    await this.validatePermissions(expandedBaseDir, errors, warnings);
+    if (errors.some((e) => e.includes('Cannot read'))) isValid = false;
+
+    const errorsBeforeCoreIntegrity = errors.length;
+    const corePath = path.join(expandedBaseDir, 'core.md');
+    await this.validateFileIntegrity(
+      corePath,
+      'core.md',
+      errors,
+      warnings,
+      true,
+    );
+    const coreIntegrityErrors = errors.slice(errorsBeforeCoreIntegrity);
+    if (
+      coreIntegrityErrors.some(
+        (error) =>
+          error.includes('core.md') && !error.startsWith('Cannot read:'),
+      )
+    ) {
+      isValid = false;
+    }
+
     const defaultFiles = [
       'env/development.md',
       'tools/git.md',
       'providers/openai.md',
     ];
-
     for (const file of defaultFiles) {
-      const filePath = path.join(expandedBaseDir, file);
-      if (existsSync(filePath)) {
-        try {
-          const stats = await fs.stat(filePath);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (stats.size === 0) {
-            warnings.push(`Empty file: ${file}`);
-          }
+      await this.validateFileIntegrity(
+        path.join(expandedBaseDir, file),
+        file,
+        errors,
+        warnings,
+        false,
+      );
+    }
 
-          // Check if file is readable
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            await fs.access(filePath, fs.constants.R_OK);
-          } catch {
-            errors.push(`Cannot read: ${file}`);
-          }
+    return { isValid, errors, warnings, missing, baseDir: expandedBaseDir };
+  }
+
+  private async repairMissingDirs(
+    expandedBaseDir: string,
+    missing: string[],
+    verbose?: boolean,
+  ): Promise<{ repaired: string[]; errors: string[] }> {
+    const repaired: string[] = [];
+    const errors: string[] = [];
+
+    for (const missingItem of missing) {
+      if (
+        !REQUIRED_DIRECTORIES.includes(
+          missingItem as (typeof REQUIRED_DIRECTORIES)[number],
+        )
+      ) {
+        continue;
+      }
+      const dirPath = path.join(expandedBaseDir, missingItem);
+      try {
+        await fs.mkdir(dirPath, { recursive: true, mode: 0o755 });
+        repaired.push(missingItem);
+        if (verbose === true) {
+          logger.debug('Created directory:', dirPath);
+        }
+      } catch (error) {
+        errors.push(
+          `Failed to create directory ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    return { repaired, errors };
+  }
+
+  private async repairMissingFiles(
+    expandedBaseDir: string,
+    missing: string[],
+    defaults: DefaultsMap,
+    verbose?: boolean,
+  ): Promise<{ repaired: string[]; errors: string[] }> {
+    const repaired: string[] = [];
+    const errors: string[] = [];
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Missing items iteration requires early continue for missing defaults
+    for (const missingItem of missing) {
+      if (!defaults[missingItem]) continue;
+
+      const filePath = path.join(expandedBaseDir, missingItem);
+      const fileDir = path.dirname(filePath);
+
+      try {
+        await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
+      } catch (error) {
+        errors.push(
+          `Failed to create directory for ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        continue;
+      }
+
+      const tempPath = `${filePath}.tmp.${Date.now()}`;
+      try {
+        await fs.writeFile(tempPath, defaults[missingItem], { mode: 0o644 });
+        await fs.rename(tempPath, filePath);
+        repaired.push(missingItem);
+        if (verbose === true) {
+          logger.debug('Restored file:', filePath);
+        }
+      } catch (error) {
+        errors.push(
+          `Failed to restore ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        try {
+          await fs.unlink(tempPath);
         } catch {
-          // Ignore errors for optional files
+          // Ignore cleanup errors
         }
       }
     }
 
-    return {
-      isValid,
-      errors,
-      warnings,
-      missing,
-      baseDir: expandedBaseDir,
-    };
+    return { repaired, errors };
   }
 
   /**
@@ -854,14 +1033,12 @@ export class PromptInstaller {
     defaults: DefaultsMap,
     options?: RepairOptions,
   ): Promise<RepairResult> {
-    // Run validation first
     const validation = await this.validate(baseDir);
 
     const expandedBaseDir = validation.baseDir;
     const repaired: string[] = [];
     const errors: string[] = [];
 
-    // Create base directory if it doesn't exist
     if (!existsSync(expandedBaseDir)) {
       try {
         await fs.mkdir(expandedBaseDir, { recursive: true, mode: 0o755 });
@@ -882,78 +1059,26 @@ export class PromptInstaller {
       }
     }
 
-    // Fix missing directories
-    for (const missingItem of validation.missing) {
-      // Check if it's a directory (from REQUIRED_DIRECTORIES)
-      if (
-        REQUIRED_DIRECTORIES.includes(
-          missingItem as (typeof REQUIRED_DIRECTORIES)[number],
-        )
-      ) {
-        const dirPath = path.join(expandedBaseDir, missingItem);
-        try {
-          await fs.mkdir(dirPath, { recursive: true, mode: 0o755 });
-          repaired.push(missingItem);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (options?.verbose === true) {
-            logger.debug('Created directory:', dirPath);
-          }
-        } catch (error) {
-          errors.push(
-            `Failed to create directory ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      }
-    }
+    const dirResult = await this.repairMissingDirs(
+      expandedBaseDir,
+      validation.missing,
+      options?.verbose,
+    );
+    repaired.push(...dirResult.repaired);
+    errors.push(...dirResult.errors);
 
-    // Fix missing default files
-    for (const missingItem of validation.missing) {
-      // Check if it's a file (has content in defaults)
-      if (defaults[missingItem]) {
-        const filePath = path.join(expandedBaseDir, missingItem);
-        const fileDir = path.dirname(filePath);
+    const fileResult = await this.repairMissingFiles(
+      expandedBaseDir,
+      validation.missing,
+      defaults,
+      options?.verbose,
+    );
+    repaired.push(...fileResult.repaired);
+    errors.push(...fileResult.errors);
 
-        // Ensure parent directory exists
-        try {
-          await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
-        } catch (error) {
-          errors.push(
-            `Failed to create directory for ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          continue;
-        }
-
-        // Write the file
-        const tempPath = `${filePath}.tmp.${Date.now()}`;
-        try {
-          await fs.writeFile(tempPath, defaults[missingItem], { mode: 0o644 });
-          await fs.rename(tempPath, filePath);
-          repaired.push(missingItem);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (options?.verbose === true) {
-            logger.debug('Restored file:', filePath);
-          }
-        } catch (error) {
-          errors.push(
-            `Failed to restore ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            await fs.unlink(tempPath);
-          } catch {
-            // Ignore cleanup errors
-          }
-        }
-      }
-    }
-
-    // Always fix permissions (even if validation passed)
     let permissionsFixed = false;
     try {
-      // Fix directory permissions
       await fs.chmod(expandedBaseDir, 0o755);
-
-      // Fix all file and directory permissions recursively
       await this.fixFilePermissions(expandedBaseDir);
       permissionsFixed = true;
 
@@ -966,13 +1091,10 @@ export class PromptInstaller {
       );
     }
 
-    // If we started with a valid installation, don't report permissions as repaired
-    // Only report actual repairs that fixed validation issues
     if (!validation.isValid && permissionsFixed && errors.length === 0) {
       repaired.push('file permissions');
     }
 
-    // Run validation again
     const finalValidation = await this.validate(baseDir);
 
     return {
@@ -981,6 +1103,26 @@ export class PromptInstaller {
       errors,
       stillInvalid: finalValidation.errors,
     };
+  }
+
+  private formatBackupTimestamp(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+  }
+
+  private classifyBackupError(errorMsg: string): string {
+    if (errorMsg.includes('ENOSPC')) {
+      return 'Insufficient space: Not enough disk space for backup. Try a different location.';
+    }
+    if (errorMsg.includes('EACCES') || errorMsg.includes('Permission denied')) {
+      return 'Permission denied: Cannot write to backup location. Try a different location or check permissions.';
+    }
+    return `Backup failed: ${errorMsg}`;
   }
 
   /**
@@ -993,39 +1135,22 @@ export class PromptInstaller {
     baseDir: string | null,
     backupPath: string,
   ): Promise<BackupResult> {
-    // Validate inputs
     const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
 
     if (!existsSync(expandedBaseDir)) {
-      return {
-        success: false,
-        error: 'Nothing to backup',
-      };
+      return { success: false, error: 'Nothing to backup' };
     }
 
     if (!backupPath || backupPath.trim() === '') {
-      return {
-        success: false,
-        error: 'Invalid backup path',
-      };
+      return { success: false, error: 'Invalid backup path' };
     }
 
-    // Create backup
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}`;
+    const timestamp = this.formatBackupTimestamp(new Date());
     const backupDir = path.join(backupPath, `prompt-backup-${timestamp}`);
 
     try {
-      // Create backup directory
       await fs.mkdir(backupDir, { recursive: true });
 
-      // Copy files
       let fileCount = 0;
       let totalSize = 0;
 
@@ -1035,7 +1160,6 @@ export class PromptInstaller {
         totalSize += stats.size;
       });
 
-      // Create manifest
       const manifest = {
         backupDate: new Date().toISOString(),
         sourcePath: expandedBaseDir,
@@ -1048,51 +1172,24 @@ export class PromptInstaller {
         JSON.stringify(manifest, null, 2),
       );
 
-      // Verify backup
       const verifyCount = await this.countFiles(backupDir);
       if (verifyCount !== fileCount + 1) {
-        // +1 for manifest
         logger.warn(
           `Backup verification warning: expected ${fileCount + 1} files, found ${verifyCount}`,
         );
       }
 
-      return {
-        success: true,
-        backupPath: backupDir,
-        fileCount,
-        totalSize,
-      };
+      return { success: true, backupPath: backupDir, fileCount, totalSize };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
 
-      // Clean up partial backup on error
       try {
         await fs.rm(backupDir, { recursive: true, force: true });
       } catch {
         // Ignore cleanup errors
       }
 
-      if (errorMsg.includes('ENOSPC')) {
-        return {
-          success: false,
-          error:
-            'Insufficient space: Not enough disk space for backup. Try a different location.',
-        };
-      } else if (
-        errorMsg.includes('EACCES') ||
-        errorMsg.includes('Permission denied')
-      ) {
-        return {
-          success: false,
-          error: `Permission denied: Cannot write to backup location. Try a different location or check permissions.`,
-        };
-      }
-
-      return {
-        success: false,
-        error: `Backup failed: ${errorMsg}`,
-      };
+      return { success: false, error: this.classifyBackupError(errorMsg) };
     }
   }
 
