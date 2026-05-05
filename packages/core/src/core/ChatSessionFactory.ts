@@ -229,6 +229,72 @@ function buildGenerateContentConfig(
 }
 
 /**
+ * Builds the runtime bundle, tool declarations, and GeminiChat instance.
+ */
+async function buildChatFromRuntime(
+  config: Config,
+  runtimeState: AgentRuntimeState,
+  contentGenerator: ContentGenerator,
+  historyService: HistoryService,
+  generateContentConfig: GenerateContentConfig,
+  todoContinuationService: TodoContinuationService,
+  toolRegistry: ToolRegistry | undefined,
+  systemInstruction: string,
+): Promise<GeminiChat> {
+  const model = runtimeState.model;
+  const generationConfigWithThinking = buildGenerateContentConfig(
+    generateContentConfig,
+    model,
+  );
+
+  const settings = buildSettingsSnapshot(config);
+  const providerRuntime = createProviderRuntimeContext({
+    settingsService: config.getSettingsService(),
+    config,
+    runtimeId: runtimeState.runtimeId,
+    metadata: { source: 'GeminiClient.startChat' },
+  });
+
+  const runtimeBundle = await loadAgentRuntime({
+    profile: {
+      config,
+      state: runtimeState,
+      settings,
+      providerRuntime,
+      contentGeneratorConfig: config.getContentGeneratorConfig(),
+      toolRegistry,
+      providerManager: config.getProviderManager(),
+    },
+    overrides: { historyService, contentGenerator },
+  });
+
+  const filteredDeclarations = buildToolDeclarationsFromView(
+    toolRegistry,
+    runtimeBundle.toolsView,
+  );
+  todoContinuationService.updateTodoToolAvailabilityFromDeclarations(
+    filteredDeclarations,
+  );
+  const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
+
+  const chat = new GeminiChat(
+    runtimeBundle.runtimeContext,
+    runtimeBundle.contentGenerator,
+    { systemInstruction, ...generationConfigWithThinking, tools },
+    [],
+  );
+
+  chat.setActiveTodosProvider(async () => {
+    const todos = await todoContinuationService.readTodoSnapshot();
+    const active = todoContinuationService.getActiveTodos(todos);
+    if (active.length === 0) return undefined;
+    return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
+  });
+
+  return chat;
+}
+
+/**
  * Stateful factory: creates a GeminiChat session.
  * Reuses stored HistoryService when available, creates a new one otherwise.
  * Configures thinking, loads the agent runtime, builds tool declarations.
@@ -283,54 +349,16 @@ export async function createChatSession(
       )}`,
   );
 
-  const generationConfigWithThinking = buildGenerateContentConfig(
-    generateContentConfig,
-    model,
-  );
-
-  const settings = buildSettingsSnapshot(config);
-  const providerRuntime = createProviderRuntimeContext({
-    settingsService: config.getSettingsService(),
+  const chat = await buildChatFromRuntime(
     config,
-    runtimeId: runtimeState.runtimeId,
-    metadata: { source: 'GeminiClient.startChat' },
-  });
-
-  const runtimeBundle = await loadAgentRuntime({
-    profile: {
-      config,
-      state: runtimeState,
-      settings,
-      providerRuntime,
-      contentGeneratorConfig: config.getContentGeneratorConfig(),
-      toolRegistry,
-      providerManager: config.getProviderManager(),
-    },
-    overrides: { historyService, contentGenerator },
-  });
-
-  const filteredDeclarations = buildToolDeclarationsFromView(
+    runtimeState,
+    contentGenerator,
+    historyService,
+    generateContentConfig,
+    todoContinuationService,
     toolRegistry,
-    runtimeBundle.toolsView,
+    systemInstruction,
   );
-  todoContinuationService.updateTodoToolAvailabilityFromDeclarations(
-    filteredDeclarations,
-  );
-  const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
-
-  const chat = new GeminiChat(
-    runtimeBundle.runtimeContext,
-    runtimeBundle.contentGenerator,
-    { systemInstruction, ...generationConfigWithThinking, tools },
-    [],
-  );
-
-  chat.setActiveTodosProvider(async () => {
-    const todos = await todoContinuationService.readTodoSnapshot();
-    const active = todoContinuationService.getActiveTodos(todos);
-    if (active.length === 0) return undefined;
-    return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
-  });
 
   if (reused) {
     clearStoredHistoryService();

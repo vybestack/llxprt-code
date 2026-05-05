@@ -184,86 +184,38 @@ export class DirectMessageProcessor {
   }
 
   /**
-   * Executes the direct provider call after applying pre-send hooks.
+   * Sets up an AbortController that propagates the upstream abort signal.
    */
-  private async _executeDirectProviderCall(
-    provider: IProvider,
-    params: SendMessageParameters,
-    userIContents: IContent[],
-  ): Promise<GenerateContentResponse> {
-    const { effectiveToolsFromConfig, contentsForApi, syntheticResponse } =
-      await this._applyPreSendHooks(params, userIContents);
-
-    if (syntheticResponse) {
-      return syntheticResponse;
-    }
-
-    const directOverrides = this._extractDirectGeminiOverrides(params.config);
-    const baseUrlForCall = this.runtimeContext.state.baseUrl;
-
-    this.logger.debug(
-      () =>
-        '[DirectMessageProcessor] Calling provider.generateChatCompletion (non-stream retry path)',
-      {
-        providerName: provider.name,
-        model: this.runtimeContext.state.model,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        toolCount: effectiveToolsFromConfig?.length ?? 0,
-        baseUrl: baseUrlForCall,
-      },
-    );
-
-    const runtimeContext = this.providerRuntimeBuilder(
-      'DirectMessageProcessor.generateDirectMessage',
-      {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        toolCount: effectiveToolsFromConfig?.length ?? 0,
-        ...(directOverrides ? { geminiDirectOverrides: directOverrides } : {}),
-      },
-    );
-
-    const providerSupportsIContent =
-      typeof provider.generateChatCompletion === 'function';
-    if (!providerSupportsIContent) {
-      throw new Error(
-        `Provider ${provider.name} does not support IContent generation`,
-      );
-    }
-
+  private _setupAbortController(upstreamAbortSignal: AbortSignal | undefined): {
+    timeoutController: AbortController;
+    timeoutSignal: AbortSignal;
+    onAbort: () => void;
+  } {
     const timeoutController = new AbortController();
     const timeoutSignal = timeoutController.signal;
-    const upstreamAbortSignal = params.config?.abortSignal;
     const onAbort = () => timeoutController.abort();
     upstreamAbortSignal?.addEventListener('abort', onAbort, { once: true });
     if (upstreamAbortSignal?.aborted === true) {
       onAbort();
     }
+    return { timeoutController, timeoutSignal, onAbort };
+  }
 
-    const streamResponse = provider.generateChatCompletion({
-      contents: contentsForApi,
-      tools:
-        effectiveToolsFromConfig.length > 0
-          ? (effectiveToolsFromConfig as ProviderToolset)
-          : undefined,
-      config: runtimeContext.config,
-      runtime: runtimeContext,
-      invocation: {
-        signal: timeoutSignal,
-      } as unknown as GenerateChatOptions['invocation'],
-      settings: runtimeContext.settingsService,
-      metadata: runtimeContext.metadata,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      userMemory: runtimeContext.config?.getUserMemory?.(),
-    });
-
+  /**
+   * Consumes an async iterable of IContent, aggregating text across chunks.
+   * Handles idle timeout via watchdog when configured.
+   */
+  private async _consumeStreamResponse(
+    streamResponse: AsyncIterable<IContent>,
+    timeoutController: AbortController,
+    timeoutSignal: AbortSignal,
+    upstreamAbortSignal: AbortSignal | undefined,
+    effectiveTimeoutMs: number,
+    onAbort: () => void,
+  ): Promise<{ lastResponse: IContent; aggregatedText: string }> {
     let lastResponse: IContent | undefined;
     let lastBlockWasNonText = false;
     let aggregatedText = '';
-
-    // Resolve the effective idle timeout from config
-    const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
-      runtimeContext.config,
-    );
 
     try {
       const iterator = streamResponse[Symbol.asyncIterator]();
@@ -312,6 +264,89 @@ export class DirectMessageProcessor {
     if (!lastResponse) {
       throw new Error('No response from provider');
     }
+    return { lastResponse, aggregatedText };
+  }
+
+  /**
+   * Executes the direct provider call after applying pre-send hooks.
+   */
+  private async _executeDirectProviderCall(
+    provider: IProvider,
+    params: SendMessageParameters,
+    userIContents: IContent[],
+  ): Promise<GenerateContentResponse> {
+    const { effectiveToolsFromConfig, contentsForApi, syntheticResponse } =
+      await this._applyPreSendHooks(params, userIContents);
+
+    if (syntheticResponse) {
+      return syntheticResponse;
+    }
+
+    const directOverrides = this._extractDirectGeminiOverrides(params.config);
+    const baseUrlForCall = this.runtimeContext.state.baseUrl;
+
+    this.logger.debug(
+      () =>
+        '[DirectMessageProcessor] Calling provider.generateChatCompletion (non-stream retry path)',
+      {
+        providerName: provider.name,
+        model: this.runtimeContext.state.model,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        toolCount: effectiveToolsFromConfig?.length ?? 0,
+        baseUrl: baseUrlForCall,
+      },
+    );
+
+    const runtimeContext = this.providerRuntimeBuilder(
+      'DirectMessageProcessor.generateDirectMessage',
+      {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        toolCount: effectiveToolsFromConfig?.length ?? 0,
+        ...(directOverrides ? { geminiDirectOverrides: directOverrides } : {}),
+      },
+    );
+
+    const providerSupportsIContent =
+      typeof provider.generateChatCompletion === 'function';
+    if (!providerSupportsIContent) {
+      throw new Error(
+        `Provider ${provider.name} does not support IContent generation`,
+      );
+    }
+
+    const upstreamAbortSignal = params.config?.abortSignal;
+    const { timeoutController, timeoutSignal, onAbort } =
+      this._setupAbortController(upstreamAbortSignal);
+
+    const streamResponse = provider.generateChatCompletion({
+      contents: contentsForApi,
+      tools:
+        effectiveToolsFromConfig.length > 0
+          ? (effectiveToolsFromConfig as ProviderToolset)
+          : undefined,
+      config: runtimeContext.config,
+      runtime: runtimeContext,
+      invocation: {
+        signal: timeoutSignal,
+      } as unknown as GenerateChatOptions['invocation'],
+      settings: runtimeContext.settingsService,
+      metadata: runtimeContext.metadata,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      userMemory: runtimeContext.config?.getUserMemory?.(),
+    });
+
+    const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
+      runtimeContext.config,
+    );
+
+    const { lastResponse, aggregatedText } = await this._consumeStreamResponse(
+      streamResponse,
+      timeoutController,
+      timeoutSignal,
+      upstreamAbortSignal,
+      effectiveTimeoutMs,
+      onAbort,
+    );
 
     return this._processDirectResponse(
       lastResponse,

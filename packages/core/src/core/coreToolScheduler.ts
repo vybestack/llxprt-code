@@ -498,6 +498,75 @@ export class CoreToolScheduler {
   }
 
   /**
+   * Handles an execution error: cancels on abort, otherwise buffers the error.
+   */
+  private async _handleExecutionError(
+    executionError: Error,
+    scheduledCall: ScheduledToolCall,
+    callId: string,
+    toolName: string,
+    executionIndex: number,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (signal.aborted) {
+      this.setStatusInternal(
+        callId,
+        'cancelled',
+        'User cancelled tool execution.',
+      );
+      this.resultAggregator.bufferCancelled(
+        callId,
+        scheduledCall,
+        executionIndex,
+      );
+      await this.publishBufferedResults(signal);
+    } else {
+      this.resultAggregator.bufferError(
+        callId,
+        toolName,
+        scheduledCall,
+        executionError,
+        executionIndex,
+      );
+      await this.publishBufferedResults(signal);
+    }
+  }
+
+  /**
+   * Handles a publish error by logging and setting an error status if needed.
+   */
+  private _handlePublishError(
+    publishError: Error,
+    scheduledCall: ScheduledToolCall,
+    callId: string,
+    toolName: string,
+  ): void {
+    if (toolSchedulerLogger.enabled) {
+      toolSchedulerLogger.debug(
+        () =>
+          `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
+      );
+    }
+    const toolCall = this.toolCalls.find((tc) => tc.request.callId === callId);
+    if (
+      toolCall &&
+      toolCall.status !== 'success' &&
+      toolCall.status !== 'error' &&
+      toolCall.status !== 'cancelled'
+    ) {
+      this.setStatusInternal(
+        callId,
+        'error',
+        createErrorResponse(
+          scheduledCall.request,
+          new Error(`Failed to publish tool result: ${publishError.message}`),
+          ToolErrorType.UNHANDLED_EXCEPTION,
+        ),
+      );
+    }
+  }
+
+  /**
    * Launch a single scheduled tool call and wire up result buffering / error handling.
    * @requirement:HOOK-017,HOOK-019,HOOK-129,HOOK-131,HOOK-132,HOOK-134 - Hook result application
    */
@@ -547,59 +616,19 @@ export class CoreToolScheduler {
         );
         await this.publishBufferedResults(signal);
       })
-      .catch(async (executionError: Error) => {
-        if (signal.aborted) {
-          this.setStatusInternal(
-            callId,
-            'cancelled',
-            'User cancelled tool execution.',
-          );
-          this.resultAggregator.bufferCancelled(
-            callId,
-            scheduledCall,
-            executionIndex,
-          );
-          await this.publishBufferedResults(signal);
-        } else {
-          this.resultAggregator.bufferError(
-            callId,
-            toolName,
-            scheduledCall,
-            executionError,
-            executionIndex,
-          );
-          await this.publishBufferedResults(signal);
-        }
-      })
-      .catch((publishError: Error) => {
-        if (toolSchedulerLogger.enabled) {
-          toolSchedulerLogger.debug(
-            () =>
-              `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
-          );
-        }
-        const toolCall = this.toolCalls.find(
-          (tc) => tc.request.callId === callId,
-        );
-        if (
-          toolCall &&
-          toolCall.status !== 'success' &&
-          toolCall.status !== 'error' &&
-          toolCall.status !== 'cancelled'
-        ) {
-          this.setStatusInternal(
-            callId,
-            'error',
-            createErrorResponse(
-              scheduledCall.request,
-              new Error(
-                `Failed to publish tool result: ${publishError.message}`,
-              ),
-              ToolErrorType.UNHANDLED_EXCEPTION,
-            ),
-          );
-        }
-      });
+      .catch(async (executionError: Error) =>
+        this._handleExecutionError(
+          executionError,
+          scheduledCall,
+          callId,
+          toolName,
+          executionIndex,
+          signal,
+        ),
+      )
+      .catch((publishError: Error) =>
+        this._handlePublishError(publishError, scheduledCall, callId, toolName),
+      );
   }
 
   private async attemptExecutionOfScheduledCalls(
