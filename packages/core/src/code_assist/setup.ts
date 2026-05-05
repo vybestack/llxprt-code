@@ -70,34 +70,9 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
       `setupUser: loadCodeAssist completed, currentTier=${!!loadRes.currentTier}, cloudaicompanionProject=${loadRes.cloudaicompanionProject}`,
   );
 
-  if (loadRes.currentTier) {
-    logger.debug(
-      () => `setupUser: user has current tier: ${loadRes.currentTier!.id}`,
-    );
-    if (!loadRes.cloudaicompanionProject) {
-      if (projectId) {
-        logger.debug(
-          () => `setupUser: returning with project ID from env: ${projectId}`,
-        );
-        return {
-          projectId,
-          userTier: loadRes.currentTier.id,
-        };
-      }
-      logger.debug(
-        () =>
-          `setupUser: throwing ProjectIdRequiredError - no project ID available`,
-      );
-      throw new ProjectIdRequiredError();
-    }
-    logger.debug(
-      () =>
-        `setupUser: returning with project ID from response: ${loadRes.cloudaicompanionProject}`,
-    );
-    return {
-      projectId: loadRes.cloudaicompanionProject,
-      userTier: loadRes.currentTier.id,
-    };
+  const existing = resolveExistingTierResult(loadRes, projectId, logger);
+  if (existing) {
+    return existing;
   }
 
   const tier = getOnboardTier(loadRes);
@@ -105,25 +80,80 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
     throw new ProjectIdRequiredError();
   }
 
-  let onboardReq: OnboardUserRequest;
+  const onboardReq = buildOnboardUserRequest(
+    tier,
+    projectId,
+    coreClientMetadata,
+  );
+  return finishOnboarding(caServer, onboardReq, tier, projectId);
+}
+
+function resolveExistingTierResult(
+  loadRes: LoadCodeAssistResponse,
+  projectId: string | undefined,
+  logger: DebugLogger,
+): UserData | undefined {
+  if (!loadRes.currentTier) {
+    return undefined;
+  }
+  logger.debug(
+    () => `setupUser: user has current tier: ${loadRes.currentTier!.id}`,
+  );
+  if (!loadRes.cloudaicompanionProject) {
+    if (projectId) {
+      logger.debug(
+        () => `setupUser: returning with project ID from env: ${projectId}`,
+      );
+      return {
+        projectId,
+        userTier: loadRes.currentTier.id,
+      };
+    }
+    logger.debug(
+      () =>
+        `setupUser: throwing ProjectIdRequiredError - no project ID available`,
+    );
+    throw new ProjectIdRequiredError();
+  }
+  logger.debug(
+    () =>
+      `setupUser: returning with project ID from response: ${loadRes.cloudaicompanionProject}`,
+  );
+  return {
+    projectId: loadRes.cloudaicompanionProject,
+    userTier: loadRes.currentTier.id,
+  };
+}
+
+function buildOnboardUserRequest(
+  tier: GeminiUserTier,
+  projectId: string | undefined,
+  coreClientMetadata: ClientMetadata,
+): OnboardUserRequest {
   if (tier.id === UserTierId.FREE) {
     // The free tier uses a managed google cloud project. Setting a project in the `onboardUser` request causes a `Precondition Failed` error.
-    onboardReq = {
+    return {
       tierId: tier.id,
       cloudaicompanionProject: undefined,
       metadata: coreClientMetadata,
     };
-  } else {
-    onboardReq = {
-      tierId: tier.id,
-      cloudaicompanionProject: projectId,
-      metadata: {
-        ...coreClientMetadata,
-        duetProject: projectId,
-      },
-    };
   }
+  return {
+    tierId: tier.id,
+    cloudaicompanionProject: projectId,
+    metadata: {
+      ...coreClientMetadata,
+      duetProject: projectId,
+    },
+  };
+}
 
+async function finishOnboarding(
+  caServer: CodeAssistServer,
+  onboardReq: OnboardUserRequest,
+  tier: GeminiUserTier,
+  projectId: string | undefined,
+): Promise<UserData> {
   // Poll onboardUser until long running operation is complete.
   let lroRes = await caServer.onboardUser(onboardReq);
   while (lroRes.done !== true) {
