@@ -415,7 +415,38 @@ export class ProviderManager implements IProviderManager {
     const runtimeId = rawOptions.runtime?.runtimeId ?? 'unknown';
     const targetProvider = providerName ?? this.getActiveProviderName();
 
-    // REQ-SP4-002: Check for required settings service and config in runtime context
+    const { settingsService, config } = this.requireRuntimeContext(
+      rawOptions,
+      runtimeId,
+    );
+
+    const resolved = this.resolveFields(
+      rawOptions,
+      settingsService,
+      config,
+      targetProvider,
+      runtimeId,
+    );
+
+    this.validateResolvedFields(resolved, targetProvider, runtimeId);
+
+    return this.buildNormalizedOptions(
+      rawOptions,
+      settingsService,
+      config,
+      resolved,
+      targetProvider,
+      runtimeId,
+    );
+  }
+
+  /**
+   * REQ-SP4-002: Validate and extract required settings service and config.
+   */
+  private requireRuntimeContext(
+    rawOptions: GenerateChatOptions,
+    runtimeId: string,
+  ): { settingsService: SettingsService; config: Config } {
     const settingsService =
       rawOptions.settings ?? rawOptions.runtime?.settingsService;
     const config = rawOptions.config ?? rawOptions.runtime?.config;
@@ -448,10 +479,138 @@ export class ProviderManager implements IProviderManager {
       });
     }
 
-    // REQ-SP4-003: Compose normalized.resolved with runtime helpers
+    return { settingsService, config };
+  }
+
+  /**
+   * REQ-SP4-003: Compose normalized.resolved with runtime helpers.
+   * Resolves model, baseURL, authToken, and telemetry.
+   */
+  private resolveFields(
+    rawOptions: GenerateChatOptions,
+    settingsService: SettingsService,
+    config: Config,
+    targetProvider: string,
+    runtimeId: string,
+  ): Record<string, unknown> {
     const providerSettings =
       settingsService.getProviderSettings(targetProvider);
     const providerInstance = this.providers.get(targetProvider);
+    const shouldApplyGlobalEphemerals = this.shouldApplyGlobalEphemerals(
+      settingsService,
+      config,
+      targetProvider,
+    );
+
+    logger.debug(() => {
+      const token = rawOptions.resolved?.authToken;
+      const tokenStr = typeof token === 'string' ? token : '';
+      return `[normalizeRuntimeInputs] provider=${targetProvider}, incoming authToken present=${Boolean(tokenStr.trim())} length=${tokenStr.length}`;
+    });
+
+    const resolved: Record<string, unknown> = {
+      model: this.resolveModelField(
+        rawOptions,
+        providerSettings,
+        config,
+        providerInstance,
+        shouldApplyGlobalEphemerals,
+      ),
+      baseURL: this.resolveBaseURLField(rawOptions, providerSettings),
+      authToken:
+        rawOptions.resolved?.authToken ??
+        (providerSettings.apiKey as string | undefined),
+      telemetry: {
+        ...rawOptions.resolved?.telemetry,
+        runtimeId,
+        normalizedAt: new Date().toISOString(),
+        provider: targetProvider,
+      },
+    };
+
+    this.applyGlobalAuthKey(
+      resolved,
+      rawOptions,
+      config,
+      shouldApplyGlobalEphemerals,
+      targetProvider,
+    );
+
+    this.resolveBaseURL(
+      resolved,
+      rawOptions,
+      settingsService,
+      config,
+      providerSettings,
+      providerInstance,
+      shouldApplyGlobalEphemerals,
+      targetProvider,
+    );
+
+    return resolved;
+  }
+
+  /**
+   * Resolve model field, treating empty/whitespace strings as absent
+   * so they do not block fallback to provider settings, config, or default model.
+   */
+  private resolveModelField(
+    rawOptions: GenerateChatOptions,
+    providerSettings: Record<string, unknown>,
+    config: Config,
+    providerInstance: IProvider | undefined,
+    shouldApplyGlobalEphemerals: boolean,
+  ): string | undefined {
+    const fromResolved = rawOptions.resolved?.model;
+    if (typeof fromResolved === 'string' && fromResolved.trim() !== '') {
+      return fromResolved;
+    }
+    const fromSettings = providerSettings.model as string | undefined;
+    if (typeof fromSettings === 'string' && fromSettings.trim() !== '') {
+      return fromSettings;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
+    if (shouldApplyGlobalEphemerals) {
+      const fromConfig = config.getModel();
+      if (typeof fromConfig === 'string' && fromConfig.trim() !== '') {
+        return fromConfig;
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
+    const fromDefault = providerInstance?.getDefaultModel?.();
+    if (typeof fromDefault === 'string' && fromDefault.trim() !== '') {
+      return fromDefault;
+    }
+    return undefined;
+  }
+
+  /**
+   * Resolve baseURL field, treating empty/whitespace strings as absent
+   * so they do not block fallback to provider settings.
+   */
+  private resolveBaseURLField(
+    rawOptions: GenerateChatOptions,
+    providerSettings: Record<string, unknown>,
+  ): string | undefined {
+    const fromResolved = rawOptions.resolved?.baseURL;
+    if (typeof fromResolved === 'string' && fromResolved.trim() !== '') {
+      return fromResolved;
+    }
+    const fromSettings = providerSettings['base-url'] as string | undefined;
+    if (typeof fromSettings === 'string' && fromSettings.trim() !== '') {
+      return fromSettings;
+    }
+    return undefined;
+  }
+
+  /**
+   * Determine whether global ephemeral settings should be applied.
+   */
+  private shouldApplyGlobalEphemerals(
+    settingsService: SettingsService,
+    config: Config,
+    targetProvider: string,
+  ): boolean {
     const configSettingsService =
       typeof (config as unknown as { getSettingsService?: () => unknown })
         .getSettingsService === 'function'
@@ -466,43 +625,25 @@ export class ProviderManager implements IProviderManager {
     const activeProviderRaw = settingsService.get('activeProvider');
     const activeProviderName =
       typeof activeProviderRaw === 'string' ? activeProviderRaw.trim() : '';
-    const shouldApplyGlobalEphemerals =
+    return (
       configMatchesSettingsService &&
-      (!activeProviderName || activeProviderName === targetProvider);
-    // Debug: Log incoming authToken before normalization
-    logger.debug(() => {
-      const token = rawOptions.resolved?.authToken;
-      const tokenStr = typeof token === 'string' ? token : '';
-      return `[normalizeRuntimeInputs] provider=${targetProvider}, incoming authToken present=${Boolean(tokenStr.trim())} length=${tokenStr.length}`;
-    });
+      (!activeProviderName || activeProviderName === targetProvider)
+    );
+  }
 
-    const resolved = {
-      model:
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        rawOptions.resolved?.model ??
-        (providerSettings.model as string | undefined) ??
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-        (shouldApplyGlobalEphemerals ? config.getModel?.() : undefined) ??
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-        providerInstance?.getDefaultModel?.() ??
-        undefined,
-      baseURL:
-        rawOptions.resolved?.baseURL ??
-        (providerSettings['base-url'] as string | undefined),
-      authToken:
-        rawOptions.resolved?.authToken ??
-        (providerSettings.apiKey as string | undefined),
-      telemetry: {
-        ...rawOptions.resolved?.telemetry,
-        runtimeId,
-        normalizedAt: new Date().toISOString(),
-        provider: targetProvider,
-      },
-    };
-
+  /**
+   * Apply global auth-key from ephemeral settings if no token is set.
+   */
+  private applyGlobalAuthKey(
+    resolved: Record<string, unknown>,
+    rawOptions: GenerateChatOptions,
+    config: Config,
+    shouldApplyGlobalEphemerals: boolean,
+    targetProvider: string,
+  ): void {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const effectiveConfig = rawOptions.config ?? config ?? null;
-    // Debug: Log resolved authToken before global auth-key check
+
     logger.debug(() => {
       const token = resolved.authToken;
       const tokenStr = typeof token === 'string' ? token : '';
@@ -530,7 +671,6 @@ export class ProviderManager implements IProviderManager {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         .getEphemeralSetting?.('auth-key') as string | undefined;
 
-      // Debug: Log global auth-key check
       logger.debug(() => {
         const tokenStr = typeof globalAuthKey === 'string' ? globalAuthKey : '';
         return `[normalizeRuntimeInputs] provider=${targetProvider}, global auth-key present=${Boolean(tokenStr.trim())} length=${tokenStr.length}, will use: ${globalAuthKey ? 'YES' : 'NO'}`;
@@ -545,8 +685,28 @@ export class ProviderManager implements IProviderManager {
         );
       }
     }
+  }
 
-    if (!resolved.baseURL && shouldApplyGlobalEphemerals) {
+  /**
+   * Check whether a value is blank (nullish or whitespace-only string).
+   * Restores prior falsy semantics for model/baseURL checks.
+   */
+  private isBlankish(value: unknown): boolean {
+    return value == null || (typeof value === 'string' && value.trim() === '');
+  }
+
+  private resolveBaseURL(
+    resolved: Record<string, unknown>,
+
+    rawOptions: GenerateChatOptions,
+    _settingsService: SettingsService,
+    config: Config,
+    providerSettings: Record<string, unknown>,
+    providerInstance: IProvider | undefined,
+    shouldApplyGlobalEphemerals: boolean,
+    _targetProvider: string,
+  ): void {
+    if (this.isBlankish(resolved.baseURL) && shouldApplyGlobalEphemerals) {
       const configBaseUrl =
         typeof config.getEphemeralSetting === 'function'
           ? (config.getEphemeralSetting('base-url') as string | undefined)
@@ -559,7 +719,7 @@ export class ProviderManager implements IProviderManager {
       }
     }
 
-    if (!resolved.baseURL) {
+    if (this.isBlankish(resolved.baseURL)) {
       const providerBaseUrl = this.getBaseUrlFromProvider(providerInstance);
       if (providerBaseUrl) {
         resolved.baseURL = providerBaseUrl;
@@ -580,23 +740,33 @@ export class ProviderManager implements IProviderManager {
         }
       }
     }
+  }
 
-    // REQ-SP4-003: Validate required fields in resolved options
+  /**
+   * REQ-SP4-003: Validate required fields in resolved options.
+   */
+  private validateResolvedFields(
+    resolved: Record<string, unknown>,
+    targetProvider: string,
+    runtimeId: string,
+  ): void {
     const missingFields: string[] = [];
-    if (!resolved.model) missingFields.push('model');
-    // Note: Gemini and some providers don't require baseURL/authToken in all configurations
+    if (this.isBlankish(resolved.model)) missingFields.push('model');
     const baseUrlOptionalProviders = new Set([
       'gemini',
       'openai',
       'openai-responses',
       'anthropic',
       'openaivercel',
-      'load-balancer', // Resolves baseURL at request time via sub-profile selection
+      'load-balancer',
     ]);
-    if (!resolved.baseURL && !baseUrlOptionalProviders.has(targetProvider)) {
+    if (
+      this.isBlankish(resolved.baseURL) &&
+      !baseUrlOptionalProviders.has(targetProvider)
+    ) {
       missingFields.push('baseURL');
     }
-    const resolvedAuthToken = resolved.authToken as unknown;
+    const resolvedAuthToken = resolved.authToken;
     const hasResolvedAuthToken =
       // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       resolvedAuthToken !== undefined &&
@@ -608,12 +778,8 @@ export class ProviderManager implements IProviderManager {
         typeof resolvedAuthToken === 'number' && Number.isNaN(resolvedAuthToken)
       );
     if (!hasResolvedAuthToken && targetProvider !== 'gemini') {
-      // Check if provider can resolve auth lazily (e.g., via OAuth)
-      // If the provider has getAuthToken(), it can handle its own auth precedence
       const providerInstance = this.providers.get(targetProvider);
 
-      // Check for getAuthToken on the actual provider
-      // (might be wrapped in multiple layers: LoggingProviderWrapper → RetryOrchestrator → BaseProvider)
       interface ProviderWithWrapper {
         wrappedProvider?: IProvider;
       }
@@ -621,7 +787,6 @@ export class ProviderManager implements IProviderManager {
         getAuthToken?: () => Promise<string>;
       }
 
-      // Traverse the full wrapper chain to find the actual provider
       let actualProvider: IProvider | undefined = providerInstance;
       while (actualProvider && 'wrappedProvider' in actualProvider) {
         actualProvider = (actualProvider as ProviderWithWrapper)
@@ -634,14 +799,8 @@ export class ProviderManager implements IProviderManager {
         typeof (actualProvider as ProviderWithAuth).getAuthToken === 'function';
 
       if (canResolveAuth === false) {
-        // Only fail for providers without lazy auth resolution capability
         missingFields.push('authToken');
       }
-      // Otherwise let the provider run its multi-modal precedence chain:
-      // 1. Manual key (from /key)
-      // 2. Keyfile (from /keyfile)
-      // 3. Environment variables
-      // 4. OAuth token (if enabled)
     }
 
     if (missingFields.length > 0) {
@@ -654,8 +813,19 @@ export class ProviderManager implements IProviderManager {
         metadata: { missingFields, provider: targetProvider },
       });
     }
+  }
 
-    // REQ-SP4-005: Ensure normalized.userMemory and metadata derive from runtime context
+  /**
+   * REQ-SP4-005: Build final normalized options with runtime context.
+   */
+  private buildNormalizedOptions(
+    rawOptions: GenerateChatOptions,
+    settingsService: SettingsService,
+    config: Config,
+    resolved: Record<string, unknown>,
+    targetProvider: string,
+    runtimeId: string,
+  ): GenerateChatOptions {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
     const userMemory = rawOptions.userMemory ?? config.getUserMemory?.();
     const metadata = {
@@ -689,7 +859,9 @@ export class ProviderManager implements IProviderManager {
           settingsService,
           targetProvider,
         ),
-        telemetry: resolved.telemetry,
+        telemetry: resolved.telemetry as
+          | { runtimeId: string; normalizedAt: string; provider: string }
+          | undefined,
         metadata,
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         userMemory: userMemorySnapshot ?? undefined,
@@ -701,7 +873,7 @@ export class ProviderManager implements IProviderManager {
       settings: settingsService,
       config,
       runtime: normalizedRuntime,
-      resolved,
+      resolved: resolved as GenerateChatOptions['resolved'],
       userMemory,
       metadata,
       invocation,

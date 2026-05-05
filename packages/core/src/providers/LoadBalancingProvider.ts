@@ -316,13 +316,11 @@ export class LoadBalancingProvider implements IProvider {
     // Normalize parameters to GenerateChatOptions format
     let options: GenerateChatOptions;
     if (Array.isArray(optionsOrContent)) {
-      // Called with content array (legacy signature)
       options = {
         contents: optionsOrContent,
         tools,
       };
     } else {
-      // Called with GenerateChatOptions
       options = optionsOrContent;
     }
 
@@ -349,7 +347,6 @@ export class LoadBalancingProvider implements IProvider {
       subProfile.providerName,
     );
 
-    // Phase 3 Step 3: Throw descriptive error if provider not found
     if (!delegateProvider) {
       const errorMsg = `Provider "${subProfile.providerName}" not found for sub-profile "${subProfile.name}"`;
       this.logger.error(() => errorMsg);
@@ -362,17 +359,35 @@ export class LoadBalancingProvider implements IProvider {
     );
 
     // Phase 3c: Build options.resolved with proper settings merge
-    let resolvedOptions: GenerateChatOptions;
+    const resolvedOptions = this.buildRoundRobinResolvedOptions(
+      subProfile,
+      options,
+    );
 
+    // Phase 3 Step 5: Delegate and yield chunks with metrics tracking
+    yield* this.yieldWithMetrics(
+      delegateProvider,
+      resolvedOptions,
+      subProfile,
+      startTime,
+    );
+  }
+
+  /**
+   * Build resolved options for round-robin strategy (non-failover path).
+   * Handles both ResolvedSubProfile and LoadBalancerSubProfile.
+   * @plan PLAN-20251211issue486c
+   */
+  private buildRoundRobinResolvedOptions(
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    options: GenerateChatOptions,
+  ): GenerateChatOptions {
     if (isResolvedSubProfile(subProfile)) {
-      // Phase 3c: Handle ResolvedSubProfile with dumb merge for ephemeralSettings
-      // LB profile ephemeralSettings override sub-profile ephemeralSettings
       const mergedEphemeralSettings = {
         ...subProfile.ephemeralSettings,
         ...this.config.lbProfileEphemeralSettings,
       };
 
-      // Extract individual ephemeralSettings that map to resolved fields
       const temperature = mergedEphemeralSettings.temperature as
         | number
         | undefined;
@@ -381,24 +396,19 @@ export class LoadBalancingProvider implements IProvider {
         | boolean
         | undefined;
 
-      resolvedOptions = {
+      const resolvedOptions: GenerateChatOptions = {
         ...options,
         resolved: {
-          // Start with existing resolved settings if any
           ...options.resolved,
-          // Provider, model, baseURL, authToken ALWAYS come from sub-profile
           model: subProfile.model,
-          // Use explicit string checks: empty string must NOT override existing values
           ...(typeof subProfile.baseURL === 'string' &&
             subProfile.baseURL !== '' && { baseURL: subProfile.baseURL }),
           ...(typeof subProfile.authToken === 'string' &&
             subProfile.authToken !== '' && { authToken: subProfile.authToken }),
-          // Map ephemeralSettings to resolved fields
           ...(temperature !== undefined && { temperature }),
           ...(maxTokens !== undefined && { maxTokens }),
           ...(streaming !== undefined && { streaming }),
         },
-        // Store merged ephemeralSettings and modelParams in metadata for provider use
         metadata: {
           ...options.metadata,
           ephemeralSettings: mergedEphemeralSettings,
@@ -415,35 +425,41 @@ export class LoadBalancingProvider implements IProvider {
           `ephemeralSettings keys: ${Object.keys(mergedEphemeralSettings).join(', ')}, ` +
           `modelParams keys: ${Object.keys(subProfile.modelParams).join(', ')}`,
       );
-    } else {
-      // Phase 3: Handle LoadBalancerSubProfile (legacy path)
-      // Sub-profile settings override any existing resolved settings
-      // Use explicit string checks: empty string must NOT override existing values
-      resolvedOptions = {
-        ...options,
-        resolved: {
-          // Start with existing resolved settings if any
-          ...options.resolved,
-          // Override with sub-profile settings (only if non-empty string)
-          ...(typeof subProfile.modelId === 'string' &&
-            subProfile.modelId !== '' && { model: subProfile.modelId }),
-          ...(typeof subProfile.baseURL === 'string' &&
-            subProfile.baseURL !== '' && { baseURL: subProfile.baseURL }),
-          ...(typeof subProfile.authToken === 'string' &&
-            subProfile.authToken !== '' && { authToken: subProfile.authToken }),
-        },
-      };
-
-      this.logger.debug(
-        () =>
-          `Resolved settings (LoadBalancerSubProfile) - model: ${resolvedOptions.resolved?.model}, ` +
-          `baseURL: ${resolvedOptions.resolved?.baseURL}, ` +
-          `authToken: ${typeof resolvedOptions.resolved?.authToken === 'string' && resolvedOptions.resolved.authToken !== '' ? 'present' : 'missing'}`,
-      );
+      return resolvedOptions;
     }
 
-    // Phase 3 Step 5: Delegate to provider.generateChatCompletion() and yield all chunks
-    // Wrap to track backend metrics (Issue #489)
+    // LoadBalancerSubProfile (legacy path)
+    const resolvedOptions: GenerateChatOptions = {
+      ...options,
+      resolved: {
+        ...options.resolved,
+        ...(typeof subProfile.modelId === 'string' &&
+          subProfile.modelId !== '' && { model: subProfile.modelId }),
+        ...(typeof subProfile.baseURL === 'string' &&
+          subProfile.baseURL !== '' && { baseURL: subProfile.baseURL }),
+        ...(typeof subProfile.authToken === 'string' &&
+          subProfile.authToken !== '' && { authToken: subProfile.authToken }),
+      },
+    };
+
+    this.logger.debug(
+      () =>
+        `Resolved settings (LoadBalancerSubProfile) - model: ${resolvedOptions.resolved?.model}, ` +
+        `baseURL: ${resolvedOptions.resolved?.baseURL}, ` +
+        `authToken: ${typeof resolvedOptions.resolved?.authToken === 'string' && resolvedOptions.resolved.authToken !== '' ? 'present' : 'missing'}`,
+    );
+    return resolvedOptions;
+  }
+
+  /**
+   * Delegate to provider and yield chunks while tracking backend metrics.
+   */
+  private async *yieldWithMetrics(
+    delegateProvider: IProvider,
+    resolvedOptions: GenerateChatOptions,
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    startTime: number,
+  ): AsyncGenerator<IContent> {
     try {
       const chunks: IContent[] = [];
       for await (const chunk of delegateProvider.generateChatCompletion(
@@ -452,7 +468,6 @@ export class LoadBalancingProvider implements IProvider {
         chunks.push(chunk);
         yield chunk;
       }
-      // Extract tokens and record success
       const tokensUsed = this.extractTokenCount(chunks);
       if (tokensUsed > 0) {
         this.updateTPM(subProfile.name, tokensUsed);
@@ -1078,16 +1093,7 @@ export class LoadBalancingProvider implements IProvider {
     const numProfiles = this.config.subProfiles.length;
 
     // Check if all backends are unhealthy (circuit breakers open)
-    if (settings.circuitBreakerEnabled) {
-      const allUnhealthy = this.config.subProfiles.every(
-        (sp) => !this.isBackendHealthy(sp.name),
-      );
-      if (allUnhealthy) {
-        throw new Error(
-          'All backends are currently unhealthy (circuit breakers open). Please wait for recovery or check backend configurations.',
-        );
-      }
-    }
+    this.validateNotAllUnhealthy(settings, numProfiles);
 
     // Start from currentFailoverIndex and iterate through all backends (Issue #902)
     let visitedCount = 0;
@@ -1118,142 +1124,16 @@ export class LoadBalancingProvider implements IProvider {
         continue;
       }
 
-      let attempts = 0;
-      const maxAttempts = Math.max(1, settings.retryCount);
-
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      while (attempts < maxAttempts) {
-        attempts++;
-        // Record request start (Phase 5, Issue #489)
-        const startTime = this.recordRequestStart(subProfile.name);
-        // Track if any chunks were yielded to detect partial-stream scenarios
-        // Declared outside try block so it's accessible in catch block
-        let chunksYielded = false;
-        try {
-          this.logger.debug(
-            () =>
-              `[LB:failover] Trying backend: ${subProfile.name} (attempt ${attempts}/${maxAttempts})`,
-          );
-
-          const resolvedOptions = this.buildResolvedOptions(
-            subProfile,
-            options,
-          );
-          const delegateProvider = this.providerManager.getProviderByName(
-            subProfile.providerName,
-          );
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (!delegateProvider) {
-            throw new Error(`Provider "${subProfile.providerName}" not found`);
-          }
-
-          const rawIterator =
-            delegateProvider.generateChatCompletion(resolvedOptions);
-          // Wrap with timeout (Phase 3, Issue #489)
-          const iterator = this.wrapWithTimeout(
-            rawIterator,
-            settings.timeoutMs,
-            subProfile.name,
-          );
-
-          // Collect chunks for token extraction (Phase 4, Issue #489)
-          const chunks: IContent[] = [];
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for await (const chunk of iterator) {
-            chunksYielded = true;
-            chunks.push(chunk);
-            yield chunk;
-          }
-
-          // Extract and update TPM (Phase 4, Issue #489)
-          const tokensUsed = this.extractTokenCount(chunks);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (tokensUsed > 0) {
-            this.updateTPM(subProfile.name, tokensUsed);
-          }
-
-          // Record request success (Phase 5, Issue #489)
-          this.recordRequestSuccess(subProfile.name, startTime, tokensUsed);
-
-          this.incrementStats(subProfile.name);
-          this.recordBackendSuccess(subProfile.name);
-          this.logger.debug(
-            () => `[LB:failover] Success on backend: ${subProfile.name}`,
-          );
-
-          // Reset sticky index on success (Issue #902)
-          this.currentFailoverIndex = 0;
-          return;
-        } catch (error) {
-          // Check for immediate failover errors (429, 401, 402, 403) - Issue #902
-          // These skip retry and immediately failover to next backend
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (this.isImmediateFailoverError(error)) {
-            // If we already yielded chunks, don't failover - we'd produce a mixed response
-            // (partial from this backend + full from next). Propagate error instead.
-            if (chunksYielded) {
-              this.logger.debug(
-                () =>
-                  `[LB:failover] ${subProfile.name} returned immediate failover error after yielding chunks, aborting stream`,
-              );
-              this.recordRequestFailure(
-                subProfile.name,
-                startTime,
-                error as Error,
-              );
-              this.recordBackendFailure(subProfile.name, error as Error);
-              throw error;
-            }
-
-            this.logger.debug(
-              () =>
-                `[LB:failover] ${subProfile.name} returned immediate failover error (${getErrorStatus(error)}), skipping retries`,
-            );
-            this.recordRequestFailure(
-              subProfile.name,
-              startTime,
-              error as Error,
-            );
-            this.recordBackendFailure(subProfile.name, error as Error);
-            errors.push({ profile: subProfile.name, error: error as Error });
-            // Update sticky index to next backend
-            this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
-            break; // Exit retry loop, continue to next backend
-          }
-
-          const isLastAttempt = attempts >= maxAttempts;
-          const shouldRetry =
-            !isLastAttempt && this.shouldFailover(error, settings);
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (shouldRetry) {
-            if (settings.retryDelayMs > 0) {
-              this.logger.debug(
-                () =>
-                  `[LB:failover] ${subProfile.name} attempt ${attempts} failed, retrying after ${settings.retryDelayMs}ms: ${(error as Error).message}`,
-              );
-              await new Promise((resolve) =>
-                setTimeout(resolve, settings.retryDelayMs),
-              );
-            }
-          } else {
-            this.logger.debug(
-              () =>
-                `[LB:failover] ${subProfile.name} failed after ${attempts} attempts: ${(error as Error).message}`,
-            );
-            // Record request failure (Phase 5, Issue #489)
-            this.recordRequestFailure(
-              subProfile.name,
-              startTime,
-              error as Error,
-            );
-            this.recordBackendFailure(subProfile.name, error as Error);
-            errors.push({ profile: subProfile.name, error: error as Error });
-            // Update sticky index to next backend (Issue #902)
-            this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
-            break;
-          }
-        }
+      const succeeded = yield* this.tryBackendWithRetries(
+        subProfile,
+        options,
+        settings,
+        errors,
+        currentIndex,
+        numProfiles,
+      );
+      if (succeeded) {
+        return;
       }
 
       // Move to next backend (circular iteration)
@@ -1261,6 +1141,209 @@ export class LoadBalancingProvider implements IProvider {
     }
 
     throw new LoadBalancerFailoverError(this.config.profileName, errors);
+  }
+
+  /**
+   * Validate that not all backends are unhealthy (circuit breakers open).
+   */
+  private validateNotAllUnhealthy(
+    settings: FailoverSettings,
+    numProfiles: number,
+  ): void {
+    if (settings.circuitBreakerEnabled) {
+      const allUnhealthy = this.config.subProfiles
+        .slice(0, numProfiles)
+        .every((sp) => !this.isBackendHealthy(sp.name));
+      if (allUnhealthy) {
+        throw new Error(
+          'All backends are currently unhealthy (circuit breakers open). Please wait for recovery or check backend configurations.',
+        );
+      }
+    }
+  }
+
+  /**
+   * Try a single backend with retry logic, yielding chunks on success.
+   * Handles immediate failover errors and retryable errors.
+   */
+  private async *tryBackendWithRetries(
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    options: GenerateChatOptions,
+    settings: FailoverSettings,
+    errors: Array<{ profile: string; error: Error }>,
+    currentIndex: number,
+    numProfiles: number,
+  ): AsyncGenerator<IContent, boolean> {
+    let attempts = 0;
+    const maxAttempts = Math.max(1, settings.retryCount);
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    while (attempts < maxAttempts) {
+      attempts++;
+      const startTime = this.recordRequestStart(subProfile.name);
+      const chunksYielded = { value: false };
+      try {
+        yield* this.attemptBackendRequest(
+          subProfile,
+          options,
+          settings,
+          startTime,
+          chunksYielded,
+        );
+        this.currentFailoverIndex = 0;
+        return true;
+      } catch (error) {
+        const handled = this.handleFailoverError(
+          error,
+          subProfile,
+          startTime,
+          attempts,
+          maxAttempts,
+          settings,
+          errors,
+          chunksYielded.value,
+          currentIndex,
+          numProfiles,
+        );
+        if (handled === 'immediate-throw') {
+          throw error;
+        }
+        if (handled === 'break') {
+          // Exit the retry while-loop. This generator returns,
+          // causing the outer executeWithFailover while-loop's
+          // yield* to complete normally. Control then continues
+          // with the next backend in the outer loop.
+          break;
+        }
+        // 'retry' — apply delay then loop
+        if (settings.retryDelayMs > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, settings.retryDelayMs),
+          );
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Execute a single request attempt against a backend, yielding chunks.
+   */
+  private async *attemptBackendRequest(
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    options: GenerateChatOptions,
+    settings: FailoverSettings,
+    startTime: number,
+    chunksYielded: { value: boolean },
+  ): AsyncGenerator<IContent> {
+    this.logger.debug(
+      () =>
+        `[LB:failover] Trying backend: ${subProfile.name} (start time: ${startTime})`,
+    );
+
+    const resolvedOptions = this.buildResolvedOptions(subProfile, options);
+    const delegateProvider = this.providerManager.getProviderByName(
+      subProfile.providerName,
+    );
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (!delegateProvider) {
+      throw new Error(`Provider "${subProfile.providerName}" not found`);
+    }
+
+    const rawIterator =
+      delegateProvider.generateChatCompletion(resolvedOptions);
+    const iterator = this.wrapWithTimeout(
+      rawIterator,
+      settings.timeoutMs,
+      subProfile.name,
+    );
+
+    const chunks: IContent[] = [];
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for await (const chunk of iterator) {
+      chunksYielded.value = true;
+      chunks.push(chunk);
+      yield chunk;
+    }
+
+    const tokensUsed = this.extractTokenCount(chunks);
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (tokensUsed > 0) {
+      this.updateTPM(subProfile.name, tokensUsed);
+    }
+
+    this.recordRequestSuccess(subProfile.name, startTime, tokensUsed);
+    this.incrementStats(subProfile.name);
+    this.recordBackendSuccess(subProfile.name);
+    this.logger.debug(
+      () => `[LB:failover] Success on backend: ${subProfile.name}`,
+    );
+  }
+
+  /**
+   * Handle error during failover attempt. Returns action:
+   * - 'immediate-throw': re-throw the error (chunks already yielded or abort)
+   * - 'break': stop retrying this backend, move to next
+   * - 'retry': continue the retry loop
+   */
+  private handleFailoverError(
+    error: unknown,
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    startTime: number,
+    attempts: number,
+    maxAttempts: number,
+    settings: FailoverSettings,
+    errors: Array<{ profile: string; error: Error }>,
+    chunksYielded: boolean,
+    currentIndex: number,
+    numProfiles: number,
+  ): 'immediate-throw' | 'break' | 'retry' {
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (this.isImmediateFailoverError(error)) {
+      if (chunksYielded) {
+        this.logger.debug(
+          () =>
+            `[LB:failover] ${subProfile.name} returned immediate failover error after yielding chunks, aborting stream`,
+        );
+        this.recordRequestFailure(subProfile.name, startTime, error as Error);
+        this.recordBackendFailure(subProfile.name, error as Error);
+        return 'immediate-throw';
+      }
+
+      this.logger.debug(
+        () =>
+          `[LB:failover] ${subProfile.name} returned immediate failover error (${getErrorStatus(error)}), skipping retries`,
+      );
+      this.recordRequestFailure(subProfile.name, startTime, error as Error);
+      this.recordBackendFailure(subProfile.name, error as Error);
+      errors.push({ profile: subProfile.name, error: error as Error });
+      this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
+      return 'break';
+    }
+
+    const isLastAttempt = attempts >= maxAttempts;
+    const shouldRetry = !isLastAttempt && this.shouldFailover(error, settings);
+
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (shouldRetry) {
+      if (settings.retryDelayMs > 0) {
+        this.logger.debug(
+          () =>
+            `[LB:failover] ${subProfile.name} attempt ${attempts} failed, retrying after ${settings.retryDelayMs}ms: ${(error as Error).message}`,
+        );
+      }
+      return 'retry';
+    }
+
+    this.logger.debug(
+      () =>
+        `[LB:failover] ${subProfile.name} failed after ${attempts} attempts: ${(error as Error).message}`,
+    );
+    this.recordRequestFailure(subProfile.name, startTime, error as Error);
+    this.recordBackendFailure(subProfile.name, error as Error);
+    errors.push({ profile: subProfile.name, error: error as Error });
+    this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
+    return 'break';
   }
 
   /**
