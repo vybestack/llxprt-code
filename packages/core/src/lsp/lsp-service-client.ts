@@ -72,19 +72,8 @@ export class LspServiceClient {
       return;
     }
 
-    if (this.config.servers.length > 0) {
-      const firstServerCommand = this.config.servers[0]?.command;
-      if (
-        typeof firstServerCommand === 'string' &&
-        firstServerCommand.length > 0 &&
-        firstServerCommand.startsWith('/')
-      ) {
-        const executable = await this.pathIsExecutable(firstServerCommand);
-        if (!executable) {
-          this.disable(`Server command not executable: ${firstServerCommand}`);
-          return;
-        }
-      }
+    if (!(await this.validateFirstServerCommand())) {
+      return;
     }
 
     const bunPath = await this.resolveBunPath();
@@ -93,85 +82,7 @@ export class LspServiceClient {
       return;
     }
 
-    let lspEntry: string | null = null;
-
-    // Walks up from a resolved package path to find package.json, then probes
-    // src/main.ts (source tree) and dist/main.js (npm-published).
-    const resolveEntryFromPackagePath = async (
-      packagePath: string,
-    ): Promise<string | null> => {
-      let pkgRoot = dirname(packagePath);
-      while (pkgRoot !== dirname(pkgRoot)) {
-        if (await this.pathIsReadable(join(pkgRoot, 'package.json'))) {
-          break;
-        }
-        pkgRoot = dirname(pkgRoot);
-      }
-
-      const srcEntry = join(pkgRoot, 'src', 'main.ts');
-      if (await this.pathIsReadable(srcEntry)) return srcEntry;
-
-      const distEntry = join(pkgRoot, 'dist', 'main.js');
-      return (await this.pathIsReadable(distEntry)) ? distEntry : null;
-    };
-
-    const resolveImportMeta = (
-      import.meta as unknown as {
-        resolve?: (specifier: string) => string;
-      }
-    ).resolve;
-
-    if (typeof resolveImportMeta === 'function') {
-      try {
-        const packageUrl = resolveImportMeta('@vybestack/llxprt-code-lsp');
-        lspEntry = await resolveEntryFromPackagePath(fileURLToPath(packageUrl));
-      } catch (error) {
-        const err = error as { code?: string };
-        if (
-          err.code !== 'MODULE_NOT_FOUND' &&
-          err.code !== 'ERR_MODULE_NOT_FOUND'
-        ) {
-          throw error;
-        }
-      }
-    }
-
-    // Fallback for Node <20.6 where import.meta.resolve is unavailable
-    if (lspEntry === null) {
-      try {
-        const require = createRequire(import.meta.url);
-        const packagePath = require.resolve('@vybestack/llxprt-code-lsp');
-        lspEntry = await resolveEntryFromPackagePath(packagePath);
-      } catch (error) {
-        const err = error as { code?: string };
-        if (
-          err.code !== 'MODULE_NOT_FOUND' &&
-          err.code !== 'ERR_MODULE_NOT_FOUND'
-        ) {
-          throw error;
-        }
-      }
-    }
-
-    // Source-tree monorepo fallback (walks up to find packages/ directory)
-    if (lspEntry === null) {
-      let dir = dirname(fileURLToPath(import.meta.url));
-      let foundPackagesDir = false;
-      while (dir !== dirname(dir)) {
-        if (basename(dir) === 'packages') {
-          foundPackagesDir = true;
-          break;
-        }
-        dir = dirname(dir);
-      }
-      if (foundPackagesDir) {
-        const fallbackEntry = join(dir, 'lsp', 'src', 'main.ts');
-        if (await this.pathIsReadable(fallbackEntry)) {
-          lspEntry = fallbackEntry;
-        }
-      }
-    }
-
+    const lspEntry = await this.resolveLspEntry();
     if (lspEntry === null) {
       this.disable(
         'LSP service entry not found. Install @vybestack/llxprt-code-lsp: npm install -g @vybestack/llxprt-code-lsp',
@@ -179,37 +90,7 @@ export class LspServiceClient {
       return;
     }
 
-    const child = spawn(bunPath, [lspEntry], {
-      cwd: this.workspaceRoot,
-      stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        LSP_BOOTSTRAP: JSON.stringify({
-          workspaceRoot: this.workspaceRoot,
-          config: this.config,
-        }),
-      },
-    });
-
-    this.process = child;
-
-    const connection = createMessageConnection(
-      new StreamMessageReader(child.stdout),
-      new StreamMessageWriter(child.stdin),
-    );
-    this.connection = connection;
-
-    child.once('error', (error) => {
-      this.alive = false;
-      this.unavailableReason = error.message;
-      this.cleanupProcessState();
-    });
-
-    child.once('exit', (code, signal) => {
-      this.alive = false;
-      this.unavailableReason ??= `LSP service exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
-      this.cleanupProcessState();
-    });
+    const { child, connection } = this.launchLspProcess(bunPath, lspEntry);
 
     connection.listen();
 
@@ -372,6 +253,156 @@ export class LspServiceClient {
       readable: readable as Readable,
       writable: writable as Writable,
     };
+  }
+
+  private async validateFirstServerCommand(): Promise<boolean> {
+    if (this.config.servers.length > 0) {
+      const firstServerCommand = this.config.servers[0]?.command;
+      if (
+        typeof firstServerCommand === 'string' &&
+        firstServerCommand.length > 0 &&
+        firstServerCommand.startsWith('/')
+      ) {
+        const executable = await this.pathIsExecutable(firstServerCommand);
+        if (!executable) {
+          this.disable(`Server command not executable: ${firstServerCommand}`);
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  private async resolveLspEntry(): Promise<string | null> {
+    let lspEntry: string | null = null;
+
+    // Walks up from a resolved package path to find package.json, then probes
+    // src/main.ts (source tree) and dist/main.js (npm-published).
+    const resolveEntryFromPackagePath = async (
+      packagePath: string,
+    ): Promise<string | null> => {
+      let pkgRoot = dirname(packagePath);
+      while (pkgRoot !== dirname(pkgRoot)) {
+        if (await this.pathIsReadable(join(pkgRoot, 'package.json'))) {
+          break;
+        }
+        pkgRoot = dirname(pkgRoot);
+      }
+
+      const srcEntry = join(pkgRoot, 'src', 'main.ts');
+      if (await this.pathIsReadable(srcEntry)) return srcEntry;
+
+      const distEntry = join(pkgRoot, 'dist', 'main.js');
+      return (await this.pathIsReadable(distEntry)) ? distEntry : null;
+    };
+
+    const resolveImportMeta = (
+      import.meta as unknown as {
+        resolve?: (specifier: string) => string;
+      }
+    ).resolve;
+
+    if (typeof resolveImportMeta === 'function') {
+      try {
+        const packageUrl = resolveImportMeta('@vybestack/llxprt-code-lsp');
+        lspEntry = await resolveEntryFromPackagePath(fileURLToPath(packageUrl));
+      } catch (error) {
+        const err = error as { code?: string };
+        if (
+          err.code !== 'MODULE_NOT_FOUND' &&
+          err.code !== 'ERR_MODULE_NOT_FOUND'
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    // Fallback for Node <20.6 where import.meta.resolve is unavailable
+    lspEntry ??= await this.resolveLspEntryViaCreateRequire(
+      resolveEntryFromPackagePath,
+    );
+
+    // Source-tree monorepo fallback (walks up to find packages/ directory)
+    lspEntry ??= await this.resolveLspEntryMonorepoFallback();
+
+    return lspEntry;
+  }
+
+  private async resolveLspEntryViaCreateRequire(
+    resolveEntryFromPackagePath: (pkgPath: string) => Promise<string | null>,
+  ): Promise<string | null> {
+    try {
+      const require = createRequire(import.meta.url);
+      const packagePath = require.resolve('@vybestack/llxprt-code-lsp');
+      return await resolveEntryFromPackagePath(packagePath);
+    } catch (error) {
+      const err = error as { code?: string };
+      if (
+        err.code !== 'MODULE_NOT_FOUND' &&
+        err.code !== 'ERR_MODULE_NOT_FOUND'
+      ) {
+        throw error;
+      }
+    }
+    return null;
+  }
+
+  private async resolveLspEntryMonorepoFallback(): Promise<string | null> {
+    let dir = dirname(fileURLToPath(import.meta.url));
+    let foundPackagesDir = false;
+    while (dir !== dirname(dir)) {
+      if (basename(dir) === 'packages') {
+        foundPackagesDir = true;
+        break;
+      }
+      dir = dirname(dir);
+    }
+    if (foundPackagesDir) {
+      const fallbackEntry = join(dir, 'lsp', 'src', 'main.ts');
+      if (await this.pathIsReadable(fallbackEntry)) {
+        return fallbackEntry;
+      }
+    }
+    return null;
+  }
+
+  private launchLspProcess(
+    bunPath: string,
+    lspEntry: string,
+  ): { child: ChildProcessWithoutNullStreams; connection: MessageConnection } {
+    const child = spawn(bunPath, [lspEntry], {
+      cwd: this.workspaceRoot,
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        LSP_BOOTSTRAP: JSON.stringify({
+          workspaceRoot: this.workspaceRoot,
+          config: this.config,
+        }),
+      },
+    });
+
+    this.process = child;
+
+    const connection = createMessageConnection(
+      new StreamMessageReader(child.stdout),
+      new StreamMessageWriter(child.stdin),
+    );
+    this.connection = connection;
+
+    child.once('error', (error) => {
+      this.alive = false;
+      this.unavailableReason = error.message;
+      this.cleanupProcessState();
+    });
+
+    child.once('exit', (code, signal) => {
+      this.alive = false;
+      this.unavailableReason ??= `LSP service exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
+      this.cleanupProcessState();
+    });
+
+    return { child, connection };
   }
 
   private async resolveBunPath(): Promise<string | null> {
