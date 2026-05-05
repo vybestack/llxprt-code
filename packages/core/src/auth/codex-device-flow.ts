@@ -133,6 +133,31 @@ export class CodexDeviceFlow {
         `[FLOW] Found PKCE verifier for state, length=${codeVerifier.length}`,
     );
 
+    const tokenResponse = await this.performTokenExchange(
+      authCode,
+      redirectUri,
+      codeVerifier,
+    );
+    const codexToken = this.buildCodexToken(tokenResponse);
+
+    this.codeVerifiers.delete(state);
+    this.logger.debug(
+      () =>
+        `[FLOW] Cleaned up PKCE verifier, remaining: ${this.codeVerifiers.size}`,
+    );
+
+    return codexToken;
+  }
+
+  /**
+   * POST to the token endpoint and return a validated CodexTokenResponse.
+   * @throws Error if the HTTP request fails or the response is not OK
+   */
+  private async performTokenExchange(
+    authCode: string,
+    redirectUri: string,
+    codeVerifier: string,
+  ): Promise<z.infer<typeof CodexTokenResponseSchema>> {
     this.logger.debug(
       () =>
         `[FLOW] Making token exchange request to ${CODEX_CONFIG.tokenEndpoint}`,
@@ -169,13 +194,21 @@ export class CodexDeviceFlow {
         `[FLOW] Token response received, keys: ${Object.keys(data as object).join(', ')}`,
     );
 
-    // Validate with Zod schema - NO TYPE ASSERTIONS
     const tokenResponse = CodexTokenResponseSchema.parse(data);
     this.logger.debug(
       () =>
         `[FLOW] Token response validated: has_id_token=${!!tokenResponse.id_token}, has_refresh_token=${!!tokenResponse.refresh_token}, expires_in=${tokenResponse.expires_in}`,
     );
+    return tokenResponse;
+  }
 
+  /**
+   * Validate token response, extract account_id, and build a CodexOAuthToken.
+   * @throws Error if id_token is missing or account_id cannot be extracted
+   */
+  private buildCodexToken(
+    tokenResponse: z.infer<typeof CodexTokenResponseSchema>,
+  ): CodexOAuthToken {
     // Extract account_id from id_token JWT
     this.logger.debug(() => '[FLOW] Extracting account_id from id_token...');
     const accountId = tokenResponse.id_token
@@ -214,12 +247,6 @@ export class CodexDeviceFlow {
     this.logger.debug(
       () =>
         `[FLOW] Token exchange successful! account_id=${accountId.substring(0, 8)}..., token_type=${codexToken.token_type}`,
-    );
-
-    this.codeVerifiers.delete(state);
-    this.logger.debug(
-      () =>
-        `[FLOW] Cleaned up PKCE verifier, remaining: ${this.codeVerifiers.size}`,
     );
 
     return codexToken;

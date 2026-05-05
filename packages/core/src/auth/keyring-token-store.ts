@@ -162,97 +162,17 @@ export class KeyringTokenStore implements TokenStore {
 
     // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (Date.now() - startTime < waitMs) {
-      let createdLockInfo: { pid: number; timestamp: number } | null = null;
-      try {
-        const lockInfo = { pid: process.pid, timestamp: Date.now() };
-        await fs.writeFile(lockPath, JSON.stringify(lockInfo), {
-          flag: 'wx',
-          mode: 0o600,
-        });
-        createdLockInfo = lockInfo;
-
-        // Verify we actually hold the lock (defense against race conditions
-        // where multiple clients might simultaneously write the lock file)
-        try {
-          const content = await fs.readFile(lockPath, 'utf8');
-          const existing = JSON.parse(content) as {
-            pid: number;
-            timestamp: number;
-          };
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (
-            existing.pid === createdLockInfo.pid &&
-            existing.timestamp === createdLockInfo.timestamp
-          ) {
-            return true;
-          }
-          // Another process won the race - continue waiting
-        } catch {
-          // Lock file disappeared or is unreadable; fall through to post-write
-          // ownership check in the existing-lock path below.
-        }
-      } catch (writeError) {
-        const err = writeError as NodeJS.ErrnoException;
-        if (err.code !== 'EEXIST') {
-          throw writeError;
-        }
+      const createResult = await this.tryCreateLock(lockPath);
+      if (createResult === 'acquired') {
+        return true;
       }
 
-      // Lock file exists — read and check staleness
-      try {
-        const content = await fs.readFile(lockPath, 'utf8');
-        const existing = JSON.parse(content) as {
-          pid: number;
-          timestamp: number;
-        };
-        const lockAge = Date.now() - existing.timestamp;
-
-        // Treat very recent lock files with invalid/zero pid as in-flight writes.
-        // On some CI file systems we can briefly observe a partially visible lock
-        // file right after creation; do not break those immediately.
-        const hasValidPid =
-          typeof existing.pid === 'number' &&
-          Number.isInteger(existing.pid) &&
-          existing.pid > 0;
-        const isRecentInFlightWrite =
-          !hasValidPid && lockAge <= LOCK_WRITE_GRACE_MS;
-
-        if (isRecentInFlightWrite) {
-          await sleep(LOCK_POLL_INTERVAL_MS);
-          continue;
-        }
-
-        if (lockAge > staleMs) {
-          // Stale lock — break it
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            await fs.unlink(lockPath);
-          } catch {
-            // Ignore ENOENT — another process may have broken it
-          }
-          continue;
-        }
-      } catch {
-        // Lock file unreadable or corrupt.
-        // A just-created lock can be observed mid-write on some file systems;
-        // give it a short grace window before treating it as truly corrupt.
-        try {
-          const stat = await fs.stat(lockPath);
-          const fileAge = Date.now() - stat.mtimeMs;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (fileAge <= LOCK_WRITE_GRACE_MS) {
-            await sleep(LOCK_POLL_INTERVAL_MS);
-            continue;
-          }
-        } catch {
-          // Ignore stat errors and fall through to unlink attempt.
-        }
-
-        try {
-          await fs.unlink(lockPath);
-        } catch {
-          // Ignore ENOENT
-        }
+      const checkResult = await this.checkExistingLock(lockPath, staleMs);
+      if (checkResult === 'retry') {
+        await sleep(LOCK_POLL_INTERVAL_MS);
+        continue;
+      }
+      if (checkResult === 'stale_broken') {
         continue;
       }
 
@@ -261,6 +181,119 @@ export class KeyringTokenStore implements TokenStore {
     }
 
     return false;
+  }
+
+  /**
+   * Attempt to create the lock file and verify ownership.
+   * Returns 'acquired' if we hold the lock, 'exists' if another process holds it.
+   * @throws on non-EEXIST write errors
+   */
+  private async tryCreateLock(
+    lockPath: string,
+  ): Promise<'acquired' | 'exists'> {
+    let createdLockInfo: { pid: number; timestamp: number } | null = null;
+    try {
+      const lockInfo = { pid: process.pid, timestamp: Date.now() };
+      await fs.writeFile(lockPath, JSON.stringify(lockInfo), {
+        flag: 'wx',
+        mode: 0o600,
+      });
+      createdLockInfo = lockInfo;
+
+      // Verify we actually hold the lock (defense against race conditions
+      // where multiple clients might simultaneously write the lock file)
+      try {
+        const content = await fs.readFile(lockPath, 'utf8');
+        const existing = JSON.parse(content) as {
+          pid: number;
+          timestamp: number;
+        };
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (
+          existing.pid === createdLockInfo.pid &&
+          existing.timestamp === createdLockInfo.timestamp
+        ) {
+          return 'acquired';
+        }
+        // Another process won the race - continue waiting
+      } catch {
+        // Lock file disappeared or is unreadable; fall through to post-write
+        // ownership check in the existing-lock path below.
+      }
+    } catch (writeError) {
+      const err = writeError as NodeJS.ErrnoException;
+      if (err.code !== 'EEXIST') {
+        throw writeError;
+      }
+    }
+    return 'exists';
+  }
+
+  /**
+   * Check an existing lock file for staleness or in-flight writes.
+   * Returns 'retry' if we should sleep and retry, 'stale_broken' if
+   * a stale/corrupt lock was removed, or 'fresh' if the lock is valid.
+   */
+  private async checkExistingLock(
+    lockPath: string,
+    staleMs: number,
+  ): Promise<'retry' | 'stale_broken' | 'fresh'> {
+    try {
+      const content = await fs.readFile(lockPath, 'utf8');
+      const existing = JSON.parse(content) as {
+        pid: number;
+        timestamp: number;
+      };
+      const lockAge = Date.now() - existing.timestamp;
+
+      // Treat very recent lock files with invalid/zero pid as in-flight writes.
+      // On some CI file systems we can briefly observe a partially visible lock
+      // file right after creation; do not break those immediately.
+      const hasValidPid =
+        typeof existing.pid === 'number' &&
+        Number.isInteger(existing.pid) &&
+        existing.pid > 0;
+      const isRecentInFlightWrite =
+        !hasValidPid && lockAge <= LOCK_WRITE_GRACE_MS;
+
+      if (isRecentInFlightWrite) {
+        return 'retry';
+      }
+
+      if (lockAge > staleMs) {
+        // Stale lock — break it
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        try {
+          await fs.unlink(lockPath);
+        } catch {
+          // Ignore ENOENT — another process may have broken it
+        }
+        return 'stale_broken';
+      }
+
+      return 'fresh';
+    } catch {
+      // Lock file unreadable or corrupt.
+      // A just-created lock can be observed mid-write on some file systems;
+      // give it a short grace window before treating it as truly corrupt.
+      try {
+        const stat = await fs.stat(lockPath);
+        const fileAge = Date.now() - stat.mtimeMs;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (fileAge <= LOCK_WRITE_GRACE_MS) {
+          return 'retry';
+        }
+      } catch {
+        // Ignore stat errors and fall through to unlink attempt.
+      }
+
+      try {
+        await fs.unlink(lockPath);
+      } catch {
+        // Ignore ENOENT
+      }
+      return 'stale_broken';
+    }
   }
 
   /**
