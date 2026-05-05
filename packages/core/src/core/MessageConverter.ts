@@ -481,43 +481,14 @@ export function convertIContentToResponse(
 }
 
 /**
- * Adds usage metadata, finish reason, and data property to the response.
+ * Maps termination reason (stopReason/finishReason) to Gemini FinishReason
+ * and applies it to the first candidate. Logs warnings for unmapped or
+ * missing-candidate cases.
  */
-export function applyResponseMetadata(
+function applyFinishReasonMapping(
   response: GenerateContentResponse,
   input: IContent,
-  _parts: Part[],
-): GenerateContentResponse {
-  // Add data property that returns self-reference
-  // Make it non-enumerable to avoid circular reference in JSON.stringify
-  Object.defineProperty(response, 'data', {
-    get() {
-      return response;
-    },
-    enumerable: false,
-    configurable: true,
-  });
-
-  // Add usage metadata if present
-  if (input.metadata?.usage) {
-    const usageMetadata: UsageMetadataWithCache = {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      promptTokenCount: input.metadata.usage.promptTokens ?? 0,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      candidatesTokenCount: input.metadata.usage.completionTokens ?? 0,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      totalTokenCount: input.metadata.usage.totalTokens ?? 0,
-      cache_read_input_tokens:
-        input.metadata.usage.cache_read_input_tokens ?? 0,
-      cache_creation_input_tokens:
-        input.metadata.usage.cache_creation_input_tokens ?? 0,
-    };
-    response.usageMetadata = usageMetadata;
-  }
-
-  // Map terminal metadata to Gemini finishReason.
-  // Providers may emit stopReason (Anthropic/Gemini-style) or
-  // finishReason (OpenAI-style); coalesce them to a single lookup path.
+): void {
   const terminationReason =
     input.metadata?.stopReason ?? input.metadata?.finishReason;
 
@@ -585,6 +556,44 @@ export function applyResponseMetadata(
       },
     );
   }
+}
+
+/**
+ * Adds usage metadata, finish reason, and data property to the response.
+ */
+export function applyResponseMetadata(
+  response: GenerateContentResponse,
+  input: IContent,
+  _parts: Part[],
+): GenerateContentResponse {
+  // Add data property that returns self-reference
+  // Make it non-enumerable to avoid circular reference in JSON.stringify
+  Object.defineProperty(response, 'data', {
+    get() {
+      return response;
+    },
+    enumerable: false,
+    configurable: true,
+  });
+
+  // Add usage metadata if present
+  if (input.metadata?.usage) {
+    const usageMetadata: UsageMetadataWithCache = {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      promptTokenCount: input.metadata.usage.promptTokens ?? 0,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      candidatesTokenCount: input.metadata.usage.completionTokens ?? 0,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      totalTokenCount: input.metadata.usage.totalTokens ?? 0,
+      cache_read_input_tokens:
+        input.metadata.usage.cache_read_input_tokens ?? 0,
+      cache_creation_input_tokens:
+        input.metadata.usage.cache_creation_input_tokens ?? 0,
+    };
+    response.usageMetadata = usageMetadata;
+  }
+
+  applyFinishReasonMapping(response, input);
 
   return response;
 }

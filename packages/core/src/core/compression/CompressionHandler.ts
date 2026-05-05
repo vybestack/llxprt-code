@@ -339,13 +339,14 @@ export class CompressionHandler {
     );
   }
 
-  async enforceContextWindow(
-    pendingTokens: number,
-    promptId: string,
-    provider?: IProvider,
-  ): Promise<void> {
-    await this.historyService.waitForTokenUpdates();
-
+  /**
+   * Compute context-window limits and completion budget for enforcement.
+   */
+  private computeContextLimits(provider?: IProvider): {
+    completionBudget: number;
+    limit: number;
+    marginAdjustedLimit: number;
+  } {
     const completionBudget = Math.max(
       0,
       getCompletionBudget(
@@ -362,6 +363,18 @@ export class CompressionHandler {
       0,
       limit - CompressionHandler.TOKEN_SAFETY_MARGIN,
     );
+    return { completionBudget, limit, marginAdjustedLimit };
+  }
+
+  async enforceContextWindow(
+    pendingTokens: number,
+    promptId: string,
+    provider?: IProvider,
+  ): Promise<void> {
+    await this.historyService.waitForTokenUpdates();
+
+    const { completionBudget, limit, marginAdjustedLimit } =
+      this.computeContextLimits(provider);
 
     const initialProjected = this.computeProjectedTokens(
       pendingTokens,
