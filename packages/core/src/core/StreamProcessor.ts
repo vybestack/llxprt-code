@@ -13,6 +13,7 @@
  */
 
 import type { GenerateContentResponse } from '@google/genai';
+import type { BeforeModelHookOutput } from '../hooks/types.js';
 import {
   type Content,
   type SendMessageParameters,
@@ -139,6 +140,13 @@ export class StreamProcessor {
       provider,
     );
 
+    return this._createCancellableStream(streamResponse, userContent);
+  }
+
+  private _createCancellableStream(
+    streamResponse: AsyncGenerator<GenerateContentResponse>,
+    userContent: Content | Content[],
+  ): AsyncGenerator<GenerateContentResponse> {
     let processedStream: AsyncGenerator<GenerateContentResponse> | undefined;
     const ensureProcessedStream =
       (): AsyncGenerator<GenerateContentResponse> => {
@@ -233,7 +241,7 @@ export class StreamProcessor {
     userContent: Content | Content[],
     provider: IProvider,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    let requestContents = this._buildRequestContents(userContent);
+    const requestContents = this._buildRequestContents(userContent);
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
     const tools = await this._applyToolSelectionHook(
@@ -241,10 +249,156 @@ export class StreamProcessor {
       this.generationConfig.tools,
     );
 
+    const { requestPayload, baseRuntimeContext, runtimeContext } =
+      this._prepareRequestPayload(
+        requestContents,
+        tools,
+        params,
+      );
+
+    const finalContents = await this._fireBeforeModelHook(
+      configForHooks,
+      requestPayload.contents,
+      tools as ProviderToolset | undefined,
+    );
+    requestPayload.contents = finalContents;
+
+    logApiRequest(
+      this.runtimeContext,
+      this.runtimeContext.state,
+      ContentConverters.toGeminiContents(requestPayload.contents),
+      this.runtimeContext.state.model,
+      promptId,
+    );
+
+    return this._sendProviderRequest(
+      provider,
+      requestPayload,
+      runtimeContext,
+      baseRuntimeContext,
+      params,
+      promptId,
+    );
+  }
+
+  /**
+   * Fire BeforeModel hook and return possibly-modified requestContents.
+   * Throws if the hook requests execution stop or blocking.
+   */
+  private async _fireBeforeModelHook(
+    configForHooks: AgentRuntimeContext['providerRuntime']['config'],
+    requestContents: IContent[],
+    tools: ProviderToolset | undefined,
+  ): Promise<IContent[]> {
+    if (
+      configForHooks === undefined ||
+      typeof configForHooks.getEnableHooks !== 'function' ||
+      configForHooks.getEnableHooks() !== true
+    ) {
+      return requestContents;
+    }
+
+    const hookSystem =
+      typeof configForHooks.getHookSystem === 'function'
+        ? configForHooks.getHookSystem()
+        : undefined;
+    if (hookSystem === undefined) return requestContents;
+
+    await hookSystem.initialize();
+    const beforeModelResult = await hookSystem.fireBeforeModelEvent({
+      contents: requestContents,
+      tools,
+    });
+
+    if (beforeModelResult?.shouldStopExecution() === true) {
+      const reason = beforeModelResult.getEffectiveReason() as
+        | string
+        | null
+        | undefined;
+      throw new AgentExecutionStoppedError(
+        reason !== undefined && reason !== null && reason !== ''
+          ? reason
+          : 'Execution stopped by BeforeModel hook',
+        beforeModelResult.systemMessage,
+      );
+    }
+
+    if (beforeModelResult?.isBlockingDecision() === true) {
+      let syntheticResponse = beforeModelResult.getSyntheticResponse();
+      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      if (syntheticResponse) {
+        const candidate = syntheticResponse.candidates?.[0];
+        const candidateFinishReason = candidate?.finishReason as
+          | FinishReason
+          | ''
+          | null
+          | undefined;
+        if (candidate && isMissingFinishReason(candidateFinishReason)) {
+          syntheticResponse = this._patchMissingFinishReason(
+            syntheticResponse,
+            candidate,
+          );
+        }
+      }
+      const reason = beforeModelResult.getEffectiveReason() as
+        | string
+        | null
+        | undefined;
+      throw new AgentExecutionBlockedError(
+        reason !== undefined && reason !== null && reason !== ''
+          ? reason
+          : 'Request blocked by BeforeModel hook',
+        syntheticResponse,
+      );
+    }
+
+    return this._applyRequestModifications(
+      beforeModelResult,
+      requestContents,
+    );
+  }
+
+  private _patchMissingFinishReason(
+    syntheticResponse: GenerateContentResponse,
+    candidate: NonNullable<GenerateContentResponse['candidates']>[0],
+  ): GenerateContentResponse {
+    return {
+      ...syntheticResponse,
+      candidates: [{ ...candidate, finishReason: FinishReason.STOP }],
+    } as GenerateContentResponse;
+  }
+
+  private _applyRequestModifications(
+    beforeModelResult: BeforeModelHookOutput | undefined,
+    requestContents: IContent[],
+  ): IContent[] {
+    if (!beforeModelResult) return requestContents;
+
+    const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
+      model: this.runtimeContext.state.model || '',
+      contents: ContentConverters.toGeminiContents(requestContents),
+    });
+    const modifiedContents = (modifiedRequest as { contents?: Content[] | null })
+      .contents;
+    if (modifiedContents !== undefined && modifiedContents !== null) {
+      return ContentConverters.toIContents(modifiedContents);
+    }
+    return requestContents;
+  }
+
+  private _prepareRequestPayload(
+    requestContents: IContent[],
+    tools: GenerateContentConfig['tools'],
+    params: SendMessageParameters,
+  ): {
+    requestPayload: { contents: IContent[]; tools: unknown };
+    baseRuntimeContext: ProviderRuntimeContext;
+    runtimeContext: ProviderRuntimeContext;
+  } {
     this.logger.debug(
       () => '[StreamProcessor] Calling provider.generateChatCompletion',
       {
-        providerName: provider.name,
+        providerName: this.providerResolver('stream').name,
         model: this.runtimeContext.state.model,
         historyLength: requestContents.length,
         toolCount: tools?.length ?? 0,
@@ -257,111 +411,35 @@ export class StreamProcessor {
       { historyLength: requestContents.length },
     );
 
-    // Trigger BeforeModel hook for streaming path
-    if (
-      configForHooks !== undefined &&
-      typeof configForHooks.getEnableHooks === 'function' &&
-      configForHooks.getEnableHooks() === true
-    ) {
-      const hookSystem =
-        typeof configForHooks.getHookSystem === 'function'
-          ? configForHooks.getHookSystem()
-          : undefined;
-      if (hookSystem !== undefined) {
-        await hookSystem.initialize();
-        const beforeModelResult = await hookSystem.fireBeforeModelEvent({
-          contents: requestContents,
-          tools: tools as ProviderToolset | undefined,
-        });
+    const requestPayload = { contents: requestContents, tools };
 
-        if (beforeModelResult?.shouldStopExecution() === true) {
-          // Explicit empty-string fallback (preserve old || behavior without implicit truthiness)
-          const reason = beforeModelResult.getEffectiveReason() as
-            | string
-            | null
-            | undefined;
-          throw new AgentExecutionStoppedError(
-            reason !== undefined && reason !== null && reason !== ''
-              ? reason
-              : 'Execution stopped by BeforeModel hook',
-            beforeModelResult.systemMessage,
-          );
-        }
-
-        if (beforeModelResult?.isBlockingDecision() === true) {
-          let syntheticResponse = beforeModelResult.getSyntheticResponse();
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (syntheticResponse) {
-            const candidate = syntheticResponse.candidates?.[0];
-            const candidateFinishReason = candidate?.finishReason as
-              | FinishReason
-              | ''
-              | null
-              | undefined;
-            if (candidate && isMissingFinishReason(candidateFinishReason)) {
-              syntheticResponse = {
-                ...syntheticResponse,
-                candidates: [
-                  {
-                    ...candidate,
-                    finishReason: FinishReason.STOP,
-                  },
-                ],
-              } as GenerateContentResponse;
-            }
-          }
-          const reason = beforeModelResult.getEffectiveReason() as
-            | string
-            | null
-            | undefined;
-          throw new AgentExecutionBlockedError(
-            reason !== undefined && reason !== null && reason !== ''
-              ? reason
-              : 'Request blocked by BeforeModel hook',
-            syntheticResponse,
-          );
-        }
-
-        if (beforeModelResult != null) {
-          const modifiedRequest =
-            beforeModelResult.applyLLMRequestModifications({
-              model: this.runtimeContext.state.model || '',
-              contents: ContentConverters.toGeminiContents(requestContents),
-            });
-          const modifiedContents = (
-            modifiedRequest as { contents?: Content[] | null }
-          ).contents;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (modifiedContents !== undefined && modifiedContents !== null) {
-            requestContents = ContentConverters.toIContents(modifiedContents);
-          }
-        }
-      }
-    }
-
-    const requestPayload = {
-      contents: requestContents,
-      tools,
-    };
-
-    const runtimeContext = params.config
-      ? {
-          ...baseRuntimeContext,
-          config: { ...baseRuntimeContext.config, ...params.config },
-        }
-      : baseRuntimeContext;
-
-    const requestContentsForTelemetry = ContentConverters.toGeminiContents(
-      requestPayload.contents,
-    );
-    logApiRequest(
-      this.runtimeContext,
-      this.runtimeContext.state,
-      requestContentsForTelemetry,
-      this.runtimeContext.state.model,
-      promptId,
+    const runtimeContext = this._buildRuntimeContext(
+      baseRuntimeContext,
+      params,
     );
 
+    return { requestPayload, baseRuntimeContext, runtimeContext };
+  }
+
+  private _buildRuntimeContext(
+    baseRuntimeContext: ProviderRuntimeContext,
+    params: SendMessageParameters,
+  ): ProviderRuntimeContext {
+    if (!params.config) return baseRuntimeContext;
+    return {
+      ...baseRuntimeContext,
+      config: { ...baseRuntimeContext.config, ...params.config },
+    } as ProviderRuntimeContext;
+  }
+
+  private async _sendProviderRequest(
+    provider: IProvider,
+    requestPayload: { contents: IContent[]; tools: unknown },
+    runtimeContext: ProviderRuntimeContext,
+    baseRuntimeContext: ProviderRuntimeContext,
+    params: SendMessageParameters,
+    promptId: string,
+  ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const startTime = Date.now();
     try {
       const streamResponse = provider.generateChatCompletion({
@@ -378,43 +456,12 @@ export class StreamProcessor {
         userMemory: baseRuntimeContext.config?.getUserMemory?.(),
       } as GenerateChatOptions);
 
-      // Convert IContent stream to GenerateContentResponse stream
-      const convertedStream = this._convertIContentStream(
+      return await this._consumeFirstChunkAndReturn(
         streamResponse,
         requestPayload,
-        {
-          promptId,
-          startTime,
-        },
+        promptId,
+        startTime,
       );
-
-      /**
-       * CRITICAL FIX (#1750): Eagerly consume the first chunk within the retry boundary.
-       *
-       * The problem: provider.generateChatCompletion() returns a lazy async generator.
-       * The actual API call and HTTP connection establishment happens when the iterator
-       * is consumed, not when the generator is created. This means errors during the
-       * actual API call occur OUTSIDE the retryWithBackoff boundary.
-       *
-       * The fix: Call .next() on the converted stream BEFORE returning. This ensures:
-       * 1. The HTTP connection is established inside the retryWithBackoff boundary
-       * 2. Connection errors (429, 500, etc.) trigger retry logic and bucket failover
-       * 3. Empty stream detection happens within the retry boundary
-       *
-       * We then use prependAsyncGenerator to reconstruct a generator that yields
-       * the preloaded first chunk followed by the remaining iterator.
-       */
-      const firstChunk = await convertedStream.next();
-
-      if (firstChunk.done === true) {
-        throw new EmptyStreamError(
-          'Model stream ended immediately with no content.',
-        );
-      }
-
-      // Use prependAsyncGenerator to wrap the preloaded first chunk
-      // with the remaining iterator from convertedStream
-      return prependAsyncGenerator(firstChunk.value, convertedStream);
     } catch (error) {
       const durationMs = Date.now() - startTime;
       logApiError(
@@ -427,6 +474,32 @@ export class StreamProcessor {
       );
       throw error;
     }
+  }
+
+  /**
+   * Eagerly consume first chunk within retry boundary (#1750).
+   */
+  private async _consumeFirstChunkAndReturn(
+    streamResponse: AsyncIterable<IContent>,
+    requestPayload: { contents: IContent[]; tools: unknown },
+    promptId: string,
+    startTime: number,
+  ): Promise<AsyncGenerator<GenerateContentResponse>> {
+    const convertedStream = this._convertIContentStream(
+      streamResponse,
+      requestPayload,
+      { promptId, startTime },
+    );
+
+    const firstChunk = await convertedStream.next();
+
+    if (firstChunk.done === true) {
+      throw new EmptyStreamError(
+        'Model stream ended immediately with no content.',
+      );
+    }
+
+    return prependAsyncGenerator(firstChunk.value, convertedStream);
   }
 
   private async _applyToolSelectionHook(
@@ -550,86 +623,115 @@ export class StreamProcessor {
     let lastConvertedChunk: GenerateContentResponse | undefined;
 
     for await (const iContent of streamResponse) {
-      // Track token counts from IContent metadata (Anthropic/OpenAI format)
-      // before conversion to Gemini format
-      // Include cached prompt tokens to reflect full context size
-      const promptTokens = iContent.metadata?.usage?.promptTokens;
-      if (promptTokens !== undefined) {
-        const cacheReads =
-          iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
-        const cacheWrites =
-          iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
-        const combinedPromptTokens = promptTokens + cacheReads + cacheWrites;
-        this.logger.debug(
-          () =>
-            `[StreamProcessor] Tracking promptTokens from IContent: ${combinedPromptTokens}`,
-        );
-        this.compressionHandler.lastPromptTokenCount = combinedPromptTokens;
-      }
+      this._trackPromptTokens(iContent);
 
-      // Convert current chunk to GenerateContentResponse
       const convertedChunk = convertIContentToResponse(iContent);
       lastConvertedChunk = convertedChunk;
 
-      // Trigger AfterModel hook per streamed chunk
-      const hookConfig = this.runtimeContext.providerRuntime.config;
-      if (
-        hookConfig !== undefined &&
-        typeof hookConfig.getEnableHooks === 'function' &&
-        hookConfig.getEnableHooks() === true
-      ) {
-        const hookSystem =
-          typeof hookConfig.getHookSystem === 'function'
-            ? hookConfig.getHookSystem()
-            : undefined;
-        if (hookSystem !== undefined) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (!hookSystem.isInitialized()) {
-            await hookSystem.initialize();
-          }
-          const afterModelResult = await hookSystem.fireAfterModelEvent(
-            llmRequest ?? {},
-            iContent,
-          );
+      const hookResult = await this._processAfterModelHook(
+        iContent,
+        llmRequest,
+        convertedChunk,
+      );
 
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (afterModelResult?.shouldStopExecution() === true) {
-            const effectiveReason = afterModelResult.getEffectiveReason() as
-              | string
-              | undefined;
-            throw new AgentExecutionStoppedError(
-              effectiveReason ?? 'Execution stopped by AfterModel hook',
-              afterModelResult.systemMessage,
-            );
-          }
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (afterModelResult?.isBlockingDecision() === true) {
-            const modifiedResponse = afterModelResult.getModifiedResponse();
-            const syntheticResponse = modifiedResponse ?? convertedChunk;
-            const effectiveReason = afterModelResult.getEffectiveReason() as
-              | string
-              | undefined;
-            throw new AgentExecutionBlockedError(
-              effectiveReason ?? 'Execution blocked by AfterModel hook',
-              syntheticResponse,
-              afterModelResult.systemMessage,
-            );
-          }
-
-          const modifiedResponse = afterModelResult?.getModifiedResponse();
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (modifiedResponse) {
-            lastConvertedChunk = modifiedResponse;
-            yield modifiedResponse;
-            continue;
-          }
-        }
+      if (hookResult.type === 'modified') {
+        lastConvertedChunk = hookResult.response;
+        yield hookResult.response;
+        continue;
       }
 
       yield convertedChunk;
     }
 
+    this._logTelemetry(telemetryContext, lastConvertedChunk);
+  }
+
+  private _trackPromptTokens(iContent: IContent): void {
+    const promptTokens = iContent.metadata?.usage?.promptTokens;
+    if (promptTokens === undefined) return;
+
+    const cacheReads =
+      iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
+    const cacheWrites =
+      iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
+    const combinedPromptTokens = promptTokens + cacheReads + cacheWrites;
+    this.logger.debug(
+      () =>
+        `[StreamProcessor] Tracking promptTokens from IContent: ${combinedPromptTokens}`,
+    );
+    this.compressionHandler.lastPromptTokenCount = combinedPromptTokens;
+  }
+
+  private async _processAfterModelHook(
+    iContent: IContent,
+    llmRequest: Record<string, unknown> | undefined,
+    convertedChunk: GenerateContentResponse,
+  ): Promise<
+    | { type: 'modified'; response: GenerateContentResponse }
+    | { type: 'passthrough' }
+  > {
+    const hookConfig = this.runtimeContext.providerRuntime.config;
+    if (
+      hookConfig === undefined ||
+      typeof hookConfig.getEnableHooks !== 'function' ||
+      hookConfig.getEnableHooks() !== true
+    ) {
+      return { type: 'passthrough' };
+    }
+
+    const hookSystem =
+      typeof hookConfig.getHookSystem === 'function'
+        ? hookConfig.getHookSystem()
+        : undefined;
+    if (hookSystem === undefined) return { type: 'passthrough' };
+
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (!hookSystem.isInitialized()) {
+      await hookSystem.initialize();
+    }
+    const afterModelResult = await hookSystem.fireAfterModelEvent(
+      llmRequest ?? {},
+      iContent,
+    );
+
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (afterModelResult?.shouldStopExecution() === true) {
+      const effectiveReason = afterModelResult.getEffectiveReason() as
+        | string
+        | undefined;
+      throw new AgentExecutionStoppedError(
+        effectiveReason ?? 'Execution stopped by AfterModel hook',
+        afterModelResult.systemMessage,
+      );
+    }
+
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (afterModelResult?.isBlockingDecision() === true) {
+      const modifiedResponse = afterModelResult.getModifiedResponse();
+      const syntheticResponse = modifiedResponse ?? convertedChunk;
+      const effectiveReason = afterModelResult.getEffectiveReason() as
+        | string
+        | undefined;
+      throw new AgentExecutionBlockedError(
+        effectiveReason ?? 'Execution blocked by AfterModel hook',
+        syntheticResponse,
+        afterModelResult.systemMessage,
+      );
+    }
+
+    const modifiedResponse = afterModelResult?.getModifiedResponse();
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (modifiedResponse) {
+      return { type: 'modified', response: modifiedResponse };
+    }
+
+    return { type: 'passthrough' };
+  }
+
+  private _logTelemetry(
+    telemetryContext: { promptId: string; startTime: number } | undefined,
+    lastConvertedChunk: GenerateContentResponse | undefined,
+  ): void {
     if (telemetryContext && lastConvertedChunk) {
       const durationMs = Date.now() - telemetryContext.startTime;
       logApiResponse(
@@ -658,108 +760,148 @@ export class StreamProcessor {
     streamResponse: AsyncGenerator<GenerateContentResponse>,
     userInput: Content | Content[],
   ): AsyncGenerator<GenerateContentResponse> {
-    // Aggregate metadata inline while yielding each chunk immediately
-    const modelResponseParts: Part[] = [];
-    let hasToolCall = false;
-    let finishReason: FinishReason | undefined;
-    let hasTextResponse = false;
-    let hasThinkingResponse = false;
-    const allChunks: GenerateContentResponse[] = [];
+    const acc = this._createStreamAccumulator();
     const includeThoughts =
       this.runtimeContext.ephemerals.reasoning.includeInContext();
 
     for await (const chunk of streamResponse) {
-      // Track finish reason
-      const candidateWithReason = chunk.candidates?.find(
-        (c) => c.finishReason !== undefined,
-      );
-      if (candidateWithReason !== undefined)
-        finishReason = candidateWithReason.finishReason as FinishReason;
-
-      // Track response content flags for later validation
-      if (isValidResponse(chunk)) {
-        const parts = chunk.candidates?.[0]?.content?.parts;
-        if (parts !== undefined) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (parts.some((p) => p.functionCall !== undefined))
-            hasToolCall = true;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (
-            parts.some(
-              (p) =>
-                p.text !== undefined &&
-                typeof p.text === 'string' &&
-                p.text.trim() !== '' &&
-                !isThoughtPart(p),
-            )
-          )
-            hasTextResponse = true;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (parts.some((p) => isThoughtPart(p))) hasThinkingResponse = true;
-          modelResponseParts.push(
-            ...(includeThoughts
-              ? parts
-              : parts.filter((p) => p.thought !== true)),
-          );
-        }
-      }
-
-      const chunkText = typeof chunk.text === 'string' ? chunk.text : '';
-      this.logger.debug(() => `[stream:terminal] observed converted chunk`, {
-        chunkFinishReason: candidateWithReason?.finishReason,
-        partCount: chunk.candidates?.[0]?.content?.parts?.length ?? 0,
-        toolCallCount: chunk.functionCalls?.length ?? 0,
-        textLength: chunkText.length,
-        hasUsageMetadata: Boolean(chunk.usageMetadata),
-      });
-
-      // Track token usage
-      if (chunk.usageMetadata?.promptTokenCount !== undefined) {
-        const chunkUsage = chunk.usageMetadata as UsageMetadataWithCache;
-        this.compressionHandler.lastPromptTokenCount =
-          chunk.usageMetadata.promptTokenCount +
-          (chunkUsage.cache_read_input_tokens ?? 0) +
-          (chunkUsage.cache_creation_input_tokens ?? 0);
-      }
-      allChunks.push(chunk);
-
-      // Yield immediately — this is the critical fix for #1846
+      this._accumulateChunkMetadata(chunk, acc, includeThoughts);
       yield chunk;
     }
 
-    // Post-stream: validate and record history
-    const consolidatedParts = this._consolidateTextParts(modelResponseParts);
+    await this._finalizeStreamProcessing(acc, userInput);
+  }
+
+  private _createStreamAccumulator(): {
+    modelResponseParts: Part[];
+    hasToolCall: boolean;
+    finishReason: FinishReason | undefined;
+    hasTextResponse: boolean;
+    hasThinkingResponse: boolean;
+    allChunks: GenerateContentResponse[];
+  } {
+    return {
+      modelResponseParts: [],
+      hasToolCall: false,
+      finishReason: undefined,
+      hasTextResponse: false,
+      hasThinkingResponse: false,
+      allChunks: [],
+    };
+  }
+
+  private _accumulateChunkMetadata(
+    chunk: GenerateContentResponse,
+    acc: {
+      modelResponseParts: Part[];
+      hasToolCall: boolean;
+      finishReason: FinishReason | undefined;
+      hasTextResponse: boolean;
+      hasThinkingResponse: boolean;
+      allChunks: GenerateContentResponse[];
+    },
+    includeThoughts: boolean,
+  ): void {
+    const candidateWithReason = chunk.candidates?.find(
+      (c) => c.finishReason !== undefined,
+    );
+    if (candidateWithReason !== undefined)
+      acc.finishReason = candidateWithReason.finishReason as FinishReason;
+
+    if (isValidResponse(chunk)) {
+      const parts = chunk.candidates?.[0]?.content?.parts;
+      if (parts !== undefined) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (parts.some((p) => p.functionCall !== undefined))
+          acc.hasToolCall = true;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (
+          parts.some(
+            (p) =>
+              p.text !== undefined &&
+              typeof p.text === 'string' &&
+              p.text.trim() !== '' &&
+              !isThoughtPart(p),
+          )
+        )
+          acc.hasTextResponse = true;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (parts.some((p) => isThoughtPart(p)))
+          acc.hasThinkingResponse = true;
+        acc.modelResponseParts.push(
+          ...(includeThoughts
+            ? parts
+            : parts.filter((p) => p.thought !== true)),
+        );
+      }
+    }
+
+    const chunkText = typeof chunk.text === 'string' ? chunk.text : '';
+    this.logger.debug(() => `[stream:terminal] observed converted chunk`, {
+      chunkFinishReason: candidateWithReason?.finishReason,
+      partCount: chunk.candidates?.[0]?.content?.parts?.length ?? 0,
+      toolCallCount: chunk.functionCalls?.length ?? 0,
+      textLength: chunkText.length,
+      hasUsageMetadata: Boolean(chunk.usageMetadata),
+    });
+
+    if (chunk.usageMetadata?.promptTokenCount !== undefined) {
+      const chunkUsage = chunk.usageMetadata as UsageMetadataWithCache;
+      this.compressionHandler.lastPromptTokenCount =
+        chunk.usageMetadata.promptTokenCount +
+        (chunkUsage.cache_read_input_tokens ?? 0) +
+        (chunkUsage.cache_creation_input_tokens ?? 0);
+    }
+    acc.allChunks.push(chunk);
+  }
+
+  private async _finalizeStreamProcessing(
+    acc: {
+      modelResponseParts: Part[];
+      hasToolCall: boolean;
+      finishReason: FinishReason | undefined;
+      hasTextResponse: boolean;
+      hasThinkingResponse: boolean;
+      allChunks: GenerateContentResponse[];
+    },
+    userInput: Content | Content[],
+  ): Promise<void> {
+    const consolidatedParts = this._consolidateTextParts(acc.modelResponseParts);
     const responseText = this._extractResponseText(consolidatedParts);
 
-    if (isMissingFinishReason(finishReason)) {
+    if (isMissingFinishReason(acc.finishReason)) {
       this.logger.debug(
         () =>
-          `[stream:terminal] stream ended without finishReason (hasToolCall=${String(hasToolCall)}, hasTextResponse=${String(hasTextResponse)}, hasThinkingResponse=${String(hasThinkingResponse)}, responseTextLength=${responseText.length})`,
+          `[stream:terminal] stream ended without finishReason (hasToolCall=${String(acc.hasToolCall)}, hasTextResponse=${String(acc.hasTextResponse)}, hasThinkingResponse=${String(acc.hasThinkingResponse)}, responseTextLength=${responseText.length})`,
       );
     } else {
       this.logger.debug(
         () => `[stream:terminal] finalized stream with finishReason`,
         {
-          finishReason,
-          hasToolCall,
-          hasTextResponse,
-          hasThinkingResponse,
+          finishReason: acc.finishReason,
+          hasToolCall: acc.hasToolCall,
+          hasTextResponse: acc.hasTextResponse,
+          hasThinkingResponse: acc.hasThinkingResponse,
           responseTextLength: responseText.length,
-          chunkCount: allChunks.length,
+          chunkCount: acc.allChunks.length,
         },
       );
     }
 
     this._validateStreamCompletion(
       userInput,
-      hasToolCall,
-      hasTextResponse,
-      hasThinkingResponse,
-      finishReason,
+      acc.hasToolCall,
+      acc.hasTextResponse,
+      acc.hasThinkingResponse,
+      acc.finishReason,
       responseText,
     );
 
-    await this._recordHistoryWithUsage(userInput, consolidatedParts, allChunks);
+    await this._recordHistoryWithUsage(
+      userInput,
+      consolidatedParts,
+      acc.allChunks,
+    );
   }
 
   /**
@@ -809,91 +951,72 @@ export class StreamProcessor {
       ? userInput.some(isFunctionResponse)
       : isFunctionResponse(userInput);
 
+    const validationContext = {
+      hasToolCall,
+      hasTextResponse,
+      hasThinkingResponse,
+      finishReason,
+      responseTextLength: responseText.length,
+      isToolContinuationInput,
+    };
+
     this.logger.debug(
       () => `[stream:terminal] validating converted stream completion`,
-      {
-        hasToolCall,
-        hasTextResponse,
-        hasThinkingResponse,
-        finishReason,
-        responseTextLength: responseText.length,
-        isToolContinuationInput,
-      },
+      validationContext,
     );
 
-    // Enhanced stream validation logic: A stream is considered successful if:
-    // 1. There's a tool call (tool calls can end without explicit finish reasons), OR
-    // 2. There's a finish reason AND we have non-empty response text, OR
-    // 3. We detected text content during streaming (hasTextResponse = true)
-    //
-    // We throw an error only when there's no tool call AND we're not in a
-    // tool-result continuation AND:
-    // - No finish reason AND no text response during streaming, OR
-    // - Empty response text after consolidation (e.g., only thoughts with no actual content)
-    // - MALFORMED_FUNCTION_CALL finish reason (should trigger retry)
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      !hasToolCall &&
-      !isToolContinuationInput &&
-      !hasThinkingResponse &&
-      ((isMissingFinishReason(finishReason) && !hasTextResponse) ||
-        responseText === '')
-    ) {
-      if (isMissingFinishReason(finishReason) && !hasTextResponse) {
-        this.logger.warn(
-          () =>
-            `[stream:terminal] validation failed: missing finishReason and text`,
-          {
-            hasToolCall,
-            hasTextResponse,
-            hasThinkingResponse,
-            finishReason,
-            responseTextLength: responseText.length,
-            isToolContinuationInput,
-          },
-        );
-        throw new InvalidStreamError(
-          'Model stream ended without a finish reason and no text response.',
-          'NO_FINISH_REASON_NO_TEXT',
-        );
-      } else {
-        this.logger.warn(
-          () => `[stream:terminal] validation failed: empty response text`,
-          {
-            hasToolCall,
-            hasTextResponse,
-            hasThinkingResponse,
-            finishReason,
-            responseTextLength: responseText.length,
-            isToolContinuationInput,
-          },
-        );
-        throw new InvalidStreamError(
-          'Model stream ended with empty response text.',
-          'NO_RESPONSE_TEXT',
-        );
-      }
+    const hasMissingFinishAndNoText =
+      isMissingFinishReason(finishReason) && !hasTextResponse;
+    const isEmptyResponse = responseText === '';
+    const noRelevantContent = !hasToolCall && !isToolContinuationInput && !hasThinkingResponse;
+    const isInvalidResponse =
+      noRelevantContent && (hasMissingFinishAndNoText || isEmptyResponse);
+
+    if (isInvalidResponse) {
+      this._throwMissingResponseError(
+        finishReason,
+        hasTextResponse,
+        validationContext,
+      );
     }
 
-    // Handle MALFORMED_FUNCTION_CALL finish reason - should trigger retry
     if (finishReason === FinishReason.MALFORMED_FUNCTION_CALL) {
       this.logger.warn(
         () =>
           `[stream:terminal] validation failed: malformed function call finishReason`,
-        {
-          hasToolCall,
-          hasTextResponse,
-          hasThinkingResponse,
-          finishReason,
-          responseTextLength: responseText.length,
-          isToolContinuationInput,
-        },
+        validationContext,
       );
       throw new InvalidStreamError(
         'Model stream ended with malformed function call.',
         'MALFORMED_FUNCTION_CALL',
       );
     }
+  }
+
+  private _throwMissingResponseError(
+    finishReason: FinishReason | undefined,
+    hasTextResponse: boolean,
+    validationContext: Record<string, unknown>,
+  ): void {
+    if (isMissingFinishReason(finishReason) && !hasTextResponse) {
+      this.logger.warn(
+        () =>
+          `[stream:terminal] validation failed: missing finishReason and text`,
+        validationContext,
+      );
+      throw new InvalidStreamError(
+        'Model stream ended without a finish reason and no text response.',
+        'NO_FINISH_REASON_NO_TEXT',
+      );
+    }
+    this.logger.warn(
+      () => `[stream:terminal] validation failed: empty response text`,
+      validationContext,
+    );
+    throw new InvalidStreamError(
+      'Model stream ended with empty response text.',
+      'NO_RESPONSE_TEXT',
+    );
   }
 
   /**
