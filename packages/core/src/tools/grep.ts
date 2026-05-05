@@ -145,6 +145,413 @@ class GrepToolInvocation extends BaseToolInvocation<
     );
   }
 
+  /**
+   * Executes a single-file search and returns a formatted ToolResult.
+   */
+  private async executeSingleFileSearch(
+    resolved: ResolvedSearchTarget & { kind: 'file' },
+    combinedSignal: AbortSignal,
+    searchDirDisplay: string,
+  ): Promise<ToolResult> {
+    const fileResult = await this.performSingleFileSearch(
+      this.params.pattern,
+      resolved.filePath,
+      resolved.basename,
+      combinedSignal,
+    );
+
+    let includeNote = '';
+    if (this.params.include) {
+      includeNote =
+        '\nNote: include filter ignored because a specific file path was provided.';
+    }
+
+    if (fileResult.length === 0) {
+      const noMatchMsg = `No matches found for pattern "${this.params.pattern}" in file "${searchDirDisplay}".${includeNote}`;
+      return { llmContent: noMatchMsg, returnDisplay: 'No matches found' };
+    }
+
+    const matchTerm = fileResult.length === 1 ? 'match' : 'matches';
+    let llmContent = `Found ${fileResult.length} ${matchTerm} for pattern "${this.params.pattern}" in file "${searchDirDisplay}":${includeNote}
+---
+File: ${resolved.basename}
+`;
+    for (const match of fileResult) {
+      llmContent += `L${match.lineNumber}: ${match.line.trim()}
+`;
+    }
+    llmContent += '---';
+
+    const limited = limitOutputTokens(
+      llmContent.trim(),
+      this.config,
+      'SearchText',
+    );
+
+    if (limited.wasTruncated) {
+      const formatted = formatLimitedOutput(limited);
+      return {
+        llmContent: formatted.llmContent,
+        returnDisplay: formatted.returnDisplay,
+      };
+    }
+
+    return {
+      llmContent: llmContent.trim(),
+      returnDisplay: `Found ${fileResult.length} ${matchTerm}`,
+    };
+  }
+
+  /**
+   * Collects matches across multiple search directories.
+   */
+  private async collectDirectoryMatches(
+    searchDirectories: readonly string[],
+    combinedSignal: AbortSignal,
+    maxResults: number,
+    maxFiles: number,
+    maxPerFile: number,
+    filesWithMatches: Set<string>,
+  ): Promise<{
+    allMatches: GrepMatch[];
+    totalMatchesFound: number;
+    wasLimited: boolean;
+  }> {
+    let allMatches: GrepMatch[] = [];
+    let totalMatchesFound = 0;
+    let wasLimited = false;
+
+    for (const searchDir of searchDirectories) {
+      if (allMatches.length >= maxResults) {
+        wasLimited = true;
+        break;
+      }
+
+      const matches = await this.performGrepSearch({
+        pattern: this.params.pattern,
+        path: searchDir,
+        include: this.params.include,
+        signal: combinedSignal,
+        maxResults: maxResults - allMatches.length,
+        maxFiles: maxFiles - filesWithMatches.size,
+        maxPerFile,
+      });
+
+      if (matches.wasLimited === true) {
+        wasLimited = true;
+      }
+
+      if (searchDirectories.length > 1) {
+        const dirName = path.basename(searchDir);
+        matches.results.forEach((match) => {
+          match.filePath = path.join(dirName, match.filePath);
+        });
+      }
+
+      matches.results.forEach((match) => {
+        filesWithMatches.add(match.filePath);
+      });
+      totalMatchesFound += matches.totalFound ?? matches.results.length;
+
+      allMatches = allMatches.concat(matches.results);
+    }
+
+    return { allMatches, totalMatchesFound, wasLimited };
+  }
+
+  /**
+   * Applies max_files and max_per_file limits, returning grouped matches,
+   * match count, and any limit message.
+   */
+  private applyFileLimits(
+    allMatches: GrepMatch[],
+    filesWithMatches: Set<string>,
+    maxFiles: number,
+    maxPerFile: number,
+  ): {
+    matchesByFile: Record<string, GrepMatch[]>;
+    matchCount: number;
+    limitedMatches: GrepMatch[];
+    limitMessage: string;
+    wasLimited: boolean;
+  } {
+    let limitedMatches = allMatches;
+    let limitMessage = '';
+    let wasLimited = false;
+
+    if (filesWithMatches.size > maxFiles) {
+      const filesToKeep = Array.from(filesWithMatches).slice(0, maxFiles);
+      limitedMatches = allMatches.filter((match) =>
+        filesToKeep.includes(match.filePath),
+      );
+      limitMessage = `
+
+**Note: Results limited to ${maxFiles} files out of ${filesWithMatches.size} files with matches.**`;
+      wasLimited = true;
+    }
+
+    const matchesByFile = limitedMatches.reduce(
+      (acc, match) => {
+        const fileKey = match.filePath;
+        if (!(fileKey in acc)) {
+          acc[fileKey] = [];
+        }
+        if (acc[fileKey].length < maxPerFile) {
+          acc[fileKey].push(match);
+        }
+        acc[fileKey].sort((a, b) => a.lineNumber - b.lineNumber);
+        return acc;
+      },
+      {} as Record<string, GrepMatch[]>,
+    );
+
+    const matchCount = Object.values(matchesByFile).reduce(
+      (sum, matches) => sum + matches.length,
+      0,
+    );
+
+    return {
+      matchesByFile,
+      matchCount,
+      limitedMatches,
+      limitMessage,
+      wasLimited,
+    };
+  }
+
+  /**
+   * Builds the formatted LLM content string from grouped matches.
+   */
+  private formatMatchOutput(
+    matchesByFile: Record<string, GrepMatch[]>,
+    limitMessage: string,
+    totalMatchesFound: number,
+    matchCount: number,
+    wasLimited: boolean,
+    searchLocationDescription: string,
+  ): string {
+    let llmContent = '';
+    if (wasLimited || totalMatchesFound > matchCount) {
+      llmContent = `Found ${totalMatchesFound} total matches, showing ${matchCount} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:
+---
+`;
+    } else {
+      const matchTerm = matchCount === 1 ? 'match' : 'matches';
+      llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:
+---
+`;
+    }
+
+    for (const filePath in matchesByFile) {
+      llmContent += `File: ${filePath}
+`;
+      matchesByFile[filePath].forEach((match) => {
+        const trimmedLine = match.line.trim();
+        llmContent += `L${match.lineNumber}: ${trimmedLine}
+`;
+      });
+      llmContent += '---\n';
+    }
+
+    if (limitMessage) {
+      llmContent += limitMessage;
+    }
+
+    return llmContent;
+  }
+
+  /**
+   * Applies file and per-file limits to matches and builds the output content.
+   */
+  private buildDirectorySearchResult(
+    allMatches: GrepMatch[],
+    totalMatchesFound: number,
+    wasLimited: boolean,
+    filesWithMatches: Set<string>,
+    searchLocationDescription: string,
+    maxFiles: number,
+    maxPerFile: number,
+  ): ToolResult {
+    if (allMatches.length === 0) {
+      const noMatchMsg = `No matches found for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}.`;
+      return { llmContent: noMatchMsg, returnDisplay: `No matches found` };
+    }
+
+    const {
+      matchesByFile,
+      matchCount,
+      limitMessage,
+      wasLimited: limited,
+    } = this.applyFileLimits(
+      allMatches,
+      filesWithMatches,
+      maxFiles,
+      maxPerFile,
+    );
+
+    const effectiveWasLimited = wasLimited || limited;
+
+    const llmContent = this.formatMatchOutput(
+      matchesByFile,
+      limitMessage,
+      totalMatchesFound,
+      matchCount,
+      effectiveWasLimited,
+      searchLocationDescription,
+    );
+
+    // Apply token limiting as final safety check
+    const limitedOutput = limitOutputTokens(
+      llmContent.trim(),
+      this.config,
+      'SearchText',
+    );
+
+    if (limitedOutput.wasTruncated) {
+      const formatted = formatLimitedOutput(limitedOutput);
+      return {
+        llmContent: formatted.llmContent,
+        returnDisplay: formatted.returnDisplay,
+      };
+    }
+
+    const displayCount =
+      effectiveWasLimited || totalMatchesFound > matchCount
+        ? `Found ${totalMatchesFound} matches (showing ${matchCount})`
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          `Found ${matchCount} ${matchCount === 1 ? 'match' : 'matches'}`;
+
+    return {
+      llmContent: llmContent.trim(),
+      returnDisplay: displayCount,
+    };
+  }
+
+  /**
+   * Handles abort/timeout errors from execute, returning appropriate ToolResult.
+   */
+  private handleExecuteError(
+    error: unknown,
+    timeoutController: AbortController,
+    timeoutMs: number,
+    signal: AbortSignal,
+  ): ToolResult {
+    const isAbortError =
+      error instanceof Error &&
+      (error.name === 'AbortError' ||
+        error.message.includes('aborted') ||
+        error.message.includes('This operation was aborted'));
+
+    if (isAbortError) {
+      // Check if it was a timeout (our controller aborted but user's didn't)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- caller AbortSignal can change asynchronously outside this stack
+      if (timeoutController.signal.aborted && !signal.aborted) {
+        const timeoutMessage =
+          `Search operation timed out after ${timeoutMs}ms. To resolve this, you can either:
+` +
+          `1. Increase the timeout (max ${MAX_TIMEOUT_MS}ms) by adding timeout_ms parameter
+` +
+          `2. Use a more specific pattern to reduce search scope
+` +
+          `3. Use a narrower path or include filter`;
+        return {
+          llmContent: timeoutMessage,
+          returnDisplay: `Timed out after ${timeoutMs}ms`,
+          error: {
+            message: timeoutMessage,
+            type: ToolErrorType.TIMEOUT,
+          },
+        };
+      }
+      return {
+        llmContent: 'Search operation was cancelled by user.',
+        returnDisplay: 'Cancelled',
+        error: {
+          message: 'Search operation was cancelled by user.',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
+    debugLogger.error(`Error during GrepLogic execution: ${error}`);
+    const errorMessage = getErrorMessage(error);
+    return {
+      llmContent: `Error during grep search operation: ${errorMessage}`,
+      returnDisplay: `Error: ${errorMessage}`,
+      error: {
+        message: errorMessage,
+        type: ToolErrorType.GREP_EXECUTION_ERROR,
+      },
+    };
+  }
+
+  /**
+   * Executes the directory search after resolving the target.
+   */
+  private async executeDirectorySearch(
+    resolved: ResolvedSearchTarget,
+    workspaceContext: ReturnType<Config['getWorkspaceContext']>,
+    combinedSignal: AbortSignal,
+    searchDirDisplay: string,
+  ): Promise<ToolResult> {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: dirPath is optional string, empty string should fall through
+    const ephemeralSettings = this.config.getEphemeralSettings();
+    const maxResults =
+      this.params.max_results ??
+      (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
+      1000;
+    const maxFiles = this.params.max_files ?? 100;
+    const maxPerFile = this.params.max_per_file ?? 50;
+
+    if (resolved.kind === 'file') {
+      return this.executeSingleFileSearch(
+        resolved as ResolvedSearchTarget & { kind: 'file' },
+        combinedSignal,
+        searchDirDisplay,
+      );
+    }
+
+    // Determine which directories to search
+    let searchDirectories: readonly string[];
+    if (resolved.kind === 'all-workspaces') {
+      searchDirectories = workspaceContext.getDirectories();
+    } else {
+      searchDirectories = [resolved.searchDir];
+    }
+
+    const filesWithMatches = new Set<string>();
+    const { allMatches, totalMatchesFound, wasLimited } =
+      await this.collectDirectoryMatches(
+        searchDirectories,
+        combinedSignal,
+        maxResults,
+        maxFiles,
+        maxPerFile,
+        filesWithMatches,
+      );
+
+    let searchLocationDescription: string;
+    if (resolved.kind === 'all-workspaces') {
+      const numDirs = workspaceContext.getDirectories().length;
+      searchLocationDescription =
+        numDirs > 1
+          ? `across ${numDirs} workspace directories`
+          : `in the workspace directory`;
+    } else {
+      searchLocationDescription = `in path "${searchDirDisplay}"`;
+    }
+
+    return this.buildDirectorySearchResult(
+      allMatches,
+      totalMatchesFound,
+      wasLimited,
+      filesWithMatches,
+      searchLocationDescription,
+      maxFiles,
+      maxPerFile,
+    );
+  }
+
   async execute(signal: AbortSignal): Promise<ToolResult> {
     // Set up timeout handling
     const timeoutMs = Math.min(
@@ -162,7 +569,6 @@ class GrepToolInvocation extends BaseToolInvocation<
     if (signal.aborted) {
       clearTimeout(timeoutId);
       timeoutController.abort();
-      // Early return for already-aborted signal
       return {
         llmContent: 'Search operation was cancelled by user.',
         returnDisplay: 'Cancelled',
@@ -174,7 +580,6 @@ class GrepToolInvocation extends BaseToolInvocation<
     }
     signal.addEventListener('abort', onUserAbort, { once: true });
 
-    // Use the combined signal for all operations
     const combinedSignal = timeoutController.signal;
 
     try {
@@ -184,267 +589,20 @@ class GrepToolInvocation extends BaseToolInvocation<
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: dirPath is optional string, empty string should fall through
       const searchDirDisplay = dirPath || '.';
 
-      // Get limits from parameters or ephemeral settings
-      const ephemeralSettings = this.config.getEphemeralSettings();
-      const maxResults =
-        this.params.max_results ??
-        (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
-        1000; // Higher default for grep than glob
-      const maxFiles = this.params.max_files ?? 100;
-      const maxPerFile = this.params.max_per_file ?? 50;
-
-      if (resolved.kind === 'file') {
-        const fileResult = await this.performSingleFileSearch(
-          this.params.pattern,
-          resolved.filePath,
-          resolved.basename,
-          combinedSignal,
-        );
-
-        let includeNote = '';
-        if (this.params.include) {
-          includeNote =
-            '\nNote: include filter ignored because a specific file path was provided.';
-        }
-
-        if (fileResult.length === 0) {
-          const noMatchMsg = `No matches found for pattern "${this.params.pattern}" in file "${searchDirDisplay}".${includeNote}`;
-          return { llmContent: noMatchMsg, returnDisplay: 'No matches found' };
-        }
-
-        const matchTerm = fileResult.length === 1 ? 'match' : 'matches';
-        let llmContent = `Found ${fileResult.length} ${matchTerm} for pattern "${this.params.pattern}" in file "${searchDirDisplay}":${includeNote}
----
-File: ${resolved.basename}
-`;
-        for (const match of fileResult) {
-          llmContent += `L${match.lineNumber}: ${match.line.trim()}
-`;
-        }
-        llmContent += '---';
-
-        const limited = limitOutputTokens(
-          llmContent.trim(),
-          this.config,
-          'SearchText',
-        );
-
-        if (limited.wasTruncated) {
-          const formatted = formatLimitedOutput(limited);
-          return {
-            llmContent: formatted.llmContent,
-            returnDisplay: formatted.returnDisplay,
-          };
-        }
-
-        return {
-          llmContent: llmContent.trim(),
-          returnDisplay: `Found ${fileResult.length} ${matchTerm}`,
-        };
-      }
-
-      // Determine which directories to search
-      let searchDirectories: readonly string[];
-      if (resolved.kind === 'all-workspaces') {
-        searchDirectories = workspaceContext.getDirectories();
-      } else {
-        searchDirectories = [resolved.searchDir];
-      }
-
-      // Collect matches from all search directories
-      let allMatches: GrepMatch[] = [];
-      let totalMatchesFound = 0;
-      const filesWithMatches = new Set<string>();
-      let wasLimited = false;
-
-      for (const searchDir of searchDirectories) {
-        if (allMatches.length >= maxResults) {
-          wasLimited = true;
-          break;
-        }
-
-        const matches = await this.performGrepSearch({
-          pattern: this.params.pattern,
-          path: searchDir,
-          include: this.params.include,
-          signal: combinedSignal,
-          maxResults: maxResults - allMatches.length,
-          maxFiles: maxFiles - filesWithMatches.size,
-          maxPerFile,
-        });
-
-        // Track if we hit limits
-        if (matches.wasLimited === true) {
-          wasLimited = true;
-        }
-
-        // Add directory prefix if searching multiple directories
-        if (searchDirectories.length > 1) {
-          const dirName = path.basename(searchDir);
-          matches.results.forEach((match) => {
-            match.filePath = path.join(dirName, match.filePath);
-          });
-        }
-
-        // Track files and total matches
-        matches.results.forEach((match) => {
-          filesWithMatches.add(match.filePath);
-        });
-        totalMatchesFound += matches.totalFound ?? matches.results.length;
-
-        allMatches = allMatches.concat(matches.results);
-      }
-
-      let searchLocationDescription: string;
-      if (resolved.kind === 'all-workspaces') {
-        const numDirs = workspaceContext.getDirectories().length;
-        searchLocationDescription =
-          numDirs > 1
-            ? `across ${numDirs} workspace directories`
-            : `in the workspace directory`;
-      } else {
-        searchLocationDescription = `in path "${searchDirDisplay}"`;
-      }
-
-      if (allMatches.length === 0) {
-        const noMatchMsg = `No matches found for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}.`;
-        return { llmContent: noMatchMsg, returnDisplay: `No matches found` };
-      }
-
-      // Apply max_files limit if needed
-      let limitedMatches = allMatches;
-      let limitMessage = '';
-
-      if (filesWithMatches.size > maxFiles) {
-        const filesToKeep = Array.from(filesWithMatches).slice(0, maxFiles);
-        limitedMatches = allMatches.filter((match) =>
-          filesToKeep.includes(match.filePath),
-        );
-        limitMessage = `\n\n**Note: Results limited to ${maxFiles} files out of ${filesWithMatches.size} files with matches.**`;
-        wasLimited = true;
-      }
-
-      // Apply max_per_file limit if needed
-      const matchesByFile = limitedMatches.reduce(
-        (acc, match) => {
-          const fileKey = match.filePath;
-          if (!(fileKey in acc)) {
-            acc[fileKey] = [];
-          }
-          if (acc[fileKey].length < maxPerFile) {
-            acc[fileKey].push(match);
-          }
-          acc[fileKey].sort((a, b) => a.lineNumber - b.lineNumber);
-          return acc;
-        },
-        {} as Record<string, GrepMatch[]>,
+      return await this.executeDirectorySearch(
+        resolved,
+        workspaceContext,
+        combinedSignal,
+        searchDirDisplay,
       );
-
-      // Count actual matches shown
-      const matchCount = Object.values(matchesByFile).reduce(
-        (sum, matches) => sum + matches.length,
-        0,
-      );
-
-      // Build output content
-      let llmContent = '';
-      if (wasLimited || totalMatchesFound > matchCount) {
-        llmContent = `Found ${totalMatchesFound} total matches, showing ${matchCount} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:\n---\n`;
-      } else {
-        const matchTerm = matchCount === 1 ? 'match' : 'matches';
-        llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:\n---\n`;
-      }
-
-      for (const filePath in matchesByFile) {
-        llmContent += `File: ${filePath}\n`;
-        matchesByFile[filePath].forEach((match) => {
-          const trimmedLine = match.line.trim();
-          llmContent += `L${match.lineNumber}: ${trimmedLine}\n`;
-        });
-        llmContent += '---\n';
-      }
-
-      if (limitMessage) {
-        llmContent += limitMessage;
-      }
-
-      // Apply token limiting as final safety check
-      const limited = limitOutputTokens(
-        llmContent.trim(),
-        this.config,
-        'SearchText',
-      );
-
-      if (limited.wasTruncated) {
-        const formatted = formatLimitedOutput(limited);
-        return {
-          llmContent: formatted.llmContent,
-          returnDisplay: formatted.returnDisplay,
-        };
-      }
-
-      const displayCount =
-        wasLimited || totalMatchesFound > matchCount
-          ? `Found ${totalMatchesFound} matches (showing ${matchCount})`
-          : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            `Found ${matchCount} ${matchCount === 1 ? 'match' : 'matches'}`;
-
-      return {
-        llmContent: llmContent.trim(),
-        returnDisplay: displayCount,
-      };
     } catch (error) {
-      // Check if this was a timeout vs user abort
-      const isAbortError =
-        error instanceof Error &&
-        (error.name === 'AbortError' ||
-          error.message.includes('aborted') ||
-          error.message.includes('This operation was aborted'));
-
-      if (isAbortError) {
-        // Check if it was a timeout (our controller aborted but user's didn't)
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- caller AbortSignal can change asynchronously outside this stack
-        if (timeoutController.signal.aborted && !signal.aborted) {
-          const timeoutMessage =
-            `Search operation timed out after ${timeoutMs}ms. To resolve this, you can either:
-` +
-            `1. Increase the timeout (max ${MAX_TIMEOUT_MS}ms) by adding timeout_ms parameter
-` +
-            `2. Use a more specific pattern to reduce search scope
-` +
-            `3. Use a narrower path or include filter`;
-          return {
-            llmContent: timeoutMessage,
-            returnDisplay: `Timed out after ${timeoutMs}ms`,
-            error: {
-              message: timeoutMessage,
-              type: ToolErrorType.TIMEOUT,
-            },
-          };
-        }
-        // User cancelled - return cancellation result rather than throwing
-        return {
-          llmContent: 'Search operation was cancelled by user.',
-          returnDisplay: 'Cancelled',
-          error: {
-            message: 'Search operation was cancelled by user.',
-            type: ToolErrorType.EXECUTION_FAILED,
-          },
-        };
-      }
-
-      debugLogger.error(`Error during GrepLogic execution: ${error}`);
-      const errorMessage = getErrorMessage(error);
-      return {
-        llmContent: `Error during grep search operation: ${errorMessage}`,
-        returnDisplay: `Error: ${errorMessage}`,
-        error: {
-          message: errorMessage,
-          type: ToolErrorType.GREP_EXECUTION_ERROR,
-        },
-      };
+      return this.handleExecuteError(
+        error,
+        timeoutController,
+        timeoutMs,
+        signal,
+      );
     } finally {
-      // Clean up timeout
       clearTimeout(timeoutId);
       signal.removeEventListener('abort', onUserAbort);
     }
@@ -654,6 +812,394 @@ File: ${resolved.basename}
   }
 
   /**
+   * Runs git grep as Strategy 1.
+   */
+  private async tryGitGrep(
+    pattern: string,
+    absolutePath: string,
+    include: string | undefined,
+    abortSignal: AbortSignal,
+    maxResults: number,
+    maxFiles: number,
+    maxPerFile: number,
+    hasBracePattern: boolean,
+  ): Promise<{
+    results: GrepMatch[];
+    wasLimited?: boolean;
+    totalFound?: number;
+  } | null> {
+    const isGit = !hasBracePattern && isGitRepository(absolutePath);
+    const gitAvailable = isGit && (await this.isCommandAvailable('git'));
+
+    if (!gitAvailable) return null;
+
+    const gitArgs = [
+      'grep',
+      '--untracked',
+      '-n',
+      '-E',
+      '--ignore-case',
+      pattern,
+    ];
+    if (include) {
+      gitArgs.push('--', include);
+    }
+
+    try {
+      const output = await new Promise<string>((resolve, reject) => {
+        // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
+        const child = spawn('git', gitArgs, {
+          cwd: absolutePath,
+          windowsHide: true,
+        });
+        const stdoutChunks: Buffer[] = [];
+        const stderrChunks: Buffer[] = [];
+
+        const abortHandler = () => {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          if (!child.killed) {
+            child.kill('SIGTERM');
+          }
+          reject(new Error('git grep aborted'));
+        };
+        abortSignal.addEventListener('abort', abortHandler);
+
+        child.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
+        child.stderr.on('data', (chunk) => stderrChunks.push(chunk));
+        child.on('error', (err) => {
+          abortSignal.removeEventListener('abort', abortHandler);
+          reject(new Error(`Failed to start git grep: ${err.message}`));
+        });
+        child.on('close', (code) => {
+          abortSignal.removeEventListener('abort', abortHandler);
+          const stdoutData = Buffer.concat(stdoutChunks).toString('utf8');
+          const stderrData = Buffer.concat(stderrChunks).toString('utf8');
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          if (code === 0) resolve(stdoutData);
+          else if (code === 1)
+            resolve(''); // No matches
+          else
+            reject(
+              new Error(`git grep exited with code ${code}: ${stderrData}`),
+            );
+        });
+      });
+      const matches = this.parseGrepOutput(output, absolutePath);
+      return this.applyLimits(matches, maxResults, maxFiles, maxPerFile);
+    } catch (gitError: unknown) {
+      debugLogger.debug(
+        `GrepLogic: git grep failed: ${getErrorMessage(
+          gitError,
+        )}. Falling back...`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Builds the grep args for system grep, including exclusion patterns.
+   */
+  private buildSystemGrepArgs(
+    pattern: string,
+    include: string | undefined,
+  ): string[] {
+    const grepArgs = ['-r', '-n', '-H', '-E', '-I'];
+    const globExcludes = this.fileExclusions.getGlobExcludes();
+    const commonExcludes = globExcludes
+      .map((pattern) => {
+        let dir = pattern;
+        if (dir.startsWith('**/')) {
+          dir = dir.substring(3);
+        }
+        if (dir.endsWith('/**')) {
+          dir = dir.slice(0, -3);
+        } else if (dir.endsWith('/')) {
+          dir = dir.slice(0, -1);
+        }
+
+        // Only consider patterns that are likely directories
+        if (dir && !dir.includes('/') && !dir.includes('*')) {
+          return dir;
+        }
+        return null;
+      })
+      .filter((dir): dir is string => !!dir);
+    commonExcludes.forEach((dir) => grepArgs.push(`--exclude-dir=${dir}`));
+    if (include) {
+      grepArgs.push(`--include=${include}`);
+    }
+    grepArgs.push(pattern);
+    grepArgs.push('.');
+    return grepArgs;
+  }
+
+  /**
+   * Sets up event handlers for a spawned grep child process.
+   */
+  private setupSystemGrepHandlers(
+    child: ReturnType<typeof spawn>,
+    abortSignal: AbortSignal,
+    stdoutChunks: Buffer[],
+    stderrChunks: Buffer[],
+    resolve: (value: string) => void,
+    reject: (reason: Error) => void,
+  ): () => void {
+    const abortHandler = () => {
+      if (!child.killed) {
+        child.kill('SIGTERM');
+      }
+      cleanup();
+      reject(new Error('system grep aborted'));
+    };
+    abortSignal.addEventListener('abort', abortHandler);
+
+    const onData = (chunk: Buffer) => stdoutChunks.push(chunk);
+    const onStderr = (chunk: Buffer) => {
+      const stderrStr = chunk.toString();
+      if (
+        !stderrStr.includes('Permission denied') &&
+        !/grep:.*: Is a directory/i.test(stderrStr)
+      ) {
+        stderrChunks.push(chunk);
+      }
+    };
+    const onError = (err: Error) => {
+      cleanup();
+      reject(new Error(`Failed to start system grep: ${err.message}`));
+    };
+    const onClose = (code: number | null) => {
+      const stdoutData = Buffer.concat(stdoutChunks).toString('utf8');
+      const stderrData = Buffer.concat(stderrChunks).toString('utf8').trim();
+      cleanup();
+      if (code === 0) resolve(stdoutData);
+      else if (code === 1)
+        resolve(''); // No matches
+      else if (stderrData)
+        reject(
+          new Error(`System grep exited with code ${code}: ${stderrData}`),
+        );
+      else resolve(''); // Exit code > 1 but no stderr, likely just suppressed errors
+    };
+
+    const cleanup = () => {
+      abortSignal.removeEventListener('abort', abortHandler);
+      child.stdout!.removeListener('data', onData);
+      child.stderr!.removeListener('data', onStderr);
+      child.removeListener('error', onError);
+      child.removeListener('close', onClose);
+      if (child.connected) {
+        child.disconnect();
+      }
+    };
+
+    child.stdout!.on('data', onData);
+    child.stderr!.on('data', onStderr);
+    child.on('error', onError);
+    child.on('close', onClose);
+
+    return cleanup;
+  }
+
+  /**
+   * Runs system grep as Strategy 2.
+   */
+  private async trySystemGrep(
+    grepArgs: string[],
+    absolutePath: string,
+    abortSignal: AbortSignal,
+    maxResults: number,
+    maxFiles: number,
+    maxPerFile: number,
+  ): Promise<{
+    results: GrepMatch[];
+    wasLimited?: boolean;
+    totalFound?: number;
+  } | null> {
+    try {
+      const output = await new Promise<string>((resolve, reject) => {
+        // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
+        const child = spawn('grep', grepArgs, {
+          cwd: absolutePath,
+          windowsHide: true,
+        });
+        const stdoutChunks: Buffer[] = [];
+        const stderrChunks: Buffer[] = [];
+
+        this.setupSystemGrepHandlers(
+          child,
+          abortSignal,
+          stdoutChunks,
+          stderrChunks,
+          resolve,
+          reject,
+        );
+      });
+      const matches = this.parseGrepOutput(output, absolutePath);
+      return this.applyLimits(matches, maxResults, maxFiles, maxPerFile);
+    } catch (grepError: unknown) {
+      debugLogger.debug(
+        `GrepLogic: System grep failed: ${getErrorMessage(
+          grepError,
+        )}. Falling back...`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Extracts matches from a single file's content lines.
+   */
+  private extractMatchesFromFile(
+    lines: string[],
+    fileAbsolutePath: string,
+    absolutePath: string,
+    regex: RegExp,
+    maxPerFile: number,
+    maxResults: number,
+    allMatches: GrepMatch[],
+    filesWithMatches: Set<string>,
+  ): number {
+    let matchesInFile = 0;
+    let totalFound = 0;
+
+    lines.forEach((line, index) => {
+      if (regex.test(line)) {
+        totalFound++;
+        if (matchesInFile < maxPerFile && allMatches.length < maxResults) {
+          allMatches.push({
+            filePath:
+              path.relative(absolutePath, fileAbsolutePath) ||
+              path.basename(fileAbsolutePath),
+            lineNumber: index + 1,
+            line,
+          });
+          matchesInFile++;
+          filesWithMatches.add(fileAbsolutePath);
+        }
+      }
+    });
+
+    return totalFound;
+  }
+
+  /**
+   * Pure JavaScript fallback for grep (Strategy 3).
+   */
+  private async javascriptGrepFallback(
+    pattern: string,
+    absolutePath: string,
+    include: string | undefined,
+    abortSignal: AbortSignal,
+    maxResults: number,
+    maxFiles: number,
+    maxPerFile: number,
+  ): Promise<{
+    results: GrepMatch[];
+    wasLimited?: boolean;
+    totalFound?: number;
+  }> {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: include is optional string, empty string should fall through to default glob
+    const globPattern = include ? include : '**/*';
+    const ignorePatterns = this.fileExclusions.getGlobExcludes();
+
+    const filesStream = globStream(globPattern, {
+      cwd: absolutePath,
+      dot: true,
+      ignore: ignorePatterns,
+      absolute: true,
+      nodir: true,
+      signal: abortSignal,
+    });
+
+    const regex = new RegExp(pattern, 'i');
+    const allMatches: GrepMatch[] = [];
+    const filesWithMatches = new Set<string>();
+    let totalFound = 0;
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for await (const filePath of filesStream) {
+      // Check if we've hit file limit
+      if (
+        filesWithMatches.size >= maxFiles &&
+        !filesWithMatches.has(filePath)
+      ) {
+        continue;
+      }
+
+      // Check if we've hit total results limit
+      if (allMatches.length >= maxResults) {
+        break;
+      }
+
+      const fileAbsolutePath = filePath;
+      try {
+        const content = await fsPromises.readFile(fileAbsolutePath, 'utf8');
+        const lines = content.split(/\r?\n/);
+
+        totalFound += this.extractMatchesFromFile(
+          lines,
+          fileAbsolutePath,
+          absolutePath,
+          regex,
+          maxPerFile,
+          maxResults,
+          allMatches,
+          filesWithMatches,
+        );
+      } catch (readError: unknown) {
+        // Ignore errors like permission denied or file gone during read
+        if (!isNodeError(readError) || readError.code !== 'ENOENT') {
+          debugLogger.debug(
+            `GrepLogic: Could not read/process ${fileAbsolutePath}: ${getErrorMessage(
+              readError,
+            )}`,
+          );
+        }
+      }
+    }
+
+    return {
+      results: allMatches,
+      wasLimited: totalFound > allMatches.length,
+      totalFound: totalFound > allMatches.length ? totalFound : undefined,
+    };
+  }
+
+  /**
+   * Attempts system grep (Strategy 2), returning null to fall through.
+   */
+  private async trySystemGrepStrategy(
+    pattern: string,
+    absolutePath: string,
+    include: string | undefined,
+    signal: AbortSignal,
+    maxResults: number,
+    maxFiles: number,
+    maxPerFile: number,
+  ): Promise<{
+    results: GrepMatch[];
+    wasLimited?: boolean;
+    totalFound?: number;
+  } | null> {
+    debugLogger.debug(
+      'GrepLogic: System grep is being considered as fallback strategy.',
+    );
+
+    const grepAvailable = await this.isCommandAvailable('grep');
+    if (!grepAvailable) return null;
+
+    const grepArgs = this.buildSystemGrepArgs(pattern, include);
+    return this.trySystemGrep(
+      grepArgs,
+      absolutePath,
+      signal,
+      maxResults,
+      maxFiles,
+      maxPerFile,
+    );
+  }
+
+  /**
    * Performs the actual search using the prioritized strategies.
    * @param options Search options including pattern, absolute path, and include glob.
    * @returns A promise resolving to search results with limit information.
@@ -683,199 +1229,38 @@ File: ${resolved.basename}
 
     try {
       // --- Strategy 1: git grep ---
-      // Skip git grep if include pattern has brace expansion (e.g., *.{ts,tsx})
-      // because git grep pathspecs don't support shell-style brace expansion.
       const hasBracePattern =
         typeof include === 'string' &&
         include.length > 0 &&
         hasBraceExpansion(include);
-      const isGit = !hasBracePattern && isGitRepository(absolutePath);
-      const gitAvailable = isGit && (await this.isCommandAvailable('git'));
 
-      if (gitAvailable) {
-        strategyUsed = 'git grep';
-        const gitArgs = [
-          'grep',
-          '--untracked',
-          '-n',
-          '-E',
-          '--ignore-case',
-          pattern,
-        ];
-        if (include) {
-          gitArgs.push('--', include);
-        }
-
-        try {
-          const output = await new Promise<string>((resolve, reject) => {
-            // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
-            const child = spawn('git', gitArgs, {
-              cwd: absolutePath,
-              windowsHide: true,
-            });
-            const stdoutChunks: Buffer[] = [];
-            const stderrChunks: Buffer[] = [];
-
-            // Handle abort signal to kill child process
-            const abortHandler = () => {
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (!child.killed) {
-                child.kill('SIGTERM');
-              }
-              reject(new Error('git grep aborted'));
-            };
-            options.signal.addEventListener('abort', abortHandler);
-
-            child.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
-            child.stderr.on('data', (chunk) => stderrChunks.push(chunk));
-            child.on('error', (err) => {
-              options.signal.removeEventListener('abort', abortHandler);
-              reject(new Error(`Failed to start git grep: ${err.message}`));
-            });
-            child.on('close', (code) => {
-              options.signal.removeEventListener('abort', abortHandler);
-              const stdoutData = Buffer.concat(stdoutChunks).toString('utf8');
-              const stderrData = Buffer.concat(stderrChunks).toString('utf8');
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (code === 0) resolve(stdoutData);
-              else if (code === 1)
-                resolve(''); // No matches
-              else
-                reject(
-                  new Error(`git grep exited with code ${code}: ${stderrData}`),
-                );
-            });
-          });
-          const matches = this.parseGrepOutput(output, absolutePath);
-          return this.applyLimits(matches, maxResults, maxFiles, maxPerFile);
-        } catch (gitError: unknown) {
-          debugLogger.debug(
-            `GrepLogic: git grep failed: ${getErrorMessage(
-              gitError,
-            )}. Falling back...`,
-          );
-        }
+      const gitResult = await this.tryGitGrep(
+        pattern,
+        absolutePath,
+        include,
+        options.signal,
+        maxResults,
+        maxFiles,
+        maxPerFile,
+        hasBracePattern,
+      );
+      if (gitResult !== null) {
+        return gitResult;
       }
 
       // --- Strategy 2: System grep ---
-      debugLogger.debug(
-        'GrepLogic: System grep is being considered as fallback strategy.',
+      strategyUsed = 'system grep';
+      const sysResult = await this.trySystemGrepStrategy(
+        pattern,
+        absolutePath,
+        include,
+        options.signal,
+        maxResults,
+        maxFiles,
+        maxPerFile,
       );
-
-      const grepAvailable = await this.isCommandAvailable('grep');
-      if (grepAvailable) {
-        strategyUsed = 'system grep';
-        const grepArgs = ['-r', '-n', '-H', '-E', '-I'];
-        // Extract directory names from exclusion patterns for grep --exclude-dir
-        const globExcludes = this.fileExclusions.getGlobExcludes();
-        const commonExcludes = globExcludes
-          .map((pattern) => {
-            let dir = pattern;
-            if (dir.startsWith('**/')) {
-              dir = dir.substring(3);
-            }
-            if (dir.endsWith('/**')) {
-              dir = dir.slice(0, -3);
-            } else if (dir.endsWith('/')) {
-              dir = dir.slice(0, -1);
-            }
-
-            // Only consider patterns that are likely directories. This filters out file patterns.
-            if (dir && !dir.includes('/') && !dir.includes('*')) {
-              return dir;
-            }
-            return null;
-          })
-          .filter((dir): dir is string => !!dir);
-        commonExcludes.forEach((dir) => grepArgs.push(`--exclude-dir=${dir}`));
-        if (include) {
-          grepArgs.push(`--include=${include}`);
-        }
-        grepArgs.push(pattern);
-        grepArgs.push('.');
-
-        try {
-          const output = await new Promise<string>((resolve, reject) => {
-            // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
-            const child = spawn('grep', grepArgs, {
-              cwd: absolutePath,
-              windowsHide: true,
-            });
-            const stdoutChunks: Buffer[] = [];
-            const stderrChunks: Buffer[] = [];
-
-            // Handle abort signal to kill child process
-            const abortHandler = () => {
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (!child.killed) {
-                child.kill('SIGTERM');
-              }
-              cleanup();
-              reject(new Error('system grep aborted'));
-            };
-            options.signal.addEventListener('abort', abortHandler);
-
-            const onData = (chunk: Buffer) => stdoutChunks.push(chunk);
-            const onStderr = (chunk: Buffer) => {
-              const stderrStr = chunk.toString();
-              // Suppress common harmless stderr messages
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (
-                !stderrStr.includes('Permission denied') &&
-                !/grep:.*: Is a directory/i.test(stderrStr)
-              ) {
-                stderrChunks.push(chunk);
-              }
-            };
-            const onError = (err: Error) => {
-              cleanup();
-              reject(new Error(`Failed to start system grep: ${err.message}`));
-            };
-            const onClose = (code: number | null) => {
-              const stdoutData = Buffer.concat(stdoutChunks).toString('utf8');
-              const stderrData = Buffer.concat(stderrChunks)
-                .toString('utf8')
-                .trim();
-              cleanup();
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (code === 0) resolve(stdoutData);
-              else if (code === 1)
-                resolve(''); // No matches
-              else if (stderrData)
-                reject(
-                  new Error(
-                    `System grep exited with code ${code}: ${stderrData}`,
-                  ),
-                );
-              else resolve(''); // Exit code > 1 but no stderr, likely just suppressed errors
-            };
-
-            const cleanup = () => {
-              options.signal.removeEventListener('abort', abortHandler);
-              child.stdout.removeListener('data', onData);
-              child.stderr.removeListener('data', onStderr);
-              child.removeListener('error', onError);
-              child.removeListener('close', onClose);
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (child.connected) {
-                child.disconnect();
-              }
-            };
-
-            child.stdout.on('data', onData);
-            child.stderr.on('data', onStderr);
-            child.on('error', onError);
-            child.on('close', onClose);
-          });
-          const matches = this.parseGrepOutput(output, absolutePath);
-          return this.applyLimits(matches, maxResults, maxFiles, maxPerFile);
-        } catch (grepError: unknown) {
-          debugLogger.debug(
-            `GrepLogic: System grep failed: ${getErrorMessage(
-              grepError,
-            )}. Falling back...`,
-          );
-        }
+      if (sysResult !== null) {
+        return sysResult;
       }
 
       // --- Strategy 3: Pure JavaScript Fallback ---
@@ -883,83 +1268,15 @@ File: ${resolved.basename}
         'GrepLogic: Falling back to JavaScript grep implementation.',
       );
       strategyUsed = 'javascript fallback';
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: include is optional string, empty string should fall through to default glob
-      const globPattern = include ? include : '**/*';
-      const ignorePatterns = this.fileExclusions.getGlobExcludes();
-
-      const filesStream = globStream(globPattern, {
-        cwd: absolutePath,
-        dot: true,
-        ignore: ignorePatterns,
-        absolute: true,
-        nodir: true,
-        signal: options.signal,
-      });
-
-      const regex = new RegExp(pattern, 'i');
-      const allMatches: GrepMatch[] = [];
-      const filesWithMatches = new Set<string>();
-      let totalFound = 0;
-
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for await (const filePath of filesStream) {
-        // Check if we've hit file limit
-        if (
-          filesWithMatches.size >= maxFiles &&
-          !filesWithMatches.has(filePath)
-        ) {
-          continue;
-        }
-
-        // Check if we've hit total results limit
-        if (allMatches.length >= maxResults) {
-          break;
-        }
-
-        const fileAbsolutePath = filePath;
-        try {
-          const content = await fsPromises.readFile(fileAbsolutePath, 'utf8');
-          const lines = content.split(/\r?\n/);
-          let matchesInFile = 0;
-
-          lines.forEach((line, index) => {
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (regex.test(line)) {
-              totalFound++;
-              if (
-                matchesInFile < maxPerFile &&
-                allMatches.length < maxResults
-              ) {
-                allMatches.push({
-                  filePath:
-                    path.relative(absolutePath, fileAbsolutePath) ||
-                    path.basename(fileAbsolutePath),
-                  lineNumber: index + 1,
-                  line,
-                });
-                matchesInFile++;
-                filesWithMatches.add(fileAbsolutePath);
-              }
-            }
-          });
-        } catch (readError: unknown) {
-          // Ignore errors like permission denied or file gone during read
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (!isNodeError(readError) || readError.code !== 'ENOENT') {
-            debugLogger.debug(
-              `GrepLogic: Could not read/process ${fileAbsolutePath}: ${getErrorMessage(
-                readError,
-              )}`,
-            );
-          }
-        }
-      }
-
-      return {
-        results: allMatches,
-        wasLimited: totalFound > allMatches.length,
-        totalFound: totalFound > allMatches.length ? totalFound : undefined,
-      };
+      return await this.javascriptGrepFallback(
+        pattern,
+        absolutePath,
+        include,
+        options.signal,
+        maxResults,
+        maxFiles,
+        maxPerFile,
+      );
     } catch (error: unknown) {
       debugLogger.error(
         `GrepLogic: Error in performGrepSearch (Strategy: ${strategyUsed}): ${getErrorMessage(
