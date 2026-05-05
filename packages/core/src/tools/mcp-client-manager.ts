@@ -168,79 +168,97 @@ export class McpClientManager {
       return;
     }
 
-    const currentDiscoveryPromise = new Promise<void>((resolve, _reject) => {
+    const currentDiscoveryPromise = this.buildDiscoveryPromise(
+      name,
+      config,
+      existing,
+    );
+    this.enqueueDiscovery(currentDiscoveryPromise);
+    return currentDiscoveryPromise;
+  }
+
+  private buildDiscoveryPromise(
+    name: string,
+    config: MCPServerConfig,
+    existing: McpClient | undefined,
+  ): Promise<void> {
+    return new Promise<void>((resolve, _reject) => {
       void (async () => {
         try {
-          if (existing) {
-            await existing.disconnect();
-          }
-
-          const client =
-            existing ??
-            new McpClient(
-              name,
-              config,
-              this.toolRegistry,
-              this.cliConfig.getPromptRegistry(),
-              this.cliConfig.getResourceRegistry(),
-              this.cliConfig.getWorkspaceContext(),
-              this.cliConfig,
-              this.cliConfig.getDebugMode(),
-              this.clientVersion,
-              async () => {
-                debugLogger.log('Tools changed, updating Gemini context...');
-                await this.scheduleMcpContextRefresh();
-              },
-            );
-          if (!existing) {
-            this.clients.set(name, client);
-            this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-              clients: new Map(this.clients),
-            });
-          }
-          try {
-            await client.connect();
-            await client.discover(this.cliConfig);
-            this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-              clients: new Map(this.clients),
-            });
-          } catch (error) {
-            this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-              clients: new Map(this.clients),
-            });
-            // Log the error but don't let a single failed server stop the others
-            // Skip emitting feedback for authentication errors (they're handled by connectToMcpServer)
-            if (!isAuthenticationError(error)) {
-              coreEvents.emitFeedback(
-                'error',
-                `Error during discovery for server '${name}': ${getErrorMessage(
-                  error,
-                )}`,
-                error,
-              );
-            }
-          }
+          await this.connectAndDiscover(name, config, existing);
         } finally {
           resolve();
         }
       })();
     });
+  }
 
-    if (this.discoveryPromise) {
-      this.discoveryPromise = this.discoveryPromise.then(
-        () => currentDiscoveryPromise,
+  private async connectAndDiscover(
+    name: string,
+    config: MCPServerConfig,
+    existing: McpClient | undefined,
+  ): Promise<void> {
+    if (existing) {
+      await existing.disconnect();
+    }
+
+    const client =
+      existing ??
+      new McpClient(
+        name,
+        config,
+        this.toolRegistry,
+        this.cliConfig.getPromptRegistry(),
+        this.cliConfig.getResourceRegistry(),
+        this.cliConfig.getWorkspaceContext(),
+        this.cliConfig,
+        this.cliConfig.getDebugMode(),
+        this.clientVersion,
+        async () => {
+          debugLogger.log('Tools changed, updating Gemini context...');
+          await this.scheduleMcpContextRefresh();
+        },
       );
+    if (!existing) {
+      this.clients.set(name, client);
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+    }
+    try {
+      await client.connect();
+      await client.discover(this.cliConfig);
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+    } catch (error) {
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+      if (!isAuthenticationError(error)) {
+        coreEvents.emitFeedback(
+          'error',
+          `Error during discovery for server '${name}': ${getErrorMessage(
+            error,
+          )}`,
+          error,
+        );
+      }
+    }
+  }
+
+  private enqueueDiscovery(promise: Promise<void>): void {
+    if (this.discoveryPromise) {
+      this.discoveryPromise = this.discoveryPromise.then(() => promise);
     } else {
       this.discoveryState = MCPDiscoveryState.IN_PROGRESS;
-      this.discoveryPromise = currentDiscoveryPromise;
+      this.discoveryPromise = promise;
     }
     this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
       clients: new Map(this.clients),
     });
     const currentPromise = this.discoveryPromise;
     void currentPromise.then((_) => {
-      // If we are the last recorded discoveryPromise, then we are done, reset
-      // the world.
       if (currentPromise === this.discoveryPromise) {
         this.discoveryPromise = undefined;
         this.discoveryState = MCPDiscoveryState.COMPLETED;
@@ -249,7 +267,6 @@ export class McpClientManager {
         });
       }
     });
-    return currentPromise;
   }
 
   /**

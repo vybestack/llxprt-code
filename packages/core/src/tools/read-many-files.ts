@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -16,7 +14,7 @@ import {
 import { getErrorMessage } from '../utils/errors.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import { glob, escape } from 'glob';
+import { glob, escape as globEscape } from 'glob';
 import { getCurrentLlxprtMdFilename } from './memoryTool.js';
 import {
   detectFileType,
@@ -25,7 +23,7 @@ import {
   getSpecificMimeType,
   DEFAULT_MAX_LINES_TEXT_FILE,
 } from '../utils/fileUtils.js';
-import { type PartListUnion } from '@google/genai';
+import { type Part } from '@google/genai';
 import type { Config } from '../config/config.js';
 
 import {
@@ -40,6 +38,13 @@ import { validatePathWithinWorkspace } from '../safety/index.js';
 // Simple token estimation - roughly 4 characters per token
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+type AddFileContentAction = 'continue' | 'stop' | 'stopAfterRecord';
+
+interface AddFileContentResult {
+  totalTokens: number;
+  action: AddFileContentAction;
 }
 
 /**
@@ -166,24 +171,62 @@ ${finalExclusionPatternsForDescription.slice(0, 2).join(
       useDefaultExcludes = true,
     } = this.params;
 
-    const defaultFileIgnores = this.config.getFileFilteringOptions();
-
-    const fileFilteringOptions = {
-      respectGitIgnore:
-        this.params.file_filtering_options?.respect_git_ignore ??
-        defaultFileIgnores.respectGitIgnore, // Use the property from the returned object
-      respectLlxprtIgnore:
-        this.params.file_filtering_options?.respect_llxprt_ignore ??
-        defaultFileIgnores.respectLlxprtIgnore, // Use the property from the returned object
-    };
-    // Get centralized file discovery service
-    const fileDiscovery = this.config.getFileService();
+    const { fileFilteringOptions, fileDiscovery, effectiveExcludes } =
+      this.resolveFileParams(useDefaultExcludes, exclude);
 
     const filesToConsider = new Set<string>();
     const skippedFiles: Array<{ path: string; reason: string }> = [];
     const processedFilesRelativePaths: string[] = [];
-    const contentParts: PartListUnion = [];
+    const contentParts: Array<string | Part> = [];
 
+    const searchResult = await this.discoverFiles(
+      inputPatterns,
+      include,
+      effectiveExcludes,
+      fileFilteringOptions,
+      fileDiscovery,
+      filesToConsider,
+      skippedFiles,
+      signal,
+    );
+
+    if (searchResult) {
+      return searchResult;
+    }
+
+    const sortedFiles = Array.from(filesToConsider).sort();
+
+    const limits = this.resolveLimits();
+    const fileCountResult = this.applyFileCountLimit(
+      sortedFiles,
+      skippedFiles,
+      limits,
+    );
+    if (fileCountResult) {
+      return fileCountResult;
+    }
+
+    return this.processAndFormat(
+      sortedFiles,
+      inputPatterns,
+      skippedFiles,
+      processedFilesRelativePaths,
+      contentParts,
+      limits,
+    );
+  }
+
+  private resolveFileParams(useDefaultExcludes: boolean, exclude: string[]) {
+    const defaultFileIgnores = this.config.getFileFilteringOptions();
+    const fileFilteringOptions = {
+      respectGitIgnore:
+        this.params.file_filtering_options?.respect_git_ignore ??
+        defaultFileIgnores.respectGitIgnore,
+      respectLlxprtIgnore:
+        this.params.file_filtering_options?.respect_llxprt_ignore ??
+        defaultFileIgnores.respectLlxprtIgnore,
+    };
+    const fileDiscovery = this.config.getFileService();
     const effectiveExcludes = useDefaultExcludes
       ? [
           ...getDefaultExcludes(this.config),
@@ -191,26 +234,68 @@ ${finalExclusionPatternsForDescription.slice(0, 2).join(
           ...this.llxprtIgnorePatterns,
         ]
       : [...exclude, ...this.llxprtIgnorePatterns];
+    return { fileFilteringOptions, fileDiscovery, effectiveExcludes };
+  }
 
+  private async processAndFormat(
+    sortedFiles: string[],
+    inputPatterns: string[],
+    skippedFiles: Array<{ path: string; reason: string }>,
+    processedFilesRelativePaths: string[],
+    contentParts: Array<string | Part>,
+    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+  ): Promise<ToolResult> {
+    const totalTokens = await this.processFiles(
+      sortedFiles,
+      inputPatterns,
+      skippedFiles,
+      processedFilesRelativePaths,
+      contentParts,
+      limits,
+    );
+
+    const displayMessage = this.buildDisplayMessage(
+      processedFilesRelativePaths,
+      skippedFiles,
+      totalTokens,
+    );
+
+    if (contentParts.length > 0) {
+      contentParts.push(DEFAULT_OUTPUT_TERMINATOR);
+    } else {
+      contentParts.push(
+        'No files matching the criteria were found or all were skipped.',
+      );
+    }
+    return {
+      llmContent: contentParts,
+      returnDisplay: displayMessage.trim(),
+    };
+  }
+
+  private async discoverFiles(
+    inputPatterns: string[],
+    include: string[],
+    effectiveExcludes: string[],
+    fileFilteringOptions: {
+      respectGitIgnore: boolean;
+      respectLlxprtIgnore: boolean;
+    },
+    fileDiscovery: ReturnType<Config['getFileService']>,
+    filesToConsider: Set<string>,
+    skippedFiles: Array<{ path: string; reason: string }>,
+    signal: AbortSignal,
+  ): Promise<ToolResult | undefined> {
     const searchPatterns = [...inputPatterns, ...include];
     try {
       const allEntries = new Set<string>();
       const workspaceDirs = this.config.getWorkspaceContext().getDirectories();
 
       for (const dir of workspaceDirs) {
-        const processedPatterns = [];
-        for (const p of searchPatterns) {
-          const normalizedP = p.replace(/\\/g, '/');
-          const fullPath = path.join(dir, normalizedP);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (fs.existsSync(fullPath)) {
-            processedPatterns.push(escape(normalizedP));
-          } else {
-            // The path does not exist or is not a file, so we treat it as a glob pattern.
-            processedPatterns.push(normalizedP);
-          }
-        }
-
+        const processedPatterns = this.processSearchPatterns(
+          dir,
+          searchPatterns,
+        );
         const entriesInDir = await glob(processedPatterns, {
           cwd: dir,
           ignore: effectiveExcludes,
@@ -224,68 +309,14 @@ ${finalExclusionPatternsForDescription.slice(0, 2).join(
           allEntries.add(entry);
         }
       }
-      const entries = Array.from(allEntries);
 
-      let gitIgnoredCount = 0;
-      let llxprtIgnoredCount = 0;
-
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for (const absoluteFilePath of entries) {
-        // Security check: ensure the glob library didn't return something outside the workspace.
-        const pathError = validatePathWithinWorkspace(
-          this.config.getWorkspaceContext(),
-          absoluteFilePath,
-        );
-        if (pathError) {
-          skippedFiles.push({
-            path: absoluteFilePath,
-            reason: 'Security: ' + pathError,
-          });
-          continue;
-        }
-
-        const normalizedPath = path.normalize(absoluteFilePath);
-
-        if (
-          fileFilteringOptions.respectGitIgnore &&
-          fileDiscovery.shouldIgnoreFile(absoluteFilePath, {
-            respectGitIgnore: true,
-            respectLlxprtIgnore: false,
-          })
-        ) {
-          gitIgnoredCount++;
-          continue;
-        }
-
-        if (
-          fileFilteringOptions.respectLlxprtIgnore &&
-          fileDiscovery.shouldIgnoreFile(absoluteFilePath, {
-            respectGitIgnore: false,
-            respectLlxprtIgnore: true,
-          })
-        ) {
-          llxprtIgnoredCount++;
-          continue;
-        }
-
-        filesToConsider.add(normalizedPath);
-      }
-
-      // Add info about git-ignored files if any were filtered
-      if (gitIgnoredCount > 0) {
-        skippedFiles.push({
-          path: `${gitIgnoredCount} file(s)`,
-          reason: 'git ignored',
-        });
-      }
-
-      // Add info about llxprt-ignored files if any were filtered
-      if (llxprtIgnoredCount > 0) {
-        skippedFiles.push({
-          path: `${llxprtIgnoredCount} file(s)`,
-          reason: 'llxprt ignored',
-        });
-      }
+      this.filterEntries(
+        Array.from(allEntries),
+        fileFilteringOptions,
+        fileDiscovery,
+        filesToConsider,
+        skippedFiles,
+      );
     } catch (error) {
       const errorMessage = `Error during file search: ${getErrorMessage(error)}`;
       return {
@@ -297,219 +328,442 @@ ${finalExclusionPatternsForDescription.slice(0, 2).join(
         },
       };
     }
+    return undefined;
+  }
 
-    const sortedFiles = Array.from(filesToConsider).sort();
+  private processSearchPatterns(
+    dir: string,
+    searchPatterns: string[],
+  ): string[] {
+    const processedPatterns = [];
+    for (const p of searchPatterns) {
+      const normalizedP = p.replace(/\\/g, '/');
+      const fullPath = path.join(dir, normalizedP);
 
-    // Get limits from ephemeral settings
-    const ephemeralSettings = this.config.getEphemeralSettings();
-    const maxFileCount =
-      (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
-      DEFAULT_MAX_FILE_COUNT;
-    const maxTokens =
-      (ephemeralSettings['tool-output-max-tokens'] as number | undefined) ??
-      DEFAULT_MAX_TOKENS;
-    const truncateMode =
-      (ephemeralSettings['tool-output-truncate-mode'] as
-        | 'warn'
-        | 'truncate'
-        | 'sample'
-        | undefined) ?? DEFAULT_TRUNCATE_MODE;
-    const fileSizeLimit =
-      (ephemeralSettings['tool-output-item-size-limit'] as
-        | number
-        | undefined) ?? DEFAULT_FILE_SIZE_LIMIT;
-
-    // Check file count limit
-    if (sortedFiles.length > maxFileCount) {
-      if (truncateMode === 'warn') {
-        const warnMessage = `Found ${sortedFiles.length} files matching your pattern, but limiting to ${maxFileCount} files. Please use more specific patterns to narrow your search.`;
-        return {
-          llmContent: warnMessage,
-          returnDisplay: `## File Count Limit Exceeded\n\n${warnMessage}\n\n**Matched files:** ${sortedFiles.length}\n**Limit:** ${maxFileCount}\n\n**Suggestion:** Use more specific glob patterns or paths to reduce the number of matched files.`,
-        };
-      } else if (truncateMode === 'sample') {
-        // Sample evenly across the files
-        const step = Math.ceil(sortedFiles.length / maxFileCount);
-        const sampledFiles: string[] = [];
-        for (let i = 0; i < sortedFiles.length; i += step) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (sampledFiles.length < maxFileCount) {
-            sampledFiles.push(sortedFiles[i]);
-          }
-        }
-        const originalCount = sortedFiles.length;
-        sortedFiles.length = 0;
-        sortedFiles.push(...sampledFiles);
-        skippedFiles.push({
-          path: `${originalCount - sampledFiles.length} file(s)`,
-          reason: `sampling to stay within ${maxFileCount} file limit`,
-        });
+      if (fs.existsSync(fullPath)) {
+        processedPatterns.push(globEscape(normalizedP));
       } else {
-        // truncate mode - just limit the array
-        const truncatedCount = sortedFiles.length - maxFileCount;
-        sortedFiles.length = maxFileCount;
-        skippedFiles.push({
-          path: `${truncatedCount} file(s)`,
-          reason: `truncated to stay within ${maxFileCount} file limit`,
-        });
+        processedPatterns.push(normalizedP);
       }
     }
+    return processedPatterns;
+  }
 
+  private filterEntries(
+    entries: string[],
+    fileFilteringOptions: {
+      respectGitIgnore: boolean;
+      respectLlxprtIgnore: boolean;
+    },
+    fileDiscovery: ReturnType<Config['getFileService']>,
+    filesToConsider: Set<string>,
+    skippedFiles: Array<{ path: string; reason: string }>,
+  ): void {
+    let gitIgnoredCount = 0;
+    let llxprtIgnoredCount = 0;
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for (const absoluteFilePath of entries) {
+      const pathError = validatePathWithinWorkspace(
+        this.config.getWorkspaceContext(),
+        absoluteFilePath,
+      );
+      if (pathError) {
+        skippedFiles.push({
+          path: absoluteFilePath,
+          reason: 'Security: ' + pathError,
+        });
+        continue;
+      }
+
+      const normalizedPath = path.normalize(absoluteFilePath);
+
+      if (
+        fileFilteringOptions.respectGitIgnore &&
+        fileDiscovery.shouldIgnoreFile(absoluteFilePath, {
+          respectGitIgnore: true,
+          respectLlxprtIgnore: false,
+        })
+      ) {
+        gitIgnoredCount++;
+        continue;
+      }
+
+      if (
+        fileFilteringOptions.respectLlxprtIgnore &&
+        fileDiscovery.shouldIgnoreFile(absoluteFilePath, {
+          respectGitIgnore: false,
+          respectLlxprtIgnore: true,
+        })
+      ) {
+        llxprtIgnoredCount++;
+        continue;
+      }
+
+      filesToConsider.add(normalizedPath);
+    }
+
+    if (gitIgnoredCount > 0) {
+      skippedFiles.push({
+        path: `${gitIgnoredCount} file(s)`,
+        reason: 'git ignored',
+      });
+    }
+
+    if (llxprtIgnoredCount > 0) {
+      skippedFiles.push({
+        path: `${llxprtIgnoredCount} file(s)`,
+        reason: 'llxprt ignored',
+      });
+    }
+  }
+
+  private resolveLimits(): {
+    maxFileCount: number;
+    maxTokens: number;
+    truncateMode: 'warn' | 'truncate' | 'sample';
+    fileSizeLimit: number;
+  } {
+    const ephemeralSettings = this.config.getEphemeralSettings();
+    return {
+      maxFileCount:
+        (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
+        DEFAULT_MAX_FILE_COUNT,
+      maxTokens:
+        (ephemeralSettings['tool-output-max-tokens'] as number | undefined) ??
+        DEFAULT_MAX_TOKENS,
+      truncateMode:
+        (ephemeralSettings['tool-output-truncate-mode'] as
+          | 'warn'
+          | 'truncate'
+          | 'sample'
+          | undefined) ?? DEFAULT_TRUNCATE_MODE,
+      fileSizeLimit:
+        (ephemeralSettings['tool-output-item-size-limit'] as
+          | number
+          | undefined) ?? DEFAULT_FILE_SIZE_LIMIT,
+    };
+  }
+
+  private applyFileCountLimit(
+    sortedFiles: string[],
+    skippedFiles: Array<{ path: string; reason: string }>,
+    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+  ): ToolResult | undefined {
+    if (sortedFiles.length <= limits.maxFileCount) {
+      return undefined;
+    }
+
+    if (limits.truncateMode === 'warn') {
+      const warnMessage = `Found ${sortedFiles.length} files matching your pattern, but limiting to ${limits.maxFileCount} files. Please use more specific patterns to narrow your search.`;
+      return {
+        llmContent: warnMessage,
+        returnDisplay: `## File Count Limit Exceeded\n\n${warnMessage}\n\n**Matched files:** ${sortedFiles.length}\n**Limit:** ${limits.maxFileCount}\n\n**Suggestion:** Use more specific glob patterns or paths to reduce the number of matched files.`,
+      };
+    } else if (limits.truncateMode === 'sample') {
+      const step = Math.ceil(sortedFiles.length / limits.maxFileCount);
+      const sampledFiles: string[] = [];
+      for (let i = 0; i < sortedFiles.length; i += step) {
+        if (sampledFiles.length < limits.maxFileCount) {
+          sampledFiles.push(sortedFiles[i]);
+        }
+      }
+      const originalCount = sortedFiles.length;
+      sortedFiles.length = 0;
+      sortedFiles.push(...sampledFiles);
+      skippedFiles.push({
+        path: `${originalCount - sampledFiles.length} file(s)`,
+        reason: `sampling to stay within ${limits.maxFileCount} file limit`,
+      });
+    } else {
+      const truncatedCount = sortedFiles.length - limits.maxFileCount;
+      sortedFiles.length = limits.maxFileCount;
+      skippedFiles.push({
+        path: `${truncatedCount} file(s)`,
+        reason: `truncated to stay within ${limits.maxFileCount} file limit`,
+      });
+    }
+    return undefined;
+  }
+
+  private async processFiles(
+    sortedFiles: string[],
+    inputPatterns: string[],
+    skippedFiles: Array<{ path: string; reason: string }>,
+    processedFilesRelativePaths: string[],
+    contentParts: Array<string | Part>,
+    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+  ): Promise<number> {
     let totalTokens = 0;
-
     // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const filePath of sortedFiles) {
       const relativePathForDisplay = path
         .relative(this.config.getTargetDir(), filePath)
         .replace(/\\/g, '/');
 
-      // Check file size limit
-      try {
-        const stats = await stat(filePath);
-        if (stats.size > fileSizeLimit) {
-          skippedFiles.push({
-            path: relativePathForDisplay,
-            reason: `file size (${Math.round(stats.size / 1024)}KB) exceeds limit (${Math.round(fileSizeLimit / 1024)}KB)`,
-          });
-          continue;
-        }
-      } catch (error) {
-        skippedFiles.push({
-          path: relativePathForDisplay,
-          reason: `stat error: ${getErrorMessage(error)}`,
-        });
-        continue;
-      }
-
-      const fileType = await detectFileType(filePath);
-
-      if (fileType === 'image' || fileType === 'pdf' || fileType === 'audio') {
-        const fileExtension = path.extname(filePath).toLowerCase();
-        const fileNameWithoutExtension = path.basename(filePath, fileExtension);
-        const requestedExplicitly = inputPatterns.some(
-          (pattern: string) =>
-            pattern.toLowerCase().includes(fileExtension) ||
-            pattern.includes(fileNameWithoutExtension),
-        );
-
-        if (!requestedExplicitly) {
-          skippedFiles.push({
-            path: relativePathForDisplay,
-            reason:
-              'asset file (image/pdf/audio) was not explicitly requested by name or extension',
-          });
-          continue;
-        }
-      }
-
-      // Use processSingleFileContent for all file types now
-      const ephemeralSettings = this.config.getEphemeralSettings();
-      const maxLinesPerFile =
-        (ephemeralSettings['file-read-max-lines'] as number | undefined) ??
-        DEFAULT_MAX_LINES_TEXT_FILE;
-
-      const fileReadResult = await processSingleFileContent(
+      const sizeCheck = await this.checkFileSize(
         filePath,
-        this.config.getTargetDir(),
-        this.config.getFileSystemService(),
-        undefined,
-        maxLinesPerFile,
+        relativePathForDisplay,
+        skippedFiles,
+        limits.fileSizeLimit,
       );
+      if (sizeCheck === 'skip') continue;
+
+      const assetCheck = await this.checkAssetFile(
+        filePath,
+        relativePathForDisplay,
+        inputPatterns,
+        skippedFiles,
+      );
+      if (assetCheck === 'skip') continue;
+
+      const fileReadResult = await this.readFileContent(filePath);
 
       if (fileReadResult.error) {
         skippedFiles.push({
           path: relativePathForDisplay,
           reason: `Read error: ${fileReadResult.error}`,
         });
-      } else {
-        // Check token limit before adding content
-        if (typeof fileReadResult.llmContent === 'string') {
-          const separator = DEFAULT_OUTPUT_SEPARATOR_FORMAT.replace(
-            '{filePath}',
-            filePath,
-          );
-          let fileContentForLlm = '';
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (fileReadResult.isTruncated === true) {
-            fileContentForLlm += `[WARNING: This file was truncated. To view the full content, use the 'read_file' tool on this specific file.]\n\n`;
-          }
-          fileContentForLlm += fileReadResult.llmContent;
-          const contentToAdd = `${separator}\n\n${fileContentForLlm}\n\n`;
-          const contentTokens = estimateTokens(contentToAdd);
+        continue;
+      }
 
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (totalTokens + contentTokens > maxTokens) {
-            if (truncateMode === 'warn') {
-              // Stop processing and warn
-              skippedFiles.push({
-                path: `${sortedFiles.length - processedFilesRelativePaths.length} remaining file(s)`,
-                reason: `would exceed token limit of ${maxTokens}`,
-              });
-              break;
-            } else if (truncateMode === 'truncate') {
-              // Truncate the content to fit
-              const remainingTokens = maxTokens - totalTokens;
-              if (remainingTokens > 100) {
-                // Only add if we have reasonable space
-                const truncatedContent = contentToAdd.substring(
-                  0,
-                  remainingTokens * 4,
-                ); // Rough estimate: 4 chars per token
-                contentParts.push(
-                  truncatedContent +
-                    '\n\n[CONTENT TRUNCATED DUE TO TOKEN LIMIT]',
-                );
-                processedFilesRelativePaths.push(relativePathForDisplay);
-                skippedFiles.push({
-                  path: relativePathForDisplay,
-                  reason: 'content truncated to fit token limit',
-                });
-              }
-              break;
-            } else {
-              // sample mode - skip this file and continue
-              skippedFiles.push({
-                path: relativePathForDisplay,
-                reason: 'skipped to stay within token limit',
-              });
-              continue;
-            }
-          }
+      const addResult = this.addFileContent(
+        fileReadResult,
+        filePath,
+        relativePathForDisplay,
+        skippedFiles,
+        processedFilesRelativePaths,
+        contentParts,
+        limits,
+        totalTokens,
+        sortedFiles,
+      );
 
-          totalTokens += contentTokens;
-          contentParts.push(contentToAdd);
-        } else {
-          // For non-text content (images/PDFs), estimate token usage
-          // Images typically use ~85 tokens per image
-          const estimatedTokens = 85;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (totalTokens + estimatedTokens > maxTokens) {
-            skippedFiles.push({
-              path: relativePathForDisplay,
-              reason: 'would exceed token limit (non-text content)',
-            });
-            continue;
-          }
-          totalTokens += estimatedTokens;
-          // This is a Part for image/pdf, which we don't add the separator to.
-          contentParts.push(fileReadResult.llmContent);
-        }
-        processedFilesRelativePaths.push(relativePathForDisplay);
-        const lines =
-          typeof fileReadResult.llmContent === 'string'
-            ? fileReadResult.llmContent.split('\n').length
-            : undefined;
-        const mimetype = getSpecificMimeType(filePath);
-        recordFileOperationMetric(
-          this.config,
-          FileOperation.READ,
-          lines,
-          mimetype,
-          path.extname(filePath),
-        );
+      if (addResult.action === 'stop') {
+        return addResult.totalTokens;
+      }
+      totalTokens = addResult.totalTokens;
+
+      processedFilesRelativePaths.push(relativePathForDisplay);
+      this.recordReadMetric(filePath, fileReadResult.llmContent);
+      if (addResult.action === 'stopAfterRecord') {
+        return totalTokens;
       }
     }
+    return totalTokens;
+  }
 
+  private async checkFileSize(
+    filePath: string,
+    relativePathForDisplay: string,
+    skippedFiles: Array<{ path: string; reason: string }>,
+    fileSizeLimit: number,
+  ): Promise<'skip' | 'continue'> {
+    try {
+      const stats = await stat(filePath);
+      if (stats.size > fileSizeLimit) {
+        skippedFiles.push({
+          path: relativePathForDisplay,
+          reason: `file size (${Math.round(stats.size / 1024)}KB) exceeds limit (${Math.round(fileSizeLimit / 1024)}KB)`,
+        });
+        return 'skip';
+      }
+    } catch (error) {
+      skippedFiles.push({
+        path: relativePathForDisplay,
+        reason: `stat error: ${getErrorMessage(error)}`,
+      });
+      return 'skip';
+    }
+    return 'continue';
+  }
+
+  private async checkAssetFile(
+    filePath: string,
+    relativePathForDisplay: string,
+    inputPatterns: string[],
+    skippedFiles: Array<{ path: string; reason: string }>,
+  ): Promise<'skip' | 'continue'> {
+    const fileType = await detectFileType(filePath);
+    if (fileType === 'image' || fileType === 'pdf' || fileType === 'audio') {
+      const fileExtension = path.extname(filePath).toLowerCase();
+      const fileNameWithoutExtension = path.basename(filePath, fileExtension);
+      const requestedExplicitly = inputPatterns.some(
+        (pattern: string) =>
+          pattern.toLowerCase().includes(fileExtension) ||
+          pattern.includes(fileNameWithoutExtension),
+      );
+
+      if (!requestedExplicitly) {
+        skippedFiles.push({
+          path: relativePathForDisplay,
+          reason:
+            'asset file (image/pdf/audio) was not explicitly requested by name or extension',
+        });
+        return 'skip';
+      }
+    }
+    return 'continue';
+  }
+
+  private async readFileContent(
+    filePath: string,
+  ): Promise<Awaited<ReturnType<typeof processSingleFileContent>>> {
+    const maxLinesPerFile =
+      (this.config.getEphemeralSettings()['file-read-max-lines'] as
+        | number
+        | undefined) ?? DEFAULT_MAX_LINES_TEXT_FILE;
+
+    return processSingleFileContent(
+      filePath,
+      this.config.getTargetDir(),
+      this.config.getFileSystemService(),
+      undefined,
+      maxLinesPerFile,
+    );
+  }
+
+  private addFileContent(
+    fileReadResult: Awaited<ReturnType<typeof processSingleFileContent>>,
+    filePath: string,
+    relativePathForDisplay: string,
+    skippedFiles: Array<{ path: string; reason: string }>,
+    _processedFilesRelativePaths: string[],
+    contentParts: Array<string | Part>,
+    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+    totalTokens: number,
+    sortedFiles: string[],
+  ): AddFileContentResult {
+    if (typeof fileReadResult.llmContent === 'string') {
+      return this.addTextFileContent(
+        fileReadResult,
+        filePath,
+        relativePathForDisplay,
+        skippedFiles,
+        contentParts,
+        limits,
+        totalTokens,
+        sortedFiles,
+        _processedFilesRelativePaths,
+      );
+    }
+
+    // Non-text content (images/PDFs)
+    const estimatedTokens = 85;
+
+    if (totalTokens + estimatedTokens > limits.maxTokens) {
+      skippedFiles.push({
+        path: relativePathForDisplay,
+        reason: 'would exceed token limit (non-text content)',
+      });
+      return { totalTokens, action: 'continue' };
+    }
+    totalTokens += estimatedTokens;
+    contentParts.push(fileReadResult.llmContent);
+    return { totalTokens, action: 'continue' };
+  }
+
+  private addTextFileContent(
+    fileReadResult: Awaited<ReturnType<typeof processSingleFileContent>>,
+    filePath: string,
+    relativePathForDisplay: string,
+    skippedFiles: Array<{ path: string; reason: string }>,
+    contentParts: Array<string | Part>,
+    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+    totalTokens: number,
+    sortedFiles: string[],
+    processedFilesRelativePaths: string[],
+  ): AddFileContentResult {
+    const separator = DEFAULT_OUTPUT_SEPARATOR_FORMAT.replace(
+      '{filePath}',
+      filePath,
+    );
+    let fileContentForLlm = '';
+
+    if (fileReadResult.isTruncated === true) {
+      fileContentForLlm += `[WARNING: This file was truncated. To view the full content, use the 'read_file' tool on this specific file.]\n\n`;
+    }
+    fileContentForLlm += fileReadResult.llmContent as string;
+    const contentToAdd = `${separator}\n\n${fileContentForLlm}\n\n`;
+    const contentTokens = estimateTokens(contentToAdd);
+
+    if (totalTokens + contentTokens > limits.maxTokens) {
+      return this.handleTokenOverflow(
+        limits,
+        relativePathForDisplay,
+        sortedFiles,
+        processedFilesRelativePaths,
+        contentParts,
+        contentToAdd,
+        totalTokens,
+        skippedFiles,
+      );
+    }
+
+    totalTokens += contentTokens;
+    contentParts.push(contentToAdd);
+    return { totalTokens, action: 'continue' };
+  }
+
+  private handleTokenOverflow(
+    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+    relativePathForDisplay: string,
+    sortedFiles: string[],
+    processedFilesRelativePaths: string[],
+    contentParts: Array<string | Part>,
+    contentToAdd: string,
+    totalTokens: number,
+    skippedFiles: Array<{ path: string; reason: string }>,
+  ): AddFileContentResult {
+    if (limits.truncateMode === 'warn') {
+      skippedFiles.push({
+        path: `${sortedFiles.length - processedFilesRelativePaths.length} remaining file(s)`,
+        reason: `would exceed token limit of ${limits.maxTokens}`,
+      });
+      return { totalTokens, action: 'stop' };
+    } else if (limits.truncateMode === 'truncate') {
+      const remainingTokens = limits.maxTokens - totalTokens;
+      if (remainingTokens > 100) {
+        const truncatedContent = contentToAdd.substring(0, remainingTokens * 4);
+        const finalContent =
+          truncatedContent + '\n\n[CONTENT TRUNCATED DUE TO TOKEN LIMIT]';
+        contentParts.push(finalContent);
+        const updatedTokens = totalTokens + estimateTokens(finalContent);
+        skippedFiles.push({
+          path: relativePathForDisplay,
+          reason: 'content truncated to fit token limit',
+        });
+        return { totalTokens: updatedTokens, action: 'stopAfterRecord' };
+      }
+      return { totalTokens, action: 'stop' };
+    }
+    skippedFiles.push({
+      path: relativePathForDisplay,
+      reason: 'skipped to stay within token limit',
+    });
+    return { totalTokens, action: 'continue' };
+  }
+
+  private recordReadMetric(filePath: string, llmContent: string | Part): void {
+    const lines =
+      typeof llmContent === 'string'
+        ? llmContent.split('\n').length
+        : undefined;
+    const mimetype = getSpecificMimeType(filePath);
+    recordFileOperationMetric(
+      this.config,
+      FileOperation.READ,
+      lines,
+      mimetype,
+      path.extname(filePath),
+    );
+  }
+
+  private buildDisplayMessage(
+    processedFilesRelativePaths: string[],
+    skippedFiles: Array<{ path: string; reason: string }>,
+    totalTokens: number,
+  ): string {
     let displayMessage = `### ReadManyFiles Result (Target Dir: \`${this.config.getTargetDir()}\`)\n\n`;
     if (processedFilesRelativePaths.length > 0) {
       displayMessage += `Successfully read and concatenated content from **${processedFilesRelativePaths.length} file(s)**`;
@@ -555,17 +809,7 @@ ${finalExclusionPatternsForDescription.slice(0, 2).join(
       displayMessage += `No files were read and concatenated based on the criteria.\n`;
     }
 
-    if (contentParts.length > 0) {
-      contentParts.push(DEFAULT_OUTPUT_TERMINATOR);
-    } else {
-      contentParts.push(
-        'No files matching the criteria were found or all were skipped.',
-      );
-    }
-    return {
-      llmContent: contentParts,
-      returnDisplay: displayMessage.trim(),
-    };
+    return displayMessage;
   }
 }
 
@@ -584,72 +828,6 @@ export class ReadManyFilesTool extends BaseDeclarativeTool<
     private config: Config,
     _messageBus: MessageBus,
   ) {
-    const parameterSchema = {
-      type: 'object',
-      properties: {
-        paths: {
-          type: 'array',
-          items: {
-            type: 'string',
-            minLength: 1,
-          },
-          minItems: 1,
-          description:
-            "Required. An array of glob patterns or paths relative to the tool's target directory. Examples: ['src/**/*.ts'], ['README.md', 'docs/']",
-        },
-        include: {
-          type: 'array',
-          items: {
-            type: 'string',
-            minLength: 1,
-          },
-          description:
-            'Optional. Additional glob patterns to include. These are merged with `paths`. Example: "*.test.ts" to specifically add test files if they were broadly excluded.',
-          default: [],
-        },
-        exclude: {
-          type: 'array',
-          items: {
-            type: 'string',
-            minLength: 1,
-          },
-          description:
-            'Optional. Glob patterns for files/directories to exclude. Added to default excludes if useDefaultExcludes is true. Example: "**/*.log", "temp/"',
-          default: [],
-        },
-        recursive: {
-          type: 'boolean',
-          description:
-            'Optional. Whether to search recursively (primarily controlled by `**` in glob patterns). Defaults to true.',
-          default: true,
-        },
-        useDefaultExcludes: {
-          type: 'boolean',
-          description:
-            'Optional. Whether to apply a list of default exclusion patterns (e.g., node_modules, .git, binary files). Defaults to true.',
-          default: true,
-        },
-        file_filtering_options: {
-          description:
-            'Whether to respect ignore patterns from .gitignore or .llxprtignore',
-          type: 'object',
-          properties: {
-            respect_git_ignore: {
-              description:
-                'Optional: Whether to respect .gitignore patterns when listing files. Only available in git repositories. Defaults to true.',
-              type: 'boolean',
-            },
-            respect_llxprt_ignore: {
-              description:
-                'Optional: Whether to respect .llxprtignore patterns when listing files. Defaults to true.',
-              type: 'boolean',
-            },
-          },
-        },
-      },
-      required: ['paths'],
-    };
-
     super(
       ReadManyFilesTool.Name,
       'ReadManyFiles',
@@ -670,7 +848,7 @@ IMPORTANT LIMITS:
 - Maximum file size: 512KB per file (configurable via 'tool-output-item-size-limit' setting)
 - If limits are exceeded, the tool will warn and suggest more specific patterns (configurable behavior via 'tool-output-truncate-mode')`,
       Kind.Read,
-      parameterSchema,
+      buildParameterSchema(),
     );
   }
 
@@ -680,4 +858,72 @@ IMPORTANT LIMITS:
   ): ToolInvocation<ReadManyFilesParams, ToolResult> {
     return new ReadManyFilesToolInvocation(this.config, params, messageBus);
   }
+}
+
+function buildParameterSchema() {
+  return {
+    type: 'object',
+    properties: {
+      paths: {
+        type: 'array',
+        items: {
+          type: 'string',
+          minLength: 1,
+        },
+        minItems: 1,
+        description:
+          "Required. An array of glob patterns or paths relative to the tool's target directory. Examples: ['src/**/*.ts'], ['README.md', 'docs/']",
+      },
+      include: {
+        type: 'array',
+        items: {
+          type: 'string',
+          minLength: 1,
+        },
+        description:
+          'Optional. Additional glob patterns to include. These are merged with `paths`. Example: "*.test.ts" to specifically add test files if they were broadly excluded.',
+        default: [],
+      },
+      exclude: {
+        type: 'array',
+        items: {
+          type: 'string',
+          minLength: 1,
+        },
+        description:
+          'Optional. Glob patterns for files/directories to exclude. Added to default excludes if useDefaultExcludes is true. Example: "**/*.log", "temp/"',
+        default: [],
+      },
+      recursive: {
+        type: 'boolean',
+        description:
+          'Optional. Whether to search recursively (primarily controlled by `**` in glob patterns). Defaults to true.',
+        default: true,
+      },
+      useDefaultExcludes: {
+        type: 'boolean',
+        description:
+          'Optional. Whether to apply a list of default exclusion patterns (e.g., node_modules, .git, binary files). Defaults to true.',
+        default: true,
+      },
+      file_filtering_options: {
+        description:
+          'Whether to respect ignore patterns from .gitignore or .llxprtignore',
+        type: 'object',
+        properties: {
+          respect_git_ignore: {
+            description:
+              'Optional: Whether to respect .gitignore patterns when listing files. Only available in git repositories. Defaults to true.',
+            type: 'boolean',
+          },
+          respect_llxprt_ignore: {
+            description:
+              'Optional: Whether to respect .llxprtignore patterns when listing files. Defaults to true.',
+            type: 'boolean',
+          },
+        },
+      },
+    },
+    required: ['paths'],
+  };
 }

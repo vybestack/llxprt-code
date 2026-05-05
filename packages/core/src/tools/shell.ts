@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+/* eslint-disable complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
 
 import fs from 'fs';
 import path from 'path';
@@ -46,6 +46,7 @@ import { summarizeToolOutput } from '../utils/summarizer.js';
 import {
   ShellExecutionService,
   type ShellOutputEvent,
+  type ShellExecutionResult,
 } from '../services/shellExecutionService.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
@@ -279,14 +280,187 @@ export class ShellToolInvocation extends BaseToolInvocation<
     terminalRows?: number,
     setPidCallback?: (pid: number) => void,
   ): Promise<ToolResult> {
-    // Validate filtering parameters
+    this.validateFilterParams();
+
+    const strippedCommand = stripShellWrapper(this.params.command);
+
+    const {
+      timeoutSeconds,
+      defaultTimeoutSeconds,
+      timeoutController,
+      timeoutId,
+      onUserAbort,
+    } = this.createTimeoutControllers(signal);
+
+    if (signal.aborted) {
+      onUserAbort();
+      return this.createPreCancelledResult();
+    }
+
+    try {
+      return await this.executeShell(
+        strippedCommand,
+        signal,
+        timeoutController,
+        timeoutSeconds,
+        defaultTimeoutSeconds,
+        onUserAbort,
+        timeoutId,
+        updateOutput,
+        terminalColumns,
+        terminalRows,
+        setPidCallback,
+      );
+    } finally {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      signal.removeEventListener('abort', onUserAbort);
+    }
+  }
+
+  private async executeShell(
+    strippedCommand: string,
+    signal: AbortSignal,
+    timeoutController: AbortController,
+    timeoutSeconds: number | undefined,
+    defaultTimeoutSeconds: number,
+    onUserAbort: () => void,
+    timeoutId: ReturnType<typeof setTimeout> | null,
+    updateOutput?: (output: string | AnsiOutput) => void,
+    terminalColumns?: number,
+    terminalRows?: number,
+    setPidCallback?: (pid: number) => void,
+  ): Promise<ToolResult> {
+    const combinedSignal = timeoutController.signal;
+
+    const isWindows = os.platform() === 'win32';
+    const tempFileName = `shell_pgrep_${crypto
+      .randomBytes(6)
+      .toString('hex')}.tmp`;
+    const tempFilePath = path.join(os.tmpdir(), tempFileName);
+
+    try {
+      const commandToExecute = this.buildCommandToExecute(
+        strippedCommand,
+        isWindows,
+        tempFilePath,
+      );
+
+      const cwd = path.resolve(
+        this.config.getTargetDir(),
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string dir_path should fall through to empty string for resolve
+        this.getDirPath() || '',
+      );
+
+      const executionResult = await this.runShellCommand(
+        commandToExecute,
+        cwd,
+        combinedSignal,
+        updateOutput,
+        terminalColumns,
+        terminalRows,
+      );
+
+      this.propagatePid(executionResult, setPidCallback);
+      const result = await executionResult.result;
+
+      const { backgroundPIDs, pgid } = this.collectProcessInfo(
+        result,
+        tempFilePath,
+        signal,
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      const rawOutput = result?.output ?? '';
+      const filterInfo = applyOutputFilters(rawOutput, this.params);
+      const filteredOutput = filterInfo.content;
+
+      const timeoutTriggered =
+        timeoutController.signal.aborted === true &&
+        (signal.aborted as boolean | undefined) === false;
+
+      return await this.buildAndApplyOutput(
+        result,
+        rawOutput,
+        filteredOutput,
+        commandToExecute,
+        backgroundPIDs,
+        pgid,
+        timeoutTriggered,
+        timeoutSeconds,
+        defaultTimeoutSeconds,
+        signal,
+        filterInfo,
+      );
+    } finally {
+      if (fs.existsSync(tempFilePath)) {
+        fs.unlinkSync(tempFilePath);
+      }
+    }
+  }
+
+  private async buildAndApplyOutput(
+    result: ShellExecutionResult,
+    rawOutput: string,
+    filteredOutput: string,
+    commandToExecute: string,
+    backgroundPIDs: number[],
+    pgid: number | null,
+    timeoutTriggered: boolean,
+    timeoutSeconds: number | undefined,
+    defaultTimeoutSeconds: number,
+    signal: AbortSignal,
+    filterInfo: { content: string; description?: string },
+  ): Promise<ToolResult> {
+    const { llmContent, returnDisplayMessage } = this.formatOutputContent(
+      result,
+      rawOutput,
+      filteredOutput,
+      commandToExecute,
+      backgroundPIDs,
+      pgid,
+      timeoutTriggered,
+      timeoutSeconds,
+      defaultTimeoutSeconds,
+    );
+
+    const displayWithFilter = this.applyFilterDescription(
+      returnDisplayMessage,
+      filterInfo,
+    );
+
+    const executionError = this.buildExecutionError(
+      result,
+      llmContent,
+      timeoutTriggered,
+    );
+
+    let llmPayload = llmContent;
+    const shellToolConfig =
+      this.config.getSummarizeToolOutputConfig()?.[ShellTool.Name];
+    if (shellToolConfig !== undefined && result.aborted !== true) {
+      llmPayload = await this.trySummarizeOutput(
+        llmContent,
+        shellToolConfig,
+        signal,
+      );
+    }
+
+    return this.applyOutputLimits(
+      llmPayload,
+      displayWithFilter,
+      executionError,
+    );
+  }
+
+  private validateFilterParams(): void {
     if (this.params.head_lines !== undefined && this.params.head_lines !== 0) {
       validatePositiveInteger(this.params.head_lines, 'head_lines');
     }
     if (this.params.tail_lines !== undefined && this.params.tail_lines !== 0) {
       validatePositiveInteger(this.params.tail_lines, 'tail_lines');
     }
-    // Validate grep_pattern: null/undefined/empty string skip; whitespace-only throws
     const grepPattern =
       typeof this.params.grep_pattern === 'string' &&
       this.params.grep_pattern !== ''
@@ -298,9 +472,15 @@ export class ShellToolInvocation extends BaseToolInvocation<
     if (this.params.grep_flags) {
       validateGrepFlags(this.params.grep_flags);
     }
+  }
 
-    const strippedCommand = stripShellWrapper(this.params.command);
-
+  private createTimeoutControllers(signal: AbortSignal): {
+    timeoutSeconds: number | undefined;
+    defaultTimeoutSeconds: number;
+    timeoutController: AbortController;
+    timeoutId: ReturnType<typeof setTimeout> | null;
+    onUserAbort: () => void;
+  } {
     const ephemeralSettings = this.config.getEphemeralSettings();
     const defaultTimeoutSeconds =
       (ephemeralSettings['shell-default-timeout-seconds'] as
@@ -314,7 +494,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
       defaultTimeoutSeconds,
       maxTimeoutSeconds,
     );
-    // Convert seconds to milliseconds for setTimeout
     const timeoutMs =
       timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
     const timeoutController = new AbortController();
@@ -329,376 +508,392 @@ export class ShellToolInvocation extends BaseToolInvocation<
       }
       timeoutController.abort();
     };
-    if (signal.aborted) {
-      onUserAbort();
-      return {
-        llmContent: 'Command was cancelled by user before it could start.',
-        returnDisplay: 'Command cancelled by user.',
-        error: {
-          message: 'Command was cancelled by user before it could start.',
-          type: ToolErrorType.EXECUTION_FAILED,
-        },
-      };
-    }
 
     signal.addEventListener('abort', onUserAbort, { once: true });
 
-    const combinedSignal = timeoutController.signal;
+    return {
+      timeoutSeconds,
+      defaultTimeoutSeconds,
+      timeoutController,
+      timeoutId,
+      onUserAbort,
+    };
+  }
 
-    const isWindows = os.platform() === 'win32';
-    const tempFileName = `shell_pgrep_${crypto
-      .randomBytes(6)
-      .toString('hex')}.tmp`;
-    const tempFilePath = path.join(os.tmpdir(), tempFileName);
+  private buildCommandToExecute(
+    strippedCommand: string,
+    isWindows: boolean,
+    tempFilePath: string,
+  ): string {
+    if (isWindows) {
+      return strippedCommand;
+    }
+    let command = strippedCommand.trim();
+    if (!command.endsWith('&')) command += ';';
+    return `{ ${command} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
+  }
 
-    try {
-      // pgrep is not available on Windows, so we can't get background PIDs
-      const commandToExecute = isWindows
-        ? strippedCommand
-        : (() => {
-            // wrap command to append subprocess pids (via pgrep) to temporary file
-            let command = strippedCommand.trim();
-            if (!command.endsWith('&')) command += ';';
-            return `{ ${command} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
-          })();
+  private async runShellCommand(
+    commandToExecute: string,
+    cwd: string,
+    combinedSignal: AbortSignal,
+    updateOutput?: (output: string | AnsiOutput) => void,
+    terminalColumns?: number,
+    terminalRows?: number,
+  ) {
+    let cumulativeOutput: string | AnsiOutput = '';
+    let lastUpdateTime = 0;
+    let isBinaryStream = false;
 
-      const cwd = path.resolve(
-        this.config.getTargetDir(),
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string dir_path should fall through to empty string for resolve
-        this.getDirPath() || '',
-      );
+    return ShellExecutionService.execute(
+      commandToExecute,
+      cwd,
+      (event: ShellOutputEvent) => {
+        if (!updateOutput) return;
 
-      let cumulativeOutput: string | AnsiOutput = '';
-      // Initialize to 0 to allow immediate first update
-      let lastUpdateTime = 0;
-      let isBinaryStream = false;
+        let shouldUpdate = false;
 
-      const executionResult = await ShellExecutionService.execute(
-        commandToExecute,
-        cwd,
-        (event: ShellOutputEvent) => {
-          if (!updateOutput) {
-            return;
+        switch (event.type) {
+          case 'data': {
+            if (isBinaryStream) break;
+            cumulativeOutput = event.chunk;
+            shouldUpdate = true;
+            break;
           }
-
-          let shouldUpdate = false;
-
-          switch (event.type) {
-            case 'data': {
-              if (isBinaryStream) break;
-              // In PTY mode, event.chunk is AnsiOutput (full screen state)
-              // In child_process mode, event.chunk is string (incremental)
-              cumulativeOutput = event.chunk;
+          case 'binary_detected':
+            isBinaryStream = true;
+            cumulativeOutput = '[Binary output detected. Halting stream...]';
+            shouldUpdate = true;
+            break;
+          case 'binary_progress':
+            isBinaryStream = true;
+            cumulativeOutput = `[Receiving binary output... ${formatMemoryUsage(
+              event.bytesReceived,
+            )} received]`;
+            if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
               shouldUpdate = true;
-              break;
             }
-            case 'binary_detected':
-              isBinaryStream = true;
-              cumulativeOutput = '[Binary output detected. Halting stream...]';
-              shouldUpdate = true;
-              break;
-            case 'binary_progress':
-              isBinaryStream = true;
-              cumulativeOutput = `[Receiving binary output... ${formatMemoryUsage(
-                event.bytesReceived,
-              )} received]`;
-              if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
-                shouldUpdate = true;
-              }
-              break;
-            default: {
-              throw new Error('An unhandled ShellOutputEvent was found.');
-            }
+            break;
+          default: {
+            throw new Error('An unhandled ShellOutputEvent was found.');
           }
-
-          if (shouldUpdate) {
-            updateOutput(cumulativeOutput);
-            lastUpdateTime = Date.now();
-          }
-        },
-        combinedSignal,
-        this.config.getShouldUseNodePtyShell(),
-        {
-          ...this.config.getShellExecutionConfig(),
-          terminalWidth: terminalColumns ?? this.config.getPtyTerminalWidth(),
-          terminalHeight: terminalRows ?? this.config.getPtyTerminalHeight(),
-        },
-      );
-
-      // Propagate PID immediately (before awaiting result) so the UI can
-      // offer Ctrl+F interactive shell focus while the process is running.
-      const pid = executionResult.pid;
-      const propagatablePid = getPropagatablePid(
-        pid,
-        setPidCallback,
-        this.config.getShouldUseNodePtyShell(),
-      );
-      if (propagatablePid !== undefined) {
-        setPidCallback?.(propagatablePid);
-      }
-
-      const result = await executionResult.result;
-
-      const backgroundPIDs: number[] = [];
-      let pgid: number | null = null;
-      if (os.platform() !== 'win32') {
-        if (fs.existsSync(tempFilePath)) {
-          const pgrepLines = fs
-            .readFileSync(tempFilePath, 'utf8')
-            .split(EOL)
-            .filter(Boolean);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const line of pgrepLines) {
-            if (!/^\d+$/.test(line)) {
-              this.logger.debug(() => `pgrep: ${line}`);
-              continue;
-            }
-            const linePid = Number(line);
-            if (isValidBackgroundPid(linePid, result.pid)) {
-              backgroundPIDs.push(linePid);
-            }
-          }
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        } else if (signal.aborted === false) {
-          this.logger.debug(() => 'missing pgrep output');
         }
 
-        // Try to get the actual PGID
-        try {
-          // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
-          const psResult = spawnSync('ps', [
-            '-o',
-            'pgid=',
-            '-p',
-            String(result.pid),
-          ]);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (psResult.status === 0 && psResult.stdout.toString().trim()) {
-            pgid = parseInt(psResult.stdout.toString().trim(), 10);
-          }
-        } catch (error) {
-          // If we can't get the PGID, that's okay
-          this.logger.debug(() => `Failed to get PGID: ${error}`);
+        if (shouldUpdate) {
+          updateOutput(cumulativeOutput);
+          lastUpdateTime = Date.now();
         }
+      },
+      combinedSignal,
+      this.config.getShouldUseNodePtyShell(),
+      {
+        ...this.config.getShellExecutionConfig(),
+        terminalWidth: terminalColumns ?? this.config.getPtyTerminalWidth(),
+        terminalHeight: terminalRows ?? this.config.getPtyTerminalHeight(),
+      },
+    );
+  }
+
+  private propagatePid(
+    executionResult: Awaited<ReturnType<typeof ShellExecutionService.execute>>,
+    setPidCallback?: (pid: number) => void,
+  ): void {
+    const pid = executionResult.pid;
+    const propagatablePid = getPropagatablePid(
+      pid,
+      setPidCallback,
+      this.config.getShouldUseNodePtyShell(),
+    );
+    if (propagatablePid !== undefined) {
+      setPidCallback?.(propagatablePid);
+    }
+  }
+
+  private parsePgrepFile(
+    tempFilePath: string,
+    mainPid: number | undefined,
+  ): number[] {
+    const pids: number[] = [];
+    if (!fs.existsSync(tempFilePath)) {
+      return pids;
+    }
+    const pgrepLines = fs
+      .readFileSync(tempFilePath, 'utf8')
+      .split(EOL)
+      .filter(Boolean);
+    for (const line of pgrepLines) {
+      if (!/^\d+$/.test(line)) {
+        this.logger.debug(() => `pgrep: ${line}`);
+        continue;
+      }
+      const linePid = Number(line);
+      if (isValidBackgroundPid(linePid, mainPid)) {
+        pids.push(linePid);
+      }
+    }
+    return pids;
+  }
+
+  private collectProcessInfo(
+    result: ShellExecutionResult,
+    tempFilePath: string,
+    signal: AbortSignal,
+  ): { backgroundPIDs: number[]; pgid: number | null } {
+    const backgroundPIDs: number[] = [];
+    let pgid: number | null = null;
+    if (os.platform() !== 'win32') {
+      const pgrepResult = this.parsePgrepFile(tempFilePath, result.pid);
+      backgroundPIDs.push(...pgrepResult);
+
+      if (
+        backgroundPIDs.length === 0 &&
+        signal.aborted === false &&
+        !fs.existsSync(tempFilePath)
+      ) {
+        this.logger.debug(() => 'missing pgrep output');
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      const rawOutput = result?.output ?? '';
-      const filterInfo = applyOutputFilters(rawOutput, this.params);
-      const filteredOutput = filterInfo.content;
+      try {
+        // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
+        const psResult = spawnSync('ps', [
+          '-o',
+          'pgid=',
+          '-p',
+          String(result.pid),
+        ]);
 
-      let llmContent = '';
-      let returnDisplayMessage = '';
-      let timeoutTriggered = false;
+        if (psResult.status === 0 && psResult.stdout.toString().trim()) {
+          pgid = parseInt(psResult.stdout.toString().trim(), 10);
+        }
+      } catch (error) {
+        this.logger.debug(() => `Failed to get PGID: ${error}`);
+      }
+    }
+    return { backgroundPIDs, pgid };
+  }
 
-      if (result.aborted === true) {
-        timeoutTriggered =
-          timeoutController.signal.aborted === true &&
-          (signal.aborted as boolean | undefined) === false;
-        if (timeoutTriggered) {
-          llmContent = `Command timed out after ${timeoutSeconds ?? defaultTimeoutSeconds}s (timeout_seconds).`;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (rawOutput.trim() !== '') {
-            llmContent += ` Partial output:\n${rawOutput}`;
-          } else {
-            llmContent += ' There was no output before timeout.';
-          }
+  private formatOutputContent(
+    result: ShellExecutionResult,
+    rawOutput: string,
+    filteredOutput: string,
+    commandToExecute: string,
+    backgroundPIDs: number[],
+    pgid: number | null,
+    timeoutTriggered: boolean,
+    timeoutSeconds: number | undefined,
+    defaultTimeoutSeconds: number,
+  ): { llmContent: string; returnDisplayMessage: string } {
+    let llmContent = '';
+    let returnDisplayMessage = '';
 
-          returnDisplayMessage = llmContent;
+    if (result.aborted === true) {
+      if (timeoutTriggered) {
+        llmContent = `Command timed out after ${timeoutSeconds ?? defaultTimeoutSeconds}s (timeout_seconds).`;
+
+        if (rawOutput.trim() !== '') {
+          llmContent += ` Partial output:\n${rawOutput}`;
         } else {
-          llmContent =
-            'Command was cancelled by user before it could complete.';
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (rawOutput.trim() !== '') {
-            llmContent += ` Below is the output before it was cancelled:\n${rawOutput}`;
-          } else {
-            llmContent += ' There was no output before it was cancelled.';
-          }
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (this.config.getDebugMode()) {
-            returnDisplayMessage = llmContent;
-          } else if (filteredOutput.trim() !== '') {
-            returnDisplayMessage = filteredOutput;
-          } else {
-            returnDisplayMessage = 'Command cancelled by user.';
-          }
+          llmContent += ' There was no output before timeout.';
         }
+        returnDisplayMessage = llmContent;
       } else {
-        const finalError = result.error
-          ? result.error.message.replace(commandToExecute, this.params.command)
-          : '(none)';
+        llmContent = 'Command was cancelled by user before it could complete.';
 
-        llmContent = [
-          `Command: ${this.params.command}`,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string directory should fall through to '(root)'
-          `Directory: ${this.getDirPath() || '(root)'}`,
-          `Stdout: ${filteredOutput || '(empty)'}`,
-          `Stderr: (empty)`,
-          `Error: ${finalError}`,
-          `Exit Code: ${result.exitCode ?? '(none)'}`,
-          `Signal: ${result.signal ?? '(none)'}`,
-          `Background PIDs: ${
-            backgroundPIDs.length > 0 ? backgroundPIDs.join(', ') : '(none)'
-          }`,
-          `Process Group PGID: ${pgid ?? result.pid ?? '(none)'}`,
-        ].join('\n');
+        if (rawOutput.trim() !== '') {
+          llmContent += ` Below is the output before it was cancelled:\n${rawOutput}`;
+        } else {
+          llmContent += ' There was no output before it was cancelled.';
+        }
 
         if (this.config.getDebugMode()) {
           returnDisplayMessage = llmContent;
         } else if (filteredOutput.trim() !== '') {
           returnDisplayMessage = filteredOutput;
-        } else if (result.signal !== null) {
-          returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
-        } else if (result.error !== null) {
-          returnDisplayMessage = `Command failed: ${getErrorMessage(result.error)}`;
-        } else if (result.exitCode !== null && result.exitCode !== 0) {
-          returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
+        } else {
+          returnDisplayMessage = 'Command cancelled by user.';
         }
       }
+    } else {
+      const finalError = result.error
+        ? result.error.message.replace(commandToExecute, this.params.command)
+        : '(none)';
 
-      if (
-        filterInfo.description !== undefined &&
-        filterInfo.description !== '' &&
-        !this.config.getDebugMode()
-      ) {
-        returnDisplayMessage =
-          returnDisplayMessage !== ''
-            ? `[${filterInfo.description}]\n${returnDisplayMessage}`
-            : `[${filterInfo.description}]`;
+      llmContent = [
+        `Command: ${this.params.command}`,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string directory should fall through to '(root)'
+        `Directory: ${this.getDirPath() || '(root)'}`,
+        `Stdout: ${filteredOutput || '(empty)'}`,
+        `Stderr: (empty)`,
+        `Error: ${finalError}`,
+        `Exit Code: ${result.exitCode ?? '(none)'}`,
+        `Signal: ${result.signal ?? '(none)'}`,
+        `Background PIDs: ${
+          backgroundPIDs.length > 0 ? backgroundPIDs.join(', ') : '(none)'
+        }`,
+        `Process Group PGID: ${pgid ?? result.pid ?? '(none)'}`,
+      ].join('\n');
+
+      if (this.config.getDebugMode()) {
+        returnDisplayMessage = llmContent;
+      } else if (filteredOutput.trim() !== '') {
+        returnDisplayMessage = filteredOutput;
+      } else if (result.signal !== null) {
+        returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
+      } else if (result.error !== null) {
+        returnDisplayMessage = `Command failed: ${getErrorMessage(result.error)}`;
+      } else if (result.exitCode !== null && result.exitCode !== 0) {
+        returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
       }
+    }
 
-      // Check if summarization is configured
-      const summarizeConfig = this.config.getSummarizeToolOutputConfig();
-      let executionError:
-        | { error: { message: string; type: ToolErrorType } }
-        | Record<string, never> = {};
-      const commandResult = result;
-      const commandError = commandResult.error as
-        | typeof commandResult.error
-        | null
-        | undefined;
-      if (commandError !== undefined && commandError !== null) {
-        executionError = {
-          error: {
-            message: commandError.message,
-            type: ToolErrorType.SHELL_EXECUTE_ERROR,
-          },
-        };
-      } else if (commandResult.aborted === true && timeoutTriggered) {
-        executionError = {
-          error: {
-            message: llmContent,
-            type: ToolErrorType.TIMEOUT,
-          },
-        };
-      } else if (commandResult.aborted === true) {
-        executionError = {
-          error: {
-            message: llmContent,
-            type: ToolErrorType.EXECUTION_FAILED,
-          },
-        };
+    return { llmContent, returnDisplayMessage };
+  }
+
+  private applyFilterDescription(
+    returnDisplayMessage: string,
+    filterInfo: { content: string; description?: string },
+  ): string {
+    if (
+      filterInfo.description !== undefined &&
+      filterInfo.description !== '' &&
+      !this.config.getDebugMode()
+    ) {
+      return returnDisplayMessage !== ''
+        ? `[${filterInfo.description}]\n${returnDisplayMessage}`
+        : `[${filterInfo.description}]`;
+    }
+    return returnDisplayMessage;
+  }
+
+  private buildExecutionError(
+    result: ShellExecutionResult,
+    llmContent: string,
+    timeoutTriggered: boolean,
+  ):
+    | { error: { message: string; type: ToolErrorType } }
+    | Record<string, never> {
+    const commandError = result.error as typeof result.error | null | undefined;
+    if (commandError !== undefined && commandError !== null) {
+      return {
+        error: {
+          message: commandError.message,
+          type: ToolErrorType.SHELL_EXECUTE_ERROR,
+        },
+      };
+    } else if (result.aborted === true && timeoutTriggered) {
+      return {
+        error: {
+          message: llmContent,
+          type: ToolErrorType.TIMEOUT,
+        },
+      };
+    } else if (result.aborted === true) {
+      return {
+        error: {
+          message: llmContent,
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+    return {};
+  }
+
+  private async trySummarizeOutput(
+    llmContent: string,
+    shellToolConfig: { tokenBudget?: number },
+    signal: AbortSignal,
+  ): Promise<string> {
+    const contentGenConfig = this.config.getContentGeneratorConfig();
+    if (contentGenConfig?.providerManager === undefined) {
+      return llmContent;
+    }
+
+    const serverToolsProvider =
+      contentGenConfig.providerManager.getServerToolsProvider();
+
+    if (serverToolsProvider !== null && serverToolsProvider.name === 'gemini') {
+      const summary = (await summarizeToolOutput(
+        llmContent,
+        this.config.getGeminiClient(),
+        signal,
+        shellToolConfig.tokenBudget,
+      )) as string | null | undefined;
+      if (summary !== undefined && summary !== null && summary !== '') {
+        return summary;
       }
+    }
 
-      let llmPayload = llmContent;
-      const shellToolConfig = summarizeConfig?.[ShellTool.Name];
-      if (shellToolConfig !== undefined && commandResult.aborted !== true) {
-        // Get the ServerToolsProvider for summarization
-        const contentGenConfig = this.config.getContentGeneratorConfig();
-        if (contentGenConfig?.providerManager !== undefined) {
-          const serverToolsProvider =
-            contentGenConfig.providerManager.getServerToolsProvider();
+    return llmContent;
+  }
 
-          // If we have a ServerToolsProvider that can handle summarization
-          // Follow-up (#1569): Need to adapt summarizeToolOutput to use ServerToolsProvider
-          // For now, check if it's a Gemini provider and use the existing function
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (
-            serverToolsProvider !== null &&
-            serverToolsProvider.name === 'gemini'
-          ) {
-            // Widen the type at this runtime/provider boundary for null-safety
-            const summary = (await summarizeToolOutput(
-              llmContent,
-              this.config.getGeminiClient(),
-              signal,
-              shellToolConfig.tokenBudget,
-            )) as string | null | undefined;
-            // Preserve old truthy behavior: only use summary if non-nullish and non-empty
-            if (summary !== undefined && summary !== null && summary !== '') {
-              llmPayload = summary;
-            }
-          }
-          // If not Gemini, we can't summarize yet - need provider-agnostic summarization
-        }
+  private applyOutputLimits(
+    llmPayload: string,
+    returnDisplayMessage: string,
+    executionError:
+      | { error: { message: string; type: ToolErrorType } }
+      | Record<string, never>,
+  ): ToolResult {
+    const limits = getOutputLimits(this.config);
+    const maxTokens = limits.maxTokens;
+    const effectiveLimit =
+      maxTokens !== undefined && maxTokens !== 0
+        ? getEffectiveTokenLimit(maxTokens)
+        : undefined;
+
+    if (
+      effectiveLimit !== undefined &&
+      effectiveLimit > 0 &&
+      limits.truncateMode === 'truncate'
+    ) {
+      const approxMaxChars = effectiveLimit * 3;
+      const clipped = clipMiddle(llmPayload, approxMaxChars, 0.3, 0.7);
+      if (clipped.wasTruncated) {
+        llmPayload = clipped.content;
       }
-
-      // For ShellTool, apply a "middle clip" strategy so we preserve both the
-      // beginning (setup/context) and the end (results/errors).
-      // We still respect the current maxTokens and truncateMode settings.
-      const limits = getOutputLimits(this.config);
-      const maxTokens = limits.maxTokens;
-      const effectiveLimit =
-        maxTokens !== undefined && maxTokens !== 0
-          ? getEffectiveTokenLimit(maxTokens)
-          : undefined;
-
-      if (
-        effectiveLimit !== undefined &&
-        effectiveLimit > 0 &&
-        limits.truncateMode === 'truncate'
-      ) {
-        // Approximate a char budget from the token budget. Keep it conservative
-        // to avoid overshooting after serialization/escaping.
-        const approxMaxChars = effectiveLimit * 3;
-        const clipped = clipMiddle(llmPayload, approxMaxChars, 0.3, 0.7);
-        if (clipped.wasTruncated) {
-          llmPayload = clipped.content;
-        }
-
-        return {
-          llmContent: llmPayload,
-          returnDisplay: returnDisplayMessage,
-          ...executionError,
-        };
-      }
-
-      // In warn/sample, keep the existing limiter behavior.
-      const limitedResult = limitOutputTokens(
-        llmPayload,
-        this.config,
-        'run_shell_command',
-      );
-
-      if (limitedResult.wasTruncated) {
-        const formatted = formatLimitedOutput(limitedResult);
-        return {
-          llmContent: formatted.llmContent,
-          returnDisplay: returnDisplayMessage,
-          ...executionError,
-        };
-      }
-
-      this.logger.debug(
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        `Final returnDisplayMessage length=${returnDisplayMessage?.length ?? 0}, preview=${returnDisplayMessage?.slice(0, 100) ?? 'EMPTY'}`,
-      );
 
       return {
-        llmContent: limitedResult.content,
+        llmContent: llmPayload,
         returnDisplay: returnDisplayMessage,
         ...executionError,
       };
-    } finally {
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-      }
-      signal.removeEventListener('abort', onUserAbort);
-      if (fs.existsSync(tempFilePath)) {
-        fs.unlinkSync(tempFilePath);
-      }
     }
+
+    const limitedResult = limitOutputTokens(
+      llmPayload,
+      this.config,
+      'run_shell_command',
+    );
+
+    if (limitedResult.wasTruncated) {
+      const formatted = formatLimitedOutput(limitedResult);
+      return {
+        llmContent: formatted.llmContent,
+        returnDisplay: returnDisplayMessage,
+        ...executionError,
+      };
+    }
+
+    this.logger.debug(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      `Final returnDisplayMessage length=${returnDisplayMessage?.length ?? 0}, preview=${returnDisplayMessage?.slice(0, 100) ?? 'EMPTY'}`,
+    );
+
+    return {
+      llmContent: limitedResult.content,
+      returnDisplay: returnDisplayMessage,
+      ...executionError,
+    };
+  }
+
+  private createPreCancelledResult(): ToolResult {
+    return {
+      llmContent: 'Command was cancelled by user before it could start.',
+      returnDisplay: 'Command cancelled by user.',
+      error: {
+        message: 'Command was cancelled by user before it could start.',
+        type: ToolErrorType.EXECUTION_FAILED,
+      },
+    };
   }
 
   private resolveTimeoutSeconds(
@@ -986,3 +1181,4 @@ export class ShellTool extends BaseDeclarativeTool<
     );
   }
 }
+/* eslint-enable complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */

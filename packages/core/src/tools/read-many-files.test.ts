@@ -685,6 +685,168 @@ Content of file[1]
     });
   });
 
+  describe('Token overflow handling', () => {
+    it('warn mode: should stop without including the overflowing file and report remaining-file count including it', async () => {
+      // Create 3 files: first small, second small, third overflows token limit
+      createFileInTempRoot('small1.txt', 'a');
+      createFileInTempRoot('small2.txt', 'b');
+      const bigContent = 'X'.repeat(200_000); // ~50k tokens, way over default limit
+      createFileInTempRoot('big.txt', bigContent);
+
+      const fileService = new FileDiscoveryService(tempRootDir);
+      const mockConfig = {
+        getFileService: () => fileService,
+        getFileSystemService: () => new StandardFileSystemService(),
+        getEphemeralSettings: () => ({
+          'tool-output-max-tokens': 100,
+          'tool-output-truncate-mode': 'warn',
+        }),
+        getFileFilteringOptions: () => ({
+          respectGitIgnore: true,
+          respectGeminiIgnore: true,
+        }),
+        getTargetDir: () => tempRootDir,
+        getWorkspaceDirs: () => [tempRootDir],
+        getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+        getFileExclusions: () => ({
+          getCoreIgnorePatterns: () => COMMON_IGNORE_PATTERNS,
+          getDefaultExcludePatterns: () => [],
+          getGlobExcludes: () => COMMON_IGNORE_PATTERNS,
+          buildExcludePatterns: () => [],
+          getReadManyFilesExcludes: () => [],
+        }),
+      } as Partial<Config> as Config;
+      const warnTool = new ReadManyFilesTool(mockConfig);
+
+      const params = { paths: ['small1.txt', 'small2.txt', 'big.txt'] };
+      const invocation = warnTool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+      const content = result.llmContent as string[];
+
+      // The overflowing file (big.txt) must NOT appear in content
+      const bigIncluded = content.some(
+        (c) => typeof c === 'string' && c.includes('big.txt'),
+      );
+      expect(bigIncluded).toBe(false);
+
+      // The display should mention "remaining file(s)" including the overflowing one
+      expect(result.returnDisplay).toContain('remaining file(s)');
+
+      // Only previously processed files should appear, not big.txt
+      const processedCount = content.filter(
+        (c) => typeof c === 'string' && c.includes('---'),
+      ).length;
+      // Either 0 or 1 files processed before hitting the limit
+      expect(processedCount).toBeLessThanOrEqual(2);
+    });
+
+    it('truncate mode: should include truncated content, report one processed file, include truncation marker, and not continue to later files', async () => {
+      // Create 3 files: first small, second overflows, third should be skipped
+      // Use prefixed names to control alphabetical sort order (sortedFiles sorts alphabetically)
+      createFileInTempRoot('a_first.txt', 'First file content');
+      const bigContent = 'Y'.repeat(200_000); // Will overflow
+      createFileInTempRoot('b_overflow.txt', bigContent);
+      createFileInTempRoot('c_after.txt', 'This should not appear');
+
+      const fileService = new FileDiscoveryService(tempRootDir);
+      const mockConfig = {
+        getFileService: () => fileService,
+        getFileSystemService: () => new StandardFileSystemService(),
+        getEphemeralSettings: () => ({
+          'tool-output-max-tokens': 500,
+          'tool-output-truncate-mode': 'truncate',
+        }),
+        getFileFilteringOptions: () => ({
+          respectGitIgnore: true,
+          respectGeminiIgnore: true,
+        }),
+        getTargetDir: () => tempRootDir,
+        getWorkspaceDirs: () => [tempRootDir],
+        getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+        getFileExclusions: () => ({
+          getCoreIgnorePatterns: () => COMMON_IGNORE_PATTERNS,
+          getDefaultExcludePatterns: () => [],
+          getGlobExcludes: () => COMMON_IGNORE_PATTERNS,
+          buildExcludePatterns: () => [],
+          getReadManyFilesExcludes: () => [],
+        }),
+      } as Partial<Config> as Config;
+      const truncateTool = new ReadManyFilesTool(mockConfig);
+
+      const params = {
+        paths: ['a_first.txt', 'b_overflow.txt', 'c_after.txt'],
+      };
+      const invocation = truncateTool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+      const content = result.llmContent as string[];
+
+      // Should contain the truncation marker
+      const hasTruncationMarker = content.some(
+        (c) =>
+          typeof c === 'string' &&
+          c.includes('[CONTENT TRUNCATED DUE TO TOKEN LIMIT]'),
+      );
+      expect(hasTruncationMarker).toBe(true);
+
+      // The overflowing file should be listed in the display
+      expect(result.returnDisplay).toContain('b_overflow.txt');
+
+      // "c_after.txt" must NOT appear as a processed file in the display message
+      // (we stopped after truncating b_overflow.txt)
+      expect(result.returnDisplay).not.toContain('c_after.txt');
+
+      // Should report the truncation reason
+      expect(result.returnDisplay).toContain(
+        'content truncated to fit token limit',
+      );
+    });
+
+    it('truncate mode with very small remaining budget: should stop without including the overflowing file', async () => {
+      // Set a tiny token limit so remainingTokens <= 100 after first file
+      createFileInTempRoot('first.txt', 'AAAA'); // ~1 token for content plus separator overhead
+      createFileInTempRoot('second.txt', 'BBBB');
+
+      const fileService = new FileDiscoveryService(tempRootDir);
+      const mockConfig = {
+        getFileService: () => fileService,
+        getFileSystemService: () => new StandardFileSystemService(),
+        getEphemeralSettings: () => ({
+          'tool-output-max-tokens': 50,
+          'tool-output-truncate-mode': 'truncate',
+        }),
+        getFileFilteringOptions: () => ({
+          respectGitIgnore: true,
+          respectGeminiIgnore: true,
+        }),
+        getTargetDir: () => tempRootDir,
+        getWorkspaceDirs: () => [tempRootDir],
+        getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+        getFileExclusions: () => ({
+          getCoreIgnorePatterns: () => COMMON_IGNORE_PATTERNS,
+          getDefaultExcludePatterns: () => [],
+          getGlobExcludes: () => COMMON_IGNORE_PATTERNS,
+          buildExcludePatterns: () => [],
+          getReadManyFilesExcludes: () => [],
+        }),
+      } as Partial<Config> as Config;
+      const truncateTool = new ReadManyFilesTool(mockConfig);
+
+      // Use many files to push remaining budget very low
+      const params = { paths: ['first.txt', 'second.txt'] };
+      const invocation = truncateTool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+      const content = result.llmContent as string[];
+
+      // No truncation marker should appear (remaining budget too small to truncate)
+      const hasTruncationMarker = content.some(
+        (c) =>
+          typeof c === 'string' &&
+          c.includes('[CONTENT TRUNCATED DUE TO TOKEN LIMIT]'),
+      );
+      expect(hasTruncationMarker).toBe(false);
+    });
+  });
+
   describe('Error handling', () => {
     it('should return an INVALID_TOOL_PARAMS error if no paths are provided', async () => {
       const params = { paths: [], include: [] };

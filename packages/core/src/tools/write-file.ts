@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import fs from 'fs';
 import path from 'path';
 import * as Diff from 'diff';
@@ -299,14 +297,12 @@ class WriteFileToolInvocation extends BaseToolInvocation<
   }
 
   async execute(abortSignal: AbortSignal): Promise<ToolResult> {
-    // Apply emoji filtering to file content
     const filter = getEmojiFilter(this.config);
     const filterResult = filter.filterFileContent(
       this.params.content,
       'write_file',
     );
 
-    // Handle blocking in error mode
     if (filterResult.blocked) {
       return {
         llmContent:
@@ -321,7 +317,6 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       };
     }
 
-    // Use filtered content
     const filteredParams = {
       ...this.params,
       content: filterResult.filtered as string,
@@ -355,282 +350,340 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       correctedContent: fileContent,
       fileExists,
     } = correctedContentResult;
-    // fileExists is true if the file existed (and was readable or unreadable but caught by readError).
-    // fileExists is false if the file did not exist (ENOENT).
-    // Note: At this point correctedContentResult.error is undefined (we returned early above if there was an error)
     const isNewFile = !fileExists;
 
     try {
-      const dirName = path.dirname(filePath);
-      if (!fs.existsSync(dirName)) {
-        fs.mkdirSync(dirName, { recursive: true });
-      }
-
-      await this.config
-        .getFileSystemService()
-        .writeTextFile(filePath, fileContent);
-
-      // Track git stats if logging is enabled and service is available
-      let gitStats = null;
-      if (this.config.getConversationLoggingEnabled()) {
-        const gitStatsService = getGitStatsService();
-        if (gitStatsService) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            gitStats = await gitStatsService.trackFileEdit(
-              filePath,
-              originalContent || '',
-              fileContent,
-            );
-          } catch (error) {
-            // Don't fail the write if git stats tracking fails
-            debugLogger.warn('Failed to track git stats:', error);
-          }
-        }
-      }
-
-      // Generate diff for display result
-      const fileName = path.basename(filePath);
-      // At this point correctedContentResult.error is undefined (we returned early above if there was an error)
-      // So currentContentForDiff is just originalContent
-      const currentContentForDiff = originalContent;
-
-      const fileDiff = Diff.createPatch(
-        fileName,
-        currentContentForDiff,
-        fileContent,
-        'Original',
-        'Written',
-        DEFAULT_CREATE_PATCH_OPTIONS,
-      );
-
-      const originallyProposedContent =
-        filteredParams.ai_proposed_content ?? filteredParams.content;
-      const diffStat = getDiffStat(
-        fileName,
-        currentContentForDiff,
-        originallyProposedContent,
-        filteredParams.content,
-      );
-
-      const displayPath =
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-        filteredParams.absolute_path || filteredParams.file_path || '';
-      const llmSuccessMessageParts = [
-        isNewFile
-          ? `Successfully created and wrote to new file: ${displayPath}.`
-          : `Successfully overwrote file: ${displayPath}.`,
-      ];
-      if (filteredParams.modified_by_user === true) {
-        llmSuccessMessageParts.push(
-          `User modified the \`content\` to be: ${filteredParams.content}`,
-        );
-      }
-
-      // Add system feedback for emoji filtering if detected
-      if (filterResult.systemFeedback) {
-        llmSuccessMessageParts.push(
-          `\n\n<system-reminder>\n${filterResult.systemFeedback}\n</system-reminder>`,
-        );
-      }
-
-      /**
-       * @plan PLAN-20250212-LSP.P32
-       * @requirement REQ-DIAG-040
-       * @requirement REQ-DIAG-070
-       * @requirement REQ-GRACE-050
-       * @pseudocode write-integration.md lines 12-84
-       *
-       * Append LSP diagnostics after successful write
-       */
-      try {
-        const lspClient = this.config.getLspServiceClient();
-        if (lspClient?.isAlive() === true) {
-          // Check the written file to trigger diagnostics
-          await lspClient.checkFile(filePath);
-
-          // Get all diagnostics from known files (files with non-empty diagnostics)
-          const allDiagnostics = await lspClient.getAllDiagnostics();
-
-          // Extract config values for formatting
-          const lspConfig = this.config.getLspConfig();
-          const includeSeverities = lspConfig?.includeSeverities ?? ['error'];
-          const maxDiagnosticsPerFile = lspConfig?.maxDiagnosticsPerFile ?? 20;
-          const maxProjectDiagnosticsFiles =
-            lspConfig?.maxProjectDiagnosticsFiles ?? 5;
-          const maxTotalLines = 50;
-
-          // Separate written file from other files
-          const allFiles = Object.keys(allDiagnostics);
-          const otherFiles = allFiles.filter((f) => f !== filePath);
-          const otherFilesSorted = otherFiles.sort();
-          const cappedOtherFiles = otherFilesSorted.slice(
-            0,
-            maxProjectDiagnosticsFiles,
-          );
-
-          // Format multi-file diagnostics with proper ordering and caps
-          const filesToFormat = [filePath, ...cappedOtherFiles];
-          const blocks: string[] = [];
-          let totalLines = 0;
-
-          // eslint-disable-next-line sonarjs/nested-control-flow, sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const file of filesToFormat) {
-            if (totalLines >= maxTotalLines) {
-              break;
-            }
-
-            // Write-file inputs cross tool invocation boundaries despite declared types.
-            const fileDiagnostics = allDiagnostics[file] ?? [];
-            // Filter by severity
-            const filtered = fileDiagnostics.filter((d) =>
-              includeSeverities.includes(d.severity),
-            );
-            // Sort by line, then column
-            const sorted = filtered.sort((a, b) => {
-              const lineDiff = (a.line ?? 0) - (b.line ?? 0);
-              if (lineDiff !== 0) return lineDiff;
-              return (a.column ?? 0) - (b.column ?? 0);
-            });
-
-            if (sorted.length === 0) {
-              continue;
-            }
-
-            const remainingTotal = maxTotalLines - totalLines;
-            const includeCount = Math.min(
-              maxDiagnosticsPerFile,
-              remainingTotal,
-              sorted.length,
-            );
-            const included = sorted.slice(0, includeCount);
-
-            const relPath = path.relative(this.config.getTargetDir(), file);
-            const isWrittenFile = file === filePath;
-            const sectionLabel = isWrittenFile
-              ? 'LSP errors detected in this file, please fix:'
-              : 'LSP errors detected in other files:';
-
-            blocks.push(`${sectionLabel}\n<diagnostics file="${relPath}">`);
-            for (const diag of included) {
-              const codeStr = diag.code !== undefined ? ` (${diag.code})` : '';
-              blocks.push(
-                `${diag.severity.toUpperCase()} [${diag.line ?? 1}:${diag.column ?? 1}] ${diag.message}${codeStr}`,
-              );
-              totalLines++;
-            }
-
-            const overflow = sorted.length - includeCount;
-            if (overflow > 0) {
-              const lastDiag = sorted[sorted.length - 1];
-              const lastCodeStr =
-                lastDiag.code !== undefined ? ` (${lastDiag.code})` : '';
-              blocks.push(
-                `... and ${overflow} more (last: ${lastDiag.severity.toUpperCase()} [${lastDiag.line ?? 1}:${lastDiag.column ?? 1}] ${lastDiag.message}${lastCodeStr})`,
-              );
-            }
-
-            blocks.push('</diagnostics>');
-          }
-
-          // Append formatted diagnostics if present
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (blocks.length > 0) {
-            llmSuccessMessageParts.push(blocks.join('\n'));
-          }
-        }
-      } catch {
-        // LSP failure must never fail write (REQ-GRACE-050, REQ-GRACE-055)
-        // Silently continue - write was already successful
-      }
-
-      const displayResult: FileDiff = {
-        fileDiff,
-        fileName,
+      return await this.writeFile(
         filePath,
-        originalContent: correctedContentResult.originalContent,
-        newContent: correctedContentResult.correctedContent,
-        diffStat,
+        fileContent,
+        originalContent,
         isNewFile,
-      };
-
-      const lines = fileContent.split('\n').length;
-      const mimetype = getSpecificMimeType(filePath);
-      const extension = path.extname(filePath); // Get extension
-      if (isNewFile) {
-        recordFileOperationMetric(
-          this.config,
-          FileOperation.CREATE,
-          lines,
-          mimetype,
-          extension,
-          diffStat,
-        );
-      } else {
-        recordFileOperationMetric(
-          this.config,
-          FileOperation.UPDATE,
-          lines,
-          mimetype,
-          extension,
-          diffStat,
-        );
-      }
-
-      const result: ToolResult = {
-        llmContent: llmSuccessMessageParts.join('\n\n'),
-        returnDisplay: displayResult,
-      };
-
-      // Include git stats in metadata if available
-      if (gitStats) {
-        result.metadata = {
-          ...result.metadata,
-          gitStats,
-        };
-      }
-
-      return result;
+        filteredParams,
+        filterResult,
+      );
     } catch (error) {
-      // Capture detailed error information for debugging
-      let errorMsg: string;
-      let errorType = ToolErrorType.FILE_WRITE_FAILURE;
+      return this.createWriteError(filePath, error);
+    }
+  }
 
-      if (isNodeError(error)) {
-        // Handle specific Node.js errors with their error codes
-        errorMsg = `Error writing to file '${filePath}': ${error.message} (${error.code})`;
+  private async writeFile(
+    filePath: string,
+    fileContent: string,
+    originalContent: string,
+    isNewFile: boolean,
+    filteredParams: WriteFileToolParams,
+    filterResult: ReturnType<EmojiFilter['filterFileContent']>,
+  ): Promise<ToolResult> {
+    const dirName = path.dirname(filePath);
+    if (!fs.existsSync(dirName)) {
+      fs.mkdirSync(dirName, { recursive: true });
+    }
 
-        // Log specific error types for better debugging
-        if (error.code === 'EACCES') {
-          errorMsg = `Permission denied writing to file: ${filePath} (${error.code})`;
-          errorType = ToolErrorType.PERMISSION_DENIED;
-        } else if (error.code === 'ENOSPC') {
-          errorMsg = `No space left on device: ${filePath} (${error.code})`;
-          errorType = ToolErrorType.NO_SPACE_LEFT;
-        } else if (error.code === 'EISDIR') {
-          errorMsg = `Target is a directory, not a file: ${filePath} (${error.code})`;
-          errorType = ToolErrorType.TARGET_IS_DIRECTORY;
-        }
+    await this.config
+      .getFileSystemService()
+      .writeTextFile(filePath, fileContent);
 
-        // Include stack trace in debug mode for better troubleshooting
-        if (this.config.getDebugMode() && error.stack) {
-          debugLogger.error('Write file error stack:', error.stack);
-        }
-      } else if (error instanceof Error) {
-        errorMsg = `Error writing to file: ${error.message}`;
-      } else {
-        errorMsg = `Error writing to file: ${String(error)}`;
-      }
+    const gitStats = await this.trackGitStats(
+      filePath,
+      originalContent,
+      fileContent,
+    );
 
-      return {
-        llmContent: errorMsg,
-        returnDisplay: errorMsg,
-        error: {
-          message: errorMsg,
-          type: errorType,
-        },
+    const fileName = path.basename(filePath);
+    const fileDiff = Diff.createPatch(
+      fileName,
+      originalContent,
+      fileContent,
+      'Original',
+      'Written',
+      DEFAULT_CREATE_PATCH_OPTIONS,
+    );
+
+    const originallyProposedContent =
+      filteredParams.ai_proposed_content ?? filteredParams.content;
+    const diffStat = getDiffStat(
+      fileName,
+      originalContent,
+      originallyProposedContent,
+      filteredParams.content,
+    );
+
+    const llmSuccessMessageParts = this.buildSuccessMessageParts(
+      filteredParams,
+      filterResult,
+      isNewFile,
+    );
+
+    await this.appendLspDiagnostics(filePath, llmSuccessMessageParts);
+
+    const displayResult: FileDiff = {
+      fileDiff,
+      fileName,
+      filePath,
+      originalContent,
+      newContent: fileContent,
+      diffStat,
+      isNewFile,
+    };
+
+    this.recordMetrics(filePath, fileContent, isNewFile, diffStat);
+
+    const result: ToolResult = {
+      llmContent: llmSuccessMessageParts.join('\n\n'),
+      returnDisplay: displayResult,
+    };
+
+    if (gitStats !== null) {
+      result.metadata = {
+        ...result.metadata,
+        gitStats,
       };
     }
+
+    return result;
+  }
+
+  private buildSuccessMessageParts(
+    filteredParams: WriteFileToolParams,
+    filterResult: ReturnType<EmojiFilter['filterFileContent']>,
+    isNewFile: boolean,
+  ): string[] {
+    const displayPath =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
+      filteredParams.absolute_path || filteredParams.file_path || '';
+    const llmSuccessMessageParts = [
+      isNewFile
+        ? `Successfully created and wrote to new file: ${displayPath}.`
+        : `Successfully overwrote file: ${displayPath}.`,
+    ];
+    if (filteredParams.modified_by_user === true) {
+      llmSuccessMessageParts.push(
+        `User modified the \`content\` to be: ${filteredParams.content}`,
+      );
+    }
+
+    if (filterResult.systemFeedback) {
+      llmSuccessMessageParts.push(
+        `\n\n<system-reminder>\n${filterResult.systemFeedback}\n</system-reminder>`,
+      );
+    }
+
+    return llmSuccessMessageParts;
+  }
+
+  private async trackGitStats(
+    filePath: string,
+    originalContent: string,
+    fileContent: string,
+  ): Promise<unknown | null> {
+    let gitStats: unknown | null = null;
+    if (this.config.getConversationLoggingEnabled()) {
+      const gitStatsService = getGitStatsService();
+      if (gitStatsService) {
+        try {
+          gitStats = await gitStatsService.trackFileEdit(
+            filePath,
+            originalContent || '',
+            fileContent,
+          );
+        } catch (error) {
+          debugLogger.warn('Failed to track git stats:', error);
+        }
+      }
+    }
+    return gitStats;
+  }
+
+  /**
+   * @plan PLAN-20250212-LSP.P32
+   * @requirement REQ-DIAG-040, REQ-DIAG-070, REQ-GRACE-050
+   */
+  private async appendLspDiagnostics(
+    filePath: string,
+    llmSuccessMessageParts: string[],
+  ): Promise<void> {
+    try {
+      const lspClient = this.config.getLspServiceClient();
+      if (lspClient?.isAlive() !== true) {
+        return;
+      }
+
+      await lspClient.checkFile(filePath);
+      const allDiagnostics = await lspClient.getAllDiagnostics();
+
+      const lspConfig = this.config.getLspConfig();
+      const includeSeverities = lspConfig?.includeSeverities ?? ['error'];
+      const maxDiagnosticsPerFile = lspConfig?.maxDiagnosticsPerFile ?? 20;
+      const maxProjectDiagnosticsFiles =
+        lspConfig?.maxProjectDiagnosticsFiles ?? 5;
+      const maxTotalLines = 50;
+
+      const blocks = this.formatLspDiagnostics(
+        filePath,
+        allDiagnostics,
+        includeSeverities,
+        maxDiagnosticsPerFile,
+        maxProjectDiagnosticsFiles,
+        maxTotalLines,
+      );
+
+      if (blocks.length > 0) {
+        llmSuccessMessageParts.push(blocks.join('\n'));
+      }
+    } catch {
+      // LSP failure must never fail write (REQ-GRACE-050, REQ-GRACE-055)
+    }
+  }
+
+  private formatLspDiagnostics(
+    filePath: string,
+    allDiagnostics: Record<
+      string,
+      Array<{
+        severity: string;
+        line?: number;
+        column?: number;
+        message: string;
+        code?: string | number;
+      }>
+    >,
+    includeSeverities: string[],
+    maxDiagnosticsPerFile: number,
+    maxProjectDiagnosticsFiles: number,
+    maxTotalLines: number,
+  ): string[] {
+    const allFiles = Object.keys(allDiagnostics);
+    const otherFiles = allFiles.filter((f) => f !== filePath).sort();
+    const cappedOtherFiles = otherFiles.slice(0, maxProjectDiagnosticsFiles);
+    const filesToFormat = [filePath, ...cappedOtherFiles];
+    const blocks: string[] = [];
+    let totalLines = 0;
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for (const file of filesToFormat) {
+      if (totalLines >= maxTotalLines) {
+        break;
+      }
+
+      // Write-file inputs cross tool invocation boundaries despite declared types.
+      const fileDiagnostics = allDiagnostics[file] ?? [];
+      const filtered = fileDiagnostics.filter((d) =>
+        includeSeverities.includes(d.severity),
+      );
+      const sorted = filtered.sort((a, b) => {
+        const lineDiff = (a.line ?? 0) - (b.line ?? 0);
+        if (lineDiff !== 0) return lineDiff;
+        return (a.column ?? 0) - (b.column ?? 0);
+      });
+
+      if (sorted.length === 0) {
+        continue;
+      }
+
+      const remainingTotal = maxTotalLines - totalLines;
+      const includeCount = Math.min(
+        maxDiagnosticsPerFile,
+        remainingTotal,
+        sorted.length,
+      );
+      const included = sorted.slice(0, includeCount);
+
+      const relPath = path.relative(this.config.getTargetDir(), file);
+      const isWrittenFile = file === filePath;
+      const sectionLabel = isWrittenFile
+        ? 'LSP errors detected in this file, please fix:'
+        : 'LSP errors detected in other files:';
+
+      blocks.push(`${sectionLabel}\n<diagnostics file="${relPath}">`);
+      for (const diag of included) {
+        const codeStr = diag.code !== undefined ? ` (${diag.code})` : '';
+        blocks.push(
+          `${diag.severity.toUpperCase()} [${diag.line ?? 1}:${diag.column ?? 1}] ${diag.message}${codeStr}`,
+        );
+        totalLines++;
+      }
+
+      const overflow = sorted.length - includeCount;
+      if (overflow > 0) {
+        const lastDiag = sorted[sorted.length - 1];
+        const lastCodeStr =
+          lastDiag.code !== undefined ? ` (${lastDiag.code})` : '';
+        blocks.push(
+          `... and ${overflow} more (last: ${lastDiag.severity.toUpperCase()} [${lastDiag.line ?? 1}:${lastDiag.column ?? 1}] ${lastDiag.message}${lastCodeStr})`,
+        );
+      }
+
+      blocks.push('</diagnostics>');
+    }
+
+    return blocks;
+  }
+
+  private recordMetrics(
+    filePath: string,
+    fileContent: string,
+    isNewFile: boolean,
+    diffStat: ReturnType<typeof getDiffStat>,
+  ): void {
+    const lines = fileContent.split('\n').length;
+    const mimetype = getSpecificMimeType(filePath);
+    const extension = path.extname(filePath);
+    if (isNewFile) {
+      recordFileOperationMetric(
+        this.config,
+        FileOperation.CREATE,
+        lines,
+        mimetype,
+        extension,
+        diffStat,
+      );
+    } else {
+      recordFileOperationMetric(
+        this.config,
+        FileOperation.UPDATE,
+        lines,
+        mimetype,
+        extension,
+        diffStat,
+      );
+    }
+  }
+
+  private createWriteError(filePath: string, error: unknown): ToolResult {
+    let errorMsg: string;
+    let errorType = ToolErrorType.FILE_WRITE_FAILURE;
+
+    if (isNodeError(error)) {
+      errorMsg = `Error writing to file '${filePath}': ${error.message} (${error.code})`;
+
+      if (error.code === 'EACCES') {
+        errorMsg = `Permission denied writing to file: ${filePath} (${error.code})`;
+        errorType = ToolErrorType.PERMISSION_DENIED;
+      } else if (error.code === 'ENOSPC') {
+        errorMsg = `No space left on device: ${filePath} (${error.code})`;
+        errorType = ToolErrorType.NO_SPACE_LEFT;
+      } else if (error.code === 'EISDIR') {
+        errorMsg = `Target is a directory, not a file: ${filePath} (${error.code})`;
+        errorType = ToolErrorType.TARGET_IS_DIRECTORY;
+      }
+
+      if (this.config.getDebugMode() && error.stack) {
+        debugLogger.error('Write file error stack:', error.stack);
+      }
+    } else if (error instanceof Error) {
+      errorMsg = `Error writing to file: ${error.message}`;
+    } else {
+      errorMsg = `Error writing to file: ${String(error)}`;
+    }
+
+    return {
+      llmContent: errorMsg,
+      returnDisplay: errorMsg,
+      error: {
+        message: errorMsg,
+        type: errorType,
+      },
+    };
   }
 }
 
