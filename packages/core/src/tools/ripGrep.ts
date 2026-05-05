@@ -85,6 +85,173 @@ class GrepToolInvocation extends BaseToolInvocation<
     );
   }
 
+  private async handleFileSearch(
+    resolved: ResolvedSearchTarget & { kind: 'file' },
+    searchDirDisplay: string,
+    signal: AbortSignal,
+  ): Promise<ToolResult> {
+    const fileResult = await this.performSingleFileSearch(
+      this.params.pattern,
+      resolved.filePath,
+      signal,
+    );
+
+    let includeNote = '';
+    if (this.params.include) {
+      includeNote =
+        '\nNote: include filter ignored because a specific file path was provided.';
+    }
+
+    if (fileResult.length === 0) {
+      const noMatchMsg = `No matches found for pattern "${this.params.pattern}" in file "${searchDirDisplay}".${includeNote}`;
+      return { llmContent: noMatchMsg, returnDisplay: 'No matches found' };
+    }
+
+    const matchTerm = fileResult.length === 1 ? 'match' : 'matches';
+    let llmContent = `Found ${fileResult.length} ${matchTerm} for pattern "${this.params.pattern}" in file "${searchDirDisplay}":${includeNote}
+---
+File: ${resolved.basename}
+`;
+    for (const match of fileResult) {
+      llmContent += `L${match.lineNumber}: ${match.line.trim()}
+`;
+    }
+    llmContent += '---';
+
+    return {
+      llmContent: llmContent.trim(),
+      returnDisplay: `Found ${fileResult.length} ${matchTerm}`,
+    };
+  }
+
+  private resolveSearchDirectories(
+    searchDirAbs: string | null,
+    workspaceContext: { getDirectories: () => readonly string[] },
+  ): readonly string[] {
+    if (searchDirAbs === null) {
+      return workspaceContext.getDirectories();
+    }
+    return [searchDirAbs];
+  }
+
+  private collectDirectoryMatches(
+    searchDirectories: readonly string[],
+    signal: AbortSignal,
+  ): Promise<GrepMatch[]> {
+    return this.collectDirectoryMatchesImpl(
+      searchDirectories,
+      signal,
+      DEFAULT_TOTAL_MAX_MATCHES,
+    );
+  }
+
+  private async collectDirectoryMatchesImpl(
+    searchDirectories: readonly string[],
+    signal: AbortSignal,
+    totalMaxMatches: number,
+  ): Promise<GrepMatch[]> {
+    let allMatches: GrepMatch[] = [];
+
+    if (this.config.getDebugMode()) {
+      debugLogger.log(`[GrepTool] Total result limit: ${totalMaxMatches}`);
+    }
+
+    for (const searchDir of searchDirectories) {
+      const searchResult = await this.performRipgrepSearch({
+        pattern: this.params.pattern,
+        path: searchDir,
+        include: this.params.include,
+        signal,
+      });
+
+      if (searchDirectories.length > 1) {
+        const dirName = path.basename(searchDir);
+        searchResult.forEach((match) => {
+          match.filePath = path.join(dirName, match.filePath);
+        });
+      }
+
+      allMatches = allMatches.concat(searchResult);
+
+      if (allMatches.length >= totalMaxMatches) {
+        allMatches = allMatches.slice(0, totalMaxMatches);
+        break;
+      }
+    }
+
+    return allMatches;
+  }
+
+  private buildSearchLocationDescription(
+    searchDirAbs: string | null,
+    searchDirDisplay: string,
+    workspaceContext: { getDirectories: () => readonly string[] },
+  ): string {
+    if (searchDirAbs === null) {
+      const numDirs = workspaceContext.getDirectories().length;
+      return numDirs > 1
+        ? `across ${numDirs} workspace directories`
+        : `in the workspace directory`;
+    }
+    return `in path "${searchDirDisplay}"`;
+  }
+
+  private formatDirectoryResults(
+    allMatches: GrepMatch[],
+    searchLocationDescription: string,
+  ): ToolResult {
+    const totalMaxMatches = DEFAULT_TOTAL_MAX_MATCHES;
+
+    if (allMatches.length === 0) {
+      const noMatchMsg = `No matches found for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}.`;
+      return { llmContent: noMatchMsg, returnDisplay: `No matches found` };
+    }
+
+    const wasTruncated = allMatches.length >= totalMaxMatches;
+
+    const matchesByFile = allMatches.reduce(
+      (acc, match) => {
+        const fileKey = match.filePath;
+        acc[fileKey] ??= [];
+        const fileMatches = acc[fileKey];
+        fileMatches.push(match);
+        fileMatches.sort((a, b) => a.lineNumber - b.lineNumber);
+        return acc;
+      },
+      {} as Record<string, GrepMatch[]>,
+    );
+
+    const matchCount = allMatches.length;
+    const matchTerm = matchCount === 1 ? 'match' : 'matches';
+
+    let llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}`;
+
+    if (wasTruncated) {
+      llmContent += ` (results limited to ${totalMaxMatches} matches for performance)`;
+    }
+
+    llmContent += `:\n---\n`;
+
+    for (const filePath in matchesByFile) {
+      llmContent += `File: ${filePath}\n`;
+      matchesByFile[filePath].forEach((match) => {
+        const trimmedLine = match.line.trim();
+        llmContent += `L${match.lineNumber}: ${trimmedLine}\n`;
+      });
+      llmContent += '---\n';
+    }
+
+    let displayMessage = `Found ${matchCount} ${matchTerm}`;
+    if (wasTruncated) {
+      displayMessage += ` (limited)`;
+    }
+
+    return {
+      llmContent: llmContent.trim(),
+      returnDisplay: displayMessage,
+    };
+  }
+
   async execute(signal: AbortSignal): Promise<ToolResult> {
     try {
       const workspaceContext = this.config.getWorkspaceContext();
@@ -93,143 +260,28 @@ class GrepToolInvocation extends BaseToolInvocation<
       const searchDirDisplay = this.params.path || '.';
 
       if (resolved.kind === 'file') {
-        const fileResult = await this.performSingleFileSearch(
-          this.params.pattern,
-          resolved.filePath,
-          signal,
-        );
-
-        let includeNote = '';
-        if (this.params.include) {
-          includeNote =
-            '\nNote: include filter ignored because a specific file path was provided.';
-        }
-
-        if (fileResult.length === 0) {
-          const noMatchMsg = `No matches found for pattern "${this.params.pattern}" in file "${searchDirDisplay}".${includeNote}`;
-          return { llmContent: noMatchMsg, returnDisplay: 'No matches found' };
-        }
-
-        const matchTerm = fileResult.length === 1 ? 'match' : 'matches';
-        let llmContent = `Found ${fileResult.length} ${matchTerm} for pattern "${this.params.pattern}" in file "${searchDirDisplay}":${includeNote}
----
-File: ${resolved.basename}
-`;
-        for (const match of fileResult) {
-          llmContent += `L${match.lineNumber}: ${match.line.trim()}
-`;
-        }
-        llmContent += '---';
-
-        return {
-          llmContent: llmContent.trim(),
-          returnDisplay: `Found ${fileResult.length} ${matchTerm}`,
-        };
+        return await this.handleFileSearch(resolved, searchDirDisplay, signal);
       }
 
       const searchDirAbs =
         resolved.kind === 'directory' ? resolved.searchDir : null;
 
-      // Determine which directories to search
-      let searchDirectories: readonly string[];
-      if (searchDirAbs === null) {
-        // No path specified - search all workspace directories
-        searchDirectories = workspaceContext.getDirectories();
-      } else {
-        // Specific path provided - search only that directory
-        searchDirectories = [searchDirAbs];
-      }
-
-      let allMatches: GrepMatch[] = [];
-      const totalMaxMatches = DEFAULT_TOTAL_MAX_MATCHES;
-
-      if (this.config.getDebugMode()) {
-        debugLogger.log(`[GrepTool] Total result limit: ${totalMaxMatches}`);
-      }
-
-      for (const searchDir of searchDirectories) {
-        const searchResult = await this.performRipgrepSearch({
-          pattern: this.params.pattern,
-          path: searchDir,
-          include: this.params.include,
-          signal,
-        });
-
-        if (searchDirectories.length > 1) {
-          const dirName = path.basename(searchDir);
-          searchResult.forEach((match) => {
-            match.filePath = path.join(dirName, match.filePath);
-          });
-        }
-
-        allMatches = allMatches.concat(searchResult);
-
-        if (allMatches.length >= totalMaxMatches) {
-          allMatches = allMatches.slice(0, totalMaxMatches);
-          break;
-        }
-      }
-
-      let searchLocationDescription: string;
-      if (searchDirAbs === null) {
-        const numDirs = workspaceContext.getDirectories().length;
-        searchLocationDescription =
-          numDirs > 1
-            ? `across ${numDirs} workspace directories`
-            : `in the workspace directory`;
-      } else {
-        searchLocationDescription = `in path "${searchDirDisplay}"`;
-      }
-
-      if (allMatches.length === 0) {
-        const noMatchMsg = `No matches found for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}.`;
-        return { llmContent: noMatchMsg, returnDisplay: `No matches found` };
-      }
-
-      const wasTruncated = allMatches.length >= totalMaxMatches;
-
-      const matchesByFile = allMatches.reduce(
-        (acc, match) => {
-          const fileKey = match.filePath;
-          acc[fileKey] ??= [];
-          const fileMatches = acc[fileKey];
-          fileMatches.push(match);
-          fileMatches.sort((a, b) => a.lineNumber - b.lineNumber);
-
-          return acc;
-        },
-        {} as Record<string, GrepMatch[]>,
+      const searchDirectories = this.resolveSearchDirectories(
+        searchDirAbs,
+        workspaceContext,
+      );
+      const allMatches = await this.collectDirectoryMatches(
+        searchDirectories,
+        signal,
       );
 
-      const matchCount = allMatches.length;
-      const matchTerm = matchCount === 1 ? 'match' : 'matches';
+      const searchLocationDescription = this.buildSearchLocationDescription(
+        searchDirAbs,
+        searchDirDisplay,
+        workspaceContext,
+      );
 
-      let llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}`;
-
-      if (wasTruncated) {
-        llmContent += ` (results limited to ${totalMaxMatches} matches for performance)`;
-      }
-
-      llmContent += `:\n---\n`;
-
-      for (const filePath in matchesByFile) {
-        llmContent += `File: ${filePath}\n`;
-        matchesByFile[filePath].forEach((match) => {
-          const trimmedLine = match.line.trim();
-          llmContent += `L${match.lineNumber}: ${trimmedLine}\n`;
-        });
-        llmContent += '---\n';
-      }
-
-      let displayMessage = `Found ${matchCount} ${matchTerm}`;
-      if (wasTruncated) {
-        displayMessage += ` (limited)`;
-      }
-
-      return {
-        llmContent: llmContent.trim(),
-        returnDisplay: displayMessage,
-      };
+      return this.formatDirectoryResults(allMatches, searchLocationDescription);
     } catch (error) {
       debugLogger.warn(`Error during GrepLogic execution: ${error}`);
       const errorMessage = getErrorMessage(error);
@@ -295,14 +347,61 @@ File: ${resolved.basename}
     return fs.existsSync(ignoreFilePath) ? ignoreFilePath : null;
   }
 
-  private async performRipgrepSearch(options: {
-    pattern: string;
-    path: string;
-    include?: string;
-    signal: AbortSignal;
-  }): Promise<GrepMatch[]> {
-    const { pattern, path: absolutePath, include } = options;
+  private async runRipgrepProcess(
+    rgArgs: string[],
+    signal: AbortSignal,
+  ): Promise<string> {
+    const resolvedRgPath = await getRipgrepPath();
 
+    return new Promise<string>((resolve, reject) => {
+      const child = spawn(resolvedRgPath, rgArgs, {
+        windowsHide: true,
+      });
+
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
+
+      const cleanup = () => {
+        if (signal.aborted) {
+          child.kill();
+        }
+      };
+
+      signal.addEventListener('abort', cleanup, { once: true });
+
+      child.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
+      child.stderr.on('data', (chunk) => stderrChunks.push(chunk));
+
+      child.on('error', (err) => {
+        signal.removeEventListener('abort', cleanup);
+        reject(
+          new Error(
+            `Failed to start ripgrep: ${err.message}. Please ensure @lvce-editor/ripgrep is properly installed.`,
+          ),
+        );
+      });
+
+      child.on('close', (code) => {
+        signal.removeEventListener('abort', cleanup);
+        const stdoutData = Buffer.concat(stdoutChunks).toString('utf8');
+        const stderrData = Buffer.concat(stderrChunks).toString('utf8');
+
+        if (code === 0) {
+          resolve(stdoutData);
+        } else if (code === 1) {
+          resolve(''); // No matches found
+        } else {
+          reject(new Error(`ripgrep exited with code ${code}: ${stderrData}`));
+        }
+      });
+    });
+  }
+
+  private buildRipgrepArgs(
+    pattern: string,
+    absolutePath: string,
+    include: string | undefined,
+  ): string[] {
     const rgArgs = [
       '--line-number',
       '--no-heading',
@@ -330,7 +429,6 @@ File: ${resolved.basename}
       rgArgs.push('--glob', `!${exclude}`);
     });
 
-    // Add .llxprtignore support (ripgrep natively handles .gitignore)
     if (this.config.getFileFilteringRespectLlxprtIgnore()) {
       const llxprtIgnorePath = this.getLlxprtIgnorePath();
       if (llxprtIgnorePath) {
@@ -340,56 +438,21 @@ File: ${resolved.basename}
 
     rgArgs.push('--threads', '4');
     rgArgs.push(absolutePath);
+    return rgArgs;
+  }
+
+  private async performRipgrepSearch(options: {
+    pattern: string;
+    path: string;
+    include?: string;
+    signal: AbortSignal;
+  }): Promise<GrepMatch[]> {
+    const { pattern, path: absolutePath, include, signal } = options;
+
+    const rgArgs = this.buildRipgrepArgs(pattern, absolutePath, include);
 
     try {
-      // Use robust cross-platform ripgrep path resolution
-      const resolvedRgPath = await getRipgrepPath();
-
-      const output = await new Promise<string>((resolve, reject) => {
-        const child = spawn(resolvedRgPath, rgArgs, {
-          windowsHide: true,
-        });
-
-        const stdoutChunks: Buffer[] = [];
-        const stderrChunks: Buffer[] = [];
-
-        const cleanup = () => {
-          if (options.signal.aborted) {
-            child.kill();
-          }
-        };
-
-        options.signal.addEventListener('abort', cleanup, { once: true });
-
-        child.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
-        child.stderr.on('data', (chunk) => stderrChunks.push(chunk));
-
-        child.on('error', (err) => {
-          options.signal.removeEventListener('abort', cleanup);
-          reject(
-            new Error(
-              `Failed to start ripgrep: ${err.message}. Please ensure @lvce-editor/ripgrep is properly installed.`,
-            ),
-          );
-        });
-
-        child.on('close', (code) => {
-          options.signal.removeEventListener('abort', cleanup);
-          const stdoutData = Buffer.concat(stdoutChunks).toString('utf8');
-          const stderrData = Buffer.concat(stderrChunks).toString('utf8');
-
-          if (code === 0) {
-            resolve(stdoutData);
-          } else if (code === 1) {
-            resolve(''); // No matches found
-          } else {
-            reject(
-              new Error(`ripgrep exited with code ${code}: ${stderrData}`),
-            );
-          }
-        });
-      });
-
+      const output = await this.runRipgrepProcess(rgArgs, signal);
       return this.parseRipgrepOutput(output, absolutePath);
     } catch (error: unknown) {
       debugLogger.debug(`GrepLogic: ripgrep failed: ${getErrorMessage(error)}`);
