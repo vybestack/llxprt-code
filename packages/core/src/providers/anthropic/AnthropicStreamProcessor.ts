@@ -74,36 +74,21 @@ async function* processStreamEvents(
     if (chunk.type === 'message_start') {
       yield* handleMessageStart(chunk, cacheLogger);
     } else if (chunk.type === 'content_block_start') {
-      handleContentBlockStart(chunk, logger);
-      if (chunk.content_block.type === 'tool_use') {
-        const toolBlock = chunk.content_block as ToolUseBlock;
-        currentToolCall = {
-          id: toolBlock.id,
-          name: unprefixToolName(toolBlock.name, isOAuth),
-          input: '',
-        };
-      } else if (chunk.content_block.type === 'thinking') {
-        currentThinkingBlock = {
-          thinking: '',
-          signature: chunk.content_block.signature,
-        };
-      } else if (chunk.content_block.type === 'redacted_thinking') {
-        const redactedBlock = chunk.content_block as {
-          type: 'redacted_thinking';
-          data: string;
-        };
+      const blockResult = handleContentBlockStartStateful(
+        chunk,
+        isOAuth,
+        unprefixToolName,
+        logger,
+      );
+      if (blockResult.currentToolCall !== undefined) {
+        currentToolCall = blockResult.currentToolCall;
+      }
+      if (blockResult.currentThinkingBlock !== undefined) {
+        currentThinkingBlock = blockResult.currentThinkingBlock;
+      }
+      if (blockResult.content) {
         state.hasYieldedContent = true;
-        yield {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: '[redacted]',
-              sourceField: 'thinking',
-              signature: redactedBlock.data,
-            } as ThinkingBlock,
-          ],
-        } as IContent;
+        yield blockResult.content;
       }
     } else if (chunk.type === 'content_block_delta') {
       const deltaResult = handleContentBlockDelta(
@@ -277,6 +262,57 @@ function handleContentBlockStart(
   } else if (chunk.content_block.type === 'redacted_thinking') {
     logger.debug(() => 'Starting redacted thinking block');
   }
+}
+
+function handleContentBlockStartStateful(
+  chunk: Anthropic.MessageStreamEvent & { type: 'content_block_start' },
+  isOAuth: boolean,
+  unprefixToolName: (name: string, isOAuth: boolean) => string,
+  logger: { debug: (fn: () => string) => void },
+): {
+  currentToolCall?: { id: string; name: string; input: string };
+  currentThinkingBlock?: { thinking: string; signature?: string };
+  content?: IContent;
+} {
+  handleContentBlockStart(chunk, logger);
+  if (chunk.content_block.type === 'tool_use') {
+    const toolBlock = chunk.content_block as ToolUseBlock;
+    return {
+      currentToolCall: {
+        id: toolBlock.id,
+        name: unprefixToolName(toolBlock.name, isOAuth),
+        input: '',
+      },
+    };
+  }
+  if (chunk.content_block.type === 'thinking') {
+    return {
+      currentThinkingBlock: {
+        thinking: '',
+        signature: chunk.content_block.signature,
+      },
+    };
+  }
+  if (chunk.content_block.type === 'redacted_thinking') {
+    const redactedBlock = chunk.content_block as {
+      type: 'redacted_thinking';
+      data: string;
+    };
+    return {
+      content: {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            thought: '[redacted]',
+            sourceField: 'thinking',
+            signature: redactedBlock.data,
+          } as ThinkingBlock,
+        ],
+      } as IContent,
+    };
+  }
+  return {};
 }
 
 function handleContentBlockDelta(

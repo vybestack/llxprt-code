@@ -517,8 +517,6 @@ export class AnthropicProvider extends BaseProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    // Build client and authToken. Client is used for initial requests;
-    // after bucket failover, a new client is built with fresh credentials.
     // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
     const { client: initialClient, authToken } = await this.buildProviderClient(
       options,
@@ -526,8 +524,45 @@ export class AnthropicProvider extends BaseProvider {
     );
     const isOAuth = authToken.startsWith('sk-ant-oat');
 
-    // Prepare full request context
-    const requestContext = await prepareAnthropicRequest({
+    const requestContext = await this.prepareRequestContext(options, isOAuth);
+
+    const customHeaders = this.buildCustomHeaders(requestContext, isOAuth);
+
+    const rateLimitLogger = this.getRateLimitLogger();
+    await this.applyRateLimitThrottling(requestContext, rateLimitLogger);
+
+    const apiCallWithResponse = createAnthropicApiCall(
+      initialClient,
+      requestContext.requestBody,
+      customHeaders,
+    );
+
+    const { response, rateLimitInfo } = await this.executeApiCall(
+      options,
+      requestContext,
+      apiCallWithResponse,
+      rateLimitLogger,
+    );
+
+    if (rateLimitInfo) {
+      this.lastRateLimitInfo = rateLimitInfo;
+    }
+
+    yield* this.yieldResponse(
+      response,
+      requestContext,
+      options,
+      isOAuth,
+      apiCallWithResponse,
+      rateLimitLogger,
+    );
+  }
+
+  private async prepareRequestContext(
+    options: NormalizedGenerateChatOptions,
+    isOAuth: boolean,
+  ) {
+    return prepareAnthropicRequest({
       content: options.contents,
       tools: options.tools,
       options,
@@ -541,9 +576,13 @@ export class AnthropicProvider extends BaseProvider {
       toolsLogger: this.getToolsLogger(),
       cacheLogger: this.getCacheLogger(),
     });
+  }
 
-    // Build custom headers
-    const customHeaders = buildAnthropicCustomHeaders({
+  private buildCustomHeaders(
+    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+    isOAuth: boolean,
+  ) {
+    return buildAnthropicCustomHeaders({
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getCustomHeaders returns Record<string, string> | undefined, empty object should fall through
       baseHeaders: this.getCustomHeaders() || {},
       isOAuth,
@@ -551,12 +590,12 @@ export class AnthropicProvider extends BaseProvider {
       ttl: requestContext.ttl,
       cacheLogger: requestContext.cacheLogger,
     });
+  }
 
-    // Proactive rate limit throttling — ephemeral settings:
-    //   rate-limit-throttle: 'on' | 'off' (default 'on')
-    //   rate-limit-throttle-threshold: number (default 5, percentage remaining)
-    //   rate-limit-max-wait: number (default 60000, milliseconds)
-    const rateLimitLogger = this.getRateLimitLogger();
+  private async applyRateLimitThrottling(
+    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+    rateLimitLogger: { debug: (fn: () => string) => void },
+  ): Promise<void> {
     const waitDecision = calculateWaitTime(this.lastRateLimitInfo ?? {}, {
       throttleEnabled:
         (requestContext.configEphemerals['rate-limit-throttle'] as string) ??
@@ -573,16 +612,17 @@ export class AnthropicProvider extends BaseProvider {
       rateLimitLogger.debug(() => waitDecision.reason);
       await this.sleep(waitDecision.waitMs);
     }
+  }
 
-    // Create reusable API call closure (used for both initial call and stream retries)
-    const apiCallWithResponse = createAnthropicApiCall(
-      initialClient,
-      requestContext.requestBody,
-      customHeaders,
-    );
-
-    // Execute API call with dump context handling
-
+  private async executeApiCall(
+    options: NormalizedGenerateChatOptions,
+    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+    apiCallWithResponse: () => Promise<{
+      data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
+      response: Response | undefined;
+    }>,
+    rateLimitLogger: { debug: (fn: () => string) => void },
+  ) {
     const dumpMode = options.invocation?.ephemerals?.dumpcontext as
       | DumpMode
       | undefined;
@@ -593,7 +633,7 @@ export class AnthropicProvider extends BaseProvider {
       'https://api.anthropic.com';
     /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
-    const { response, rateLimitInfo } = await executeAnthropicApiCall({
+    return executeAnthropicApiCall({
       apiCallFn: apiCallWithResponse,
       dumpMode,
       baseURL,
@@ -601,13 +641,19 @@ export class AnthropicProvider extends BaseProvider {
       streamingEnabled: requestContext.streamingEnabled,
       rateLimitLogger,
     });
+  }
 
-    // Update rate limit state (already extracted and logged by executeAnthropicApiCall)
-    if (rateLimitInfo) {
-      this.lastRateLimitInfo = rateLimitInfo;
-    }
-
-    // Yield streaming or non-streaming results
+  private async *yieldResponse(
+    response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>,
+    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+    options: NormalizedGenerateChatOptions,
+    isOAuth: boolean,
+    apiCallWithResponse: () => Promise<{
+      data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
+      response?: Response;
+    }>,
+    rateLimitLogger: { debug: (fn: () => string) => void },
+  ): AsyncGenerator<IContent> {
     if (requestContext.streamingEnabled) {
       yield* processAnthropicStream(
         response as AsyncIterable<Anthropic.MessageStreamEvent>,
