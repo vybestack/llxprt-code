@@ -39,6 +39,212 @@ export interface ApiExecutionOptions {
   getBaseURL: () => string | undefined;
 }
 
+interface ErrorContext {
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams;
+  shouldDumpError: boolean;
+  baseURL: string | undefined;
+  model: string;
+  formattedTools: OpenAITool[] | undefined;
+  streamingEnabled: boolean;
+  logger: DebugLogger;
+  getBaseURL: () => string | undefined;
+}
+
+/**
+ * Check for Cerebras/Qwen "Tool not present" errors and throw enhanced error.
+ * Returns true if the error was a Cerebras tool error (caller should not continue).
+ */
+function handleCerebrasToolError(
+  error: unknown,
+  errorMessage: string,
+  resolvedBaseURL: string | undefined,
+  ctx: ErrorContext,
+): boolean {
+  if (
+    !errorMessage.includes('Tool is not present in the tools list') ||
+    (!ctx.model.toLowerCase().includes('qwen') &&
+      !(resolvedBaseURL?.includes('cerebras') ?? false))
+  ) {
+    return false;
+  }
+  ctx.logger.error(
+    'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+    {
+      error,
+      model: ctx.model,
+      toolsProvided: ctx.formattedTools?.length ?? 0,
+      toolNames: ctx.formattedTools?.map((t) => t.function.name),
+      streamingEnabled: ctx.streamingEnabled,
+    },
+  );
+  const enhancedError = new Error(
+    `Cerebras/Qwen API bug: Tool not found in list. We sent ${ctx.formattedTools?.length ?? 0} tools. Known API issue.`,
+  );
+  (enhancedError as Error & { originalError?: unknown }).originalError = error;
+  throw enhancedError;
+}
+
+/**
+ * Dump error context, log the failure, and re-throw.
+ */
+async function handleApiError(
+  error: unknown,
+  ctx: ErrorContext,
+): Promise<never> {
+  const resolvedBaseURL = ctx.baseURL ?? ctx.getBaseURL();
+
+  if (ctx.shouldDumpError) {
+    const dumpErrorMessage =
+      error instanceof Error ? error.message : String(error);
+    await dumpSDKContext(
+      'openai',
+      '/chat/completions',
+      ctx.requestBody,
+      { error: dumpErrorMessage },
+      true,
+      resolvedBaseURL ?? 'https://api.openai.com/v1',
+    );
+  }
+
+  const capturedErrorMessage =
+    error instanceof Error ? error.message : String(error);
+  const status =
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    typeof (error as { status: unknown }).status === 'number'
+      ? (error as { status: number }).status
+      : undefined;
+
+  ctx.logger.error(
+    () =>
+      `[OpenAIProvider] Chat completion failed for model '${ctx.model}' at '${resolvedBaseURL ?? 'default'}': ${capturedErrorMessage}`,
+    {
+      model: ctx.model,
+      baseURL: resolvedBaseURL,
+      streamingEnabled: ctx.streamingEnabled,
+      hasTools: ctx.formattedTools?.length ?? 0,
+      status,
+    },
+  );
+  throw error;
+}
+
+/**
+ * Execute streaming API request with dump and error handling.
+ */
+async function executeStreamingRequest(
+  opts: ApiExecutionOptions,
+  shouldDumpSuccess: boolean,
+  shouldDumpError: boolean,
+): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
+  const { client, requestBody, abortSignal, mergedHeaders, baseURL } = opts;
+
+  try {
+    const response = (await client.chat.completions.create(requestBody, {
+      ...(abortSignal ? { signal: abortSignal } : {}),
+      ...(mergedHeaders ? { headers: mergedHeaders } : {}),
+    })) as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+
+    if (shouldDumpSuccess) {
+      await dumpSDKContext(
+        'openai',
+        '/chat/completions',
+        requestBody,
+        { streaming: true },
+        false,
+        baseURL ?? 'https://api.openai.com/v1',
+      );
+    }
+
+    return response;
+  } catch (error) {
+    const errorMessage = String(error);
+    const resolvedBaseURL = opts.getBaseURL();
+
+    const ctx: ErrorContext = {
+      requestBody,
+      shouldDumpError,
+      baseURL,
+      model: opts.model,
+      formattedTools: opts.formattedTools,
+      streamingEnabled: opts.streamingEnabled,
+      logger: opts.logger,
+      getBaseURL: opts.getBaseURL,
+    };
+
+    if (!handleCerebrasToolError(error, errorMessage, resolvedBaseURL, ctx)) {
+      await handleApiError(error, ctx);
+    }
+    // handleApiError always throws; handleCerebrasToolError throws on match
+    // This line is unreachable but satisfies the type system.
+    throw error;
+  }
+}
+
+/**
+ * Execute non-streaming API request with dump and error handling.
+ */
+async function executeNonStreamingRequest(
+  opts: ApiExecutionOptions,
+  shouldDumpSuccess: boolean,
+  shouldDumpError: boolean,
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  const { client, requestBody, abortSignal, mergedHeaders, baseURL } = opts;
+
+  try {
+    const response = (await client.chat.completions.create(requestBody, {
+      ...(abortSignal ? { signal: abortSignal } : {}),
+      ...(mergedHeaders ? { headers: mergedHeaders } : {}),
+    })) as OpenAI.Chat.Completions.ChatCompletion;
+
+    if (shouldDumpSuccess) {
+      await dumpSDKContext(
+        'openai',
+        '/chat/completions',
+        requestBody,
+        response,
+        false,
+        baseURL ?? 'https://api.openai.com/v1',
+      );
+    }
+
+    return response;
+  } catch (error) {
+    const errorMessage = String(error);
+    const resolvedBaseURL = opts.getBaseURL();
+
+    opts.logger.debug(() => `[OpenAIProvider] Chat request error`, {
+      errorType: error?.constructor?.name,
+      status:
+        typeof error === 'object' && error !== null && 'status' in error
+          ? (error as { status?: number }).status
+          : undefined,
+      errorKeys:
+        error !== null && typeof error === 'object' ? Object.keys(error) : [],
+    });
+
+    const ctx: ErrorContext = {
+      requestBody,
+      shouldDumpError,
+      baseURL,
+      model: opts.model,
+      formattedTools: opts.formattedTools,
+      streamingEnabled: opts.streamingEnabled,
+      logger: opts.logger,
+      getBaseURL: opts.getBaseURL,
+    };
+
+    if (!handleCerebrasToolError(error, errorMessage, resolvedBaseURL, ctx)) {
+      await handleApiError(error, ctx);
+    }
+    // handleApiError always throws; handleCerebrasToolError throws on match
+    // This line is unreachable but satisfies the type system.
+    throw error;
+  }
+}
+
 /**
  * Execute OpenAI API request with error handling
  * Handles both streaming and non-streaming calls
@@ -49,203 +255,13 @@ export async function executeApiRequest(
   | AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>
   | OpenAI.Chat.Completions.ChatCompletion
 > {
-  const {
-    client,
-    requestBody,
-    abortSignal,
-    mergedHeaders,
-    dumpMode,
-    baseURL,
-    model,
-    formattedTools,
-    streamingEnabled,
-    logger,
-    getBaseURL,
-  } = opts;
+  const { dumpMode, streamingEnabled } = opts;
 
   const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
   const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
 
   if (streamingEnabled) {
-    try {
-      const response = await client.chat.completions.create(requestBody, {
-        ...(abortSignal ? { signal: abortSignal } : {}),
-        ...(mergedHeaders ? { headers: mergedHeaders } : {}),
-      });
-
-      // Dump successful streaming request if enabled
-      if (shouldDumpSuccess) {
-        await dumpSDKContext(
-          'openai',
-          '/chat/completions',
-          requestBody,
-          { streaming: true },
-          false,
-          baseURL ?? 'https://api.openai.com/v1',
-        );
-      }
-
-      return response;
-    } catch (error) {
-      // Special handling for Cerebras/Qwen "Tool not present" errors
-      const errorMessage = String(error);
-      const baseURL = getBaseURL();
-      if (
-        errorMessage.includes('Tool is not present in the tools list') &&
-        (model.toLowerCase().includes('qwen') ||
-          (baseURL?.includes('cerebras') ?? false))
-      ) {
-        logger.error(
-          'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
-          {
-            error,
-            model,
-            toolsProvided: formattedTools?.length ?? 0,
-            toolNames: formattedTools?.map((t) => t.function.name),
-            streamingEnabled,
-          },
-        );
-        const enhancedError = new Error(
-          `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length ?? 0} tools. Known API issue.`,
-        );
-        (enhancedError as Error & { originalError?: unknown }).originalError =
-          error;
-        throw enhancedError;
-      }
-
-      // Dump error if enabled
-      if (shouldDumpError) {
-        const dumpErrorMessage =
-          error instanceof Error ? error.message : String(error);
-        await dumpSDKContext(
-          'openai',
-          '/chat/completions',
-          requestBody,
-          { error: dumpErrorMessage },
-          true,
-          baseURL ?? 'https://api.openai.com/v1',
-        );
-      }
-
-      // Re-throw other errors
-      const capturedErrorMessage =
-        error instanceof Error ? error.message : String(error);
-      const status =
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        typeof error === 'object' &&
-        error !== null &&
-        'status' in error &&
-        typeof (error as { status: unknown }).status === 'number'
-          ? (error as { status: number }).status
-          : undefined;
-
-      logger.error(
-        () =>
-          `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
-        {
-          model,
-          baseURL: baseURL ?? getBaseURL(),
-          streamingEnabled,
-          hasTools: formattedTools?.length ?? 0,
-          status,
-        },
-      );
-      throw error;
-    }
-  } else {
-    try {
-      const response = (await client.chat.completions.create(requestBody, {
-        ...(abortSignal ? { signal: abortSignal } : {}),
-        ...(mergedHeaders ? { headers: mergedHeaders } : {}),
-      })) as OpenAI.Chat.Completions.ChatCompletion;
-
-      // Dump successful non-streaming request if enabled
-      if (shouldDumpSuccess) {
-        await dumpSDKContext(
-          'openai',
-          '/chat/completions',
-          requestBody,
-          response,
-          false,
-          baseURL ?? 'https://api.openai.com/v1',
-        );
-      }
-
-      return response;
-    } catch (error) {
-      const errorMessage = String(error);
-      logger.debug(() => `[OpenAIProvider] Chat request error`, {
-        errorType: error?.constructor?.name,
-        status:
-          typeof error === 'object' && error !== null && 'status' in error
-            ? (error as { status?: number }).status
-            : undefined,
-        errorKeys:
-          error !== null && typeof error === 'object' ? Object.keys(error) : [],
-      });
-
-      const baseURL = getBaseURL();
-      const isCerebrasToolError =
-        errorMessage.includes('Tool is not present in the tools list') &&
-        (model.toLowerCase().includes('qwen') ||
-          (baseURL?.includes('cerebras') ?? false));
-
-      if (isCerebrasToolError === true) {
-        logger.error(
-          'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
-          {
-            error,
-            model,
-            toolsProvided: formattedTools?.length ?? 0,
-            toolNames: formattedTools?.map((t) => t.function.name),
-            streamingEnabled,
-          },
-        );
-        const enhancedError = new Error(
-          `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length ?? 0} tools. Known API issue.`,
-        );
-        (enhancedError as Error & { originalError?: unknown }).originalError =
-          error;
-        throw enhancedError;
-      }
-
-      // Dump error if enabled
-      if (shouldDumpError) {
-        const dumpErrorMessage =
-          error instanceof Error ? error.message : String(error);
-        await dumpSDKContext(
-          'openai',
-          '/chat/completions',
-          requestBody,
-          { error: dumpErrorMessage },
-          true,
-          baseURL ?? 'https://api.openai.com/v1',
-        );
-      }
-
-      const capturedErrorMessage =
-        error instanceof Error ? error.message : String(error);
-      const status =
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        typeof error === 'object' &&
-        error !== null &&
-        'status' in error &&
-        typeof (error as { status: unknown }).status === 'number'
-          ? (error as { status: number }).status
-          : undefined;
-
-      logger.error(
-        () =>
-          `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
-        {
-          model,
-          baseURL: baseURL ?? getBaseURL(),
-          streamingEnabled,
-          hasTools: formattedTools?.length ?? 0,
-          status,
-        },
-      );
-      throw error;
-    }
+    return executeStreamingRequest(opts, shouldDumpSuccess, shouldDumpError);
   }
+  return executeNonStreamingRequest(opts, shouldDumpSuccess, shouldDumpError);
 }

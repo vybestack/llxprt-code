@@ -38,42 +38,14 @@ export interface RequestContext {
 }
 
 /**
- * Prepare OpenAI API request from normalized options
- * Extracts all the request preparation logic from generateChatCompletionImpl
+ * Convert tools to OpenAI format and handle empty-array guard.
  */
-export async function prepareRequest(
-  options: NormalizedGenerateChatOptions,
-  defaultModel: string,
-  config: Config | undefined,
+function convertAndGuardTools(
+  tools: NormalizedGenerateChatOptions['tools'],
+  model: string,
+  detectedFormat: string,
   logger: DebugLogger,
-): Promise<RequestContext> {
-  const { contents, tools, metadata } = options;
-  const model = options.resolved.model || defaultModel;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  const ephemeralSettings = options.invocation?.ephemerals ?? {};
-
-  // Detect the tool format to use BEFORE building messages
-  const detectedFormat = detectToolFormat(model, logger);
-
-  logger.debug(
-    () =>
-      `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
-    {
-      model,
-      detectedFormat,
-      provider: 'openai',
-    },
-  );
-
-  // Convert IContent to OpenAI messages format
-  const messages = buildMessagesWithReasoning(
-    contents,
-    options,
-    detectedFormat,
-    config,
-  );
-
-  // Convert Gemini format tools to OpenAI format
+): OpenAITool[] | undefined {
   let formattedTools: OpenAITool[] | undefined = convertToolsToOpenAI(tools);
 
   // CRITICAL FIX: Ensure we never pass an empty tools array
@@ -106,11 +78,18 @@ export async function prepareRequest(
     });
   }
 
-  // Get streaming setting
-  const streamingSetting = ephemeralSettings['streaming'];
-  const streamingEnabled = streamingSetting !== 'disabled';
+  return formattedTools;
+}
 
-  // Build system prompt
+/**
+ * Resolve the system prompt from user memory, MCP instructions, and config.
+ */
+async function resolveSystemPrompt(
+  options: NormalizedGenerateChatOptions,
+  tools: NormalizedGenerateChatOptions['tools'],
+  model: string,
+  config: Config | undefined,
+): Promise<string> {
   const flattenedToolNames =
     tools?.flatMap((group) =>
       group.functionDeclarations
@@ -132,7 +111,7 @@ export async function prepareRequest(
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     () => config?.getSubagentManager?.(),
   );
-  const systemPrompt = await getCoreSystemPromptAsync({
+  return getCoreSystemPromptAsync({
     userMemory,
     mcpInstructions,
     model,
@@ -145,30 +124,20 @@ export async function prepareRequest(
         ? 'interactive'
         : 'non-interactive',
   });
+}
 
-  // Add system prompt as the first message
-  const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt },
-    ...messages,
-  ];
-
-  const maxTokens =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    (metadata?.maxTokens as number | undefined) ??
-    (ephemeralSettings['max-tokens'] as number | undefined);
-
-  // Build request
-  const requestBody: OpenAI.Chat.ChatCompletionCreateParams = {
-    model,
-    messages: messagesWithSystem,
-    stream: streamingEnabled,
-  };
-
-  if (formattedTools && formattedTools.length > 0) {
-    requestBody.tools = formattedTools;
-    requestBody.tool_choice = 'auto';
-  }
-
+/**
+ * Apply reasoning, max-tokens, and stream-options to the request body.
+ */
+function applyRequestBodyOverrides(
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  options: NormalizedGenerateChatOptions,
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+  ephemeralSettings: Record<string, unknown>,
+  maxTokens: number | undefined,
+  streamingEnabled: boolean,
+  logger: DebugLogger,
+): void {
   // Apply request overrides
   const requestOverrides = extractModelParamsFromOptions(options);
   if (requestOverrides) {
@@ -209,6 +178,91 @@ export async function prepareRequest(
   if (streamingEnabled) {
     Object.assign(requestBody, { stream_options: streamOptions });
   }
+}
+
+/**
+ * Prepare OpenAI API request from normalized options
+ * Extracts all the request preparation logic from generateChatCompletionImpl
+ */
+export async function prepareRequest(
+  options: NormalizedGenerateChatOptions,
+  defaultModel: string,
+  config: Config | undefined,
+  logger: DebugLogger,
+): Promise<RequestContext> {
+  const { contents, tools, metadata } = options;
+  const model = options.resolved.model || defaultModel;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+  const ephemeralSettings = options.invocation?.ephemerals ?? {};
+
+  // Detect the tool format to use BEFORE building messages
+  const detectedFormat = detectToolFormat(model, logger);
+
+  logger.debug(
+    () =>
+      `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
+    {
+      model,
+      detectedFormat,
+      provider: 'openai',
+    },
+  );
+
+  // Convert IContent to OpenAI messages format
+  const messages = buildMessagesWithReasoning(
+    contents,
+    options,
+    detectedFormat,
+    config,
+  );
+
+  // Convert tools and guard against empty array
+  const formattedTools = convertAndGuardTools(
+    tools,
+    model,
+    detectedFormat,
+    logger,
+  );
+
+  // Get streaming setting
+  const streamingSetting = ephemeralSettings['streaming'];
+  const streamingEnabled = streamingSetting !== 'disabled';
+
+  // Resolve and build system prompt
+  const systemPrompt = await resolveSystemPrompt(options, tools, model, config);
+
+  // Add system prompt as the first message
+  const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt },
+    ...messages,
+  ];
+
+  const maxTokens =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    (metadata?.maxTokens as number | undefined) ??
+    (ephemeralSettings['max-tokens'] as number | undefined);
+
+  // Build request
+  const requestBody: OpenAI.Chat.ChatCompletionCreateParams = {
+    model,
+    messages: messagesWithSystem,
+    stream: streamingEnabled,
+  };
+
+  if (formattedTools && formattedTools.length > 0) {
+    requestBody.tools = formattedTools;
+    requestBody.tool_choice = 'auto';
+  }
+
+  // Apply reasoning, max-tokens, and stream-options overrides
+  applyRequestBodyOverrides(
+    requestBody,
+    options,
+    ephemeralSettings,
+    maxTokens,
+    streamingEnabled,
+    logger,
+  );
 
   return {
     model,

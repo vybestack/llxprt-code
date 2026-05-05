@@ -88,6 +88,224 @@ export interface NonStreamHandlerDeps {
 }
 
 /**
+ * Build usage metadata from OpenAI usage object, preserving old || 0 behavior.
+ */
+function buildUsageMetadata(
+  usage: OpenAI.CompletionUsage,
+  stopReason: string | undefined,
+): IContent['metadata'] {
+  const cacheMetrics = extractCacheMetrics(usage);
+  const promptTokens = toTokenCount(usage.prompt_tokens);
+  const completionTokens = toTokenCount(usage.completion_tokens);
+  const totalTokens = computeTotalTokens(
+    usage.total_tokens,
+    promptTokens,
+    completionTokens,
+  );
+  return {
+    usage: {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      cachedTokens: cacheMetrics.cachedTokens,
+      cacheCreationTokens: cacheMetrics.cacheCreationTokens,
+      cacheMissTokens: cacheMetrics.cacheMissTokens,
+    },
+    ...(isNonEmptyString(stopReason) && { stopReason }),
+  };
+}
+
+/**
+ * Apply finishReason to response metadata (issue #1844 propagation).
+ */
+function applyFinishReason(
+  content: IContent,
+  finishReason: string | null | undefined,
+): void {
+  if (!isDefined(finishReason)) return;
+  content.metadata ??= {};
+  content.metadata.finishReason = finishReason;
+}
+
+/**
+ * Build text and Kimi tool blocks from choice message content.
+ */
+function buildTextBlocks(
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+  messageContent: unknown,
+  logger: DebugLogger,
+): {
+  blocks: Array<TextBlock | ToolCallBlock>;
+  kimiCleanContent: string | undefined;
+  kimiToolBlocks: ToolCallBlock[];
+} {
+  const blocks: Array<TextBlock | ToolCallBlock> = [];
+  let kimiCleanContent: string | undefined;
+  let kimiToolBlocks: ToolCallBlock[] = [];
+
+  const rawContent = coerceMessageContentToString(messageContent);
+  if (rawContent) {
+    const kimiParsed = extractKimiToolCallsFromText(rawContent, logger);
+    kimiCleanContent = kimiParsed.cleanedText;
+    kimiToolBlocks = kimiParsed.toolCalls;
+
+    const cleanedText = sanitizeProviderText(kimiCleanContent);
+    if (cleanedText) {
+      blocks.push({
+        type: 'text',
+        text: cleanedText,
+      } as TextBlock);
+    }
+  }
+
+  return { blocks, kimiCleanContent, kimiToolBlocks };
+}
+
+/**
+ * Build tool call blocks from choice.message.tool_calls.
+ */
+function buildToolCallBlocks(
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+  toolCalls:
+    | OpenAI.Chat.Completions.ChatCompletionMessageToolCall[]
+    | undefined,
+  pipeline: ToolCallPipeline,
+  logger: DebugLogger,
+): ToolCallBlock[] {
+  const blocks: ToolCallBlock[] = [];
+  if (toolCalls && toolCalls.length > 0) {
+    for (const toolCall of toolCalls) {
+      if (toolCall.type === 'function') {
+        const normalizedName = pipeline.normalizeToolName(
+          toolCall.function.name,
+          toolCall.function.arguments,
+        );
+
+        const sanitizedArgs = sanitizeToolArgumentsString(
+          toolCall.function.arguments,
+          logger,
+        );
+
+        const processedParameters = processToolParameters(
+          sanitizedArgs,
+          normalizedName,
+        );
+
+        blocks.push({
+          type: 'tool_call',
+          id: normalizeToHistoryToolId(toolCall.id),
+          name: normalizedName,
+          parameters: processedParameters,
+        } as ToolCallBlock);
+      }
+    }
+  }
+  return blocks;
+}
+
+/**
+ * Log finish reason details for non-streaming responses.
+ */
+function logFinishReason(
+  choice: OpenAI.Chat.Completions.ChatCompletion['choices'][number],
+  model: string,
+  detectedFormat: string,
+  logger: DebugLogger,
+): void {
+  if (!isDefined(choice.finish_reason)) return;
+
+  logger.debug(
+    () => `[Non-streaming] Response finish_reason: ${choice.finish_reason}`,
+    {
+      model,
+      finishReason: choice.finish_reason,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      hasContent: !!choice.message?.content,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      hasToolCalls:
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        choice.message?.tool_calls != null &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        choice.message.tool_calls.length > 0,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      contentLength: choice.message?.content?.length ?? 0,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      toolCallCount: choice.message?.tool_calls?.length ?? 0,
+      detectedFormat,
+    },
+  );
+
+  if (choice.finish_reason === 'length') {
+    logger.warn(
+      () =>
+        `Response truncated due to max_tokens limit for model ${model}. Consider increasing max_tokens.`,
+    );
+  }
+}
+
+/**
+ * Yield the response content, handling blocks-present, usage-only,
+ * finish-reason-only, and stop-reason-only paths.
+ */
+function yieldResponseContent(
+  blocks: Array<TextBlock | ToolCallBlock>,
+  completion: OpenAI.Chat.Completions.ChatCompletion,
+  choice: OpenAI.Chat.Completions.ChatCompletion['choices'][number],
+  stopReason: string | undefined,
+): IContent | null {
+  if (blocks.length > 0) {
+    const responseContent: IContent = {
+      speaker: 'ai',
+      blocks,
+    };
+
+    if (completion.usage) {
+      responseContent.metadata = buildUsageMetadata(
+        completion.usage,
+        stopReason,
+      );
+    } else if (isNonEmptyString(stopReason)) {
+      responseContent.metadata = { stopReason };
+    }
+
+    applyFinishReason(responseContent, choice.finish_reason);
+    return responseContent;
+  }
+
+  if (completion.usage) {
+    const metadataOnly: IContent = {
+      speaker: 'ai',
+      blocks: [],
+      metadata: buildUsageMetadata(completion.usage, stopReason),
+    };
+
+    applyFinishReason(metadataOnly, choice.finish_reason);
+    return metadataOnly;
+  }
+
+  if (isDefined(choice.finish_reason)) {
+    return {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        stopReason,
+        finishReason: choice.finish_reason,
+      },
+    } as IContent;
+  }
+
+  if (isNonEmptyString(stopReason)) {
+    return {
+      speaker: 'ai',
+      blocks: [],
+      metadata: { stopReason },
+    } as IContent;
+  }
+
+  return null;
+}
+
+/**
  * Handle non-streaming response from OpenAI API
  */
 export async function* handleNonStreamingResponse(
@@ -106,212 +324,50 @@ export async function* handleNonStreamingResponse(
     throw new Error('No choices in completion response');
   }
 
-  // Log finish reason using helper predicate to avoid different-types-comparison
-  if (isDefined(choice.finish_reason)) {
-    deps.logger.debug(
-      () => `[Non-streaming] Response finish_reason: ${choice.finish_reason}`,
-      {
-        model,
-        finishReason: choice.finish_reason,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        hasContent: !!choice.message?.content,
-        hasToolCalls: !!(
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          (choice.message?.tool_calls && choice.message.tool_calls.length > 0)
-        ),
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        contentLength: choice.message?.content?.length ?? 0,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        toolCallCount: choice.message?.tool_calls?.length ?? 0,
-        detectedFormat,
-      },
-    );
+  logFinishReason(choice, model, detectedFormat, deps.logger);
 
-    if (choice.finish_reason === 'length') {
-      deps.logger.warn(
-        () =>
-          `Response truncated due to max_tokens limit for model ${model}. Consider increasing max_tokens.`,
-      );
-    }
-  }
-
-  const blocks: Array<TextBlock | ToolCallBlock> = [];
-
-  // Handle text content and Kimi tool sections
-  const pipelineRawMessageContent = coerceMessageContentToString(
+  // Build text and Kimi tool blocks
+  const textResult = buildTextBlocks(
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     choice.message?.content as unknown,
+    deps.logger,
   );
-  let pipelineKimiCleanContent: string | undefined;
-  let pipelineKimiToolBlocks: ToolCallBlock[] = [];
-  if (pipelineRawMessageContent) {
-    const kimiParsed = extractKimiToolCallsFromText(
-      pipelineRawMessageContent,
-      deps.logger,
-    );
-    pipelineKimiCleanContent = kimiParsed.cleanedText;
-    pipelineKimiToolBlocks = kimiParsed.toolCalls;
+  const blocks: Array<TextBlock | ToolCallBlock> = [...textResult.blocks];
 
-    const cleanedText = sanitizeProviderText(pipelineKimiCleanContent);
-    if (cleanedText) {
-      blocks.push({
-        type: 'text',
-        text: cleanedText,
-      } as TextBlock);
-    }
-  }
+  // Build structured tool call blocks
+  const toolBlocks = buildToolCallBlocks(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    choice.message?.tool_calls,
+    deps.toolCallPipeline,
+    deps.logger,
+  );
+  blocks.push(...toolBlocks);
 
-  // Handle tool calls
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
-    for (const toolCall of choice.message.tool_calls) {
-      if (toolCall.type === 'function') {
-        const normalizedName = deps.toolCallPipeline.normalizeToolName(
-          toolCall.function.name,
-          toolCall.function.arguments,
-        );
-
-        const sanitizedArgs = sanitizeToolArgumentsString(
-          toolCall.function.arguments,
-          deps.logger,
-        );
-
-        const processedParameters = processToolParameters(
-          sanitizedArgs,
-          normalizedName,
-        );
-
-        blocks.push({
-          type: 'tool_call',
-          id: normalizeToHistoryToolId(toolCall.id),
-          name: normalizedName,
-          parameters: processedParameters,
-        } as ToolCallBlock);
-      }
-    }
-  }
-
-  if (pipelineKimiToolBlocks.length > 0) {
-    blocks.push(...pipelineKimiToolBlocks);
+  // Append Kimi tool blocks
+  if (textResult.kimiToolBlocks.length > 0) {
+    blocks.push(...textResult.kimiToolBlocks);
     deps.logger.debug(
       () =>
         `[OpenAIProvider] Non-stream pipeline added Kimi tool calls from text`,
-      { count: pipelineKimiToolBlocks.length },
+      { count: textResult.kimiToolBlocks.length },
     );
   }
 
   // Check for InTheDocument format in text content
-  if (pipelineKimiCleanContent) {
+  if (textResult.kimiCleanContent) {
     processTextToolCalls(
-      pipelineKimiCleanContent,
+      textResult.kimiCleanContent,
       blocks,
-      choice.message.content,
+      choice.message.content ?? undefined,
       deps,
     );
   }
 
   // Emit the complete response
   const stopReason = mapFinishReasonToStopReason(choice.finish_reason);
-
-  if (blocks.length > 0) {
-    const responseContent: IContent = {
-      speaker: 'ai',
-      blocks,
-    };
-
-    if (completion.usage) {
-      const cacheMetrics = extractCacheMetrics(completion.usage);
-      // Preserve old || 0 behavior via helper: default to 0 for nullish/falsy/NaN
-      const promptTokens = toTokenCount(completion.usage.prompt_tokens);
-      const completionTokens = toTokenCount(completion.usage.completion_tokens);
-      const totalTokens = computeTotalTokens(
-        completion.usage.total_tokens,
-        promptTokens,
-        completionTokens,
-      );
-      responseContent.metadata = {
-        usage: {
-          promptTokens,
-          completionTokens,
-          totalTokens,
-          cachedTokens: cacheMetrics.cachedTokens,
-          cacheCreationTokens: cacheMetrics.cacheCreationTokens,
-          cacheMissTokens: cacheMetrics.cacheMissTokens,
-        },
-        // Preserve old truthy behavior: only spread non-empty string
-        ...(isNonEmptyString(stopReason) && { stopReason }),
-      };
-    } else if (isNonEmptyString(stopReason)) {
-      responseContent.metadata = { stopReason };
-    }
-
-    // Propagate terminal metadata so downstream turn handling and telemetry
-    // receive a finish signal (issue #1844).  stopReason stays normalized
-    // (via mapFinishReasonToStopReason above); finishReason preserves the
-    // raw provider value for diagnostics.
-    // Use helper predicate to avoid different-types-comparison (finish_reason is string | null)
-    if (isDefined(choice.finish_reason)) {
-      responseContent.metadata ??= {};
-      // stopReason was already set to the normalized value above; do NOT
-      // overwrite it with the raw provider string.
-      responseContent.metadata.finishReason = choice.finish_reason;
-    }
-
-    yield responseContent;
-  } else if (completion.usage) {
-    // Emit metadata-only response
-    const cacheMetrics = extractCacheMetrics(completion.usage);
-    // Preserve old || 0 behavior via helper: default to 0 for nullish/falsy/NaN
-    const promptTokens = toTokenCount(completion.usage.prompt_tokens);
-    const completionTokens = toTokenCount(completion.usage.completion_tokens);
-    const totalTokens = computeTotalTokens(
-      completion.usage.total_tokens,
-      promptTokens,
-      completionTokens,
-    );
-    const metadataOnly: IContent = {
-      speaker: 'ai',
-      blocks: [],
-      metadata: {
-        usage: {
-          promptTokens,
-          completionTokens,
-          totalTokens,
-          cachedTokens: cacheMetrics.cachedTokens,
-          cacheCreationTokens: cacheMetrics.cacheCreationTokens,
-          cacheMissTokens: cacheMetrics.cacheMissTokens,
-        },
-        // Preserve old truthy behavior: only spread non-empty string
-        ...(isNonEmptyString(stopReason) && { stopReason }),
-      },
-    };
-
-    // Propagate terminal metadata on usage-only responses too (issue #1844).
-    // Use helper predicate to check finish_reason without different-types-comparison
-    if (isDefined(choice.finish_reason) && metadataOnly.metadata) {
-      metadataOnly.metadata.finishReason = choice.finish_reason;
-    }
-
-    yield metadataOnly;
-    // Use helper predicate for finish_reason check
-  } else if (isDefined(choice.finish_reason)) {
-    // Emit a metadata-only chunk even without usage so downstream receives
-    // the terminal finish signal (issue #1844).  stopReason is normalized.
-    yield {
-      speaker: 'ai',
-      blocks: [],
-      metadata: {
-        stopReason,
-        finishReason: choice.finish_reason,
-      },
-    } as IContent;
-  } else if (isNonEmptyString(stopReason)) {
-    // Preserve old truthy behavior: only emit for non-empty string
-    yield {
-      speaker: 'ai',
-      blocks: [],
-      metadata: { stopReason },
-    } as IContent;
+  const content = yieldResponseContent(blocks, completion, choice, stopReason);
+  if (content) {
+    yield content;
   }
 }
 
@@ -322,7 +378,7 @@ export async function* handleNonStreamingResponse(
 function processTextToolCalls(
   pipelineKimiCleanContent: string,
   blocks: IContent['blocks'],
-  originalContent: string | null | undefined,
+  originalContent: string | undefined,
   deps: {
     textToolParser: {
       parse: (source: string) => {
