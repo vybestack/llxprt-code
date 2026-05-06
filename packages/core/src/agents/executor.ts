@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import type { Config } from '../config/config.js';
 import { reportError } from '../utils/errorReporting.js';
 import {
@@ -32,15 +30,6 @@ import { ToolRegistry } from '../tools/tool-registry.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { type ToolCallRequestInfo } from '../core/turn.js';
-import { getDirectoryContextString } from '../utils/environmentContext.js';
-import { GlobTool } from '../tools/glob.js';
-import { GrepTool } from '../tools/grep.js';
-import { RipGrepTool } from '../tools/ripGrep.js';
-import { LSTool } from '../tools/ls.js';
-import { MemoryTool } from '../tools/memoryTool.js';
-import { ReadFileTool } from '../tools/read-file.js';
-import { ReadManyFilesTool } from '../tools/read-many-files.js';
-import { GoogleWebSearchTool } from '../tools/google-web-search.js';
 import type {
   AgentDefinition,
   AgentInputs,
@@ -48,6 +37,12 @@ import type {
   SubagentActivityEvent,
 } from './types.js';
 import { AgentTerminateMode } from './types.js';
+import { validateToolsForNonInteractiveUse } from './executor-validation.js';
+import {
+  buildAgentSystemPrompt,
+  applyTemplateToInitialMessages,
+} from './executor-prompt-builder.js';
+import { checkAgentTermination } from './executor-termination.js';
 import { templateString } from './utils.js';
 import { parseThought } from '../utils/thoughtUtils.js';
 import { type z } from 'zod';
@@ -133,7 +128,10 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       agentToolRegistry.sortTools();
       // Validate that all registered tools are safe for non-interactive
       // execution.
-      await AgentExecutor.validateTools(agentToolRegistry, definition.name);
+      await validateToolsForNonInteractiveUse(
+        agentToolRegistry,
+        definition.name,
+      );
     }
 
     return new AgentExecutor(
@@ -177,7 +175,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
    */
   async run(inputs: AgentInputs, signal: AbortSignal): Promise<OutputObject> {
     const startTime = Date.now();
-    const turnCounter = 0;
 
     try {
       const chat = await this.createChatObject(inputs);
@@ -197,7 +194,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         initialMessage,
         signal,
         startTime,
-        turnCounter,
+        0,
       );
 
       if (terminateReason === AgentTerminateMode.GOAL) {
@@ -230,23 +227,24 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     terminateReason: AgentTerminateMode;
     finalResult: string | null;
   }> {
-    let terminateReason = AgentTerminateMode.ERROR;
     let finalResult: string | null = null;
     let currentMessage = initialMessage;
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Agent/model streams are external runtime boundaries despite declared types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
     while (true) {
       const reason = this.checkTermination(startTime, turnCounter);
       if (reason !== null) {
-        terminateReason = reason;
-        break;
+        return { terminateReason: reason, finalResult };
       }
       if (signal.aborted) {
-        terminateReason = AgentTerminateMode.ABORTED;
-        break;
+        return {
+          terminateReason: AgentTerminateMode.ABORTED,
+          finalResult,
+        };
       }
 
-      const promptId = `${this.runtimeContext.getSessionId()}#${this.agentId}#${turnCounter++}`;
+      const promptId = `${this.runtimeContext.getSessionId()}#${this.agentId}#${turnCounter}`;
+      turnCounter += 1;
       const { functionCalls } = await this.callModel(
         chat,
         currentMessage,
@@ -257,18 +255,22 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
       if (signal.aborted) {
-        terminateReason = AgentTerminateMode.ABORTED;
-        break;
+        return {
+          terminateReason: AgentTerminateMode.ABORTED,
+          finalResult,
+        };
       }
 
       if (functionCalls.length === 0) {
-        terminateReason = AgentTerminateMode.ERROR;
         finalResult = `Agent stopped calling tools but did not call '${TASK_COMPLETE_TOOL_NAME}' to finalize the session.`;
         this.emitActivity('ERROR', {
           error: finalResult,
           context: 'protocol_violation',
         });
-        break;
+        return {
+          terminateReason: AgentTerminateMode.ERROR,
+          finalResult,
+        };
       }
 
       const { nextMessage, submittedOutput, taskCompleted } =
@@ -276,14 +278,14 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
       if (taskCompleted) {
         finalResult = submittedOutput ?? 'Task completed successfully.';
-        terminateReason = AgentTerminateMode.GOAL;
-        break;
+        return {
+          terminateReason: AgentTerminateMode.GOAL,
+          finalResult,
+        };
       }
 
       currentMessage = nextMessage;
     }
-
-    return { terminateReason, finalResult };
   }
 
   /**
@@ -363,7 +365,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           timeoutMs: effectiveTimeoutMs,
           signal: timeoutSignal,
           onTimeout: () => {
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (signal.aborted) {
               return;
             }
@@ -398,12 +399,11 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     const { subject } = parseThought(
       parts?.find((p: Part) => p.thought === true)?.text ?? '',
     );
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+
     if (subject !== '') {
       this.emitActivity('THOUGHT_CHUNK', { text: subject });
     }
 
-    // eslint-disable-next-line sonarjs/nested-control-flow, @typescript-eslint/strict-boolean-expressions -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (chunk.functionCalls) {
       functionCalls.push(...chunk.functionCalls);
     }
@@ -414,7 +414,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         .map((p: Part) => p.text)
         .join('') ?? '';
 
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (text.length > 0) {
       onText(text);
     }
@@ -674,8 +673,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     }
 
     const { outputConfig } = this.definition;
-    let taskCompleted = true;
-    let submittedOutput: string | null = currentSubmittedOutput;
 
     if (outputConfig) {
       const result = this.processCompleteTaskOutput(
@@ -684,25 +681,31 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         args,
         outputConfig,
       );
-      taskCompleted = result.taskCompleted;
-      submittedOutput = result.submittedOutput;
       syncParts.push(...result.syncParts);
-    } else {
-      submittedOutput = 'Task completed successfully.';
-      syncParts.push({
-        functionResponse: {
-          name: TASK_COMPLETE_TOOL_NAME,
-          response: { status: 'Task marked complete.' },
-          id: callId,
-        },
-      });
-      this.emitActivity('TOOL_CALL_END', {
-        name: functionCall.name,
-        output: 'Task marked complete.',
-      });
+      return {
+        taskCompleted: result.taskCompleted,
+        submittedOutput: result.submittedOutput,
+        syncParts,
+      };
     }
 
-    return { taskCompleted, submittedOutput, syncParts };
+    syncParts.push({
+      functionResponse: {
+        name: TASK_COMPLETE_TOOL_NAME,
+        response: { status: 'Task marked complete.' },
+        id: callId,
+      },
+    });
+    this.emitActivity('TOOL_CALL_END', {
+      name: functionCall.name,
+      output: 'Task marked complete.',
+    });
+
+    return {
+      taskCompleted: true,
+      submittedOutput: 'Task completed successfully.',
+      syncParts,
+    };
   }
 
   /** Processes the output argument of a `complete_task` call when outputConfig is present. */
@@ -719,7 +722,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     const syncParts: Part[] = [];
     const outputName = outputConfig.outputName;
 
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (args[outputName] !== undefined) {
       const outputValue = args[outputName];
       const validationResult = outputConfig.schema.safeParse(outputValue);
@@ -951,27 +953,11 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     if (!promptConfig.systemPrompt) {
       return '';
     }
-
-    // Inject user inputs into the prompt template.
-    let finalPrompt = templateString(promptConfig.systemPrompt, inputs);
-
-    // Append environment context (CWD and folder structure).
-    const dirContext = await getDirectoryContextString(this.runtimeContext);
-    finalPrompt += `\n\n# Environment Context\n${dirContext}`;
-
-    // Append standard rules for non-interactive execution.
-    finalPrompt += `
-Important Rules:
-* You are running in a non-interactive mode. You CANNOT ask the user for input or clarification.
-* Work systematically using available tools to complete your task.
-* Always use absolute paths for file operations. Construct them using the provided "Environment Context".`;
-
-    finalPrompt += `
-* When you have completed your task, you MUST call the \`${TASK_COMPLETE_TOOL_NAME}\` tool.
-* Do not call any other tools in the same turn as \`${TASK_COMPLETE_TOOL_NAME}\`.
-* This is the ONLY way to complete your mission. If you stop calling tools without calling this, you have failed.`;
-
-    return finalPrompt;
+    return buildAgentSystemPrompt(
+      inputs,
+      this.runtimeContext,
+      promptConfig.systemPrompt,
+    );
   }
 
   /**
@@ -985,47 +971,7 @@ Important Rules:
     initialMessages: Content[],
     inputs: AgentInputs,
   ): Content[] {
-    return initialMessages.map((content) => {
-      const newParts = (content.parts ?? []).map((part) => {
-        if ('text' in part && part.text !== undefined) {
-          return { text: templateString(part.text, inputs) };
-        }
-        return part;
-      });
-      return { ...content, parts: newParts };
-    });
-  }
-
-  /**
-   * Validates that all tools in a registry are safe for non-interactive use.
-   *
-   * @throws An error if a tool is not on the allow-list for non-interactive execution.
-   */
-  private static async validateTools(
-    toolRegistry: ToolRegistry,
-    agentName: string,
-  ): Promise<void> {
-    // Tools that are currently approved for non-interactive execution while
-    // subagent confirmation handling remains restricted to this allowlist.
-    const allowlist = new Set([
-      LSTool.Name,
-      ReadFileTool.Name,
-      GrepTool.Name,
-      RipGrepTool.Name,
-      GlobTool.Name,
-      ReadManyFilesTool.Name,
-      MemoryTool.Name,
-      GoogleWebSearchTool.Name,
-    ]);
-    for (const tool of toolRegistry.getAllTools()) {
-      if (!allowlist.has(tool.name)) {
-        throw new Error(
-          `Tool "${tool.name}" is not on the allow-list for non-interactive ` +
-            `execution in agent "${agentName}". Only tools that do not require user ` +
-            `confirmation can be used in subagents.`,
-        );
-      }
-    }
+    return applyTemplateToInitialMessages(initialMessages, inputs);
   }
 
   /**
@@ -1037,26 +983,11 @@ Important Rules:
     startTime: number,
     turnCounter: number,
   ): AgentTerminateMode | null {
-    const { runConfig } = this.definition;
-
-    // Preserve old truthiness semantics: max_turns: 0 must NOT terminate.
-    // Use explicit nonzero/non-NaN numeric check to satisfy strict-boolean.
-    if (
-      typeof runConfig.max_turns === 'number' &&
-      runConfig.max_turns > 0 &&
-      !Number.isNaN(runConfig.max_turns) &&
-      turnCounter >= runConfig.max_turns
-    ) {
-      return AgentTerminateMode.MAX_TURNS;
-    }
-
-    const elapsedMinutes = (Date.now() - startTime) / (1000 * 60);
-    if (elapsedMinutes >= runConfig.max_time_minutes) {
-      return AgentTerminateMode.TIMEOUT;
-    }
-
-    const activeRun: AgentTerminateMode | null = null;
-    return activeRun;
+    return checkAgentTermination(
+      this.definition.runConfig,
+      startTime,
+      turnCounter,
+    );
   }
 
   /** Emits an activity event to the configured callback. */

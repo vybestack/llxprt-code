@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 /* @plan PLAN-20250212-LSP.P31 */
 /* @requirement REQ-DIAG-010, REQ-GRACE-050, REQ-GRACE-055 */
 
@@ -37,132 +35,19 @@ import {
 } from './modifiable-tool.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
-import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
 import { EDIT_TOOL_NAME } from './tool-names.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { ensureParentDirectoriesExist } from './ensure-dirs.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
-
-/**
- * Gets emoji filter instance based on configuration
- */
-function getEmojiFilter(config: Config): EmojiFilter {
-  // Get emojifilter from ephemeral settings or default to 'auto'
-  const mode = config.getEphemeralSetting('emojifilter') as
-    | 'allowed'
-    | 'auto'
-    | 'warn'
-    | 'error';
-
-  // Map auto to warn for file operations (we want warnings when filtering files)
-  let filterMode: 'allowed' | 'warn' | 'error';
-  if (mode === 'allowed') {
-    filterMode = 'allowed';
-  } else if (mode === 'auto' || mode === 'warn') {
-    filterMode = 'warn';
-  } else {
-    filterMode = 'error';
-  }
-
-  return new EmojiFilter({ mode: filterMode });
-}
-
-export function applyReplacement(
-  currentContent: string | null,
-  oldString: string,
-  newString: string,
-  isNewFile: boolean,
-  expectedReplacements: number = 1,
-): string {
-  if (isNewFile) {
-    return newString;
-  }
-  if (currentContent === null) {
-    // Should not happen if not a new file, but defensively return empty or newString if oldString is also empty
-    return oldString === '' ? newString : '';
-  }
-
-  const preserveTrailingNewline = currentContent.endsWith('\n');
-  // Prevent infinite loop: empty oldString with multiple replacements is invalid
-  if (oldString === '' && expectedReplacements > 1) {
-    // This would cause an infinite loop as indexOf("", n) always returns n
-    throw new Error(
-      'Cannot perform multiple replacements with empty old_string',
-    );
-  }
-
-  // If oldString is empty and it's not a new file, do not modify the content.
-  if (oldString === '') {
-    return currentContent;
-  }
-
-  // Try fuzzy matching first
-  const fuzzyResult = fuzzyReplace(
-    currentContent,
-    oldString,
-    newString,
-    expectedReplacements > 1,
-  );
-
-  // Verify the number of replacements matches expectations
-  // If fuzzy matching found a different number of occurrences,
-  // fall through to the strict matching below which will properly report the error
-  if (fuzzyResult && fuzzyResult.occurrences === expectedReplacements) {
-    const result = fuzzyResult.result;
-    if (
-      preserveTrailingNewline &&
-      result.length > 0 &&
-      !result.endsWith('\n')
-    ) {
-      return `${result}\n`;
-    }
-    return result;
-  }
-
-  // Fall back to strict matching (original behavior)
-  // Use a more precise replacement that only replaces the expected number of occurrences
-  if (expectedReplacements === 1) {
-    // For single replacement, use replace() instead of replaceAll().
-    // Use a replacer function so `$` in `newString` is treated literally.
-    const result = currentContent.replace(oldString, () => newString);
-    if (
-      preserveTrailingNewline &&
-      result.length > 0 &&
-      !result.endsWith('\n')
-    ) {
-      return `${result}\n`;
-    }
-    return result;
-  }
-  // For multiple replacements, we need to count and limit replacements
-  let result = currentContent;
-  let replacementCount = 0;
-  let searchIndex = 0;
-
-  while (replacementCount < expectedReplacements) {
-    const foundIndex = result.indexOf(oldString, searchIndex);
-    if (foundIndex === -1) {
-      break; // No more occurrences found
-    }
-
-    // Replace only this specific occurrence
-    result =
-      result.substring(0, foundIndex) +
-      newString +
-      result.substring(foundIndex + oldString.length);
-
-    replacementCount++;
-    // Update search index to continue after the replacement
-    searchIndex = foundIndex + newString.length;
-  }
-
-  if (preserveTrailingNewline && result.length > 0 && !result.endsWith('\n')) {
-    return `${result}\n`;
-  }
-  return result;
-}
+import {
+  getEmojiFilter,
+  validateEditState,
+  applyReplacement,
+  type EditErrorInfo,
+} from './edit-utils.js';
+export { applyReplacement } from './edit-utils.js';
 
 /**
  * Parameters for the Edit tool
@@ -270,7 +155,7 @@ class EditToolInvocation extends BaseToolInvocation<
 
     if (replaceLine !== undefined && replaceLine > 0) {
       const lines = currentContent.split('\n');
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+
       if (replaceLine > lines.length) {
         return {
           occurrences: 0,
@@ -297,7 +182,7 @@ class EditToolInvocation extends BaseToolInvocation<
       finalNewString,
       expectedReplacements > 1,
     );
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+
     if (fuzzyResult) {
       return { occurrences: fuzzyResult.occurrences, error: undefined };
     }
@@ -324,96 +209,17 @@ class EditToolInvocation extends BaseToolInvocation<
     expectedReplacements: number,
     finalOldString: string,
     finalNewString: string,
-  ): { display: string; raw: string; type: ToolErrorType } | undefined {
-    if (filteredParams.old_string === '' && expectedReplacements > 1) {
-      return {
-        display: `Failed to edit. Cannot perform multiple replacements with empty old_string.`,
-        raw: `Invalid parameters: empty old_string with expected_replacements=${expectedReplacements} would cause infinite loop`,
-        type: ToolErrorType.INVALID_TOOL_PARAMS,
-      };
-    }
-    if (filteredParams.old_string === '') {
-      return {
-        display: `Failed to edit. Attempted to create a file that already exists.`,
-        raw: `File already exists, cannot create: ${filePath}`,
-        type: ToolErrorType.ATTEMPT_TO_CREATE_EXISTING_FILE,
-      };
-    }
-    if (occurrences === 0) {
-      return this.buildNoOccurrenceError(
-        filteredParams,
-        currentContent,
-        filePath,
-      );
-    }
-    if (occurrences !== expectedReplacements) {
-      const occurrenceTerm =
-        expectedReplacements === 1 ? 'occurrence' : 'occurrences';
-      return {
-        display: `Failed to edit, expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences}.`,
-        raw: `Failed to edit, Expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences} for old_string in file: ${filePath}`,
-        type: ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
-      };
-    }
-    if (finalOldString === finalNewString) {
-      return {
-        display: `No changes to apply. The old_string and new_string are identical.`,
-        raw: `No changes to apply. The old_string and new_string are identical in file: ${filePath}`,
-        type: ToolErrorType.EDIT_NO_CHANGE,
-      };
-    }
-    return undefined;
-  }
-
-  /**
-   * Builds the error object when zero occurrences are found.
-   */
-  private buildNoOccurrenceError(
-    filteredParams: EditToolParams,
-    currentContent: string | null,
-    filePath: string,
-  ): { display: string; raw: string; type: ToolErrorType } {
-    const replaceLine = filteredParams.replaceBeginLineNumber;
-
-    if (
-      replaceLine !== undefined &&
-      replaceLine > 0 &&
-      currentContent !== null
-    ) {
-      const lines = currentContent.split('\n');
-
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      if (replaceLine > lines.length) {
-        return {
-          display: `Failed to edit: replaceBeginLineNumber is out of range.`,
-          raw: `Failed to edit: replaceBeginLineNumber=${replaceLine} is out of range for ${filePath} (total lines: ${lines.length}). No edits made.`,
-          type: ToolErrorType.INVALID_TOOL_PARAMS,
-        };
-      }
-
-      const lineIndex = replaceLine - 1;
-      const startContext = Math.max(0, lineIndex - 2);
-      const endContext = Math.min(lines.length - 1, lineIndex + 2);
-
-      let preview = 'Context around requested line:';
-      for (let i = startContext; i <= endContext; i++) {
-        const lineNumber = i + 1;
-        const prefix = lineNumber === replaceLine ? '->' : '  ';
-        preview += `\n${prefix} ${lineNumber.toString().padStart(4, ' ')} | ${lines[i]}`;
-      }
-
-      return {
-        display: `Failed to edit: no occurrences of old_string found on the specified line ${replaceLine}.`,
-        raw: `Failed to edit, 0 occurrences found for old_string on line ${replaceLine} in ${filePath}. No edits made. The exact text in old_string was not found on that line.\n\n${preview}`,
-        type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
-      };
-    }
-
-    return {
-      display: `Failed to edit, could not find the string to replace.`,
-      raw: `Failed to edit, 0 occurrences found for old_string in ${filePath}. No edits made. The exact text in old_string was not found. Ensure you're not escaping content incorrectly and check whitespace, indentation, and context. Use ${ReadFileTool.Name} tool to verify.`,
-      type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
-    };
+  ): EditErrorInfo | undefined {
+    return validateEditState(
+      filteredParams,
+      currentContent,
+      fileExists,
+      filePath,
+      occurrences,
+      expectedReplacements,
+      finalOldString,
+      finalNewString,
+    );
   }
 
   /**
@@ -451,7 +257,7 @@ class EditToolInvocation extends BaseToolInvocation<
         };
       }
       let offset = 0;
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+
       for (let i = 0; i < replaceLine - 1; i++) {
         offset += lines[i].length + 1; // +1 for the '\n'
       }
@@ -818,7 +624,7 @@ class EditToolInvocation extends BaseToolInvocation<
     if (!this.config.getConversationLoggingEnabled()) return null;
     const gitStatsService = getGitStatsService();
     if (!gitStatsService) return null;
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+
     try {
       return await gitStatsService.trackFileEdit(
         filePath,
