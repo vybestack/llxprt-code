@@ -135,6 +135,77 @@ function checkForTempDirectories(): string[] {
   }
 }
 
+function handleTempDirectoryCleanup(): boolean {
+  const tempDirs = checkForTempDirectories();
+  if (tempDirs.length === 0) {
+    return false;
+  }
+
+  const cliPath = process.argv[1];
+  if (!cliPath) {
+    return true;
+  }
+  const realPath = fs.realpathSync(cliPath);
+  // Cross-platform regex for node_modules path
+  // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
+  const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
+  const cleanupPath = nodeModulesMatch
+    ? path.dirname(nodeModulesMatch[1])
+    : 'the parent directory of node_modules';
+
+  const isWindows = process.platform === 'win32';
+  const cleanupCommand = isWindows
+    ? `rmdir /s /q ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`
+    : `rm -rf ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`;
+
+  updateEventEmitter.emit('update-info', {
+    message: `Temporary directories from a previous failed update were detected. Please clean them up manually:\n  ${cleanupCommand}`,
+  });
+  return true;
+}
+
+function spawnUpdateProcess(
+  updateCommand: string,
+  lockFilePath: string,
+  cleanupLock: () => void,
+  spawnFn: typeof spawn,
+): ChildProcess {
+  const updateProcess = spawnFn(updateCommand, {
+    stdio: 'ignore',
+    shell: true,
+    detached: true,
+  });
+  updateProcess.unref();
+
+  updateProcess.on('close', (code) => {
+    process.off('SIGTERM', cleanupLock);
+    process.off('SIGINT', cleanupLock);
+    releaseLock(lockFilePath);
+
+    if (code === 0) {
+      updateEventEmitter.emit('update-success', {
+        message:
+          'Update successful! The new version will be used on your next run.',
+      });
+    } else {
+      updateEventEmitter.emit('update-failed', {
+        message: `Automatic update failed. Please try updating manually. (command: ${updateCommand})`,
+      });
+    }
+  });
+
+  updateProcess.on('error', (err) => {
+    process.off('SIGTERM', cleanupLock);
+    process.off('SIGINT', cleanupLock);
+    releaseLock(lockFilePath);
+    updateEventEmitter.emit('update-failed', {
+      message: `Automatic update failed. Please try updating manually. (error: ${err.message})`,
+    });
+  });
+
+  return updateProcess;
+}
+
 export function handleAutoUpdate(
   info: UpdateObject | null,
   settings: LoadedSettings,
@@ -178,34 +249,10 @@ export function handleAutoUpdate(
     return undefined;
   }
 
-  // Check for temp directories
-  const tempDirs = checkForTempDirectories();
-  if (tempDirs.length > 0) {
-    const cliPath = process.argv[1];
-    if (!cliPath) {
-      return undefined;
-    }
-    const realPath = fs.realpathSync(cliPath);
-    // Cross-platform regex for node_modules path
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
-    const cleanupPath = nodeModulesMatch
-      ? path.dirname(nodeModulesMatch[1])
-      : 'the parent directory of node_modules';
-
-    // Platform-appropriate cleanup command
-    const isWindows = process.platform === 'win32';
-    const cleanupCommand = isWindows
-      ? `rmdir /s /q ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`
-      : `rm -rf ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`;
-
-    updateEventEmitter.emit('update-info', {
-      message: `Temporary directories from a previous failed update were detected. Please clean them up manually:\n  ${cleanupCommand}`,
-    });
+  if (handleTempDirectoryCleanup()) {
     return undefined;
   }
 
-  // Try to acquire lock atomically
   const lockFilePath = tryAcquireLock();
   if (!lockFilePath) {
     updateEventEmitter.emit('update-info', {
@@ -214,7 +261,6 @@ export function handleAutoUpdate(
     return undefined;
   }
 
-  // Set up signal handlers to release lock on process termination
   const cleanupLock = () => {
     releaseLock(lockFilePath);
   };
@@ -226,41 +272,8 @@ export function handleAutoUpdate(
     '@latest',
     isNightly ? '@nightly' : `@${info.update.latest}`,
   );
-  const updateProcess = spawnFn(updateCommand, {
-    stdio: 'ignore',
-    shell: true,
-    detached: true,
-  });
-  // Un-reference the child process to allow the parent to exit independently.
-  updateProcess.unref();
 
-  updateProcess.on('close', (code) => {
-    process.off('SIGTERM', cleanupLock);
-    process.off('SIGINT', cleanupLock);
-    releaseLock(lockFilePath);
-
-    if (code === 0) {
-      updateEventEmitter.emit('update-success', {
-        message:
-          'Update successful! The new version will be used on your next run.',
-      });
-    } else {
-      updateEventEmitter.emit('update-failed', {
-        message: `Automatic update failed. Please try updating manually. (command: ${updateCommand})`,
-      });
-    }
-  });
-
-  updateProcess.on('error', (err) => {
-    process.off('SIGTERM', cleanupLock);
-    process.off('SIGINT', cleanupLock);
-    releaseLock(lockFilePath);
-    updateEventEmitter.emit('update-failed', {
-      message: `Automatic update failed. Please try updating manually. (error: ${err.message})`,
-    });
-  });
-
-  return updateProcess;
+  return spawnUpdateProcess(updateCommand, lockFilePath, cleanupLock, spawnFn);
 }
 
 export function setUpdateHandler(

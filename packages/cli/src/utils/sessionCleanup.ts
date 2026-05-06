@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+/* eslint-disable sonarjs/nested-control-flow, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -97,6 +97,61 @@ async function cleanupDebugLogsForSession(sessionId: string): Promise<number> {
   }
 }
 
+async function deleteSingleSession(
+  sessionToDelete: SessionFileEntry,
+  chatsDir: string,
+  config: Config,
+  result: CleanupResult,
+): Promise<void> {
+  try {
+    const sessionPath = path.join(chatsDir, sessionToDelete.fileName);
+    await fs.unlink(sessionPath);
+
+    if (config.getDebugMode()) {
+      if (sessionToDelete.sessionInfo === null) {
+        debugLogger.debug(
+          `Deleted corrupted session file: ${sessionToDelete.fileName}`,
+        );
+      } else {
+        debugLogger.debug(
+          `Deleted expired session: ${sessionToDelete.sessionInfo.id} (${sessionToDelete.sessionInfo.lastUpdated})`,
+        );
+      }
+    }
+    result.deleted++;
+
+    if (sessionToDelete.sessionInfo !== null) {
+      const debugLogsDeleted = await cleanupDebugLogsForSession(
+        sessionToDelete.sessionInfo.id,
+      );
+      if (debugLogsDeleted > 0) {
+        result.debugLogsDeleted =
+          (result.debugLogsDeleted ?? 0) + debugLogsDeleted;
+        if (config.getDebugMode()) {
+          debugLogger.debug(
+            `Deleted ${debugLogsDeleted} debug log file(s) for session ${sessionToDelete.sessionInfo.id}`,
+          );
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      // File already deleted, do nothing.
+    } else {
+      const sessionId =
+        sessionToDelete.sessionInfo === null
+          ? sessionToDelete.fileName
+          : sessionToDelete.sessionInfo.id;
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      debugLogger.error(
+        `Failed to delete session ${sessionId}: ${errorMessage}`,
+      );
+      result.failed++;
+    }
+  }
+}
+
 /**
  * Main entry point for session cleanup during CLI startup
  */
@@ -113,7 +168,6 @@ export async function cleanupExpiredSessions(
   };
 
   try {
-    // Early exit if cleanup is disabled
     if (settings.sessionRetention?.enabled !== true) {
       return { ...result, disabled: true };
     }
@@ -121,18 +175,15 @@ export async function cleanupExpiredSessions(
     const retentionConfig = settings.sessionRetention;
     const chatsDir = path.join(config.storage.getProjectTempDir(), 'chats');
 
-    // Validate retention configuration
     const validationErrorMessage = validateRetentionConfig(
       config,
       retentionConfig,
     );
     if (validationErrorMessage) {
-      // Log validation errors to console for visibility
       debugLogger.error(`Session cleanup disabled: ${validationErrorMessage}`);
       return { ...result, disabled: true };
     }
 
-    // Get all session files (including corrupted ones) for this project
     const allFiles = await getAllSessionFiles(chatsDir, config.getSessionId());
     result.scanned = allFiles.length;
 
@@ -140,71 +191,13 @@ export async function cleanupExpiredSessions(
       return result;
     }
 
-    // Determine which sessions to delete (corrupted and expired)
     const sessionsToDelete = await identifySessionsToDelete(
       allFiles,
       retentionConfig,
     );
 
-    // Delete all sessions that need to be deleted
     for (const sessionToDelete of sessionsToDelete) {
-      try {
-        const sessionPath = path.join(chatsDir, sessionToDelete.fileName);
-        await fs.unlink(sessionPath);
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (config.getDebugMode()) {
-          if (sessionToDelete.sessionInfo === null) {
-            debugLogger.debug(
-              `Deleted corrupted session file: ${sessionToDelete.fileName}`,
-            );
-          } else {
-            debugLogger.debug(
-              `Deleted expired session: ${sessionToDelete.sessionInfo.id} (${sessionToDelete.sessionInfo.lastUpdated})`,
-            );
-          }
-        }
-        result.deleted++;
-
-        // Also attempt to cleanup any related debug log files
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (sessionToDelete.sessionInfo !== null) {
-          const debugLogsDeleted = await cleanupDebugLogsForSession(
-            sessionToDelete.sessionInfo.id,
-          );
-          if (debugLogsDeleted > 0) {
-            result.debugLogsDeleted =
-              (result.debugLogsDeleted ?? 0) + debugLogsDeleted;
-            if (config.getDebugMode()) {
-              debugLogger.debug(
-                `Deleted ${debugLogsDeleted} debug log file(s) for session ${sessionToDelete.sessionInfo.id}`,
-              );
-            }
-          }
-        }
-      } catch (error) {
-        // Ignore ENOENT errors (file already deleted)
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (
-          error instanceof Error &&
-          'code' in error &&
-          error.code === 'ENOENT'
-        ) {
-          // File already deleted, do nothing.
-        } else {
-          // Log error directly to console
-          const sessionId =
-            sessionToDelete.sessionInfo === null
-              ? sessionToDelete.fileName
-              : sessionToDelete.sessionInfo.id;
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
-          debugLogger.error(
-            `Failed to delete session ${sessionId}: ${errorMessage}`,
-          );
-          result.failed++;
-        }
-      }
+      await deleteSingleSession(sessionToDelete, chatsDir, config, result);
     }
 
     result.skipped = result.scanned - result.deleted - result.failed;
@@ -215,7 +208,6 @@ export async function cleanupExpiredSessions(
       );
     }
   } catch (error) {
-    // Global error handler - don't let cleanup failures break startup
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
     debugLogger.error(`Session cleanup failed: ${errorMessage}`);
