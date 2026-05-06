@@ -18,6 +18,62 @@ interface CloudFreePrivacyNoticeProps {
   onExit: () => void;
 }
 
+const PrivacyNoticeHeader: React.FC = () => (
+  <>
+    <Text bold color={Colors.AccentPurple}>
+      Gemini Code Assist for Individuals Privacy Notice
+    </Text>
+    <Newline />
+    <Text color={Colors.Foreground}>
+      This notice and our Privacy Policy
+      <Text color={Colors.AccentBlue}>[1]</Text> describe how Gemini Code Assist
+      handles your data. Please read them carefully.
+    </Text>
+    <Newline />
+  </>
+);
+
+const PrivacyNoticeBody: React.FC = () => (
+  <>
+    <Text color={Colors.Foreground}>
+      When you use Gemini Code Assist for individuals with LLxprt Code, Google
+      collects your prompts, related code, generated output, code edits, related
+      feature usage information, and your feedback to provide, improve, and
+      develop Google products and services and machine learning technologies.
+    </Text>
+    <Newline />
+    <Text color={Colors.Foreground}>
+      To help with quality and improve our products (such as generative
+      machine-learning models), human reviewers may read, annotate, and process
+      the data collected above. We take steps to protect your privacy as part of
+      this process. This includes disconnecting the data from your Google
+      Account before reviewers see or annotate it, and storing those
+      disconnected copies for up to 18 months. Please don&apos;t submit
+      confidential information or any data you wouldn&apos;t want a reviewer to
+      see or Google to use to improve our products, services and
+      machine-learning technologies.
+    </Text>
+    <Newline />
+  </>
+);
+
+const PrivacyNoticeFooter: React.FC = () => (
+  <>
+    <Newline />
+    <Text color={Colors.Foreground}>
+      <Text color={Colors.AccentBlue}>[1]</Text>{' '}
+      https://policies.google.com/privacy
+    </Text>
+    <Newline />
+    <Text color={Colors.Gray}>Press Enter to choose an option and exit.</Text>
+  </>
+);
+
+const OPT_IN_ITEMS = [
+  { label: 'Yes', value: true, key: 'true' },
+  { label: 'No', value: false, key: 'false' },
+];
+
 export const CloudFreePrivacyNotice = ({
   config,
   onExit,
@@ -28,7 +84,6 @@ export const CloudFreePrivacyNotice = ({
   const handleSelect = useCallback(
     (value: boolean) => {
       void updateDataCollectionOptIn(value);
-      // Only exit if there was no error.
       if (!privacyState.error) {
         onExit();
       }
@@ -64,60 +119,21 @@ export const CloudFreePrivacyNotice = ({
     return <CloudPaidPrivacyNotice onExit={onExit} />;
   }
 
-  const items = [
-    { label: 'Yes', value: true, key: 'true' },
-    { label: 'No', value: false, key: 'false' },
-  ];
-
   return (
     <Box flexDirection="column" marginY={1}>
-      <Text bold color={Colors.AccentPurple}>
-        Gemini Code Assist for Individuals Privacy Notice
-      </Text>
-      <Newline />
-      <Text color={Colors.Foreground}>
-        This notice and our Privacy Policy
-        <Text color={Colors.AccentBlue}>[1]</Text> describe how Gemini Code
-        Assist handles your data. Please read them carefully.
-      </Text>
-      <Newline />
-      <Text color={Colors.Foreground}>
-        When you use Gemini Code Assist for individuals with LLxprt Code, Google
-        collects your prompts, related code, generated output, code edits,
-        related feature usage information, and your feedback to provide,
-        improve, and develop Google products and services and machine learning
-        technologies.
-      </Text>
-      <Newline />
-      <Text color={Colors.Foreground}>
-        To help with quality and improve our products (such as generative
-        machine-learning models), human reviewers may read, annotate, and
-        process the data collected above. We take steps to protect your privacy
-        as part of this process. This includes disconnecting the data from your
-        Google Account before reviewers see or annotate it, and storing those
-        disconnected copies for up to 18 months. Please don&apos;t submit
-        confidential information or any data you wouldn&apos;t want a reviewer
-        to see or Google to use to improve our products, services and
-        machine-learning technologies.
-      </Text>
-      <Newline />
+      <PrivacyNoticeHeader />
+      <PrivacyNoticeBody />
       <Box flexDirection="column">
         <Text color={Colors.Foreground}>
           Allow Google to use this data to develop and improve our products?
         </Text>
         <RadioButtonSelect
-          items={items}
+          items={OPT_IN_ITEMS}
           initialIndex={privacyState.dataCollectionOptIn === true ? 0 : 1}
           onSelect={handleSelect}
         />
       </Box>
-      <Newline />
-      <Text color={Colors.Foreground}>
-        <Text color={Colors.AccentBlue}>[1]</Text>{' '}
-        https://policies.google.com/privacy
-      </Text>
-      <Newline />
-      <Text color={Colors.Gray}>Press Enter to choose an option and exit.</Text>
+      <PrivacyNoticeFooter />
     </Box>
   );
 };

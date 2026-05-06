@@ -34,6 +34,89 @@ interface WelcomeDialogProps {
   ) => Promise<void>;
 }
 
+interface WelcomeStepRendererProps {
+  state: WelcomeState;
+  actions: WelcomeActions;
+  availableProviders: string[];
+  availableModels: ModelInfo[];
+  triggerAuth: (
+    provider: string,
+    method: 'oauth' | 'api_key',
+    apiKey?: string,
+  ) => Promise<void>;
+  handleWelcomeSelect: (choice: WelcomeChoice) => void;
+}
+
+const WelcomeStepRenderer: React.FC<WelcomeStepRendererProps> = ({
+  state,
+  actions,
+  availableProviders,
+  availableModels,
+  triggerAuth,
+  handleWelcomeSelect,
+}) => {
+  switch (state.step) {
+    case 'welcome':
+      return <WelcomeStep onSelect={handleWelcomeSelect} />;
+    case 'provider':
+      return (
+        <ProviderSelectStep
+          providers={availableProviders}
+          onSelect={actions.selectProvider}
+          onSkip={actions.skipSetup}
+        />
+      );
+    case 'model':
+      if (!state.selectedProvider) return null;
+      return (
+        <ModelSelectStep
+          provider={state.selectedProvider}
+          models={availableModels}
+          modelsLoadStatus={state.modelsLoadStatus}
+          onSelect={actions.selectModel}
+          onBack={actions.goBack}
+        />
+      );
+    case 'auth_method':
+      if (!state.selectedProvider) return null;
+      return (
+        <AuthMethodStep
+          provider={state.selectedProvider}
+          onSelect={actions.selectAuthMethod}
+          onBack={actions.goBack}
+          error={state.error}
+        />
+      );
+    case 'authenticating':
+      if (!state.selectedProvider || !state.selectedAuthMethod) return null;
+      return (
+        <AuthenticationStep
+          provider={state.selectedProvider}
+          method={state.selectedAuthMethod}
+          onComplete={actions.onAuthComplete}
+          onError={actions.onAuthError}
+          onBack={actions.goBack}
+          triggerAuth={triggerAuth}
+        />
+      );
+    case 'completion':
+      if (!state.selectedProvider || !state.selectedAuthMethod) return null;
+      return (
+        <CompletionStep
+          provider={state.selectedProvider}
+          model={state.selectedModel}
+          authMethod={state.selectedAuthMethod}
+          onSaveProfile={actions.saveProfile}
+          onDismiss={actions.dismiss}
+        />
+      );
+    case 'skipped':
+      return <SkipExitStep onDismiss={actions.dismiss} />;
+    default:
+      return null;
+  }
+};
+
 export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
   state,
   actions,
@@ -41,7 +124,6 @@ export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
   availableModels,
   triggerAuth,
 }) => {
-  // Handle global escape to skip (except during auth)
   useKeypress(
     (key) => {
       if (key.name === 'escape' && !state.authInProgress) {
@@ -62,76 +144,6 @@ export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
     [actions],
   );
 
-  const renderStep = () => {
-    switch (state.step) {
-      case 'welcome':
-        return <WelcomeStep onSelect={handleWelcomeSelect} />;
-
-      case 'provider':
-        return (
-          <ProviderSelectStep
-            providers={availableProviders}
-            onSelect={actions.selectProvider}
-            onSkip={actions.skipSetup}
-          />
-        );
-
-      case 'model':
-        if (!state.selectedProvider) return null;
-        return (
-          <ModelSelectStep
-            provider={state.selectedProvider}
-            models={availableModels}
-            modelsLoadStatus={state.modelsLoadStatus}
-            onSelect={actions.selectModel}
-            onBack={actions.goBack}
-          />
-        );
-
-      case 'auth_method':
-        if (!state.selectedProvider) return null;
-        return (
-          <AuthMethodStep
-            provider={state.selectedProvider}
-            onSelect={actions.selectAuthMethod}
-            onBack={actions.goBack}
-            error={state.error}
-          />
-        );
-
-      case 'authenticating':
-        if (!state.selectedProvider || !state.selectedAuthMethod) return null;
-        return (
-          <AuthenticationStep
-            provider={state.selectedProvider}
-            method={state.selectedAuthMethod}
-            onComplete={actions.onAuthComplete}
-            onError={actions.onAuthError}
-            onBack={actions.goBack}
-            triggerAuth={triggerAuth}
-          />
-        );
-
-      case 'completion':
-        if (!state.selectedProvider || !state.selectedAuthMethod) return null;
-        return (
-          <CompletionStep
-            provider={state.selectedProvider}
-            model={state.selectedModel}
-            authMethod={state.selectedAuthMethod}
-            onSaveProfile={actions.saveProfile}
-            onDismiss={actions.dismiss}
-          />
-        );
-
-      case 'skipped':
-        return <SkipExitStep onDismiss={actions.dismiss} />;
-
-      default:
-        return null;
-    }
-  };
-
   return (
     <Box
       flexDirection="column"
@@ -141,7 +153,14 @@ export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
       width="100%"
       marginLeft={1}
     >
-      {renderStep()}
+      <WelcomeStepRenderer
+        state={state}
+        actions={actions}
+        availableProviders={availableProviders}
+        availableModels={availableModels}
+        triggerAuth={triggerAuth}
+        handleWelcomeSelect={handleWelcomeSelect}
+      />
     </Box>
   );
 };

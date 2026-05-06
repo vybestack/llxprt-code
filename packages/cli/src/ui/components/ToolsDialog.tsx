@@ -20,6 +20,32 @@ interface ToolsDialogProps {
   onClose: () => void;
 }
 
+const EmptyToolsMessage: React.FC<{ action: 'enable' | 'disable' }> = ({
+  action,
+}) => (
+  <Box flexDirection="column" paddingX={2} paddingY={1}>
+    <Text color={Colors.AccentYellow}>
+      {action === 'disable'
+        ? 'All tools are already disabled.'
+        : 'No tools are currently disabled.'}
+    </Text>
+    <Box marginTop={1}>
+      <Text color={Colors.DimComment}>Press ESC to return</Text>
+    </Box>
+  </Box>
+);
+
+const SelectedToolInfo: React.FC<{
+  selectedTool: AnyDeclarativeTool | undefined;
+}> = ({ selectedTool }) => {
+  if (selectedTool == null) return null;
+  return (
+    <Box marginTop={1}>
+      <Text color={Colors.DimComment}>Tool name: {selectedTool.name}</Text>
+    </Box>
+  );
+};
+
 export const ToolsDialog: React.FC<ToolsDialogProps> = ({
   tools,
   action,
@@ -29,7 +55,6 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Filter tools based on action
   const availableTools = tools.filter((tool) => {
     if (action === 'disable') {
       return !disabledTools.includes(tool.name);
@@ -37,7 +62,6 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
     return disabledTools.includes(tool.name);
   });
 
-  // Create items for RadioButtonSelect
   const items = availableTools.map((tool) => ({
     key: tool.name,
     label: tool.displayName,
@@ -71,18 +95,7 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
   );
 
   if (availableTools.length === 0) {
-    return (
-      <Box flexDirection="column" paddingX={2} paddingY={1}>
-        <Text color={Colors.AccentYellow}>
-          {action === 'disable'
-            ? 'All tools are already disabled.'
-            : 'No tools are currently disabled.'}
-        </Text>
-        <Box marginTop={1}>
-          <Text color={Colors.DimComment}>Press ESC to return</Text>
-        </Box>
-      </Box>
-    );
+    return <EmptyToolsMessage action={action} />;
   }
 
   return (
@@ -92,7 +105,6 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
           Select a tool to {action}:
         </Text>
       </Box>
-
       <RadioButtonSelect
         items={items}
         onSelect={handleSelect}
@@ -100,22 +112,7 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
         isFocused={true}
         initialIndex={selectedIndex}
       />
-
-      {(() => {
-        const selectedTool = availableTools[selectedIndex];
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve runtime guard for malformed tools arrays.
-        if (selectedTool == null) {
-          return null;
-        }
-        return (
-          <Box marginTop={1}>
-            <Text color={Colors.DimComment}>
-              Tool name: {selectedTool.name}
-            </Text>
-          </Box>
-        );
-      })()}
-
+      <SelectedToolInfo selectedTool={availableTools[selectedIndex]} />
       <Box marginTop={1}>
         <Text color={Colors.DimComment}>
           Press ENTER to {action} • ESC to cancel
