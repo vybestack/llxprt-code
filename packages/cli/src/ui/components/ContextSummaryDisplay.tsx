@@ -46,6 +46,66 @@ function hasNoContextSummary(counts: {
   );
 }
 
+function buildOpenFilesText(openFileCount: number): string {
+  if (openFileCount === 0) {
+    return '';
+  }
+  const suffix = openFileCount > 1 ? 's' : '';
+  return `${openFileCount} open file${suffix} (ctrl+g to view)`;
+}
+
+function buildCoreMemoryText(effectiveCoreCount: number): string {
+  if (effectiveCoreCount === 0) {
+    return '';
+  }
+  const suffix = effectiveCoreCount > 1 ? 's' : '';
+  return `${effectiveCoreCount} .LLXPRT_SYSTEM file${suffix}`;
+}
+
+function buildGeminiMdText(
+  effectiveMdFileCount: number,
+  contextFileNames: string[],
+): string {
+  if (effectiveMdFileCount === 0) {
+    return '';
+  }
+  const allNamesTheSame = new Set(contextFileNames).size < 2;
+  const name = allNamesTheSame ? contextFileNames[0] : 'context';
+  return `${effectiveMdFileCount} ${name} file${
+    effectiveMdFileCount > 1 ? 's' : ''
+  }`;
+}
+
+function buildMcpText(
+  mcpServerCount: number,
+  blockedMcpServerCount: number,
+): string {
+  if (mcpServerCount === 0 && blockedMcpServerCount === 0) {
+    return '';
+  }
+
+  const parts = [];
+  if (mcpServerCount > 0) {
+    parts.push(`${mcpServerCount} MCP server${mcpServerCount > 1 ? 's' : ''}`);
+  }
+
+  if (blockedMcpServerCount > 0) {
+    let blockedText = `${blockedMcpServerCount} Blocked`;
+    if (mcpServerCount === 0) {
+      blockedText += ` MCP server${blockedMcpServerCount > 1 ? 's' : ''}`;
+    }
+    parts.push(blockedText);
+  }
+  return parts.join(', ');
+}
+
+function buildSkillText(skillCount: number | undefined): string {
+  if (skillCount === 0) {
+    return '';
+  }
+  return `${skillCount ?? 0} skill${(skillCount ?? 0) > 1 ? 's' : ''}`;
+}
+
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   llxprtMdFileCount,
   geminiMdFileCount,
@@ -74,64 +134,17 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
       skillCount,
     })
   ) {
-    return <Text color={theme.text.primary}> </Text>; // Render an empty space to reserve height
+    return <Text color={theme.text.primary}> </Text>;
   }
 
-  const openFilesText = (() => {
-    if (openFileCount === 0) {
-      return '';
-    }
-    const suffix = openFileCount > 1 ? 's' : '';
-    return `${openFileCount} open file${suffix} (ctrl+g to view)`;
-  })();
-
-  const coreMemoryText = (() => {
-    if (effectiveCoreCount === 0) {
-      return '';
-    }
-    const suffix = effectiveCoreCount > 1 ? 's' : '';
-    return `${effectiveCoreCount} .LLXPRT_SYSTEM file${suffix}`;
-  })();
-
-  const geminiMdText = (() => {
-    if (effectiveMdFileCount === 0) {
-      return '';
-    }
-    const allNamesTheSame = new Set(contextFileNames).size < 2;
-    const name = allNamesTheSame ? contextFileNames[0] : 'context';
-    return `${effectiveMdFileCount} ${name} file${
-      effectiveMdFileCount > 1 ? 's' : ''
-    }`;
-  })();
-
-  const mcpText = (() => {
-    if (mcpServerCount === 0 && blockedMcpServerCount === 0) {
-      return '';
-    }
-
-    const parts = [];
-    if (mcpServerCount > 0) {
-      parts.push(
-        `${mcpServerCount} MCP server${mcpServerCount > 1 ? 's' : ''}`,
-      );
-    }
-
-    if (blockedMcpServerCount > 0) {
-      let blockedText = `${blockedMcpServerCount} Blocked`;
-      if (mcpServerCount === 0) {
-        blockedText += ` MCP server${blockedMcpServerCount > 1 ? 's' : ''}`;
-      }
-      parts.push(blockedText);
-    }
-    return parts.join(', ');
-  })();
-
-  const skillText = (() => {
-    if (skillCount === 0) {
-      return '';
-    }
-    return `${skillCount ?? 0} skill${(skillCount ?? 0) > 1 ? 's' : ''}`;
-  })();
+  const openFilesText = buildOpenFilesText(openFileCount);
+  const coreMemoryText = buildCoreMemoryText(effectiveCoreCount);
+  const geminiMdText = buildGeminiMdText(
+    effectiveMdFileCount,
+    contextFileNames,
+  );
+  const mcpText = buildMcpText(mcpServerCount, blockedMcpServerCount);
+  const skillText = buildSkillText(skillCount);
 
   const summaryParts = [
     openFilesText,

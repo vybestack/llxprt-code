@@ -17,6 +17,70 @@ interface LoadProfileDialogProps {
   isLoading?: boolean;
 }
 
+interface ProfileGridProps {
+  profiles: string[];
+  index: number;
+  colWidth: number;
+  columns: number;
+}
+
+const ProfileGrid: React.FC<ProfileGridProps> = ({
+  profiles,
+  index,
+  colWidth,
+  columns,
+}) => {
+  const rows = Math.ceil(profiles.length / columns);
+  const grid: React.ReactNode[] = [];
+
+  const renderItem = (name: string, i: number) => {
+    const selected = i === index;
+    return (
+      <Box key={name} width={colWidth} marginRight={2}>
+        <Text color={selected ? '#00ff00' : Colors.Foreground}>
+          {selected ? '● ' : '○ '}
+          {name}
+        </Text>
+      </Box>
+    );
+  };
+
+  for (let r = 0; r < rows; r++) {
+    const rowItems = [] as React.ReactNode[];
+    for (let c = 0; c < columns; c++) {
+      const i = r * columns + c;
+      if (i < profiles.length) rowItems.push(renderItem(profiles[i], i));
+    }
+    grid.push(<Box key={r}>{rowItems}</Box>);
+  }
+
+  return <>{grid}</>;
+};
+
+const LoadingState: React.FC = () => (
+  <Box
+    borderStyle="round"
+    borderColor={Colors.Gray}
+    flexDirection="column"
+    padding={1}
+  >
+    <Text color={Colors.Foreground}>Loading profiles...</Text>
+  </Box>
+);
+
+const EmptyState: React.FC = () => (
+  <Box
+    borderStyle="round"
+    borderColor={Colors.Gray}
+    flexDirection="column"
+    padding={1}
+  >
+    <Text color={Colors.Foreground}>
+      No saved profiles found. Use /save to create a profile.
+    </Text>
+  </Box>
+);
+
 export const LoadProfileDialog: React.FC<LoadProfileDialogProps> = ({
   profiles,
   onSelect,
@@ -28,7 +92,6 @@ export const LoadProfileDialog: React.FC<LoadProfileDialogProps> = ({
   const columns = 2;
   const longest = profiles.reduce((len, p) => Math.max(len, p.length), 0);
   const colWidth = Math.max(longest + 4, 30);
-  const rows = Math.ceil(profiles.length / columns);
 
   const move = (delta: number) => {
     let next = index + delta;
@@ -60,54 +123,12 @@ export const LoadProfileDialog: React.FC<LoadProfileDialogProps> = ({
     { isActive: !isLoading },
   );
 
-  const renderItem = (name: string, i: number) => {
-    const selected = i === index;
-    return (
-      <Box key={name} width={colWidth} marginRight={2}>
-        <Text color={selected ? '#00ff00' : Colors.Foreground}>
-          {selected ? '● ' : '○ '}
-          {name}
-        </Text>
-      </Box>
-    );
-  };
-
-  const grid: React.ReactNode[] = [];
-  for (let r = 0; r < rows; r++) {
-    const rowItems = [] as React.ReactNode[];
-    for (let c = 0; c < columns; c++) {
-      const i = r * columns + c;
-      if (i < profiles.length) rowItems.push(renderItem(profiles[i], i));
-    }
-    grid.push(<Box key={r}>{rowItems}</Box>);
-  }
-
   if (isLoading) {
-    return (
-      <Box
-        borderStyle="round"
-        borderColor={Colors.Gray}
-        flexDirection="column"
-        padding={1}
-      >
-        <Text color={Colors.Foreground}>Loading profiles...</Text>
-      </Box>
-    );
+    return <LoadingState />;
   }
 
   if (profiles.length === 0) {
-    return (
-      <Box
-        borderStyle="round"
-        borderColor={Colors.Gray}
-        flexDirection="column"
-        padding={1}
-      >
-        <Text color={Colors.Foreground}>
-          No saved profiles found. Use /save to create a profile.
-        </Text>
-      </Box>
-    );
+    return <EmptyState />;
   }
 
   return (
@@ -120,7 +141,12 @@ export const LoadProfileDialog: React.FC<LoadProfileDialogProps> = ({
       <Text bold color={Colors.Foreground}>
         Select Profile (←/→/↑/↓, Enter to load, Esc to cancel)
       </Text>
-      {grid}
+      <ProfileGrid
+        profiles={profiles}
+        index={index}
+        colWidth={colWidth}
+        columns={columns}
+      />
     </Box>
   );
 };

@@ -34,6 +34,76 @@ const StatRow: React.FC<StatRowProps> = ({
   </Box>
 );
 
+interface NoStatsBoxProps {
+  message: string;
+}
+
+const NoStatsBox: React.FC<NoStatsBoxProps> = ({ message }) => (
+  <Box borderStyle="round" borderColor={Colors.Gray} paddingY={1} paddingX={2}>
+    <Text color={Colors.Foreground}>{message}</Text>
+  </Box>
+);
+
+const CacheStatsHeader: React.FC = () => (
+  <>
+    <Text bold color={Colors.AccentPurple}>
+      Cache Stats
+    </Text>
+    <Box height={1} />
+  </>
+);
+
+interface CacheStatsContentProps {
+  totalCacheReads: number;
+  totalCacheWrites: number | null;
+  cacheHitRate: number;
+  requestsWithCacheHits: number;
+}
+
+const CacheStatsContent: React.FC<CacheStatsContentProps> = ({
+  totalCacheReads,
+  totalCacheWrites,
+  cacheHitRate,
+  requestsWithCacheHits,
+}) => (
+  <>
+    <StatRow
+      title="Total Cache Reads (tokens)"
+      value={
+        <Text color={Colors.AccentGreen}>
+          {totalCacheReads.toLocaleString()}
+        </Text>
+      }
+    />
+    {totalCacheWrites !== null && (
+      <StatRow
+        title="Total Cache Writes (tokens)"
+        value={
+          <Text color={Colors.Foreground}>
+            {totalCacheWrites.toLocaleString()}
+          </Text>
+        }
+      />
+    )}
+    <StatRow
+      title="Cache Hit Rate"
+      value={
+        <Text color={cacheHitRate > 0 ? Colors.AccentGreen : Colors.Foreground}>
+          {cacheHitRate.toFixed(1)}%
+        </Text>
+      }
+    />
+    <StatRow
+      title="Requests with Cache Hits"
+      value={
+        <Text color={Colors.Foreground}>
+          {requestsWithCacheHits.toLocaleString()}
+        </Text>
+      }
+    />
+  </>
+);
+
 export const CacheStatsDisplay: React.FC = () => {
   const { getCliProviderManager } = useRuntimeApi();
   const providerManager = getCliProviderManager() as ReturnType<
@@ -41,19 +111,9 @@ export const CacheStatsDisplay: React.FC = () => {
   > | null;
 
   if (!providerManager) {
-    return (
-      <Box
-        borderStyle="round"
-        borderColor={Colors.Gray}
-        paddingY={1}
-        paddingX={2}
-      >
-        <Text color={Colors.Foreground}>Provider manager not available</Text>
-      </Box>
-    );
+    return <NoStatsBox message="Provider manager not available" />;
   }
 
-  // Get cache statistics from ProviderManager
   const cacheStats =
     (
       providerManager as {
@@ -63,42 +123,22 @@ export const CacheStatsDisplay: React.FC = () => {
 
   if (!cacheStats) {
     return (
-      <Box
-        borderStyle="round"
-        borderColor={Colors.Gray}
-        paddingY={1}
-        paddingX={2}
-      >
-        <Text color={Colors.Foreground}>
-          Cache statistics are not available for the current provider.
-        </Text>
-      </Box>
+      <NoStatsBox message="Cache statistics are not available for the current provider." />
     );
   }
 
-  const totalCacheReads = cacheStats.totalCacheReads;
-  const totalCacheWrites = cacheStats.totalCacheWrites;
-  const requestsWithCacheHits = cacheStats.requestsWithCacheHits;
-  const cacheHitRate = cacheStats.hitRate;
+  const {
+    totalCacheReads,
+    totalCacheWrites,
+    requestsWithCacheHits,
+    hitRate: cacheHitRate,
+  } = cacheStats;
 
-  // Check if we have any cache data
-  // totalCacheWrites can be null (not reported by provider) vs 0 (explicitly reported as zero)
   const hasCacheData = totalCacheReads > 0 || (totalCacheWrites ?? 0) > 0;
 
   if (!hasCacheData) {
     return (
-      <Box
-        borderStyle="round"
-        borderColor={Colors.Gray}
-        paddingY={1}
-        paddingX={2}
-      >
-        <Text color={Colors.Foreground}>
-          No cache data available. Cache statistics are available for providers
-          with prompt caching support (Anthropic, OpenAI, Groq, Deepseek,
-          Fireworks, OpenRouter, Qwen).
-        </Text>
-      </Box>
+      <NoStatsBox message="No cache data available. Cache statistics are available for providers with prompt caching support (Anthropic, OpenAI, Groq, Deepseek, Fireworks, OpenRouter, Qwen)." />
     );
   }
 
@@ -110,48 +150,12 @@ export const CacheStatsDisplay: React.FC = () => {
       paddingY={1}
       paddingX={2}
     >
-      <Text bold color={Colors.AccentPurple}>
-        Cache Stats
-      </Text>
-      <Box height={1} />
-
-      {/* Cache Usage */}
-      <StatRow
-        title="Total Cache Reads (tokens)"
-        value={
-          <Text color={Colors.AccentGreen}>
-            {totalCacheReads.toLocaleString()}
-          </Text>
-        }
-      />
-      {/* Only show cache writes if the provider reports them (not null) */}
-      {totalCacheWrites !== null && (
-        <StatRow
-          title="Total Cache Writes (tokens)"
-          value={
-            <Text color={Colors.Foreground}>
-              {totalCacheWrites.toLocaleString()}
-            </Text>
-          }
-        />
-      )}
-      <StatRow
-        title="Cache Hit Rate"
-        value={
-          <Text
-            color={cacheHitRate > 0 ? Colors.AccentGreen : Colors.Foreground}
-          >
-            {cacheHitRate.toFixed(1)}%
-          </Text>
-        }
-      />
-      <StatRow
-        title="Requests with Cache Hits"
-        value={
-          <Text color={Colors.Foreground}>
-            {requestsWithCacheHits.toLocaleString()}
-          </Text>
-        }
+      <CacheStatsHeader />
+      <CacheStatsContent
+        totalCacheReads={totalCacheReads}
+        totalCacheWrites={totalCacheWrites}
+        cacheHitRate={cacheHitRate}
+        requestsWithCacheHits={requestsWithCacheHits}
       />
     </Box>
   );

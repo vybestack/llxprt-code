@@ -35,20 +35,58 @@ interface PendingRequest {
 
 type ConfirmOption = 'proceed' | 'cancel';
 
-/**
- * Component that listens for bucket auth confirmation requests
- * and shows an approval dialog in the TUI.
- */
-/**
- * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
- * @requirement REQ-D01-002
- * @requirement REQ-D01-003
- * @pseudocode lines 122-133
- */
-export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
-  messageBus,
-  isFocused = true,
-}) => {
+const CONFIRMATION_OPTIONS: Array<RadioSelectItem<ConfirmOption>> = [
+  {
+    label: 'Yes, open browser',
+    value: 'proceed',
+    key: 'proceed',
+  },
+  {
+    label: 'Cancel (esc)',
+    value: 'cancel',
+    key: 'cancel',
+  },
+];
+
+interface BucketAuthHeaderProps {
+  bucketIndex: number;
+  totalBuckets: number;
+  bucket: string;
+  provider: string;
+}
+
+const BucketAuthHeader: React.FC<BucketAuthHeaderProps> = ({
+  bucketIndex,
+  totalBuckets,
+  bucket,
+  provider,
+}) => (
+  <>
+    <Box marginBottom={1}>
+      <Text color={Colors.AccentCyan} bold>
+        OAuth Bucket Authentication
+      </Text>
+    </Box>
+
+    <Box flexDirection="column" marginBottom={1}>
+      <Text color={Colors.Foreground}>
+        Bucket {bucketIndex} of {totalBuckets}:{' '}
+        <Text color={Colors.AccentGreen}>{bucket}</Text>
+      </Text>
+      <Text color={Colors.DimComment}>Provider: {provider}</Text>
+    </Box>
+
+    <Box marginBottom={1}>
+      <Text color={Colors.AccentGreen}>
+        Open browser to authenticate this bucket?
+      </Text>
+    </Box>
+  </>
+);
+
+function useBucketAuthConfirmation(
+  messageBus: MessageBus | undefined,
+): [PendingRequest | null, () => void] {
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(
     null,
   );
@@ -88,6 +126,26 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
     };
   }, [messageBus]);
 
+  const clearPendingRequest = useCallback(() => {
+    setPendingRequest(null);
+  }, []);
+
+  return [pendingRequest, clearPendingRequest];
+}
+
+/**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+ * @requirement REQ-D01-002
+ * @requirement REQ-D01-003
+ * @pseudocode lines 122-133
+ */
+export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
+  messageBus,
+  isFocused = true,
+}) => {
+  const [pendingRequest, clearPendingRequest] =
+    useBucketAuthConfirmation(messageBus);
+
   const handleConfirm = useCallback(
     (confirmed: boolean) => {
       if (!pendingRequest || !messageBus) {
@@ -99,9 +157,9 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
         confirmed,
       );
 
-      setPendingRequest(null);
+      clearPendingRequest();
     },
-    [messageBus, pendingRequest],
+    [messageBus, pendingRequest, clearPendingRequest],
   );
 
   useKeypress(
@@ -125,19 +183,6 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
     return null;
   }
 
-  const options: Array<RadioSelectItem<ConfirmOption>> = [
-    {
-      label: 'Yes, open browser',
-      value: 'proceed',
-      key: 'proceed',
-    },
-    {
-      label: 'Cancel (esc)',
-      value: 'cancel',
-      key: 'cancel',
-    },
-  ];
-
   return (
     <Box
       flexDirection="column"
@@ -146,30 +191,15 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
       padding={1}
       marginY={1}
     >
-      <Box marginBottom={1}>
-        <Text color={Colors.AccentCyan} bold>
-          OAuth Bucket Authentication
-        </Text>
-      </Box>
-
-      <Box flexDirection="column" marginBottom={1}>
-        <Text color={Colors.Foreground}>
-          Bucket {pendingRequest.bucketIndex} of {pendingRequest.totalBuckets}:{' '}
-          <Text color={Colors.AccentGreen}>{pendingRequest.bucket}</Text>
-        </Text>
-        <Text color={Colors.DimComment}>
-          Provider: {pendingRequest.provider}
-        </Text>
-      </Box>
-
-      <Box marginBottom={1}>
-        <Text color={Colors.AccentGreen}>
-          Open browser to authenticate this bucket?
-        </Text>
-      </Box>
+      <BucketAuthHeader
+        bucketIndex={pendingRequest.bucketIndex}
+        totalBuckets={pendingRequest.totalBuckets}
+        bucket={pendingRequest.bucket}
+        provider={pendingRequest.provider}
+      />
 
       <RadioButtonSelect
-        items={options}
+        items={CONFIRMATION_OPTIONS}
         onSelect={handleSelect}
         isFocused={isFocused}
       />
