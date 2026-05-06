@@ -6,7 +6,7 @@
 
 /* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config, DiscoveredMCPPrompt } from '@vybestack/llxprt-code-core';
 import {
   getErrorMessage,
   getMCPServerPrompts,
@@ -46,162 +46,149 @@ export class McpPromptLoader implements ICommandLoader {
     for (const serverName in mcpServers) {
       const prompts = getMCPServerPrompts(this.config, serverName);
       for (const prompt of prompts) {
-        // Sanitize prompt names to ensure they are valid slash commands (e.g. "Prompt Name" -> "Prompt-Name")
-        const commandName = `${prompt.name}`.trim().replace(/\s+/g, '-');
-        const newPromptCommand: SlashCommand = {
-          name: commandName,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string description should use generated default
-          description: prompt.description || `Invoke prompt ${prompt.name}`,
-          kind: CommandKind.MCP_PROMPT,
-          autoExecute: !prompt.arguments || prompt.arguments.length === 0,
-          subCommands: [
-            {
-              name: 'help',
-              description: 'Show help for this prompt',
-              kind: CommandKind.MCP_PROMPT,
-              action: async (): Promise<SlashCommandActionReturn> => {
-                if (!prompt.arguments || prompt.arguments.length === 0) {
-                  return {
-                    type: 'message',
-                    messageType: 'info',
-                    content: `Prompt "${prompt.name}" has no arguments.`,
-                  };
-                }
-
-                const promptArgs = prompt.arguments;
-                let helpMessage = `Arguments for "${prompt.name}":\n\n`;
-                helpMessage += `You can provide arguments by name (e.g., --argName="value") or by position.\n\n`;
-                helpMessage += `e.g., ${prompt.name} ${promptArgs.map(() => `"foo"`)} is equivalent to ${prompt.name} ${promptArgs.map((arg) => `--${arg.name}="foo"`)}\n\n`;
-                for (const arg of promptArgs) {
-                  helpMessage += `  --${arg.name}\n`;
-                  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-                  if (arg.description) {
-                    helpMessage += `    ${arg.description}\n`;
-                  }
-                  helpMessage += `    (required: ${
-                    arg.required === true ? 'yes' : 'no'
-                  })\n\n`;
-                }
-
-                return {
-                  type: 'message',
-                  messageType: 'info',
-                  content: helpMessage,
-                };
-              },
-            },
-          ],
-          action: async (
-            context: CommandContext,
-            args: string,
-          ): Promise<SlashCommandActionReturn> => {
-            if (!this.config) {
-              return {
-                type: 'message',
-                messageType: 'error',
-                content: 'Config not loaded.',
-              };
-            }
-
-            const promptInputs = this.parseArgs(args, prompt.arguments);
-            if (promptInputs instanceof Error) {
-              return {
-                type: 'message',
-                messageType: 'error',
-                content: promptInputs.message,
-              };
-            }
-
-            try {
-              const mcpServers = this.config.getMcpServers() ?? {};
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (!Object.hasOwn(mcpServers, serverName)) {
-                return {
-                  type: 'message',
-                  messageType: 'error',
-                  content: `MCP server config not found for '${serverName}'.`,
-                };
-              }
-              const result = await prompt.invoke(promptInputs);
-
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (result.error != null) {
-                return {
-                  type: 'message',
-                  messageType: 'error',
-                  content: `Error invoking prompt: ${result.error}`,
-                };
-              }
-
-              const responseText = McpPromptLoader.extractFirstTextContent(
-                result.messages,
-              );
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (!responseText) {
-                return {
-                  type: 'message',
-                  messageType: 'error',
-                  content:
-                    'Received an empty or invalid prompt response from the server.',
-                };
-              }
-
-              return {
-                type: 'submit_prompt',
-                content: JSON.stringify(responseText),
-              };
-            } catch (error) {
-              return {
-                type: 'message',
-                messageType: 'error',
-                content: `Error: ${getErrorMessage(error)}`,
-              };
-            }
-          },
-          // Follow-up (#1569): Re-enable schema-based argument completion when SlashCommand interface supports it
-          // schema: [
-          //   {
-          //     kind: 'value',
-          //     name: 'argument',
-          //     description: 'Provide prompt argument (--name="value")',
-          //     completer: async (_ctx: CommandContext, partialArg: string, tokenInfo: TokenInfo) => {
-          //       if (!prompt || !prompt.arguments) {
-          //         return [];
-          //       }
-          //       const usedArgNames = new Set(
-          //         [...tokenInfo.tokens, tokenInfo.partialToken]
-          //           .filter(
-          //             (token): token is string =>
-          //               typeof token === 'string' && token.startsWith('--'),
-          //           )
-          //           .map((token) => token.slice(2).split('=')[0]),
-          //       );
-          //       const normalizedPartial = partialArg.toLowerCase();
-          //       return prompt.arguments
-          //         .filter((arg) => !usedArgNames.has(arg.name))
-          //         .map((arg) => {
-          //           const value = `--${arg.name}=""`;
-          //           return {
-          //             value,
-          //             description:
-          //               arg.description || 'Prompt argument placeholder',
-          //           };
-          //         })
-          //         .filter((option) =>
-          //           normalizedPartial.length === 0
-          //             ? true
-          //             : option.value
-          //                 .toLowerCase()
-          //                 .startsWith(normalizedPartial),
-          //         );
-          //     },
-          //   },
-          // ],
-        };
-        promptCommands.push(newPromptCommand);
+        promptCommands.push(this.buildPromptCommand(prompt, serverName));
       }
     }
     return Promise.resolve(promptCommands);
+  }
+
+  private buildPromptCommand(
+    prompt: DiscoveredMCPPrompt,
+    serverName: string,
+  ): SlashCommand {
+    const commandName = `${prompt.name}`.trim().replace(/\s+/g, '-');
+    return {
+      name: commandName,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string description should use generated default
+      description: prompt.description || `Invoke prompt ${prompt.name}`,
+      kind: CommandKind.MCP_PROMPT,
+      autoExecute: !prompt.arguments || prompt.arguments.length === 0,
+      subCommands: [
+        {
+          name: 'help',
+          description: 'Show help for this prompt',
+          kind: CommandKind.MCP_PROMPT,
+          action: McpPromptLoader.buildHelpAction(prompt),
+        },
+      ],
+      action: this.buildInvokeAction(prompt, serverName),
+    };
+  }
+
+  private static buildHelpAction(prompt: {
+    name: string;
+    arguments?: PromptArgument[];
+  }): () => Promise<SlashCommandActionReturn> {
+    return async (): Promise<SlashCommandActionReturn> => {
+      if (!prompt.arguments || prompt.arguments.length === 0) {
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Prompt "${prompt.name}" has no arguments.`,
+        };
+      }
+
+      const promptArgs = prompt.arguments;
+      let helpMessage = `Arguments for "${prompt.name}":\n\n`;
+      helpMessage += `You can provide arguments by name (e.g., --argName="value") or by position.\n\n`;
+      helpMessage += `e.g., ${prompt.name} ${promptArgs.map(() => `"foo"`)} is equivalent to ${prompt.name} ${promptArgs.map((arg) => `--${arg.name}="foo"`)}\n\n`;
+      for (const arg of promptArgs) {
+        helpMessage += `  --${arg.name}\n`;
+        if (arg.description) {
+          helpMessage += `    ${arg.description}\n`;
+        }
+        helpMessage += `    (required: ${
+          arg.required === true ? 'yes' : 'no'
+        })\n\n`;
+      }
+
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: helpMessage,
+      };
+    };
+  }
+
+  private buildInvokeAction(
+    prompt: DiscoveredMCPPrompt,
+    serverName: string,
+  ): (
+    context: CommandContext,
+    args: string,
+  ) => Promise<SlashCommandActionReturn> {
+    return async (
+      context: CommandContext,
+      args: string,
+    ): Promise<SlashCommandActionReturn> => {
+      if (!this.config) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Config not loaded.',
+        };
+      }
+
+      const promptInputs = this.parseArgs(args, prompt.arguments);
+      if (promptInputs instanceof Error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: promptInputs.message,
+        };
+      }
+
+      try {
+        return await this.invokePrompt(prompt, promptInputs, serverName);
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Error: ${getErrorMessage(error)}`,
+        };
+      }
+    };
+  }
+
+  private async invokePrompt(
+    prompt: DiscoveredMCPPrompt,
+    promptInputs: Record<string, unknown>,
+    serverName: string,
+  ): Promise<SlashCommandActionReturn> {
+    const mcpServers = this.config?.getMcpServers() ?? {};
+    if (!Object.hasOwn(mcpServers, serverName)) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `MCP server config not found for '${serverName}'.`,
+      };
+    }
+    const result = await prompt.invoke(promptInputs);
+
+    if (result.error != null) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Error invoking prompt: ${result.error}`,
+      };
+    }
+
+    const responseText = McpPromptLoader.extractFirstTextContent(
+      result.messages,
+    );
+    if (!responseText) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content:
+          'Received an empty or invalid prompt response from the server.',
+      };
+    }
+
+    return {
+      type: 'submit_prompt',
+      content: JSON.stringify(responseText),
+    };
   }
 
   private static extractFirstTextContent(

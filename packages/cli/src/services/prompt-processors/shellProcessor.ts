@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 import {
   ApprovalMode,
@@ -13,6 +13,7 @@ import {
   getShellConfiguration,
   ShellExecutionService,
 } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 
 import type { CommandContext } from '../../ui/commands/types.js';
 import type { IPromptProcessor } from './types.js';
@@ -82,25 +83,46 @@ export class ShellProcessor implements IPromptProcessor {
     const { shell } = getShellConfiguration();
     const userArgsEscaped = escapeShellArg(userArgsRaw, shell);
 
-    const resolvedInjections = injections.map((injection) => {
+    const resolvedInjections = this.resolveInjections(
+      injections,
+      userArgsEscaped,
+    );
+    this.checkPermissions(resolvedInjections, config, sessionShellAllowlist);
+
+    return this.executeInjections(
+      prompt,
+      resolvedInjections,
+      config,
+      userArgsRaw,
+    );
+  }
+
+  private resolveInjections(
+    injections: ShellInjection[],
+    userArgsEscaped: string,
+  ): ShellInjection[] {
+    return injections.map((injection) => {
       if (injection.command === '') {
         return injection;
       }
-      // Replace {{args}} inside the command string with the escaped version.
       const resolvedCommand = injection.command.replaceAll(
         SHORTHAND_ARGS_PLACEHOLDER,
         userArgsEscaped,
       );
       return { ...injection, resolvedCommand };
     });
+  }
 
+  private checkPermissions(
+    resolvedInjections: ShellInjection[],
+    config: Config,
+    sessionShellAllowlist: Set<string>,
+  ): void {
     const commandsToConfirm = new Set<string>();
     for (const injection of resolvedInjections) {
       const command = injection.resolvedCommand;
-
       if (!command) continue;
 
-      // Security check on the final, escaped command string.
       const { allAllowed, disallowedCommands, blockReason, isHardDenial } =
         checkCommandPermissions(command, config, sessionShellAllowlist);
 
@@ -110,22 +132,26 @@ export class ShellProcessor implements IPromptProcessor {
             `Blocked command: "${command}". Reason: ${blockReason ?? 'Blocked by configuration.'}`,
           );
         }
-
-        // If not a hard denial, respect YOLO mode and auto-approve.
         if (config.getApprovalMode() !== ApprovalMode.YOLO) {
           disallowedCommands.forEach((uc) => commandsToConfirm.add(uc));
         }
       }
     }
 
-    // Handle confirmation requirements.
     if (commandsToConfirm.size > 0) {
       throw new ConfirmationRequiredError(
         'Shell command confirmation required',
         Array.from(commandsToConfirm),
       );
     }
+  }
 
+  private async executeInjections(
+    prompt: string,
+    resolvedInjections: ShellInjection[],
+    config: Config,
+    userArgsRaw: string,
+  ): Promise<string> {
     let processedPrompt = '';
     let lastIndex = 0;
 

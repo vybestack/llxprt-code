@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 /**
  * Performs session resume - resolves session reference and swaps recording infrastructure.
@@ -149,28 +149,20 @@ export async function performResume(
   const sessions = await SessionDiscovery.listSessions(chatsDir, projectHash);
 
   // 2. Resolve session reference
-  let targetSession: SessionSummary | undefined;
-
-  if (sessionRef === 'latest') {
-    // Find newest non-locked, non-current, non-empty session
-    targetSession = await findResumableSession(
-      sessions,
-      chatsDir,
-      currentSessionId,
-    );
-    if (!targetSession) {
-      return {
-        ok: false,
-        error: 'No resumable sessions found (all locked, empty, or current).',
-      };
-    }
-  } else {
-    // Resolve by ID, prefix, or index
-    const resolved = SessionDiscovery.resolveSessionRef(sessionRef, sessions);
-    if ('error' in resolved) {
-      return { ok: false, error: resolved.error };
-    }
-    targetSession = resolved.session;
+  const targetSession = await resolveTargetSession(
+    sessionRef,
+    sessions,
+    chatsDir,
+    currentSessionId,
+  );
+  if (!targetSession) {
+    return {
+      ok: false,
+      error: 'No resumable sessions found (all locked, empty, or current).',
+    };
+  }
+  if (targetSession instanceof Error) {
+    return { ok: false, error: targetSession.message };
   }
 
   // 3. Check same-session
@@ -186,7 +178,7 @@ export async function performResume(
     };
   }
 
-  // 5. Phase 1: Acquire new session (before disposing old)
+  // 5. Acquire new session (before disposing old)
   const resumeResult = await resumeSession({
     continueRef: targetSession.sessionId,
     projectHash,
@@ -200,13 +192,59 @@ export async function performResume(
     return { ok: false, error: resumeResult.error };
   }
 
-  // 6. Phase 2: Dispose old infrastructure (ordered)
+  // 6. Dispose old infrastructure (ordered)
+  await disposeOldInfrastructure(recordingCallbacks, logger);
+
+  // 7. Create new integration and install
+  const newRecording = resumeResult.recording;
+  const newLock = resumeResult.lockHandle;
+  const newIntegration = new RecordingIntegration(newRecording);
+
+  recordingCallbacks.setRecording(
+    newRecording,
+    newIntegration,
+    newLock,
+    resumeResult.metadata,
+  );
+
+  // 8. Return success
+  return {
+    ok: true,
+    history: resumeResult.history,
+    metadata: resumeResult.metadata,
+    warnings: resumeResult.warnings,
+  };
+}
+
+async function resolveTargetSession(
+  sessionRef: string,
+  sessions: SessionSummary[],
+  chatsDir: string,
+  currentSessionId: string,
+): Promise<SessionSummary | Error | null> {
+  if (sessionRef === 'latest') {
+    const session = await findResumableSession(
+      sessions,
+      chatsDir,
+      currentSessionId,
+    );
+    return session ?? null;
+  }
+  const resolved = SessionDiscovery.resolveSessionRef(sessionRef, sessions);
+  if ('error' in resolved) {
+    return new Error(resolved.error);
+  }
+  return resolved.session;
+}
+
+async function disposeOldInfrastructure(
+  recordingCallbacks: RecordingSwapCallbacks,
+  logger?: DebugLogger,
+): Promise<void> {
   const oldIntegration = recordingCallbacks.getCurrentIntegration();
   const oldRecording = recordingCallbacks.getCurrentRecording();
   const oldLock = recordingCallbacks.getCurrentLockHandle();
 
-  // Dispose in order: integration -> recording -> lock.
-  // Failures are warnings so newly acquired infrastructure can still be installed.
   if (oldIntegration) {
     try {
       oldIntegration.dispose();
@@ -232,25 +270,4 @@ export async function performResume(
       logger?.warn(`Failed to release old session lock (continuing): ${e}`);
     }
   }
-
-  // 7. Create new integration and metadata
-  const newRecording = resumeResult.recording;
-  const newLock = resumeResult.lockHandle;
-  const newIntegration = new RecordingIntegration(newRecording);
-
-  // 8. Install new infrastructure
-  recordingCallbacks.setRecording(
-    newRecording,
-    newIntegration,
-    newLock,
-    resumeResult.metadata,
-  );
-
-  // 9. Return success
-  return {
-    ok: true,
-    history: resumeResult.history,
-    metadata: resumeResult.metadata,
-    warnings: resumeResult.warnings,
-  };
 }
