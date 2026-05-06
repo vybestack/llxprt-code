@@ -74,28 +74,11 @@ export interface UseWelcomeOnboardingReturn {
   ) => Promise<void>;
 }
 
-export const useWelcomeOnboarding = (
-  options: UseWelcomeOnboardingOptions,
-): UseWelcomeOnboardingReturn => {
-  const { settings: _settings, isFolderTrustComplete } = options;
-  const runtime = useRuntimeApi();
-  const [welcomeCompleted, setWelcomeCompleted] = useState(() =>
-    isWelcomeCompleted(),
-  );
-
-  // Only show welcome after folder trust is complete
-  const showWelcome = !welcomeCompleted && isFolderTrustComplete;
-
-  const [state, setState] = useState<WelcomeState>({
-    step: 'welcome',
-    authInProgress: false,
-    modelsLoadStatus: 'idle',
-  });
-
+function useProviderLoader(
+  runtime: ReturnType<typeof useRuntimeApi>,
+): [string[], React.Dispatch<React.SetStateAction<string[]>>] {
   const [availableProviders, setAvailableProviders] = useState<string[]>([]);
-  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
 
-  // Load available providers on mount
   useEffect(() => {
     const providerManager = runtime.getCliProviderManager();
     const providers = providerManager.listProviders();
@@ -103,10 +86,19 @@ export const useWelcomeOnboarding = (
     debug.log(`Loaded ${providers.length} providers: ${providers.join(', ')}`);
   }, [runtime]);
 
-  // Load available models when provider is selected
+  return [availableProviders, setAvailableProviders];
+}
+
+function useModelLoader(
+  runtime: ReturnType<typeof useRuntimeApi>,
+  selectedProvider: string | undefined,
+  setState: React.Dispatch<React.SetStateAction<WelcomeState>>,
+): [ModelInfo[], React.Dispatch<React.SetStateAction<ModelInfo[]>>] {
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
+
   useEffect(() => {
     const loadModels = async () => {
-      if (!state.selectedProvider) {
+      if (!selectedProvider) {
         setAvailableModels([]);
         setState((prev) => ({ ...prev, modelsLoadStatus: 'idle' }));
         return;
@@ -115,18 +107,14 @@ export const useWelcomeOnboarding = (
       setState((prev) => ({ ...prev, modelsLoadStatus: 'loading' }));
 
       try {
-        const models = await runtime.listAvailableModels(
-          state.selectedProvider,
-        );
+        const models = await runtime.listAvailableModels(selectedProvider);
         const modelInfos: ModelInfo[] = models.map((m) => ({
           id: m.id,
           name: m.name,
         }));
         setAvailableModels(modelInfos);
         setState((prev) => ({ ...prev, modelsLoadStatus: 'success' }));
-        debug.log(
-          `Loaded ${modelInfos.length} models for ${state.selectedProvider}`,
-        );
+        debug.log(`Loaded ${modelInfos.length} models for ${selectedProvider}`);
       } catch (error) {
         debug.log(`Failed to load models: ${error}`);
         setAvailableModels([]);
@@ -135,23 +123,17 @@ export const useWelcomeOnboarding = (
     };
 
     void loadModels();
-  }, [runtime, state.selectedProvider]);
+  }, [runtime, selectedProvider, setState]);
 
-  const startSetup = useCallback(() => {
-    setState((prev) => ({ ...prev, step: 'provider' }));
-  }, []);
+  return [availableModels, setAvailableModels];
+}
 
-  const selectProvider = useCallback((providerId: string) => {
-    setState((prev) => ({
-      ...prev,
-      selectedProvider: providerId,
-      step: 'auth_method', // Auth before model selection to ensure models load properly
-    }));
-  }, []);
-
-  const selectModel = useCallback(
+function useSelectModelAction(
+  runtime: ReturnType<typeof useRuntimeApi>,
+  setState: React.Dispatch<React.SetStateAction<WelcomeState>>,
+) {
+  return useCallback(
     async (modelId: string) => {
-      // Actually set the model on the runtime so it's captured in the profile
       debug.log(`[selectModel] Setting model: ${modelId}`);
       try {
         await runtime.setActiveModel(modelId);
@@ -168,34 +150,28 @@ export const useWelcomeOnboarding = (
       setState((prev) => ({
         ...prev,
         selectedModel: modelId,
-        step: 'completion', // After model selection, go to completion (auth already done)
+        step: 'completion',
       }));
     },
-    [runtime],
+    [runtime, setState],
   );
+}
 
-  const selectAuthMethod = useCallback((method: 'oauth' | 'api_key') => {
-    setState((prev) => ({
-      ...prev,
-      selectedAuthMethod: method,
-      step: 'authenticating',
-      authInProgress: true,
-    }));
-  }, []);
-
-  const onAuthComplete = useCallback(async () => {
-    // Provider switch already happened in triggerAuth
+function useOnAuthCompleteAction(
+  runtime: ReturnType<typeof useRuntimeApi>,
+  selectedProvider: string | undefined,
+  setState: React.Dispatch<React.SetStateAction<WelcomeState>>,
+  setAvailableModels: React.Dispatch<React.SetStateAction<ModelInfo[]>>,
+) {
+  return useCallback(async () => {
     debug.log(
-      `[onAuthComplete] Auth complete for provider: ${state.selectedProvider}`,
+      `[onAuthComplete] Auth complete for provider: ${selectedProvider}`,
     );
 
-    // Refresh models now that auth is established
     try {
-      if (state.selectedProvider) {
+      if (selectedProvider) {
         setState((prev) => ({ ...prev, modelsLoadStatus: 'loading' }));
-        const models = await runtime.listAvailableModels(
-          state.selectedProvider,
-        );
+        const models = await runtime.listAvailableModels(selectedProvider);
         const modelInfos: ModelInfo[] = models.map((m) => ({
           id: m.id,
           name: m.name,
@@ -203,7 +179,7 @@ export const useWelcomeOnboarding = (
         setAvailableModels(modelInfos);
         setState((prev) => ({ ...prev, modelsLoadStatus: 'success' }));
         debug.log(
-          `[onAuthComplete] Loaded ${modelInfos.length} models for ${state.selectedProvider}`,
+          `[onAuthComplete] Loaded ${modelInfos.length} models for ${selectedProvider}`,
         );
       }
     } catch (error) {
@@ -212,33 +188,22 @@ export const useWelcomeOnboarding = (
       setState((prev) => ({ ...prev, modelsLoadStatus: 'error' }));
     }
 
-    // Go to model selection step (since we reordered: provider → auth → model)
     setState((prev) => ({
       ...prev,
       step: 'model',
       authInProgress: false,
       error: undefined,
     }));
-  }, [runtime, state.selectedProvider]);
+  }, [runtime, selectedProvider, setState, setAvailableModels]);
+}
 
-  const onAuthError = useCallback((error: string) => {
-    setState((prev) => ({
-      ...prev,
-      authInProgress: false,
-      error,
-      step: 'auth_method',
-    }));
-  }, []);
-
-  const skipSetup = useCallback(() => {
-    setState((prev) => ({ ...prev, step: 'skipped' }));
-  }, []);
-
-  const goBack = useCallback(() => {
+function useGoBackAction(
+  setState: React.Dispatch<React.SetStateAction<WelcomeState>>,
+) {
+  return useCallback(() => {
     setState((prev) => {
       switch (prev.step) {
         case 'auth_method':
-          // Going back from auth method goes to provider selection
           return { ...prev, step: 'provider', selectedProvider: undefined };
         case 'authenticating':
           return {
@@ -248,7 +213,6 @@ export const useWelcomeOnboarding = (
             authInProgress: false,
           };
         case 'model':
-          // Going back from model selection goes to auth method
           return { ...prev, step: 'auth_method', selectedModel: undefined };
         case 'provider':
           return { ...prev, step: 'welcome' };
@@ -256,9 +220,82 @@ export const useWelcomeOnboarding = (
           return prev;
       }
     });
-  }, []);
+  }, [setState]);
+}
 
-  const saveProfile = useCallback(
+function useWelcomeStepActions(
+  runtime: ReturnType<typeof useRuntimeApi>,
+  setState: React.Dispatch<React.SetStateAction<WelcomeState>>,
+  selectedProvider: string | undefined,
+  setAvailableModels: React.Dispatch<React.SetStateAction<ModelInfo[]>>,
+) {
+  const startSetup = useCallback(() => {
+    setState((prev) => ({ ...prev, step: 'provider' }));
+  }, [setState]);
+
+  const selectProvider = useCallback(
+    (providerId: string) => {
+      setState((prev) => ({
+        ...prev,
+        selectedProvider: providerId,
+        step: 'auth_method',
+      }));
+    },
+    [setState],
+  );
+
+  const selectModel = useSelectModelAction(runtime, setState);
+  const onAuthComplete = useOnAuthCompleteAction(
+    runtime,
+    selectedProvider,
+    setState,
+    setAvailableModels,
+  );
+
+  const selectAuthMethod = useCallback(
+    (method: 'oauth' | 'api_key') => {
+      setState((prev) => ({
+        ...prev,
+        selectedAuthMethod: method,
+        step: 'authenticating',
+        authInProgress: true,
+      }));
+    },
+    [setState],
+  );
+
+  const onAuthError = useCallback(
+    (error: string) => {
+      setState((prev) => ({
+        ...prev,
+        authInProgress: false,
+        error,
+        step: 'auth_method',
+      }));
+    },
+    [setState],
+  );
+
+  const skipSetup = useCallback(() => {
+    setState((prev) => ({ ...prev, step: 'skipped' }));
+  }, [setState]);
+
+  const goBack = useGoBackAction(setState);
+
+  return {
+    startSetup,
+    selectProvider,
+    selectModel,
+    selectAuthMethod,
+    onAuthComplete,
+    onAuthError,
+    skipSetup,
+    goBack,
+  };
+}
+
+function useProfileSave(runtime: ReturnType<typeof useRuntimeApi>) {
+  return useCallback(
     async (name: string) => {
       try {
         const providerManager = runtime.getCliProviderManager();
@@ -303,29 +340,10 @@ export const useWelcomeOnboarding = (
     },
     [runtime],
   );
+}
 
-  const dismiss = useCallback(() => {
-    const skipped = state.step === 'skipped';
-    markWelcomeCompleted(skipped);
-    setWelcomeCompleted(true);
-    debug.log(`Welcome flow completed (skipped: ${skipped})`);
-  }, [state.step]);
-
-  const resetAndReopen = useCallback(() => {
-    debug.log('[resetAndReopen] Re-triggering welcome onboarding');
-    // Reset local state
-    setWelcomeCompleted(false);
-    setState({
-      step: 'welcome',
-      authInProgress: false,
-      modelsLoadStatus: 'idle',
-    });
-    setAvailableModels([]);
-  }, []);
-
-  // Trigger authentication for the selected provider
-  // Flow is now: provider → auth → model, so we authenticate FIRST before setting provider/model
-  const triggerAuth = useCallback(
+function useTriggerAuth(runtime: ReturnType<typeof useRuntimeApi>) {
+  return useCallback(
     async (
       provider: string,
       method: 'oauth' | 'api_key',
@@ -379,6 +397,69 @@ export const useWelcomeOnboarding = (
     },
     [runtime],
   );
+}
+
+export const useWelcomeOnboarding = (
+  options: UseWelcomeOnboardingOptions,
+): UseWelcomeOnboardingReturn => {
+  const { settings: _settings, isFolderTrustComplete } = options;
+  const runtime = useRuntimeApi();
+  const [welcomeCompleted, setWelcomeCompleted] = useState(() =>
+    isWelcomeCompleted(),
+  );
+
+  // Only show welcome after folder trust is complete
+  const showWelcome = !welcomeCompleted && isFolderTrustComplete;
+
+  const [state, setState] = useState<WelcomeState>({
+    step: 'welcome',
+    authInProgress: false,
+    modelsLoadStatus: 'idle',
+  });
+
+  const [availableProviders] = useProviderLoader(runtime);
+  const [availableModels, setAvailableModels] = useModelLoader(
+    runtime,
+    state.selectedProvider,
+    setState,
+  );
+
+  const {
+    startSetup,
+    selectProvider,
+    selectModel,
+    selectAuthMethod,
+    onAuthComplete,
+    onAuthError,
+    skipSetup,
+    goBack,
+  } = useWelcomeStepActions(
+    runtime,
+    setState,
+    state.selectedProvider,
+    setAvailableModels,
+  );
+
+  const saveProfile = useProfileSave(runtime);
+  const triggerAuth = useTriggerAuth(runtime);
+
+  const dismiss = useCallback(() => {
+    const skipped = state.step === 'skipped';
+    markWelcomeCompleted(skipped);
+    setWelcomeCompleted(true);
+    debug.log(`Welcome flow completed (skipped: ${skipped})`);
+  }, [state.step]);
+
+  const resetAndReopen = useCallback(() => {
+    debug.log('[resetAndReopen] Re-triggering welcome onboarding');
+    setWelcomeCompleted(false);
+    setState({
+      step: 'welcome',
+      authInProgress: false,
+      modelsLoadStatus: 'idle',
+    });
+    setAvailableModels([]);
+  }, [setState, setAvailableModels]);
 
   return {
     showWelcome,

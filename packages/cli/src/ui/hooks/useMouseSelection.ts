@@ -102,19 +102,74 @@ function findInnermostScrollableAtPoint(
   return candidates[0] ?? null;
 }
 
-export function useMouseSelection({
-  enabled,
-  rootRef,
-  onCopiedText,
-}: {
-  enabled: boolean;
-  rootRef: RefObject<DOMElement | null>;
-  onCopiedText?: (text: string) => void;
-}) {
-  const { stdout } = useStdout();
-  const { selection } = useApp();
-  const scrollProvider = useScrollProvider();
+function findScrollableCandidateFromProvider(
+  scrollProvider: ReturnType<typeof useScrollProvider>,
+  point: { x: number; y: number },
+): { node: DOMElement; box: BoundingBox } | null {
+  const scrollableCandidates: Array<{
+    node: DOMElement;
+    box: BoundingBox;
+    area: number;
+  }> = [];
 
+  for (const entry of scrollProvider.getScrollables()) {
+    if (!entry.ref.current || !entry.hasFocus()) continue;
+    const box = getBoundingBox(entry.ref.current);
+    if (isInsideBox(point, box)) {
+      scrollableCandidates.push({
+        node: entry.ref.current,
+        box,
+        area: box.width * box.height,
+      });
+    }
+  }
+
+  if (scrollableCandidates.length === 0) return null;
+  scrollableCandidates.sort((a, b) => a.area - b.area);
+  return scrollableCandidates[0] ?? null;
+}
+
+function resolveTargetFromScrollable(
+  scrollable: { node: DOMElement; box: BoundingBox },
+  x: number,
+  y: number,
+): { node: DOMElement; point: { x: number; y: number } } | null {
+  // Ignore clicks on the scrollbar column so scrollbar dragging still works.
+  if (x === scrollable.box.x + scrollable.box.width - 1) {
+    return null;
+  }
+
+  const innermostScrollable = findInnermostScrollableAtPoint(scrollable.node, {
+    x,
+    y,
+  });
+
+  if (innermostScrollable) {
+    const { scrollTop, scrollLeft } = getScrollOffsets(
+      innermostScrollable.node,
+    );
+    return {
+      node: innermostScrollable.node,
+      point: {
+        x: x - innermostScrollable.box.x + scrollLeft,
+        y: y - innermostScrollable.box.y + scrollTop,
+      },
+    };
+  }
+
+  return {
+    node: scrollable.node,
+    point: {
+      x: x - scrollable.box.x,
+      y: y - scrollable.box.y,
+    },
+  };
+}
+
+function useSelectionState(
+  selection: ReturnType<typeof useApp>['selection'],
+  enabled: boolean,
+) {
   const selectionRangeRef = useRef<Range | null>(null);
   const anchorPointRef = useRef<SelectionPoint | null>(null);
   const isDraggingRef = useRef(false);
@@ -127,19 +182,24 @@ export function useMouseSelection({
   }, [selection]);
 
   useEffect(() => {
-    if (!enabled) {
+    if (enabled === false) {
       clearSelection();
     }
   }, [enabled, clearSelection]);
 
-  const notifySelectionChanged = useCallback(() => {
-    // `Selection.notifyChange()` is intentionally private, but Ink relies on it to trigger rerenders.
-    (
-      selection as unknown as { notifyChange?: () => void } | undefined
-    )?.notifyChange?.();
-  }, [selection]);
+  return {
+    selectionRangeRef,
+    anchorPointRef,
+    isDraggingRef,
+    clearSelection,
+  };
+}
 
-  const findHitTestTarget = useCallback(
+function useHitTestTarget(
+  rootRef: RefObject<DOMElement | null>,
+  scrollProvider: ReturnType<typeof useScrollProvider>,
+) {
+  return useCallback(
     (
       event: MouseEvent,
     ): { node: DOMElement; point: { x: number; y: number } } | null => {
@@ -150,70 +210,28 @@ export function useMouseSelection({
       const y = event.row - 1;
       const point = { x, y };
 
-      const scrollables = scrollProvider.getScrollables();
-      const scrollableCandidates: Array<{
-        node: DOMElement;
-        box: BoundingBox;
-        area: number;
-      }> = [];
-
-      for (const entry of scrollables) {
-        if (!entry.ref.current || !entry.hasFocus()) continue;
-        const box = getBoundingBox(entry.ref.current);
-        if (isInsideBox(point, box)) {
-          scrollableCandidates.push({
-            node: entry.ref.current,
-            box,
-            area: box.width * box.height,
-          });
-        }
-      }
-
-      if (scrollableCandidates.length === 0) {
+      const scrollable = findScrollableCandidateFromProvider(
+        scrollProvider,
+        point,
+      );
+      if (!scrollable) {
         return { node: root, point };
       }
 
-      scrollableCandidates.sort((a, b) => a.area - b.area);
-      const { node: scrollableRoot, box: scrollableBox } =
-        scrollableCandidates[0];
-
-      // Ignore clicks on the scrollbar column so scrollbar dragging still works.
-      if (x === scrollableBox.x + scrollableBox.width - 1) {
-        return null;
-      }
-
-      const innermostScrollable = findInnermostScrollableAtPoint(
-        scrollableRoot,
-        point,
-      );
-
-      if (innermostScrollable) {
-        const { scrollTop, scrollLeft } = getScrollOffsets(
-          innermostScrollable.node,
-        );
-        return {
-          node: innermostScrollable.node,
-          point: {
-            x: x - innermostScrollable.box.x + scrollLeft,
-            y: y - innermostScrollable.box.y + scrollTop,
-          },
-        };
-      }
-
-      return {
-        node: scrollableRoot,
-        point: {
-          x: x - scrollableBox.x,
-          y: y - scrollableBox.y,
-        },
-      };
+      return resolveTargetFromScrollable(scrollable, x, y);
     },
     [rootRef, scrollProvider],
   );
+}
 
-  const resolveSelectionPoint = useCallback(
+function useSelectionPointResolver(
+  enabled: boolean,
+  selection: ReturnType<typeof useApp>['selection'],
+  findHitTestTarget: ReturnType<typeof useHitTestTarget>,
+) {
+  return useCallback(
     (event: MouseEvent): SelectionPoint | null => {
-      if (!enabled) return null;
+      if (enabled === false) return null;
       if (!selection) return null;
 
       const target = findHitTestTarget(event);
@@ -226,6 +244,17 @@ export function useMouseSelection({
     },
     [enabled, selection, findHitTestTarget],
   );
+}
+
+function useRangeUpdater(
+  selection: ReturnType<typeof useApp>['selection'],
+  selectionRangeRef: React.RefObject<Range | null>,
+) {
+  const notifySelectionChanged = useCallback(() => {
+    (
+      selection as unknown as { notifyChange?: () => void } | undefined
+    )?.notifyChange?.();
+  }, [selection]);
 
   const updateSelectionRange = useCallback(
     (anchor: SelectionPoint, focus: SelectionPoint) => {
@@ -252,10 +281,18 @@ export function useMouseSelection({
         notifySelectionChanged();
       }
     },
-    [selection, notifySelectionChanged],
+    [selection, selectionRangeRef, notifySelectionChanged],
   );
 
-  const copySelectionToClipboard = useCallback(async () => {
+  return { updateSelectionRange };
+}
+
+function useClipboardCopy(
+  onCopiedText: ((text: string) => void) | undefined,
+  selection: ReturnType<typeof useApp>['selection'],
+  stdout: ReturnType<typeof useStdout>['stdout'],
+) {
+  return useCallback(async () => {
     if (!selection || selection.rangeCount === 0) return;
     // Issue #885: Snapshot the text immediately before any async operations
     // to prevent race conditions where selection changes during copy
@@ -269,10 +306,20 @@ export function useMouseSelection({
     // This allows callers to handle failures appropriately if needed
     await copyTextToClipboard(text, stdout);
   }, [onCopiedText, selection, stdout]);
+}
 
-  const mouseHandler = useMemo(
+function useMouseEventHandler(
+  enabled: boolean,
+  selection: ReturnType<typeof useApp>['selection'],
+  resolveSelectionPoint: (event: MouseEvent) => SelectionPoint | null,
+  updateSelectionRange: (anchor: SelectionPoint, focus: SelectionPoint) => void,
+  copySelectionToClipboard: () => Promise<void>,
+  anchorPointRef: React.RefObject<SelectionPoint | null>,
+  isDraggingRef: React.RefObject<boolean>,
+) {
+  return useMemo(
     () => (event: MouseEvent) => {
-      if (!enabled) return;
+      if (enabled === false) return;
       if (!selection) return;
 
       if (event.name === 'left-press') {
@@ -285,7 +332,7 @@ export function useMouseSelection({
       }
 
       if (event.name === 'move') {
-        if (!isDraggingRef.current) return;
+        if (isDraggingRef.current !== true) return;
         const anchor = anchorPointRef.current;
         if (!anchor) return;
         const point = resolveSelectionPoint(event);
@@ -295,7 +342,7 @@ export function useMouseSelection({
       }
 
       if (event.name === 'left-release') {
-        if (!isDraggingRef.current) return;
+        if (isDraggingRef.current !== true) return;
         const anchor = anchorPointRef.current;
         if (anchor) {
           const releasePoint = resolveSelectionPoint(event);
@@ -313,7 +360,54 @@ export function useMouseSelection({
       resolveSelectionPoint,
       updateSelectionRange,
       copySelectionToClipboard,
+      anchorPointRef,
+      isDraggingRef,
     ],
+  );
+}
+
+export function useMouseSelection({
+  enabled,
+  rootRef,
+  onCopiedText,
+}: {
+  enabled: boolean;
+  rootRef: RefObject<DOMElement | null>;
+  onCopiedText?: (text: string) => void;
+}) {
+  const { stdout } = useStdout();
+  const { selection } = useApp();
+  const scrollProvider = useScrollProvider();
+
+  const { selectionRangeRef, anchorPointRef, isDraggingRef, clearSelection } =
+    useSelectionState(selection, enabled);
+
+  const findHitTestTarget = useHitTestTarget(rootRef, scrollProvider);
+  const resolveSelectionPoint = useSelectionPointResolver(
+    enabled,
+    selection,
+    findHitTestTarget,
+  );
+
+  const { updateSelectionRange } = useRangeUpdater(
+    selection,
+    selectionRangeRef,
+  );
+
+  const copySelectionToClipboard = useClipboardCopy(
+    onCopiedText,
+    selection,
+    stdout,
+  );
+
+  const mouseHandler = useMouseEventHandler(
+    enabled,
+    selection,
+    resolveSelectionPoint,
+    updateSelectionRange,
+    copySelectionToClipboard,
+    anchorPointRef,
+    isDraggingRef,
   );
 
   useMouse(mouseHandler, { isActive: enabled });
