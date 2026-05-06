@@ -238,6 +238,156 @@ function formatGeminiQuotaLines(quotaData: Record<string, unknown>): string[] {
   return lines;
 }
 
+type UsageMap = Map<string, Record<string, unknown>>;
+
+function formatAnthropicLines(anthropicUsageInfo: UsageMap): string[] {
+  if (anthropicUsageInfo.size === 0) return [];
+  const anthropicLines: string[] = [];
+  const sortedBuckets = Array.from(anthropicUsageInfo.keys()).sort(
+    defaultFirstSort,
+  );
+  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  for (const bucket of sortedBuckets) {
+    const usageInfo = anthropicUsageInfo.get(bucket)!;
+    const lines = formatAllUsagePeriods(usageInfo);
+    if (lines.length > 0) {
+      if (anthropicUsageInfo.size > 1) {
+        anthropicLines.push(`### Bucket: ${bucket}\n`);
+      }
+      anthropicLines.push(...lines);
+      anthropicLines.push('');
+    }
+  }
+  if (anthropicLines[anthropicLines.length - 1] === '') {
+    anthropicLines.pop();
+  }
+  return anthropicLines;
+}
+
+function formatCodexLines(codexUsageInfo: UsageMap): string[] {
+  if (codexUsageInfo.size === 0) return [];
+  const codexLines: string[] = [];
+  const sortedBuckets = Array.from(codexUsageInfo.keys()).sort(
+    defaultFirstSort,
+  );
+  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  for (const bucket of sortedBuckets) {
+    const usageInfo = codexUsageInfo.get(bucket)!;
+    const parsed = CodexUsageInfoSchema.safeParse(usageInfo);
+    if (!parsed.success) {
+      logger.warn(
+        `Invalid Codex usage info for bucket ${bucket}:`,
+        parsed.error,
+      );
+      continue;
+    }
+    const lines = formatCodexUsage(parsed.data);
+    if (lines.length > 0) {
+      if (codexUsageInfo.size > 1) {
+        codexLines.push(`### Bucket: ${bucket}\n`);
+      }
+      codexLines.push(...lines);
+      codexLines.push('');
+    }
+  }
+  if (codexLines[codexLines.length - 1] === '') {
+    codexLines.pop();
+  }
+  return codexLines;
+}
+
+function formatGeminiLines(geminiUsageInfo: UsageMap): string[] {
+  if (geminiUsageInfo.size === 0) return [];
+  const geminiLines: string[] = [];
+  const sortedBuckets = Array.from(geminiUsageInfo.keys()).sort(
+    defaultFirstSort,
+  );
+  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  for (const bucket of sortedBuckets) {
+    const quotaData = geminiUsageInfo.get(bucket)!;
+    const lines = formatGeminiQuotaLines(quotaData);
+    if (lines.length > 0) {
+      if (geminiUsageInfo.size > 1) {
+        geminiLines.push(`### Bucket: ${bucket}\n`);
+      }
+      geminiLines.push(...lines);
+      geminiLines.push('');
+    }
+  }
+  if (geminiLines[geminiLines.length - 1] === '') {
+    geminiLines.pop();
+  }
+  return geminiLines;
+}
+
+async function fetchOAuthQuotaLines(
+  oauthManager: NonNullable<
+    ReturnType<ReturnType<typeof getRuntimeApi>['getCliOAuthManager']>
+  >,
+): Promise<string[]> {
+  const output: string[] = [];
+
+  const [anthropicResult, codexResult, geminiResult] = await Promise.allSettled(
+    [
+      oauthManager.getAllAnthropicUsageInfo(),
+      oauthManager.getAllCodexUsageInfo(),
+      oauthManager.getAllGeminiUsageInfo(),
+    ],
+  );
+
+  if (anthropicResult.status === 'rejected') {
+    logger.warn(
+      'Failed to fetch Anthropic usage info:',
+      anthropicResult.reason,
+    );
+  }
+  if (codexResult.status === 'rejected') {
+    logger.warn('Failed to fetch Codex usage info:', codexResult.reason);
+  }
+
+  const anthropicUsageInfo: UsageMap =
+    anthropicResult.status === 'fulfilled'
+      ? anthropicResult.value
+      : new Map<string, Record<string, unknown>>();
+  const codexUsageInfo: UsageMap =
+    codexResult.status === 'fulfilled'
+      ? codexResult.value
+      : new Map<string, Record<string, unknown>>();
+  const geminiUsageInfo: UsageMap =
+    geminiResult.status === 'fulfilled'
+      ? geminiResult.value
+      : new Map<string, Record<string, unknown>>();
+
+  const anthropicLines = formatAnthropicLines(anthropicUsageInfo);
+  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  if (anthropicLines.length > 0) {
+    output.push('## Anthropic Quota Information\n');
+    output.push(...anthropicLines);
+  }
+
+  const codexLines = formatCodexLines(codexUsageInfo);
+  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  if (codexLines.length > 0) {
+    if (output.length > 0) {
+      output.push('');
+    }
+    output.push('## Codex Quota Information\n');
+    output.push(...codexLines);
+  }
+
+  const geminiLines = formatGeminiLines(geminiUsageInfo);
+  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  if (geminiLines.length > 0) {
+    if (output.length > 0) {
+      output.push('');
+    }
+    output.push('## Gemini Quota Information\n');
+    output.push(...geminiLines);
+  }
+
+  return output;
+}
+
 /**
  * Fetch all available quota information for the default stats view.
  * Returns formatted lines ready for display, or empty array if no quota available.
@@ -251,153 +401,8 @@ async function fetchAllQuotaInfo(
   try {
     // 1. Fetch OAuth provider quotas (Anthropic + Codex + Gemini)
     if (oauthManager) {
-      const [anthropicResult, codexResult, geminiResult] =
-        await Promise.allSettled([
-          oauthManager.getAllAnthropicUsageInfo(),
-          oauthManager.getAllCodexUsageInfo(),
-          oauthManager.getAllGeminiUsageInfo(),
-        ]);
-
-      if (anthropicResult.status === 'rejected') {
-        logger.warn(
-          'Failed to fetch Anthropic usage info:',
-          anthropicResult.reason,
-        );
-      }
-      if (codexResult.status === 'rejected') {
-        logger.warn('Failed to fetch Codex usage info:', codexResult.reason);
-      }
-
-      const anthropicUsageInfo =
-        anthropicResult.status === 'fulfilled'
-          ? anthropicResult.value
-          : new Map<string, Record<string, unknown>>();
-      const codexUsageInfo =
-        codexResult.status === 'fulfilled'
-          ? codexResult.value
-          : new Map<string, Record<string, unknown>>();
-      const geminiUsageInfo =
-        geminiResult.status === 'fulfilled'
-          ? geminiResult.value
-          : new Map<string, Record<string, unknown>>();
-
-      // Collect Anthropic lines
-      if (anthropicUsageInfo.size > 0) {
-        const anthropicLines: string[] = [];
-
-        const sortedBuckets = Array.from(anthropicUsageInfo.keys()).sort(
-          defaultFirstSort,
-        );
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        for (const bucket of sortedBuckets) {
-          const usageInfo = anthropicUsageInfo.get(bucket)!;
-          const lines = formatAllUsagePeriods(usageInfo);
-
-          if (lines.length > 0) {
-            if (anthropicUsageInfo.size > 1) {
-              anthropicLines.push(`### Bucket: ${bucket}\n`);
-            }
-            anthropicLines.push(...lines);
-            anthropicLines.push('');
-          }
-        }
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (anthropicLines[anthropicLines.length - 1] === '') {
-          anthropicLines.pop();
-        }
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (anthropicLines.length > 0) {
-          output.push('## Anthropic Quota Information\n');
-          output.push(...anthropicLines);
-        }
-      }
-
-      // Collect Codex lines
-      if (codexUsageInfo.size > 0) {
-        const codexLines: string[] = [];
-
-        const sortedBuckets = Array.from(codexUsageInfo.keys()).sort(
-          defaultFirstSort,
-        );
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        for (const bucket of sortedBuckets) {
-          const usageInfo = codexUsageInfo.get(bucket)!;
-
-          const parsed = CodexUsageInfoSchema.safeParse(usageInfo);
-          if (!parsed.success) {
-            logger.warn(
-              `Invalid Codex usage info for bucket ${bucket}:`,
-              parsed.error,
-            );
-            continue;
-          }
-
-          const lines = formatCodexUsage(parsed.data);
-
-          if (lines.length > 0) {
-            if (codexUsageInfo.size > 1) {
-              codexLines.push(`### Bucket: ${bucket}\n`);
-            }
-            codexLines.push(...lines);
-            codexLines.push('');
-          }
-        }
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (codexLines[codexLines.length - 1] === '') {
-          codexLines.pop();
-        }
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (codexLines.length > 0) {
-          if (output.length > 0) {
-            output.push('');
-          }
-          output.push('## Codex Quota Information\n');
-          output.push(...codexLines);
-        }
-      }
-
-      // Collect Gemini quota lines (from CodeAssist retrieveUserQuota API)
-      if (geminiUsageInfo.size > 0) {
-        const geminiLines: string[] = [];
-
-        const sortedBuckets = Array.from(geminiUsageInfo.keys()).sort(
-          defaultFirstSort,
-        );
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        for (const bucket of sortedBuckets) {
-          const quotaData = geminiUsageInfo.get(bucket)!;
-          const lines = formatGeminiQuotaLines(quotaData);
-
-          if (lines.length > 0) {
-            if (geminiUsageInfo.size > 1) {
-              geminiLines.push(`### Bucket: ${bucket}\n`);
-            }
-            geminiLines.push(...lines);
-            geminiLines.push('');
-          }
-        }
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (geminiLines[geminiLines.length - 1] === '') {
-          geminiLines.pop();
-        }
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (geminiLines.length > 0) {
-          if (output.length > 0) {
-            output.push('');
-          }
-          output.push('## Gemini Quota Information\n');
-          output.push(...geminiLines);
-        }
-      }
+      const oauthLines = await fetchOAuthQuotaLines(oauthManager);
+      output.push(...oauthLines);
     }
 
     // 2. Fetch API-key provider quota (Z.ai, Synthetic, Chutes, Kimi)
