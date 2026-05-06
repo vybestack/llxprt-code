@@ -123,6 +123,8 @@ export const DefaultAppLayout = ({
   const mainControlsSharedProps = buildMainControlsProps(
     uiState,
     layoutSettings,
+    config,
+    settings,
     startupWarnings,
     updateInfo,
     contextFileNames,
@@ -202,6 +204,8 @@ function renderLayout(
 function buildMainControlsProps(
   uiState: ReturnType<typeof useUIState>,
   layoutSettings: ReturnType<typeof useLayoutSettings>,
+  config: Config,
+  settings: LoadedSettings,
   startupWarnings: string[],
   updateInfo: UpdateObject | null,
   contextFileNames: string[],
@@ -210,8 +214,8 @@ function buildMainControlsProps(
   onSuggestionsVisibilityChange: (visible: boolean) => void,
 ): MainControlsProps {
   return {
-    config: uiState.config,
-    settings: uiState.settings,
+    config,
+    settings,
     startupWarnings,
     updateInfo,
     history: uiState.history,
