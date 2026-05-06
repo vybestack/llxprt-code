@@ -11,59 +11,25 @@ import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import type { SubagentInfo } from './types.js';
 
-interface SubagentDeleteDialogProps {
-  subagent: SubagentInfo;
-  onConfirm: () => Promise<void>;
-  onCancel: () => void;
-  isFocused?: boolean;
+function formatDate(isoString: string): string {
+  try {
+    return new Date(isoString).toLocaleString();
+  } catch {
+    return isoString;
+  }
 }
 
-export const SubagentDeleteDialog: React.FC<SubagentDeleteDialogProps> = ({
+interface SubagentDeleteContentProps {
+  subagent: SubagentInfo;
+  error: string | null;
+  isDeleting: boolean;
+}
+
+function SubagentDeleteContent({
   subagent,
-  onConfirm,
-  onCancel,
-  isFocused = true,
-}) => {
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleConfirm = useCallback(async () => {
-    setIsDeleting(true);
-    setError(null);
-    try {
-      await onConfirm();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete');
-      setIsDeleting(false);
-    }
-  }, [onConfirm]);
-
-  useKeypress(
-    (key) => {
-      if (isDeleting) return;
-
-      if (key.name === 'escape') {
-        onCancel();
-        return;
-      }
-
-      if (key.name === 'return') {
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        handleConfirm();
-        return;
-      }
-    },
-    { isActive: isFocused && !isDeleting },
-  );
-
-  const formatDate = (isoString: string) => {
-    try {
-      return new Date(isoString).toLocaleString();
-    } catch {
-      return isoString;
-    }
-  };
-
+  error,
+  isDeleting,
+}: SubagentDeleteContentProps) {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
@@ -124,5 +90,58 @@ export const SubagentDeleteDialog: React.FC<SubagentDeleteDialogProps> = ({
         </Box>
       )}
     </Box>
+  );
+}
+
+interface SubagentDeleteDialogProps {
+  subagent: SubagentInfo;
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+  isFocused?: boolean;
+}
+
+export const SubagentDeleteDialog: React.FC<SubagentDeleteDialogProps> = ({
+  subagent,
+  onConfirm,
+  onCancel,
+  isFocused = true,
+}) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleConfirm = useCallback(async () => {
+    setIsDeleting(true);
+    setError(null);
+    try {
+      await onConfirm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete');
+      setIsDeleting(false);
+    }
+  }, [onConfirm]);
+
+  useKeypress(
+    (key) => {
+      if (isDeleting) return;
+
+      if (key.name === 'escape') {
+        onCancel();
+        return;
+      }
+
+      if (key.name === 'return') {
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        handleConfirm();
+      }
+    },
+    { isActive: isFocused && !isDeleting },
+  );
+
+  return (
+    <SubagentDeleteContent
+      subagent={subagent}
+      error={error}
+      isDeleting={isDeleting}
+    />
   );
 };
