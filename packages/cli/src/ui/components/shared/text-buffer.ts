@@ -296,202 +296,84 @@ async function runExternalEditor(params: {
   }
 }
 
-export function useTextBuffer({
-  initialText = '',
-  initialCursorOffset = 0,
-  viewport,
-  stdin,
-  setRawMode,
-  onChange,
-  isValidPath,
-  shellModeActive = false,
-  inputFilter,
-  singleLine = false,
-  getPreferredEditor,
-}: UseTextBufferProps): TextBuffer {
-  const initialState = useMemo((): TextBufferState => {
-    const lines = initialText.split('\n');
-    const [initialCursorRow, initialCursorCol] = calculateInitialCursorPosition(
-      lines.length === 0 ? [''] : lines,
-      initialCursorOffset,
-    );
-    const transformationsByLine = calculateTransformations(
-      lines.length === 0 ? [''] : lines,
-    );
-    const visualLayout = calculateLayout(
-      lines.length === 0 ? [''] : lines,
-      viewport.width,
-      [initialCursorRow, initialCursorCol],
-    );
-    return {
-      lines: lines.length === 0 ? [''] : lines,
-      cursorRow: initialCursorRow,
-      cursorCol: initialCursorCol,
-      transformationsByLine,
-      preferredCol: null,
-      undoStack: [],
-      redoStack: [],
-      clipboard: null,
-      selectionAnchor: null,
-      viewportWidth: viewport.width,
-      viewportHeight: viewport.height,
-      visualLayout,
-    };
-  }, [initialText, initialCursorOffset, viewport.width, viewport.height]);
-
-  const [state, dispatch] = useReducer(
-    (s: TextBufferState, a: TextBufferAction) =>
-      textBufferReducer(s, a, { inputFilter, singleLine }),
-    initialState,
+/** Create simple dispatch-only action callbacks. */
+function useSimpleDispatchActions(
+  dispatch: (action: TextBufferAction) => void,
+) {
+  return useMemo(
+    () => ({
+      backspace: () => dispatch({ type: 'backspace' }),
+      del: () => dispatch({ type: 'delete' }),
+      undo: () => dispatch({ type: 'undo' }),
+      redo: () => dispatch({ type: 'redo' }),
+      deleteWordLeft: () => dispatch({ type: 'delete_word_left' }),
+      deleteWordRight: () => dispatch({ type: 'delete_word_right' }),
+      killLineRight: () => dispatch({ type: 'kill_line_right' }),
+      killLineLeft: () => dispatch({ type: 'kill_line_left' }),
+      moveToOffset: (offset: number) =>
+        dispatch({ type: 'move_to_offset', payload: { offset } }),
+    }),
+    [dispatch],
   );
-  const {
-    lines,
-    cursorRow,
-    cursorCol,
-    preferredCol,
-    selectionAnchor,
-    visualLayout,
-  } = state;
+}
 
-  const text = useMemo(() => lines.join('\n'), [lines]);
-
-  const visualCursor = useMemo(
-    () => calculateVisualCursorFromLayout(visualLayout, [cursorRow, cursorCol]),
-    [visualLayout, cursorRow, cursorCol],
-  );
-
-  const { visualLines } = visualLayout;
-
-  const [visualScrollRow, setVisualScrollRow] = useState<number>(0);
-
-  useEffect(() => {
-    if (onChange) {
-      onChange(text);
-    }
-  }, [text, onChange]);
-
-  useEffect(() => {
-    dispatch({
-      type: 'set_viewport',
-      payload: { width: viewport.width, height: viewport.height },
-    });
-  }, [viewport.width, viewport.height]);
-
-  // Update visual scroll (vertical)
-  useEffect(() => {
-    const { height } = viewport;
-    const totalVisualLines = visualLines.length;
-    const maxScrollStart = Math.max(0, totalVisualLines - height);
-    let newVisualScrollRow = visualScrollRow;
-
-    if (visualCursor[0] < visualScrollRow) {
-      newVisualScrollRow = visualCursor[0];
-    } else if (visualCursor[0] >= visualScrollRow + height) {
-      newVisualScrollRow = visualCursor[0] - height + 1;
-    }
-
-    // When the number of visual lines shrinks (e.g., after widening the viewport),
-    // ensure scroll never starts beyond the last valid start so we can render a full window.
-    newVisualScrollRow = clamp(newVisualScrollRow, 0, maxScrollStart);
-
-    if (newVisualScrollRow !== visualScrollRow) {
-      setVisualScrollRow(newVisualScrollRow);
-    }
-  }, [visualCursor, visualScrollRow, viewport, visualLines.length]);
-
-  const insert = useCallback(
-    (rawText: string, { paste = false }: { paste?: boolean } = {}): void => {
-      processInsertText(rawText, dispatch, {
-        singleLine,
-        shellModeActive,
-        isValidPath,
-        paste,
-      });
-    },
-    [dispatch, isValidPath, shellModeActive, singleLine],
-  );
-
+/** Create composite action callbacks that depend on other hooks. */
+function useCompositeActions(
+  dispatch: (action: TextBufferAction) => void,
+  singleLine: boolean,
+  text: string,
+  replaceRange: (
+    startRow: number,
+    startCol: number,
+    endRow: number,
+    endCol: number,
+    replacementText: string,
+  ) => void,
+) {
   const newline = useCallback((): void => {
-    if (singleLine) {
-      return;
-    }
+    if (singleLine) return;
     dispatch({ type: 'insert', payload: '\n' });
-  }, [singleLine]);
+  }, [singleLine, dispatch]);
 
-  const backspace = useCallback((): void => {
-    dispatch({ type: 'backspace' });
-  }, []);
-
-  const del = useCallback((): void => {
-    dispatch({ type: 'delete' });
-  }, []);
-
-  const move = useCallback(
-    (dir: Direction): void => {
-      dispatch({ type: 'move', payload: { dir } });
+  const setText = useCallback(
+    (newText: string): void => {
+      dispatch({ type: 'set_text', payload: newText });
     },
     [dispatch],
   );
 
-  const undo = useCallback((): void => {
-    dispatch({ type: 'undo' });
-  }, []);
-
-  const redo = useCallback((): void => {
-    dispatch({ type: 'redo' });
-  }, []);
-
-  const setText = useCallback((newText: string): void => {
-    dispatch({ type: 'set_text', payload: newText });
-  }, []);
-
-  const deleteWordLeft = useCallback((): void => {
-    dispatch({ type: 'delete_word_left' });
-  }, []);
-
-  const deleteWordRight = useCallback((): void => {
-    dispatch({ type: 'delete_word_right' });
-  }, []);
-
-  const killLineRight = useCallback((): void => {
-    dispatch({ type: 'kill_line_right' });
-  }, []);
-
-  const killLineLeft = useCallback((): void => {
-    dispatch({ type: 'kill_line_left' });
-  }, []);
-
-  // Vim callbacks — dispatch is stable from useReducer, so useMemo computes once.
-  const vimCallbacks = useMemo(() => createVimCallbacks(dispatch), [dispatch]);
-
-  const openInExternalEditor = useCallback(
-    async () =>
-      runExternalEditor({
-        text,
-        stdin,
-        setRawMode,
-        getPreferredEditor,
-        dispatch,
-      }),
-    [text, stdin, setRawMode, getPreferredEditor],
+  const replaceRangeByOffset = useCallback(
+    (startOffset: number, endOffset: number, replacementText: string): void => {
+      const [startRow, startCol] = offsetToLogicalPos(text, startOffset);
+      const [endRow, endCol] = offsetToLogicalPos(text, endOffset);
+      replaceRange(startRow, startCol, endRow, endCol, replacementText);
+    },
+    [text, replaceRange],
   );
 
-  const handleInput = useCallback(
+  return { newline, setText, replaceRangeByOffset };
+}
+
+/** Key-input handler: maps key events to buffer actions. */
+function useInputHandler(
+  singleLine: boolean,
+  insert: (ch: string, opts?: { paste?: boolean }) => void,
+  newline: () => void,
+  move: (dir: Direction) => void,
+  simpleActions: ReturnType<typeof useSimpleDispatchActions>,
+): (key: Key) => void {
+  const { deleteWordLeft, deleteWordRight, backspace, del, undo, redo } =
+    simpleActions;
+  return useCallback(
     (key: Key): void => {
       const { sequence: input } = key;
-      const isPasteKey = key.name === 'paste';
-
-      if (isPasteKey) {
-        // Do not do any other processing on pastes so ensure we handle them
-        // before all other cases.
+      if (key.name === 'paste') {
         insert(input, { paste: true });
         return;
       }
-
       const isReturnKey =
         key.name === 'return' || input === '\r' || input === '\n';
-      const isVsCodeShiftEnter = input === '\\r'; // VSCode terminal represents shift + enter this way
-
+      const isVsCodeShiftEnter = input === '\\r';
       if (!singleLine && (isReturnKey || isVsCodeShiftEnter)) newline();
       else if (keyMatchers[Command.MOVE_LEFT](key)) move('left');
       else if (keyMatchers[Command.MOVE_RIGHT](key)) move('right');
@@ -507,9 +389,7 @@ export function useTextBuffer({
       else if (keyMatchers[Command.DELETE_CHAR_RIGHT](key)) del();
       else if (keyMatchers[Command.UNDO](key)) undo();
       else if (keyMatchers[Command.REDO](key)) redo();
-      else if (key.insertable ?? false) {
-        insert(input, { paste: false });
-      }
+      else if (key.insertable ?? false) insert(input, { paste: false });
     },
     [
       newline,
@@ -524,72 +404,67 @@ export function useTextBuffer({
       singleLine,
     ],
   );
+}
 
-  const renderedVisualLines = useMemo(
-    () => visualLines.slice(visualScrollRow, visualScrollRow + viewport.height),
-    [visualLines, visualScrollRow, viewport.height],
-  );
-
-  const replaceRange = useCallback(
-    (
-      startRow: number,
-      startCol: number,
-      endRow: number,
-      endCol: number,
-      text: string,
-    ): void => {
-      dispatch({
-        type: 'replace_range',
-        payload: { startRow, startCol, endRow, endCol, text },
-      });
-    },
-    [],
-  );
-
-  const replaceRangeByOffset = useCallback(
-    (startOffset: number, endOffset: number, replacementText: string): void => {
-      const [startRow, startCol] = offsetToLogicalPos(text, startOffset);
-      const [endRow, endCol] = offsetToLogicalPos(text, endOffset);
-      replaceRange(startRow, startCol, endRow, endCol, replacementText);
-    },
-    [text, replaceRange],
-  );
-
-  const moveToOffset = useCallback((offset: number): void => {
-    dispatch({ type: 'move_to_offset', payload: { offset } });
-  }, []);
-
-  const moveToVisualPosition = useCallback(
-    (visRow: number, visCol: number): void => {
-      const pos = resolveVisualToLogical(visualLayout, visRow, visCol);
-      if (pos) {
-        dispatch({ type: 'set_cursor', payload: pos });
-      }
-    },
-    [visualLayout],
-  );
-
-  const getOffset = useCallback(
-    (): number => logicalPosToOffset(lines, cursorRow, cursorCol),
-    [lines, cursorRow, cursorCol],
-  );
-
-  const returnValue: TextBuffer = useMemo(
+/** Build the state-dependent portion of the TextBuffer return value. */
+function useTextBufferStateSlice(
+  state: TextBufferState,
+  renderedVisualLines: string[],
+  visualCursor: [number, number],
+  visualScrollRow: number,
+) {
+  return useMemo(
     () => ({
-      lines,
-      text,
-      cursor: [cursorRow, cursorCol],
-      preferredCol,
-      selectionAnchor,
-
-      allVisualLines: visualLines,
+      lines: state.lines,
+      text: state.lines.join('\n'),
+      cursor: [state.cursorRow, state.cursorCol] as [number, number],
+      preferredCol: state.preferredCol,
+      selectionAnchor: state.selectionAnchor,
+      allVisualLines: state.visualLayout.visualLines,
       viewportVisualLines: renderedVisualLines,
       visualCursor,
       visualScrollRow,
-      visualToLogicalMap: visualLayout.visualToLogicalMap,
+      visualToLogicalMap: state.visualLayout.visualToLogicalMap,
       transformationsByLine: state.transformationsByLine,
-      visualToTransformedMap: visualLayout.visualToTransformedMap,
+      visualToTransformedMap: state.visualLayout.visualToTransformedMap,
+    }),
+    [state, renderedVisualLines, visualCursor, visualScrollRow],
+  );
+}
 
+/** Build the action-dependent portion of the TextBuffer return value. */
+function useTextBufferActionSlice(
+  simpleActions: ReturnType<typeof useSimpleDispatchActions>,
+  compositeActions: ReturnType<typeof useCompositeActions>,
+  insert: (ch: string, opts?: { paste?: boolean }) => void,
+  move: (dir: Direction) => void,
+  replaceRange: (
+    startRow: number,
+    startCol: number,
+    endRow: number,
+    endCol: number,
+    rText: string,
+  ) => void,
+  moveToVisualPosition: (visRow: number, visCol: number) => void,
+  getOffset: () => number,
+  handleInput: (key: Key) => void,
+  openInExternalEditor: () => Promise<void>,
+  vimCallbacks: ReturnType<typeof createVimCallbacks>,
+) {
+  const {
+    backspace,
+    del,
+    undo,
+    redo,
+    deleteWordLeft,
+    deleteWordRight,
+    killLineRight,
+    killLineLeft,
+    moveToOffset,
+  } = simpleActions;
+  const { newline, setText, replaceRangeByOffset } = compositeActions;
+  return useMemo(
+    () => ({
       setText,
       insert,
       newline,
@@ -612,17 +487,6 @@ export function useTextBuffer({
       ...vimCallbacks,
     }),
     [
-      lines,
-      text,
-      cursorRow,
-      cursorCol,
-      preferredCol,
-      selectionAnchor,
-      visualLines,
-      renderedVisualLines,
-      visualCursor,
-      visualScrollRow,
-      visualLayout,
       setText,
       insert,
       newline,
@@ -643,8 +507,320 @@ export function useTextBuffer({
       handleInput,
       openInExternalEditor,
       vimCallbacks,
-      state.transformationsByLine,
     ],
   );
-  return returnValue;
+}
+
+function useBufferState(
+  initialText: string,
+  initialCursorOffset: number,
+  viewport: { width: number; height: number },
+  inputFilter: UseTextBufferProps['inputFilter'],
+  singleLine: boolean,
+) {
+  const initialState = useMemo((): TextBufferState => {
+    const lines = initialText.split('\n');
+    const safeLines = lines.length === 0 ? [''] : lines;
+    const [r, c] = calculateInitialCursorPosition(
+      safeLines,
+      initialCursorOffset,
+    );
+    return {
+      lines: safeLines,
+      cursorRow: r,
+      cursorCol: c,
+      transformationsByLine: calculateTransformations(safeLines),
+      preferredCol: null,
+      undoStack: [],
+      redoStack: [],
+      clipboard: null,
+      selectionAnchor: null,
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      visualLayout: calculateLayout(safeLines, viewport.width, [r, c]),
+    };
+  }, [initialText, initialCursorOffset, viewport.width, viewport.height]);
+
+  return useReducer(
+    (s: TextBufferState, a: TextBufferAction) =>
+      textBufferReducer(s, a, { inputFilter, singleLine }),
+    initialState,
+  );
+}
+
+function useVisualScrollSync(
+  visualCursor: [number, number],
+  viewport: { width: number; height: number },
+  visualLinesCount: number,
+): [number, React.Dispatch<React.SetStateAction<number>>] {
+  const [visualScrollRow, setVisualScrollRow] = useState<number>(0);
+  useEffect(() => {
+    const { height } = viewport;
+    const maxScrollStart = Math.max(0, visualLinesCount - height);
+    let newRow = visualScrollRow;
+    if (visualCursor[0] < visualScrollRow) newRow = visualCursor[0];
+    else if (visualCursor[0] >= visualScrollRow + height)
+      newRow = visualCursor[0] - height + 1;
+    newRow = clamp(newRow, 0, maxScrollStart);
+    if (newRow !== visualScrollRow) setVisualScrollRow(newRow);
+  }, [visualCursor, visualScrollRow, viewport, visualLinesCount]);
+  return [visualScrollRow, setVisualScrollRow];
+}
+
+function useBufferEffects(
+  text: string,
+  onChange: UseTextBufferProps['onChange'],
+  dispatch: (action: TextBufferAction) => void,
+  viewport: { width: number; height: number },
+) {
+  useEffect(() => {
+    if (onChange) onChange(text);
+  }, [text, onChange, dispatch]);
+  useEffect(() => {
+    dispatch({
+      type: 'set_viewport',
+      payload: { width: viewport.width, height: viewport.height },
+    });
+  }, [viewport.width, viewport.height, dispatch]);
+}
+
+function useBufferInsertAndMove(
+  dispatch: (action: TextBufferAction) => void,
+  singleLine: boolean,
+  shellModeActive: boolean,
+  isValidPath: (path: string) => boolean,
+) {
+  const insert = useCallback(
+    (rawText: string, opts?: { paste?: boolean }): void => {
+      processInsertText(rawText, dispatch, {
+        singleLine,
+        shellModeActive,
+        isValidPath,
+        paste: opts?.paste ?? false,
+      });
+    },
+    [dispatch, isValidPath, shellModeActive, singleLine],
+  );
+  const move = useCallback(
+    (dir: Direction): void => {
+      dispatch({ type: 'move', payload: { dir } });
+    },
+    [dispatch],
+  );
+  return { insert, move };
+}
+
+function useBufferPositionActions(
+  dispatch: (action: TextBufferAction) => void,
+  visualLayout: {
+    visualLines: string[];
+    visualToLogicalMap: Array<[number, number]>;
+  },
+  lines: string[],
+  cursorRow: number,
+  cursorCol: number,
+  visualScrollRow: number,
+  viewportHeight: number,
+) {
+  const renderedVisualLines = useMemo(
+    () =>
+      visualLayout.visualLines.slice(
+        visualScrollRow,
+        visualScrollRow + viewportHeight,
+      ),
+    [visualLayout.visualLines, visualScrollRow, viewportHeight],
+  );
+  const moveToVisualPosition = useCallback(
+    (visRow: number, visCol: number): void => {
+      const pos = resolveVisualToLogical(visualLayout, visRow, visCol);
+      if (pos) dispatch({ type: 'set_cursor', payload: pos });
+    },
+    [visualLayout, dispatch],
+  );
+  const getOffset = useCallback(
+    (): number => logicalPosToOffset(lines, cursorRow, cursorCol),
+    [lines, cursorRow, cursorCol],
+  );
+  return { renderedVisualLines, moveToVisualPosition, getOffset };
+}
+
+function useBufferExternalEditor(
+  text: string,
+  stdin: NodeJS.ReadStream | null | undefined,
+  setRawMode: ((mode: boolean) => void) | undefined,
+  getPreferredEditor: UseTextBufferProps['getPreferredEditor'],
+  dispatch: (action: TextBufferAction) => void,
+) {
+  return useCallback(
+    async () =>
+      runExternalEditor({
+        text,
+        stdin,
+        setRawMode,
+        getPreferredEditor,
+        dispatch,
+      }),
+    [text, stdin, setRawMode, getPreferredEditor, dispatch],
+  );
+}
+
+function useBufferCompositeAndInput(
+  dispatch: (action: TextBufferAction) => void,
+  singleLine: boolean,
+  text: string,
+  insert: (ch: string, opts?: { paste?: boolean }) => void,
+  move: (dir: Direction) => void,
+  simpleActions: ReturnType<typeof useSimpleDispatchActions>,
+) {
+  const replaceRange = useCallback(
+    (sr: number, sc: number, er: number, ec: number, rText: string) => {
+      dispatch({
+        type: 'replace_range',
+        payload: {
+          startRow: sr,
+          startCol: sc,
+          endRow: er,
+          endCol: ec,
+          text: rText,
+        },
+      });
+    },
+    [dispatch],
+  );
+  const compositeActions = useCompositeActions(
+    dispatch,
+    singleLine,
+    text,
+    replaceRange,
+  );
+  const handleInput = useInputHandler(
+    singleLine,
+    insert,
+    compositeActions.newline,
+    move,
+    simpleActions,
+  );
+  return { replaceRange, compositeActions, handleInput };
+}
+
+function useTextBufferComputedValues(state: TextBufferState) {
+  const { lines, cursorRow, cursorCol, visualLayout } = state;
+  const text = useMemo(() => lines.join('\n'), [lines]);
+  const visualCursor = useMemo(
+    () => calculateVisualCursorFromLayout(visualLayout, [cursorRow, cursorCol]),
+    [visualLayout, cursorRow, cursorCol],
+  );
+  return { lines, cursorRow, cursorCol, visualLayout, text, visualCursor };
+}
+
+function useTextBufferAssembly(
+  state: TextBufferState,
+  dispatch: (action: TextBufferAction) => void,
+  viewport: { width: number; height: number },
+  stdin: NodeJS.ReadStream | null | undefined,
+  setRawMode: ((mode: boolean) => void) | undefined,
+  onChange: UseTextBufferProps['onChange'],
+  isValidPath: (path: string) => boolean,
+  shellModeActive: boolean,
+  singleLine: boolean,
+  getPreferredEditor: UseTextBufferProps['getPreferredEditor'],
+): TextBuffer {
+  const { lines, cursorRow, cursorCol, visualLayout, text, visualCursor } =
+    useTextBufferComputedValues(state);
+  const [visualScrollRow] = useVisualScrollSync(
+    visualCursor,
+    viewport,
+    visualLayout.visualLines.length,
+  );
+  useBufferEffects(text, onChange, dispatch, viewport);
+  const { insert, move } = useBufferInsertAndMove(
+    dispatch,
+    singleLine,
+    shellModeActive,
+    isValidPath,
+  );
+  const vimCallbacks = useMemo(() => createVimCallbacks(dispatch), [dispatch]);
+  const simpleActions = useSimpleDispatchActions(dispatch);
+  const openInExternalEditor = useBufferExternalEditor(
+    text,
+    stdin,
+    setRawMode,
+    getPreferredEditor,
+    dispatch,
+  );
+  const { replaceRange, compositeActions, handleInput } =
+    useBufferCompositeAndInput(
+      dispatch,
+      singleLine,
+      text,
+      insert,
+      move,
+      simpleActions,
+    );
+  const { renderedVisualLines, moveToVisualPosition, getOffset } =
+    useBufferPositionActions(
+      dispatch,
+      visualLayout,
+      lines,
+      cursorRow,
+      cursorCol,
+      visualScrollRow,
+      viewport.height,
+    );
+  const stateSlice = useTextBufferStateSlice(
+    state,
+    renderedVisualLines,
+    visualCursor,
+    visualScrollRow,
+  );
+  const actionSlice = useTextBufferActionSlice(
+    simpleActions,
+    compositeActions,
+    insert,
+    move,
+    replaceRange,
+    moveToVisualPosition,
+    getOffset,
+    handleInput,
+    openInExternalEditor,
+    vimCallbacks,
+  );
+  return useMemo(
+    () => ({ ...stateSlice, ...actionSlice }),
+    [stateSlice, actionSlice],
+  );
+}
+
+export function useTextBuffer({
+  initialText = '',
+  initialCursorOffset = 0,
+  viewport,
+  stdin,
+  setRawMode,
+  onChange,
+  isValidPath,
+  shellModeActive = false,
+  inputFilter,
+  singleLine = false,
+  getPreferredEditor,
+}: UseTextBufferProps): TextBuffer {
+  const [state, dispatch] = useBufferState(
+    initialText,
+    initialCursorOffset,
+    viewport,
+    inputFilter,
+    singleLine,
+  );
+  return useTextBufferAssembly(
+    state,
+    dispatch,
+    viewport,
+    stdin,
+    setRawMode,
+    onChange,
+    isValidPath,
+    shellModeActive,
+    singleLine,
+    getPreferredEditor,
+  );
 }

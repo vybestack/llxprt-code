@@ -39,7 +39,6 @@ import { appReducer, initialAppState } from '../reducers/appReducer.js';
 
 // Context type
 export interface SessionContextType {
-  // History management
   history: HistoryItem[];
   addItem: (
     itemData: Omit<HistoryItem, 'id'>,
@@ -53,26 +52,18 @@ export interface SessionContextType {
   ) => void;
   clearItems: () => void;
   loadHistory: (newHistory: HistoryItem[]) => void;
-
-  // Session state
   sessionState: SessionState;
   dispatch: React.Dispatch<SessionAction>;
-
-  // App state and dispatch
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
-
-  // Helper functions
   checkPaymentModeChange: (forcePreviousProvider?: string) => void;
   performMemoryRefresh: () => Promise<void>;
 }
 
-// Create context
 export const SessionContext = createContext<SessionContextType | undefined>(
   undefined,
 );
 
-// Provider component props
 interface SessionControllerProps {
   children: React.ReactNode;
   config: Config;
@@ -103,43 +94,29 @@ export const SessionController: React.FC<SessionControllerProps> = ({
   );
 };
 
-// Inner component that uses the session state
-const SessionControllerInner: React.FC<SessionControllerProps> = ({
-  children,
-  config,
-}) => {
-  const [sessionState, dispatch] = useSessionState();
-  const [appState, appDispatch] = useReducer(appReducer, initialAppState);
+function scheduleWarningClear(
+  warningTimerRef: React.MutableRefObject<NodeJS.Timeout | null>,
+  dispatch: React.Dispatch<SessionAction>,
+): void {
+  if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+  warningTimerRef.current = setTimeout(() => {
+    dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
+    warningTimerRef.current = null;
+  }, 10000);
+}
 
-  // Use the history hook
-  const { history, addItem, updateItem, clearItems, loadHistory } =
-    useHistory();
-
-  // Transient warning timer ref
-  const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  function scheduleWarningClear(
-    warningTimerRef: React.MutableRefObject<NodeJS.Timeout | null>,
-    dispatch: React.Dispatch<SessionAction>,
-  ): void {
-    if (warningTimerRef.current) {
-      clearTimeout(warningTimerRef.current);
-    }
-
-    warningTimerRef.current = setTimeout(() => {
-      dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
-      warningTimerRef.current = null;
-    }, 10000);
-  }
-
-  // Check payment mode change function
-  const checkPaymentModeChange = useCallback(
+function useCheckPaymentModeChange(
+  sessionState: SessionState,
+  historyLength: number,
+  dispatch: React.Dispatch<SessionAction>,
+  warningTimerRef: React.MutableRefObject<NodeJS.Timeout | null>,
+): (forcePreviousProvider?: string) => void {
+  return useCallback(
     (forcePreviousProvider?: string) => {
       const runtime = getRuntimeApi();
       const status = runtime.getActiveProviderStatus();
       const newPaymentMode = status.isPaidMode;
       const currentProviderName = status.providerName ?? undefined;
-
       const previousProvider =
         forcePreviousProvider ?? sessionState.lastProvider;
       const providerChanged =
@@ -147,14 +124,12 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       const paymentModeChanged =
         newPaymentMode !== sessionState.isPaidMode &&
         newPaymentMode !== undefined;
-
       if (
         (paymentModeChanged || providerChanged) &&
-        (providerChanged || history.length > 0)
+        (providerChanged || historyLength > 0)
       ) {
         dispatch({ type: 'SET_PAID_MODE', payload: newPaymentMode });
         dispatch({ type: 'SET_LAST_PROVIDER', payload: currentProviderName });
-
         if (status.providerName === 'gemini') {
           if (newPaymentMode === true) {
             dispatch({
@@ -172,27 +147,27 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
             });
           }
         }
-
-        if (warningTimerRef.current) {
-          clearTimeout(warningTimerRef.current);
-        }
-
-        warningTimerRef.current = setTimeout(() => {
-          dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
-          warningTimerRef.current = null;
-        }, 10000);
+        scheduleWarningClear(warningTimerRef, dispatch);
       }
     },
     [
       sessionState.isPaidMode,
       sessionState.lastProvider,
-      history.length,
+      historyLength,
       dispatch,
+      warningTimerRef,
     ],
   );
+}
 
-  // Memory refresh function
-  const performMemoryRefresh = useCallback(async () => {
+function usePerformMemoryRefresh(
+  config: Config,
+  addItem: (
+    itemData: Omit<HistoryItem, 'id'>,
+    baseTimestamp?: number,
+  ) => number,
+): () => Promise<void> {
+  return useCallback(async () => {
     addItem(
       {
         type: MessageType.INFO,
@@ -200,7 +175,6 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       },
       Date.now(),
     );
-
     try {
       const settings = loadSettings(config.getWorkingDir());
       const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
@@ -219,23 +193,24 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       );
       config.setUserMemory(memoryContent);
       config.setLlxprtMdFileCount(fileCount);
-
-      // Refresh core (system) memory from .LLXPRT_SYSTEM files
       try {
         const coreContent = await loadCoreMemoryContent(config.getWorkingDir());
         config.setCoreMemory(coreContent);
       } catch {
         // Non-fatal: keep existing core memory
       }
-
+      const charCount = memoryContent.length;
+      const refreshDetails =
+        charCount > 0
+          ? `Loaded ${charCount} characters from ${fileCount} file(s).`
+          : 'No memory content found.';
       addItem(
         {
           type: MessageType.INFO,
-          text: `Memory refreshed successfully. ${memoryContent.length > 0 ? `Loaded ${memoryContent.length} characters from ${fileCount} file(s).` : 'No memory content found.'}`,
+          text: `Memory refreshed successfully. ${refreshDetails}`,
         },
         Date.now(),
       );
-
       if (config.getDebugMode()) {
         debugLogger.log(
           `Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
@@ -253,9 +228,17 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       debugLogger.error('Error refreshing memory:', error);
     }
   }, [config, addItem]);
+}
 
-  // Watch for model changes
+function useModelChangeWatcher(
+  config: Config,
+  sessionState: SessionState,
+  historyLength: number,
+  dispatch: React.Dispatch<SessionAction>,
+  warningTimerRef: React.MutableRefObject<NodeJS.Timeout | null>,
+): void {
   useEffect(() => {
+    const currentTimerRef = warningTimerRef;
     const checkModelChange = () => {
       const runtime = getRuntimeApi();
       const status = runtime.getActiveProviderStatus();
@@ -266,52 +249,64 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       if (displayModel !== sessionState.currentModel) {
         dispatch({ type: 'SET_CURRENT_MODEL', payload: displayModel });
       }
-
       const paymentMode = status.isPaidMode;
       if (paymentMode === sessionState.isPaidMode) return;
-
       dispatch({ type: 'SET_PAID_MODE', payload: paymentMode });
-
       const paymentModeJustChanged =
         paymentMode !== undefined &&
         sessionState.isPaidMode !== undefined &&
-        history.length > 0;
+        historyLength > 0;
       if (!paymentModeJustChanged) return;
-
       if (status.providerName === 'gemini') {
         const warning =
           paymentMode === true
             ? `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`
             : `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`;
-        dispatch({
-          type: 'SET_TRANSIENT_WARNINGS',
-          payload: [warning],
-        });
+        dispatch({ type: 'SET_TRANSIENT_WARNINGS', payload: [warning] });
       }
-
-      scheduleWarningClear(warningTimerRef, dispatch);
+      scheduleWarningClear(currentTimerRef, dispatch);
     };
-
     checkModelChange();
     const interval = setInterval(checkModelChange, 1000);
-
     return () => {
       clearInterval(interval);
-      if (warningTimerRef.current) {
-        clearTimeout(warningTimerRef.current);
-      }
+      if (currentTimerRef.current) clearTimeout(currentTimerRef.current);
     };
   }, [
     config,
     sessionState.currentModel,
     sessionState.isPaidMode,
+    historyLength,
+    dispatch,
+    warningTimerRef,
+  ]);
+}
+
+const SessionControllerInner: React.FC<SessionControllerProps> = ({
+  children,
+  config,
+}) => {
+  const [sessionState, dispatch] = useSessionState();
+  const [appState, appDispatch] = useReducer(appReducer, initialAppState);
+  const { history, addItem, updateItem, clearItems, loadHistory } =
+    useHistory();
+  const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const checkPaymentModeChange = useCheckPaymentModeChange(
+    sessionState,
     history.length,
     dispatch,
-  ]);
+    warningTimerRef,
+  );
+  const performMemoryRefresh = usePerformMemoryRefresh(config, addItem);
+  useModelChangeWatcher(
+    config,
+    sessionState,
+    history.length,
+    dispatch,
+    warningTimerRef,
+  );
 
-  // Flash fallback removed in main - no longer needed
-
-  // Handle ADD_ITEM actions
   useEffect(() => {
     if (appState.lastAddItemAction) {
       const { itemData, baseTimestamp } = appState.lastAddItemAction;
