@@ -90,41 +90,8 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
   }
 }
 
-export const ideCommand = (config: Config | null): SlashCommand | null => {
-  if (!config) {
-    return null;
-  }
-  const ideClient = config.getIdeClient();
-  if (!ideClient) {
-    return null;
-  }
-  const currentIDE = ideClient.getCurrentIde();
-  if (!currentIDE) {
-    return {
-      name: 'ide',
-      description: 'manage IDE integration',
-      kind: CommandKind.BUILT_IN,
-      action: (): SlashCommandActionReturn =>
-        ({
-          type: 'message',
-          messageType: 'error',
-          content: `IDE integration is not supported in your current environment. To use this feature, run LLxprt Code in one of these supported IDEs: ${Object.values(
-            IDE_DEFINITIONS,
-          )
-            .map((ide) => ide.displayName)
-            .join(', ')}`,
-        }) as const,
-    };
-  }
-
-  const ideSlashCommand: SlashCommand = {
-    name: 'ide',
-    description: 'manage IDE integration',
-    kind: CommandKind.BUILT_IN,
-    subCommands: [],
-  };
-
-  const statusCommand: SlashCommand = {
+function buildStatusCommand(ideClient: IdeClient): SlashCommand {
+  return {
     name: 'status',
     description: 'check status of IDE integration',
     kind: CommandKind.BUILT_IN,
@@ -139,8 +106,30 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
       } as const;
     },
   };
+}
 
-  const installCommand: SlashCommand = {
+async function pollForConnection(
+  config: Config,
+  ideClient: IdeClient,
+): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    config.setIdeMode(true);
+    await ideClient.connect();
+    if (
+      ideClient.getConnectionStatus().status === IDEConnectionStatus.Connected
+    ) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
+function buildInstallCommand(
+  config: Config,
+  ideClient: IdeClient,
+  currentIDE: NonNullable<ReturnType<IdeClient['getCurrentIde']>>,
+): SlashCommand {
+  return {
     name: 'install',
     description: `install required IDE companion for ${ideClient.getDetectedIdeDisplayName()}`,
     kind: CommandKind.BUILT_IN,
@@ -180,18 +169,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
           'ui.ideMode',
           true,
         );
-        // Poll for up to 5 seconds for the extension to activate.
-        for (let i = 0; i < 10; i++) {
-          config.setIdeMode(true);
-          await ideClient.connect();
-          if (
-            ideClient.getConnectionStatus().status ===
-            IDEConnectionStatus.Connected
-          ) {
-            break;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
+        await pollForConnection(config, ideClient);
 
         const { messageType, content } =
           await getIdeStatusMessageWithFiles(ideClient);
@@ -215,8 +193,10 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
       }
     },
   };
+}
 
-  const enableCommand: SlashCommand = {
+function buildEnableCommand(config: Config): SlashCommand {
+  return {
     name: 'enable',
     description: 'enable IDE integration',
     kind: CommandKind.BUILT_IN,
@@ -227,8 +207,10 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
       config.setIdeClientConnected();
     },
   };
+}
 
-  const disableCommand: SlashCommand = {
+function buildDisableCommand(config: Config): SlashCommand {
+  return {
     name: 'disable',
     description: 'disable IDE integration',
     kind: CommandKind.BUILT_IN,
@@ -242,6 +224,46 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
       config.setIdeMode(false);
       config.setIdeClientDisconnected();
     },
+  };
+}
+
+export const ideCommand = (config: Config | null): SlashCommand | null => {
+  if (!config) {
+    return null;
+  }
+  const ideClient = config.getIdeClient();
+  if (!ideClient) {
+    return null;
+  }
+  const currentIDE = ideClient.getCurrentIde();
+  if (!currentIDE) {
+    return {
+      name: 'ide',
+      description: 'manage IDE integration',
+      kind: CommandKind.BUILT_IN,
+      action: (): SlashCommandActionReturn =>
+        ({
+          type: 'message',
+          messageType: 'error',
+          content: `IDE integration is not supported in your current environment. To use this feature, run LLxprt Code in one of these supported IDEs: ${Object.values(
+            IDE_DEFINITIONS,
+          )
+            .map((ide) => ide.displayName)
+            .join(', ')}`,
+        }) as const,
+    };
+  }
+
+  const statusCommand = buildStatusCommand(ideClient);
+  const installCommand = buildInstallCommand(config, ideClient, currentIDE);
+  const enableCommand = buildEnableCommand(config);
+  const disableCommand = buildDisableCommand(config);
+
+  const ideSlashCommand: SlashCommand = {
+    name: 'ide',
+    description: 'manage IDE integration',
+    kind: CommandKind.BUILT_IN,
+    subCommands: [],
   };
 
   const { status } = ideClient.getConnectionStatus();
