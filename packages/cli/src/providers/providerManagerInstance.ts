@@ -291,6 +291,116 @@ function tryGetSettingsServiceAuthOnly(): boolean | undefined {
   }
 }
 
+/** Registers OAuth providers for authentication support. */
+function registerOAuthProviders(
+  oauthManager: OAuthManager,
+  tokenStore: ReturnType<typeof createTokenStore>,
+  addItem: ProviderManagerFactoryOptions['addItem'],
+): void {
+  void ensureOAuthProviderRegistered(
+    'gemini',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
+  void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
+  void ensureOAuthProviderRegistered(
+    'anthropic',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
+  void ensureOAuthProviderRegistered(
+    'codex',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
+}
+
+/** Resolves OpenAI-specific settings from merged settings and ephemeral overrides. */
+function resolveOpenaiSettings(
+  config: Config | undefined,
+  loadedSettings: LoadedSettings | undefined,
+  authOnlyEnabled: boolean,
+  allowBrowserEnvironment: boolean,
+): {
+  openaiApiKey: string | undefined;
+  openaiBaseUrl: string | undefined;
+  openaiProviderConfig: IProviderConfig;
+} {
+  const settingsData =
+    loadedSettings?.merged ?? ({} as Partial<MergedSettings>);
+  const ephemeralSettings = config?.getEphemeralSettings() ?? {};
+  const effectiveOpenaiResponsesEnabled = resolveOpenaiResponsesEnabled(
+    ephemeralSettings.openaiResponsesEnabled,
+    authOnlyEnabled,
+    settingsData.openaiResponsesEnabled,
+  );
+
+  const ephemeralAuthKey = ephemeralSettings['auth-key'];
+  const settingsProviders = settingsData as Record<string, unknown>;
+  const openaiProviderSettings = settingsProviders.providers as
+    | Record<string, unknown>
+    | undefined;
+  const openaiSettings = openaiProviderSettings?.openai as
+    | Record<string, unknown>
+    | undefined;
+  const openaiProviderApiKey =
+    (openaiSettings?.apiKey as string | undefined) ??
+    (openaiSettings?.['auth-key'] as string | undefined);
+
+  const openaiApiKey = resolveOpenaiApiKey(
+    ephemeralAuthKey,
+    openaiProviderApiKey,
+    authOnlyEnabled,
+  );
+
+  const ephemeralBaseUrl = ephemeralSettings['base-url'];
+  const providerBaseUrl = openaiSettings?.['base-url'] as string | undefined;
+  const openaiBaseUrl = resolveOpenaiBaseUrl(ephemeralBaseUrl, providerBaseUrl);
+
+  const openaiProviderConfig: IProviderConfig = {
+    enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
+    textToolCallModels: settingsData.textToolCallModels,
+    providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
+    openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
+    allowBrowserEnvironment,
+    getEphemeralSettings: config
+      ? () => config.getEphemeralSettings()
+      : undefined,
+  };
+
+  return { openaiApiKey, openaiBaseUrl, openaiProviderConfig };
+}
+
+/** Registers all alias-based providers and OAuth providers on the manager. */
+function registerAllProviders(
+  manager: ProviderManager,
+  aliasEntries: ProviderAliasEntry[],
+  openaiApiKey: string | undefined,
+  openaiBaseUrl: string | undefined,
+  openaiProviderConfig: IProviderConfig,
+  oauthManager: OAuthManager,
+  tokenStore: ReturnType<typeof createTokenStore>,
+  config: Config | undefined,
+  authOnlyEnabled: boolean,
+  addItem: ProviderManagerFactoryOptions['addItem'],
+): void {
+  registerAliasProviders(
+    manager,
+    aliasEntries,
+    openaiApiKey,
+    openaiBaseUrl,
+    openaiProviderConfig,
+    oauthManager,
+    config,
+    authOnlyEnabled,
+  );
+
+  registerOAuthProviders(oauthManager, tokenStore, addItem);
+}
+
 export function createProviderManager(
   context: RuntimeContextShape,
   options: ProviderManagerFactoryOptions = {},
@@ -310,15 +420,8 @@ export function createProviderManager(
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
    */
-  const runtimeOAuthMessageBus = options.runtimeMessageBus;
-  /**
-   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
-   * @requirement REQ-D01-002
-   * @requirement REQ-D01-003
-   * @pseudocode lines 122-133
-   */
   const oauthRuntimeDeps: OAuthManagerRuntimeMessageBusDeps = {
-    messageBus: runtimeOAuthMessageBus,
+    messageBus: options.runtimeMessageBus,
     config: options.config,
   };
   const oauthManager = new OAuthManager(
@@ -356,103 +459,28 @@ export function createProviderManager(
   if (config) {
     manager.setConfig(config);
     config.setProviderManager(manager);
-    logger.debug(
-      'OAuthManager runtime dependencies configured from composition root',
-    );
-  } else {
-    logger.debug('No config provided; runtime MessageBus was not injected');
   }
 
   const authOnlyEnabled = resolveAuthOnlyFlag(config, loadedSettings);
+  const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
+    resolveOpenaiSettings(
+      config,
+      loadedSettings,
+      authOnlyEnabled,
+      allowBrowserEnvironment,
+    );
 
-  const settingsData =
-    loadedSettings?.merged ?? ({} as Partial<MergedSettings>);
-  const ephemeralSettings = config?.getEphemeralSettings() ?? {};
-  const effectiveOpenaiResponsesEnabled = resolveOpenaiResponsesEnabled(
-    ephemeralSettings.openaiResponsesEnabled,
-    authOnlyEnabled,
-    settingsData.openaiResponsesEnabled,
-  );
-
-  // Check for CLI-provided API key first (highest priority)
-  // NOTE: Bootstrap args (--key, --keyfile) should be applied to ephemeral settings
-  // by calling applyCliArgumentOverrides() BEFORE creating the provider manager.
-  // We check ephemeralSettings['auth-key'] which should already contain the resolved value.
-  const ephemeralAuthKey = ephemeralSettings['auth-key'];
-
-  // Also check provider-specific settings if no ephemeral auth-key
-  const settingsProviders = settingsData as Record<string, unknown>;
-  const openaiProviderSettings = settingsProviders.providers as
-    | Record<string, unknown>
-    | undefined;
-  const openaiSettings = openaiProviderSettings?.openai as
-    | Record<string, unknown>
-    | undefined;
-  const openaiProviderApiKey =
-    (openaiSettings?.apiKey as string | undefined) ??
-    (openaiSettings?.['auth-key'] as string | undefined);
-
-  const openaiApiKey = resolveOpenaiApiKey(
-    ephemeralAuthKey,
-    openaiProviderApiKey,
-    authOnlyEnabled,
-  );
-
-  // Check for CLI-provided baseUrl in ephemerals or provider settings
-  // NOTE: Bootstrap args (--baseurl) should be applied to ephemeral settings
-  // by calling applyCliArgumentOverrides() BEFORE creating the provider manager.
-  const ephemeralBaseUrl = ephemeralSettings['base-url'];
-  const providerBaseUrl = openaiSettings?.['base-url'] as string | undefined;
-  const openaiBaseUrl = resolveOpenaiBaseUrl(ephemeralBaseUrl, providerBaseUrl);
-
-  // Debug logging removed - was using debugLogger.log which violates project guidelines
-  // Use DebugLogger if detailed logging is needed here
-
-  const openaiProviderConfig: IProviderConfig = {
-    enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
-    textToolCallModels: settingsData.textToolCallModels,
-    providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
-    openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
-    allowBrowserEnvironment,
-    getEphemeralSettings: config
-      ? () => config.getEphemeralSettings()
-      : undefined,
-  };
-
-  // All providers are now registered via alias configs
   const aliasEntries = loadProviderAliasEntries();
-  registerAliasProviders(
+  registerAllProviders(
     manager,
     aliasEntries,
     openaiApiKey,
     openaiBaseUrl,
     openaiProviderConfig,
     oauthManager,
+    tokenStore,
     config,
     authOnlyEnabled,
-  );
-
-  // Register OAuth providers for authentication support
-  void ensureOAuthProviderRegistered(
-    'gemini',
-    oauthManager,
-    tokenStore,
-    addItem,
-  );
-
-  void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
-
-  void ensureOAuthProviderRegistered(
-    'anthropic',
-    oauthManager,
-    tokenStore,
-    addItem,
-  );
-
-  void ensureOAuthProviderRegistered(
-    'codex',
-    oauthManager,
-    tokenStore,
     addItem,
   );
 

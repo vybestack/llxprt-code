@@ -96,6 +96,110 @@ function getAliasDirectories(): Array<{
   return directories;
 }
 
+/** Validates a single modelDefaults entry; returns true when the entry is valid. */
+function isValidModelDefaultRule(
+  entry: unknown,
+  filePath: string,
+): entry is ModelDefaultRule {
+  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  if (
+    entry === null ||
+    entry === undefined ||
+    typeof entry !== 'object' ||
+    Array.isArray(entry)
+  ) {
+    debugLogger.warn(
+      `[ProviderAliases] Skipping non-object modelDefaults entry in ${filePath}`,
+    );
+    return false;
+  }
+
+  const rule = entry as Record<string, unknown>;
+
+  if (typeof rule.pattern !== 'string') {
+    debugLogger.warn(
+      `[ProviderAliases] Skipping modelDefaults entry with non-string pattern in ${filePath}`,
+    );
+    return false;
+  }
+
+  if (rule.pattern === '') {
+    debugLogger.warn(
+      `[ProviderAliases] Skipping modelDefaults entry with empty pattern in ${filePath}`,
+    );
+    return false;
+  }
+
+  if (
+    rule.ephemeralSettings === null ||
+    rule.ephemeralSettings === undefined ||
+    typeof rule.ephemeralSettings !== 'object' ||
+    Array.isArray(rule.ephemeralSettings)
+  ) {
+    debugLogger.warn(
+      `[ProviderAliases] Skipping modelDefaults entry with invalid ephemeralSettings in ${filePath}`,
+    );
+    return false;
+  }
+
+  try {
+    new RegExp(rule.pattern);
+  } catch {
+    debugLogger.warn(
+      `[ProviderAliases] Skipping modelDefaults entry with invalid regex pattern "${rule.pattern}" in ${filePath}`,
+    );
+    return false;
+  }
+
+  return true;
+}
+
+/** Sanitizes the modelDefaults array on an alias config in place. */
+function sanitizeModelDefaults(
+  aliasConfig: ProviderAliasConfig,
+  filePath: string,
+): void {
+  if (!('modelDefaults' in aliasConfig)) {
+    return;
+  }
+  if (!Array.isArray(aliasConfig.modelDefaults)) {
+    debugLogger.warn(
+      `[ProviderAliases] Ignoring non-array modelDefaults in ${filePath}`,
+    );
+    aliasConfig.modelDefaults = undefined;
+    return;
+  }
+  aliasConfig.modelDefaults = aliasConfig.modelDefaults.filter((entry) =>
+    isValidModelDefaultRule(entry, filePath),
+  );
+}
+
+/** Validates scalar-typed fields on an alias config in place. */
+function sanitizeAliasConfigFields(
+  aliasConfig: ProviderAliasConfig,
+  filePath: string,
+): void {
+  if (
+    Object.prototype.hasOwnProperty.call(aliasConfig, 'sandbox-base-url') &&
+    typeof aliasConfig['sandbox-base-url'] !== 'string'
+  ) {
+    debugLogger.warn(
+      `[ProviderAliases] Ignoring non-string sandbox-base-url in ${filePath}`,
+    );
+    aliasConfig['sandbox-base-url'] = undefined;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(aliasConfig, 'requires-auth') &&
+    typeof aliasConfig['requires-auth'] !== 'boolean'
+  ) {
+    debugLogger.warn(
+      `[ProviderAliases] Ignoring non-boolean requires-auth in ${filePath}`,
+    );
+    aliasConfig['requires-auth'] = undefined;
+  }
+}
+
 function readAliasFile(
   filePath: string,
   source: ProviderAliasSource,
@@ -130,95 +234,8 @@ function readAliasFile(
       return null;
     }
 
-    if (
-      Object.prototype.hasOwnProperty.call(aliasConfig, 'sandbox-base-url') &&
-      typeof aliasConfig['sandbox-base-url'] !== 'string'
-    ) {
-      debugLogger.warn(
-        `[ProviderAliases] Ignoring non-string sandbox-base-url in ${filePath}`,
-      );
-      aliasConfig['sandbox-base-url'] = undefined;
-    }
-
-    if (
-      Object.prototype.hasOwnProperty.call(aliasConfig, 'requires-auth') &&
-      typeof aliasConfig['requires-auth'] !== 'boolean'
-    ) {
-      debugLogger.warn(
-        `[ProviderAliases] Ignoring non-boolean requires-auth in ${filePath}`,
-      );
-      aliasConfig['requires-auth'] = undefined;
-    }
-
-    // Validate modelDefaults if present
-    if ('modelDefaults' in aliasConfig) {
-      if (!Array.isArray(aliasConfig.modelDefaults)) {
-        debugLogger.warn(
-          `[ProviderAliases] Ignoring non-array modelDefaults in ${filePath}`,
-        );
-        aliasConfig.modelDefaults = undefined;
-      } else {
-        aliasConfig.modelDefaults = aliasConfig.modelDefaults.filter(
-          (entry: unknown): entry is ModelDefaultRule => {
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (
-              entry === null ||
-              entry === undefined ||
-              typeof entry !== 'object' ||
-              Array.isArray(entry)
-            ) {
-              debugLogger.warn(
-                `[ProviderAliases] Skipping non-object modelDefaults entry in ${filePath}`,
-              );
-              return false;
-            }
-
-            const rule = entry as Record<string, unknown>;
-
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (typeof rule.pattern !== 'string') {
-              debugLogger.warn(
-                `[ProviderAliases] Skipping modelDefaults entry with non-string pattern in ${filePath}`,
-              );
-              return false;
-            }
-
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (rule.pattern === '') {
-              debugLogger.warn(
-                `[ProviderAliases] Skipping modelDefaults entry with empty pattern in ${filePath}`,
-              );
-              return false;
-            }
-
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (
-              rule.ephemeralSettings === null ||
-              rule.ephemeralSettings === undefined ||
-              typeof rule.ephemeralSettings !== 'object' ||
-              Array.isArray(rule.ephemeralSettings)
-            ) {
-              debugLogger.warn(
-                `[ProviderAliases] Skipping modelDefaults entry with invalid ephemeralSettings in ${filePath}`,
-              );
-              return false;
-            }
-
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            try {
-              new RegExp(rule.pattern);
-            } catch {
-              debugLogger.warn(
-                `[ProviderAliases] Skipping modelDefaults entry with invalid regex pattern "${rule.pattern}" in ${filePath}`,
-              );
-              return false;
-            }
-
-            return true;
-          },
-        );
-      }
-    }
+    sanitizeAliasConfigFields(aliasConfig, filePath);
+    sanitizeModelDefaults(aliasConfig, filePath);
 
     return {
       alias,
