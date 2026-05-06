@@ -4,62 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { glob } from 'glob';
-import type { Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
-import {
-  isNodeError,
-  escapePath,
-  unescapePath,
-  getErrorMessage,
-  DEFAULT_FILE_FILTERING_OPTIONS,
-  SHELL_SPECIAL_CHARS,
-  DebugLogger,
-} from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
-import { logicalPosToOffset } from '../components/shared/text-buffer.js';
+import { logicalPosToOffset } from '../components/shared/buffer-operations.js';
 import { isSlashCommand } from '../utils/commandUtils.js';
 import { toCodePoints } from '../utils/textUtils.js';
 import { useCompletion } from './useCompletion.js';
-import { createCompletionHandler } from '../commands/schema/index.js';
-
-/**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P05
- * @requirement:REQ-001
- * @requirement:REQ-002
- * @pseudocode ArgumentSchema.md lines 71-90
- * Integration of schema-driven completion system
- *
- * The schema system provides a more structured approach to command completion:
- * - Import: import { createCompletionHandler } from '../commands/schema/index.js';
- * - Create handler: const handler = createCompletionHandler(commandSchema);
- * - Use handler: const suggestions = await handler(commandContext, partialArg, fullLine);
- *
- * Schema completion is now available for commands that provide a schema definition.
- * The integration maintains existing UI behavior while providing enhanced completion.
- */
-
-/**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P08
- * @requirement:REQ-002
- * @requirement:REQ-003
- * @requirement:REQ-004
- * @pseudocode ArgumentSchema.md lines 71-90
- * Full integration of schema-driven completion system with hints
- * - Line 71: call createCompletionHandler with current command context
- * - Line 72: supply schema specific to active command
- * - Line 73: capture { suggestions, hint } result
- * - Line 74: set state for suggestions and new activeHint field
- * - Line 75: handle pending async results with sequence/timestamp guard
- * - Line 76-78: gracefully handle resolver errors (log + fallback to empty suggestions + hint)
- * - Line 79-80: ensure cleanup on component unmount / completion reset
- */
+import type { SlashCommandCompletionContext } from './slashCompletionTypes.js';
+import {
+  handleCompletionEffect,
+  type StateRefs,
+  type AllSetters,
+} from './slashCompletionEffect.js';
 
 export interface UseSlashCompletionReturn {
   suggestions: Suggestion[];
@@ -80,23 +39,311 @@ export interface UseSlashCompletionReturn {
   leafCommand: SlashCommand | null;
 }
 
-const debugLogger = new DebugLogger('llxprt:ui:slash-completion');
-
 type RuntimeExtensionConfig = Partial<Pick<Config, 'isExtensionEnabled'>>;
 type RuntimeCommandContext = Omit<CommandContext, 'services'> & {
-  services?: {
-    config?: RuntimeExtensionConfig | null;
+  services?: { config?: RuntimeExtensionConfig | null };
+};
+
+function getExtCfg(
+  ctx: CommandContext,
+): RuntimeExtensionConfig | null | undefined {
+  return (ctx as RuntimeCommandContext).services?.config;
+}
+
+function computeCmdIdx(
+  row: number,
+  col: number,
+  lines: readonly string[],
+): number {
+  const line = lines[row] || '';
+  if (row === 0 && isSlashCommand(line.trim())) {
+    const i = line.indexOf('/');
+    return i === 0 ? i : -1;
+  }
+  const cps = toCodePoints(line);
+  for (let i = col - 1; i >= 0; i--) {
+    if (cps[i] === ' ') {
+      let bc = 0;
+      for (let j = i - 1; j >= 0 && cps[j] === '\\'; j--) {
+        bc++;
+      }
+      if (bc % 2 === 0) {
+        return -1;
+      }
+    } else if (cps[i] === '@') {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function applyAutocomplete(
+  s: string,
+  buf: TextBuffer,
+  row: number,
+  idx: number,
+  start: number,
+  end: number,
+): string | undefined {
+  const isSlash = (buf.lines[row] || '')[idx] === '/';
+  let t = s;
+  const l = buf.lines[row] || '';
+  if (isSlash && start === end && start > idx + 1 && l[start - 1] !== ' ') {
+    t = ' ' + t;
+  }
+  t += ' ';
+  const so = logicalPosToOffset(buf.lines, row, start);
+  const eo = logicalPosToOffset(buf.lines, row, end);
+  const r = buf.text.substring(0, so) + t + buf.text.substring(eo);
+  buf.replaceRangeByOffset(so, eo, t);
+  return r;
+}
+
+function useStateRefs(): StateRefs {
+  const seqRef = useRef<number>(0);
+  const start = useRef(-1);
+  const end = useRef(-1);
+  const prev = useRef<string>('');
+  const ctxRef = useRef<{
+    isArgumentCompletion: boolean;
+    leafCommand: SlashCommand | null;
+    commandMap: Map<string, SlashCommand>;
+  }>({
+    isArgumentCompletion: false,
+    leafCommand: null,
+    commandMap: new Map<string, SlashCommand>(),
+  });
+  return {
+    completionSequenceRef: seqRef,
+    completionStart: start,
+    completionEnd: end,
+    previousInput: prev,
+    slashCompletionContextRef: ctxRef,
   };
-};
+}
 
-type RuntimeCompletionResult = {
-  hint?: string;
-};
+function useMemoInput(
+  cmdIdx: number,
+  row: number,
+  col: number,
+  lines: readonly string[],
+) {
+  return useMemo(() => {
+    if (cmdIdx === -1) return null;
+    return { line: lines[row] || '', commandIndex: cmdIdx, cursorCol: col };
+  }, [lines, row, cmdIdx, col]);
+}
 
-const getRuntimeExtensionConfig = (
+function useSetupEffect(
+  buf: TextBuffer,
+  cmds: readonly SlashCommand[],
+  ctx: CommandContext,
+  cfg: Config | undefined,
+  dirs: readonly string[],
+  cwd: string,
+  reverseSearchActive: boolean,
+  refs: StateRefs,
+  cmdIdx: number,
+  col: number,
+  extCfg: RuntimeExtensionConfig | null | undefined,
+  mi: { line: string; commandIndex: number; cursorCol: number } | null,
+  resetCompletionState: () => void,
+  setActiveHint: (h: string) => void,
+  setters: AllSetters,
+): void {
+  useEffect(
+    () =>
+      handleCompletionEffect(
+        mi,
+        cmdIdx,
+        col,
+        cmds,
+        extCfg,
+        ctx,
+        cfg,
+        dirs,
+        cwd,
+        refs,
+        reverseSearchActive,
+        resetCompletionState,
+        setActiveHint,
+        setters,
+      ),
+    [
+      mi,
+      cmdIdx,
+      col,
+      cmds,
+      extCfg,
+      ctx,
+      cfg,
+      dirs,
+      cwd,
+      refs,
+      reverseSearchActive,
+      resetCompletionState,
+      setActiveHint,
+      setters,
+    ],
+  );
+}
+
+function useSlashCompletionSetup(
+  buffer: TextBuffer,
+  slashCommands: readonly SlashCommand[],
   commandContext: CommandContext,
-): RuntimeExtensionConfig | null | undefined =>
-  (commandContext as RuntimeCommandContext).services?.config;
+  config: Config | undefined,
+  dirs: readonly string[],
+  cwd: string,
+  reverseSearchActive: boolean,
+  resetCompletionState: () => void,
+  setSuggestions: (s: Suggestion[]) => void,
+  setShowSuggestions: (show: boolean) => void,
+  setActiveSuggestionIndex: (idx: number) => void,
+  setIsLoadingSuggestions: (l: boolean) => void,
+  setIsPerfectMatch: (p: boolean) => void,
+  setVisibleStartIndex: (i: number) => void,
+  setActiveHint: (h: string) => void,
+) {
+  const refs = useStateRefs();
+  const [cursorRow, cursorCol] = buffer.cursor;
+  const extCfg = getExtCfg(commandContext);
+  const cmdIdx = useMemo(
+    () => computeCmdIdx(cursorRow, cursorCol, buffer.lines),
+    [cursorRow, cursorCol, buffer.lines],
+  );
+  const mi = useMemoInput(cmdIdx, cursorRow, cursorCol, buffer.lines);
+
+  const setCtx = useCallback(
+    (v: SlashCommandCompletionContext) => {
+      refs.slashCompletionContextRef.current = {
+        isArgumentCompletion: v.isArgumentCompletion,
+        leafCommand: v.leafCommand,
+        commandMap: v.commandMap ?? new Map<string, SlashCommand>(),
+      };
+      refs.completionStart.current = v.completionStart;
+      refs.completionEnd.current = v.completionEnd;
+    },
+    [refs],
+  );
+
+  const setters = useMemo<AllSetters>(
+    () => ({
+      setSuggestions,
+      setShowSuggestions,
+      setActiveSuggestionIndex,
+      setActiveHint,
+      setIsPerfectMatch,
+      setIsLoadingSuggestions,
+      setSlashCompletionContext: setCtx,
+      setVisibleStartIndex,
+    }),
+    [
+      setSuggestions,
+      setShowSuggestions,
+      setActiveSuggestionIndex,
+      setActiveHint,
+      setIsPerfectMatch,
+      setIsLoadingSuggestions,
+      setCtx,
+      setVisibleStartIndex,
+    ],
+  );
+
+  useSetupEffect(
+    buffer,
+    slashCommands,
+    commandContext,
+    config,
+    dirs,
+    cwd,
+    reverseSearchActive,
+    refs,
+    cmdIdx,
+    cursorCol,
+    extCfg,
+    mi,
+    resetCompletionState,
+    setActiveHint,
+    setters,
+  );
+
+  return { cmdIdx, refs, cursorRow, setters };
+}
+
+function useAutocompleteCallback(
+  suggestions: Suggestion[],
+  buffer: TextBuffer,
+  cursorRow: number,
+  cmdIdx: number,
+  refs: StateRefs,
+  setSuggestions: (s: Suggestion[]) => void,
+  setShowSuggestions: (show: boolean) => void,
+  setActiveSuggestionIndex: (idx: number) => void,
+  setVisibleStartIndex: (i: number) => void,
+  setActiveHint: (h: string) => void,
+  setIsLoadingSuggestions: (l: boolean) => void,
+): (i: number) => string | undefined {
+  return useCallback(
+    (i: number): string | undefined => {
+      if (i < 0 || i >= suggestions.length) return undefined;
+      if (
+        refs.completionStart.current === -1 ||
+        refs.completionEnd.current === -1
+      )
+        return undefined;
+      const r = applyAutocomplete(
+        suggestions[i].value,
+        buffer,
+        cursorRow,
+        cmdIdx,
+        refs.completionStart.current,
+        refs.completionEnd.current,
+      );
+      if (r !== undefined) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+        setActiveSuggestionIndex(-1);
+        setVisibleStartIndex(0);
+        setActiveHint('');
+        setIsLoadingSuggestions(false);
+      }
+      return r;
+    },
+    [
+      cursorRow,
+      buffer,
+      suggestions,
+      cmdIdx,
+      setSuggestions,
+      setShowSuggestions,
+      setActiveSuggestionIndex,
+      setVisibleStartIndex,
+      setActiveHint,
+      setIsLoadingSuggestions,
+      refs,
+    ],
+  );
+}
+
+function useCommandLookup(
+  suggestions: Suggestion[],
+  refs: StateRefs,
+): (suggestionIndex: number) => SlashCommand | null {
+  return useCallback(
+    (suggestionIndex: number): SlashCommand | null => {
+      if (suggestionIndex < 0 || suggestionIndex >= suggestions.length) {
+        return null;
+      }
+      return (
+        refs.slashCompletionContextRef.current.commandMap.get(
+          suggestions[suggestionIndex].value,
+        ) ?? null
+      );
+    },
+    [suggestions, refs],
+  );
+}
 
 export function useSlashCompletion(
   buffer: TextBuffer,
@@ -114,782 +361,27 @@ export function useSlashCompletion(
     showSuggestions,
     isLoadingSuggestions,
     isPerfectMatch,
-
     setSuggestions,
     setShowSuggestions,
     setActiveSuggestionIndex,
     setIsLoadingSuggestions,
     setIsPerfectMatch,
     setVisibleStartIndex,
-
     resetCompletionState,
     navigateUp,
     navigateDown,
   } = useCompletion();
 
-  // Track active hint for schema-based completions
   const [activeHint, setActiveHint] = React.useState<string>('');
 
-  // Track async completion sequence to avoid race conditions
-  const completionSequenceRef = useRef<number>(0);
-
-  const completionStart = useRef(-1);
-  const completionEnd = useRef(-1);
-
-  // Track the previous input to avoid unnecessary re-computations
-  const previousInput = useRef<string>('');
-
-  // Track mapping from suggestion values to their source commands for autoExecute
-  const suggestionCommandMapRef = useRef<Map<string, SlashCommand>>(new Map());
-
-  // Track slash completion context for Enter auto-execute behavior in InputPrompt.
-  const slashCompletionContextRef = useRef<{
-    isArgumentCompletion: boolean;
-    leafCommand: SlashCommand | null;
-  }>({
-    isArgumentCompletion: false,
-    leafCommand: null,
-  });
-
-  const cursorRow = buffer.cursor[0];
-  const cursorCol = buffer.cursor[1];
-  const extensionConfig = getRuntimeExtensionConfig(commandContext);
-
-  // Check if cursor is after @ or / without unescaped spaces
-  const commandIndex = useMemo(() => {
-    const currentLine = buffer.lines[cursorRow] || '';
-    debugLogger.debug(
-      () => `Checking commandIndex - Row: ${cursorRow}, Line: "${currentLine}"`,
-    );
-    if (cursorRow === 0 && isSlashCommand(currentLine.trim())) {
-      const index = currentLine.indexOf('/');
-      debugLogger.debug(() => `Slash command detected at index ${index}`);
-      // Only activate slash commands at index 0
-      return index === 0 ? index : -1;
-    }
-
-    // For other completions like '@', we search backwards from the cursor.
-
-    const codePoints = toCodePoints(currentLine);
-    for (let i = cursorCol - 1; i >= 0; i--) {
-      const char = codePoints[i];
-
-      if (char === ' ') {
-        // Check for unescaped spaces.
-        let backslashCount = 0;
-        for (let j = i - 1; j >= 0 && codePoints[j] === '\\'; j--) {
-          backslashCount++;
-        }
-        if (backslashCount % 2 === 0) {
-          return -1; // Inactive on unescaped space.
-        }
-      } else if (char === '@') {
-        // Active if we find an '@' before any unescaped space.
-        return i;
-      }
-    }
-
-    return -1;
-  }, [cursorRow, cursorCol, buffer.lines]);
-
-  // Memoize the current input to avoid re-processing on unrelated re-renders
-  const memoizedInput = useMemo(() => {
-    if (commandIndex === -1) return null;
-    const currentLine = buffer.lines[cursorRow] || '';
-    return {
-      line: currentLine,
-      commandIndex,
-      cursorCol,
-    };
-  }, [buffer.lines, cursorRow, commandIndex, cursorCol]);
-
-  useEffect(() => {
-    if (commandIndex === -1 || reverseSearchActive) {
-      // Only reset if we actually had suggestions or hints before
-      if (previousInput.current !== '') {
-        debugLogger.debug(() => 'Resetting completion state');
-        resetCompletionState();
-        setActiveHint('');
-        previousInput.current = '';
-      }
-      return undefined;
-    }
-
-    debugLogger.debug(
-      () =>
-        `useEffect triggered - commandIndex: ${commandIndex}, reverseSearchActive: ${reverseSearchActive}`,
-    );
-
-    if (!memoizedInput) return undefined;
-
-    const currentLine = memoizedInput.line;
-
-    // Check if the input actually changed
-    // Include slashCommands.length in key to detect command list changes (e.g., extension enable/disable)
-    const currentInputKey = `${currentLine}:${commandIndex}:${cursorCol}:${slashCommands.length}`;
-    if (previousInput.current === currentInputKey) {
-      debugLogger.debug(() => 'Input unchanged, skipping re-computation');
-      return undefined;
-    }
-    previousInput.current = currentInputKey;
-
-    // Increment completion sequence for race condition protection
-    const currentSequence = ++completionSequenceRef.current;
-
-    const codePoints = toCodePoints(currentLine);
-
-    if (codePoints[commandIndex] === '/') {
-      // Always reset perfect match at the beginning of processing.
-      setIsPerfectMatch(false);
-
-      const fullPath = currentLine.substring(commandIndex + 1);
-      const hasTrailingSpace = currentLine.endsWith(' ');
-
-      const rawParts = fullPath.split(/\s+/).filter((p) => p);
-
-      const pathParts: string[] = [];
-      let currentLevel: readonly SlashCommand[] | undefined = slashCommands;
-      let leafCommand: SlashCommand | null = null;
-
-      // Only process complete parts (parts followed by another part or a space)
-      const completeParts = hasTrailingSpace ? rawParts : rawParts.slice(0, -1);
-
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for (const part of completeParts) {
-        if (!currentLevel) {
-          break;
-        }
-        const found = currentLevel.find(
-          (cmd) => cmd.name === part || cmd.altNames?.includes(part) === true,
-        );
-        if (!found) {
-          break;
-        }
-        pathParts.push(part);
-        leafCommand = found;
-        currentLevel = found.subCommands as readonly SlashCommand[] | undefined;
-      }
-
-      const remainingParts = rawParts.slice(pathParts.length);
-      const commandPathLength = pathParts.length;
-
-      const leafSupportsArguments = Boolean(leafCommand?.schema);
-
-      let commandPartial = '';
-      let argumentPartial = '';
-      let completedArgsForSchema: string[] = [];
-
-      if (leafSupportsArguments) {
-        if (remainingParts.length > 0) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (hasTrailingSpace) {
-            completedArgsForSchema = remainingParts;
-          } else {
-            argumentPartial = remainingParts[remainingParts.length - 1];
-            completedArgsForSchema = remainingParts.slice(0, -1);
-          }
-        }
-      } else if (!hasTrailingSpace && remainingParts.length > 0) {
-        commandPartial = remainingParts[remainingParts.length - 1];
-      }
-
-      let exactMatchAsParent: SlashCommand | undefined;
-      if (!hasTrailingSpace && currentLevel) {
-        const candidate =
-          commandPartial.length > 0 ? commandPartial : argumentPartial;
-        if (candidate.length > 0) {
-          exactMatchAsParent = currentLevel.find(
-            (cmd) =>
-              (cmd.name === candidate ||
-                cmd.altNames?.includes(candidate) === true) &&
-              cmd.subCommands != null,
-          );
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (exactMatchAsParent) {
-            // Only descend if there are NO other matches for the partial at this level.
-            // This ensures that typing "/memory" still shows "/memory-leak" if it exists.
-            const otherMatches = currentLevel.filter(
-              (cmd) =>
-                cmd !== exactMatchAsParent &&
-                (cmd.name.toLowerCase().startsWith(candidate.toLowerCase()) ||
-                  cmd.altNames?.some((alt) =>
-                    alt.toLowerCase().startsWith(candidate.toLowerCase()),
-                  ) === true),
-            );
-
-            if (otherMatches.length === 0) {
-              leafCommand = exactMatchAsParent;
-              currentLevel = exactMatchAsParent.subCommands as
-                | readonly SlashCommand[]
-                | undefined;
-              commandPartial = '';
-            } else {
-              // Reset exactMatchAsParent when descent is skipped due to other matches
-              exactMatchAsParent = undefined;
-            }
-          }
-        }
-      }
-
-      // Check for perfect, executable match
-      if (!hasTrailingSpace) {
-        if (
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          leafCommand &&
-          commandPartial === '' &&
-          argumentPartial === '' &&
-          leafCommand.action &&
-          !leafSupportsArguments
-        ) {
-          setIsPerfectMatch(true);
-          setActiveHint('');
-        } else if (currentLevel && commandPartial.length > 0) {
-          const perfectMatch = currentLevel.find(
-            (cmd) =>
-              (cmd.name === commandPartial ||
-                cmd.altNames?.includes(commandPartial) === true) &&
-              cmd.action != null,
-          );
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (perfectMatch !== undefined) {
-            setIsPerfectMatch(true);
-            setActiveHint('');
-          }
-        }
-      }
-
-      const hasArgumentTokens = remainingParts.length > 0 || hasTrailingSpace;
-      const isArgumentCompletion = leafSupportsArguments && hasArgumentTokens;
-
-      // Set completion range
-      const activePartial = leafSupportsArguments
-        ? argumentPartial
-        : commandPartial;
-
-      if (hasTrailingSpace || exactMatchAsParent) {
-        completionStart.current = currentLine.length;
-        completionEnd.current = currentLine.length;
-      } else if (activePartial) {
-        completionStart.current = currentLine.length - activePartial.length;
-        completionEnd.current = currentLine.length;
-      } else {
-        // e.g. /
-        completionStart.current = commandIndex + 1;
-        completionEnd.current = currentLine.length;
-      }
-
-      slashCompletionContextRef.current = {
-        isArgumentCompletion,
-        leafCommand,
-      };
-
-      // Provide Suggestions based on the now-corrected context
-      if (isArgumentCompletion) {
-        const argsForHandler = [...completedArgsForSchema];
-        if (!hasTrailingSpace && argumentPartial) {
-          argsForHandler.push(argumentPartial);
-        }
-        const argString = argsForHandler.join(' ');
-
-        // Check if command has schema-based completion
-        if (leafCommand!.schema) {
-          /**
-           * @plan:PLAN-20251013-AUTOCOMPLETE.P08
-           * @requirement:REQ-002
-           * @requirement:REQ-003
-           * @requirement:REQ-004
-           * @pseudocode ArgumentSchema.md lines 71-90
-           * Full integration of schema handler with hint support
-           * - Line 71: call createCompletionHandler with current command schema
-           * - Line 72: supply schema specific to active command
-           * - Line 73: capture { suggestions, hint } result
-           * - Line 74: set state for suggestions and activeHint field
-           * - Line 75: handle pending async results with sequence guard
-           * - Line 76-78: gracefully handle resolver errors (log + fallback)
-           */
-          const schemaHandler = createCompletionHandler(leafCommand!.schema);
-          setIsLoadingSuggestions(true);
-
-          schemaHandler(
-            commandContext,
-            {
-              args: argString,
-              completedArgs: completedArgsForSchema,
-              partialArg: argumentPartial,
-              commandPathLength,
-            },
-            currentLine,
-          )
-            .then((completionResult) => {
-              // Race condition protection: only process if this is the latest completion
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (currentSequence !== completionSequenceRef.current) {
-                return;
-              }
-
-              const finalSuggestions = completionResult.suggestions.map(
-                (s) => ({
-                  label: s.value,
-                  value: s.value,
-                  description: s.description,
-                }),
-              );
-
-              // Set suggestions and hint
-              setSuggestions(finalSuggestions);
-              setShowSuggestions(finalSuggestions.length > 0);
-              setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
-              setActiveHint(
-                (completionResult as RuntimeCompletionResult).hint ?? '',
-              );
-
-              setIsLoadingSuggestions(false);
-            })
-            .catch((error) => {
-              // Race condition protection: only process if this is the latest completion
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (currentSequence !== completionSequenceRef.current) {
-                return;
-              }
-
-              debugLogger.error('Schema completion error:', error);
-              setSuggestions([]);
-              setShowSuggestions(false);
-              setActiveSuggestionIndex(-1);
-              setActiveHint('');
-              setIsLoadingSuggestions(false);
-            });
-          return undefined;
-        }
-      }
-
-      // Command/Sub-command Completion
-      const commandsToSearch = currentLevel ?? [];
-      debugLogger.debug(
-        () =>
-          `Commands to search: ${commandsToSearch.length}, Partial: "${commandPartial}"`,
-      );
-      debugLogger.debug(
-        () => `currentLevel: ${currentLevel ? 'exists' : 'null/undefined'}`,
-      );
-      debugLogger.debug(() => `slashCommands at root: ${slashCommands.length}`);
-      if (commandsToSearch.length > 0) {
-        const potentialSuggestions = commandsToSearch.filter((cmd) => {
-          // Filter extension commands: must have extensionName AND be enabled
-          if (cmd.kind === 'extension') {
-            // Extension commands without extensionName are treated as invalid/disabled
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (!cmd.extensionName) {
-              return false;
-            }
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (
-              typeof extensionConfig?.isExtensionEnabled === 'function' &&
-              !extensionConfig.isExtensionEnabled(cmd.extensionName)
-            ) {
-              return false;
-            }
-          }
-          // Match by name or altNames
-          return (
-            typeof cmd.description === 'string' &&
-            cmd.description.length > 0 &&
-            (cmd.name.startsWith(commandPartial) ||
-              cmd.altNames?.some((alt) => alt.startsWith(commandPartial)) ===
-                true)
-          );
-        });
-        debugLogger.debug(
-          () => `Found ${potentialSuggestions.length} potential suggestions`,
-        );
-
-        // Sort potentialSuggestions so that exact match (by name or altName) comes first
-        const sortedSuggestions = [...potentialSuggestions].sort((a, b) => {
-          const aIsExact =
-            a.name === commandPartial ||
-            a.altNames?.includes(commandPartial) === true;
-          const bIsExact =
-            b.name === commandPartial ||
-            b.altNames?.includes(commandPartial) === true;
-          if (aIsExact && !bIsExact) return -1;
-          if (!aIsExact && bIsExact) return 1;
-          return 0;
-        });
-
-        const finalSuggestions = sortedSuggestions.map((cmd) => ({
-          label: cmd.name,
-          value: cmd.name,
-          description: cmd.description,
-        }));
-
-        // Update command mapping for autoExecute support
-        const newCommandMap = new Map<string, SlashCommand>();
-        potentialSuggestions.forEach((cmd) => {
-          newCommandMap.set(cmd.name, cmd);
-        });
-        suggestionCommandMapRef.current = newCommandMap;
-
-        setSuggestions(finalSuggestions);
-        setShowSuggestions(finalSuggestions.length > 0);
-        setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
-        // Don't set loading state - we never showed loading for command completions
-        return undefined;
-      }
-
-      // If we fall through, no suggestions are available.
-      // Don't reset everything - just set empty suggestions and clear hint
-      setSuggestions([]);
-      setShowSuggestions(false);
-      setActiveSuggestionIndex(-1);
-      setActiveHint('');
-      return undefined;
-    }
-
-    // Handle At Command Completion - this needs async file operations
-    completionEnd.current = codePoints.length;
-    for (let i = cursorCol; i < codePoints.length; i++) {
-      if (codePoints[i] === ' ') {
-        let backslashCount = 0;
-        for (let j = i - 1; j >= 0 && codePoints[j] === '\\'; j--) {
-          backslashCount++;
-        }
-
-        if (backslashCount % 2 === 0) {
-          completionEnd.current = i;
-          break;
-        }
-      }
-    }
-
-    const pathStart = commandIndex + 1;
-    const partialPath = currentLine.substring(pathStart, completionEnd.current);
-    const lastSlashIndex = partialPath.lastIndexOf('/');
-    completionStart.current =
-      lastSlashIndex === -1 ? pathStart : pathStart + lastSlashIndex + 1;
-    const baseDirRelative =
-      lastSlashIndex === -1
-        ? '.'
-        : partialPath.substring(0, lastSlashIndex + 1);
-    const prefix = unescapePath(
-      lastSlashIndex === -1
-        ? partialPath
-        : partialPath.substring(lastSlashIndex + 1),
-    );
-
-    let isMounted = true;
-
-    const findFilesRecursively = async (
-      startDir: string,
-      searchPrefix: string,
-      fileDiscovery: FileDiscoveryService | null,
-      filterOptions: {
-        respectGitIgnore?: boolean;
-        respectLlxprtIgnore?: boolean;
-      },
-      currentRelativePath = '',
-      depth = 0,
-      maxDepth = 10, // Limit recursion depth
-      maxResults = 50, // Limit number of results
-    ): Promise<Suggestion[]> => {
-      if (depth > maxDepth) {
-        return [];
-      }
-
-      const lowerSearchPrefix = searchPrefix.toLowerCase();
-      let foundSuggestions: Suggestion[] = [];
-      try {
-        const entries = await fs.readdir(startDir, { withFileTypes: true });
-        // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        for (const entry of entries) {
-          if (foundSuggestions.length >= maxResults) break;
-
-          const entryPathRelative = path.join(currentRelativePath, entry.name);
-          const entryPathFromRoot = path.relative(
-            startDir,
-            path.join(startDir, entry.name),
-          );
-
-          // Conditionally ignore dotfiles
-          if (!searchPrefix.startsWith('.') && entry.name.startsWith('.')) {
-            continue;
-          }
-
-          // Check if this entry should be ignored by filtering options
-          if (
-            fileDiscovery?.shouldIgnoreFile(
-              entryPathFromRoot,
-              filterOptions,
-            ) === true
-          ) {
-            continue;
-          }
-
-          if (entry.name.toLowerCase().startsWith(lowerSearchPrefix)) {
-            foundSuggestions.push({
-              label: entryPathRelative + (entry.isDirectory() ? '/' : ''),
-              value: escapePath(
-                entryPathRelative + (entry.isDirectory() ? '/' : ''),
-              ),
-            });
-          }
-          if (
-            entry.isDirectory() &&
-            entry.name !== 'node_modules' &&
-            !entry.name.startsWith('.') &&
-            foundSuggestions.length < maxResults
-          ) {
-            foundSuggestions = foundSuggestions.concat(
-              await findFilesRecursively(
-                path.join(startDir, entry.name),
-                searchPrefix, // Pass original searchPrefix for recursive calls
-                fileDiscovery,
-                filterOptions,
-                entryPathRelative,
-                depth + 1,
-                maxDepth,
-                maxResults - foundSuggestions.length,
-              ),
-            );
-          }
-        }
-      } catch {
-        // Ignore errors like permission denied or ENOENT during recursive search
-      }
-      return foundSuggestions.slice(0, maxResults);
-    };
-
-    const findFilesWithGlob = async (
-      searchPrefix: string,
-      fileDiscoveryService: FileDiscoveryService,
-      filterOptions: {
-        respectGitIgnore?: boolean;
-        respectLlxprtIgnore?: boolean;
-      },
-      searchDir: string,
-      maxResults = 50,
-    ): Promise<Suggestion[]> => {
-      const globPattern = `**/${searchPrefix}*`;
-      const files = await glob(globPattern, {
-        cwd: searchDir,
-        dot: searchPrefix.startsWith('.'),
-        nocase: true,
-      });
-
-      const suggestions: Suggestion[] = files
-        .filter(
-          (file) => !fileDiscoveryService.shouldIgnoreFile(file, filterOptions),
-        )
-        .map((file: string) => {
-          const absolutePath = path.resolve(searchDir, file);
-          const label = path.relative(cwd, absolutePath);
-          return {
-            label,
-            value: escapePath(label),
-          };
-        })
-        .slice(0, maxResults);
-
-      return suggestions;
-    };
-
-    const fetchSuggestions = async () => {
-      let fetchedSuggestions: Suggestion[] = [];
-
-      // Set loading state after a delay to avoid flicker for fast operations
-      const loadingTimer = setTimeout(() => {
-        setIsLoadingSuggestions(true);
-      }, 200); // Only show loading if operation takes more than 200ms
-
-      const fileDiscoveryService = config ? config.getFileService() : null;
-      const enableRecursiveSearch =
-        config?.getEnableRecursiveFileSearch() ?? true;
-      const filterOptions =
-        config?.getFileFilteringOptions() ?? DEFAULT_FILE_FILTERING_OPTIONS;
-
-      try {
-        // If there's no slash, or it's the root, do a recursive search from workspace directories
-        for (const dir of dirs) {
-          let fetchedSuggestionsPerDir: Suggestion[] = [];
-          if (
-            partialPath.indexOf('/') === -1 &&
-            prefix &&
-            enableRecursiveSearch
-          ) {
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (fileDiscoveryService) {
-              fetchedSuggestionsPerDir = await findFilesWithGlob(
-                prefix,
-                fileDiscoveryService,
-                filterOptions,
-                dir,
-              );
-            } else {
-              fetchedSuggestionsPerDir = await findFilesRecursively(
-                dir,
-                prefix,
-                null,
-                filterOptions,
-              );
-            }
-          } else {
-            // Original behavior: list files in the specific directory
-            const lowerPrefix = prefix.toLowerCase();
-            const baseDirAbsolute = path.resolve(dir, baseDirRelative);
-            const entries = await fs.readdir(baseDirAbsolute, {
-              withFileTypes: true,
-            });
-
-            // Filter entries using git-aware filtering
-            const filteredEntries = [];
-            // eslint-disable-next-line sonarjs/nested-control-flow, sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            for (const entry of entries) {
-              // Conditionally ignore dotfiles
-              if (!prefix.startsWith('.') && entry.name.startsWith('.')) {
-                continue;
-              }
-              if (!entry.name.toLowerCase().startsWith(lowerPrefix)) continue;
-
-              const relativePath = path.relative(
-                dir,
-                path.join(baseDirAbsolute, entry.name),
-              );
-              if (
-                fileDiscoveryService?.shouldIgnoreFile(
-                  relativePath,
-                  filterOptions,
-                ) === true
-              ) {
-                continue;
-              }
-
-              filteredEntries.push(entry);
-            }
-
-            fetchedSuggestionsPerDir = filteredEntries.map((entry) => {
-              const absolutePath = path.resolve(baseDirAbsolute, entry.name);
-              const label =
-                cwd === dir ? entry.name : path.relative(cwd, absolutePath);
-              const suggestionLabel = entry.isDirectory() ? label + '/' : label;
-              return {
-                label: suggestionLabel,
-                value: escapePath(suggestionLabel),
-              };
-            });
-          }
-          fetchedSuggestions = [
-            ...fetchedSuggestions,
-            ...fetchedSuggestionsPerDir,
-          ];
-        }
-
-        // Like glob, we always return forward slashes for path separators, even on Windows.
-        // But preserve backslash escaping for special characters.
-        const specialCharsLookahead = `(?![${SHELL_SPECIAL_CHARS.source.slice(1, -1)}])`;
-        const pathSeparatorRegex = new RegExp(
-          `\\\\${specialCharsLookahead}`,
-          'g',
-        );
-        fetchedSuggestions = fetchedSuggestions.map((suggestion) => ({
-          ...suggestion,
-          label: suggestion.label.replace(pathSeparatorRegex, '/'),
-          value: suggestion.value.replace(pathSeparatorRegex, '/'),
-        }));
-
-        // Sort by depth, then directories first, then alphabetically
-        fetchedSuggestions.sort((a, b) => {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (null match should use empty array)
-          const depthA = (a.label.match(/\//g) || []).length;
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (null match should use empty array)
-          const depthB = (b.label.match(/\//g) || []).length;
-
-          if (depthA !== depthB) {
-            return depthA - depthB;
-          }
-
-          const aIsDir = a.label.endsWith('/');
-          const bIsDir = b.label.endsWith('/');
-          if (aIsDir && !bIsDir) return -1;
-          if (!aIsDir && bIsDir) return 1;
-
-          // exclude extension when comparing
-          const filenameA = a.label.substring(
-            0,
-            a.label.length - path.extname(a.label).length,
-          );
-          const filenameB = b.label.substring(
-            0,
-            b.label.length - path.extname(b.label).length,
-          );
-
-          return filenameA.localeCompare(filenameB) !== 0
-            ? filenameA.localeCompare(filenameB)
-            : a.label.localeCompare(b.label);
-        });
-
-        if (isMounted) {
-          setSuggestions(fetchedSuggestions);
-          setShowSuggestions(fetchedSuggestions.length > 0);
-          setActiveSuggestionIndex(fetchedSuggestions.length > 0 ? 0 : -1);
-          setVisibleStartIndex(0);
-        }
-      } catch (error: unknown) {
-        if (isNodeError(error) && error.code === 'ENOENT') {
-          if (isMounted) {
-            setSuggestions([]);
-            setShowSuggestions(false);
-          }
-        } else {
-          debugLogger.error(
-            `Error fetching completion suggestions for ${partialPath}: ${getErrorMessage(error)}`,
-          );
-          if (isMounted) {
-            // Don't reset everything on error - just clear suggestions
-            setSuggestions([]);
-            setShowSuggestions(false);
-            setActiveSuggestionIndex(-1);
-          }
-        }
-      }
-
-      // Clear the loading timer if it hasn't fired yet
-      clearTimeout(loadingTimer);
-
-      if (isMounted) {
-        setIsLoadingSuggestions(false);
-      }
-    };
-
-    // Only schedule async file operations for @ commands
-    // Slash commands are handled synchronously above and return early
-    let debounceTimeout: NodeJS.Timeout | undefined;
-    if (codePoints[commandIndex] === '@') {
-      // File operations are expensive and benefit from debouncing
-      debounceTimeout = setTimeout(() => {
-        void fetchSuggestions();
-      }, 100);
-    }
-
-    return () => {
-      isMounted = false;
-      if (debounceTimeout) {
-        clearTimeout(debounceTimeout);
-      }
-    };
-  }, [
-    // Only re-run when the actual input changes
-    memoizedInput,
-    commandIndex,
-    cursorCol,
-    reverseSearchActive,
-    // These are needed for the computation
-    dirs,
-    cwd,
+  const { cmdIdx, refs, cursorRow } = useSlashCompletionSetup(
+    buffer,
     slashCommands,
     commandContext,
-    extensionConfig, // Add explicit dependency on config to catch changes
     config,
-    // These are the setters - they're stable references
+    dirs,
+    cwd,
+    reverseSearchActive,
     resetCompletionState,
     setSuggestions,
     setShowSuggestions,
@@ -897,89 +389,24 @@ export function useSlashCompletion(
     setIsLoadingSuggestions,
     setIsPerfectMatch,
     setVisibleStartIndex,
-  ]);
-
-  const getCommandFromSuggestion = useCallback(
-    (suggestionIndex: number): SlashCommand | null => {
-      if (suggestionIndex < 0 || suggestionIndex >= suggestions.length) {
-        return null;
-      }
-      const suggestion = suggestions[suggestionIndex];
-      return suggestionCommandMapRef.current.get(suggestion.value) ?? null;
-    },
-    [suggestions],
+    setActiveHint,
   );
 
-  const handleAutocomplete = useCallback(
-    (indexToUse: number): string | undefined => {
-      if (indexToUse < 0 || indexToUse >= suggestions.length) {
-        return undefined;
-      }
-      const suggestion = suggestions[indexToUse].value;
-
-      if (completionStart.current === -1 || completionEnd.current === -1) {
-        return undefined;
-      }
-
-      const isSlash = (buffer.lines[cursorRow] || '')[commandIndex] === '/';
-      let suggestionText = suggestion;
-      // If we are inserting (not replacing), and the preceding character is not a space, add one.
-      if (
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        isSlash &&
-        completionStart.current === completionEnd.current &&
-        completionStart.current > commandIndex + 1 &&
-        (buffer.lines[cursorRow] || '')[completionStart.current - 1] !== ' '
-      ) {
-        suggestionText = ' ' + suggestionText;
-      }
-
-      suggestionText += ' ';
-
-      const startOffset = logicalPosToOffset(
-        buffer.lines,
-        cursorRow,
-        completionStart.current,
-      );
-      const endOffset = logicalPosToOffset(
-        buffer.lines,
-        cursorRow,
-        completionEnd.current,
-      );
-
-      // Compute the resulting text before dispatching (buffer.text will be
-      // stale in any deferred callback because it is derived via useMemo).
-      const resultingText =
-        buffer.text.substring(0, startOffset) +
-        suggestionText +
-        buffer.text.substring(endOffset);
-
-      buffer.replaceRangeByOffset(startOffset, endOffset, suggestionText);
-
-      // Clear current suggestions so we don't re-apply stale entries while
-      // the resolver recomputes the next argument context.
-      setSuggestions([]);
-      setShowSuggestions(false);
-      setActiveSuggestionIndex(-1);
-      setVisibleStartIndex(0);
-      setActiveHint('');
-      setIsLoadingSuggestions(false);
-
-      return resultingText;
-    },
-    [
-      cursorRow,
-      buffer,
-      suggestions,
-      commandIndex,
-      setSuggestions,
-      setShowSuggestions,
-      setActiveSuggestionIndex,
-      setVisibleStartIndex,
-      setActiveHint,
-      setIsLoadingSuggestions,
-    ],
+  const handleAutocomplete = useAutocompleteCallback(
+    suggestions,
+    buffer,
+    cursorRow,
+    cmdIdx,
+    refs,
+    setSuggestions,
+    setShowSuggestions,
+    setActiveSuggestionIndex,
+    setVisibleStartIndex,
+    setActiveHint,
+    setIsLoadingSuggestions,
   );
+
+  const getCommandFromSuggestion = useCommandLookup(suggestions, refs);
 
   return {
     suggestions,
@@ -997,7 +424,7 @@ export function useSlashCompletion(
     handleAutocomplete,
     getCommandFromSuggestion,
     isArgumentCompletion:
-      slashCompletionContextRef.current.isArgumentCompletion,
-    leafCommand: slashCompletionContextRef.current.leafCommand,
+      refs.slashCompletionContextRef.current.isArgumentCompletion,
+    leafCommand: refs.slashCompletionContextRef.current.leafCommand,
   };
 }
