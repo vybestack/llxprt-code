@@ -9,6 +9,7 @@
 
 import { Box, Text } from 'ink';
 import type React from 'react';
+import { useCallback } from 'react';
 
 import type { SessionSummary } from '@vybestack/llxprt-code-core';
 
@@ -79,6 +80,529 @@ function getSessionDisplay(
   };
 }
 
+const SessionPreview: React.FC<{
+  session: EnrichedSessionSummary;
+  isNarrow: boolean;
+}> = ({ session, isNarrow }) => {
+  switch (session.previewState) {
+    case 'loading':
+      return (
+        <Text color={SemanticColors.text.secondary} italic>
+          Loading...
+        </Text>
+      );
+    case 'none':
+      return (
+        <Text color={SemanticColors.text.secondary} italic>
+          (no user message)
+        </Text>
+      );
+    case 'error':
+      return (
+        <Text color={SemanticColors.text.secondary} italic>
+          (preview unavailable)
+        </Text>
+      );
+    case 'loaded':
+    default: {
+      const previewText = session.firstUserMessage ?? '';
+      const maxLen = isNarrow ? 40 : 80;
+      const truncated = truncateEnd(previewText.replace(/\n/g, ' '), maxLen);
+      return <Text color={SemanticColors.text.secondary}>{truncated}</Text>;
+    }
+  }
+};
+
+const NarrowSessionRow: React.FC<{
+  session: EnrichedSessionSummary;
+  isSelected: boolean;
+  display: PersistedSessionDisplay;
+  relTime: string;
+  isNarrow: boolean;
+}> = ({ session, isSelected, display, relTime, isNarrow }) => (
+  <Box key={session.sessionId} flexDirection="column">
+    <Box>
+      <Text
+        color={
+          isSelected ? SemanticColors.text.accent : SemanticColors.text.primary
+        }
+      >
+        {isSelected ? '● ' : '○ '}
+      </Text>
+      <Text
+        color={
+          isSelected ? SemanticColors.text.accent : SemanticColors.text.primary
+        }
+      >
+        {display.provider}
+      </Text>
+      <Text color={SemanticColors.text.secondary}> · </Text>
+      <Text color={SemanticColors.text.secondary}>{relTime}</Text>
+      {session.isLocked ? (
+        <Text color={SemanticColors.status.warning}> (in use)</Text>
+      ) : null}
+      {isSelected ? (
+        <Text color={SemanticColors.text.secondary}>
+          {' '}
+          [{session.sessionId.slice(0, 8)}]
+        </Text>
+      ) : null}
+    </Box>
+    <Box marginLeft={2}>
+      <SessionPreview session={session} isNarrow={isNarrow} />
+    </Box>
+  </Box>
+);
+
+const WideSessionRow: React.FC<{
+  session: EnrichedSessionSummary;
+  isSelected: boolean;
+  display: PersistedSessionDisplay;
+  relTime: string;
+  oneBasedIndex: number;
+  isNarrow: boolean;
+}> = ({ session, isSelected, display, relTime, oneBasedIndex, isNarrow }) => (
+  <Box key={session.sessionId} flexDirection="column">
+    <Box>
+      <Text
+        color={
+          isSelected ? SemanticColors.text.accent : SemanticColors.text.primary
+        }
+      >
+        {isSelected ? '● ' : '○ '}
+      </Text>
+      <Text color={SemanticColors.text.secondary}>#{oneBasedIndex} </Text>
+      <Text
+        color={
+          isSelected ? SemanticColors.text.accent : SemanticColors.text.primary
+        }
+      >
+        {display.provider}
+      </Text>
+      <Text color={SemanticColors.text.secondary}>/</Text>
+      <Text color={SemanticColors.text.primary}>
+        {truncateEnd(display.model, 30)}
+      </Text>
+      <Text color={SemanticColors.text.secondary}> · </Text>
+      <Text color={SemanticColors.text.secondary}>{relTime}</Text>
+      <Text color={SemanticColors.text.secondary}> · </Text>
+      <Text color={SemanticColors.text.secondary}>
+        {formatFileSize(display.fileSize)}
+      </Text>
+      {session.isLocked ? (
+        <Text color={SemanticColors.status.warning}> (in use)</Text>
+      ) : null}
+    </Box>
+    <Box marginLeft={2}>
+      <SessionPreview session={session} isNarrow={isNarrow} />
+    </Box>
+  </Box>
+);
+
+const LoadingState: React.FC<{ isNarrow: boolean }> = ({ isNarrow }) => {
+  if (isNarrow) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold color={SemanticColors.text.primary}>
+          Sessions
+        </Text>
+        <Text color={SemanticColors.text.secondary}>Loading sessions...</Text>
+      </Box>
+    );
+  }
+  return (
+    <Box
+      borderStyle="round"
+      borderColor={SemanticColors.border.default}
+      flexDirection="column"
+      padding={1}
+    >
+      <Text bold color={SemanticColors.text.primary}>
+        Session Browser
+      </Text>
+      <Text color={SemanticColors.text.secondary}>Loading sessions...</Text>
+    </Box>
+  );
+};
+
+const EmptyState: React.FC<{ isNarrow: boolean }> = ({ isNarrow }) => {
+  if (isNarrow) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold color={SemanticColors.text.primary}>
+          Sessions
+        </Text>
+        <Text color={SemanticColors.text.primary}>
+          No sessions found for this project.
+        </Text>
+        <Text color={SemanticColors.text.secondary}>
+          Sessions are created automatically when you start a conversation.
+        </Text>
+        <Box marginTop={1}>
+          <Text color={SemanticColors.text.secondary}>Press Esc to close</Text>
+        </Box>
+      </Box>
+    );
+  }
+  return (
+    <Box
+      borderStyle="round"
+      borderColor={SemanticColors.border.default}
+      flexDirection="column"
+      padding={1}
+    >
+      <Text bold color={SemanticColors.text.primary}>
+        Session Browser
+      </Text>
+      <Text color={SemanticColors.text.primary}>
+        No sessions found for this project.
+      </Text>
+      <Text color={SemanticColors.text.secondary}>
+        Sessions are created automatically when you start a conversation.
+      </Text>
+      <Box marginTop={1}>
+        <Text color={SemanticColors.text.secondary}>Press Esc to close</Text>
+      </Box>
+    </Box>
+  );
+};
+
+const SearchBarNarrow: React.FC<{
+  state: ReturnType<typeof useSessionBrowser>;
+}> = ({ state }) => (
+  <Box marginY={1}>
+    <Text
+      color={
+        state.isSearching
+          ? SemanticColors.text.primary
+          : SemanticColors.text.secondary
+      }
+    >
+      Search:{' '}
+    </Text>
+    {state.isSearching ? (
+      <Text color={SemanticColors.text.accent}>▌</Text>
+    ) : null}
+    <Text color={SemanticColors.text.primary}>{state.searchTerm}</Text>
+    {state.searchTerm.length > 0 ? (
+      <Text color={SemanticColors.text.secondary}>
+        {' '}
+        ({state.filteredSessions.length} found)
+      </Text>
+    ) : null}
+  </Box>
+);
+
+const SearchBarWide: React.FC<{
+  state: ReturnType<typeof useSessionBrowser>;
+}> = ({ state }) => {
+  const matchCount = state.filteredSessions.length;
+  return (
+    <Box marginY={1}>
+      <Text
+        color={
+          state.isSearching
+            ? SemanticColors.text.primary
+            : SemanticColors.text.secondary
+        }
+      >
+        Search:{' '}
+      </Text>
+      {state.isSearching ? (
+        <Text color={SemanticColors.text.accent}>▌</Text>
+      ) : null}
+      <Text color={SemanticColors.text.primary}>{state.searchTerm}</Text>
+      <Text color={SemanticColors.text.secondary}>
+        {' '}
+        ({matchCount} {matchCount === 1 ? 'session' : 'sessions'} found)
+        {state.isSearching ? ' (Tab to navigate)' : ''}
+      </Text>
+    </Box>
+  );
+};
+
+const SortBar: React.FC<{
+  sortOrder: string;
+}> = ({ sortOrder }) => (
+  <Box marginBottom={1}>
+    <Text color={SemanticColors.text.secondary}>Sort: </Text>
+    <Text
+      color={
+        sortOrder === 'newest'
+          ? SemanticColors.text.primary
+          : SemanticColors.text.secondary
+      }
+    >
+      {sortOrder === 'newest' ? '[newest]' : 'newest'}
+    </Text>
+    <Text color={SemanticColors.text.secondary}> </Text>
+    <Text
+      color={
+        sortOrder === 'oldest'
+          ? SemanticColors.text.primary
+          : SemanticColors.text.secondary
+      }
+    >
+      {sortOrder === 'oldest' ? '[oldest]' : 'oldest'}
+    </Text>
+    <Text color={SemanticColors.text.secondary}> </Text>
+    <Text
+      color={
+        sortOrder === 'size'
+          ? SemanticColors.text.primary
+          : SemanticColors.text.secondary
+      }
+    >
+      {sortOrder === 'size' ? '[size]' : 'size'}
+    </Text>
+    <Text color={SemanticColors.text.secondary}> (press s to cycle)</Text>
+  </Box>
+);
+
+const PageIndicator: React.FC<{
+  page: number;
+  totalPages: number;
+}> = ({ page, totalPages }) => {
+  if (totalPages <= 1) return null;
+
+  return (
+    <Box marginY={1}>
+      <Text color={SemanticColors.text.secondary}>
+        Page {page + 1} of {totalPages} (PgUp/PgDn to navigate)
+      </Text>
+    </Box>
+  );
+};
+
+const SelectionDetail: React.FC<{
+  session: EnrichedSessionSummary | null;
+}> = ({ session }) => {
+  if (!session) return null;
+
+  const relTime = formatRelativeTime(session.lastModified, { mode: 'long' });
+  const display = getSessionDisplay(session);
+
+  return (
+    <Box marginTop={1}>
+      <Text color={SemanticColors.text.secondary}>Selected: </Text>
+      <Text color={SemanticColors.text.primary}>{session.sessionId}</Text>
+      <Text color={SemanticColors.text.secondary}> · </Text>
+      <Text color={SemanticColors.text.primary}>
+        {display.provider}/{display.model}
+      </Text>
+      <Text color={SemanticColors.text.secondary}> · </Text>
+      <Text color={SemanticColors.text.secondary}>{relTime}</Text>
+    </Box>
+  );
+};
+
+const ControlsBarNarrow: React.FC<{
+  hasSessions: boolean;
+  sortOrder: string;
+}> = ({ hasSessions, sortOrder }) => (
+  <Box marginTop={1}>
+    <Text color={SemanticColors.text.secondary}>
+      Nav:↑↓ {hasSessions ? 'Enter ' : ''}s:{sortOrder} Esc
+    </Text>
+  </Box>
+);
+
+const ControlsBarWide: React.FC<{
+  hasSessions: boolean;
+}> = ({ hasSessions }) => (
+  <Box marginTop={1}>
+    <Text color={SemanticColors.text.secondary}>
+      Controls: ↑↓ Navigate
+      {hasSessions ? ' [Enter] Resume [Del] Delete' : ''} [s] Sort [Tab] Toggle
+      Mode [Esc] Close
+    </Text>
+  </Box>
+);
+
+const ErrorMessage: React.FC<{ error: string | null }> = ({ error }) => {
+  if (error === null) return null;
+
+  return (
+    <Box marginY={1}>
+      <Text color={SemanticColors.status.error}>{error}</Text>
+    </Box>
+  );
+};
+
+const SkippedNotice: React.FC<{ skippedCount: number }> = ({
+  skippedCount,
+}) => {
+  if (skippedCount === 0) return null;
+
+  return (
+    <Box marginY={1}>
+      <Text color={SemanticColors.status.warning}>
+        Skipped {skippedCount} unreadable session(s).
+      </Text>
+    </Box>
+  );
+};
+
+const ResumingStatus: React.FC<{ isResuming: boolean }> = ({ isResuming }) => {
+  if (isResuming !== true) return null;
+
+  return (
+    <Box marginY={1}>
+      <Text color={SemanticColors.text.accent}>Resuming...</Text>
+    </Box>
+  );
+};
+
+const DeleteConfirmation: React.FC<{
+  deleteConfirmIndex: number | null;
+}> = ({ deleteConfirmIndex }) => {
+  if (deleteConfirmIndex === null) return null;
+
+  return (
+    <Box marginY={1}>
+      <Text color={SemanticColors.status.warning}>
+        Delete this session? Press Y to confirm, N or Esc to cancel.
+      </Text>
+    </Box>
+  );
+};
+
+const ConversationConfirmation: React.FC<{
+  conversationConfirmActive: boolean;
+}> = ({ conversationConfirmActive }) => {
+  if (conversationConfirmActive !== true) return null;
+
+  return (
+    <Box marginY={1}>
+      <Text color={SemanticColors.status.warning}>
+        This will replace your current conversation. Continue? Y/N
+      </Text>
+    </Box>
+  );
+};
+
+const EmptySearchResults: React.FC<{
+  pageItemsLength: number;
+  searchTerm: string;
+}> = ({ pageItemsLength, searchTerm }) => {
+  if (pageItemsLength > 0 || searchTerm === '') return null;
+
+  return (
+    <Box marginY={1}>
+      <Text color={SemanticColors.text.secondary}>
+        No sessions match &quot;{searchTerm}&quot;
+      </Text>
+    </Box>
+  );
+};
+
+const SessionList: React.FC<{
+  state: ReturnType<typeof useSessionBrowser>;
+  isNarrow: boolean;
+}> = ({ state, isNarrow }) => {
+  if (state.pageItems.length === 0) {
+    return (
+      <EmptySearchResults pageItemsLength={0} searchTerm={state.searchTerm} />
+    );
+  }
+
+  return (
+    <Box flexDirection="column">
+      {state.pageItems.map((session, index) => {
+        const isSelected = index === state.selectedIndex;
+        const relTime = formatRelativeTime(session.lastModified, {
+          mode: isNarrow ? 'short' : 'long',
+        });
+        const display = getSessionDisplay(session);
+
+        if (isNarrow) {
+          return (
+            <NarrowSessionRow
+              key={session.sessionId}
+              session={session}
+              isSelected={isSelected}
+              display={display}
+              relTime={relTime}
+              isNarrow={isNarrow}
+            />
+          );
+        }
+
+        const oneBasedIndex = state.page * 20 + index + 1;
+        return (
+          <WideSessionRow
+            key={session.sessionId}
+            session={session}
+            isSelected={isSelected}
+            display={display}
+            relTime={relTime}
+            oneBasedIndex={oneBasedIndex}
+            isNarrow={isNarrow}
+          />
+        );
+      })}
+    </Box>
+  );
+};
+
+const SessionContent: React.FC<{
+  isNarrow: boolean;
+  state: ReturnType<typeof useSessionBrowser>;
+}> = ({ isNarrow, state }) => (
+  <>
+    {/* Title */}
+    <Text bold color={SemanticColors.text.primary}>
+      {isNarrow ? 'Sessions' : 'Session Browser'}
+    </Text>
+
+    {/* Search bar */}
+    {isNarrow ? (
+      <SearchBarNarrow state={state} />
+    ) : (
+      <SearchBarWide state={state} />
+    )}
+
+    {/* Sort bar (wide mode only) */}
+    {!isNarrow && <SortBar sortOrder={state.sortOrder} />}
+
+    {/* Skipped notice */}
+    <SkippedNotice skippedCount={state.skippedCount} />
+
+    {/* Session list */}
+    <SessionList state={state} isNarrow={isNarrow} />
+
+    {/* Page indicator */}
+    <PageIndicator page={state.page} totalPages={state.totalPages} />
+
+    {/* Error message */}
+    <ErrorMessage error={state.error} />
+
+    {/* Resuming status */}
+    <ResumingStatus isResuming={state.isResuming} />
+
+    {/* Delete confirmation */}
+    <DeleteConfirmation deleteConfirmIndex={state.deleteConfirmIndex} />
+
+    {/* Conversation confirmation */}
+    <ConversationConfirmation
+      conversationConfirmActive={state.conversationConfirmActive}
+    />
+
+    {/* Selection detail (wide mode only) */}
+    {!isNarrow && <SelectionDetail session={state.selectedSession} />}
+
+    {/* Controls bar */}
+    {isNarrow ? (
+      <ControlsBarNarrow
+        hasSessions={state.pageItems.length > 0}
+        sortOrder={state.sortOrder}
+      />
+    ) : (
+      <ControlsBarWide hasSessions={state.pageItems.length > 0} />
+    )}
+  </>
+);
+
 /**
  * Interactive session browser dialog for selecting and resuming sessions
  * @plan PLAN-20260214-SESSIONBROWSER.P15
@@ -105,501 +629,25 @@ export function SessionBrowserDialog(
     hasActiveConversation,
   });
 
-  // Register keypress handler
-  useKeypress(
-    (key) => {
+  const handleKeypress = useCallback(
+    (key: Parameters<Parameters<typeof useKeypress>[0]>[0]) => {
       state.handleKeypress(key.sequence, key);
     },
-    { isActive: true },
+    [state],
   );
 
-  // Loading state
+  useKeypress(handleKeypress, { isActive: true });
+
   if (state.isLoading) {
-    if (isNarrow) {
-      return (
-        <Box flexDirection="column" padding={1}>
-          <Text bold color={SemanticColors.text.primary}>
-            Sessions
-          </Text>
-          <Text color={SemanticColors.text.secondary}>Loading sessions...</Text>
-        </Box>
-      );
-    }
-    return (
-      <Box
-        borderStyle="round"
-        borderColor={SemanticColors.border.default}
-        flexDirection="column"
-        padding={1}
-      >
-        <Text bold color={SemanticColors.text.primary}>
-          Session Browser
-        </Text>
-        <Text color={SemanticColors.text.secondary}>Loading sessions...</Text>
-      </Box>
-    );
+    return <LoadingState isNarrow={isNarrow} />;
   }
 
-  // Empty state (no sessions)
   if (state.sessions.length === 0 && state.searchTerm === '') {
-    if (isNarrow) {
-      return (
-        <Box flexDirection="column" padding={1}>
-          <Text bold color={SemanticColors.text.primary}>
-            Sessions
-          </Text>
-          <Text color={SemanticColors.text.primary}>
-            No sessions found for this project.
-          </Text>
-          <Text color={SemanticColors.text.secondary}>
-            Sessions are created automatically when you start a conversation.
-          </Text>
-          <Box marginTop={1}>
-            <Text color={SemanticColors.text.secondary}>
-              Press Esc to close
-            </Text>
-          </Box>
-        </Box>
-      );
-    }
-    return (
-      <Box
-        borderStyle="round"
-        borderColor={SemanticColors.border.default}
-        flexDirection="column"
-        padding={1}
-      >
-        <Text bold color={SemanticColors.text.primary}>
-          Session Browser
-        </Text>
-        <Text color={SemanticColors.text.primary}>
-          No sessions found for this project.
-        </Text>
-        <Text color={SemanticColors.text.secondary}>
-          Sessions are created automatically when you start a conversation.
-        </Text>
-        <Box marginTop={1}>
-          <Text color={SemanticColors.text.secondary}>Press Esc to close</Text>
-        </Box>
-      </Box>
-    );
+    return <EmptyState isNarrow={isNarrow} />;
   }
 
-  // Render session preview text based on preview state
-  const renderPreview = (session: EnrichedSessionSummary): React.ReactNode => {
-    switch (session.previewState) {
-      case 'loading':
-        return (
-          <Text color={SemanticColors.text.secondary} italic>
-            Loading...
-          </Text>
-        );
-      case 'none':
-        return (
-          <Text color={SemanticColors.text.secondary} italic>
-            (no user message)
-          </Text>
-        );
-      case 'error':
-        return (
-          <Text color={SemanticColors.text.secondary} italic>
-            (preview unavailable)
-          </Text>
-        );
-      case 'loaded':
-      default: {
-        const previewText = session.firstUserMessage ?? '';
-        const maxLen = isNarrow ? 40 : 80;
-        const truncated = truncateEnd(previewText.replace(/\n/g, ' '), maxLen);
-        return <Text color={SemanticColors.text.secondary}>{truncated}</Text>;
-      }
-    }
-  };
+  const content = <SessionContent isNarrow={isNarrow} state={state} />;
 
-  // Render a session row
-  const renderSessionRow = (
-    session: EnrichedSessionSummary,
-    index: number,
-    isSelected: boolean,
-  ): React.ReactNode => {
-    const relTime = formatRelativeTime(session.lastModified, {
-      mode: isNarrow ? 'short' : 'long',
-    });
-
-    const display = getSessionDisplay(session);
-
-    if (isNarrow) {
-      // Narrow mode: compact layout, no index, show session ID suffix for selected
-      return (
-        <Box key={session.sessionId} flexDirection="column">
-          <Box>
-            <Text
-              color={
-                isSelected
-                  ? SemanticColors.text.accent
-                  : SemanticColors.text.primary
-              }
-            >
-              {isSelected ? '● ' : '○ '}
-            </Text>
-            <Text
-              color={
-                isSelected
-                  ? SemanticColors.text.accent
-                  : SemanticColors.text.primary
-              }
-            >
-              {display.provider}
-            </Text>
-            <Text color={SemanticColors.text.secondary}> · </Text>
-            <Text color={SemanticColors.text.secondary}>{relTime}</Text>
-            {session.isLocked ? (
-              <Text color={SemanticColors.status.warning}> (in use)</Text>
-            ) : null}
-            {isSelected ? (
-              <Text color={SemanticColors.text.secondary}>
-                {' '}
-                [{session.sessionId.slice(0, 8)}]
-              </Text>
-            ) : null}
-          </Box>
-          <Box marginLeft={2}>{renderPreview(session)}</Box>
-        </Box>
-      );
-    }
-
-    // Wide mode: full layout with index and file size
-    const oneBasedIndex = state.page * 20 + index + 1;
-    return (
-      <Box key={session.sessionId} flexDirection="column">
-        <Box>
-          <Text
-            color={
-              isSelected
-                ? SemanticColors.text.accent
-                : SemanticColors.text.primary
-            }
-          >
-            {isSelected ? '● ' : '○ '}
-          </Text>
-          <Text color={SemanticColors.text.secondary}>#{oneBasedIndex} </Text>
-          <Text
-            color={
-              isSelected
-                ? SemanticColors.text.accent
-                : SemanticColors.text.primary
-            }
-          >
-            {display.provider}
-          </Text>
-          <Text color={SemanticColors.text.secondary}>/</Text>
-          <Text color={SemanticColors.text.primary}>
-            {truncateEnd(display.model, 30)}
-          </Text>
-          <Text color={SemanticColors.text.secondary}> · </Text>
-          <Text color={SemanticColors.text.secondary}>{relTime}</Text>
-          <Text color={SemanticColors.text.secondary}> · </Text>
-          <Text color={SemanticColors.text.secondary}>
-            {formatFileSize(display.fileSize)}
-          </Text>
-          {session.isLocked ? (
-            <Text color={SemanticColors.status.warning}> (in use)</Text>
-          ) : null}
-        </Box>
-        <Box marginLeft={2}>{renderPreview(session)}</Box>
-      </Box>
-    );
-  };
-
-  // Render search bar
-  const renderSearchBar = (): React.ReactNode => {
-    const matchCount = state.filteredSessions.length;
-    const hasSearch = state.searchTerm.length > 0;
-
-    if (isNarrow) {
-      return (
-        <Box marginY={1}>
-          <Text
-            color={
-              state.isSearching
-                ? SemanticColors.text.primary
-                : SemanticColors.text.secondary
-            }
-          >
-            Search:{' '}
-          </Text>
-          {state.isSearching ? (
-            <Text color={SemanticColors.text.accent}>▌</Text>
-          ) : null}
-          <Text color={SemanticColors.text.primary}>{state.searchTerm}</Text>
-          {hasSearch ? (
-            <Text color={SemanticColors.text.secondary}>
-              {' '}
-              ({matchCount} found)
-            </Text>
-          ) : null}
-        </Box>
-      );
-    }
-
-    return (
-      <Box marginY={1}>
-        <Text
-          color={
-            state.isSearching
-              ? SemanticColors.text.primary
-              : SemanticColors.text.secondary
-          }
-        >
-          Search:{' '}
-        </Text>
-        {state.isSearching ? (
-          <Text color={SemanticColors.text.accent}>▌</Text>
-        ) : null}
-        <Text color={SemanticColors.text.primary}>{state.searchTerm}</Text>
-        <Text color={SemanticColors.text.secondary}>
-          {' '}
-          ({matchCount} {matchCount === 1 ? 'session' : 'sessions'} found)
-          {state.isSearching ? ' (Tab to navigate)' : ''}
-        </Text>
-      </Box>
-    );
-  };
-
-  // Render sort bar (wide mode only)
-  const renderSortBar = (): React.ReactNode => {
-    if (isNarrow) return null;
-
-    return (
-      <Box marginBottom={1}>
-        <Text color={SemanticColors.text.secondary}>Sort: </Text>
-        <Text
-          color={
-            state.sortOrder === 'newest'
-              ? SemanticColors.text.primary
-              : SemanticColors.text.secondary
-          }
-        >
-          {state.sortOrder === 'newest' ? '[newest]' : 'newest'}
-        </Text>
-        <Text color={SemanticColors.text.secondary}> </Text>
-        <Text
-          color={
-            state.sortOrder === 'oldest'
-              ? SemanticColors.text.primary
-              : SemanticColors.text.secondary
-          }
-        >
-          {state.sortOrder === 'oldest' ? '[oldest]' : 'oldest'}
-        </Text>
-        <Text color={SemanticColors.text.secondary}> </Text>
-        <Text
-          color={
-            state.sortOrder === 'size'
-              ? SemanticColors.text.primary
-              : SemanticColors.text.secondary
-          }
-        >
-          {state.sortOrder === 'size' ? '[size]' : 'size'}
-        </Text>
-        <Text color={SemanticColors.text.secondary}> (press s to cycle)</Text>
-      </Box>
-    );
-  };
-
-  // Render page indicator
-  const renderPageIndicator = (): React.ReactNode => {
-    if (state.totalPages <= 1) return null;
-
-    return (
-      <Box marginY={1}>
-        <Text color={SemanticColors.text.secondary}>
-          Page {state.page + 1} of {state.totalPages} (PgUp/PgDn to navigate)
-        </Text>
-      </Box>
-    );
-  };
-
-  // Render selection detail (wide mode only)
-  const renderSelectionDetail = (): React.ReactNode => {
-    if (isNarrow || !state.selectedSession) return null;
-
-    const session = state.selectedSession;
-    const relTime = formatRelativeTime(session.lastModified, { mode: 'long' });
-    const display = getSessionDisplay(session);
-
-    return (
-      <Box marginTop={1}>
-        <Text color={SemanticColors.text.secondary}>Selected: </Text>
-        <Text color={SemanticColors.text.primary}>{session.sessionId}</Text>
-        <Text color={SemanticColors.text.secondary}> · </Text>
-        <Text color={SemanticColors.text.primary}>
-          {display.provider}/{display.model}
-        </Text>
-        <Text color={SemanticColors.text.secondary}> · </Text>
-        <Text color={SemanticColors.text.secondary}>{relTime}</Text>
-      </Box>
-    );
-  };
-
-  // Render controls bar
-  const renderControlsBar = (): React.ReactNode => {
-    const hasSessions = state.pageItems.length > 0;
-
-    if (isNarrow) {
-      return (
-        <Box marginTop={1}>
-          <Text color={SemanticColors.text.secondary}>
-            Nav:↑↓ {hasSessions ? 'Enter ' : ''}s:{state.sortOrder} Esc
-          </Text>
-        </Box>
-      );
-    }
-
-    return (
-      <Box marginTop={1}>
-        <Text color={SemanticColors.text.secondary}>
-          Controls: ↑↓ Navigate
-          {hasSessions ? ' [Enter] Resume [Del] Delete' : ''} [s] Sort [Tab]
-          Toggle Mode [Esc] Close
-        </Text>
-      </Box>
-    );
-  };
-
-  // Render error message
-  const renderError = (): React.ReactNode => {
-    if (!state.error) return null;
-
-    return (
-      <Box marginY={1}>
-        <Text color={SemanticColors.status.error}>{state.error}</Text>
-      </Box>
-    );
-  };
-
-  // Render skipped notice
-  const renderSkippedNotice = (): React.ReactNode => {
-    if (state.skippedCount === 0) return null;
-
-    return (
-      <Box marginY={1}>
-        <Text color={SemanticColors.status.warning}>
-          Skipped {state.skippedCount} unreadable session(s).
-        </Text>
-      </Box>
-    );
-  };
-
-  // Render resuming status
-  const renderResumingStatus = (): React.ReactNode => {
-    if (!state.isResuming) return null;
-
-    return (
-      <Box marginY={1}>
-        <Text color={SemanticColors.text.accent}>Resuming...</Text>
-      </Box>
-    );
-  };
-
-  // Render delete confirmation
-  const renderDeleteConfirmation = (): React.ReactNode => {
-    if (state.deleteConfirmIndex === null) return null;
-
-    return (
-      <Box marginY={1}>
-        <Text color={SemanticColors.status.warning}>
-          Delete this session? Press Y to confirm, N or Esc to cancel.
-        </Text>
-      </Box>
-    );
-  };
-
-  // Render conversation confirmation
-  const renderConversationConfirmation = (): React.ReactNode => {
-    if (!state.conversationConfirmActive) return null;
-
-    return (
-      <Box marginY={1}>
-        <Text color={SemanticColors.status.warning}>
-          This will replace your current conversation. Continue? Y/N
-        </Text>
-      </Box>
-    );
-  };
-
-  // Render empty search results
-  const renderEmptySearchResults = (): React.ReactNode => {
-    if (state.pageItems.length > 0 || state.searchTerm === '') return null;
-
-    return (
-      <Box marginY={1}>
-        <Text color={SemanticColors.text.secondary}>
-          No sessions match &quot;{state.searchTerm}&quot;
-        </Text>
-      </Box>
-    );
-  };
-
-  // Render session list
-  const renderSessionList = (): React.ReactNode => {
-    if (state.pageItems.length === 0) {
-      return renderEmptySearchResults();
-    }
-
-    return (
-      <Box flexDirection="column">
-        {state.pageItems.map((session, index) =>
-          renderSessionRow(session, index, index === state.selectedIndex),
-        )}
-      </Box>
-    );
-  };
-
-  // Main content
-  const content = (
-    <>
-      {/* Title */}
-      <Text bold color={SemanticColors.text.primary}>
-        {isNarrow ? 'Sessions' : 'Session Browser'}
-      </Text>
-
-      {/* Search bar */}
-      {renderSearchBar()}
-
-      {/* Sort bar (wide mode only) */}
-      {renderSortBar()}
-
-      {/* Skipped notice */}
-      {renderSkippedNotice()}
-
-      {/* Session list */}
-      {renderSessionList()}
-
-      {/* Page indicator */}
-      {renderPageIndicator()}
-
-      {/* Error message */}
-      {renderError()}
-
-      {/* Resuming status */}
-      {renderResumingStatus()}
-
-      {/* Delete confirmation */}
-      {renderDeleteConfirmation()}
-
-      {/* Conversation confirmation */}
-      {renderConversationConfirmation()}
-
-      {/* Selection detail (wide mode only) */}
-      {renderSelectionDetail()}
-
-      {/* Controls bar */}
-      {renderControlsBar()}
-    </>
-  );
-
-  // Wrap in box with border (wide mode) or borderless (narrow mode)
   if (isNarrow) {
     return (
       <Box flexDirection="column" padding={1}>
