@@ -37,26 +37,10 @@ interface ScrollableListProps<T> extends VirtualizedListProps<T> {
 
 export type ScrollableListRef<T> = VirtualizedListRef<T>;
 
-/**
- * @plan PLAN-20251215-OLDUI-SCROLL.P05
- * @requirement REQ-456.4
- */
-function ScrollableList<T>(
-  props: ScrollableListProps<T>,
+function useScrollImperativeHandle<T>(
   ref: React.Ref<ScrollableListRef<T>>,
+  virtualizedListRef: React.RefObject<VirtualizedListRef<T> | null>,
 ) {
-  const { hasFocus } = props;
-  const virtualizedListRef = useRef<VirtualizedListRef<T>>(null);
-  const containerRef = useRef<DOMElement>(null);
-
-  const smoothScrollState = useRef<{
-    intervalId: NodeJS.Timeout | null;
-    targetScrollTop: number;
-  }>({
-    intervalId: null,
-    targetScrollTop: 0,
-  });
-
   useImperativeHandle(
     ref,
     () => ({
@@ -75,22 +59,25 @@ function ScrollableList<T>(
           innerHeight: 0,
         },
     }),
-    [],
+    [virtualizedListRef],
   );
+}
 
-  const getScrollState = useCallback(
-    () =>
-      virtualizedListRef.current?.getScrollState() ?? {
-        scrollTop: 0,
-        scrollHeight: 0,
-        innerHeight: 0,
-      },
-    [],
-  );
-
-  const scrollBy = useCallback((delta: number) => {
-    virtualizedListRef.current?.scrollBy(delta);
-  }, []);
+function useSmoothScroll<T>(
+  virtualizedListRef: React.RefObject<VirtualizedListRef<T> | null>,
+  getScrollState: () => {
+    scrollTop: number;
+    scrollHeight: number;
+    innerHeight: number;
+  },
+) {
+  const smoothScrollState = useRef<{
+    intervalId: NodeJS.Timeout | null;
+    targetScrollTop: number;
+  }>({
+    intervalId: null,
+    targetScrollTop: 0,
+  });
 
   const stopSmoothScroll = useCallback(() => {
     if (smoothScrollState.current.intervalId !== null) {
@@ -118,7 +105,6 @@ function ScrollableList<T>(
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
 
-        // Ease-in-out
         const easeProgress =
           progress < 0.5
             ? 2 * progress * progress
@@ -140,14 +126,30 @@ function ScrollableList<T>(
       animate();
       smoothScrollState.current.targetScrollTop = targetScrollTop;
     },
-    [getScrollState, stopSmoothScroll],
+    [getScrollState, stopSmoothScroll, virtualizedListRef],
   );
 
   useEffect(() => () => stopSmoothScroll(), [stopSmoothScroll]);
 
-  const { scrollbarColor, flashScrollbar, scrollByWithAnimation } =
-    useAnimatedScrollbar(hasFocus, scrollBy);
+  return { smoothScrollState, stopSmoothScroll, smoothScrollTo };
+}
 
+function useScrollKeyHandlers(
+  hasFocus: boolean,
+  stopSmoothScroll: () => void,
+  scrollByWithAnimation: (delta: number) => void,
+  getScrollState: () => {
+    scrollTop: number;
+    scrollHeight: number;
+    innerHeight: number;
+  },
+  smoothScrollTo: (target: number) => void,
+  flashScrollbar: () => void,
+  smoothScrollState: React.RefObject<{
+    intervalId: NodeJS.Timeout | null;
+    targetScrollTop: number;
+  }>,
+) {
   useKeypress(
     (key: Key) => {
       if (keyMatchers[Command.SCROLL_UP](key)) {
@@ -173,7 +175,6 @@ function ScrollableList<T>(
         smoothScrollTo(0);
         flashScrollbar();
       } else if (keyMatchers[Command.SCROLL_END](key)) {
-        // Resolve SCROLL_TO_ITEM_END to actual max scrollTop for animation
         const scrollState = getScrollState();
         const maxScrollTop = Math.max(
           scrollState.scrollHeight - scrollState.innerHeight,
@@ -184,6 +185,51 @@ function ScrollableList<T>(
       }
     },
     { isActive: hasFocus },
+  );
+}
+
+/**
+ * @plan PLAN-20251215-OLDUI-SCROLL.P05
+ * @requirement REQ-456.4
+ */
+function ScrollableList<T>(
+  props: ScrollableListProps<T>,
+  ref: React.Ref<ScrollableListRef<T>>,
+) {
+  const { hasFocus } = props;
+  const virtualizedListRef = useRef<VirtualizedListRef<T>>(null);
+  const containerRef = useRef<DOMElement>(null);
+
+  useScrollImperativeHandle(ref, virtualizedListRef);
+
+  const getScrollState = useCallback(
+    () =>
+      virtualizedListRef.current?.getScrollState() ?? {
+        scrollTop: 0,
+        scrollHeight: 0,
+        innerHeight: 0,
+      },
+    [],
+  );
+
+  const scrollBy = useCallback((delta: number) => {
+    virtualizedListRef.current?.scrollBy(delta);
+  }, []);
+
+  const { smoothScrollState, stopSmoothScroll, smoothScrollTo } =
+    useSmoothScroll(virtualizedListRef, getScrollState);
+
+  const { scrollbarColor, flashScrollbar, scrollByWithAnimation } =
+    useAnimatedScrollbar(hasFocus, scrollBy);
+
+  useScrollKeyHandlers(
+    hasFocus,
+    stopSmoothScroll,
+    scrollByWithAnimation,
+    getScrollState,
+    smoothScrollTo,
+    flashScrollbar,
+    smoothScrollState,
   );
 
   const hasFocusCallback = useCallback(() => hasFocus, [hasFocus]);

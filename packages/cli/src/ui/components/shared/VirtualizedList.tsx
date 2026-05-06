@@ -70,35 +70,43 @@ function getOffsetAt(offsets: number[], index: number): number | undefined {
   return offsets[index];
 }
 
-/**
- * @plan PLAN-20251215-OLDUI-SCROLL.P05
- * @requirement REQ-456.4
- */
-function VirtualizedList<T>(
-  props: VirtualizedListProps<T>,
-  ref: React.Ref<VirtualizedListRef<T>>,
+function clampScrollTop(
+  scrollTop: number,
+  totalHeight: number,
+  scrollableContainerHeight: number,
+): number {
+  return Math.max(
+    0,
+    Math.min(totalHeight - scrollableContainerHeight, scrollTop),
+  );
+}
+
+function isScrollToEndConfig(
+  initialScrollIndex: number | undefined,
+  initialScrollOffsetInIndex: number | undefined,
+  dataLength: number,
+): boolean {
+  return (
+    initialScrollIndex === SCROLL_TO_ITEM_END ||
+    (typeof initialScrollIndex === 'number' &&
+      initialScrollIndex >= dataLength - 1 &&
+      initialScrollOffsetInIndex === SCROLL_TO_ITEM_END)
+  );
+}
+
+function useScrollAnchor<T>(
+  data: T[],
+  initialScrollIndex: number | undefined,
+  initialScrollOffsetInIndex: number | undefined,
 ) {
-  const {
-    data,
-    renderItem,
-    estimatedItemHeight,
-    keyExtractor,
-    initialScrollIndex,
-    initialScrollOffsetInIndex,
-  } = props;
-  const dataRef = useRef(data);
-  useEffect(() => {
-    dataRef.current = data;
-  }, [data]);
-
   const [scrollAnchor, setScrollAnchor] = useState(() => {
-    const scrollToEnd =
-      initialScrollIndex === SCROLL_TO_ITEM_END ||
-      (typeof initialScrollIndex === 'number' &&
-        initialScrollIndex >= data.length - 1 &&
-        initialScrollOffsetInIndex === SCROLL_TO_ITEM_END);
-
-    if (scrollToEnd) {
+    if (
+      isScrollToEndConfig(
+        initialScrollIndex,
+        initialScrollOffsetInIndex,
+        data.length,
+      )
+    ) {
       return {
         index: data.length > 0 ? data.length - 1 : 0,
         offset: SCROLL_TO_ITEM_END,
@@ -114,30 +122,28 @@ function VirtualizedList<T>(
 
     return { index: 0, offset: 0 };
   });
-  const [isStickingToBottom, setIsStickingToBottom] = useState(() => {
-    const scrollToEnd =
-      initialScrollIndex === SCROLL_TO_ITEM_END ||
-      (typeof initialScrollIndex === 'number' &&
-        initialScrollIndex >= data.length - 1 &&
-        initialScrollOffsetInIndex === SCROLL_TO_ITEM_END);
-    return scrollToEnd;
-  });
-  const containerRef = useRef<DOMElement>(null);
-  const [containerHeight, setContainerHeight] = useState(0);
-  const itemRefs = useRef<Array<DOMElement | null>>([]);
-  const [heights, setHeights] = useState<number[]>([]);
-  const isInitialScrollSet = useRef(false);
 
-  const { totalHeight, offsets } = useMemo(() => {
-    const offsets: number[] = [0];
-    let totalHeight = 0;
-    for (let i = 0; i < data.length; i++) {
-      const height = heights[i] ?? estimatedItemHeight(i);
-      totalHeight += height;
-      offsets.push(totalHeight);
-    }
-    return { totalHeight, offsets };
-  }, [heights, data, estimatedItemHeight]);
+  const [isStickingToBottom, setIsStickingToBottom] = useState(() =>
+    isScrollToEndConfig(
+      initialScrollIndex,
+      initialScrollOffsetInIndex,
+      data.length,
+    ),
+  );
+
+  return {
+    scrollAnchor,
+    setScrollAnchor,
+    isStickingToBottom,
+    setIsStickingToBottom,
+  };
+}
+
+function useItemHeights<T>(
+  data: T[],
+  estimatedItemHeight: (index: number) => number,
+) {
+  const [heights, setHeights] = useState<number[]>([]);
 
   useEffect(() => {
     setHeights((prevHeights) => {
@@ -157,67 +163,66 @@ function VirtualizedList<T>(
     });
   }, [data, estimatedItemHeight]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useLayoutEffect(() => {
-    if (containerRef.current) {
-      const height = Math.round(measureElement(containerRef.current).height);
-      if (containerHeight !== height) {
-        setContainerHeight(height);
-      }
+  return { heights, setHeights };
+}
+
+function useComputedLayout<T>(
+  data: T[],
+  heights: number[],
+  estimatedItemHeight: (index: number) => number,
+) {
+  return useMemo(() => {
+    const offsets: number[] = [0];
+    let totalHeight = 0;
+    for (let i = 0; i < data.length; i++) {
+      const height = heights[i] ?? estimatedItemHeight(i);
+      totalHeight += height;
+      offsets.push(totalHeight);
     }
+    return { totalHeight, offsets };
+  }, [heights, data, estimatedItemHeight]);
+}
 
-    let newHeights: number[] | null = null;
-    for (let i = startIndex; i <= endIndex; i++) {
-      const itemRef = itemRefs.current[i];
-      if (itemRef) {
-        const height = Math.round(measureElement(itemRef).height);
-        if (height !== heights[i]) {
-          newHeights ??= [...heights];
-          newHeights[i] = height;
-        }
-      }
-    }
-    if (newHeights) {
-      setHeights(newHeights);
-    }
-  });
+function computeScrollTop(
+  scrollAnchor: { index: number; offset: number },
+  offsets: number[],
+  heights: number[],
+  scrollableContainerHeight: number,
+  totalHeight: number,
+): number {
+  const offset = offsets[scrollAnchor.index];
+  if (typeof offset !== 'number') {
+    return 0;
+  }
 
-  const scrollableContainerHeight = containerRef.current
-    ? Math.round(measureElement(containerRef.current).height)
-    : containerHeight;
+  const maxScrollTop = Math.max(0, totalHeight - scrollableContainerHeight);
+  if (scrollAnchor.offset === SCROLL_TO_ITEM_END) {
+    const itemHeight = heights[scrollAnchor.index] ?? 0;
+    const scrollToEnd = offset + itemHeight - scrollableContainerHeight;
+    return Math.max(0, Math.min(maxScrollTop, scrollToEnd));
+  }
 
-  const getAnchorForScrollTop = useCallback(
-    (
-      scrollTop: number,
-      offsets: number[],
-    ): { index: number; offset: number } => {
-      const index = findLastIndex(offsets, (offset) => offset <= scrollTop);
-      if (index === -1) {
-        return { index: 0, offset: 0 };
-      }
+  const absolute = offset + scrollAnchor.offset;
+  return Math.max(0, Math.min(maxScrollTop, absolute));
+}
 
-      return { index, offset: scrollTop - offsets[index] };
-    },
-    [],
-  );
-
-  const scrollTop = useMemo(() => {
-    const offset = offsets[scrollAnchor.index];
-    if (typeof offset !== 'number') {
-      return 0;
-    }
-
-    const maxScrollTop = Math.max(0, totalHeight - scrollableContainerHeight);
-    if (scrollAnchor.offset === SCROLL_TO_ITEM_END) {
-      const itemHeight = heights[scrollAnchor.index] ?? 0;
-      const scrollToEnd = offset + itemHeight - scrollableContainerHeight;
-      return Math.max(0, Math.min(maxScrollTop, scrollToEnd));
-    }
-
-    const absolute = offset + scrollAnchor.offset;
-    return Math.max(0, Math.min(maxScrollTop, absolute));
-  }, [scrollAnchor, offsets, heights, scrollableContainerHeight, totalHeight]);
-
+function useStickToBottom(
+  data: { length: number },
+  scrollTop: number,
+  totalHeight: number,
+  scrollableContainerHeight: number,
+  scrollAnchor: { index: number; offset: number },
+  isStickingToBottom: boolean,
+  setIsStickingToBottom: React.Dispatch<React.SetStateAction<boolean>>,
+  setScrollAnchor: React.Dispatch<
+    React.SetStateAction<{ index: number; offset: number }>
+  >,
+  getAnchorForScrollTop: (
+    scrollTop: number,
+    offsets: number[],
+  ) => { index: number; offset: number },
+  offsets: number[],
+) {
   const prevDataLength = useRef(data.length);
   const prevTotalHeight = useRef(totalHeight);
   const prevScrollTop = useRef(scrollTop);
@@ -267,6 +272,7 @@ function VirtualizedList<T>(
     prevTotalHeight.current = totalHeight;
     prevScrollTop.current = scrollTop;
     prevContainerHeight.current = scrollableContainerHeight;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setScrollAnchor and setIsStickingToBottom are stable React state dispatchers
   }, [
     data.length,
     scrollTop,
@@ -277,8 +283,27 @@ function VirtualizedList<T>(
     getAnchorForScrollTop,
     offsets,
   ]);
+}
 
-  const { getScrollTop, setPendingScrollTop } = useBatchedScroll(scrollTop);
+function useInitialScroll<T>(
+  initialScrollIndex: number | undefined,
+  initialScrollOffsetInIndex: number | undefined,
+  data: T[],
+  offsets: number[],
+  totalHeight: number,
+  containerHeight: number,
+  scrollableContainerHeight: number,
+  heights: number[],
+  setScrollAnchor: React.Dispatch<
+    React.SetStateAction<{ index: number; offset: number }>
+  >,
+  setIsStickingToBottom: React.Dispatch<React.SetStateAction<boolean>>,
+  getAnchorForScrollTop: (
+    scrollTop: number,
+    offsets: number[],
+  ) => { index: number; offset: number },
+) {
+  const isInitialScrollSet = useRef(false);
 
   useLayoutEffect(() => {
     if (
@@ -309,14 +334,16 @@ function VirtualizedList<T>(
       const index = Math.max(0, Math.min(data.length - 1, initialScrollIndex));
       const offset = initialScrollOffsetInIndex ?? 0;
       const newScrollTop = (offsets[index] ?? 0) + offset;
-      const clampedScrollTop = Math.max(
-        0,
-        Math.min(totalHeight - scrollableContainerHeight, newScrollTop),
+      const clampedScrollTop = clampScrollTop(
+        newScrollTop,
+        totalHeight,
+        scrollableContainerHeight,
       );
 
       setScrollAnchor(getAnchorForScrollTop(clampedScrollTop, offsets));
       isInitialScrollSet.current = true;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setScrollAnchor and setIsStickingToBottom are stable React state dispatchers
   }, [
     initialScrollIndex,
     initialScrollOffsetInIndex,
@@ -328,23 +355,51 @@ function VirtualizedList<T>(
     heights,
     scrollableContainerHeight,
   ]);
+}
 
-  const startIndex = Math.max(
-    0,
-    findLastIndex(offsets, (offset) => offset <= scrollTop) - 1,
-  );
-  const endIndexOffset = offsets.findIndex(
-    (offset) => offset > scrollTop + scrollableContainerHeight,
-  );
-  const endIndex =
-    endIndexOffset === -1
-      ? data.length - 1
-      : Math.min(data.length - 1, endIndexOffset);
+function useMeasureItems(
+  containerRef: React.RefObject<DOMElement | null>,
+  containerHeight: number,
+  setContainerHeight: (h: number) => void,
+  itemRefs: React.RefObject<Array<DOMElement | null>>,
+  heights: number[],
+  setHeights: (h: number[] | ((prev: number[]) => number[])) => void,
+  startIndex: number,
+  endIndex: number,
+) {
+  useLayoutEffect(() => {
+    if (containerRef.current) {
+      const height = Math.round(measureElement(containerRef.current).height);
+      if (containerHeight !== height) {
+        setContainerHeight(height);
+      }
+    }
 
-  const topSpacerHeight = offsets[startIndex] ?? 0;
-  const bottomSpacerHeight =
-    totalHeight - (offsets[endIndex + 1] ?? totalHeight);
+    let newHeights: number[] | null = null;
+    for (let i = startIndex; i <= endIndex; i++) {
+      const itemRef = itemRefs.current[i];
+      if (itemRef) {
+        const height = Math.round(measureElement(itemRef).height);
+        if (height !== heights[i]) {
+          newHeights ??= [...heights];
+          newHeights[i] = height;
+        }
+      }
+    }
+    if (newHeights) {
+      setHeights(newHeights);
+    }
+  });
+}
 
+function useRenderedItems<T>(
+  data: T[],
+  startIndex: number,
+  endIndex: number,
+  keyExtractor: (item: T, index: number) => string,
+  renderItem: (info: { item: T; index: number }) => React.ReactElement,
+  itemRefs: React.RefObject<Array<DOMElement | null>>,
+): React.ReactElement[] {
   const renderedItems: React.ReactElement[] = [];
   for (let i = startIndex; i <= endIndex; i++) {
     const item = data[i];
@@ -365,116 +420,536 @@ function VirtualizedList<T>(
       </Box>,
     );
   }
+  return renderedItems;
+}
 
-  useImperativeHandle(
-    ref,
+function applyScrollToOffset(
+  offset: number,
+  viewPosition: number,
+  viewOffset: number,
+  totalHeight: number,
+  scrollableContainerHeight: number,
+  setPendingScrollTop: (v: number) => void,
+  setScrollAnchor: React.Dispatch<
+    React.SetStateAction<{ index: number; offset: number }>
+  >,
+  setIsStickingToBottom: React.Dispatch<React.SetStateAction<boolean>>,
+  getAnchorForScrollTop: (
+    scrollTop: number,
+    offsets: number[],
+  ) => { index: number; offset: number },
+  offsets: number[],
+) {
+  setIsStickingToBottom(false);
+  const newScrollTop = clampScrollTop(
+    offset - viewPosition * scrollableContainerHeight + viewOffset,
+    totalHeight,
+    scrollableContainerHeight,
+  );
+  setPendingScrollTop(newScrollTop);
+  setScrollAnchor(getAnchorForScrollTop(newScrollTop, offsets));
+}
+
+function buildScrollMethods<T>(
+  ctx: {
+    offsets: number[];
+    scrollAnchor: { index: number; offset: number };
+    totalHeight: number;
+    scrollableContainerHeight: number;
+    data: T[];
+    getScrollTop: () => number;
+    setPendingScrollTop: (v: number) => void;
+  },
+  setScrollAnchor: React.Dispatch<
+    React.SetStateAction<{ index: number; offset: number }>
+  >,
+  setIsStickingToBottom: React.Dispatch<React.SetStateAction<boolean>>,
+  getAnchorForScrollTop: (
+    scrollTop: number,
+    offsets: number[],
+  ) => { index: number; offset: number },
+) {
+  const {
+    offsets,
+    totalHeight,
+    scrollableContainerHeight,
+    getScrollTop,
+    setPendingScrollTop,
+    data,
+  } = ctx;
+
+  const scrollBy = (delta: number) => {
+    if (delta < 0) {
+      setIsStickingToBottom(false);
+    }
+    const newScrollTop = clampScrollTop(
+      getScrollTop() + delta,
+      totalHeight,
+      scrollableContainerHeight,
+    );
+    setPendingScrollTop(newScrollTop);
+    setScrollAnchor(getAnchorForScrollTop(newScrollTop, offsets));
+  };
+
+  const scrollTo = (offset: number) => {
+    setIsStickingToBottom(false);
+    const newScrollTop = clampScrollTop(
+      offset,
+      totalHeight,
+      scrollableContainerHeight,
+    );
+    setPendingScrollTop(newScrollTop);
+    setScrollAnchor(getAnchorForScrollTop(newScrollTop, offsets));
+  };
+
+  const scrollToEnd = () => {
+    setIsStickingToBottom(true);
+    if (data.length > 0) {
+      setScrollAnchor({
+        index: data.length - 1,
+        offset: SCROLL_TO_ITEM_END,
+      });
+    }
+  };
+
+  return { scrollBy, scrollTo, scrollToEnd };
+}
+
+function buildIndexScrollMethods<T>(
+  ctx: {
+    offsets: number[];
+    totalHeight: number;
+    scrollableContainerHeight: number;
+    data: T[];
+    setPendingScrollTop: (v: number) => void;
+  },
+  setScrollAnchor: React.Dispatch<
+    React.SetStateAction<{ index: number; offset: number }>
+  >,
+  setIsStickingToBottom: React.Dispatch<React.SetStateAction<boolean>>,
+  getAnchorForScrollTop: (
+    scrollTop: number,
+    offsets: number[],
+  ) => { index: number; offset: number },
+) {
+  const doScrollToOffset = (
+    offset: number,
+    viewPosition: number,
+    viewOffset: number,
+  ) => {
+    applyScrollToOffset(
+      offset,
+      viewPosition,
+      viewOffset,
+      ctx.totalHeight,
+      ctx.scrollableContainerHeight,
+      ctx.setPendingScrollTop,
+      setScrollAnchor,
+      setIsStickingToBottom,
+      getAnchorForScrollTop,
+      ctx.offsets,
+    );
+  };
+
+  const scrollToIndex = ({
+    index,
+    viewOffset = 0,
+    viewPosition = 0,
+  }: {
+    index: number;
+    viewOffset?: number;
+    viewPosition?: number;
+  }) => {
+    const offset = getOffsetAt(ctx.offsets, index);
+    if (offset !== undefined) {
+      doScrollToOffset(offset, viewPosition, viewOffset);
+    }
+  };
+
+  const scrollToItem = ({
+    item,
+    viewOffset = 0,
+    viewPosition = 0,
+  }: {
+    item: T;
+    viewOffset?: number;
+    viewPosition?: number;
+  }) => {
+    const index = ctx.data.indexOf(item);
+    if (index !== -1) {
+      const offset = getOffsetAt(ctx.offsets, index);
+      if (offset !== undefined) {
+        doScrollToOffset(offset, viewPosition, viewOffset);
+      }
+    }
+  };
+
+  return { scrollToIndex, scrollToItem };
+}
+
+function buildImperativeHandle<T>(
+  ctx: {
+    offsets: number[];
+    scrollAnchor: { index: number; offset: number };
+    totalHeight: number;
+    scrollableContainerHeight: number;
+    data: T[];
+    getScrollTop: () => number;
+    setPendingScrollTop: (v: number) => void;
+  },
+  setScrollAnchor: React.Dispatch<
+    React.SetStateAction<{ index: number; offset: number }>
+  >,
+  setIsStickingToBottom: React.Dispatch<React.SetStateAction<boolean>>,
+  getAnchorForScrollTop: (
+    scrollTop: number,
+    offsets: number[],
+  ) => { index: number; offset: number },
+): VirtualizedListRef<T> {
+  const { scrollBy, scrollTo, scrollToEnd } = buildScrollMethods(
+    ctx,
+    setScrollAnchor,
+    setIsStickingToBottom,
+    getAnchorForScrollTop,
+  );
+
+  const { scrollToIndex, scrollToItem } = buildIndexScrollMethods(
+    ctx,
+    setScrollAnchor,
+    setIsStickingToBottom,
+    getAnchorForScrollTop,
+  );
+
+  return {
+    scrollBy,
+    scrollTo,
+    scrollToEnd,
+    scrollToIndex,
+    scrollToItem,
+    getScrollIndex: () => ctx.scrollAnchor.index,
+    getScrollState: () => ({
+      scrollTop: ctx.getScrollTop(),
+      scrollHeight: ctx.totalHeight,
+      innerHeight: ctx.scrollableContainerHeight,
+    }),
+  };
+}
+
+/**
+ * @plan PLAN-20251215-OLDUI-SCROLL.P05
+ * @requirement REQ-456.4
+ */
+function useViewportRange(
+  scrollTop: number,
+  offsets: number[],
+  scrollableContainerHeight: number,
+  dataLength: number,
+): { startIndex: number; endIndex: number } {
+  const startIndex = Math.max(
+    0,
+    findLastIndex(offsets, (offset) => offset <= scrollTop) - 1,
+  );
+  const endIndexOffset = offsets.findIndex(
+    (offset) => offset > scrollTop + scrollableContainerHeight,
+  );
+  const endIndex =
+    endIndexOffset === -1
+      ? dataLength - 1
+      : Math.min(dataLength - 1, endIndexOffset);
+  return { startIndex, endIndex };
+}
+
+type VirtualizedListState = {
+  scrollAnchor: { index: number; offset: number };
+  setScrollAnchor: React.Dispatch<
+    React.SetStateAction<{ index: number; offset: number }>
+  >;
+  isStickingToBottom: boolean;
+  setIsStickingToBottom: React.Dispatch<React.SetStateAction<boolean>>;
+  containerRef: React.RefObject<DOMElement | null>;
+  containerHeight: number;
+  setContainerHeight: (h: number) => void;
+  itemRefs: React.RefObject<Array<DOMElement | null>>;
+  heights: number[];
+  setHeights: (h: number[] | ((prev: number[]) => number[])) => void;
+  totalHeight: number;
+  offsets: number[];
+  scrollableContainerHeight: number;
+  getAnchorForScrollTop: (
+    scrollTop: number,
+    offsets: number[],
+  ) => { index: number; offset: number };
+  scrollTop: number;
+};
+
+function useVirtualizedListState<T>(
+  data: T[],
+  estimatedItemHeight: (index: number) => number,
+  initialScrollIndex: number | undefined,
+  initialScrollOffsetInIndex: number | undefined,
+): VirtualizedListState {
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  const {
+    scrollAnchor,
+    setScrollAnchor,
+    isStickingToBottom,
+    setIsStickingToBottom,
+  } = useScrollAnchor(data, initialScrollIndex, initialScrollOffsetInIndex);
+
+  const containerRef = useRef<DOMElement>(null);
+  const [containerHeight, setContainerHeight] = useState(0);
+  const itemRefs = useRef<Array<DOMElement | null>>([]);
+
+  const { heights, setHeights } = useItemHeights(data, estimatedItemHeight);
+
+  const { totalHeight, offsets } = useComputedLayout(
+    data,
+    heights,
+    estimatedItemHeight,
+  );
+
+  const scrollableContainerHeight = containerRef.current
+    ? Math.round(measureElement(containerRef.current).height)
+    : containerHeight;
+
+  const getAnchorForScrollTop = useCallback(
+    (
+      scrollTop: number,
+      offsets: number[],
+    ): { index: number; offset: number } => {
+      const index = findLastIndex(offsets, (offset) => offset <= scrollTop);
+      if (index === -1) {
+        return { index: 0, offset: 0 };
+      }
+      return { index, offset: scrollTop - offsets[index] };
+    },
+    [],
+  );
+
+  const scrollTop = useMemo(
+    () =>
+      computeScrollTop(
+        scrollAnchor,
+        offsets,
+        heights,
+        scrollableContainerHeight,
+        totalHeight,
+      ),
+    [scrollAnchor, offsets, heights, scrollableContainerHeight, totalHeight],
+  );
+
+  return {
+    scrollAnchor,
+    setScrollAnchor,
+    isStickingToBottom,
+    setIsStickingToBottom,
+    containerRef,
+    containerHeight,
+    setContainerHeight,
+    itemRefs,
+    heights,
+    setHeights,
+    totalHeight,
+    offsets,
+    scrollableContainerHeight,
+    getAnchorForScrollTop,
+    scrollTop,
+  };
+}
+
+function useVirtualizedListEffects(
+  data: unknown[],
+  scrollTop: number,
+  totalHeight: number,
+  scrollableContainerHeight: number,
+  scrollAnchor: { index: number; offset: number },
+  isStickingToBottom: boolean,
+  setIsStickingToBottom: React.Dispatch<React.SetStateAction<boolean>>,
+  setScrollAnchor: React.Dispatch<
+    React.SetStateAction<{ index: number; offset: number }>
+  >,
+  getAnchorForScrollTop: (
+    scrollTop: number,
+    offsets: number[],
+  ) => { index: number; offset: number },
+  offsets: number[],
+  initialScrollIndex: number | undefined,
+  initialScrollOffsetInIndex: number | undefined,
+  containerHeight: number,
+  scrollableContainerHeight2: number,
+  heights: number[],
+) {
+  useStickToBottom(
+    data,
+    scrollTop,
+    totalHeight,
+    scrollableContainerHeight,
+    scrollAnchor,
+    isStickingToBottom,
+    setIsStickingToBottom,
+    setScrollAnchor,
+    getAnchorForScrollTop,
+    offsets,
+  );
+
+  const { getScrollTop, setPendingScrollTop } = useBatchedScroll(scrollTop);
+
+  useInitialScroll(
+    initialScrollIndex,
+    initialScrollOffsetInIndex,
+    data,
+    offsets,
+    totalHeight,
+    containerHeight,
+    scrollableContainerHeight2,
+    heights,
+    setScrollAnchor,
+    setIsStickingToBottom,
+    getAnchorForScrollTop,
+  );
+
+  return { getScrollTop, setPendingScrollTop };
+}
+
+function useImperativeCtx(
+  state: ReturnType<typeof useVirtualizedListState>,
+  data: unknown[],
+  getScrollTop: () => number,
+  setPendingScrollTop: (v: number) => void,
+) {
+  return useMemo(
     () => ({
-      scrollBy: (delta: number) => {
-        if (delta < 0) {
-          setIsStickingToBottom(false);
-        }
-        const newScrollTop = Math.max(
-          0,
-          Math.min(
-            totalHeight - scrollableContainerHeight,
-            getScrollTop() + delta,
-          ),
-        );
-        setPendingScrollTop(newScrollTop);
-        setScrollAnchor(getAnchorForScrollTop(newScrollTop, offsets));
-      },
-      scrollTo: (offset: number) => {
-        setIsStickingToBottom(false);
-        const newScrollTop = Math.max(
-          0,
-          Math.min(totalHeight - scrollableContainerHeight, offset),
-        );
-        setPendingScrollTop(newScrollTop);
-        setScrollAnchor(getAnchorForScrollTop(newScrollTop, offsets));
-      },
-      scrollToEnd: () => {
-        setIsStickingToBottom(true);
-        if (data.length > 0) {
-          setScrollAnchor({
-            index: data.length - 1,
-            offset: SCROLL_TO_ITEM_END,
-          });
-        }
-      },
-      scrollToIndex: ({
-        index,
-        viewOffset = 0,
-        viewPosition = 0,
-      }: {
-        index: number;
-        viewOffset?: number;
-        viewPosition?: number;
-      }) => {
-        setIsStickingToBottom(false);
-        const offset = getOffsetAt(offsets, index);
-        if (offset !== undefined) {
-          const newScrollTop = Math.max(
-            0,
-            Math.min(
-              totalHeight - scrollableContainerHeight,
-              offset - viewPosition * scrollableContainerHeight + viewOffset,
-            ),
-          );
-          setPendingScrollTop(newScrollTop);
-          setScrollAnchor(getAnchorForScrollTop(newScrollTop, offsets));
-        }
-      },
-      scrollToItem: ({
-        item,
-        viewOffset = 0,
-        viewPosition = 0,
-      }: {
-        item: T;
-        viewOffset?: number;
-        viewPosition?: number;
-      }) => {
-        setIsStickingToBottom(false);
-        const index = data.indexOf(item);
-        if (index !== -1) {
-          const offset = getOffsetAt(offsets, index);
-          if (offset !== undefined) {
-            const newScrollTop = Math.max(
-              0,
-              Math.min(
-                totalHeight - scrollableContainerHeight,
-                offset - viewPosition * scrollableContainerHeight + viewOffset,
-              ),
-            );
-            setPendingScrollTop(newScrollTop);
-            setScrollAnchor(getAnchorForScrollTop(newScrollTop, offsets));
-          }
-        }
-      },
-      getScrollIndex: () => scrollAnchor.index,
-      getScrollState: () => ({
-        scrollTop: getScrollTop(),
-        scrollHeight: totalHeight,
-        innerHeight: scrollableContainerHeight,
-      }),
+      offsets: state.offsets,
+      scrollAnchor: state.scrollAnchor,
+      totalHeight: state.totalHeight,
+      scrollableContainerHeight: state.scrollableContainerHeight,
+      data,
+      getScrollTop,
+      setPendingScrollTop,
     }),
     [
-      offsets,
-      scrollAnchor,
-      totalHeight,
-      getAnchorForScrollTop,
+      state.offsets,
+      state.scrollAnchor,
+      state.totalHeight,
+      state.scrollableContainerHeight,
       data,
-      scrollableContainerHeight,
       getScrollTop,
       setPendingScrollTop,
     ],
   );
+}
+
+function useViewportAndRender<T>(
+  state: ReturnType<typeof useVirtualizedListState>,
+  data: T[],
+  keyExtractor: (item: T, index: number) => string,
+  renderItem: (info: { item: T; index: number }) => React.ReactElement,
+) {
+  const { startIndex, endIndex } = useViewportRange(
+    state.scrollTop,
+    state.offsets,
+    state.scrollableContainerHeight,
+    data.length,
+  );
+
+  useMeasureItems(
+    state.containerRef,
+    state.containerHeight,
+    state.setContainerHeight,
+    state.itemRefs,
+    state.heights,
+    state.setHeights,
+    startIndex,
+    endIndex,
+  );
+
+  const renderedItems = useRenderedItems(
+    data,
+    startIndex,
+    endIndex,
+    keyExtractor,
+    renderItem,
+    state.itemRefs,
+  );
+
+  const topSpacerHeight = state.offsets[startIndex] ?? 0;
+  const bottomSpacerHeight =
+    state.totalHeight - (state.offsets[endIndex + 1] ?? state.totalHeight);
+
+  return { renderedItems, topSpacerHeight, bottomSpacerHeight };
+}
+
+function VirtualizedList<T>(
+  props: VirtualizedListProps<T>,
+  ref: React.Ref<VirtualizedListRef<T>>,
+) {
+  const {
+    data,
+    renderItem,
+    estimatedItemHeight,
+    keyExtractor,
+    initialScrollIndex,
+    initialScrollOffsetInIndex,
+  } = props;
+
+  const state = useVirtualizedListState(
+    data,
+    estimatedItemHeight,
+    initialScrollIndex,
+    initialScrollOffsetInIndex,
+  );
+
+  const { getScrollTop, setPendingScrollTop } = useVirtualizedListEffects(
+    data,
+    state.scrollTop,
+    state.totalHeight,
+    state.scrollableContainerHeight,
+    state.scrollAnchor,
+    state.isStickingToBottom,
+    state.setIsStickingToBottom,
+    state.setScrollAnchor,
+    state.getAnchorForScrollTop,
+    state.offsets,
+    initialScrollIndex,
+    initialScrollOffsetInIndex,
+    state.containerHeight,
+    state.scrollableContainerHeight,
+    state.heights,
+  );
+
+  const { renderedItems, topSpacerHeight, bottomSpacerHeight } =
+    useViewportAndRender(state, data, keyExtractor, renderItem);
+
+  const imperativeCtx = useImperativeCtx(
+    state,
+    data,
+    getScrollTop,
+    setPendingScrollTop,
+  );
+
+  useImperativeHandle(
+    ref,
+    () =>
+      buildImperativeHandle(
+        imperativeCtx,
+        state.setScrollAnchor,
+        state.setIsStickingToBottom,
+        state.getAnchorForScrollTop,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setScrollAnchor and setIsStickingToBottom are stable React state dispatchers
+    [imperativeCtx, state.getAnchorForScrollTop],
+  );
 
   return (
     <Box
-      ref={containerRef}
+      ref={state.containerRef}
       overflowY="scroll"
       overflowX="hidden"
-      scrollTop={scrollTop}
+      scrollTop={state.scrollTop}
       scrollbarThumbColor={props.scrollbarThumbColor ?? Colors.Gray}
       width="100%"
       height="100%"
