@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import React from 'react';
 import { Text } from 'ink';
@@ -25,6 +25,190 @@ interface RenderInlineProps {
   defaultColor?: string;
 }
 
+function renderBoldNode(
+  fullMatch: string,
+  key: string,
+  baseColor: string,
+): React.ReactNode | null {
+  if (
+    fullMatch.startsWith('**') &&
+    fullMatch.endsWith('**') &&
+    fullMatch.length > BOLD_MARKER_LENGTH * 2
+  ) {
+    return (
+      <Text key={key} bold color={baseColor}>
+        {fullMatch.slice(BOLD_MARKER_LENGTH, -BOLD_MARKER_LENGTH)}
+      </Text>
+    );
+  }
+  return null;
+}
+
+function isItalicMatch(
+  fullMatch: string,
+  text: string,
+  matchIndex: number,
+  lastIndex: number,
+): boolean {
+  if (fullMatch.length <= ITALIC_MARKER_LENGTH * 2) return false;
+
+  const isAsterisk = fullMatch.startsWith('*') && fullMatch.endsWith('*');
+  const isUnderscore = fullMatch.startsWith('_') && fullMatch.endsWith('_');
+  if (!isAsterisk && !isUnderscore) return false;
+
+  const beforeMatch = text.substring(matchIndex - 1, matchIndex);
+  const afterMatch = text.substring(lastIndex, lastIndex + 1);
+  if (/\w/.test(beforeMatch)) return false;
+  if (/\w/.test(afterMatch)) return false;
+
+  const beforePunct = text.substring(matchIndex - 2, matchIndex);
+  const afterPunct = text.substring(lastIndex, lastIndex + 2);
+  if (/\S[./\\]/.test(beforePunct)) return false;
+  if (/[./\\]\S/.test(afterPunct)) return false;
+
+  return true;
+}
+
+function renderItalicNode(
+  fullMatch: string,
+  key: string,
+  baseColor: string,
+): React.ReactNode {
+  return (
+    <Text key={key} italic color={baseColor}>
+      {fullMatch.slice(ITALIC_MARKER_LENGTH, -ITALIC_MARKER_LENGTH)}
+    </Text>
+  );
+}
+
+function renderStrikethroughNode(
+  fullMatch: string,
+  key: string,
+  baseColor: string,
+): React.ReactNode | null {
+  if (
+    fullMatch.startsWith('~~') &&
+    fullMatch.endsWith('~~') &&
+    fullMatch.length > STRIKETHROUGH_MARKER_LENGTH * 2
+  ) {
+    return (
+      <Text key={key} strikethrough color={baseColor}>
+        {fullMatch.slice(
+          STRIKETHROUGH_MARKER_LENGTH,
+          -STRIKETHROUGH_MARKER_LENGTH,
+        )}
+      </Text>
+    );
+  }
+  return null;
+}
+
+function renderInlineCodeNode(
+  fullMatch: string,
+  key: string,
+): React.ReactNode | null {
+  if (
+    fullMatch.startsWith('`') &&
+    fullMatch.endsWith('`') &&
+    fullMatch.length > INLINE_CODE_MARKER_LENGTH
+  ) {
+    // Static regex for inline code matching - no dynamic parts
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
+    const codeMatch = fullMatch.match(/^(`+)(.+?)\1$/s);
+    if (codeMatch?.[2]) {
+      return (
+        <Text key={key} color={theme.text.accent}>
+          {codeMatch[2]}
+        </Text>
+      );
+    }
+  }
+  return null;
+}
+
+function renderLinkNode(
+  fullMatch: string,
+  key: string,
+  baseColor: string,
+): React.ReactNode | null {
+  if (
+    fullMatch.startsWith('[') &&
+    fullMatch.includes('](') &&
+    fullMatch.endsWith(')')
+  ) {
+    // Static regex for link matching - no dynamic parts
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
+    const linkMatch = fullMatch.match(/\[(.*?)\]\((.*?)\)/);
+    if (linkMatch) {
+      const [, linkText, url] = linkMatch;
+      return (
+        <Text key={key} color={baseColor}>
+          {linkText}
+          <Text color={theme.text.link}> ({url})</Text>
+        </Text>
+      );
+    }
+  }
+  return null;
+}
+
+function renderUnderlineNode(
+  fullMatch: string,
+  key: string,
+  baseColor: string,
+): React.ReactNode | null {
+  if (
+    fullMatch.startsWith('<u>') &&
+    fullMatch.endsWith('</u>') &&
+    fullMatch.length > UNDERLINE_TAG_START_LENGTH + UNDERLINE_TAG_END_LENGTH - 1
+  ) {
+    return (
+      <Text key={key} underline color={baseColor}>
+        {fullMatch.slice(UNDERLINE_TAG_START_LENGTH, -UNDERLINE_TAG_END_LENGTH)}
+      </Text>
+    );
+  }
+  return null;
+}
+
+function renderMatchedNode(
+  fullMatch: string,
+  key: string,
+  baseColor: string,
+  text: string,
+  matchIndex: number,
+  lastIndex: number,
+): React.ReactNode | null {
+  const bold = renderBoldNode(fullMatch, key, baseColor);
+  if (bold !== null) return bold;
+
+  if (isItalicMatch(fullMatch, text, matchIndex, lastIndex)) {
+    return renderItalicNode(fullMatch, key, baseColor);
+  }
+
+  const strikethrough = renderStrikethroughNode(fullMatch, key, baseColor);
+  if (strikethrough !== null) return strikethrough;
+
+  const code = renderInlineCodeNode(fullMatch, key);
+  if (code !== null) return code;
+
+  const link = renderLinkNode(fullMatch, key, baseColor);
+  if (link !== null) return link;
+
+  const underline = renderUnderlineNode(fullMatch, key, baseColor);
+  if (underline !== null) return underline;
+
+  if (fullMatch.match(/^https?:\/\//)) {
+    return (
+      <Text key={key} color={theme.text.link}>
+        {fullMatch}
+      </Text>
+    );
+  }
+
+  return null;
+}
+
 const RenderInlineInternal: React.FC<RenderInlineProps> = ({
   text,
   defaultColor,
@@ -33,7 +217,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
   // Early return for plain text without markdown or URLs
   // Static regex for markdown marker detection - no dynamic parts
 
-  if (!/[*_~`<[https?:]/.test(text)) {
+  if (!/[*_~`<[]|https?:\/\//.test(text)) {
     return <Text color={baseColor}>{text}</Text>;
   }
 
@@ -41,7 +225,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
   let lastIndex = 0;
   // Static regex for inline markdown parsing - no dynamic parts
   const inlineRegex =
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex, sonarjs/regex-complexity -- Static regex reviewed for lint hardening; bounded inputs preserve behavior and existing token order.
     /(\*\*.*?\*\*|\*.*?\*|_.*?_|~~.*?~~|\[.*?\]\(.*?\)|`+.+?`+|<u>.*?<\/u>|https?:\/\/\S+)/g;
   let match;
 
@@ -59,112 +243,14 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
     const key = `m-${match.index}`;
 
     try {
-      if (
-        fullMatch.startsWith('**') &&
-        fullMatch.endsWith('**') &&
-        fullMatch.length > BOLD_MARKER_LENGTH * 2
-      ) {
-        renderedNode = (
-          <Text key={key} bold color={baseColor}>
-            {fullMatch.slice(BOLD_MARKER_LENGTH, -BOLD_MARKER_LENGTH)}
-          </Text>
-        );
-      } else if (
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        fullMatch.length > ITALIC_MARKER_LENGTH * 2 &&
-        ((fullMatch.startsWith('*') && fullMatch.endsWith('*')) ||
-          (fullMatch.startsWith('_') && fullMatch.endsWith('_'))) &&
-        // Static regex for word boundary check - no dynamic parts
-
-        !/\w/.test(text.substring(match.index - 1, match.index)) &&
-        // Static regex for word boundary check - no dynamic parts
-
-        !/\w/.test(
-          text.substring(inlineRegex.lastIndex, inlineRegex.lastIndex + 1),
-        ) &&
-        // Static regex for punctuation check - no dynamic parts
-
-        !/\S[./\\]/.test(text.substring(match.index - 2, match.index)) &&
-        // Static regex for punctuation check - no dynamic parts
-
-        !/[./\\]\S/.test(
-          text.substring(inlineRegex.lastIndex, inlineRegex.lastIndex + 2),
-        )
-      ) {
-        renderedNode = (
-          <Text key={key} italic color={baseColor}>
-            {fullMatch.slice(ITALIC_MARKER_LENGTH, -ITALIC_MARKER_LENGTH)}
-          </Text>
-        );
-      } else if (
-        fullMatch.startsWith('~~') &&
-        fullMatch.endsWith('~~') &&
-        fullMatch.length > STRIKETHROUGH_MARKER_LENGTH * 2
-      ) {
-        renderedNode = (
-          <Text key={key} strikethrough color={baseColor}>
-            {fullMatch.slice(
-              STRIKETHROUGH_MARKER_LENGTH,
-              -STRIKETHROUGH_MARKER_LENGTH,
-            )}
-          </Text>
-        );
-      } else if (
-        fullMatch.startsWith('`') &&
-        fullMatch.endsWith('`') &&
-        fullMatch.length > INLINE_CODE_MARKER_LENGTH
-      ) {
-        // Static regex for inline code matching - no dynamic parts
-        // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-        const codeMatch = fullMatch.match(/^(`+)(.+?)\1$/s);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (codeMatch?.[2]) {
-          renderedNode = (
-            <Text key={key} color={theme.text.accent}>
-              {codeMatch[2]}
-            </Text>
-          );
-        }
-      } else if (
-        fullMatch.startsWith('[') &&
-        fullMatch.includes('](') &&
-        fullMatch.endsWith(')')
-      ) {
-        // Static regex for link matching - no dynamic parts
-        // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-        const linkMatch = fullMatch.match(/\[(.*?)\]\((.*?)\)/);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (linkMatch) {
-          const linkText = linkMatch[1];
-          const url = linkMatch[2];
-          renderedNode = (
-            <Text key={key} color={baseColor}>
-              {linkText}
-              <Text color={theme.text.link}> ({url})</Text>
-            </Text>
-          );
-        }
-      } else if (
-        fullMatch.startsWith('<u>') &&
-        fullMatch.endsWith('</u>') &&
-        fullMatch.length >
-          UNDERLINE_TAG_START_LENGTH + UNDERLINE_TAG_END_LENGTH - 1 // -1 because length is compared to combined length of start and end tags
-      ) {
-        renderedNode = (
-          <Text key={key} underline color={baseColor}>
-            {fullMatch.slice(
-              UNDERLINE_TAG_START_LENGTH,
-              -UNDERLINE_TAG_END_LENGTH,
-            )}
-          </Text>
-        );
-      } else if (fullMatch.match(/^https?:\/\//)) {
-        renderedNode = (
-          <Text key={key} color={theme.text.link}>
-            {fullMatch}
-          </Text>
-        );
-      }
+      renderedNode = renderMatchedNode(
+        fullMatch,
+        key,
+        baseColor,
+        text,
+        match.index,
+        inlineRegex.lastIndex,
+      );
     } catch (e) {
       debugLogger.error('Error parsing inline markdown part:', fullMatch, e);
       renderedNode = null;

@@ -255,27 +255,23 @@ interface TableRendererProps {
   terminalWidth: number;
 }
 
-/**
- * Custom table renderer for markdown tables
- * We implement our own instead of using ink-table due to module compatibility issues
- */
-export const TableRenderer: React.FC<TableRendererProps> = ({
-  headers,
-  rows,
-  terminalWidth,
-}) => {
-  // Calculate column widths using actual display width after markdown processing
-  const columnWidths = headers.map((header, index) => {
+function computeColumnWidths(headers: string[], rows: string[][]): number[] {
+  return headers.map((header, index) => {
     const headerWidth = getPlainTextLength(header);
     const maxRowWidth = Math.max(
       ...rows.map((row) => getPlainTextLength(row[index] || '')),
     );
-    return Math.max(headerWidth, maxRowWidth) + 2; // Add padding
+    return Math.max(headerWidth, maxRowWidth) + 2;
   });
+}
 
-  // Ensure table fits within terminal width
+function fitColumnsToTerminal(
+  columnWidths: number[],
+  terminalWidth: number,
+  columnCount: number,
+): number[] {
   const totalWidth = columnWidths.reduce((sum, width) => sum + width + 1, 1);
-  const minTotalWidth = headers.length * MIN_COLUMN_WIDTH + headers.length + 1;
+  const minTotalWidth = columnCount * MIN_COLUMN_WIDTH + columnCount + 1;
   const availableWidth = Math.max(
     Math.min(totalWidth, Math.max(terminalWidth - TERMINAL_MARGIN, 0)),
     minTotalWidth,
@@ -309,90 +305,116 @@ export const TableRenderer: React.FC<TableRendererProps> = ({
     adjustedTotal -= 1;
   }
 
-  // Helper function to render border
-  const renderBorder = (type: 'top' | 'middle' | 'bottom'): React.ReactNode => {
-    const chars = {
-      top: { left: '┌', middle: '┬', right: '┐', horizontal: '─' },
-      middle: { left: '├', middle: '┼', right: '┤', horizontal: '─' },
-      bottom: { left: '└', middle: '┴', right: '┘', horizontal: '─' },
-    };
+  return adjustedWidths;
+}
 
-    const char = chars[type];
-    const borderParts = adjustedWidths.map((w) => char.horizontal.repeat(w));
-    const border = char.left + borderParts.join(char.middle) + char.right;
-
-    return <Text color={theme.border.default}>{border}</Text>;
+const renderBorder = (
+  type: 'top' | 'middle' | 'bottom',
+  adjustedWidths: number[],
+): React.ReactNode => {
+  const chars = {
+    top: { left: '┌', middle: '┬', right: '┐', horizontal: '─' },
+    middle: { left: '├', middle: '┼', right: '┤', horizontal: '─' },
+    bottom: { left: '└', middle: '┴', right: '┘', horizontal: '─' },
   };
 
-  // Helper function to render a table row
-  const renderRow = (cells: string[], isHeader = false): React.ReactNode => {
-    const cellData = cells.map((cell, index) => {
-      const width = adjustedWidths[index] ?? 0;
-      const contentWidth = Math.max(0, width - 2);
-      const cacheKey = `${contentWidth}::${cell || ''}`;
-      const cachedLines = wrapCache.get(cacheKey);
-      const lines = cachedLines ?? wrapCellContent(cell || '', contentWidth);
-      return { lines, contentWidth };
-    });
+  const char = chars[type];
+  const borderParts = adjustedWidths.map((w) => char.horizontal.repeat(w));
+  const border = char.left + borderParts.join(char.middle) + char.right;
 
-    const maxLines = Math.max(1, ...cellData.map((data) => data.lines.length));
+  return <Text color={theme.border.default}>{border}</Text>;
+};
 
-    return (
-      <Text color={theme.text.primary}>
-        {Array.from({ length: maxLines }).map((_, lineIndex) => (
-          <React.Fragment key={lineIndex}>
-            {lineIndex > 0 ? '\n' : null}
-            <Text color={theme.border.default}>│</Text>{' '}
-            {cellData.map((data, index) => {
-              const lineContent = data.lines[lineIndex] ?? '';
-              const displayWidth = getPlainTextLength(lineContent);
-              const padding = Math.max(0, data.contentWidth - displayWidth);
-              const contentNode = isHeader ? (
-                <Text bold color={theme.text.accent}>
-                  <RenderInline text={lineContent} />
-                </Text>
-              ) : (
+const renderRow = (
+  cells: string[],
+  adjustedWidths: number[],
+  isHeader = false,
+): React.ReactNode => {
+  const cellData = cells.map((cell, index) => {
+    const width = adjustedWidths[index] ?? 0;
+    const contentWidth = Math.max(0, width - 2);
+    const cacheKey = `${contentWidth}::${cell || ''}`;
+    const cachedLines = wrapCache.get(cacheKey);
+    const lines = cachedLines ?? wrapCellContent(cell || '', contentWidth);
+    return { lines, contentWidth };
+  });
+
+  const maxLines = Math.max(1, ...cellData.map((data) => data.lines.length));
+
+  return (
+    <Text color={theme.text.primary}>
+      {Array.from({ length: maxLines }).map((_, lineIndex) => (
+        <React.Fragment key={lineIndex}>
+          {lineIndex > 0 ? '\n' : null}
+          <Text color={theme.border.default}>│</Text>{' '}
+          {cellData.map((data, index) => {
+            const lineContent = data.lines[lineIndex] ?? '';
+            const displayWidth = getPlainTextLength(lineContent);
+            const padding = Math.max(0, data.contentWidth - displayWidth);
+            const contentNode = isHeader ? (
+              <Text bold color={theme.text.accent}>
                 <RenderInline text={lineContent} />
-              );
+              </Text>
+            ) : (
+              <RenderInline text={lineContent} />
+            );
 
-              return (
-                <React.Fragment key={index}>
-                  {contentNode}
-                  {padding > 0 ? ' '.repeat(padding) : ''}
-                  {index < cellData.length - 1 ? (
-                    <>
-                      {' '}
-                      <Text color={theme.border.default}>│</Text>{' '}
-                    </>
-                  ) : null}
-                </React.Fragment>
-              );
-            })}{' '}
-            <Text color={theme.border.default}>│</Text>
-          </React.Fragment>
-        ))}
-      </Text>
-    );
-  };
+            return (
+              <React.Fragment key={index}>
+                {contentNode}
+                {padding > 0 ? ' '.repeat(padding) : ''}
+                {index < cellData.length - 1 ? (
+                  <>
+                    {' '}
+                    <Text color={theme.border.default}>│</Text>{' '}
+                  </>
+                ) : null}
+              </React.Fragment>
+            );
+          })}{' '}
+          <Text color={theme.border.default}>│</Text>
+        </React.Fragment>
+      ))}
+    </Text>
+  );
+};
+
+/**
+ * Custom table renderer for markdown tables
+ * We implement our own instead of using ink-table due to module compatibility issues
+ */
+export const TableRenderer: React.FC<TableRendererProps> = ({
+  headers,
+  rows,
+  terminalWidth,
+}) => {
+  const columnWidths = computeColumnWidths(headers, rows);
+  const adjustedWidths = fitColumnsToTerminal(
+    columnWidths,
+    terminalWidth,
+    headers.length,
+  );
 
   return (
     <Box flexDirection="column" marginY={1}>
       {/* Top border */}
-      {renderBorder('top')}
+      {renderBorder('top', adjustedWidths)}
 
       {/* Header row */}
-      {renderRow(headers, true)}
+      {renderRow(headers, adjustedWidths, true)}
 
       {/* Middle border */}
-      {renderBorder('middle')}
+      {renderBorder('middle', adjustedWidths)}
 
       {/* Data rows */}
       {rows.map((row, index) => (
-        <React.Fragment key={index}>{renderRow(row)}</React.Fragment>
+        <React.Fragment key={index}>
+          {renderRow(row, adjustedWidths)}
+        </React.Fragment>
       ))}
 
       {/* Bottom border */}
-      {renderBorder('bottom')}
+      {renderBorder('bottom', adjustedWidths)}
     </Box>
   );
 };

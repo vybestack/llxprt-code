@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 import { isGitRepository, debugLogger } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
@@ -82,6 +82,102 @@ function checkHomebrewInstall(
   return null;
 }
 
+function checkNpxPnpxInstall(realPath: string): InstallationInfo | null {
+  if (realPath.includes('/.npm/_npx') || realPath.includes('/npm/_npx')) {
+    return {
+      packageManager: PackageManager.NPX,
+      isGlobal: false,
+      updateMessage: 'Running via npx, update not applicable.',
+    };
+  }
+  if (realPath.includes('/.pnpm/_pnpx')) {
+    return {
+      packageManager: PackageManager.PNPX,
+      isGlobal: false,
+      updateMessage: 'Running via pnpx, update not applicable.',
+    };
+  }
+  return null;
+}
+
+function checkPackageManagerByPath(
+  realPath: string,
+  isAutoUpdateEnabled: boolean,
+): InstallationInfo | null {
+  if (realPath.includes('/.pnpm/global')) {
+    const updateCommand = 'pnpm add -g @vybestack/llxprt-code@latest';
+    return {
+      packageManager: PackageManager.PNPM,
+      isGlobal: true,
+      updateCommand,
+      updateMessage: !isAutoUpdateEnabled
+        ? `Please run ${updateCommand} to update`
+        : 'Installed with pnpm. Attempting to automatically update now...',
+    };
+  }
+
+  if (realPath.includes('/.yarn/global')) {
+    const updateCommand = 'yarn global add @vybestack/llxprt-code@latest';
+    return {
+      packageManager: PackageManager.YARN,
+      isGlobal: true,
+      updateCommand,
+      updateMessage: !isAutoUpdateEnabled
+        ? `Please run ${updateCommand} to update`
+        : 'Installed with yarn. Attempting to automatically update now...',
+    };
+  }
+
+  if (realPath.includes('/.bun/install/cache')) {
+    return {
+      packageManager: PackageManager.BUNX,
+      isGlobal: false,
+      updateMessage: 'Running via bunx, update not applicable.',
+    };
+  }
+  if (realPath.includes('/.bun/bin')) {
+    const updateCommand = 'bun add -g @vybestack/llxprt-code@latest';
+    return {
+      packageManager: PackageManager.BUN,
+      isGlobal: true,
+      updateCommand,
+      updateMessage: !isAutoUpdateEnabled
+        ? `Please run ${updateCommand} to update`
+        : 'Installed with bun. Attempting to automatically update now...',
+    };
+  }
+
+  return null;
+}
+
+function checkLocalNodeModulesInstall(
+  realPath: string,
+  normalizedProjectRoot: string,
+  projectRoot: string,
+): InstallationInfo | null {
+  if (
+    !normalizedProjectRoot ||
+    !realPath.startsWith(`${normalizedProjectRoot}/node_modules`)
+  ) {
+    return null;
+  }
+
+  let pm = PackageManager.NPM;
+  if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
+    pm = PackageManager.YARN;
+  } else if (fs.existsSync(path.join(projectRoot, 'pnpm-lock.yaml'))) {
+    pm = PackageManager.PNPM;
+  } else if (fs.existsSync(path.join(projectRoot, 'bun.lockb'))) {
+    pm = PackageManager.BUN;
+  }
+  return {
+    packageManager: pm,
+    isGlobal: false,
+    updateMessage:
+      "Locally installed. Please update via your project's package.json.",
+  };
+}
+
 export function getInstallationInfo(
   projectRoot: string,
   isAutoUpdateEnabled: boolean,
@@ -92,12 +188,10 @@ export function getInstallationInfo(
   }
 
   try {
-    // Normalize path separators to forward slashes for consistent matching.
     const realPath = fs.realpathSync(cliPath).replace(/\\/g, '/');
     const normalizedProjectRoot = projectRoot.replace(/\\/g, '/');
     const isGit = isGitRepository(process.cwd());
 
-    // Check for local git clone first
     if (
       isGit &&
       normalizedProjectRoot &&
@@ -105,103 +199,29 @@ export function getInstallationInfo(
       !realPath.includes('/node_modules/')
     ) {
       return {
-        packageManager: PackageManager.UNKNOWN, // Not managed by a package manager in this sense
+        packageManager: PackageManager.UNKNOWN,
         isGlobal: false,
         updateMessage:
           'Running from a local git clone. Please update with "git pull".',
       };
     }
 
-    // Check for npx/pnpx
-    if (realPath.includes('/.npm/_npx') || realPath.includes('/npm/_npx')) {
-      return {
-        packageManager: PackageManager.NPX,
-        isGlobal: false,
-        updateMessage: 'Running via npx, update not applicable.',
-      };
-    }
-    if (realPath.includes('/.pnpm/_pnpx')) {
-      return {
-        packageManager: PackageManager.PNPX,
-        isGlobal: false,
-        updateMessage: 'Running via pnpx, update not applicable.',
-      };
-    }
+    const npxPnpx = checkNpxPnpxInstall(realPath);
+    if (npxPnpx) return npxPnpx;
 
-    // Check for Homebrew
     const homebrewInfo = checkHomebrewInstall(realPath, isAutoUpdateEnabled);
-    if (homebrewInfo) {
-      return homebrewInfo;
-    }
+    if (homebrewInfo) return homebrewInfo;
 
-    // Check for pnpm
-    if (realPath.includes('/.pnpm/global')) {
-      const updateCommand = 'pnpm add -g @vybestack/llxprt-code@latest';
-      return {
-        packageManager: PackageManager.PNPM,
-        isGlobal: true,
-        updateCommand,
-        updateMessage: !isAutoUpdateEnabled
-          ? `Please run ${updateCommand} to update`
-          : 'Installed with pnpm. Attempting to automatically update now...',
-      };
-    }
+    const pkgMgr = checkPackageManagerByPath(realPath, isAutoUpdateEnabled);
+    if (pkgMgr) return pkgMgr;
 
-    // Check for yarn
-    if (realPath.includes('/.yarn/global')) {
-      const updateCommand = 'yarn global add @vybestack/llxprt-code@latest';
-      return {
-        packageManager: PackageManager.YARN,
-        isGlobal: true,
-        updateCommand,
-        updateMessage: !isAutoUpdateEnabled
-          ? `Please run ${updateCommand} to update`
-          : 'Installed with yarn. Attempting to automatically update now...',
-      };
-    }
+    const localInstall = checkLocalNodeModulesInstall(
+      realPath,
+      normalizedProjectRoot,
+      projectRoot,
+    );
+    if (localInstall) return localInstall;
 
-    // Check for bun
-    if (realPath.includes('/.bun/install/cache')) {
-      return {
-        packageManager: PackageManager.BUNX,
-        isGlobal: false,
-        updateMessage: 'Running via bunx, update not applicable.',
-      };
-    }
-    if (realPath.includes('/.bun/bin')) {
-      const updateCommand = 'bun add -g @vybestack/llxprt-code@latest';
-      return {
-        packageManager: PackageManager.BUN,
-        isGlobal: true,
-        updateCommand,
-        updateMessage: !isAutoUpdateEnabled
-          ? `Please run ${updateCommand} to update`
-          : 'Installed with bun. Attempting to automatically update now...',
-      };
-    }
-
-    // Check for local install
-    if (
-      normalizedProjectRoot &&
-      realPath.startsWith(`${normalizedProjectRoot}/node_modules`)
-    ) {
-      let pm = PackageManager.NPM;
-      if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
-        pm = PackageManager.YARN;
-      } else if (fs.existsSync(path.join(projectRoot, 'pnpm-lock.yaml'))) {
-        pm = PackageManager.PNPM;
-      } else if (fs.existsSync(path.join(projectRoot, 'bun.lockb'))) {
-        pm = PackageManager.BUN;
-      }
-      return {
-        packageManager: pm,
-        isGlobal: false,
-        updateMessage:
-          "Locally installed. Please update via your project's package.json.",
-      };
-    }
-
-    // Assume global npm
     const updateCommand = 'npm install -g @vybestack/llxprt-code@latest';
     return {
       packageManager: PackageManager.NPM,

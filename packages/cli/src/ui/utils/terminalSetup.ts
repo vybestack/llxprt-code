@@ -172,6 +172,87 @@ function parseKeybindings(
   }
 }
 
+async function readExistingKeybindings(
+  keybindingsFile: string,
+  terminalName: string,
+): Promise<unknown[] | TerminalSetupResult> {
+  const readResult = await fs
+    .readFile(keybindingsFile, 'utf8')
+    .catch(() => null);
+  if (readResult === null) return [];
+
+  await backupFile(keybindingsFile);
+  const parsed = parseKeybindings(readResult, terminalName, keybindingsFile);
+  if (!parsed.ok) {
+    return {
+      success: false,
+      message:
+        `Failed to parse ${terminalName} keybindings.json. The file contains invalid JSON.\n` +
+        `Please fix the file manually or delete it to allow automatic configuration.\n` +
+        `File: ${keybindingsFile}\n` +
+        `Error: ${parsed.error}`,
+    };
+  }
+  if (!Array.isArray(parsed.value)) {
+    return {
+      success: false,
+      message:
+        `${terminalName} keybindings.json exists but is not a valid JSON array. ` +
+        `Please fix the file manually or delete it to allow automatic configuration.\n` +
+        `File: ${keybindingsFile}`,
+    };
+  }
+  return parsed.value;
+}
+
+function checkExistingKeybindings(
+  keybindings: unknown[],
+): TerminalSetupResult | null {
+  const existingShiftEnter = keybindings.find((kb) => {
+    const binding = kb as { key?: string };
+    return binding.key === 'shift+enter';
+  });
+  const existingCtrlEnter = keybindings.find((kb) => {
+    const binding = kb as { key?: string };
+    return binding.key === 'ctrl+enter';
+  });
+
+  if (existingShiftEnter === undefined && existingCtrlEnter === undefined) {
+    return null;
+  }
+
+  const messages: string[] = [];
+  if (existingShiftEnter !== undefined) {
+    messages.push(`- Shift+Enter binding already exists`);
+  }
+  if (existingCtrlEnter !== undefined) {
+    messages.push(`- Ctrl+Enter binding already exists`);
+  }
+  return {
+    success: false,
+    message:
+      `Existing keybindings detected. Will not modify to avoid conflicts.\n` +
+      messages.join('\n') +
+      '\n' +
+      `Please check and modify manually if needed: `,
+  };
+}
+
+function hasOurSpecificBinding(keybindings: unknown[], key: string): boolean {
+  return keybindings.some((kb) => {
+    const binding = kb as {
+      command?: string;
+      args?: { text?: string };
+      key?: string;
+    };
+    return (
+      binding.key === key &&
+      binding.command === 'workbench.action.terminal.sendSequence' &&
+      binding.args?.text === '\\\r\n'
+    );
+  });
+}
+
 // Generic VS Code-style terminal configuration
 async function configureVSCodeStyle(
   terminalName: string,
@@ -191,39 +272,16 @@ async function configureVSCodeStyle(
   try {
     await fs.mkdir(configDir, { recursive: true });
 
-    let keybindings: unknown[] = [];
+    const result = await readExistingKeybindings(keybindingsFile, terminalName);
+    if ('success' in result) return result;
+    const keybindings = result;
 
-    // Try to read existing keybindings file
-    const readResult = await fs
-      .readFile(keybindingsFile, 'utf8')
-      .catch(() => null);
-    if (readResult !== null) {
-      await backupFile(keybindingsFile);
-      const parsed = parseKeybindings(
-        readResult,
-        terminalName,
-        keybindingsFile,
-      );
-      if (!parsed.ok) {
-        return {
-          success: false,
-          message:
-            `Failed to parse ${terminalName} keybindings.json. The file contains invalid JSON.\n` +
-            `Please fix the file manually or delete it to allow automatic configuration.\n` +
-            `File: ${keybindingsFile}\n` +
-            `Error: ${parsed.error}`,
-        };
-      }
-      if (!Array.isArray(parsed.value)) {
-        return {
-          success: false,
-          message:
-            `${terminalName} keybindings.json exists but is not a valid JSON array. ` +
-            `Please fix the file manually or delete it to allow automatic configuration.\n` +
-            `File: ${keybindingsFile}`,
-        };
-      }
-      keybindings = parsed.value;
+    const conflict = checkExistingKeybindings(keybindings);
+    if (conflict) {
+      return {
+        ...conflict,
+        message: conflict.message + keybindingsFile,
+      };
     }
 
     const shiftEnterBinding = {
@@ -232,7 +290,6 @@ async function configureVSCodeStyle(
       when: 'terminalFocus',
       args: { text: VSCODE_SHIFT_ENTER_SEQUENCE },
     };
-
     const ctrlEnterBinding = {
       key: 'ctrl+enter',
       command: 'workbench.action.terminal.sendSequence',
@@ -240,65 +297,12 @@ async function configureVSCodeStyle(
       args: { text: VSCODE_SHIFT_ENTER_SEQUENCE },
     };
 
-    // Check if ANY shift+enter or ctrl+enter bindings already exist
-    const existingShiftEnter = keybindings.find((kb) => {
-      const binding = kb as { key?: string };
-      return binding.key === 'shift+enter';
-    });
+    const hasShiftEnter = hasOurSpecificBinding(keybindings, 'shift+enter');
+    const hasCtrlEnter = hasOurSpecificBinding(keybindings, 'ctrl+enter');
 
-    const existingCtrlEnter = keybindings.find((kb) => {
-      const binding = kb as { key?: string };
-      return binding.key === 'ctrl+enter';
-    });
-
-    if (existingShiftEnter !== undefined || existingCtrlEnter !== undefined) {
-      const messages: string[] = [];
-      if (existingShiftEnter !== undefined) {
-        messages.push(`- Shift+Enter binding already exists`);
-      }
-      if (existingCtrlEnter !== undefined) {
-        messages.push(`- Ctrl+Enter binding already exists`);
-      }
-      return {
-        success: false,
-        message:
-          `Existing keybindings detected. Will not modify to avoid conflicts.\n` +
-          messages.join('\n') +
-          '\n' +
-          `Please check and modify manually if needed: ${keybindingsFile}`,
-      };
-    }
-
-    // Check if our specific bindings already exist
-    const hasOurShiftEnter = keybindings.some((kb) => {
-      const binding = kb as {
-        command?: string;
-        args?: { text?: string };
-        key?: string;
-      };
-      return (
-        binding.key === 'shift+enter' &&
-        binding.command === 'workbench.action.terminal.sendSequence' &&
-        binding.args?.text === '\\\r\n'
-      );
-    });
-
-    const hasOurCtrlEnter = keybindings.some((kb) => {
-      const binding = kb as {
-        command?: string;
-        args?: { text?: string };
-        key?: string;
-      };
-      return (
-        binding.key === 'ctrl+enter' &&
-        binding.command === 'workbench.action.terminal.sendSequence' &&
-        binding.args?.text === '\\\r\n'
-      );
-    });
-
-    if (!hasOurShiftEnter || !hasOurCtrlEnter) {
-      if (!hasOurShiftEnter) keybindings.unshift(shiftEnterBinding);
-      if (!hasOurCtrlEnter) keybindings.unshift(ctrlEnterBinding);
+    if (!hasShiftEnter || !hasCtrlEnter) {
+      if (!hasShiftEnter) keybindings.unshift(shiftEnterBinding);
+      if (!hasCtrlEnter) keybindings.unshift(ctrlEnterBinding);
 
       await fs.writeFile(keybindingsFile, JSON.stringify(keybindings, null, 4));
       return {
