@@ -6,26 +6,21 @@
 
 /* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { Buffer } from 'buffer';
-import type { PartListUnion, PartUnion } from '@google/genai';
-import {
-  DEFAULT_AGENT_ID,
-  getErrorMessage,
-  isNodeError,
-  unescapePath,
-  debugLogger,
-  validatePathWithinWorkspace,
-} from '@vybestack/llxprt-code-core';
-import type {
-  DiscoveredMCPResource,
-  AnyToolInvocation,
-  Config,
-} from '@vybestack/llxprt-code-core';
-import type { HistoryItem, IndividualToolCallDisplay } from '../types.js';
-import { ToolCallStatus } from '../types.js';
+import type { PartUnion } from '@google/genai';
+import { unescapePath } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
+import {
+  buildInitialQueryText,
+  processResourceAttachments,
+  readFilesAndBuildResult,
+  reportIgnoredPaths,
+  resolveAtPathCommands,
+} from './atCommandProcessorHelpers.js';
+import type {
+  AtCommandPart,
+  AtCommandProcessResult,
+} from './atCommandProcessorHelpers.js';
 
 // Detect if running in PowerShell to handle @ symbol conflicts
 // PowerShell's IntelliSense treats @ as hashtable start and causes severe lag
@@ -48,15 +43,7 @@ interface HandleAtCommandParams {
   signal: AbortSignal;
 }
 
-interface HandleAtCommandResult {
-  processedQuery: PartListUnion | null;
-  error?: string;
-}
-
-interface AtCommandPart {
-  type: 'text' | 'atPath';
-  content: string;
-}
+type HandleAtCommandResult = AtCommandProcessResult;
 
 /**
  * Parses a query string to find all '@<path>' commands and text segments.
@@ -142,35 +129,6 @@ function parseAllAtCommands(query: string): AtCommandPart[] {
     (part) => !(part.type === 'text' && part.content.trim() === ''),
   );
 }
-
-/**
- * Helper function to handle resource read errors by adding items to history
- * and returning an error result.
- */
-function handleResourceReadError(
-  resourceReadDisplays: IndividualToolCallDisplay[],
-  addItem: UseHistoryManagerReturn['addItem'],
-  userMessageTimestamp: number,
-): HandleAtCommandResult {
-  addItem(
-    {
-      type: 'tool_group',
-      agentId: DEFAULT_AGENT_ID,
-      tools: resourceReadDisplays,
-    } as Omit<HistoryItem, 'id'>,
-    userMessageTimestamp,
-  );
-  const firstError = resourceReadDisplays.find(
-    (d) => d.status === ToolCallStatus.Error,
-  )!;
-  const errorMessages = resourceReadDisplays
-    .filter((d) => d.status === ToolCallStatus.Error)
-    .map((d) => d.resultDisplay);
-  debugLogger.error(errorMessages.filter(Boolean).join(', '));
-  const errorMsg = `Exiting due to an error processing the @ command: ${firstError.resultDisplay}`;
-  return { processedQuery: null, error: errorMsg };
-}
-
 /**
  * Processes user input potentially containing one or more '@<path>' commands.
  * If found, it attempts to read the specified files/directories using the
@@ -188,552 +146,118 @@ export async function handleAtCommand({
   messageId: userMessageTimestamp,
   signal,
 }: HandleAtCommandParams): Promise<HandleAtCommandResult> {
-  // Show PowerShell tip on first use if detected
-  if (isPowerShell && query.includes('@') && !powershellTipShown) {
-    powershellTipShown = true;
-    onDebugMessage(
-      'TIP: PowerShell tip: You can use "+" instead of "@" to avoid IntelliSense lag (e.g., +example.txt instead of @example.txt)',
-    );
-  }
-
-  const resourceRegistry = (
-    config as Config & {
-      getResourceRegistry: () => {
-        findResourceByUri: (
-          identifier: string,
-        ) => DiscoveredMCPResource | undefined;
-      };
-    }
-  ).getResourceRegistry();
-  const mcpClientManager = config.getMcpClientManager();
+  showPowerShellTip(query, onDebugMessage);
 
   const commandParts = parseAllAtCommands(query);
   const atPathCommandParts = commandParts.filter(
     (part) => part.type === 'atPath',
   );
-
-  if (atPathCommandParts.length === 0) {
+  if (atPathCommandParts.length === 0)
     return { processedQuery: [{ text: query }] };
-  }
-
-  // Get centralized file discovery service
-  const fileDiscovery = config.getFileService();
-
-  const respectFileIgnore = config.getFileFilteringOptions();
-
-  const pathSpecsToRead: string[] = [];
-  const resourceAttachments: DiscoveredMCPResource[] = [];
-  const atPathToResolvedSpecMap = new Map<string, string>();
-  const contentLabelsForDisplay: string[] = [];
-  const absoluteToRelativePathMap = new Map<string, string>();
-  const ignoredByReason: Record<string, string[]> = {
-    git: [],
-    llxprt: [],
-    both: [],
-  };
 
   const toolRegistry = config.getToolRegistry();
   const readManyFilesTool = toolRegistry.getTool('read_many_files');
-  const globTool = toolRegistry.getTool('glob');
-
   if (!readManyFilesTool) {
-    addItem(
-      { type: 'error', text: 'Error: read_many_files tool not found.' },
-      userMessageTimestamp,
-    );
-    return {
-      processedQuery: null,
-      error: 'Error: read_many_files tool not found.',
-    };
+    return handleMissingReadManyFilesTool(addItem, userMessageTimestamp);
   }
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  for (const atPathPart of atPathCommandParts) {
-    const originalAtPath = atPathPart.content; // e.g., "@file.txt" or "@"
-
-    if (originalAtPath === '@') {
-      onDebugMessage(
-        'Lone @ detected, will be treated as text in the modified query.',
-      );
-      continue;
-    }
-
-    const pathName = originalAtPath.substring(1);
-    if (!pathName) {
-      // This case should ideally not be hit if parseAllAtCommands ensures content after @
-      // but as a safeguard:
-      const errMsg = `Error: Invalid @ command '${originalAtPath}'. No path specified.`;
-      addItem(
-        {
-          type: 'error',
-          text: errMsg,
-        },
-        userMessageTimestamp,
-      );
-      // Decide if this is a fatal error for the whole command or just skip this @ part
-      // For now, let's be strict and fail the command if one @path is malformed.
-      return { processedQuery: null, error: errMsg };
-    }
-
-    const resourceMatch = resourceRegistry.findResourceByUri(pathName);
-    if (resourceMatch) {
-      resourceAttachments.push(resourceMatch);
-      atPathToResolvedSpecMap.set(originalAtPath, pathName);
-      continue;
-    }
-
-    const workspaceContext = config.getWorkspaceContext();
-    const pathError = validatePathWithinWorkspace(workspaceContext, pathName);
-    if (pathError) {
-      onDebugMessage(pathError);
-      continue;
-    }
-
-    const gitIgnored =
-      respectFileIgnore.respectGitIgnore &&
-      fileDiscovery.shouldIgnoreFile(pathName, {
-        respectGitIgnore: true,
-        respectLlxprtIgnore: false,
-      });
-    const llxprtIgnored =
-      respectFileIgnore.respectLlxprtIgnore &&
-      fileDiscovery.shouldIgnoreFile(pathName, {
-        respectGitIgnore: false,
-        respectLlxprtIgnore: true,
-      });
-
-    if (gitIgnored || llxprtIgnored) {
-      const reason =
-        // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        gitIgnored && llxprtIgnored ? 'both' : gitIgnored ? 'git' : 'llxprt';
-      ignoredByReason[reason].push(pathName);
-      const reasonText =
-        reason === 'both'
-          ? 'ignored by both git and llxprt'
-          : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            reason === 'git'
-            ? 'git-ignored'
-            : 'llxprt-ignored';
-      onDebugMessage(`Path ${pathName} is ${reasonText} and will be skipped.`);
-      continue;
-    }
-
-    for (const dir of config.getWorkspaceContext().getDirectories()) {
-      let currentPathSpec = pathName;
-      let resolvedSuccessfully = false;
-      let relativePath = pathName;
-      try {
-        const absolutePath = path.isAbsolute(pathName)
-          ? pathName
-          : path.resolve(dir, pathName);
-        const stats = await fs.stat(absolutePath);
-
-        // Convert absolute path to relative path
-        relativePath = path.isAbsolute(pathName)
-          ? path.relative(dir, absolutePath)
-          : pathName;
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (stats.isDirectory()) {
-          currentPathSpec = path.join(relativePath, '**');
-          onDebugMessage(
-            `Path ${pathName} resolved to directory, using glob: ${currentPathSpec}`,
-          );
-        } else {
-          currentPathSpec = relativePath;
-          absoluteToRelativePathMap.set(absolutePath, relativePath);
-          onDebugMessage(
-            `Path ${pathName} resolved to file: ${absolutePath}, using relative path: ${relativePath}`,
-          );
-        }
-        resolvedSuccessfully = true;
-      } catch (error) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (isNodeError(error) && error.code === 'ENOENT') {
-          if (config.getEnableRecursiveFileSearch() && globTool) {
-            onDebugMessage(
-              `Path ${pathName} not found directly, attempting glob search.`,
-            );
-            try {
-              const globResult = await globTool.buildAndExecute(
-                {
-                  pattern: `**/*${pathName}*`,
-                  path: dir,
-                },
-                signal,
-              );
-              if (
-                typeof globResult.llmContent === 'string' &&
-                !globResult.llmContent.startsWith('No files found') &&
-                !globResult.llmContent.startsWith('Error:')
-              ) {
-                const lines = globResult.llmContent.split('\n');
-                if (lines.length > 1 && lines[1]) {
-                  const firstMatchAbsolute = lines[1].trim();
-                  currentPathSpec = path.relative(dir, firstMatchAbsolute);
-                  absoluteToRelativePathMap.set(
-                    firstMatchAbsolute,
-                    currentPathSpec,
-                  );
-                  onDebugMessage(
-                    `Glob search for ${pathName} found ${firstMatchAbsolute}, using relative path: ${currentPathSpec}`,
-                  );
-                  resolvedSuccessfully = true;
-                } else {
-                  onDebugMessage(
-                    `Glob search for '**/*${pathName}*' did not return a usable path. Path ${pathName} will be skipped.`,
-                  );
-                }
-              } else {
-                onDebugMessage(
-                  `Glob search for '**/*${pathName}*' found no files or an error. Path ${pathName} will be skipped.`,
-                );
-              }
-            } catch (globError) {
-              debugLogger.error(
-                `Error during glob search for ${pathName}: ${getErrorMessage(globError)}`,
-              );
-              onDebugMessage(
-                `Error during glob search for ${pathName}. Path ${pathName} will be skipped.`,
-              );
-            }
-          } else {
-            onDebugMessage(
-              `Glob tool not found. Path ${pathName} will be skipped.`,
-            );
-          }
-        } else {
-          debugLogger.error(
-            `Error stating path ${pathName}: ${getErrorMessage(error)}`,
-          );
-          onDebugMessage(
-            `Error stating path ${pathName}. Path ${pathName} will be skipped.`,
-          );
-        }
-      }
-      if (resolvedSuccessfully) {
-        pathSpecsToRead.push(currentPathSpec);
-        atPathToResolvedSpecMap.set(originalAtPath, currentPathSpec);
-        const displayPath = path.isAbsolute(pathName) ? relativePath : pathName;
-        contentLabelsForDisplay.push(displayPath);
-        break;
-      }
-    }
+  const resolution = await resolveAtPathCommands({
+    atPathCommandParts,
+    config,
+    resourceRegistry: getResourceRegistry(config),
+    globTool: toolRegistry.getTool('glob'),
+    signal,
+    onDebugMessage,
+  });
+  if (resolution.error) {
+    addItem({ type: 'error', text: resolution.error }, userMessageTimestamp);
+    return { processedQuery: null, error: resolution.error };
   }
 
-  // Construct the initial part of the query for the LLM
-  let initialQueryText = '';
-  for (let i = 0; i < commandParts.length; i++) {
-    const part = commandParts[i];
-    if (part.type === 'text') {
-      initialQueryText += part.content;
-    } else {
-      // type === 'atPath'
-      const resolvedSpec = atPathToResolvedSpecMap.get(part.content);
-      if (
-        i > 0 &&
-        initialQueryText.length > 0 &&
-        !initialQueryText.endsWith(' ')
-      ) {
-        // Add space if previous part was text and didn't end with space, or if previous was @path
-        const prevPart = commandParts[i - 1];
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (
-          prevPart.type === 'text' ||
-          atPathToResolvedSpecMap.has(prevPart.content)
-        ) {
-          initialQueryText += ' ';
-        }
-      }
-      if (resolvedSpec) {
-        initialQueryText += `@${resolvedSpec}`;
-      } else {
-        // If not resolved for reading (e.g. lone @ or invalid path that was skipped),
-        // add the original @-string back, ensuring spacing if it's not the first element.
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (
-          i > 0 &&
-          initialQueryText.length > 0 &&
-          !initialQueryText.endsWith(' ') &&
-          !part.content.startsWith(' ')
-        ) {
-          initialQueryText += ' ';
-        }
-        initialQueryText += part.content;
-      }
-    }
-  }
-  initialQueryText = initialQueryText.trim();
-
-  // Inform user about ignored paths
-  const totalIgnored =
-    ignoredByReason.git.length +
-    ignoredByReason.llxprt.length +
-    ignoredByReason.both.length;
-
-  if (totalIgnored > 0) {
-    const messages = [];
-    if (ignoredByReason.git.length > 0) {
-      messages.push(`Git-ignored: ${ignoredByReason.git.join(', ')}`);
-    }
-    if (ignoredByReason.llxprt.length > 0) {
-      messages.push(`Llxprt-ignored: ${ignoredByReason.llxprt.join(', ')}`);
-    }
-    if (ignoredByReason.both.length > 0) {
-      messages.push(`Ignored by both: ${ignoredByReason.both.join(', ')}`);
-    }
-
-    const message = `Ignored ${totalIgnored} files:\n${messages.join('\n')}`;
-    debugLogger.log(message);
-    onDebugMessage(message);
-  }
-
-  // Fallback for lone "@" or completely invalid @-commands resulting in empty initialQueryText
-  if (pathSpecsToRead.length === 0 && resourceAttachments.length === 0) {
-    onDebugMessage('No valid file paths found in @ commands to read.');
-    if (
-      (initialQueryText === '@' && query.trim() === '@') ||
-      (!initialQueryText && query)
-    ) {
-      // If the only thing was a lone @, or all @-commands were invalid with no surrounding text,
-      // pass original query
-      return { processedQuery: [{ text: query }] };
-    }
-    // Otherwise, proceed with the (potentially modified) query text that doesn't involve file reading
-    return { processedQuery: [{ text: initialQueryText || query }] };
+  const initialQueryText = buildInitialQueryText(
+    commandParts,
+    resolution.atPathToResolvedSpecMap,
+  );
+  reportIgnoredPaths(resolution.ignoredByReason, onDebugMessage);
+  if (
+    resolution.pathSpecsToRead.length === 0 &&
+    resolution.resourceAttachments.length === 0
+  ) {
+    return handleNoValidPaths(query, initialQueryText, onDebugMessage);
   }
 
   const processedQueryParts: PartUnion[] = [{ text: initialQueryText }];
-  const resourceReadDisplays: IndividualToolCallDisplay[] = [];
+  const resourceResult = await processResourceAttachments({
+    resourceAttachments: resolution.resourceAttachments,
+    processedQueryParts,
+    addItem,
+    userMessageTimestamp,
+    mcpClientManager: config.getMcpClientManager(),
+  });
+  if (!Array.isArray(resourceResult)) return resourceResult;
 
-  for (const resource of resourceAttachments) {
-    const uri = resource.uri;
-    if (!uri) {
-      continue;
-    }
-    const client = (
-      mcpClientManager as
-        | {
-            getClient: (name: string) =>
-              | {
-                  readResource: (uri: string) => Promise<{
-                    contents?: Array<{
-                      text?: string;
-                      blob?: string;
-                      mimeType?: string;
-                      resource?: {
-                        text?: string;
-                        blob?: string;
-                        mimeType?: string;
-                      };
-                    }>;
-                  }>;
-                }
-              | undefined;
-          }
-        | undefined
-    )?.getClient(resource.serverName);
-    if (!client) {
-      const toolCallDisplay: IndividualToolCallDisplay = {
-        callId: `mcp-resource-${resource.serverName}-${uri}`,
-        name: `resources/read (${resource.serverName})`,
-        description: uri,
-        status: ToolCallStatus.Error,
-        resultDisplay: `Error reading resource ${uri}: MCP client for server '${resource.serverName}' is not available or not connected.`,
-        confirmationDetails: undefined,
-      };
-      resourceReadDisplays.push(toolCallDisplay);
-      return handleResourceReadError(
-        resourceReadDisplays,
-        addItem,
-        userMessageTimestamp,
-      );
-    }
-
-    try {
-      const response = await client.readResource(uri);
-      processedQueryParts.push({
-        text: `\nContent from @${resource.serverName}:${uri}:\n`,
-      });
-      processedQueryParts.push(...convertResourceContentsToParts(response));
-
-      const toolCallDisplay: IndividualToolCallDisplay = {
-        callId: `mcp-resource-${resource.serverName}-${uri}`,
-        name: `resources/read (${resource.serverName})`,
-        description: uri,
-        status: ToolCallStatus.Success,
-        resultDisplay: `Successfully read resource ${uri}`,
-        confirmationDetails: undefined,
-      };
-      resourceReadDisplays.push(toolCallDisplay);
-    } catch (error) {
-      const toolCallDisplay: IndividualToolCallDisplay = {
-        callId: `mcp-resource-${resource.serverName}-${uri}`,
-        name: `resources/read (${resource.serverName})`,
-        description: uri,
-        status: ToolCallStatus.Error,
-        resultDisplay: `Error reading resource ${uri}: ${getErrorMessage(error)}`,
-        confirmationDetails: undefined,
-      };
-      resourceReadDisplays.push(toolCallDisplay);
-      return handleResourceReadError(
-        resourceReadDisplays,
-        addItem,
-        userMessageTimestamp,
-      );
-    }
-  }
-
-  if (pathSpecsToRead.length === 0) {
-    if (resourceReadDisplays.length > 0) {
-      addItem(
-        {
-          type: 'tool_group',
-          agentId: DEFAULT_AGENT_ID,
-          tools: resourceReadDisplays,
-        } as Omit<HistoryItem, 'id'>,
-        userMessageTimestamp,
-      );
-    }
-    return { processedQuery: processedQueryParts };
-  }
-
-  const toolArgs = {
-    paths: pathSpecsToRead,
-    file_filtering_options: {
-      respect_git_ignore: respectFileIgnore.respectGitIgnore,
-      respect_llxprt_ignore: respectFileIgnore.respectLlxprtIgnore,
-    },
-    // Use configuration setting
-  };
-  let toolCallDisplay: IndividualToolCallDisplay;
-
-  let invocation: AnyToolInvocation | undefined = undefined;
-  try {
-    invocation = readManyFilesTool.build(toolArgs);
-    const result = await invocation.execute(signal);
-    toolCallDisplay = {
-      callId: `client-read-${userMessageTimestamp}`,
-      name: readManyFilesTool.displayName,
-      description: invocation.getDescription(),
-      status: ToolCallStatus.Success,
-      resultDisplay:
-        typeof result.returnDisplay === 'string' && result.returnDisplay
-          ? result.returnDisplay
-          : `Successfully read: ${contentLabelsForDisplay.join(', ')}`,
-      confirmationDetails: undefined,
-    };
-
-    if (Array.isArray(result.llmContent)) {
-      // Static regex for parsing file content markers - no dynamic parts
-      // eslint-disable-next-line sonarjs/regular-expr
-      const fileContentRegex = /^--- (.*?) ---\n\n([\s\S]*?)\n\n$/;
-      processedQueryParts.push({
-        text: '\n--- Content from referenced files ---',
-      });
-      for (const part of result.llmContent) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (typeof part === 'string') {
-          const match = fileContentRegex.exec(part);
-          if (match) {
-            const filePathSpecInContent = match[1];
-            const fileActualContent = match[2].trim();
-
-            let displayPath = absoluteToRelativePathMap.get(
-              filePathSpecInContent,
-            );
-
-            // Fallback: if no mapping found, try to convert absolute path to relative
-            if (!displayPath) {
-              for (const dir of config.getWorkspaceContext().getDirectories()) {
-                if (filePathSpecInContent.startsWith(dir)) {
-                  displayPath = path.relative(dir, filePathSpecInContent);
-                  break;
-                }
-              }
-            }
-
-            displayPath = displayPath || filePathSpecInContent; // eslint-disable-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty displayPath should fall back to filePathSpecInContent
-
-            processedQueryParts.push({
-              text: `\nContent from @${displayPath}:\n`,
-            });
-            processedQueryParts.push({ text: fileActualContent });
-          } else {
-            processedQueryParts.push({ text: part });
-          }
-        } else {
-          // part is a Part object.
-          processedQueryParts.push(part);
-        }
-      }
-    } else {
-      onDebugMessage(
-        'read_many_files tool returned no content or empty content.',
-      );
-    }
-
-    addItem(
-      {
-        type: 'tool_group',
-        agentId: DEFAULT_AGENT_ID,
-        tools: [...resourceReadDisplays, toolCallDisplay],
-      } as Omit<HistoryItem, 'id'>,
-      userMessageTimestamp,
-    );
-    return { processedQuery: processedQueryParts };
-  } catch (error: unknown) {
-    toolCallDisplay = {
-      callId: `client-read-${userMessageTimestamp}`,
-      name: readManyFilesTool.displayName,
-      description:
-        invocation?.getDescription() ??
-        'Error attempting to execute tool to read files',
-      status: ToolCallStatus.Error,
-      resultDisplay: `Error reading files (${contentLabelsForDisplay.join(', ')}): ${getErrorMessage(error)}`,
-      confirmationDetails: undefined,
-    };
-    addItem(
-      {
-        type: 'tool_group',
-        agentId: DEFAULT_AGENT_ID,
-        tools: [...resourceReadDisplays, toolCallDisplay],
-      } as Omit<HistoryItem, 'id'>,
-      userMessageTimestamp,
-    );
-    return {
-      processedQuery: null,
-      error: `Exiting due to an error processing the @ command: ${toolCallDisplay.resultDisplay}`,
-    };
-  }
+  return readFilesAndBuildResult({
+    pathSpecsToRead: resolution.pathSpecsToRead,
+    contentLabelsForDisplay: resolution.contentLabelsForDisplay,
+    absoluteToRelativePathMap: resolution.absoluteToRelativePathMap,
+    processedQueryParts,
+    resourceReadDisplays: resourceResult,
+    readManyFilesTool,
+    respectFileIgnore: config.getFileFilteringOptions(),
+    config,
+    addItem,
+    onDebugMessage,
+    userMessageTimestamp,
+    signal,
+  });
 }
 
-function convertResourceContentsToParts(response: {
-  contents?: Array<{
-    text?: string;
-    blob?: string;
-    mimeType?: string;
-    resource?: {
-      text?: string;
-      blob?: string;
-      mimeType?: string;
-    };
-  }>;
-}): PartUnion[] {
-  const parts: PartUnion[] = [];
-  for (const content of response.contents ?? []) {
-    const candidate = content.resource ?? content;
-    if (candidate.text) {
-      parts.push({ text: candidate.text });
-      continue;
+function showPowerShellTip(
+  query: string,
+  onDebugMessage: (message: string) => void,
+): void {
+  if (!isPowerShell || !query.includes('@') || powershellTipShown) return;
+  powershellTipShown = true;
+  onDebugMessage(
+    'TIP: PowerShell tip: You can use "+" instead of "@" to avoid IntelliSense lag (e.g., +example.txt instead of @example.txt)',
+  );
+}
+
+function getResourceRegistry(config: Config) {
+  return (
+    config as Config & {
+      getResourceRegistry: () => {
+        findResourceByUri: (identifier: string) => unknown;
+      };
     }
-    if (candidate.blob) {
-      const sizeBytes = Buffer.from(candidate.blob, 'base64').length;
-      const mimeType = candidate.mimeType ?? 'application/octet-stream';
-      parts.push({
-        text: `[Binary resource content ${mimeType}, ${sizeBytes} bytes]`,
-      });
-    }
+  ).getResourceRegistry();
+}
+
+function handleMissingReadManyFilesTool(
+  addItem: UseHistoryManagerReturn['addItem'],
+  userMessageTimestamp: number,
+): HandleAtCommandResult {
+  addItem(
+    { type: 'error', text: 'Error: read_many_files tool not found.' },
+    userMessageTimestamp,
+  );
+  return {
+    processedQuery: null,
+    error: 'Error: read_many_files tool not found.',
+  };
+}
+
+function handleNoValidPaths(
+  query: string,
+  initialQueryText: string,
+  onDebugMessage: (message: string) => void,
+): HandleAtCommandResult {
+  onDebugMessage('No valid file paths found in @ commands to read.');
+  if (
+    (initialQueryText === '@' && query.trim() === '@') ||
+    (!initialQueryText && query)
+  ) {
+    return { processedQuery: [{ text: query }] };
   }
-  return parts;
+  return { processedQuery: [{ text: initialQueryText || query }] };
 }
