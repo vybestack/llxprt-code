@@ -28,6 +28,225 @@ const getParameterDefaults = (provider: string | null): AdvancedParams => {
   return PARAMETER_DEFAULTS.anthropic;
 };
 
+const FIELD_LABELS = {
+  temperature: 'Temperature (0.0-2.0)',
+  maxTokens: 'Max Tokens (positive integer)',
+  contextLimit: 'Context Limit (positive integer)',
+} as const;
+
+const FIELD_HELP = {
+  temperature:
+    'Controls randomness. Lower = more focused, Higher = more creative',
+  maxTokens: 'Maximum tokens to generate in responses',
+  contextLimit: 'Maximum context window size',
+} as const;
+
+type ParamField = 'temperature' | 'maxTokens' | 'contextLimit';
+
+const advanceField = (
+  currentField: ParamField,
+  customParams: AdvancedParams,
+  setCurrentField: (f: ParamField) => void,
+  onUpdateParams: (params: AdvancedParams | undefined) => void,
+  onContinue: () => void,
+) => {
+  if (currentField === 'temperature') {
+    setCurrentField('maxTokens');
+  } else if (currentField === 'maxTokens') {
+    setCurrentField('contextLimit');
+  } else {
+    onUpdateParams(customParams);
+    onContinue();
+  }
+};
+
+const buildParamOptions = (providerDefaults: AdvancedParams) => [
+  {
+    label: `Use recommended defaults (temp: ${providerDefaults.temperature}, max tokens: ${providerDefaults.maxTokens})`,
+    value: 'defaults',
+    key: 'defaults',
+  },
+  {
+    label: 'Configure custom parameters',
+    value: 'custom',
+    key: 'custom',
+  },
+  {
+    label: 'Skip (use system defaults)',
+    value: 'skip',
+    key: 'skip',
+  },
+];
+
+const CustomFieldInput: React.FC<{
+  currentField: ParamField;
+  fieldInput: string;
+  validationError: string | null;
+  handleFieldChange: (value: string) => void;
+  handleFieldSubmit: () => void;
+}> = ({
+  currentField,
+  fieldInput,
+  validationError,
+  handleFieldChange,
+  handleFieldSubmit,
+}) => (
+  <>
+    <Text color={Colors.Foreground}>{FIELD_LABELS[currentField]}:</Text>
+    <Text color={Colors.Gray}>{FIELD_HELP[currentField]}</Text>
+    <Text color={Colors.Foreground}> </Text>
+    <TextInput
+      value={fieldInput}
+      onChange={handleFieldChange}
+      onSubmit={handleFieldSubmit}
+      isFocused={true}
+      placeholder={currentField === 'temperature' ? '1.0' : '4096'}
+    />
+    {validationError && (
+      <Text color={Colors.AccentRed}>✗ {validationError}</Text>
+    )}
+    {!validationError && fieldInput && (
+      <Text color={Colors.AccentGreen}>✓ Valid</Text>
+    )}
+    <Text color={Colors.Foreground}> </Text>
+    <Text color={Colors.Gray}>
+      Press Enter to set value or leave empty to skip
+    </Text>
+    <Text color={Colors.Gray}>
+      Progress:{' '}
+      {currentField === 'temperature'
+        ? '1'
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          currentField === 'maxTokens'
+          ? '2'
+          : '3'}
+      /3
+    </Text>
+    <Text color={Colors.Foreground}> </Text>
+    <Text color={Colors.Gray}>Enter Continue Esc Back to menu</Text>
+  </>
+);
+
+const ParamSelectView: React.FC<{
+  paramOptions: Array<{ label: string; value: string; key: string }>;
+  handleParamSelect: (value: string) => void;
+}> = ({ paramOptions, handleParamSelect }) => (
+  <>
+    <RadioButtonSelect
+      items={paramOptions}
+      onSelect={handleParamSelect}
+      isFocused={true}
+    />
+    <Text color={Colors.Foreground}> </Text>
+    <Text color={Colors.Gray}>Esc Cancel</Text>
+  </>
+);
+
+const useEscapeHandler = (
+  focusedComponent: 'select' | 'custom',
+  setFocusedComponent: (v: 'select' | 'custom') => void,
+  setFieldInput: (v: string) => void,
+  setValidationError: (v: string | null) => void,
+  onCancel: () => void,
+) => {
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        if (focusedComponent === 'custom') {
+          setFocusedComponent('select');
+          setFieldInput('');
+          setValidationError(null);
+        } else {
+          onCancel();
+        }
+      }
+    },
+    { isActive: true },
+  );
+};
+
+const useFieldSubmitHandler = (
+  fieldInput: string,
+  currentField: ParamField,
+  customParams: AdvancedParams,
+  onUpdateParams: (params: AdvancedParams | undefined) => void,
+  onContinue: () => void,
+  setFieldInput: (v: string) => void,
+  setCurrentField: (f: ParamField) => void,
+  setCustomParams: (p: AdvancedParams) => void,
+  setValidationError: (v: string | null) => void,
+) =>
+  useCallback(() => {
+    const numValue =
+      currentField === 'temperature'
+        ? Number.parseFloat(fieldInput)
+        : Number.parseInt(fieldInput, 10);
+
+    if (!fieldInput.trim()) {
+      setFieldInput('');
+      setValidationError(null);
+      advanceField(
+        currentField,
+        customParams,
+        setCurrentField,
+        onUpdateParams,
+        onContinue,
+      );
+      return;
+    }
+
+    if (Number.isNaN(numValue)) {
+      setValidationError('Must be a valid number');
+      return;
+    }
+
+    const validation = PARAM_VALIDATORS[currentField](numValue);
+    if (!validation.valid) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error should use default message
+      setValidationError(validation.error || 'Invalid value');
+      return;
+    }
+
+    const updated = { ...customParams, [currentField]: numValue };
+    setCustomParams(updated);
+    setFieldInput('');
+    setValidationError(null);
+    advanceField(
+      currentField,
+      updated,
+      setCurrentField,
+      onUpdateParams,
+      onContinue,
+    );
+  }, [
+    fieldInput,
+    currentField,
+    customParams,
+    onUpdateParams,
+    onContinue,
+    setFieldInput,
+    setCurrentField,
+    setCustomParams,
+    setValidationError,
+  ]);
+
+const AdvancedParamsHeader: React.FC<{ current: number; total: number }> = ({
+  current,
+  total,
+}) => (
+  <>
+    <Text bold color={Colors.AccentCyan}>
+      Create New Profile - Step {current} of {total}
+    </Text>
+    <Text color={Colors.Foreground}> </Text>
+    <Text color={Colors.Foreground}>Advanced Parameters:</Text>
+    <Text color={Colors.Gray}>
+      Configure temperature, max tokens, and context limits (optional)
+    </Text>
+    <Text color={Colors.Foreground}> </Text>
+  </>
+);
+
 interface AdvancedParamsStepProps {
   state: WizardState;
   onUpdateParams: (params: AdvancedParams | undefined) => void;
@@ -51,43 +270,28 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
     maxTokens: undefined,
     contextLimit: undefined,
   });
-  const [currentField, setCurrentField] = useState<
-    'temperature' | 'maxTokens' | 'contextLimit'
-  >('temperature');
+  const [currentField, setCurrentField] = useState<ParamField>('temperature');
   const [fieldInput, setFieldInput] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Handle Escape key to cancel or go back
-  useKeypress(
-    (key) => {
-      if (key.name === 'escape') {
-        if (focusedComponent === 'custom') {
-          // Go back to selection menu
-          setFocusedComponent('select');
-          setFieldInput('');
-          setValidationError(null);
-        } else {
-          // Cancel wizard
-          onCancel();
-        }
-      }
-    },
-    { isActive: true },
+  useEscapeHandler(
+    focusedComponent,
+    setFocusedComponent,
+    setFieldInput,
+    setValidationError,
+    onCancel,
   );
 
   const handleParamSelect = useCallback(
     (value: string) => {
       if (value === 'defaults') {
-        // Use provider defaults
         const defaults = getParameterDefaults(state.config.provider);
         onUpdateParams(defaults);
         onContinue();
       } else if (value === 'skip') {
-        // Skip params (use system defaults)
         onUpdateParams(undefined);
         onContinue();
       } else if (value === 'custom') {
-        // Enter custom configuration mode
         setFocusedComponent('custom');
         setCurrentField('temperature');
       }
@@ -100,154 +304,39 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
     setValidationError(null);
   }, []);
 
-  const handleFieldSubmit = useCallback(() => {
-    const numValue =
-      currentField === 'temperature'
-        ? Number.parseFloat(fieldInput)
-        : Number.parseInt(fieldInput, 10);
-
-    if (!fieldInput.trim()) {
-      // Allow skipping individual fields
-      setFieldInput('');
-      setValidationError(null);
-
-      // Move to next field
-      if (currentField === 'temperature') {
-        setCurrentField('maxTokens');
-      } else if (currentField === 'maxTokens') {
-        setCurrentField('contextLimit');
-      } else {
-        // Done with all fields
-        onUpdateParams(customParams);
-        onContinue();
-      }
-      return;
-    }
-
-    if (Number.isNaN(numValue)) {
-      setValidationError('Must be a valid number');
-      return;
-    }
-
-    // Validate the field
-    const validation = PARAM_VALIDATORS[currentField](numValue);
-    if (!validation.valid) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error should use default message
-      setValidationError(validation.error || 'Invalid value');
-      return;
-    }
-
-    // Update custom params
-    const updated = { ...customParams, [currentField]: numValue };
-    setCustomParams(updated);
-    setFieldInput('');
-    setValidationError(null);
-
-    // Move to next field or complete
-    if (currentField === 'temperature') {
-      setCurrentField('maxTokens');
-    } else if (currentField === 'maxTokens') {
-      setCurrentField('contextLimit');
-    } else {
-      // Done with all fields
-      onUpdateParams(updated);
-      onContinue();
-    }
-  }, [fieldInput, currentField, customParams, onUpdateParams, onContinue]);
+  const handleFieldSubmit = useFieldSubmitHandler(
+    fieldInput,
+    currentField,
+    customParams,
+    onUpdateParams,
+    onContinue,
+    setFieldInput,
+    setCurrentField,
+    setCustomParams,
+    setValidationError,
+  );
 
   const providerDefaults = getParameterDefaults(state.config.provider);
-
-  const paramOptions = [
-    {
-      label: `Use recommended defaults (temp: ${providerDefaults.temperature}, max tokens: ${providerDefaults.maxTokens})`,
-      value: 'defaults',
-      key: 'defaults',
-    },
-    {
-      label: 'Configure custom parameters',
-      value: 'custom',
-      key: 'custom',
-    },
-    {
-      label: 'Skip (use system defaults)',
-      value: 'skip',
-      key: 'skip',
-    },
-  ];
-
-  const fieldLabels = {
-    temperature: 'Temperature (0.0-2.0)',
-    maxTokens: 'Max Tokens (positive integer)',
-    contextLimit: 'Context Limit (positive integer)',
-  };
-
-  const fieldHelp = {
-    temperature:
-      'Controls randomness. Lower = more focused, Higher = more creative',
-    maxTokens: 'Maximum tokens to generate in responses',
-    contextLimit: 'Maximum context window size',
-  };
-
+  const paramOptions = buildParamOptions(providerDefaults);
   const { current, total } = getStepPosition(state);
 
   return (
     <Box flexDirection="column">
-      <Text bold color={Colors.AccentCyan}>
-        Create New Profile - Step {current} of {total}
-      </Text>
-      <Text color={Colors.Foreground}> </Text>
-      <Text color={Colors.Foreground}>Advanced Parameters:</Text>
-      <Text color={Colors.Gray}>
-        Configure temperature, max tokens, and context limits (optional)
-      </Text>
-      <Text color={Colors.Foreground}> </Text>
+      <AdvancedParamsHeader current={current} total={total} />
       {focusedComponent === 'select' && (
-        <>
-          <RadioButtonSelect
-            items={paramOptions}
-            onSelect={handleParamSelect}
-            isFocused={true}
-          />
-          <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Gray}>Esc Cancel</Text>
-        </>
+        <ParamSelectView
+          paramOptions={paramOptions}
+          handleParamSelect={handleParamSelect}
+        />
       )}
-      {/* eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice. */}
       {focusedComponent === 'custom' && (
-        <>
-          <Text color={Colors.Foreground}>{fieldLabels[currentField]}:</Text>
-          <Text color={Colors.Gray}>{fieldHelp[currentField]}</Text>
-          <Text color={Colors.Foreground}> </Text>
-          <TextInput
-            value={fieldInput}
-            onChange={handleFieldChange}
-            onSubmit={handleFieldSubmit}
-            isFocused={true}
-            placeholder={currentField === 'temperature' ? '1.0' : '4096'}
-          />
-          {validationError && (
-            <Text color={Colors.AccentRed}>✗ {validationError}</Text>
-          )}
-          {!validationError && fieldInput && (
-            <Text color={Colors.AccentGreen}>✓ Valid</Text>
-          )}
-          <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Gray}>
-            Press Enter to set value or leave empty to skip
-          </Text>
-          <Text color={Colors.Gray}>
-            Progress:{' '}
-            {currentField === 'temperature'
-              ? '1'
-              : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-                currentField === 'maxTokens'
-                ? '2'
-                : '3'}
-            /3
-          </Text>
-          <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Gray}>Enter Continue Esc Back to menu</Text>
-        </>
+        <CustomFieldInput
+          currentField={currentField}
+          fieldInput={fieldInput}
+          validationError={validationError}
+          handleFieldChange={handleFieldChange}
+          handleFieldSubmit={handleFieldSubmit}
+        />
       )}
     </Box>
   );
