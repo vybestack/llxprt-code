@@ -14,6 +14,7 @@ import type {
   BrowserRefs,
   BrowserSetters,
   DerivedState,
+  PaginationValues,
 } from './useSessionBrowserHelpers.js';
 
 const SORT_CYCLE: Array<'newest' | 'oldest' | 'size'> = [
@@ -40,26 +41,15 @@ export function useSessionKeypressHandler(params: {
   return useCallback(
     (input: string, key: Key) => {
       const context = buildControllerContext(params);
+      const derived = params.derived.refreshPagination();
       if (clearErrorOrBlocked(params.refs, params.setters)) return;
-      if (handleModalKeys(input, key, params, context)) return;
+      if (handleModalKeys(input, key, params, context, derived)) return;
       if (handleGlobalKeys(key, params.refs, params.setters, context)) return;
       if (
-        handleNavigationKeys(
-          key,
-          params.refs,
-          params.setters,
-          params.derived,
-          context,
-        )
+        handleNavigationKeys(key, params.refs, params.setters, derived, context)
       )
         return;
-      handleModeSpecificKeys(
-        input,
-        key,
-        params.refs,
-        params.setters,
-        params.derived,
-      );
+      handleModeSpecificKeys(input, key, params.refs, params.setters, derived);
     },
     [params],
   );
@@ -92,9 +82,9 @@ function handleModalKeys(
   params: {
     refs: BrowserRefs;
     setters: BrowserSetters;
-    derived: DerivedState;
   },
   context: ControllerContext,
+  derived: PaginationValues,
 ): boolean {
   const deleteIndex = params.refs.deleteConfirmIndexRef.current;
   if (deleteIndex !== null) {
@@ -102,7 +92,7 @@ function handleModalKeys(
       input,
       key,
       params.setters,
-      params.derived.pageItems,
+      derived.pageItems,
       deleteIndex,
       context,
     );
@@ -112,7 +102,7 @@ function handleModalKeys(
       input,
       key,
       params.setters,
-      params.derived.selectedSession,
+      derived.selectedSession,
       context,
     );
   }
@@ -182,7 +172,7 @@ function handleNavigationKeys(
   key: Key,
   refs: BrowserRefs,
   setters: BrowserSetters,
-  derived: DerivedState,
+  derived: PaginationValues,
   context: ControllerContext,
 ): boolean {
   if (key.name === 'return') {
@@ -209,7 +199,7 @@ function handleReturnKey(
 
 function handlePageDown(
   setters: BrowserSetters,
-  derived: DerivedState,
+  derived: PaginationValues,
 ): boolean {
   if (derived.clampedPage < derived.totalPages - 1) {
     setters.setPage(derived.clampedPage + 1);
@@ -218,7 +208,10 @@ function handlePageDown(
   return true;
 }
 
-function handlePageUp(setters: BrowserSetters, derived: DerivedState): boolean {
+function handlePageUp(
+  setters: BrowserSetters,
+  derived: PaginationValues,
+): boolean {
   if (derived.clampedPage > 0) {
     setters.setPage(derived.clampedPage - 1);
     setters.setSelectedIndex(0);
@@ -248,7 +241,7 @@ function handleModeSpecificKeys(
   key: Key,
   refs: BrowserRefs,
   setters: BrowserSetters,
-  derived: DerivedState,
+  derived: PaginationValues,
 ): void {
   if (refs.isSearchingRef.current) {
     handleSearchModeKey(input, key, refs, setters);
@@ -283,7 +276,7 @@ function handleNavModeKey(
   key: Key,
   refs: BrowserRefs,
   setters: BrowserSetters,
-  derived: DerivedState,
+  derived: PaginationValues,
 ): void {
   if (key.name === 'delete') {
     if (derived.pageItems.length > 0 && derived.selectedSession !== null) {

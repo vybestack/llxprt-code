@@ -51,7 +51,7 @@ export interface BrowserSetters {
   setError: (value: string | null) => void;
 }
 
-interface PaginationValues {
+export interface PaginationValues {
   sorted: EnrichedSessionSummary[];
   totalPages: number;
   clampedPage: number;
@@ -63,6 +63,7 @@ export interface DerivedState extends PaginationValues {
   getSortedSessions: () => EnrichedSessionSummary[];
   getPaginationValues: () => PaginationValues;
   previewPageKey: string;
+  refreshPagination: () => PaginationValues;
 }
 
 interface CoreState {
@@ -73,6 +74,11 @@ interface CoreState {
   skippedCount: number;
   setSkippedCount: React.Dispatch<React.SetStateAction<number>>;
 }
+
+type CoreSetters = Pick<
+  CoreState,
+  'setSessions' | 'setIsLoading' | 'setSkippedCount'
+>;
 
 export function useSessionBrowserController(
   props: UseSessionBrowserProps,
@@ -88,9 +94,17 @@ export function useSessionBrowserController(
     previewCacheRef,
     core.setSessions,
   );
+  const coreSetters = useMemo(
+    () => ({
+      setSessions: core.setSessions,
+      setIsLoading: core.setIsLoading,
+      setSkippedCount: core.setSkippedCount,
+    }),
+    [core.setIsLoading, core.setSessions, core.setSkippedCount],
+  );
   const loaderDeps = useMemo(
     () => ({
-      core,
+      coreSetters,
       refs,
       setters,
       generationRef,
@@ -99,7 +113,7 @@ export function useSessionBrowserController(
       loadPreviewsForPage,
     }),
     [
-      core,
+      coreSetters,
       refs,
       setters,
       generationRef,
@@ -257,6 +271,7 @@ function useDerivedState(
     previewPageKey: values.pageItems
       .map((session) => session.sessionId)
       .join('|'),
+    refreshPagination: getPaginationValues,
   };
 }
 
@@ -392,7 +407,7 @@ function updateSessionPreview(
 }
 
 interface LoaderDeps {
-  core: CoreState;
+  coreSetters: CoreSetters;
   refs: BrowserRefs;
   setters: BrowserSetters;
   generationRef: React.MutableRefObject<number>;
@@ -433,7 +448,7 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
       deps.setters.setError(
         `Failed to load sessions: ${loadError instanceof Error ? loadError.message : String(loadError)}`,
       );
-      deps.core.setIsLoading(false);
+      deps.coreSetters.setIsLoading(false);
     }
   }, [
     deps,
@@ -446,7 +461,7 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
 
 function beginSessionLoad(deps: LoaderDeps): number {
   deps.generationRef.current += 1;
-  deps.core.setIsLoading(true);
+  deps.coreSetters.setIsLoading(true);
   deps.setters.setError(null);
   return deps.generationRef.current;
 }
@@ -482,9 +497,9 @@ function finishSessionLoad(
   filtered: FilteredSessionsResult,
   deps: LoaderDeps,
 ): number {
-  deps.core.setSkippedCount(initialSkippedCount + filtered.skippedCount);
-  deps.core.setSessions(filtered.sessions);
-  deps.core.setIsLoading(false);
+  deps.coreSetters.setSkippedCount(initialSkippedCount + filtered.skippedCount);
+  deps.coreSetters.setSessions(filtered.sessions);
+  deps.coreSetters.setIsLoading(false);
   return restoreSelectionAfterLoad(filtered.sessions, deps);
 }
 
