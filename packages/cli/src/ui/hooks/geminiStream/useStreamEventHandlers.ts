@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 /**
  * Extracted stream event handler hooks from useGeminiStream.
@@ -13,29 +13,24 @@
  */
 
 import type React from 'react';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   type Config,
-  GeminiEventType as ServerGeminiEventType,
   type ServerGeminiStreamEvent as GeminiEvent,
-  type ServerGeminiContentEvent as ContentEvent,
   type ServerGeminiErrorEvent as ErrorEvent,
   type ServerGeminiChatCompressedEvent,
   type ServerGeminiFinishedEvent,
-  MessageSenderType,
+  type MessageSenderType,
   type ToolCallRequestInfo,
-  logUserPrompt,
-  UserPromptEvent,
   parseAndFormatApiError,
-  DEFAULT_AGENT_ID,
   nextStreamEventWithIdleTimeout,
   StreamIdleTimeoutError,
   resolveStreamIdleTimeoutMs,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   type ThinkingBlock,
   tokenLimit,
-  uiTelemetryService,
   type ThoughtSummary,
+  type ServerGeminiContentEvent,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
@@ -43,27 +38,76 @@ import {
   type HistoryItem,
   type HistoryItemWithoutId,
   type HistoryItemToolGroup,
-  type HistoryItemGemini,
-  type HistoryItemGeminiContent,
   MessageType,
-  type SlashCommandProcessorResult,
   ToolCallStatus,
+  type SlashCommandProcessorResult,
 } from '../../types.js';
-import { isAtCommand, isSlashCommand } from '../../utils/commandUtils.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import {
   SYSTEM_NOTICE_EVENT,
   showCitations,
   getCurrentProfileName,
   buildFinishReasonMessage,
-  buildSplitContent,
-  buildFullSplitItem,
-  deduplicateToolCallRequests,
-  buildThinkingBlock,
-  processSlashCommandResult,
 } from './streamUtils.js';
 import { StreamProcessingStatus } from './types.js';
-import { handleAtCommand } from '../atCommandProcessor.js';
+import {
+  processContentEvent,
+  type ContentEventDeps,
+} from './contentEventProcessor.js';
+import {
+  dispatchStreamEvent,
+  scheduleDedupedToolCalls,
+} from './streamEventDispatcher.js';
+import {
+  prepareQueryForGemini as prepareQueryImpl,
+  type PrepareQueryDeps,
+} from './queryPreparer.js';
+interface StreamEventHandlersResult {
+  handleContentEvent: (
+    eventValue: ServerGeminiContentEvent['value'],
+    currentGeminiMessageBuffer: string,
+    userMessageTimestamp: number,
+  ) => string;
+  handleUserCancelledEvent: (userMessageTimestamp: number) => void;
+  handleErrorEvent: (
+    eventValue: ErrorEvent['value'],
+    userMessageTimestamp: number,
+    options?: { clearQueue?: boolean },
+  ) => void;
+  handleCitationEvent: (text: string, userMessageTimestamp: number) => void;
+  handleFinishedEvent: (
+    event: ServerGeminiFinishedEvent,
+    userMessageTimestamp: number,
+  ) => void;
+  handleChatCompressionEvent: (
+    eventValue: ServerGeminiChatCompressedEvent['value'],
+    userMessageTimestamp: number,
+  ) => void;
+  handleMaxSessionTurnsEvent: () => void;
+  handleContextWindowWillOverflowEvent: (
+    estimatedRequestTokenCount: number,
+    remainingTokenCount: number,
+  ) => void;
+  handleLoopDetectedEvent: () => void;
+  processGeminiStreamEvents: (
+    stream: AsyncIterable<GeminiEvent>,
+    userMessageTimestamp: number,
+    signal: AbortSignal,
+  ) => Promise<StreamProcessingStatus>;
+  displayUserMessage: (
+    trimmedQuery: string,
+    userMessageTimestamp: number,
+  ) => void;
+  prepareQueryForGemini: (
+    query: PartListUnion,
+    userMessageTimestamp: number,
+    abortSignal: AbortSignal,
+    promptId: string,
+  ) => Promise<{
+    queryToSend: PartListUnion | null;
+    shouldProceed: boolean;
+  }>;
+}
 
 interface StreamEventHandlerDeps {
   config: Config;
@@ -111,217 +155,104 @@ interface StreamEventHandlerDeps {
   lastProfileNameRef: React.MutableRefObject<string | undefined>;
 }
 
-/**
- * Applies a ThoughtSummary to the pending history item state.
- */
-function applyThoughtToState(
-  thoughtSummary: ThoughtSummary,
-  sanitizeContent: (text: string) => {
-    text: string;
-    blocked: boolean;
-    feedback?: string;
-  },
-  config: Config,
-  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
-  setLastGeminiActivityTime: (t: number) => void,
-  setThought: (t: ThoughtSummary | null) => void,
-  setPendingHistoryItem: (
-    updater: (item: HistoryItemWithoutId | null) => HistoryItemWithoutId | null,
-  ) => void,
-): void {
-  setLastGeminiActivityTime(Date.now());
-  setThought(thoughtSummary);
-  let thoughtText = [thoughtSummary.subject, thoughtSummary.description]
-    .filter(Boolean)
-    .join(': ');
-  const sanitized = sanitizeContent(thoughtText);
-  thoughtText = sanitized.blocked ? '' : sanitized.text;
-  const thinkingBlock = buildThinkingBlock(
-    thoughtText,
-    thinkingBlocksRef.current,
+export function useStreamEventHandlers(
+  deps: StreamEventHandlerDeps,
+): StreamEventHandlersResult {
+  const handleContentEvent = useContentEventHandler(deps);
+  const handleLoopDetectedEvent = useCallback(
+    () =>
+      deps.addItem(
+        {
+          type: 'info',
+          text: 'A potential loop was detected. This can happen due to repetitive tool calls or other model behavior. The request has been halted.',
+        },
+        Date.now(),
+      ),
+    [deps],
   );
-  if (thinkingBlock) {
-    thinkingBlocksRef.current.push(thinkingBlock);
-    const liveProfileName = getCurrentProfileName(config);
-    setPendingHistoryItem((item) => {
-      const ep = (
-        item as HistoryItemGemini | HistoryItemGeminiContent | undefined
-      )?.profileName;
-      const pn = liveProfileName ?? ep;
-      const itemType =
-        item?.type === 'gemini_content' ? 'gemini_content' : 'gemini';
-      return {
-        type: itemType,
-        text: item?.text ?? '',
-        ...(pn != null ? { profileName: pn } : {}),
-        thinkingBlocks: [...thinkingBlocksRef.current],
-      };
-    });
-  }
+  const handlers = useStreamHandlers(
+    deps,
+    handleContentEvent,
+    handleLoopDetectedEvent,
+  );
+  const processGeminiStreamEvents = useProcessStream(deps, handlers);
+  const displayUserMessage = useDisplayUserMessage(deps);
+  const prepareQueryForGemini = usePrepareQueryForGemini(deps);
+
+  return {
+    ...handlers,
+    processGeminiStreamEvents,
+    displayUserMessage,
+    prepareQueryForGemini,
+  };
 }
 
-export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
-  const {
-    config,
-    settings,
-    addItem,
-    onDebugMessage,
-    onCancelSubmit,
-    sanitizeContent,
-    flushPendingHistoryItem,
-    pendingHistoryItemRef,
-    thinkingBlocksRef,
-    turnCancelledRef,
-    queuedSubmissionsRef,
-    setPendingHistoryItem,
-    setIsResponding,
-    setThought,
-    setLastGeminiActivityTime,
-    scheduleToolCalls,
-    abortActiveStream,
-    handleShellCommand,
-    handleSlashCommand,
-    logger,
-    shellModeActive,
-    loopDetectedRef,
-    lastProfileNameRef,
-  } = deps;
-
-  const handleContentEvent = useCallback(
+function useContentEventHandler(deps: StreamEventHandlerDeps) {
+  const contentEventDeps = useContentEventDeps(deps);
+  return useCallback(
     (
-      eventValue: ContentEvent['value'],
+      eventValue: ServerGeminiContentEvent['value'],
       currentGeminiMessageBuffer: string,
       userMessageTimestamp: number,
-    ): string => {
-      if (turnCancelledRef.current) {
-        return '';
-      }
-
-      const liveProfileName = getCurrentProfileName(config);
-      const combined = currentGeminiMessageBuffer + eventValue;
-      const {
-        text: sanitizedCombined,
-        feedback,
-        blocked,
-      } = sanitizeContent(combined);
-
-      if (blocked) {
-        addItem(
-          {
-            type: MessageType.ERROR,
-            text: '[Error: Response blocked due to emoji detection]',
-          },
-          userMessageTimestamp,
-        );
-        if (feedback)
-          addItem(
-            { type: MessageType.INFO, text: feedback },
-            userMessageTimestamp,
-          );
-        return currentGeminiMessageBuffer;
-      }
-      if (feedback)
-        addItem(
-          { type: MessageType.INFO, text: feedback },
-          userMessageTimestamp,
-        );
-
-      if (
-        pendingHistoryItemRef.current?.type !== 'gemini' &&
-        pendingHistoryItemRef.current?.type !== 'gemini_content'
-      ) {
-        if (pendingHistoryItemRef.current)
-          flushPendingHistoryItem(userMessageTimestamp);
-        setPendingHistoryItem({
-          type: 'gemini',
-          text: '',
-          ...(liveProfileName != null ? { profileName: liveProfileName } : {}),
-          ...(thinkingBlocksRef.current.length > 0
-            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
-            : {}),
-        });
-      }
-
-      const pendingType =
-        pendingHistoryItemRef.current?.type === 'gemini_content'
-          ? 'gemini_content'
-          : 'gemini';
-      const existingProfileName = (
-        pendingHistoryItemRef.current as
-          | HistoryItemGemini
-          | HistoryItemGeminiContent
-          | undefined
-      )?.profileName;
-      const { splitPoint, beforeText, afterItem } = buildSplitContent(
-        sanitizedCombined,
-        liveProfileName,
-        existingProfileName ?? null,
-        thinkingBlocksRef.current,
-        pendingType,
-      );
-
-      if (splitPoint === sanitizedCombined.length) {
-        setPendingHistoryItem((item) =>
-          buildFullSplitItem(
-            item,
-            sanitizedCombined,
-            liveProfileName,
-            thinkingBlocksRef.current,
-          ),
-        );
-        return sanitizedCombined;
-      }
-
-      if (beforeText) {
-        addItem(
-          {
-            type: pendingType,
-            text: beforeText,
-            ...(liveProfileName != null
-              ? { profileName: liveProfileName }
-              : {}),
-            ...(thinkingBlocksRef.current.length > 0
-              ? { thinkingBlocks: [...thinkingBlocksRef.current] }
-              : {}),
-          },
-          userMessageTimestamp,
-        );
-        thinkingBlocksRef.current = [];
-      }
-
-      setPendingHistoryItem(afterItem);
-      return afterItem.text;
-    },
-    [
-      addItem,
-      config,
-      pendingHistoryItemRef,
-      sanitizeContent,
-      setPendingHistoryItem,
-      flushPendingHistoryItem,
-      thinkingBlocksRef,
-      turnCancelledRef,
-    ],
+    ): string =>
+      processContentEvent(
+        eventValue,
+        currentGeminiMessageBuffer,
+        userMessageTimestamp,
+        contentEventDeps,
+      ),
+    [contentEventDeps],
   );
+}
 
-  const handleUserCancelledEvent = useCallback(
+function useStreamHandlers(
+  deps: StreamEventHandlerDeps,
+  handleContentEvent: (
+    eventValue: ServerGeminiContentEvent['value'],
+    currentGeminiMessageBuffer: string,
+    userMessageTimestamp: number,
+  ) => string,
+  handleLoopDetectedEvent: () => void,
+): HandlerMap {
+  return {
+    handleContentEvent,
+    handleUserCancelledEvent: useUserCancelledHandler(deps),
+    handleErrorEvent: useErrorEventHandler(deps),
+    handleCitationEvent: useCitationEventHandler(deps),
+    handleFinishedEvent: useFinishedEventHandler(deps),
+    handleChatCompressionEvent: useChatCompressionHandler(deps),
+    handleMaxSessionTurnsEvent: useMaxSessionTurnsHandler(deps),
+    handleContextWindowWillOverflowEvent: useContextOverflowHandler(deps),
+    handleLoopDetectedEvent,
+  };
+}
+
+function useUserCancelledHandler(deps: StreamEventHandlerDeps) {
+  const {
+    addItem,
+    flushPendingHistoryItem,
+    pendingHistoryItemRef,
+    queuedSubmissionsRef,
+    setIsResponding,
+    setPendingHistoryItem,
+    setThought,
+    turnCancelledRef,
+  } = deps;
+
+  return useCallback(
     (userMessageTimestamp: number) => {
-      if (turnCancelledRef.current) {
-        return;
-      }
+      if (turnCancelledRef.current) return;
       if (pendingHistoryItemRef.current) {
         if (pendingHistoryItemRef.current.type === 'tool_group') {
-          const updatedTools = pendingHistoryItemRef.current.tools.map(
-            (tool) =>
+          const pendingItem: HistoryItemToolGroup = {
+            ...pendingHistoryItemRef.current,
+            tools: pendingHistoryItemRef.current.tools.map((tool) =>
               tool.status === ToolCallStatus.Pending ||
               tool.status === ToolCallStatus.Confirming ||
               tool.status === ToolCallStatus.Executing
                 ? { ...tool, status: ToolCallStatus.Canceled }
                 : tool,
-          );
-          const pendingItem: HistoryItemToolGroup = {
-            ...pendingHistoryItemRef.current,
-            tools: updatedTools,
+            ),
           };
           addItem(pendingItem, userMessageTimestamp);
         } else {
@@ -339,17 +270,29 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
     },
     [
       addItem,
-      pendingHistoryItemRef,
-      setPendingHistoryItem,
-      setThought,
       flushPendingHistoryItem,
+      pendingHistoryItemRef,
       queuedSubmissionsRef,
       setIsResponding,
+      setPendingHistoryItem,
+      setThought,
       turnCancelledRef,
     ],
   );
+}
 
-  const handleErrorEvent = useCallback(
+function useErrorEventHandler(deps: StreamEventHandlerDeps) {
+  const {
+    addItem,
+    config,
+    flushPendingHistoryItem,
+    pendingHistoryItemRef,
+    queuedSubmissionsRef,
+    setPendingHistoryItem,
+    setThought,
+  } = deps;
+
+  return useCallback(
     (
       eventValue: ErrorEvent['value'],
       userMessageTimestamp: number,
@@ -370,28 +313,34 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         },
         userMessageTimestamp,
       );
-      if (options?.clearQueue ?? true) {
-        queuedSubmissionsRef.current = [];
-      }
+      if (options?.clearQueue ?? true) queuedSubmissionsRef.current = [];
       setThought(null);
     },
     [
       addItem,
-      pendingHistoryItemRef,
-      setPendingHistoryItem,
       config,
-      setThought,
       flushPendingHistoryItem,
+      pendingHistoryItemRef,
       queuedSubmissionsRef,
+      setPendingHistoryItem,
+      setThought,
     ],
   );
+}
 
-  const handleCitationEvent = useCallback(
+function useCitationEventHandler(deps: StreamEventHandlerDeps) {
+  const {
+    addItem,
+    config,
+    flushPendingHistoryItem,
+    pendingHistoryItemRef,
+    setPendingHistoryItem,
+    settings,
+  } = deps;
+
+  return useCallback(
     (text: string, userMessageTimestamp: number) => {
-      if (!showCitations(settings, config)) {
-        return;
-      }
-
+      if (!showCitations(settings, config)) return;
       if (pendingHistoryItemRef.current) {
         flushPendingHistoryItem(userMessageTimestamp);
         setPendingHistoryItem(null);
@@ -400,28 +349,34 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
     },
     [
       addItem,
+      config,
+      flushPendingHistoryItem,
       pendingHistoryItemRef,
       setPendingHistoryItem,
       settings,
-      config,
-      flushPendingHistoryItem,
     ],
   );
+}
 
-  const handleFinishedEvent = useCallback(
+function useFinishedEventHandler(deps: StreamEventHandlerDeps) {
+  const { addItem } = deps;
+  return useCallback(
     (event: ServerGeminiFinishedEvent, userMessageTimestamp: number) => {
       const message = buildFinishReasonMessage(event.value.reason);
-      if (message) {
+      if (message)
         addItem(
           { type: 'info', text: `WARNING:  ${message}` },
           userMessageTimestamp,
         );
-      }
     },
     [addItem],
   );
+}
 
-  const handleChatCompressionEvent = useCallback(
+function useChatCompressionHandler(deps: StreamEventHandlerDeps) {
+  const { addItem, config, pendingHistoryItemRef, setPendingHistoryItem } =
+    deps;
+  return useCallback(
     (
       eventValue: ServerGeminiChatCompressedEvent['value'],
       userMessageTimestamp: number,
@@ -444,300 +399,116 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
     },
     [addItem, config, pendingHistoryItemRef, setPendingHistoryItem],
   );
+}
 
-  const handleMaxSessionTurnsEvent = useCallback(
+function useMaxSessionTurnsHandler(deps: StreamEventHandlerDeps) {
+  const { addItem, config } = deps;
+  return useCallback(
     () =>
       addItem(
         {
           type: 'info',
-          text:
-            `The session has reached the maximum number of turns: ${config.getMaxSessionTurns()}. ` +
-            `Please update this limit in your setting.json file.`,
+          text: `The session has reached the maximum number of turns: ${config.getMaxSessionTurns()}. Please update this limit in your setting.json file.`,
         },
         Date.now(),
       ),
     [addItem, config],
   );
+}
 
-  const handleContextWindowWillOverflowEvent = useCallback(
+function useContextOverflowHandler(deps: StreamEventHandlerDeps) {
+  const { addItem, config, onCancelSubmit } = deps;
+  return useCallback(
     (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
       onCancelSubmit(true);
-
       const limit = tokenLimit(config.getModel());
-
       const isLessThan75Percent =
         limit > 0 && remainingTokenCount < limit * 0.75;
-
       let text = `Sending this message (${estimatedRequestTokenCount} tokens) might exceed the remaining context window limit (${remainingTokenCount} tokens).`;
-
-      if (isLessThan75Percent) {
+      if (isLessThan75Percent)
         text +=
           ' Please try reducing the size of your message or use the `/compress` command to compress the chat history.';
-      }
-
-      addItem(
-        {
-          type: 'info',
-          text,
-        },
-        Date.now(),
-      );
+      addItem({ type: 'info', text }, Date.now());
     },
-    [addItem, onCancelSubmit, config],
+    [addItem, config, onCancelSubmit],
   );
+}
 
-  const handleLoopDetectedEvent = useCallback(() => {
-    addItem(
-      {
-        type: 'info',
-        text: `A potential loop was detected. This can happen due to repetitive tool calls or other model behavior. The request has been halted.`,
-      },
-      Date.now(),
-    );
-  }, [addItem]);
-
-  const processGeminiStreamEvents = useCallback(
+function usePrepareQueryForGemini(deps: StreamEventHandlerDeps) {
+  const prepareQueryDeps = usePrepareQueryDeps(deps);
+  return useCallback(
     async (
-      stream: AsyncIterable<GeminiEvent>,
+      query: PartListUnion,
       userMessageTimestamp: number,
-      signal: AbortSignal,
-    ): Promise<StreamProcessingStatus> => {
-      let geminiMessageBuffer = '';
-      const toolCallRequests: ToolCallRequestInfo[] = [];
-      let processingResult = StreamProcessingStatus.Completed;
-      const pendingHistoryAtTimeout = () => {
-        if (pendingHistoryItemRef.current) {
-          addItem(pendingHistoryItemRef.current, userMessageTimestamp);
-          setPendingHistoryItem(null);
-        }
-      };
-      let iterator: AsyncIterator<GeminiEvent> | undefined;
+      abortSignal: AbortSignal,
+      prompt_id: string,
+    ) =>
+      prepareQueryImpl(
+        query,
+        userMessageTimestamp,
+        abortSignal,
+        prompt_id,
+        prepareQueryDeps,
+      ),
+    [prepareQueryDeps],
+  );
+}
 
-      // Resolve the effective idle timeout from config
-      const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(config);
-
-      try {
-        iterator = stream[Symbol.asyncIterator]();
-        // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        for (;;) {
-          // Use watchdog if timeout > 0, otherwise call iterator.next() directly
-          let nextEvent: IteratorResult<GeminiEvent>;
-          if (effectiveTimeoutMs > 0) {
-            nextEvent = await nextStreamEventWithIdleTimeout({
-              iterator,
-              timeoutMs: effectiveTimeoutMs,
-              signal,
-              onTimeout: () => {
-                // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-                if (signal.aborted) {
-                  return;
-                }
-
-                pendingHistoryAtTimeout();
-                setThought(null);
-                abortActiveStream(
-                  new StreamIdleTimeoutError(
-                    'Stream idle timeout: no response received within the allowed time.',
-                  ),
-                );
-              },
-              createTimeoutError: () =>
-                new StreamIdleTimeoutError(
-                  'Stream idle timeout: no response received within the allowed time.',
-                ),
-            });
-          } else {
-            // Watchdog disabled: call iterator.next() directly
-            nextEvent = await iterator.next();
-          }
-          if (nextEvent.done === true) {
-            break;
-          }
-
-          const event = nextEvent.value;
-          if ((event as { type?: unknown }).type === SYSTEM_NOTICE_EVENT) {
-            continue;
-          }
-
-          switch (event.type) {
-            case ServerGeminiEventType.Thought:
-              applyThoughtToState(
-                event.value,
-                sanitizeContent,
-                config,
-                thinkingBlocksRef,
-                setLastGeminiActivityTime,
-                setThought,
-                setPendingHistoryItem,
-              );
-              break;
-            case ServerGeminiEventType.Content:
-              setLastGeminiActivityTime(Date.now());
-              geminiMessageBuffer = handleContentEvent(
-                event.value,
-                geminiMessageBuffer,
-                userMessageTimestamp,
-              );
-              break;
-            case ServerGeminiEventType.ToolCallRequest:
-              toolCallRequests.push({
-                ...event.value,
-                agentId: event.value.agentId ?? DEFAULT_AGENT_ID,
-              });
-              break;
-            case ServerGeminiEventType.UserCancelled:
-              toolCallRequests.length = 0;
-              handleUserCancelledEvent(userMessageTimestamp);
-              processingResult = StreamProcessingStatus.UserCancelled;
-              break;
-            case ServerGeminiEventType.StreamIdleTimeout:
-              toolCallRequests.length = 0;
-              handleErrorEvent(event.value, userMessageTimestamp, {
-                clearQueue: false,
-              });
-              processingResult = StreamProcessingStatus.Error;
-              break;
-            case ServerGeminiEventType.Error:
-              toolCallRequests.length = 0;
-              handleErrorEvent(event.value, userMessageTimestamp);
-              processingResult = StreamProcessingStatus.Error;
-              break;
-            case ServerGeminiEventType.ChatCompressed:
-              handleChatCompressionEvent(event.value, userMessageTimestamp);
-              break;
-            case ServerGeminiEventType.ToolCallConfirmation:
-            case ServerGeminiEventType.ToolCallResponse:
-              break;
-            case ServerGeminiEventType.MaxSessionTurns:
-              handleMaxSessionTurnsEvent();
-              break;
-            case ServerGeminiEventType.ContextWindowWillOverflow:
-              handleContextWindowWillOverflowEvent(
-                event.value.estimatedRequestTokenCount,
-                event.value.remainingTokenCount,
-              );
-              break;
-            case ServerGeminiEventType.Finished:
-              handleFinishedEvent(event, userMessageTimestamp);
-              break;
-            case ServerGeminiEventType.LoopDetected:
-              loopDetectedRef.current = true;
-              toolCallRequests.length = 0;
-              break;
-            case ServerGeminiEventType.UsageMetadata:
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (event.value.promptTokenCount !== undefined)
-                uiTelemetryService.setLastPromptTokenCount(
-                  event.value.promptTokenCount,
-                );
-              break;
-            case ServerGeminiEventType.Citation:
-              handleCitationEvent(event.value, userMessageTimestamp);
-              break;
-            case ServerGeminiEventType.Retry:
-            case ServerGeminiEventType.InvalidStream:
-              break;
-            case ServerGeminiEventType.AgentExecutionStopped:
-              addItem(
-                {
-                  type: MessageType.INFO,
-                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty system message should fall back to reason
-                  text: `Execution stopped by hook: ${event.systemMessage?.trim() || event.reason}`,
-                },
-                userMessageTimestamp,
-              );
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (event.contextCleared === true) {
-                addItem(
-                  {
-                    type: MessageType.INFO,
-                    text: 'Conversation context has been cleared.',
-                  },
-                  userMessageTimestamp,
-                );
-              }
-              break;
-            case ServerGeminiEventType.AgentExecutionBlocked:
-              addItem(
-                {
-                  type: MessageType.INFO,
-                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty system message should fall back to reason
-                  text: `Execution blocked by hook: ${event.systemMessage?.trim() || event.reason}`,
-                },
-                userMessageTimestamp,
-              );
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (event.contextCleared === true) {
-                addItem(
-                  {
-                    type: MessageType.INFO,
-                    text: 'Conversation context has been cleared.',
-                  },
-                  userMessageTimestamp,
-                );
-              }
-              break;
-            default:
-              break;
-          }
-        }
-
-        if (
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          processingResult === StreamProcessingStatus.Completed &&
-          !signal.aborted &&
-          !turnCancelledRef.current &&
-          !loopDetectedRef.current &&
-          toolCallRequests.length > 0
-        ) {
-          const deduped = deduplicateToolCallRequests(toolCallRequests);
-          if (deduped.length > 0) {
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (pendingHistoryItemRef.current) {
-              addItem(pendingHistoryItemRef.current, userMessageTimestamp);
-              setPendingHistoryItem(null);
-            }
-            await scheduleToolCalls(deduped, signal);
-          }
-        }
-
-        return processingResult;
-      } finally {
-        // Don't await the return() call to avoid hanging on stuck generators.
-        // The generator will eventually be garbage collected.
-        iterator?.return?.().catch(() => {
-          // cleanup errors are non-fatal
-        });
-        if (pendingHistoryItemRef.current && signal.aborted) {
-          setPendingHistoryItem(null);
-        }
-      }
-    },
+function useContentEventDeps(deps: StreamEventHandlerDeps): ContentEventDeps {
+  return useMemo(
+    () => ({
+      config: deps.config,
+      addItem: deps.addItem,
+      sanitizeContent: deps.sanitizeContent,
+      flushPendingHistoryItem: deps.flushPendingHistoryItem,
+      pendingHistoryItemRef: deps.pendingHistoryItemRef,
+      thinkingBlocksRef: deps.thinkingBlocksRef,
+      turnCancelledRef: deps.turnCancelledRef,
+      setPendingHistoryItem: deps.setPendingHistoryItem,
+    }),
     [
-      config,
-      handleContentEvent,
-      handleUserCancelledEvent,
-      handleErrorEvent,
-      scheduleToolCalls,
-      abortActiveStream,
-      handleChatCompressionEvent,
-      handleFinishedEvent,
-      handleMaxSessionTurnsEvent,
-      handleContextWindowWillOverflowEvent,
-      handleCitationEvent,
-      sanitizeContent,
-      addItem,
-      pendingHistoryItemRef,
-      setPendingHistoryItem,
-      loopDetectedRef,
-      turnCancelledRef,
-      setLastGeminiActivityTime,
-      setThought,
-      thinkingBlocksRef,
+      deps.config,
+      deps.addItem,
+      deps.sanitizeContent,
+      deps.flushPendingHistoryItem,
+      deps.pendingHistoryItemRef,
+      deps.thinkingBlocksRef,
+      deps.turnCancelledRef,
+      deps.setPendingHistoryItem,
     ],
   );
+}
 
-  const displayUserMessage = useCallback(
+function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
+  return useMemo(
+    () => ({
+      config: deps.config,
+      addItem: deps.addItem,
+      onDebugMessage: deps.onDebugMessage,
+      handleShellCommand: deps.handleShellCommand,
+      handleSlashCommand: deps.handleSlashCommand,
+      logger: deps.logger,
+      shellModeActive: deps.shellModeActive,
+      scheduleToolCalls: deps.scheduleToolCalls,
+      turnCancelledRef: deps.turnCancelledRef,
+    }),
+    [
+      deps.config,
+      deps.addItem,
+      deps.onDebugMessage,
+      deps.handleShellCommand,
+      deps.handleSlashCommand,
+      deps.logger,
+      deps.shellModeActive,
+      deps.scheduleToolCalls,
+      deps.turnCancelledRef,
+    ],
+  );
+}
+
+function useDisplayUserMessage(deps: StreamEventHandlerDeps) {
+  const { addItem, config, lastProfileNameRef, settings } = deps;
+  return useCallback(
     (trimmedQuery: string, userMessageTimestamp: number) => {
       addItem(
         { type: MessageType.USER, text: trimmedQuery },
@@ -769,111 +540,167 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       lastProfileNameRef,
     ],
   );
+}
 
-  const prepareQueryForGemini = useCallback(
+type HandlerMap = Pick<
+  StreamEventHandlersResult,
+  | 'handleContentEvent'
+  | 'handleUserCancelledEvent'
+  | 'handleErrorEvent'
+  | 'handleChatCompressionEvent'
+  | 'handleFinishedEvent'
+  | 'handleMaxSessionTurnsEvent'
+  | 'handleContextWindowWillOverflowEvent'
+  | 'handleCitationEvent'
+  | 'handleLoopDetectedEvent'
+>;
+
+function useProcessStream(deps: StreamEventHandlerDeps, handlers: HandlerMap) {
+  return useCallback(
     async (
-      query: PartListUnion,
+      stream: AsyncIterable<GeminiEvent>,
       userMessageTimestamp: number,
-      abortSignal: AbortSignal,
-      prompt_id: string,
-    ): Promise<{
-      queryToSend: PartListUnion | null;
-      shouldProceed: boolean;
-    }> => {
-      if (turnCancelledRef.current) {
-        return { queryToSend: null, shouldProceed: false };
-      }
-      if (typeof query === 'string' && query.trim().length === 0) {
-        return { queryToSend: null, shouldProceed: false };
-      }
+      signal: AbortSignal,
+    ): Promise<StreamProcessingStatus> => {
+      const toolCallRequests: ToolCallRequestInfo[] = [];
+      let processingResult = StreamProcessingStatus.Completed;
 
-      let localQueryToSendToGemini: PartListUnion | null = null;
+      const pendingHistoryAtTimeout = () => {
+        if (deps.pendingHistoryItemRef.current) {
+          deps.addItem(
+            deps.pendingHistoryItemRef.current,
+            userMessageTimestamp,
+          );
+          deps.setPendingHistoryItem(null);
+        }
+      };
+      const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(deps.config);
+      let iterator: AsyncIterator<GeminiEvent> | undefined;
 
-      if (typeof query === 'string') {
-        const trimmedQuery = query.trim();
-        logUserPrompt(
-          config,
-          new UserPromptEvent(trimmedQuery.length, prompt_id, trimmedQuery),
+      try {
+        iterator = stream[Symbol.asyncIterator]();
+        const streamResult = await consumeStreamEvents(
+          iterator,
+          effectiveTimeoutMs,
+          signal,
+          pendingHistoryAtTimeout,
+          deps,
+          handlers,
+          '',
+          toolCallRequests,
+          userMessageTimestamp,
         );
-        await logger?.logMessage(MessageSenderType.USER, trimmedQuery);
+        processingResult = streamResult.processingResult;
 
-        if (shellModeActive !== true) {
-          const slashCommandResult = isSlashCommand(trimmedQuery)
-            ? await handleSlashCommand(trimmedQuery)
-            : false;
-          if (slashCommandResult !== false) {
-            return processSlashCommandResult(
-              slashCommandResult,
-              scheduleToolCalls,
-              prompt_id,
-              abortSignal,
-            );
-          }
-        }
-
-        if (
-          shellModeActive === true &&
-          handleShellCommand(trimmedQuery, abortSignal)
-        ) {
-          return { queryToSend: null, shouldProceed: false };
-        }
-
-        if (isAtCommand(trimmedQuery)) {
-          const atCommandResult = await handleAtCommand({
-            query: trimmedQuery,
-            config,
-            addItem,
-            onDebugMessage,
-            messageId: userMessageTimestamp,
-            signal: abortSignal,
-          });
-          if (atCommandResult.error) {
-            onDebugMessage(atCommandResult.error);
-            return { queryToSend: null, shouldProceed: false };
-          }
-          localQueryToSendToGemini = atCommandResult.processedQuery;
-        } else {
-          localQueryToSendToGemini = trimmedQuery;
-        }
-      } else {
-        localQueryToSendToGemini = query;
-      }
-
-      if (localQueryToSendToGemini === null) {
-        onDebugMessage(
-          'Query processing resulted in null, not sending to Gemini.',
+        await scheduleDedupedToolCalls(
+          toolCallRequests,
+          processingResult,
+          signal,
+          deps.turnCancelledRef,
+          deps.loopDetectedRef,
+          deps.pendingHistoryItemRef,
+          deps.addItem,
+          userMessageTimestamp,
+          deps.setPendingHistoryItem,
+          deps.scheduleToolCalls,
         );
-        return { queryToSend: null, shouldProceed: false };
+        return processingResult;
+      } finally {
+        iterator?.return?.().catch(() => {});
+        if (deps.pendingHistoryItemRef.current && signal.aborted)
+          deps.setPendingHistoryItem(null);
       }
-      return { queryToSend: localQueryToSendToGemini, shouldProceed: true };
     },
-    [
-      config,
-      addItem,
-      onDebugMessage,
-      handleShellCommand,
-      handleSlashCommand,
-      logger,
-      shellModeActive,
-      scheduleToolCalls,
-      turnCancelledRef,
-    ],
+    [deps, handlers],
   );
+}
 
-  return {
-    handleContentEvent,
-    handleUserCancelledEvent,
-    handleErrorEvent,
-    handleCitationEvent,
-    handleFinishedEvent,
-    handleChatCompressionEvent,
-    handleMaxSessionTurnsEvent,
-    handleContextWindowWillOverflowEvent,
-    handleLoopDetectedEvent,
-    processGeminiStreamEvents,
-    displayUserMessage,
-    prepareQueryForGemini,
-  };
+async function consumeStreamEvents(
+  iterator: AsyncIterator<GeminiEvent>,
+  effectiveTimeoutMs: number,
+  signal: AbortSignal,
+  pendingHistoryAtTimeout: () => void,
+  deps: StreamEventHandlerDeps,
+  handlers: HandlerMap,
+  geminiMessageBuffer: string,
+  toolCallRequests: ToolCallRequestInfo[],
+  userMessageTimestamp: number,
+): Promise<{
+  geminiMessageBuffer: string;
+  processingResult: StreamProcessingStatus;
+}> {
+  let processingResult = StreamProcessingStatus.Completed;
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  for (;;) {
+    const nextEvent = await getNextStreamEvent(
+      iterator,
+      effectiveTimeoutMs,
+      signal,
+      pendingHistoryAtTimeout,
+      deps.setThought,
+      deps.abortActiveStream,
+    );
+    if (nextEvent.done === true) break;
+    const event = nextEvent.value;
+    if ((event as { type?: unknown }).type === SYSTEM_NOTICE_EVENT) continue;
+
+    const result = dispatchStreamEvent(
+      event,
+      {
+        config: deps.config,
+        addItem: deps.addItem,
+        sanitizeContent: deps.sanitizeContent,
+        pendingHistoryItemRef: deps.pendingHistoryItemRef,
+        thinkingBlocksRef: deps.thinkingBlocksRef,
+        turnCancelledRef: deps.turnCancelledRef,
+        loopDetectedRef: deps.loopDetectedRef,
+        setPendingHistoryItem: deps.setPendingHistoryItem,
+        setLastGeminiActivityTime: deps.setLastGeminiActivityTime,
+        setThought: deps.setThought,
+        ...handlers,
+        scheduleToolCalls: deps.scheduleToolCalls,
+      },
+      geminiMessageBuffer,
+      toolCallRequests,
+      userMessageTimestamp,
+    );
+    geminiMessageBuffer = result.geminiMessageBuffer;
+    if (result.processingResult !== undefined)
+      processingResult = result.processingResult;
+  }
+  return { geminiMessageBuffer, processingResult };
+}
+
+async function getNextStreamEvent(
+  iterator: AsyncIterator<GeminiEvent>,
+  effectiveTimeoutMs: number,
+  signal: AbortSignal,
+  pendingHistoryAtTimeout: () => void,
+  setThought: React.Dispatch<React.SetStateAction<ThoughtSummary | null>>,
+  abortActiveStream: (reason?: unknown) => void,
+): Promise<IteratorResult<GeminiEvent>> {
+  if (effectiveTimeoutMs > 0) {
+    return nextStreamEventWithIdleTimeout({
+      iterator,
+      timeoutMs: effectiveTimeoutMs,
+      signal,
+      onTimeout: () => {
+        if (signal.aborted) return;
+        pendingHistoryAtTimeout();
+        setThought(null);
+        abortActiveStream(
+          new StreamIdleTimeoutError(
+            'Stream idle timeout: no response received within the allowed time.',
+          ),
+        );
+      },
+      createTimeoutError: () =>
+        new StreamIdleTimeoutError(
+          'Stream idle timeout: no response received within the allowed time.',
+        ),
+    });
+  }
+  return iterator.next();
 }
 
 export const __testing = {
