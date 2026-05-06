@@ -13,73 +13,46 @@ import {
   calculateCacheHitRate,
   calculateErrorRate,
 } from '../utils/computeStats.js';
-import { useSessionStats } from '../contexts/SessionContext.js';
+import {
+  useSessionStats,
+  type SessionMetrics,
+} from '../contexts/SessionContext.js';
 import { Table, type Column } from './Table.js';
 
 interface StatRowData {
   metric: string;
   isSection?: boolean;
   isSubtle?: boolean;
-  // Dynamic keys for model values
   [key: string]: string | React.ReactNode | boolean | undefined;
 }
 
-export const ModelStatsDisplay: React.FC = () => {
-  const { stats } = useSessionStats();
-  const { models } = stats.metrics;
-  const activeModels = Object.entries(models).filter(
-    ([, metrics]) => metrics.api.totalRequests > 0,
-  );
+type ModelMetrics = SessionMetrics['models'][string];
+type ActiveModelEntry = [string, ModelMetrics];
 
-  if (activeModels.length === 0) {
-    return (
-      <Box
-        borderStyle="round"
-        borderColor={theme.border.default}
-        paddingY={1}
-        paddingX={2}
-      >
-        <Text color={theme.text.primary}>
-          No API calls have been made in this session.
-        </Text>
-      </Box>
-    );
-  }
-
-  const modelNames = activeModels.map(([name]) => name);
-
-  const hasThoughts = activeModels.some(
-    ([, metrics]) => metrics.tokens.thoughts > 0,
-  );
-  const hasTool = activeModels.some(([, metrics]) => metrics.tokens.tool > 0);
-  const hasCached = activeModels.some(
-    ([, metrics]) => metrics.tokens.cached > 0,
-  );
-
-  // Helper to create a row with values for each model
-  const createRow = (
-    metric: string,
-    getValue: (
-      metrics: (typeof activeModels)[0][1],
-    ) => string | React.ReactNode,
-    options: { isSection?: boolean; isSubtle?: boolean } = {},
-  ): StatRowData => {
-    const row: StatRowData = {
-      metric,
-      isSection: options.isSection,
-      isSubtle: options.isSubtle,
-    };
-    activeModels.forEach(([name, metrics]) => {
-      row[name] = getValue(metrics);
-    });
-    return row;
+function createStatRow(
+  activeModels: ActiveModelEntry[],
+  metric: string,
+  getValue: (metrics: ModelMetrics) => string | React.ReactNode,
+  options: { isSection?: boolean; isSubtle?: boolean } = {},
+): StatRowData {
+  const row: StatRowData = {
+    metric,
+    isSection: options.isSection,
+    isSubtle: options.isSubtle,
   };
+  activeModels.forEach(([name, metrics]) => {
+    row[name] = getValue(metrics);
+  });
+  return row;
+}
 
-  const rows: StatRowData[] = [
-    // API Section
+function buildApiSectionRows(activeModels: ActiveModelEntry[]): StatRowData[] {
+  return [
     { metric: 'API', isSection: true },
-    createRow('Requests', (m) => m.api.totalRequests.toLocaleString()),
-    createRow('Errors', (m) => {
+    createStatRow(activeModels, 'Requests', (m) =>
+      m.api.totalRequests.toLocaleString(),
+    ),
+    createStatRow(activeModels, 'Errors', (m) => {
       const errorRate = calculateErrorRate(m);
       return (
         <Text
@@ -91,19 +64,23 @@ export const ModelStatsDisplay: React.FC = () => {
         </Text>
       );
     }),
-    createRow('Avg Latency', (m) => formatDuration(calculateAverageLatency(m))),
-
-    // Spacer
+    createStatRow(activeModels, 'Avg Latency', (m) =>
+      formatDuration(calculateAverageLatency(m)),
+    ),
     { metric: '' },
-
-    // Tokens Section
     { metric: 'Tokens', isSection: true },
-    createRow('Total', (m) => (
+  ];
+}
+
+function buildBaseTokenRows(activeModels: ActiveModelEntry[]): StatRowData[] {
+  return [
+    createStatRow(activeModels, 'Total', (m) => (
       <Text color={theme.text.secondary}>
         {m.tokens.total.toLocaleString()}
       </Text>
     )),
-    createRow(
+    createStatRow(
+      activeModels,
       'Input',
       (m) => (
         <Text color={theme.text.primary}>
@@ -113,10 +90,19 @@ export const ModelStatsDisplay: React.FC = () => {
       { isSubtle: true },
     ),
   ];
+}
 
+function buildOptionalTokenRows(
+  activeModels: ActiveModelEntry[],
+  hasCached: boolean,
+  hasThoughts: boolean,
+  hasTool: boolean,
+): StatRowData[] {
+  const rows: StatRowData[] = [];
   if (hasCached) {
     rows.push(
-      createRow(
+      createStatRow(
+        activeModels,
         'Cache Reads',
         (m) => {
           const cacheHitRate = calculateCacheHitRate(m);
@@ -130,10 +116,10 @@ export const ModelStatsDisplay: React.FC = () => {
       ),
     );
   }
-
   if (hasThoughts) {
     rows.push(
-      createRow(
+      createStatRow(
+        activeModels,
         'Thoughts',
         (m) => (
           <Text color={theme.text.primary}>
@@ -144,10 +130,10 @@ export const ModelStatsDisplay: React.FC = () => {
       ),
     );
   }
-
   if (hasTool) {
     rows.push(
-      createRow(
+      createStatRow(
+        activeModels,
         'Tool',
         (m) => (
           <Text color={theme.text.primary}>
@@ -158,9 +144,22 @@ export const ModelStatsDisplay: React.FC = () => {
       ),
     );
   }
+  return rows;
+}
 
+function buildTokenRows(
+  activeModels: ActiveModelEntry[],
+  hasCached: boolean,
+  hasThoughts: boolean,
+  hasTool: boolean,
+): StatRowData[] {
+  const rows = buildBaseTokenRows(activeModels);
   rows.push(
-    createRow(
+    ...buildOptionalTokenRows(activeModels, hasCached, hasThoughts, hasTool),
+  );
+  rows.push(
+    createStatRow(
+      activeModels,
       'Output',
       (m) => (
         <Text color={theme.text.primary}>
@@ -170,8 +169,11 @@ export const ModelStatsDisplay: React.FC = () => {
       { isSubtle: true },
     ),
   );
+  return rows;
+}
 
-  const columns: Array<Column<StatRowData>> = [
+function buildColumns(modelNames: string[]): Array<Column<StatRowData>> {
+  return [
     {
       key: 'metric',
       header: 'Metric',
@@ -190,7 +192,6 @@ export const ModelStatsDisplay: React.FC = () => {
       header: name,
       flexGrow: 1,
       renderCell: (row: StatRowData) => {
-        // Don't render anything for section headers in model columns
         if (row.isSection === true) return null;
         const val = row[name];
         if (val === undefined || val === null) return null;
@@ -201,6 +202,44 @@ export const ModelStatsDisplay: React.FC = () => {
       },
     })),
   ];
+}
+
+export const ModelStatsDisplay: React.FC = () => {
+  const { stats } = useSessionStats();
+  const { models } = stats.metrics;
+  const activeModels = Object.entries(models).filter(
+    ([, metrics]) => metrics.api.totalRequests > 0,
+  ) as ActiveModelEntry[];
+
+  if (activeModels.length === 0) {
+    return (
+      <Box
+        borderStyle="round"
+        borderColor={theme.border.default}
+        paddingY={1}
+        paddingX={2}
+      >
+        <Text color={theme.text.primary}>
+          No API calls have been made in this session.
+        </Text>
+      </Box>
+    );
+  }
+
+  const modelNames = activeModels.map(([name]) => name);
+  const hasThoughts = activeModels.some(
+    ([, metrics]) => metrics.tokens.thoughts > 0,
+  );
+  const hasTool = activeModels.some(([, metrics]) => metrics.tokens.tool > 0);
+  const hasCached = activeModels.some(
+    ([, metrics]) => metrics.tokens.cached > 0,
+  );
+
+  const rows = [
+    ...buildApiSectionRows(activeModels),
+    ...buildTokenRows(activeModels, hasCached, hasThoughts, hasTool),
+  ];
+  const columns = buildColumns(modelNames);
 
   return (
     <Box

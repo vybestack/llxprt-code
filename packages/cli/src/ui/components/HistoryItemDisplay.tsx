@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type React from 'react';
 import { useMemo } from 'react';
@@ -52,6 +52,192 @@ interface HistoryItemDisplayProps {
   availableTerminalHeightGemini?: number;
 }
 
+function useSanitizedItem(item: HistoryItem) {
+  return useMemo(() => {
+    if (
+      item.type === 'info' ||
+      item.type === 'error' ||
+      item.type === 'warning' ||
+      item.type === 'oauth_url'
+    ) {
+      return item;
+    }
+    return escapeAnsiCtrlCodes(item);
+  }, [item]);
+}
+
+function renderCoreMessages(
+  itemForDisplay: HistoryItem,
+  isPending: boolean,
+  availableTerminalHeight: number | undefined,
+  terminalWidth: number,
+  _availableTerminalHeightGemini: number | undefined,
+) {
+  switch (itemForDisplay.type) {
+    case 'user':
+      return <UserMessage text={itemForDisplay.text} />;
+    case 'user_shell':
+      return <UserShellMessage text={itemForDisplay.text} />;
+    case 'gemini':
+      return (
+        <GeminiMessage
+          text={itemForDisplay.text}
+          isPending={isPending}
+          availableTerminalHeight={
+            _availableTerminalHeightGemini ?? availableTerminalHeight
+          }
+          terminalWidth={terminalWidth}
+          model={itemForDisplay.model}
+          profileName={itemForDisplay.profileName}
+          thinkingBlocks={itemForDisplay.thinkingBlocks}
+        />
+      );
+    case 'gemini_content':
+      return (
+        <GeminiMessageContent
+          text={itemForDisplay.text}
+          isPending={isPending}
+          availableTerminalHeight={
+            _availableTerminalHeightGemini ?? availableTerminalHeight
+          }
+          terminalWidth={terminalWidth}
+        />
+      );
+    case 'info':
+      return (
+        <InfoMessage
+          text={itemForDisplay.text}
+          icon={itemForDisplay.icon}
+          color={itemForDisplay.color}
+        />
+      );
+    case 'warning':
+      return <WarningMessage text={itemForDisplay.text} />;
+    case 'error':
+      return <ErrorMessage text={itemForDisplay.text} />;
+    case 'oauth_url':
+      return (
+        <OAuthUrlMessage text={itemForDisplay.text} url={itemForDisplay.url} />
+      );
+    default:
+      return null;
+  }
+}
+
+function renderStatsMessages(itemForDisplay: HistoryItem) {
+  switch (itemForDisplay.type) {
+    case 'stats':
+      return (
+        <StatsDisplay
+          duration={itemForDisplay.duration}
+          quotaLines={itemForDisplay.quotaLines}
+        />
+      );
+    case 'model_stats':
+      return <ModelStatsDisplay />;
+    case 'tool_stats':
+      return <ToolStatsDisplay />;
+    case 'cache_stats':
+      return <CacheStatsDisplay />;
+    case 'lb_stats':
+      return <LBStatsDisplay />;
+    case 'quit':
+      return <SessionSummaryDisplay duration={itemForDisplay.duration} />;
+    default:
+      return null;
+  }
+}
+
+function renderInfoViews(
+  itemForDisplay: HistoryItem,
+  slashCommands: readonly SlashCommand[],
+) {
+  switch (itemForDisplay.type) {
+    case 'about':
+      return (
+        <AboutBox
+          cliVersion={itemForDisplay.cliVersion}
+          osVersion={itemForDisplay.osVersion}
+          sandboxEnv={itemForDisplay.sandboxEnv}
+          modelVersion={itemForDisplay.modelVersion}
+          gcpProject={itemForDisplay.gcpProject}
+          ideClient={itemForDisplay.ideClient}
+          provider={itemForDisplay.provider}
+          baseURL={itemForDisplay.baseURL}
+          keyfile={itemForDisplay.keyfile}
+          key={itemForDisplay.key}
+        />
+      );
+    case 'help':
+      return <Help commands={slashCommands} />;
+    case 'compression':
+      return <CompressionMessage compression={itemForDisplay.compression} />;
+    case 'profile_change':
+      return <ProfileChangeMessage profileName={itemForDisplay.profileName} />;
+    default:
+      return null;
+  }
+}
+
+function renderListViewMessages(itemForDisplay: HistoryItem) {
+  switch (itemForDisplay.type) {
+    case 'extensions_list':
+      return <ExtensionsList extensions={itemForDisplay.extensions} />;
+    case 'hooks_list':
+      return <HooksList hooks={itemForDisplay.hooks} />;
+    case 'tools_list':
+      return (
+        <Box>
+          <Text color="yellow">Tools list view not yet implemented</Text>
+        </Box>
+      );
+    case 'skills_list':
+      return (
+        <SkillsList
+          skills={itemForDisplay.skills}
+          showDescriptions={itemForDisplay.showDescriptions ?? false}
+        />
+      );
+    case 'mcp_status':
+      return (
+        <Box>
+          <Text color="yellow">MCP status view not yet implemented</Text>
+        </Box>
+      );
+    case 'chat_list':
+      return <ChatList chats={itemForDisplay.chats} />;
+    default:
+      return null;
+  }
+}
+
+function renderToolGroupMessage(
+  itemForDisplay: HistoryItem,
+  availableTerminalHeight: number | undefined,
+  terminalWidth: number,
+  config: Config,
+  isFocused: boolean,
+  showTodoPanel: boolean,
+  _activeShellPtyId: number | null | undefined,
+  _embeddedShellFocused: boolean | undefined,
+) {
+  if (itemForDisplay.type !== 'tool_group') return null;
+  return (
+    <ToolGroupMessage
+      toolCalls={itemForDisplay.tools}
+      groupId={itemForDisplay.id}
+      agentId={itemForDisplay.agentId}
+      availableTerminalHeight={availableTerminalHeight}
+      terminalWidth={terminalWidth}
+      config={config}
+      isFocused={isFocused}
+      showTodoPanel={showTodoPanel}
+      activeShellPtyId={_activeShellPtyId}
+      embeddedShellFocused={_embeddedShellFocused}
+    />
+  );
+}
+
 export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   item,
   availableTerminalHeight,
@@ -65,140 +251,29 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   embeddedShellFocused: _embeddedShellFocused,
   availableTerminalHeightGemini: _availableTerminalHeightGemini,
 }) => {
-  const itemForDisplay = useMemo(() => {
-    // Skip sanitization for trusted system message types that may contain ANSI codes
-    // for coloring (e.g. from mcpCommand)
-    if (
-      item.type === 'info' ||
-      item.type === 'error' ||
-      item.type === 'warning' ||
-      item.type === 'oauth_url'
-    ) {
-      return item;
-    }
-    return escapeAnsiCtrlCodes(item);
-  }, [item]);
+  const itemForDisplay = useSanitizedItem(item);
 
   return (
     <Box flexDirection="column" key={itemForDisplay.id}>
-      {/* Render standard message types */}
-      {itemForDisplay.type === 'user' && (
-        <UserMessage text={itemForDisplay.text} />
+      {renderCoreMessages(
+        itemForDisplay,
+        isPending,
+        availableTerminalHeight,
+        terminalWidth,
+        _availableTerminalHeightGemini,
       )}
-      {itemForDisplay.type === 'user_shell' && (
-        <UserShellMessage text={itemForDisplay.text} />
-      )}
-      {itemForDisplay.type === 'gemini' && (
-        <GeminiMessage
-          text={itemForDisplay.text}
-          isPending={isPending}
-          availableTerminalHeight={
-            _availableTerminalHeightGemini ?? availableTerminalHeight
-          }
-          terminalWidth={terminalWidth}
-          model={itemForDisplay.model}
-          profileName={itemForDisplay.profileName}
-          thinkingBlocks={itemForDisplay.thinkingBlocks} // @plan:PLAN-20251202-THINKING-UI.P06
-        />
-      )}
-      {itemForDisplay.type === 'gemini_content' && (
-        <GeminiMessageContent
-          text={itemForDisplay.text}
-          isPending={isPending}
-          availableTerminalHeight={
-            _availableTerminalHeightGemini ?? availableTerminalHeight
-          }
-          terminalWidth={terminalWidth}
-        />
-      )}
-      {itemForDisplay.type === 'info' && (
-        <InfoMessage
-          text={itemForDisplay.text}
-          icon={itemForDisplay.icon}
-          color={itemForDisplay.color}
-        />
-      )}
-      {itemForDisplay.type === 'warning' && (
-        <WarningMessage text={itemForDisplay.text} />
-      )}
-      {itemForDisplay.type === 'error' && (
-        <ErrorMessage text={itemForDisplay.text} />
-      )}
-      {itemForDisplay.type === 'oauth_url' && (
-        <OAuthUrlMessage text={itemForDisplay.text} url={itemForDisplay.url} />
-      )}
-      {itemForDisplay.type === 'about' && (
-        <AboutBox
-          cliVersion={itemForDisplay.cliVersion}
-          osVersion={itemForDisplay.osVersion}
-          sandboxEnv={itemForDisplay.sandboxEnv}
-          modelVersion={itemForDisplay.modelVersion}
-          gcpProject={itemForDisplay.gcpProject}
-          ideClient={itemForDisplay.ideClient}
-          provider={itemForDisplay.provider}
-          baseURL={itemForDisplay.baseURL}
-          keyfile={itemForDisplay.keyfile}
-          key={itemForDisplay.key}
-        />
-      )}
-      {itemForDisplay.type === 'help' && <Help commands={slashCommands} />}
-      {itemForDisplay.type === 'stats' && (
-        <StatsDisplay
-          duration={itemForDisplay.duration}
-          quotaLines={itemForDisplay.quotaLines}
-        />
-      )}
-      {itemForDisplay.type === 'model_stats' && <ModelStatsDisplay />}
-      {itemForDisplay.type === 'tool_stats' && <ToolStatsDisplay />}
-      {itemForDisplay.type === 'cache_stats' && <CacheStatsDisplay />}
-      {itemForDisplay.type === 'lb_stats' && <LBStatsDisplay />}
-      {itemForDisplay.type === 'quit' && (
-        <SessionSummaryDisplay duration={itemForDisplay.duration} />
-      )}
-      {itemForDisplay.type === 'tool_group' && (
-        <ToolGroupMessage
-          toolCalls={itemForDisplay.tools}
-          groupId={itemForDisplay.id}
-          agentId={itemForDisplay.agentId}
-          availableTerminalHeight={availableTerminalHeight}
-          terminalWidth={terminalWidth}
-          config={config}
-          isFocused={isFocused}
-          showTodoPanel={showTodoPanel}
-          activeShellPtyId={_activeShellPtyId}
-          embeddedShellFocused={_embeddedShellFocused}
-        />
-      )}
-      {itemForDisplay.type === 'compression' && (
-        <CompressionMessage compression={itemForDisplay.compression} />
-      )}
-      {itemForDisplay.type === 'extensions_list' && (
-        <ExtensionsList extensions={itemForDisplay.extensions} />
-      )}
-      {itemForDisplay.type === 'hooks_list' && (
-        <HooksList hooks={itemForDisplay.hooks} />
-      )}
-      {itemForDisplay.type === 'tools_list' && (
-        <Box>
-          <Text color="yellow">Tools list view not yet implemented</Text>
-        </Box>
-      )}
-      {itemForDisplay.type === 'skills_list' && (
-        <SkillsList
-          skills={itemForDisplay.skills}
-          showDescriptions={itemForDisplay.showDescriptions ?? false}
-        />
-      )}
-      {itemForDisplay.type === 'mcp_status' && (
-        <Box>
-          <Text color="yellow">MCP status view not yet implemented</Text>
-        </Box>
-      )}
-      {itemForDisplay.type === 'chat_list' && (
-        <ChatList chats={itemForDisplay.chats} />
-      )}
-      {itemForDisplay.type === 'profile_change' && (
-        <ProfileChangeMessage profileName={itemForDisplay.profileName} />
+      {renderStatsMessages(itemForDisplay)}
+      {renderInfoViews(itemForDisplay, slashCommands)}
+      {renderListViewMessages(itemForDisplay)}
+      {renderToolGroupMessage(
+        itemForDisplay,
+        availableTerminalHeight,
+        terminalWidth,
+        config,
+        isFocused,
+        showTodoPanel,
+        _activeShellPtyId,
+        _embeddedShellFocused,
       )}
     </Box>
   );
