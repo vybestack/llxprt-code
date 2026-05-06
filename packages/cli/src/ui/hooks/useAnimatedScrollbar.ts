@@ -9,6 +9,79 @@ import { theme } from '../semantic-colors.js';
 import { interpolateColor } from '../themes/color-utils.js';
 import { debugState } from '../debug.js';
 
+const ANIMATION_INTERVAL_MS = 33;
+const FADE_IN_DURATION_MS = 200;
+const VISIBLE_DURATION_MS = 1000;
+const FADE_OUT_DURATION_MS = 300;
+
+function createFadeOutAnimator(
+  focusedColor: string,
+  unfocusedColor: string,
+  setScrollbarColor: (color: string) => void,
+  cleanup: () => void,
+) {
+  const start = Date.now();
+  return () => {
+    const elapsed = Date.now() - start;
+    const progress = Math.max(0, Math.min(elapsed / FADE_OUT_DURATION_MS, 1));
+    setScrollbarColor(interpolateColor(focusedColor, unfocusedColor, progress));
+    if (progress === 1) {
+      cleanup();
+    }
+  };
+}
+
+function startFadeOut(
+  focusedColor: string,
+  unfocusedColor: string,
+  setScrollbarColor: (color: string) => void,
+  cleanup: () => void,
+  animationFrame: React.MutableRefObject<NodeJS.Timeout | null>,
+  timeout: React.MutableRefObject<NodeJS.Timeout | null>,
+) {
+  const animateFadeOut = createFadeOutAnimator(
+    focusedColor,
+    unfocusedColor,
+    setScrollbarColor,
+    cleanup,
+  );
+  timeout.current = setTimeout(() => {
+    animationFrame.current = setInterval(animateFadeOut, ANIMATION_INTERVAL_MS);
+  }, VISIBLE_DURATION_MS);
+}
+
+function createFadeInAnimator(
+  startColor: string,
+  focusedColor: string,
+  unfocusedColor: string,
+  setScrollbarColor: (color: string) => void,
+  cleanup: () => void,
+  animationFrame: React.MutableRefObject<NodeJS.Timeout | null>,
+  timeout: React.MutableRefObject<NodeJS.Timeout | null>,
+) {
+  const start = Date.now();
+  return () => {
+    const elapsed = Date.now() - start;
+    const progress = Math.max(0, Math.min(elapsed / FADE_IN_DURATION_MS, 1));
+    setScrollbarColor(interpolateColor(startColor, focusedColor, progress));
+
+    if (progress === 1) {
+      if (animationFrame.current) {
+        clearInterval(animationFrame.current);
+        animationFrame.current = null;
+      }
+      startFadeOut(
+        focusedColor,
+        unfocusedColor,
+        setScrollbarColor,
+        cleanup,
+        animationFrame,
+        timeout,
+      );
+    }
+  };
+}
+
 export function useAnimatedScrollbar(
   isFocused: boolean,
   scrollBy: (delta: number) => void,
@@ -39,10 +112,6 @@ export function useAnimatedScrollbar(
   const flashScrollbar = useCallback(() => {
     cleanup();
 
-    const fadeInDuration = 200;
-    const visibleDuration = 1000;
-    const fadeOutDuration = 300;
-
     const focusedColor = theme.text.secondary;
     const unfocusedColor = theme.ui.dark;
     const startColor = colorRef.current;
@@ -54,45 +123,17 @@ export function useAnimatedScrollbar(
     debugState.debugNumAnimatedComponents++;
     isAnimatingRef.current = true;
 
-    // Phase 1: Fade In
-    let start = Date.now();
-    const animateFadeIn = () => {
-      const elapsed = Date.now() - start;
-      const progress = Math.max(0, Math.min(elapsed / fadeInDuration, 1));
+    const animateFadeIn = createFadeInAnimator(
+      startColor,
+      focusedColor,
+      unfocusedColor,
+      setScrollbarColor,
+      cleanup,
+      animationFrame,
+      timeout,
+    );
 
-      setScrollbarColor(interpolateColor(startColor, focusedColor, progress));
-
-      if (progress === 1) {
-        if (animationFrame.current) {
-          clearInterval(animationFrame.current);
-          animationFrame.current = null;
-        }
-
-        // Phase 2: Wait
-        timeout.current = setTimeout(() => {
-          // Phase 3: Fade Out
-          start = Date.now();
-          const animateFadeOut = () => {
-            const elapsed = Date.now() - start;
-            const progress = Math.max(
-              0,
-              Math.min(elapsed / fadeOutDuration, 1),
-            );
-            setScrollbarColor(
-              interpolateColor(focusedColor, unfocusedColor, progress),
-            );
-
-            if (progress === 1) {
-              cleanup();
-            }
-          };
-
-          animationFrame.current = setInterval(animateFadeOut, 33);
-        }, visibleDuration);
-      }
-    };
-
-    animationFrame.current = setInterval(animateFadeIn, 33);
+    animationFrame.current = setInterval(animateFadeIn, ANIMATION_INTERVAL_MS);
   }, [cleanup]);
 
   const wasFocused = useRef(isFocused);

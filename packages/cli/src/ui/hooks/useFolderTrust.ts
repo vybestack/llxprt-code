@@ -24,6 +24,74 @@ const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 
 type AddItemFn = (item: HistoryItemWithoutId, timestamp: number) => number;
 
+function getTrustLevelFromChoice(choice: FolderTrustChoice): TrustLevel | null {
+  switch (choice) {
+    case FolderTrustChoice.TRUST_FOLDER:
+      return TrustLevel.TRUST_FOLDER;
+    case FolderTrustChoice.TRUST_PARENT:
+      return TrustLevel.TRUST_PARENT;
+    case FolderTrustChoice.DO_NOT_TRUST:
+      return TrustLevel.DO_NOT_TRUST;
+    default:
+      return null;
+  }
+}
+
+function saveTrustLevel(
+  cwd: string,
+  trustLevel: TrustLevel,
+  addItem?: AddItemFn,
+): boolean {
+  try {
+    const trustedFolders = loadTrustedFolders();
+    trustedFolders.setValue(cwd, trustLevel);
+    return true;
+  } catch {
+    if (addItem) {
+      addItem(
+        {
+          type: MessageType.ERROR,
+          text: 'Failed to save trust settings. Exiting LLxprt Code.',
+        },
+        Date.now(),
+      );
+    }
+    setTimeout(() => {
+      process.exit(ExitCodes.FATAL_CONFIG_ERROR);
+    }, 100);
+    return false;
+  }
+}
+
+function computeNewTrustedState(trustLevel: TrustLevel): boolean {
+  return (
+    trustLevel === TrustLevel.TRUST_FOLDER ||
+    trustLevel === TrustLevel.TRUST_PARENT
+  );
+}
+
+function showStartupMessage(
+  trusted: boolean | undefined = undefined,
+  addItem: AddItemFn | undefined,
+  startupMessageSent: React.MutableRefObject<boolean>,
+): void {
+  if (trusted === false && !startupMessageSent.current) {
+    debug.log(
+      'Folder is untrusted - displaying permissions command hint on startup',
+    );
+    if (addItem) {
+      addItem(
+        {
+          type: MessageType.INFO,
+          text: 'This folder is not trusted. Some features may be disabled. Use the `/permissions` command to change the trust level.',
+        },
+        Date.now(),
+      );
+    }
+    startupMessageSent.current = true;
+  }
+}
+
 export const useFolderTrust = (
   settings: LoadedSettings,
   config: Config,
@@ -40,6 +108,7 @@ export const useFolderTrust = (
 
   // Folder trust feature flag removed - now using settings directly
   const { folderTrust } = settings.merged;
+
   useEffect(() => {
     const trusted = isWorkspaceTrusted({
       folderTrust,
@@ -49,70 +118,25 @@ export const useFolderTrust = (
       setIsFolderTrustDialogOpen(true);
     }
 
-    // Show a message about permissions command when folder is untrusted
-    if (trusted === false && !startupMessageSent.current) {
-      debug.log(
-        'Folder is untrusted - displaying permissions command hint on startup',
-      );
-      if (addItem) {
-        addItem(
-          {
-            type: MessageType.INFO,
-            text: 'This folder is not trusted. Some features may be disabled. Use the `/permissions` command to change the trust level.',
-          },
-          Date.now(),
-        );
-      }
-      startupMessageSent.current = true;
-    }
+    showStartupMessage(trusted, addItem, startupMessageSent);
   }, [folderTrust, addItem]);
 
   const handleFolderTrustSelect = useCallback(
     (choice: FolderTrustChoice) => {
-      const trustedFolders = loadTrustedFolders();
-      const cwd = process.cwd();
-      let trustLevel: TrustLevel;
-
-      const wasTrusted = isTrusted ?? false;
-
-      switch (choice) {
-        case FolderTrustChoice.TRUST_FOLDER:
-          trustLevel = TrustLevel.TRUST_FOLDER;
-          break;
-        case FolderTrustChoice.TRUST_PARENT:
-          trustLevel = TrustLevel.TRUST_PARENT;
-          break;
-        case FolderTrustChoice.DO_NOT_TRUST:
-          trustLevel = TrustLevel.DO_NOT_TRUST;
-          break;
-        default:
-          return;
-      }
-
-      try {
-        trustedFolders.setValue(cwd, trustLevel);
-      } catch {
-        if (addItem) {
-          addItem(
-            {
-              type: MessageType.ERROR,
-              text: 'Failed to save trust settings. Exiting LLxprt Code.',
-            },
-            Date.now(),
-          );
-        }
-        setTimeout(() => {
-          process.exit(ExitCodes.FATAL_CONFIG_ERROR);
-        }, 100);
+      const trustLevel = getTrustLevelFromChoice(choice);
+      if (trustLevel === null) {
         return;
       }
 
-      const newIsTrusted =
-        trustLevel === TrustLevel.TRUST_FOLDER ||
-        trustLevel === TrustLevel.TRUST_PARENT;
-      setIsTrusted(newIsTrusted);
+      const cwd = process.cwd();
+      const wasTrusted = isTrusted ?? false;
 
-      // Trust state is managed by trustedFolders and doesn't need to be set on config
+      if (!saveTrustLevel(cwd, trustLevel, addItem)) {
+        return;
+      }
+
+      const newIsTrusted = computeNewTrustedState(trustLevel);
+      setIsTrusted(newIsTrusted);
 
       const needsRestart = wasTrusted !== newIsTrusted;
       if (needsRestart) {

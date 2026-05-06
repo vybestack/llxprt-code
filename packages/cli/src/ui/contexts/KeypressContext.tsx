@@ -455,6 +455,7 @@ function* readBracketSequence(): Generator<
     sequence += ch;
     ch = yield;
   }
+  let terminatorInSequence = false;
   if (ch === ';') {
     while (ch === ';') {
       sequence += ch;
@@ -473,11 +474,13 @@ function* readBracketSequence(): Generator<
     }
   } else if (ch === 'M') {
     sequence += ch;
+    terminatorInSequence = true;
     for (let i = 0; i < 3; i++) {
       ch = yield;
       sequence += ch;
     }
   }
+  if (!terminatorInSequence) sequence += ch;
   const cmd = sequence.slice(cmdStart);
   const numbered = parseNumberedCode(cmd);
   const letter = numbered ? null : parseLetterCode(cmd);
@@ -524,7 +527,7 @@ function* emitKeys(
         parsed.code,
         parsed.modifier,
       );
-      let seq = parsed.sequence;
+      let seq = ESC + parsed.sequence;
       let insertable = false;
       if (name === 'space' && !ctrl && !meta) {
         seq = ' ';

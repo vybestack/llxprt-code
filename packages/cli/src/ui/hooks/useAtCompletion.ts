@@ -191,6 +191,7 @@ async function buildSubagentCandidates(
 async function searchResourceCandidates(
   pattern: string,
   candidates: ResourceSuggestionCandidate[],
+  signal: AbortSignal,
 ): Promise<Suggestion[]> {
   if (candidates.length === 0) {
     return [];
@@ -210,6 +211,10 @@ async function searchResourceCandidates(
     limit: MAX_SUGGESTIONS_TO_SHOW * 3,
   });
 
+  if (signal.aborted) {
+    return [];
+  }
+
   return results.map(
     (result: { item: ResourceSuggestionCandidate }) => result.item.suggestion,
   );
@@ -218,6 +223,7 @@ async function searchResourceCandidates(
 async function searchSubagentCandidates(
   pattern: string,
   candidates: SubagentSuggestionCandidate[],
+  signal: AbortSignal,
 ): Promise<Suggestion[]> {
   if (candidates.length === 0) {
     return [];
@@ -237,9 +243,104 @@ async function searchSubagentCandidates(
     limit: MAX_SUGGESTIONS_TO_SHOW * 3,
   });
 
+  if (signal.aborted) {
+    return [];
+  }
+
   return results.map(
     (result: { item: SubagentSuggestionCandidate }) => result.item.suggestion,
   );
+}
+
+async function createFileSearcher(
+  config: Config | undefined,
+  cwd: string,
+): Promise<FileSearch> {
+  const filteringOptions = fileFilteringOptions(config);
+  const searcher = FileSearchFactory.create({
+    projectRoot: cwd,
+    ignoreDirs: [],
+    useGitignore: filteringOptions?.respectGitIgnore ?? true,
+    useGeminiignore: filteringOptions?.respectGitIgnore ?? true,
+    cache: true,
+    cacheTtl: 30, // 30 seconds
+    enableRecursiveFileSearch: config?.getEnableRecursiveFileSearch() ?? true,
+    enableFuzzySearch: !(config?.getFileFilteringDisableFuzzySearch() ?? false),
+    maxFiles: filteringOptions?.maxFileCount,
+  });
+  await searcher.initialize();
+  return searcher;
+}
+
+async function performSearch(
+  fileSearch: FileSearch,
+  pattern: string,
+  config: Config | undefined,
+  controller: AbortController,
+  clearSlowSearchTimer: () => void,
+  dispatch: React.Dispatch<AtCompletionAction>,
+): Promise<void> {
+  const timeoutMs =
+    fileFilteringOptions(config)?.searchTimeout ?? DEFAULT_SEARCH_TIMEOUT_MS;
+
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  (async () => {
+    try {
+      await setTimeoutPromise(timeoutMs, undefined, {
+        signal: controller.signal,
+      });
+      controller.abort();
+    } catch {
+      // ignore
+    }
+  })();
+
+  try {
+    const results = await fileSearch.search(pattern, {
+      signal: controller.signal,
+      maxResults: MAX_SUGGESTIONS_TO_SHOW * 3,
+    });
+
+    clearSlowSearchTimer();
+
+    if (controller.signal.aborted) {
+      return;
+    }
+
+    const fileSuggestions = results.map((p) => ({
+      label: p,
+      value: escapePath(p),
+    }));
+
+    const resourceCandidates = buildResourceCandidates(config);
+    const resourceSuggestions = await searchResourceCandidates(
+      pattern,
+      resourceCandidates,
+      controller.signal,
+    );
+
+    const subagentCandidates = await buildSubagentCandidates(config);
+    const subagentSuggestions = await searchSubagentCandidates(
+      pattern,
+      subagentCandidates,
+      controller.signal,
+    );
+
+    dispatch({
+      type: 'SEARCH_SUCCESS',
+      payload: [
+        ...fileSuggestions,
+        ...resourceSuggestions,
+        ...subagentSuggestions,
+      ],
+    });
+  } catch (error) {
+    if (!(error instanceof Error && error.name === 'AbortError')) {
+      dispatch({ type: 'ERROR' });
+    }
+  } finally {
+    controller.abort();
+  }
 }
 
 export interface UseAtCompletionProps {
@@ -251,33 +352,40 @@ export interface UseAtCompletionProps {
   setIsLoadingSuggestions: (isLoading: boolean) => void;
 }
 
-export function useAtCompletion(props: UseAtCompletionProps): void {
-  const {
-    enabled,
-    pattern,
-    config,
-    cwd,
-    setSuggestions,
-    setIsLoadingSuggestions,
-  } = props;
-  const [state, dispatch] = useReducer(atCompletionReducer, initialState);
-  const fileSearch = useRef<FileSearch | null>(null);
-  const searchAbortController = useRef<AbortController | null>(null);
-  const slowSearchTimer = useRef<NodeJS.Timeout | null>(null);
-
+function useSyncSuggestions(
+  suggestions: Suggestion[],
+  setSuggestions: (suggestions: Suggestion[]) => void,
+): void {
   useEffect(() => {
-    setSuggestions(state.suggestions);
-  }, [state.suggestions, setSuggestions]);
+    setSuggestions(suggestions);
+  }, [suggestions, setSuggestions]);
+}
 
+function useSyncLoadingState(
+  isLoading: boolean,
+  setIsLoadingSuggestions: (isLoading: boolean) => void,
+): void {
   useEffect(() => {
-    setIsLoadingSuggestions(state.isLoading);
-  }, [state.isLoading, setIsLoadingSuggestions]);
+    setIsLoadingSuggestions(isLoading);
+  }, [isLoading, setIsLoadingSuggestions]);
+}
 
+function useResetOnCwdChange(
+  cwd: string,
+  config: Config | undefined,
+  dispatch: React.Dispatch<AtCompletionAction>,
+): void {
   useEffect(() => {
     dispatch({ type: 'RESET' });
-  }, [cwd, config]);
+  }, [cwd, config, dispatch]);
+}
 
-  // Reacts to user input (`pattern`) ONLY.
+function usePatternChangeHandler(
+  enabled: boolean,
+  pattern: PatternInput,
+  state: AtCompletionState,
+  dispatch: React.Dispatch<AtCompletionAction>,
+): void {
   useEffect(() => {
     if (!enabled) {
       // reset when first getting out of completion suggestions
@@ -303,28 +411,24 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
     ) {
       dispatch({ type: 'SEARCH', payload: pattern.toLowerCase() });
     }
-  }, [enabled, pattern, state.status, state.pattern]);
+  }, [enabled, pattern, state.status, state.pattern, dispatch]);
+}
 
-  // The "Worker" that performs async operations based on status.
+function useInitializationHandler(
+  state: AtCompletionState,
+  config: Config | undefined,
+  cwd: string,
+  fileSearch: React.MutableRefObject<FileSearch | null>,
+  dispatch: React.Dispatch<AtCompletionAction>,
+): void {
   useEffect(() => {
-    const initialize = async () => {
+    if (state.status !== AtCompletionStatus.INITIALIZING) {
+      return;
+    }
+
+    const initialize = async (): Promise<void> => {
       try {
-        const filteringOptions = fileFilteringOptions(config);
-        const searcher = FileSearchFactory.create({
-          projectRoot: cwd,
-          ignoreDirs: [],
-          useGitignore: filteringOptions?.respectGitIgnore ?? true,
-          useGeminiignore: filteringOptions?.respectGitIgnore ?? true,
-          cache: true,
-          cacheTtl: 30, // 30 seconds
-          enableRecursiveFileSearch:
-            config?.getEnableRecursiveFileSearch() ?? true,
-          enableFuzzySearch: !(
-            config?.getFileFilteringDisableFuzzySearch() ?? false
-          ),
-          maxFiles: filteringOptions?.maxFileCount,
-        });
-        await searcher.initialize();
+        const searcher = await createFileSearcher(config, cwd);
         fileSearch.current = searcher;
         dispatch({ type: 'INITIALIZE_SUCCESS' });
         if (state.pattern !== null) {
@@ -335,95 +439,80 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
       }
     };
 
-    const search = async () => {
-      if (!fileSearch.current || state.pattern === null) {
-        return;
-      }
+    void initialize();
+  }, [state.status, state.pattern, config, cwd, fileSearch, dispatch]);
+}
 
-      if (slowSearchTimer.current) {
-        clearTimeout(slowSearchTimer.current);
-      }
+function useSearchHandler(
+  state: AtCompletionState,
+  config: Config | undefined,
+  fileSearch: React.MutableRefObject<FileSearch | null>,
+  dispatch: React.Dispatch<AtCompletionAction>,
+): void {
+  const searchAbortController = useRef<AbortController | null>(null);
+  const slowSearchTimer = useRef<NodeJS.Timeout | null>(null);
 
-      const controller = new AbortController();
-      searchAbortController.current = controller;
-
-      slowSearchTimer.current = setTimeout(() => {
-        dispatch({ type: 'SET_LOADING', payload: true });
-      }, 200);
-
-      const timeoutMs =
-        fileFilteringOptions(config)?.searchTimeout ??
-        DEFAULT_SEARCH_TIMEOUT_MS;
-
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      (async () => {
-        try {
-          await setTimeoutPromise(timeoutMs, undefined, {
-            signal: controller.signal,
-          });
-          controller.abort();
-        } catch {
-          // ignore
-        }
-      })();
-
-      try {
-        const results = await fileSearch.current.search(state.pattern, {
-          signal: controller.signal,
-          maxResults: MAX_SUGGESTIONS_TO_SHOW * 3,
-        });
-
-        clearTimeout(slowSearchTimer.current);
-
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        const fileSuggestions = results.map((p) => ({
-          label: p,
-          value: escapePath(p),
-        }));
-
-        const resourceCandidates = buildResourceCandidates(config);
-        const resourceSuggestions = await searchResourceCandidates(
-          state.pattern,
-          resourceCandidates,
-        );
-
-        const subagentCandidates = await buildSubagentCandidates(config);
-        const subagentSuggestions = await searchSubagentCandidates(
-          state.pattern,
-          subagentCandidates,
-        );
-
-        dispatch({
-          type: 'SEARCH_SUCCESS',
-          payload: [
-            ...fileSuggestions,
-            ...resourceSuggestions,
-            ...subagentSuggestions,
-          ],
-        });
-      } catch (error) {
-        if (!(error instanceof Error && error.name === 'AbortError')) {
-          dispatch({ type: 'ERROR' });
-        }
-      } finally {
-        controller.abort();
-      }
-    };
-
-    if (state.status === AtCompletionStatus.INITIALIZING) {
-      void initialize();
-    } else if (state.status === AtCompletionStatus.SEARCHING) {
-      void search();
+  useEffect(() => {
+    if (state.status !== AtCompletionStatus.SEARCHING) {
+      return undefined;
+    }
+    if (!fileSearch.current || state.pattern === null) {
+      return undefined;
     }
 
-    return () => {
-      searchAbortController.current?.abort();
-      if (slowSearchTimer.current) {
+    if (slowSearchTimer.current) {
+      clearTimeout(slowSearchTimer.current);
+    }
+
+    const controller = new AbortController();
+    searchAbortController.current = controller;
+
+    slowSearchTimer.current = setTimeout(() => {
+      dispatch({ type: 'SET_LOADING', payload: true });
+    }, 200);
+
+    void performSearch(
+      fileSearch.current,
+      state.pattern,
+      config,
+      controller,
+      () => {
+        if (slowSearchTimer.current !== null) {
+          clearTimeout(slowSearchTimer.current);
+          slowSearchTimer.current = null;
+        }
+      },
+      dispatch,
+    );
+
+    return (): void => {
+      if (searchAbortController.current !== null) {
+        searchAbortController.current.abort();
+      }
+      if (slowSearchTimer.current !== null) {
         clearTimeout(slowSearchTimer.current);
+        slowSearchTimer.current = null;
       }
     };
-  }, [state.status, state.pattern, config, cwd]);
+  }, [state.status, state.pattern, config, fileSearch, dispatch]);
+}
+
+export function useAtCompletion(props: UseAtCompletionProps): void {
+  const {
+    enabled,
+    pattern,
+    config,
+    cwd,
+    setSuggestions,
+    setIsLoadingSuggestions,
+  } = props;
+  const [state, dispatch] = useReducer(atCompletionReducer, initialState);
+  const fileSearch = useRef<FileSearch | null>(null);
+
+  useSyncSuggestions(state.suggestions, setSuggestions);
+  useSyncLoadingState(state.isLoading, setIsLoadingSuggestions);
+  useResetOnCwdChange(cwd, config, dispatch);
+  usePatternChangeHandler(enabled, pattern, state, dispatch);
+  useInitializationHandler(state, config, cwd, fileSearch, dispatch);
+  useSearchHandler(state, config, fileSearch, dispatch);
 }

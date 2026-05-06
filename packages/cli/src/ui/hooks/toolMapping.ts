@@ -14,7 +14,14 @@ import {
   type HistoryItemToolGroup,
   type IndividualToolCallDisplay,
 } from '../types.js';
-import type { TrackedToolCall } from './useReactToolScheduler.js';
+import type {
+  TrackedCompletedToolCall,
+  TrackedExecutingToolCall,
+  TrackedScheduledToolCall,
+  TrackedToolCall,
+  TrackedValidatingToolCall,
+  TrackedWaitingToolCall,
+} from './useReactToolScheduler.js';
 
 const logger = DebugLogger.getLogger('llxprt:cli:tool-mapping');
 
@@ -48,18 +55,11 @@ export function mapCoreStatusToDisplayStatus(
 }
 
 /**
- * Transforms `TrackedToolCall` objects into `HistoryItemToolGroup` objects for UI display.
- * LLxprt enhancement: Includes agentId handling for subagent support.
- *
- * agentId precedence: response.agentId > request.agentId > DEFAULT_AGENT_ID
+ * Determines the group agentId with 3-level precedence:
+ * response.agentId > request.agentId > DEFAULT_AGENT_ID
  */
-export function mapToDisplay(
-  toolOrTools: TrackedToolCall[] | TrackedToolCall,
-): HistoryItemToolGroup {
-  const toolCalls = Array.isArray(toolOrTools) ? toolOrTools : [toolOrTools];
-
-  // LLxprt-specific: Determine group agentId (3-level precedence)
-  const groupAgentId =
+function determineGroupAgentId(toolCalls: TrackedToolCall[]): string {
+  return (
     toolCalls
       .map((trackedCall) => {
         const responseAgentId =
@@ -69,102 +69,167 @@ export function mapToDisplay(
       .find(
         (agentId): agentId is string =>
           typeof agentId === 'string' && agentId.trim().length > 0,
-      ) ?? DEFAULT_AGENT_ID;
-
-  const toolDisplays = toolCalls.map(
-    (trackedCall): IndividualToolCallDisplay => {
-      let displayName: string;
-      let description: string;
-      let renderOutputAsMarkdown = false;
-
-      if (trackedCall.status === 'error') {
-        displayName =
-          trackedCall.tool === undefined
-            ? trackedCall.request.name
-            : trackedCall.tool.displayName;
-        description = JSON.stringify(trackedCall.request.args);
-      } else {
-        displayName = trackedCall.tool.displayName;
-        description = trackedCall.invocation.getDescription();
-        renderOutputAsMarkdown = trackedCall.tool.isOutputMarkdown;
-      }
-
-      const baseDisplayProperties: Omit<
-        IndividualToolCallDisplay,
-        'status' | 'resultDisplay' | 'confirmationDetails'
-      > = {
-        callId: trackedCall.request.callId,
-        name: displayName,
-        description,
-        renderOutputAsMarkdown,
-      };
-
-      switch (trackedCall.status) {
-        case 'success': {
-          logger.debug(
-            `mapToDisplay: success call ${trackedCall.request.callId}, toolName=${trackedCall.request.name}, resultDisplay type: ${typeof trackedCall.response.resultDisplay}, hasValue: ${Boolean(trackedCall.response.resultDisplay)}`,
-          );
-          return {
-            ...baseDisplayProperties,
-            status: mapCoreStatusToDisplayStatus(trackedCall.status),
-            resultDisplay: trackedCall.response.resultDisplay,
-            confirmationDetails: undefined,
-            outputFile: trackedCall.response.outputFile,
-          };
-        }
-        case 'error':
-        case 'cancelled':
-          return {
-            ...baseDisplayProperties,
-            status: mapCoreStatusToDisplayStatus(trackedCall.status),
-            resultDisplay: trackedCall.response.resultDisplay,
-            confirmationDetails: undefined,
-          };
-        case 'awaiting_approval': {
-          const confirmationDetails =
-            'onConfirm' in trackedCall.confirmationDetails
-              ? trackedCall.confirmationDetails
-              : undefined;
-
-          return {
-            ...baseDisplayProperties,
-            status: mapCoreStatusToDisplayStatus(trackedCall.status),
-            resultDisplay: undefined,
-            confirmationDetails,
-          };
-        }
-        case 'executing': {
-          return {
-            ...baseDisplayProperties,
-            status: mapCoreStatusToDisplayStatus(trackedCall.status),
-            resultDisplay: trackedCall.liveOutput ?? undefined,
-            confirmationDetails: undefined,
-            ptyId: trackedCall.pid,
-          };
-        }
-        case 'validating': // Fallthrough
-        case 'scheduled':
-          return {
-            ...baseDisplayProperties,
-            status: mapCoreStatusToDisplayStatus(trackedCall.status),
-            resultDisplay: undefined,
-            confirmationDetails: undefined,
-          };
-        default: {
-          const exhaustiveCheck: never = trackedCall;
-          return {
-            callId: (exhaustiveCheck as TrackedToolCall).request.callId,
-            name: 'Unknown Tool',
-            description: 'Encountered an unknown tool call state.',
-            status: ToolCallStatus.Error,
-            resultDisplay: 'Unknown tool call state',
-            confirmationDetails: undefined,
-            renderOutputAsMarkdown: false,
-          };
-        }
-      }
-    },
+      ) ?? DEFAULT_AGENT_ID
   );
+}
+
+function getDisplayName(trackedCall: TrackedToolCall): string {
+  if (trackedCall.status === 'error') {
+    return trackedCall.tool === undefined
+      ? trackedCall.request.name
+      : trackedCall.tool.displayName;
+  }
+  return trackedCall.tool.displayName;
+}
+
+function getDescription(trackedCall: TrackedToolCall): string {
+  if (trackedCall.status === 'error') {
+    return JSON.stringify(trackedCall.request.args);
+  }
+  return trackedCall.invocation.getDescription();
+}
+
+function getRenderOutputAsMarkdown(trackedCall: TrackedToolCall): boolean {
+  if (trackedCall.status === 'error') {
+    return false;
+  }
+  return trackedCall.tool.isOutputMarkdown;
+}
+
+function getBaseDisplayProperties(
+  trackedCall: TrackedToolCall,
+): Omit<
+  IndividualToolCallDisplay,
+  'status' | 'resultDisplay' | 'confirmationDetails'
+> {
+  return {
+    callId: trackedCall.request.callId,
+    name: getDisplayName(trackedCall),
+    description: getDescription(trackedCall),
+    renderOutputAsMarkdown: getRenderOutputAsMarkdown(trackedCall),
+  };
+}
+
+function buildSuccessDisplay(
+  trackedCall: Extract<TrackedCompletedToolCall, { status: 'success' }>,
+): IndividualToolCallDisplay {
+  logger.debug(
+    `mapToDisplay: success call ${trackedCall.request.callId}, toolName=${trackedCall.request.name}, resultDisplay type: ${typeof trackedCall.response.resultDisplay}, hasValue: ${Boolean(trackedCall.response.resultDisplay)}`,
+  );
+  const baseProperties = getBaseDisplayProperties(trackedCall);
+  return {
+    ...baseProperties,
+    status: mapCoreStatusToDisplayStatus(trackedCall.status),
+    resultDisplay: trackedCall.response.resultDisplay,
+    confirmationDetails: undefined,
+    outputFile: trackedCall.response.outputFile,
+  };
+}
+
+function buildErrorCancelledDisplay(
+  trackedCall: Extract<
+    TrackedCompletedToolCall,
+    { status: 'error' | 'cancelled' }
+  >,
+): IndividualToolCallDisplay {
+  const baseProperties = getBaseDisplayProperties(trackedCall);
+  return {
+    ...baseProperties,
+    status: mapCoreStatusToDisplayStatus(trackedCall.status),
+    resultDisplay: trackedCall.response.resultDisplay,
+    confirmationDetails: undefined,
+  };
+}
+
+function buildAwaitingApprovalDisplay(
+  trackedCall: TrackedWaitingToolCall,
+): IndividualToolCallDisplay {
+  const baseProperties = getBaseDisplayProperties(trackedCall);
+  const confirmationDetails =
+    'onConfirm' in trackedCall.confirmationDetails
+      ? trackedCall.confirmationDetails
+      : undefined;
+
+  return {
+    ...baseProperties,
+    status: mapCoreStatusToDisplayStatus(trackedCall.status),
+    resultDisplay: undefined,
+    confirmationDetails,
+  };
+}
+
+function buildExecutingDisplay(
+  trackedCall: TrackedExecutingToolCall,
+): IndividualToolCallDisplay {
+  const baseProperties = getBaseDisplayProperties(trackedCall);
+  return {
+    ...baseProperties,
+    status: mapCoreStatusToDisplayStatus(trackedCall.status),
+    resultDisplay: trackedCall.liveOutput ?? undefined,
+    confirmationDetails: undefined,
+    ptyId: trackedCall.pid,
+  };
+}
+
+function buildScheduledDisplay(
+  trackedCall: TrackedScheduledToolCall | TrackedValidatingToolCall,
+): IndividualToolCallDisplay {
+  const baseProperties = getBaseDisplayProperties(trackedCall);
+  return {
+    ...baseProperties,
+    status: mapCoreStatusToDisplayStatus(trackedCall.status),
+    resultDisplay: undefined,
+    confirmationDetails: undefined,
+  };
+}
+
+function buildUnknownDisplay(
+  trackedCall: TrackedToolCall,
+): IndividualToolCallDisplay {
+  return {
+    callId: trackedCall.request.callId,
+    name: 'Unknown Tool',
+    description: 'Encountered an unknown tool call state.',
+    status: ToolCallStatus.Error,
+    resultDisplay: 'Unknown tool call state',
+    confirmationDetails: undefined,
+    renderOutputAsMarkdown: false,
+  };
+}
+
+function mapTrackedCallToDisplay(
+  trackedCall: TrackedToolCall,
+): IndividualToolCallDisplay {
+  switch (trackedCall.status) {
+    case 'success':
+      return buildSuccessDisplay(trackedCall);
+    case 'error':
+    case 'cancelled':
+      return buildErrorCancelledDisplay(trackedCall);
+    case 'awaiting_approval':
+      return buildAwaitingApprovalDisplay(trackedCall);
+    case 'executing':
+      return buildExecutingDisplay(trackedCall);
+    case 'validating':
+    case 'scheduled':
+      return buildScheduledDisplay(trackedCall);
+    default: {
+      const exhaustiveCheck: never = trackedCall;
+      return buildUnknownDisplay(exhaustiveCheck as TrackedToolCall);
+    }
+  }
+}
+
+/**
+ * Transforms `TrackedToolCall` objects into `HistoryItemToolGroup` objects for UI display.
+ * LLxprt enhancement: Includes agentId handling for subagent support.
+ */
+export function mapToDisplay(
+  toolOrTools: TrackedToolCall[] | TrackedToolCall,
+): HistoryItemToolGroup {
+  const toolCalls = Array.isArray(toolOrTools) ? toolOrTools : [toolOrTools];
+  const groupAgentId = determineGroupAgentId(toolCalls);
+  const toolDisplays = toolCalls.map(mapTrackedCallToDisplay);
 
   return {
     type: 'tool_group',

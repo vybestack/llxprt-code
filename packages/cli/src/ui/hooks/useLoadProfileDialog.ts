@@ -23,6 +23,54 @@ interface UseLoadProfileDialogParams {
   settings: LoadedSettings;
 }
 
+function formatInfoMessages(result: { infoMessages: string[] }): string {
+  return result.infoMessages.map((message) => `\n- ${message}`).join('');
+}
+
+function handleProfileLoadError(
+  error: unknown,
+  profileName: string,
+  addMessage: (msg: {
+    type: MessageType;
+    content: string;
+    timestamp: Date;
+  }) => void,
+): void {
+  if (error instanceof Error) {
+    if (error.message.includes('not found')) {
+      addMessage({
+        type: MessageType.ERROR,
+        content: `Profile '${profileName}' not found`,
+        timestamp: new Date(),
+      });
+    } else if (error.message.includes('corrupted')) {
+      addMessage({
+        type: MessageType.ERROR,
+        content: `Profile '${profileName}' is corrupted`,
+        timestamp: new Date(),
+      });
+    } else if (error.message.includes('missing required fields')) {
+      addMessage({
+        type: MessageType.ERROR,
+        content: `Profile '${profileName}' is invalid: missing required fields`,
+        timestamp: new Date(),
+      });
+    } else {
+      addMessage({
+        type: MessageType.ERROR,
+        content: `Failed to load profile: ${error.message}`,
+        timestamp: new Date(),
+      });
+    }
+  } else {
+    addMessage({
+      type: MessageType.ERROR,
+      content: `Failed to load profile: ${String(error)}`,
+      timestamp: new Date(),
+    });
+  }
+}
+
 export const useLoadProfileDialog = ({
   addMessage,
   appState,
@@ -68,9 +116,7 @@ export const useLoadProfileDialog = ({
     async (profileName: string) => {
       try {
         const result = await runtime.loadProfileByName(profileName);
-        const extra = result.infoMessages
-          .map((message) => `\n- ${message}`)
-          .join('');
+        const extra = formatInfoMessages(result);
         addMessage({
           type: MessageType.INFO,
           content: `Profile '${profileName}' loaded${extra}`,
@@ -84,40 +130,7 @@ export const useLoadProfileDialog = ({
           });
         }
       } catch (error) {
-        // Handle specific error messages
-        if (error instanceof Error) {
-          if (error.message.includes('not found')) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Profile '${profileName}' not found`,
-              timestamp: new Date(),
-            });
-          } else if (error.message.includes('corrupted')) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Profile '${profileName}' is corrupted`,
-              timestamp: new Date(),
-            });
-          } else if (error.message.includes('missing required fields')) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Profile '${profileName}' is invalid: missing required fields`,
-              timestamp: new Date(),
-            });
-          } else {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Failed to load profile: ${error.message}`,
-              timestamp: new Date(),
-            });
-          }
-        } else {
-          addMessage({
-            type: MessageType.ERROR,
-            content: `Failed to load profile: ${String(error)}`,
-            timestamp: new Date(),
-          });
-        }
+        handleProfileLoadError(error, profileName, addMessage);
       }
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'loadProfile' });
     },
