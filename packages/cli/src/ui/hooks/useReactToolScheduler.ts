@@ -96,6 +96,623 @@ export type TrackedToolCall =
 
 export type CancelAllFn = () => void;
 
+/**
+ * Ensures a request has an agentId, defaulting to DEFAULT_AGENT_ID.
+ */
+function ensureAgentId(req: ToolCallRequestInfo): ToolCallRequestInfo {
+  return { ...req, agentId: req.agentId ?? DEFAULT_AGENT_ID };
+}
+
+/**
+ * Normalizes a request to ensure all requests have agentId.
+ */
+function normalizeRequest(
+  request: ToolCallRequestInfo | ToolCallRequestInfo[],
+): ToolCallRequestInfo | ToolCallRequestInfo[] {
+  return Array.isArray(request)
+    ? request.map(ensureAgentId)
+    : ensureAgentId(request);
+}
+
+/**
+ * Updates a pending history item with output for a specific tool call.
+ */
+function updatePendingItemWithOutput(
+  prevItem: HistoryItemWithoutId | null,
+  toolCallId: string,
+  outputChunk: string | AnsiOutput,
+): HistoryItemWithoutId | null {
+  if (prevItem?.type !== 'tool_group') return prevItem;
+  return {
+    ...prevItem,
+    tools: prevItem.tools.map((toolDisplay) =>
+      toolDisplay.callId === toolCallId &&
+      toolDisplay.status === ToolCallStatus.Executing
+        ? { ...toolDisplay, resultDisplay: outputChunk }
+        : toolDisplay,
+    ),
+  };
+}
+
+/**
+ * Maps updated calls preserving the responseSubmittedToGemini flag.
+ */
+function mapCallsWithSubmittedFlag(
+  prevCalls: TrackedToolCall[],
+  updatedCalls: ToolCall[],
+): TrackedToolCall[] {
+  if (updatedCalls.length === 0) return [];
+  const previousCallMap = new Map(
+    prevCalls.map((call) => [call.request.callId, call]),
+  );
+  return updatedCalls.map((call) => ({
+    ...call,
+    responseSubmittedToGemini:
+      previousCallMap.get(call.request.callId)?.responseSubmittedToGemini ??
+      false,
+  })) as TrackedToolCall[];
+}
+
+/**
+ * Updates tool calls with live output for a specific tool call.
+ */
+function updateCallsWithLiveOutput(
+  prevCalls: TrackedToolCall[],
+  toolCallId: string,
+  outputChunk: string | AnsiOutput,
+): TrackedToolCall[] {
+  return prevCalls.map((call) =>
+    call.request.callId === toolCallId && call.status === 'executing'
+      ? { ...call, liveOutput: outputChunk }
+      : call,
+  );
+}
+
+/**
+ * Updates scheduler state with new calls, handling empty arrays.
+ */
+function updateSchedulerState(
+  prev: Map<symbol, TrackedToolCall[]>,
+  schedulerId: symbol,
+  updatedCalls: TrackedToolCall[] | null,
+): Map<symbol, TrackedToolCall[]> {
+  if (updatedCalls === null || updatedCalls.length === 0) {
+    if (prev.has(schedulerId)) {
+      const next = new Map(prev);
+      next.delete(schedulerId);
+      return next;
+    }
+    return prev;
+  }
+  const next = new Map(prev);
+  next.set(schedulerId, updatedCalls);
+  return next;
+}
+
+/**
+ * Marks tool calls as submitted to Gemini.
+ */
+function markCallsAsSubmitted(
+  calls: TrackedToolCall[],
+  callIdsToMark: string[],
+): TrackedToolCall[] {
+  return calls.map((call) =>
+    callIdsToMark.includes(call.request.callId)
+      ? { ...call, responseSubmittedToGemini: true }
+      : call,
+  );
+}
+
+/**
+ * Processes pending schedule requests after scheduler initialization.
+ */
+function processPendingRequests(
+  instance: CoreToolScheduler,
+  requests: Array<{
+    request: ToolCallRequestInfo | ToolCallRequestInfo[];
+    signal: AbortSignal;
+  }>,
+): void {
+  for (const { request, signal } of requests) {
+    if (signal.aborted) continue;
+    instance.schedule(request, signal).catch(() => {});
+  }
+}
+
+/** Shared refs type for scheduler callbacks */
+type SchedulerRefs = {
+  updateToolCallOutput: (
+    schedulerId: symbol,
+    toolCallId: string,
+    chunk: string | AnsiOutput,
+  ) => void;
+  replaceToolCallsForScheduler: (
+    schedulerId: symbol,
+    calls: ToolCall[],
+  ) => void;
+  onCompleteRef: React.MutableRefObject<
+    (
+      schedulerId: symbol,
+      tools: CompletedToolCall[],
+      options: { isPrimary: boolean },
+    ) => Promise<void> | void
+  >;
+  getPreferredEditorRef: React.MutableRefObject<() => EditorType | undefined>;
+  onEditorCloseRef: React.MutableRefObject<() => void>;
+  onEditorOpenRef: React.MutableRefObject<() => void>;
+  setLastToolOutputTime: (time: number) => void;
+};
+
+/**
+ * Creates callbacks for the main scheduler.
+ */
+function createMainSchedulerCallbacks(
+  mainSchedulerId: symbol,
+  refs: SchedulerRefs,
+  mounted: React.MutableRefObject<boolean>,
+): Parameters<
+  SchedulerConfigWithExplicitMessageBus['getOrCreateScheduler']
+>[1] {
+  return {
+    outputUpdateHandler: (toolCallId, chunk) => {
+      if (!mounted.current) return;
+      refs.updateToolCallOutput(mainSchedulerId, toolCallId, chunk);
+      refs.setLastToolOutputTime(Date.now());
+    },
+    onAllToolCallsComplete: async (completedToolCalls) => {
+      if (!mounted.current) return;
+      if (completedToolCalls.length > 0) {
+        await refs.onCompleteRef.current(mainSchedulerId, completedToolCalls, {
+          isPrimary: true,
+        });
+      }
+      refs.replaceToolCallsForScheduler(mainSchedulerId, []);
+    },
+    onToolCallsUpdate: (calls) => {
+      if (!mounted.current) return;
+      refs.replaceToolCallsForScheduler(mainSchedulerId, calls);
+    },
+    getPreferredEditor: () => refs.getPreferredEditorRef.current(),
+    onEditorClose: () => refs.onEditorCloseRef.current(),
+    onEditorOpen: () => refs.onEditorOpenRef.current(),
+  };
+}
+
+/**
+ * Creates callbacks for an external scheduler.
+ */
+function createSubagentCallbacks(
+  schedulerId: symbol,
+  refs: SchedulerRefs,
+  args: Parameters<ExternalSchedulerFactory>[0],
+): Parameters<
+  SchedulerConfigWithExplicitMessageBus['getOrCreateScheduler']
+>[1] {
+  return {
+    outputUpdateHandler: (toolCallId, chunk) => {
+      refs.updateToolCallOutput(schedulerId, toolCallId, chunk);
+      refs.setLastToolOutputTime(Date.now());
+    },
+    onToolCallsUpdate: (calls) => {
+      refs.replaceToolCallsForScheduler(schedulerId, calls);
+      args.onToolCallsUpdate?.(calls);
+    },
+    onAllToolCallsComplete: async (calls) => {
+      if (calls.length > 0) {
+        await refs.onCompleteRef.current(schedulerId, calls, {
+          isPrimary: false,
+        });
+        await args.onAllToolCallsComplete(calls);
+      }
+      refs.replaceToolCallsForScheduler(schedulerId, []);
+    },
+    getPreferredEditor: () => refs.getPreferredEditorRef.current(),
+    onEditorClose: () => refs.onEditorCloseRef.current(),
+    onEditorOpen: () => refs.onEditorOpenRef.current(),
+  };
+}
+
+/**
+ * Initializes a scheduler instance.
+ */
+async function initializeSchedulerInstance(
+  config: Config,
+  sessionId: string,
+  mainSchedulerId: symbol,
+  refs: SchedulerRefs,
+  runtimeMessageBus: MessageBus | undefined,
+  mounted: React.MutableRefObject<boolean>,
+): Promise<CoreToolScheduler | null> {
+  try {
+    const instance = await (
+      config as SchedulerConfigWithExplicitMessageBus
+    ).getOrCreateScheduler(
+      sessionId,
+      createMainSchedulerCallbacks(mainSchedulerId, refs, mounted),
+      undefined,
+      { messageBus: runtimeMessageBus },
+    );
+    if (!mounted.current) {
+      config.disposeScheduler(sessionId);
+      return null;
+    }
+    return instance;
+  } catch (error) {
+    logger.warn(
+      () =>
+        `Failed to initialize scheduler: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Hook that provides tool call update callbacks.
+ */
+function useToolCallUpdaters(
+  setPendingHistoryItem: React.Dispatch<
+    React.SetStateAction<HistoryItemWithoutId | null>
+  >,
+  setToolCallsByScheduler: React.Dispatch<
+    React.SetStateAction<Map<symbol, TrackedToolCall[]>>
+  >,
+): {
+  updateToolCallOutput: (
+    schedulerId: symbol,
+    toolCallId: string,
+    outputChunk: string | AnsiOutput,
+  ) => void;
+  replaceToolCallsForScheduler: (
+    schedulerId: symbol,
+    calls: ToolCall[],
+  ) => void;
+} {
+  const updateToolCallsForScheduler = useCallback(
+    (
+      schedulerId: symbol,
+      updater: (prevCalls: TrackedToolCall[]) => TrackedToolCall[] | null,
+    ) => {
+      setToolCallsByScheduler((prev) => {
+        const currentCalls = prev.get(schedulerId) ?? [];
+        const updatedCalls = updater(currentCalls);
+        return updateSchedulerState(prev, schedulerId, updatedCalls);
+      });
+    },
+    [setToolCallsByScheduler],
+  );
+
+  const replaceToolCallsForScheduler = useCallback(
+    (schedulerId: symbol, updatedCalls: ToolCall[]) => {
+      updateToolCallsForScheduler(schedulerId, (prevCalls) =>
+        mapCallsWithSubmittedFlag(prevCalls, updatedCalls),
+      );
+    },
+    [updateToolCallsForScheduler],
+  );
+
+  const updateToolCallOutput = useCallback(
+    (
+      schedulerId: symbol,
+      toolCallId: string,
+      outputChunk: string | AnsiOutput,
+    ) => {
+      updateToolCallsForScheduler(schedulerId, (prevCalls) => {
+        const nextCalls = updateCallsWithLiveOutput(
+          prevCalls,
+          toolCallId,
+          outputChunk,
+        );
+        return nextCalls.some((call, index) => call !== prevCalls[index])
+          ? nextCalls
+          : prevCalls;
+      });
+      setPendingHistoryItem((prev) =>
+        updatePendingItemWithOutput(prev, toolCallId, outputChunk),
+      );
+    },
+    [updateToolCallsForScheduler, setPendingHistoryItem],
+  );
+
+  return { updateToolCallOutput, replaceToolCallsForScheduler };
+}
+
+/**
+ * Hook that manages scheduler initialization effect.
+ */
+function useSchedulerEffect(
+  config: Config,
+  sessionId: string,
+  mainSchedulerId: symbol,
+  refs: SchedulerRefs,
+  runtimeMessageBus: MessageBus | undefined,
+  pendingScheduleRequests: React.MutableRefObject<
+    Array<{
+      request: ToolCallRequestInfo | ToolCallRequestInfo[];
+      signal: AbortSignal;
+    }>
+  >,
+  setScheduler: (s: CoreToolScheduler | null) => void,
+): void {
+  useEffect(() => {
+    const mounted = { current: true };
+    const resolved = { current: false };
+
+    const init = async () => {
+      const instance = await initializeSchedulerInstance(
+        config,
+        sessionId,
+        mainSchedulerId,
+        refs,
+        runtimeMessageBus,
+        mounted,
+      );
+      if (!mounted.current) return;
+      if (!instance) {
+        setScheduler(null);
+        return;
+      }
+      resolved.current = true;
+      processPendingRequests(instance, pendingScheduleRequests.current);
+      pendingScheduleRequests.current = [];
+      setScheduler(instance);
+    };
+
+    void init();
+
+    return () => {
+      mounted.current = false;
+      if (resolved.current) {
+        config.disposeScheduler(sessionId);
+      }
+    };
+  }, [
+    config,
+    sessionId,
+    mainSchedulerId,
+    refs,
+    runtimeMessageBus,
+    pendingScheduleRequests,
+    setScheduler,
+  ]);
+}
+
+/**
+ * Hook that manages scheduler initialization.
+ */
+function useScheduler(
+  config: Config,
+  sessionId: string,
+  mainSchedulerId: symbol,
+  refs: SchedulerRefs,
+  runtimeMessageBus: MessageBus | undefined,
+  pendingScheduleRequests: React.MutableRefObject<
+    Array<{
+      request: ToolCallRequestInfo | ToolCallRequestInfo[];
+      signal: AbortSignal;
+    }>
+  >,
+): CoreToolScheduler | null {
+  const [scheduler, setScheduler] = useState<CoreToolScheduler | null>(null);
+  useSchedulerEffect(
+    config,
+    sessionId,
+    mainSchedulerId,
+    refs,
+    runtimeMessageBus,
+    pendingScheduleRequests,
+    setScheduler,
+  );
+  return scheduler;
+}
+
+/**
+ * Hook that creates the external scheduler factory.
+ */
+function useExternalSchedulerFactoryCreator(
+  refs: SchedulerRefs,
+  runtimeMessageBus: MessageBus | undefined,
+): ExternalSchedulerFactory {
+  const factory = useCallback(
+    async (args: Parameters<ExternalSchedulerFactory>[0]) => {
+      const schedulerId = Symbol('subagent-scheduler');
+      const schedulerSessionId = args.schedulerConfig.getSessionId();
+      const instance = await (
+        args.schedulerConfig as SchedulerConfigWithExplicitMessageBus
+      ).getOrCreateScheduler(
+        schedulerSessionId,
+        createSubagentCallbacks(schedulerId, refs, args),
+        undefined,
+        { messageBus: runtimeMessageBus },
+      );
+      return {
+        schedule: (
+          request: ToolCallRequestInfo | ToolCallRequestInfo[],
+          signal: AbortSignal,
+        ) => instance.schedule(request, signal),
+        dispose: () =>
+          args.schedulerConfig.disposeScheduler(schedulerSessionId),
+      };
+    },
+    [refs, runtimeMessageBus],
+  );
+  return factory as unknown as ExternalSchedulerFactory;
+}
+
+/**
+ * Hook that manages external scheduler factory setup.
+ */
+function useExternalSchedulerSetup(
+  config: Config,
+  createExternalScheduler: ExternalSchedulerFactory,
+): void {
+  type ConfigWithSchedulerFactory = Config & {
+    setInteractiveSubagentSchedulerFactory?: (
+      factory: ExternalSchedulerFactory | undefined,
+    ) => void;
+  };
+
+  useEffect(() => {
+    const configWithFactory = config as ConfigWithSchedulerFactory;
+    if (
+      typeof configWithFactory.setInteractiveSubagentSchedulerFactory !==
+      'function'
+    ) {
+      return undefined;
+    }
+    configWithFactory.setInteractiveSubagentSchedulerFactory(
+      createExternalScheduler,
+    );
+    return () => {
+      configWithFactory.setInteractiveSubagentSchedulerFactory(undefined);
+    };
+  }, [config, createExternalScheduler]);
+}
+
+/**
+ * Hook that manages schedule function.
+ */
+function useScheduleFn(
+  scheduler: CoreToolScheduler | null,
+  pendingScheduleRequests: React.MutableRefObject<
+    Array<{
+      request: ToolCallRequestInfo | ToolCallRequestInfo[];
+      signal: AbortSignal;
+    }>
+  >,
+): ScheduleFn {
+  return useCallback(
+    (request, signal) => {
+      const normalizedRequest = normalizeRequest(request);
+      if (!scheduler) {
+        pendingScheduleRequests.current.push({
+          request: normalizedRequest,
+          signal,
+        });
+        return Promise.resolve();
+      }
+      return scheduler.schedule(normalizedRequest, signal).catch(() => {});
+    },
+    [scheduler, pendingScheduleRequests],
+  );
+}
+
+/**
+ * Hook that manages markToolsAsSubmitted function.
+ */
+function useMarkToolsAsSubmitted(
+  setToolCallsByScheduler: React.Dispatch<
+    React.SetStateAction<Map<symbol, TrackedToolCall[]>>
+  >,
+): MarkToolsAsSubmittedFn {
+  return useCallback(
+    (callIdsToMark: string[]) => {
+      if (callIdsToMark.length === 0) return;
+      setToolCallsByScheduler((prev) => {
+        let changed = false;
+        const next = new Map(prev);
+        for (const [schedulerId, calls] of prev) {
+          const updatedCalls = markCallsAsSubmitted(calls, callIdsToMark);
+          const hasChange = updatedCalls.some(
+            (call, index) => call !== calls[index],
+          );
+          if (hasChange) {
+            changed = true;
+            next.set(schedulerId, updatedCalls);
+          }
+        }
+        return changed ? next : prev;
+      });
+    },
+    [setToolCallsByScheduler],
+  );
+}
+
+/**
+ * Hook that manages ref synchronization and creation.
+ */
+function useRefState(
+  onComplete: (
+    schedulerId: symbol,
+    tools: CompletedToolCall[],
+    options: { isPrimary: boolean },
+  ) => Promise<void> | void,
+  getPreferredEditor: () => EditorType | undefined,
+  onEditorClose: () => void,
+  onEditorOpen: () => void,
+): {
+  onCompleteRef: React.MutableRefObject<
+    (
+      schedulerId: symbol,
+      tools: CompletedToolCall[],
+      options: { isPrimary: boolean },
+    ) => Promise<void> | void
+  >;
+  getPreferredEditorRef: React.MutableRefObject<() => EditorType | undefined>;
+  onEditorCloseRef: React.MutableRefObject<() => void>;
+  onEditorOpenRef: React.MutableRefObject<() => void>;
+} {
+  const onCompleteRef = useRef(onComplete);
+  const getPreferredEditorRef = useRef(getPreferredEditor);
+  const onEditorCloseRef = useRef(onEditorClose);
+  const onEditorOpenRef = useRef(onEditorOpen);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    getPreferredEditorRef.current = getPreferredEditor;
+    onEditorCloseRef.current = onEditorClose;
+    onEditorOpenRef.current = onEditorOpen;
+  }, [getPreferredEditor, onEditorClose, onEditorOpen]);
+
+  return useMemo(
+    () => ({
+      onCompleteRef,
+      getPreferredEditorRef,
+      onEditorCloseRef,
+      onEditorOpenRef,
+    }),
+    [],
+  );
+}
+
+/**
+ * Hook that creates scheduler refs from constituent parts.
+ */
+function useSchedulerRefs(
+  refs: ReturnType<typeof useRefState>,
+  callbacks: {
+    updateToolCallOutput: (
+      schedulerId: symbol,
+      toolCallId: string,
+      chunk: string | AnsiOutput,
+    ) => void;
+    replaceToolCallsForScheduler: (
+      schedulerId: symbol,
+      calls: ToolCall[],
+    ) => void;
+    setLastToolOutputTime: (time: number) => void;
+  },
+): SchedulerRefs {
+  return useMemo(
+    () => ({
+      updateToolCallOutput: callbacks.updateToolCallOutput,
+      replaceToolCallsForScheduler: callbacks.replaceToolCallsForScheduler,
+      setLastToolOutputTime: callbacks.setLastToolOutputTime,
+      ...refs,
+    }),
+    [
+      callbacks.updateToolCallOutput,
+      callbacks.replaceToolCallsForScheduler,
+      callbacks.setLastToolOutputTime,
+      refs,
+    ],
+  );
+}
+
 export function useReactToolScheduler(
   onComplete: (
     schedulerId: symbol,
@@ -120,374 +737,56 @@ export function useReactToolScheduler(
   const [toolCallsByScheduler, setToolCallsByScheduler] = useState<
     Map<symbol, TrackedToolCall[]>
   >(new Map());
-
-  const updatePendingHistoryItem = useCallback(
-    (toolCallId: string, outputChunk: string | AnsiOutput) => {
-      setPendingHistoryItem((prevItem) => {
-        if (prevItem?.type === 'tool_group') {
-          return {
-            ...prevItem,
-            tools: prevItem.tools.map((toolDisplay) =>
-              toolDisplay.callId === toolCallId &&
-              toolDisplay.status === ToolCallStatus.Executing
-                ? { ...toolDisplay, resultDisplay: outputChunk }
-                : toolDisplay,
-            ),
-          };
-        }
-        return prevItem;
-      });
-    },
-    [setPendingHistoryItem],
-  );
-
-  const updateToolCallsForScheduler = useCallback(
-    (
-      schedulerId: symbol,
-      updater: (prevCalls: TrackedToolCall[]) => TrackedToolCall[] | null,
-    ) => {
-      setToolCallsByScheduler((prev) => {
-        const currentCalls = prev.get(schedulerId) ?? [];
-        const updatedCalls = updater(currentCalls);
-        if (updatedCalls === currentCalls) {
-          return prev;
-        }
-        const next = new Map(prev);
-        if (!updatedCalls || updatedCalls.length === 0) {
-          next.delete(schedulerId);
-        } else {
-          next.set(schedulerId, updatedCalls);
-        }
-        return next;
-      });
-    },
-    [],
-  );
-
-  const replaceToolCallsForScheduler = useCallback(
-    (schedulerId: symbol, updatedCalls: ToolCall[]) => {
-      updateToolCallsForScheduler(schedulerId, (prevCalls) => {
-        if (updatedCalls.length === 0) {
-          return [];
-        }
-        const previousCallMap = new Map(
-          prevCalls.map((call) => [call.request.callId, call]),
-        );
-        return updatedCalls.map((call) => ({
-          ...call,
-          responseSubmittedToGemini:
-            previousCallMap.get(call.request.callId)
-              ?.responseSubmittedToGemini ?? false,
-        })) as TrackedToolCall[];
-      });
-    },
-    [updateToolCallsForScheduler],
-  );
-
-  const updateToolCallOutput = useCallback(
-    (
-      schedulerId: symbol,
-      toolCallId: string,
-      outputChunk: string | AnsiOutput,
-    ) => {
-      updateToolCallsForScheduler(schedulerId, (prevCalls) => {
-        const nextCalls = prevCalls.map((call) =>
-          call.request.callId === toolCallId && call.status === 'executing'
-            ? { ...call, liveOutput: outputChunk }
-            : call,
-        );
-        return nextCalls.some((call, index) => call !== prevCalls[index])
-          ? nextCalls
-          : prevCalls;
-      });
-      updatePendingHistoryItem(toolCallId, outputChunk);
-    },
-    [updateToolCallsForScheduler, updatePendingHistoryItem],
-  );
-
-  const toolCalls = useMemo(
-    () => Array.from(toolCallsByScheduler.values()).flat(),
-    [toolCallsByScheduler],
-  );
-
   const [lastToolOutputTime, setLastToolOutputTime] = useState(0);
-
   const mainSchedulerId = useState(() => Symbol('main-scheduler'))[0];
   const sessionId = useMemo(() => config.getSessionId(), [config]);
-  const [scheduler, setScheduler] = useState<CoreToolScheduler | null>(null);
   const pendingScheduleRequests = useRef<
     Array<{
       request: ToolCallRequestInfo | ToolCallRequestInfo[];
       signal: AbortSignal;
     }>
   >([]);
-  const onCompleteRef = useRef(onComplete);
-  const getPreferredEditorRef = useRef(getPreferredEditor);
-  const onEditorCloseRef = useRef(onEditorClose);
-  const onEditorOpenRef = useRef(onEditorOpen);
 
-  useEffect(() => {
-    onCompleteRef.current = onComplete;
-  }, [onComplete]);
+  const syncedRefs = useRefState(
+    onComplete,
+    getPreferredEditor,
+    onEditorClose,
+    onEditorOpen,
+  );
+  const toolCallUpdaters = useToolCallUpdaters(
+    setPendingHistoryItem,
+    setToolCallsByScheduler,
+  );
+  const refs = useSchedulerRefs(syncedRefs, {
+    ...toolCallUpdaters,
+    setLastToolOutputTime,
+  });
 
-  useEffect(() => {
-    getPreferredEditorRef.current = getPreferredEditor;
-    onEditorCloseRef.current = onEditorClose;
-    onEditorOpenRef.current = onEditorOpen;
-  }, [getPreferredEditor, onEditorClose, onEditorOpen]);
-
-  // Use the singleton scheduler from config to ensure all schedulers in a session
-  // share the same CoreToolScheduler instance, avoiding duplicate MessageBus
-  // subscriptions and "unknown correlationId" errors.
-  useEffect(() => {
-    let mounted = true;
-    let resolved = false;
-
-    const initializeScheduler = async () => {
-      try {
-        const instance = await (
-          config as SchedulerConfigWithExplicitMessageBus
-        ).getOrCreateScheduler(
-          sessionId,
-          {
-            outputUpdateHandler: (toolCallId, chunk) => {
-              if (!mounted) {
-                return;
-              }
-              updateToolCallOutput(mainSchedulerId, toolCallId, chunk);
-              setLastToolOutputTime(Date.now());
-            },
-            onAllToolCallsComplete: async (completedToolCalls) => {
-              if (!mounted) {
-                return;
-              }
-              if (completedToolCalls.length > 0) {
-                await onCompleteRef.current(
-                  mainSchedulerId,
-                  completedToolCalls,
-                  {
-                    isPrimary: true,
-                  },
-                );
-              }
-              replaceToolCallsForScheduler(mainSchedulerId, []);
-            },
-            onToolCallsUpdate: (calls) => {
-              if (!mounted) {
-                return;
-              }
-              replaceToolCallsForScheduler(mainSchedulerId, calls);
-            },
-            getPreferredEditor: () => getPreferredEditorRef.current(),
-            onEditorClose: () => onEditorCloseRef.current(),
-            onEditorOpen: () => onEditorOpenRef.current(),
-          },
-          undefined,
-          { messageBus: runtimeMessageBus },
-        );
-
-        resolved = true;
-        if (!mounted) {
-          config.disposeScheduler(sessionId);
-          return;
-        }
-        // Process any pending schedule requests
-        const pending = pendingScheduleRequests.current;
-        pendingScheduleRequests.current = [];
-        for (const { request, signal } of pending) {
-          if (signal.aborted) {
-            continue;
-          }
-          instance.schedule(request, signal).catch(() => {
-            // Silently ignore cancellation rejections - this is expected behavior
-            // when the user presses ESC to cancel queued tool calls
-          });
-        }
-
-        setScheduler(instance);
-      } catch (error) {
-        logger.warn(
-          () =>
-            `Failed to initialize scheduler: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-        );
-        if (mounted) {
-          setScheduler(null);
-        }
-      }
-    };
-
-    void initializeScheduler();
-
-    return () => {
-      mounted = false;
-      if (resolved) {
-        config.disposeScheduler(sessionId);
-      }
-    };
-  }, [
+  const scheduler = useScheduler(
     config,
     sessionId,
     mainSchedulerId,
-    replaceToolCallsForScheduler,
-    updateToolCallOutput,
+    refs,
     runtimeMessageBus,
-  ]);
+    pendingScheduleRequests,
+  );
 
-  const createExternalScheduler = useCallback(
-    async (args: Parameters<ExternalSchedulerFactory>[0]) => {
-      const {
-        schedulerConfig,
-        onAllToolCallsComplete,
-        outputUpdateHandler: _outputUpdateHandler,
-        onToolCallsUpdate,
-      } = args;
-      // Note: _outputUpdateHandler is intentionally not called - see comment below
+  const createExternalScheduler = useExternalSchedulerFactoryCreator(
+    refs,
+    runtimeMessageBus,
+  );
+  useExternalSchedulerSetup(config, createExternalScheduler);
 
-      const schedulerId = Symbol('subagent-scheduler');
-      const schedulerSessionId = schedulerConfig.getSessionId();
-
-      // Use the shared scheduler instance for this session to avoid multiple
-      // MessageBus subscriptions and "unknown correlationId" errors
-      const instance = await (
-        schedulerConfig as SchedulerConfigWithExplicitMessageBus
-      ).getOrCreateScheduler(
-        schedulerSessionId,
-        {
-          // Only update the local UI state - don't call outputUpdateHandler as well,
-          // since that would cause duplicate output (the subagent's outputUpdateHandler
-          // calls onMessage which goes to task.updateOutput, creating a second display).
-          // The local updateToolCallOutput handles the UI rendering for subagent tools.
-          outputUpdateHandler: (toolCallId, chunk) => {
-            updateToolCallOutput(schedulerId, toolCallId, chunk);
-            setLastToolOutputTime(Date.now());
-          },
-          onToolCallsUpdate: (calls) => {
-            replaceToolCallsForScheduler(schedulerId, calls);
-            onToolCallsUpdate?.(calls);
-          },
-          onAllToolCallsComplete: async (calls) => {
-            if (calls.length > 0) {
-              await onCompleteRef.current(schedulerId, calls, {
-                isPrimary: false,
-              });
-              await onAllToolCallsComplete(calls);
-            }
-            replaceToolCallsForScheduler(schedulerId, []);
-          },
-          getPreferredEditor: () => getPreferredEditorRef.current(),
-          onEditorClose: () => onEditorCloseRef.current(),
-          onEditorOpen: () => onEditorOpenRef.current(),
-        },
-        undefined,
-        { messageBus: runtimeMessageBus },
-      );
-
-      return {
-        schedule: (
-          request: ToolCallRequestInfo | ToolCallRequestInfo[],
-          signal: AbortSignal,
-        ) => instance.schedule(request, signal),
-        dispose: () => schedulerConfig.disposeScheduler(schedulerSessionId),
-      };
-    },
-    [replaceToolCallsForScheduler, updateToolCallOutput, runtimeMessageBus],
-  ) as unknown as ExternalSchedulerFactory;
-
-  type ConfigWithSchedulerFactory = Config & {
-    setInteractiveSubagentSchedulerFactory?: (
-      factory: ExternalSchedulerFactory | undefined,
-    ) => void;
-  };
-
-  useEffect(() => {
-    const configWithFactory = config as ConfigWithSchedulerFactory;
-    if (
-      typeof configWithFactory.setInteractiveSubagentSchedulerFactory !==
-      'function'
-    ) {
-      return undefined;
-    }
-
-    configWithFactory.setInteractiveSubagentSchedulerFactory(
-      createExternalScheduler,
-    );
-
-    return () => {
-      configWithFactory.setInteractiveSubagentSchedulerFactory(undefined);
-    };
-  }, [config, createExternalScheduler]);
-
-  const schedule: ScheduleFn = useCallback(
-    (
-      request: ToolCallRequestInfo | ToolCallRequestInfo[],
-      signal: AbortSignal,
-    ) => {
-      const ensureAgentId = (
-        req: ToolCallRequestInfo,
-      ): ToolCallRequestInfo => ({
-        ...req,
-        agentId: req.agentId ?? DEFAULT_AGENT_ID,
-      });
-
-      const normalizedRequest = Array.isArray(request)
-        ? request.map(ensureAgentId)
-        : ensureAgentId(request);
-
-      if (!scheduler) {
-        pendingScheduleRequests.current.push({
-          request: normalizedRequest,
-          signal,
-        });
-        return Promise.resolve();
-      }
-
-      // The scheduler.schedule() returns a Promise that rejects when the abort
-      // signal fires while tool calls are queued. We intentionally catch and
-      // ignore these rejections because:
-      // 1. Cancellation is an expected user action, not an error
-      // 2. The UI state is updated via cancelAllToolCalls() synchronously
-      // 3. Tool results are not needed after cancellation
-      return scheduler.schedule(normalizedRequest, signal).catch(() => {
-        // Silently ignore cancellation rejections - this is expected behavior
-        // when the user presses ESC to cancel queued tool calls
-      });
-    },
+  const schedule = useScheduleFn(scheduler, pendingScheduleRequests);
+  const markToolsAsSubmitted = useMarkToolsAsSubmitted(setToolCallsByScheduler);
+  const cancelAllToolCalls = useCallback(
+    () => scheduler?.cancelAll(),
     [scheduler],
   );
-
-  const markToolsAsSubmitted: MarkToolsAsSubmittedFn = useCallback(
-    (callIdsToMark: string[]) => {
-      if (callIdsToMark.length === 0) {
-        return;
-      }
-      setToolCallsByScheduler((prev) => {
-        let changed = false;
-        const next = new Map(prev);
-        for (const [schedulerId, calls] of prev) {
-          const updatedCalls = calls.map((call) =>
-            callIdsToMark.includes(call.request.callId)
-              ? { ...call, responseSubmittedToGemini: true }
-              : call,
-          );
-          const hasChange = updatedCalls.some(
-            (call, index) => call !== calls[index],
-          );
-          if (hasChange) {
-            changed = true;
-            next.set(schedulerId, updatedCalls);
-          }
-        }
-        return changed ? next : prev;
-      });
-    },
-    [],
+  const toolCalls = useMemo(
+    () => Array.from(toolCallsByScheduler.values()).flat(),
+    [toolCallsByScheduler],
   );
-
-  const cancelAllToolCalls = useCallback(() => {
-    scheduler?.cancelAll();
-  }, [scheduler]);
 
   return [
     toolCalls,
