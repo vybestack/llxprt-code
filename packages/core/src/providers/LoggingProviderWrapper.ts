@@ -381,11 +381,7 @@ export class LoggingProviderWrapper implements IProvider {
       this.checkConversationLoggingEnabled(activeConfig);
 
     if (conversationLoggingEnabled) {
-      await this.logRequestIfEnabled(
-        activeConfig,
-        normalizedOptions,
-        promptId,
-      );
+      await this.logRequestIfEnabled(activeConfig, normalizedOptions, promptId);
     }
 
     this.logApiRequestTelemetry(activeConfig, normalizedOptions, promptId);
@@ -469,17 +465,14 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   /** REQ-SP4-004: Throw if runtime context is missing settings or config. */
-  private ensureRuntimeContext(
-    normalizedOptions: GenerateChatOptions,
-  ): void {
+  private ensureRuntimeContext(normalizedOptions: GenerateChatOptions): void {
     const runtimeId = normalizedOptions.runtime?.runtimeId ?? 'unknown';
     this.debug.log(
       () =>
         `Checking runtime context: runtimeId=${runtimeId}, hasRuntime=${!!normalizedOptions.runtime}, hasSettings=${!!normalizedOptions.runtime?.settingsService}, hasConfig=${!!normalizedOptions.runtime?.config}`,
     );
     this.debug.log(
-      () =>
-        `Contents length at entry: ${normalizedOptions.contents.length}`,
+      () => `Contents length at entry: ${normalizedOptions.contents.length}`,
     );
 
     if (!normalizedOptions.runtime?.settingsService) {
@@ -644,8 +637,7 @@ export class LoggingProviderWrapper implements IProvider {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         activeConfig?.getConversationLoggingEnabled() ?? false;
       this.debug.log(
-        () =>
-          `getConversationLoggingEnabled() returned: ${enabled}`,
+        () => `getConversationLoggingEnabled() returned: ${enabled}`,
       );
       return enabled;
     } catch (error) {
@@ -796,10 +788,16 @@ export class LoggingProviderWrapper implements IProvider {
         }
         this.extractChunkMetadata(
           chunk,
-          (usage) => { latestTokenUsage = usage; },
-          (reason) => { lastFinishReason = reason; },
+          (usage) => {
+            latestTokenUsage = usage;
+          },
+          (reason) => {
+            lastFinishReason = reason;
+          },
           latestTokenUsage === undefined,
-          (text) => { streamedText += text; },
+          (text) => {
+            streamedText += text;
+          },
         );
         yield chunk;
       }
@@ -860,8 +858,8 @@ export class LoggingProviderWrapper implements IProvider {
       onUsage(content.metadata.usage);
     }
     const metaFinishReason =
-      (content.metadata as Record<string, unknown> | undefined)
-        ?.finishReason ?? content.metadata?.stopReason;
+      (content.metadata as Record<string, unknown> | undefined)?.finishReason ??
+      content.metadata?.stopReason;
     // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (typeof metaFinishReason === 'string') {
       onFinishReason(metaFinishReason);
@@ -934,8 +932,7 @@ export class LoggingProviderWrapper implements IProvider {
     );
     event.input_token_count = tokenCounts.input_token_count;
     event.output_token_count = tokenCounts.output_token_count;
-    event.cached_content_token_count =
-      tokenCounts.cached_content_token_count;
+    event.cached_content_token_count = tokenCounts.cached_content_token_count;
     event.thoughts_token_count = tokenCounts.thoughts_token_count;
     event.tool_token_count = tokenCounts.tool_token_count;
     event.total_token_count =
@@ -1004,8 +1001,12 @@ export class LoggingProviderWrapper implements IProvider {
 
         this.extractChunkMetadata(
           chunk,
-          (usage) => { latestTokenUsage = usage; },
-          (reason) => { lastFinishReason = reason; },
+          (usage) => {
+            latestTokenUsage = usage;
+          },
+          (reason) => {
+            lastFinishReason = reason;
+          },
           false,
           () => {},
         );
@@ -1386,14 +1387,12 @@ export class LoggingProviderWrapper implements IProvider {
         }
         // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (obj.headers != null && typeof obj.headers === 'object') {
-          ({
-            input_token_count,
-            output_token_count,
-          } = this.extractAnthropicHeaderTokens(
-            obj.headers as Record<string, string>,
-            input_token_count,
-            output_token_count,
-          ));
+          ({ input_token_count, output_token_count } =
+            this.extractAnthropicHeaderTokens(
+              obj.headers as Record<string, string>,
+              input_token_count,
+              output_token_count,
+            ));
         }
       }
 
@@ -1448,7 +1447,9 @@ export class LoggingProviderWrapper implements IProvider {
     if (headers['anthropic-input-tokens']) {
       const parsedValue = parseInt(headers['anthropic-input-tokens'], 10);
       input_token_count =
-        !isNaN(parsedValue) && parsedValue >= 0 ? parsedValue : input_token_count;
+        !isNaN(parsedValue) && parsedValue >= 0
+          ? parsedValue
+          : input_token_count;
     }
     if (headers['anthropic-output-tokens']) {
       const parsedValue = parseInt(headers['anthropic-output-tokens'], 10);
@@ -1481,11 +1482,17 @@ export class LoggingProviderWrapper implements IProvider {
     return {
       input_token_count: Math.max(0, counts.input_token_count),
       output_token_count: Math.max(0, counts.output_token_count),
-      cached_content_token_count: Math.max(0, counts.cached_content_token_count),
+      cached_content_token_count: Math.max(
+        0,
+        counts.cached_content_token_count,
+      ),
       thoughts_token_count: Math.max(0, counts.thoughts_token_count),
       tool_token_count: Math.max(0, counts.tool_token_count),
       cache_read_input_tokens: Math.max(0, counts.cache_read_input_tokens),
-      cache_creation_input_tokens: Math.max(0, counts.cache_creation_input_tokens),
+      cache_creation_input_tokens: Math.max(
+        0,
+        counts.cache_creation_input_tokens,
+      ),
     };
   }
 

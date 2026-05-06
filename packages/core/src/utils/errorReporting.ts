@@ -17,9 +17,10 @@ interface ErrorReportData {
 }
 
 /** Normalises an unknown error value into a structured { message, stack? } object. */
-function normaliseError(
-  error: Error | unknown,
-): { message: string; stack?: string } {
+function normaliseError(error: Error | unknown): {
+  message: string;
+  stack?: string;
+} {
   if (error instanceof Error) {
     return { message: error.message, stack: error.stack };
   }

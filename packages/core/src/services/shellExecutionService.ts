@@ -352,7 +352,11 @@ function appendDecodedChunk(
 }
 
 /** Process incoming data from child_process stdout/stderr. */
-function handleCpOutput(state: CpExecState, data: Buffer, stream: 'stdout' | 'stderr'): void {
+function handleCpOutput(
+  state: CpExecState,
+  data: Buffer,
+  stream: 'stdout' | 'stderr',
+): void {
   state.resetInactivityTimer();
   ensureDecoders(state, data);
 
@@ -377,7 +381,8 @@ function handleCpOutput(state: CpExecState, data: Buffer, stream: 'stdout' | 'st
     }
   }
 
-  const decoder = stream === 'stdout' ? state.stdoutDecoder : state.stderrDecoder;
+  const decoder =
+    stream === 'stdout' ? state.stdoutDecoder : state.stderrDecoder;
   const decodedChunk = decoder!.decode(data, { stream: true });
   const strippedChunk = stripAnsiIfPresent(decodedChunk);
 
@@ -491,10 +496,7 @@ function registerCpExitHandlers(
   const childOnce = state.child.once as
     | ((
         event: 'exit' | 'close',
-        listener: (
-          code: number | null,
-          signal: NodeJS.Signals | null,
-        ) => void,
+        listener: (code: number | null, signal: NodeJS.Signals | null) => void,
       ) => typeof state.child)
     | undefined;
   if (childOnce !== undefined) {
@@ -596,9 +598,7 @@ function maybeEmitRenderedOutput(
   const finalJson = JSON.stringify(finalOutput);
   const outputJson = JSON.stringify(state.output);
   if (outputJson !== finalJson) {
-    const cursorLine = finalOutput[buffer.cursorY] as
-      | AnsiLine
-      | undefined;
+    const cursorLine = finalOutput[buffer.cursorY] as AnsiLine | undefined;
     const cursorLineText =
       cursorLine !== undefined
         ? cursorLine
@@ -715,7 +715,6 @@ export class ShellExecutionService {
     );
   }
 
-
   private static childProcessFallback(
     commandToExecute: string,
     cwd: string,
@@ -750,7 +749,11 @@ export class ShellExecutionService {
       });
 
       const result = this.createCpResultPromise(
-        child, isWindows, onOutputEvent, abortSignal, shellExecutionConfig,
+        child,
+        isWindows,
+        onOutputEvent,
+        abortSignal,
+        shellExecutionConfig,
       );
 
       return { pid: child.pid, result };
@@ -782,8 +785,10 @@ export class ShellExecutionService {
     const exitedRef = { value: false };
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const inactivityTimeoutMs = shellExecutionConfig?.inactivityTimeoutMs;
-    const { reset: resetInactivityTimer, controller: inactivityAbortController } =
-      makeInactivityTimer(inactivityTimeoutMs, exitedRef);
+    const {
+      reset: resetInactivityTimer,
+      controller: inactivityAbortController,
+    } = makeInactivityTimer(inactivityTimeoutMs, exitedRef);
 
     const state: CpExecState = {
       child,
@@ -810,10 +815,17 @@ export class ShellExecutionService {
     };
 
     return new Promise<ShellExecutionResult>((resolve) => {
-      this.setupCpInactivityHandler(state, inactivityTimeoutMs, resetInactivityTimer);
+      this.setupCpInactivityHandler(
+        state,
+        inactivityTimeoutMs,
+        resetInactivityTimer,
+      );
       const abortHandler = this.setupCpAbortHandler(state);
 
-      const handleExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      const handleExit = (
+        code: number | null,
+        signal: NodeJS.Signals | null,
+      ) => {
         if (state.hasResolved) {
           return;
         }
@@ -850,9 +862,18 @@ export class ShellExecutionService {
         void (async () => {
           // Preserve old truthiness semantics: skip pid 0 and undefined (invalid process IDs)
           // Old code: if (child.pid && !exited)
-          if (state.child.pid !== undefined && state.child.pid !== 0 && !state.exitedRef.value) {
+          if (
+            state.child.pid !== undefined &&
+            state.child.pid !== 0 &&
+            !state.exitedRef.value
+          ) {
             const pid = state.child.pid;
-            await killProcessWithEscalation(pid, state.isWindows, () => state.child.kill('SIGKILL'), state.exitedRef);
+            await killProcessWithEscalation(
+              pid,
+              state.isWindows,
+              () => state.child.kill('SIGKILL'),
+              state.exitedRef,
+            );
           }
         })();
       },
@@ -866,7 +887,11 @@ export class ShellExecutionService {
       void (async () => {
         // Preserve old truthiness semantics: skip pid 0 and undefined (invalid process IDs)
         // Old code: if (child.pid && !exited)
-        if (state.child.pid !== undefined && state.child.pid !== 0 && !state.exitedRef.value) {
+        if (
+          state.child.pid !== undefined &&
+          state.child.pid !== 0 &&
+          !state.exitedRef.value
+        ) {
           await killProcessWithEscalation(
             state.child.pid,
             state.isWindows,
@@ -919,8 +944,14 @@ export class ShellExecutionService {
       });
 
       const result = this.createPtyResultPromise(
-        ptyProcess, isWindows, cols, rows, onOutputEvent, abortSignal,
-        shellExecutionConfig, ptyInfo,
+        ptyProcess,
+        isWindows,
+        cols,
+        rows,
+        onOutputEvent,
+        abortSignal,
+        shellExecutionConfig,
+        ptyInfo,
       );
 
       return { pid: ptyProcess.pid, result };
@@ -962,8 +993,10 @@ export class ShellExecutionService {
 
     const exitedRef = { value: false };
     const inactivityTimeoutMs = shellExecutionConfig.inactivityTimeoutMs;
-    const { reset: resetInactivityTimer, controller: inactivityAbortController } =
-      makeInactivityTimer(inactivityTimeoutMs, exitedRef);
+    const {
+      reset: resetInactivityTimer,
+      controller: inactivityAbortController,
+    } = makeInactivityTimer(inactivityTimeoutMs, exitedRef);
 
     const activePtyEntry: ActivePty = {
       ptyProcess,
@@ -1007,14 +1040,18 @@ export class ShellExecutionService {
     resolve: (value: ShellExecutionResult) => void,
   ): void {
     const resolveResult = this.makePtyResolveResult(state, resolve);
-    const renderFn = () => { this.ptyRenderFn(state); };
+    const renderFn = () => {
+      this.ptyRenderFn(state);
+    };
     const render = this.makePtyRender(state, renderFn);
 
-    state.activePtyEntry.onScrollDisposable = state.headlessTerminal.onScroll(() => {
-      if (!state.isWriting) {
-        render();
-      }
-    });
+    state.activePtyEntry.onScrollDisposable = state.headlessTerminal.onScroll(
+      () => {
+        if (!state.isWriting) {
+          render();
+        }
+      },
+    );
 
     this.setupPtyInactivityHandler(state);
     const abortHandler = this.setupPtyAbortHandler(state, resolveResult);
@@ -1042,7 +1079,9 @@ export class ShellExecutionService {
         state,
         ShellExecutionService.activePtys,
         () => ShellExecutionService.lastActivePtyId,
-        (id) => { ShellExecutionService.lastActivePtyId = id; },
+        (id) => {
+          ShellExecutionService.lastActivePtyId = id;
+        },
       );
       resolve(resultValue);
     };
@@ -1096,8 +1135,13 @@ export class ShellExecutionService {
 
             state.outputChunks.push(data);
 
-            if (state.isStreamingRawContent && state.sniffedBytes < MAX_SNIFF_SIZE) {
-              const sniffBuffer = Buffer.concat(state.outputChunks.slice(0, 20));
+            if (
+              state.isStreamingRawContent &&
+              state.sniffedBytes < MAX_SNIFF_SIZE
+            ) {
+              const sniffBuffer = Buffer.concat(
+                state.outputChunks.slice(0, 20),
+              );
               state.sniffedBytes = sniffBuffer.length;
 
               if (isBinary(sniffBuffer)) {
@@ -1136,10 +1180,12 @@ export class ShellExecutionService {
       state.processingChain.catch(() => {});
     };
 
-    state.activePtyEntry.onDataDisposable = state.ptyProcess.onData((data: string) => {
-      const bufferData = Buffer.from(data, 'utf-8');
-      handleOutput(bufferData);
-    });
+    state.activePtyEntry.onDataDisposable = state.ptyProcess.onData(
+      (data: string) => {
+        const bufferData = Buffer.from(data, 'utf-8');
+        handleOutput(bufferData);
+      },
+    );
   }
 
   private static registerPtyExitHandler(
@@ -1149,7 +1195,14 @@ export class ShellExecutionService {
   ): void {
     const finalizeResult = (exitCode: number, signal?: number | null) => {
       this.ptyRenderFn(state);
-      resolveResult(buildPtyResult(state, exitCode, signal ?? null, state.abortSignal.aborted));
+      resolveResult(
+        buildPtyResult(
+          state,
+          exitCode,
+          signal ?? null,
+          state.abortSignal.aborted,
+        ),
+      );
     };
 
     state.activePtyEntry.onExitDisposable = state.ptyProcess.onExit(
@@ -1162,7 +1215,9 @@ export class ShellExecutionService {
           return;
         }
 
-        const processingComplete = state.processingChain.then(() => 'processed');
+        const processingComplete = state.processingChain.then(
+          () => 'processed',
+        );
         let raceAbortListener: (() => void) | null = null;
 
         const cleanupRaceListener = () => {
@@ -1223,7 +1278,10 @@ export class ShellExecutionService {
       state.shellExecutionConfig.showColor,
     );
 
-    const lastNonEmptyLine = findLastNonEmptyLineIndex(newOutput, buffer.cursorY);
+    const lastNonEmptyLine = findLastNonEmptyLineIndex(
+      newOutput,
+      buffer.cursorY,
+    );
     const trimmedOutput = newOutput.slice(0, lastNonEmptyLine + 1);
 
     const finalOutput =
@@ -1250,7 +1308,9 @@ export class ShellExecutionService {
     state.resetInactivityTimer();
   }
 
-  private static async ptyInactivityAbortAction(state: PtyExecState): Promise<void> {
+  private static async ptyInactivityAbortAction(
+    state: PtyExecState,
+  ): Promise<void> {
     // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
     // Old code: if (ptyProcess.pid && !exited)
     if (state.ptyProcess.pid === 0 || state.exitedRef.value) {
@@ -1284,10 +1344,7 @@ export class ShellExecutionService {
       void (async () => {
         // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
         // Old code: if (ptyProcess.pid && !exited)
-        if (
-          state.ptyProcess.pid !== 0 &&
-          !state.exitedRef.value
-        ) {
+        if (state.ptyProcess.pid !== 0 && !state.exitedRef.value) {
           const pid = state.ptyProcess.pid;
           if (state.isWindows) {
             // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
@@ -1296,7 +1353,9 @@ export class ShellExecutionService {
               state,
               ShellExecutionService.activePtys,
               () => ShellExecutionService.lastActivePtyId,
-              (id) => { ShellExecutionService.lastActivePtyId = id; },
+              (id) => {
+                ShellExecutionService.lastActivePtyId = id;
+              },
             );
             resolveResult(buildPtyResult(state, 1, null, true));
             return;

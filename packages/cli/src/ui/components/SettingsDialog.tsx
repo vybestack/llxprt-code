@@ -352,7 +352,9 @@ function toggleImmediateBoolean(
   saveSingleSetting(key, newValue, settings, selectedScope);
 
   if (key === 'vimMode' && newValue !== vimEnabled) {
-    debugLogger.log('[DEBUG SettingsDialog] Vim mode context will sync from settings.');
+    debugLogger.log(
+      '[DEBUG SettingsDialog] Vim mode context will sync from settings.',
+    );
   }
 
   removeKeyFromTracking(
@@ -1711,14 +1713,17 @@ export function SettingsDialog(props: SettingsDialogProps): React.JSX.Element {
     config,
   } = props;
   const { vimEnabled } = useVimMode();
-  const [focusSection, setFocusSection] = useState<'settings' | 'scope'>('settings');
-  const [selectedScope, setSelectedScope] = useState<SettingScope>(SettingScope.User);
+  const [focusSection, setFocusSection] = useState<'settings' | 'scope'>(
+    'settings',
+  );
+  const [selectedScope, setSelectedScope] = useState<SettingScope>(
+    SettingScope.User,
+  );
   const settingsState = useSettingsStateFull(settings, selectedScope);
   const [activeSettingIndex, setActiveSettingIndex] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
   const search = useSearchState(setActiveSettingIndex, setScrollOffset);
   const edit = useEditState();
-
 
   const itemsCtx = useSettingsItemsAndActions(
     settings,
@@ -2154,8 +2159,6 @@ function handleSettingsFocusKeypress(key: Key, ctx: SettingsFocusCtx): boolean {
 
   return false;
 }
-
-
 
 function handleGlobalKeypress(
   key: Key,

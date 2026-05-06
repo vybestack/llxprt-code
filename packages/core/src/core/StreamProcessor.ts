@@ -250,11 +250,7 @@ export class StreamProcessor {
     );
 
     const { requestPayload, baseRuntimeContext, runtimeContext } =
-      this._prepareRequestPayload(
-        requestContents,
-        tools,
-        params,
-      );
+      this._prepareRequestPayload(requestContents, tools, params);
 
     const finalContents = await this._fireBeforeModelHook(
       configForHooks,
@@ -352,10 +348,7 @@ export class StreamProcessor {
       );
     }
 
-    return this._applyRequestModifications(
-      beforeModelResult,
-      requestContents,
-    );
+    return this._applyRequestModifications(beforeModelResult, requestContents);
   }
 
   private _patchMissingFinishReason(
@@ -378,8 +371,9 @@ export class StreamProcessor {
       model: this.runtimeContext.state.model || '',
       contents: ContentConverters.toGeminiContents(requestContents),
     });
-    const modifiedContents = (modifiedRequest as { contents?: Content[] | null })
-      .contents;
+    const modifiedContents = (
+      modifiedRequest as { contents?: Content[] | null }
+    ).contents;
     if (modifiedContents !== undefined && modifiedContents !== null) {
       return ContentConverters.toIContents(modifiedContents);
     }
@@ -650,8 +644,7 @@ export class StreamProcessor {
     const promptTokens = iContent.metadata?.usage?.promptTokens;
     if (promptTokens === undefined) return;
 
-    const cacheReads =
-      iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
+    const cacheReads = iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
     const cacheWrites =
       iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
     const combinedPromptTokens = promptTokens + cacheReads + cacheWrites;
@@ -826,8 +819,7 @@ export class StreamProcessor {
         )
           acc.hasTextResponse = true;
         // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (parts.some((p) => isThoughtPart(p)))
-          acc.hasThinkingResponse = true;
+        if (parts.some((p) => isThoughtPart(p))) acc.hasThinkingResponse = true;
         acc.modelResponseParts.push(
           ...(includeThoughts
             ? parts
@@ -866,7 +858,9 @@ export class StreamProcessor {
     },
     userInput: Content | Content[],
   ): Promise<void> {
-    const consolidatedParts = this._consolidateTextParts(acc.modelResponseParts);
+    const consolidatedParts = this._consolidateTextParts(
+      acc.modelResponseParts,
+    );
     const responseText = this._extractResponseText(consolidatedParts);
 
     if (isMissingFinishReason(acc.finishReason)) {
@@ -968,7 +962,8 @@ export class StreamProcessor {
     const hasMissingFinishAndNoText =
       isMissingFinishReason(finishReason) && !hasTextResponse;
     const isEmptyResponse = responseText === '';
-    const noRelevantContent = !hasToolCall && !isToolContinuationInput && !hasThinkingResponse;
+    const noRelevantContent =
+      !hasToolCall && !isToolContinuationInput && !hasThinkingResponse;
     const isInvalidResponse =
       noRelevantContent && (hasMissingFinishAndNoText || isEmptyResponse);
 

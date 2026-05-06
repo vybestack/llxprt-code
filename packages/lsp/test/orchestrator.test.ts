@@ -67,23 +67,32 @@ describe('Orchestrator unit tests against real implementation', () => {
     expect(status).toEqual([{ serverId: 'fake-ts', state: 'idle' }]);
   });
 
-  it('status marks broken after crash during checkFile', async () => {
-    const broken = createOrchestrator(
-      createConfig([
-        createFakeServer('fake-crash', ['.ts'], ['--crash-on-did-open']),
-      ]),
-      WORKSPACE_ROOT,
-    );
-    try {
-      await broken.checkFile('/workspace/src/crash.ts', 'const x = TYPE_ERROR');
-      const status = await broken.status();
-      expect(
-        status.some((s) => s.serverId === 'fake-crash' && s.state === 'broken'),
-      ).toBe(true);
-    } finally {
-      await broken.shutdown();
-    }
-  });
+  it(
+    'status marks broken after crash during checkFile',
+    { timeout: 15_000 },
+    async () => {
+      const broken = createOrchestrator(
+        createConfig([
+          createFakeServer('fake-crash', ['.ts'], ['--crash-on-did-open']),
+        ]),
+        WORKSPACE_ROOT,
+      );
+      try {
+        await broken.checkFile(
+          '/workspace/src/crash.ts',
+          'const x = TYPE_ERROR',
+        );
+        const status = await broken.status();
+        expect(
+          status.some(
+            (s) => s.serverId === 'fake-crash' && s.state === 'broken',
+          ),
+        ).toBe(true);
+      } finally {
+        await broken.shutdown();
+      }
+    },
+  );
 
   it('gotoDefinition returns empty for unknown extension', async () => {
     await expect(

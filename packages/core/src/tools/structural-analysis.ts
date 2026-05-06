@@ -1049,9 +1049,20 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
         );
 
         for (const r of calleeResults) {
-          const entry: CalleeEntry = { text: r.text, file: r.file, line: r.line };
-          const calleeName = r.calleeNode ? this.extractCalleeName(r.calleeNode) : null;
-          if (currentDepth > 1 && ctx.nodesVisited < maxNodes && calleeName && calleeName !== sym) {
+          const entry: CalleeEntry = {
+            text: r.text,
+            file: r.file,
+            line: r.line,
+          };
+          const calleeName = r.calleeNode
+            ? this.extractCalleeName(r.calleeNode)
+            : null;
+          if (
+            currentDepth > 1 &&
+            ctx.nodesVisited < maxNodes &&
+            calleeName &&
+            calleeName !== sym
+          ) {
             nodesVisited = ctx.nodesVisited;
             entry.callees = await findCalleesOf(calleeName, currentDepth - 1);
             ctx.nodesVisited = nodesVisited;

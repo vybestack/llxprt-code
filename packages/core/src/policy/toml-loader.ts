@@ -292,7 +292,13 @@ function resolveRulePatterns(
     } catch (e) {
       const error = e as Error;
       errors.push(
-        buildRegexError(filePath, file, tierName, rule.argsPattern, error.message),
+        buildRegexError(
+          filePath,
+          file,
+          tierName,
+          rule.argsPattern,
+          error.message,
+        ),
       );
       return null;
     }
@@ -384,7 +390,13 @@ function transformTomlRules(
       return rule.modes.includes(approvalMode);
     })
     .flatMap((rule) => {
-      const patterns = resolveRulePatterns(rule, filePath, file, tierName, errors);
+      const patterns = resolveRulePatterns(
+        rule,
+        filePath,
+        file,
+        tierName,
+        errors,
+      );
       if (!patterns) {
         return [];
       }
@@ -432,7 +444,12 @@ async function processTomlFile(
 ): Promise<void> {
   const filePath = path.join(dir, file);
   try {
-    const data = await parseAndValidateTomlFile(filePath, file, tierName, errors);
+    const data = await parseAndValidateTomlFile(
+      filePath,
+      file,
+      tierName,
+      errors,
+    );
     if (!data) {
       return;
     }
@@ -479,7 +496,15 @@ export async function loadPoliciesFromToml(
     }
 
     for (const file of filesToLoad) {
-      await processTomlFile(file, dir, approvalMode, tier, tierName, rules, errors);
+      await processTomlFile(
+        file,
+        dir,
+        approvalMode,
+        tier,
+        tierName,
+        rules,
+        errors,
+      );
     }
   }
 

@@ -34,38 +34,65 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('calls createAndStartProxy before container spawn', () => {
-      // The proxy must be created before args.push(image)
+      const setupProxyIndex = sandboxSource.indexOf(
+        'async function setupCredentialProxy',
+      );
       const createProxyIndex = sandboxSource.indexOf(
         'await createAndStartProxy',
+        setupProxyIndex,
       );
-      const pushImageIndex = sandboxSource.indexOf('args.push(image)');
-
-      expect(createProxyIndex).toBeGreaterThan(-1);
-      expect(pushImageIndex).toBeGreaterThan(-1);
-
-      // In Docker/Podman path, createAndStartProxy should appear before pushing image
-      // Find the Docker/Podman section (after seatbelt return)
-      const dockerPathStart = sandboxSource.indexOf(
-        'hopping into sandbox (command:',
+      const prepareContainerIndex = sandboxSource.indexOf(
+        'async function prepareContainerSandbox',
       );
-      expect(dockerPathStart).toBeGreaterThan(-1);
+      const setupProxyCallIndex = sandboxSource.indexOf(
+        'await setupCredentialProxy',
+        prepareContainerIndex,
+      );
+      const executeContainerIndex = sandboxSource.indexOf(
+        'async function executeContainerSandbox',
+      );
+      const pushImageIndex = sandboxSource.indexOf(
+        'args.push(image)',
+        executeContainerIndex,
+      );
+      const spawnInDocker = sandboxSource.indexOf(
+        'spawn(config.command, args, {',
+        executeContainerIndex,
+      );
 
-      // Get the relevant substring for Docker/Podman path
-      const dockerPath = sandboxSource.substring(dockerPathStart);
-      const proxyInDocker = dockerPath.indexOf('createAndStartProxy');
-      const spawnInDocker = dockerPath.indexOf('spawn(config.command, args, {');
-
-      expect(proxyInDocker).toBeGreaterThan(-1);
-      expect(spawnInDocker).toBeGreaterThan(-1);
-      expect(proxyInDocker).toBeLessThan(spawnInDocker);
+      expect(createProxyIndex).toBeGreaterThan(setupProxyIndex);
+      expect(setupProxyCallIndex).toBeGreaterThan(prepareContainerIndex);
+      expect(pushImageIndex).toBeGreaterThan(executeContainerIndex);
+      expect(spawnInDocker).toBeGreaterThan(pushImageIndex);
+      expect(setupProxyCallIndex).toBeLessThan(pushImageIndex);
     });
   });
 
   describe('R25.1a: Proxy Creation Failure Aborts', () => {
     it('throws FatalSandboxError on proxy creation failure', () => {
-      expect(sandboxSource).toContain(
-        'throw new FatalSandboxError(\n        `Failed to start credential proxy:',
+      const proxyFailureIndex = sandboxSource.indexOf(
+        '@plan:PLAN-20250214-CREDPROXY.P34 R25.1a:',
       );
+      const catchIndex = sandboxSource.lastIndexOf(
+        'catch (err)',
+        proxyFailureIndex,
+      );
+      const proxyFailureSection = sandboxSource.substring(
+        catchIndex,
+        sandboxSource.indexOf(
+          'const socketPath = getProxySocketPath()',
+          proxyFailureIndex,
+        ),
+      );
+      const messagePrefixMatches = proxyFailureSection.match(
+        /Failed to start credential proxy:/g,
+      );
+
+      expect(proxyFailureIndex).toBeGreaterThan(-1);
+      expect(catchIndex).toBeGreaterThan(-1);
+      expect(proxyFailureSection).toContain('catch (err)');
+      expect(proxyFailureSection).toContain('throw new FatalSandboxError(');
+      expect(messagePrefixMatches).toHaveLength(1);
     });
 
     it('wraps createAndStartProxy in try-catch', () => {
@@ -133,14 +160,19 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('adds cleanup on process exit signal', () => {
-      // Should register handlers for exit, SIGINT, SIGTERM
-      const dockerPath = sandboxSource.substring(
-        sandboxSource.indexOf('hopping into sandbox'),
+      const cleanupStart = sandboxSource.indexOf(
+        'function wireCleanupHandlers',
       );
+      expect(cleanupStart).toBeGreaterThan(-1);
+      const cleanupSection = sandboxSource.substring(cleanupStart);
 
-      expect(dockerPath).toContain("process.on('exit', stopCredentialProxy)");
-      expect(dockerPath).toContain("process.on('SIGINT', stopCredentialProxy)");
-      expect(dockerPath).toContain(
+      expect(cleanupSection).toContain(
+        "process.on('exit', stopCredentialProxy)",
+      );
+      expect(cleanupSection).toContain(
+        "process.on('SIGINT', stopCredentialProxy)",
+      );
+      expect(cleanupSection).toContain(
         "process.on('SIGTERM', stopCredentialProxy)",
       );
     });
@@ -148,6 +180,24 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     it('adds cleanup on sandbox process close', () => {
       expect(sandboxSource).toContain(
         "sandboxProcess.on('close', stopCredentialProxy)",
+      );
+    });
+
+    it('kills sandbox process group when proxy container closes', () => {
+      const handlerStart = sandboxSource.indexOf(
+        'function wireProxyContainerCloseHandler',
+      );
+      expect(handlerStart).toBeGreaterThan(-1);
+      const handlerSection = sandboxSource.substring(
+        handlerStart,
+        sandboxSource.indexOf('/** Wires all cleanup handlers', handlerStart),
+      );
+
+      expect(handlerSection).toContain("proxyContainer.process.on('close'");
+      expect(handlerSection).toContain("process.kill(-sandboxPid, 'SIGTERM')");
+      expect(handlerSection).toContain('Proxy container command');
+      expect(handlerSection).toContain(
+        'exited with code ${code}, signal ${signal}',
       );
     });
 
@@ -161,13 +211,10 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
 
   describe('R26.2: Seatbelt Unaffected', () => {
     it('seatbelt path does not call createAndStartProxy', () => {
-      // Extract seatbelt section - from 'sandbox-exec' check to its return
       const seatbeltStart = sandboxSource.indexOf(
-        "if (config.command === 'sandbox-exec')",
+        'async function runSeatbeltSandbox',
       );
-      const seatbeltEnd = sandboxSource.indexOf(
-        'hopping into sandbox (command:',
-      );
+      const seatbeltEnd = sandboxSource.indexOf('function resolveProxyUrl');
 
       expect(seatbeltStart).toBeGreaterThan(-1);
       expect(seatbeltEnd).toBeGreaterThan(seatbeltStart);
@@ -177,27 +224,32 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
         seatbeltEnd,
       );
 
-      // Seatbelt section should NOT contain credential proxy calls
       expect(seatbeltSection).not.toContain('createAndStartProxy');
       expect(seatbeltSection).not.toContain('credentialProxyHandle');
       expect(seatbeltSection).not.toContain('LLXPRT_CREDENTIAL_SOCKET');
     });
 
     it('seatbelt path returns before Docker/Podman path', () => {
-      // The seatbelt path should have a return statement before the Docker path
-      const seatbeltStart = sandboxSource.indexOf(
-        "if (config.command === 'sandbox-exec')",
+      const startSandboxStart = sandboxSource.indexOf(
+        'export async function start_sandbox',
       );
-      const dockerStart = sandboxSource.indexOf(
-        'hopping into sandbox (command:',
+      const seatbeltBranch = sandboxSource.indexOf(
+        "if (config.command === 'sandbox-exec')",
+        startSandboxStart,
+      );
+      const seatbeltReturn = sandboxSource.indexOf(
+        'return exitCode;',
+        seatbeltBranch,
+      );
+      const containerCall = sandboxSource.indexOf(
+        'await runContainerSandbox',
+        seatbeltBranch,
       );
 
-      // Find the return in the seatbelt section
-      const seatbeltSection = sandboxSource.substring(
-        seatbeltStart,
-        dockerStart,
-      );
-      expect(seatbeltSection).toContain('return await new Promise<number>');
+      expect(startSandboxStart).toBeGreaterThan(-1);
+      expect(seatbeltBranch).toBeGreaterThan(startSandboxStart);
+      expect(seatbeltReturn).toBeGreaterThan(seatbeltBranch);
+      expect(containerCall).toBeGreaterThan(seatbeltReturn);
     });
   });
 

@@ -118,9 +118,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     rawTodos: Todo[],
   ): void {
     const scopedAgentId = agentId ?? DEFAULT_AGENT_ID;
-    const inProgressTodo = todos.find(
-      (todo) => todo.status === 'in_progress',
-    );
+    const inProgressTodo = todos.find((todo) => todo.status === 'in_progress');
     const contextTracker = TodoContextTracker.forAgent(
       sessionId,
       scopedAgentId,

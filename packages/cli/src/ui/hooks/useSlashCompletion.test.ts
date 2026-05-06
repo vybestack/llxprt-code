@@ -929,28 +929,28 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitFor(() => {
+          expect(mockCompleter).toHaveBeenCalledWith(
+            mockCommandContext,
+            'my-ch',
+            expect.objectContaining({ partialToken: 'my-ch' }),
+          );
         });
 
-        expect(mockCompleter).toHaveBeenCalledWith(
-          mockCommandContext,
-          'my-ch',
-          expect.objectContaining({ partialToken: 'my-ch' }),
-        );
-
-        expect(result.current.suggestions).toStrictEqual([
-          {
-            label: 'my-chat-tag-1',
-            value: 'my-chat-tag-1',
-            description: undefined,
-          },
-          {
-            label: 'my-chat-tag-2',
-            value: 'my-chat-tag-2',
-            description: undefined,
-          },
-        ]);
+        await waitFor(() => {
+          expect(result.current.suggestions).toStrictEqual([
+            {
+              label: 'my-chat-tag-1',
+              value: 'my-chat-tag-1',
+              description: undefined,
+            },
+            {
+              label: 'my-chat-tag-2',
+              value: 'my-chat-tag-2',
+              description: undefined,
+            },
+          ]);
+        });
       });
 
       it('should call schema completer with an empty string when args start with a space', async () => {
@@ -993,17 +993,17 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitFor(() => {
+          expect(mockCompleter).toHaveBeenCalledWith(
+            mockCommandContext,
+            '',
+            expect.objectContaining({ partialToken: '' }),
+          );
         });
-
-        expect(mockCompleter).toHaveBeenCalledWith(
-          mockCommandContext,
-          '',
-          expect.objectContaining({ partialToken: '' }),
-        );
-        expect(result.current.suggestions).toHaveLength(3);
-        expect(result.current.showSuggestions).toBe(true);
+        await waitFor(() => {
+          expect(result.current.suggestions).toHaveLength(3);
+          expect(result.current.showSuggestions).toBe(true);
+        });
       });
 
       it('should handle schema completer that returns an empty array', async () => {
@@ -1042,12 +1042,10 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitFor(() => {
+          expect(result.current.suggestions).toHaveLength(0);
+          expect(result.current.showSuggestions).toBe(false);
         });
-
-        expect(result.current.suggestions).toHaveLength(0);
-        expect(result.current.showSuggestions).toBe(false);
       });
     });
   });
@@ -1106,14 +1104,12 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitFor(() => {
+          // Should filter out .log files but include matching .tsx files
+          expect(result.current.suggestions).toStrictEqual([
+            { label: 'component.tsx', value: 'component.tsx' },
+          ]);
         });
-
-        // Should filter out .log files but include matching .tsx files
-        expect(result.current.suggestions).toStrictEqual([
-          { label: 'component.tsx', value: 'component.tsx' },
-        ]);
       });
 
       it('should include dotfiles in glob search when input starts with a dot', async () => {
@@ -1134,14 +1130,12 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitFor(() => {
+          expect(result.current.suggestions).toStrictEqual([
+            { label: '.env', value: '.env' },
+            { label: '.gitignore', value: '.gitignore' },
+          ]);
         });
-
-        expect(result.current.suggestions).toStrictEqual([
-          { label: '.env', value: '.env' },
-          { label: '.gitignore', value: '.gitignore' },
-        ]);
       });
     });
 
@@ -1188,23 +1182,20 @@ describe('useSlashCompletion', () => {
             testRootDir,
             [],
             mockCommandContext,
-            undefined,
           ),
         );
 
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitFor(() => {
+          // Without config, should include all files
+          expect(result.current.suggestions).toHaveLength(3);
+          expect(result.current.suggestions).toStrictEqual(
+            expect.arrayContaining([
+              { label: 'src/', value: 'src/' },
+              { label: 'node_modules/', value: 'node_modules/' },
+              { label: 'README.md', value: 'README.md' },
+            ]),
+          );
         });
-
-        // Without config, should include all files
-        expect(result.current.suggestions).toHaveLength(3);
-        expect(result.current.suggestions).toStrictEqual(
-          expect.arrayContaining([
-            { label: 'src/', value: 'src/' },
-            { label: 'node_modules/', value: 'node_modules/' },
-            { label: 'README.md', value: 'README.md' },
-          ]),
-        );
       });
 
       it('should handle git discovery service initialization failure gracefully', async () => {
@@ -1229,15 +1220,13 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitFor(() => {
+          // Since we use centralized service, initialization errors are handled at config level
+          // This test should verify graceful fallback behavior
+          expect(result.current.suggestions.length).toBeGreaterThanOrEqual(0);
+          // Should still show completions even if git discovery fails
+          expect(result.current.suggestions.length).toBeGreaterThan(0);
         });
-
-        // Since we use centralized service, initialization errors are handled at config level
-        // This test should verify graceful fallback behavior
-        expect(result.current.suggestions.length).toBeGreaterThanOrEqual(0);
-        // Should still show completions even if git discovery fails
-        expect(result.current.suggestions.length).toBeGreaterThan(0);
 
         consoleSpy.mockRestore();
       });
@@ -1263,14 +1252,12 @@ describe('useSlashCompletion', () => {
         );
 
         // Wait for async operations to complete
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150)); // Account for debounce
+        await waitFor(() => {
+          expect(result.current.suggestions).toStrictEqual(
+            expect.arrayContaining([{ label: 'data', value: 'data' }]),
+          );
+          expect(result.current.showSuggestions).toBe(true);
         });
-
-        expect(result.current.suggestions).toStrictEqual(
-          expect.arrayContaining([{ label: 'data', value: 'data' }]),
-        );
-        expect(result.current.showSuggestions).toBe(true);
       });
 
       it('should filter git-ignored directories from @ completions', async () => {
@@ -1299,15 +1286,13 @@ describe('useSlashCompletion', () => {
         );
 
         // Wait for async operations to complete
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150)); // Account for debounce
+        await waitFor(() => {
+          expect(result.current.suggestions).toStrictEqual([
+            { label: 'README.md', value: 'README.md' },
+            { label: 'src/', value: 'src/' },
+          ]);
+          expect(result.current.showSuggestions).toBe(true);
         });
-
-        expect(result.current.suggestions).toStrictEqual([
-          { label: 'README.md', value: 'README.md' },
-          { label: 'src/', value: 'src/' },
-        ]);
-        expect(result.current.showSuggestions).toBe(true);
       });
 
       it('should handle recursive search with git-aware filtering', async () => {
@@ -1333,14 +1318,14 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitFor(() => {
+          // Should not include anything from node_modules or dist
+          const suggestionLabels = result.current.suggestions.map(
+            (s) => s.label,
+          );
+          expect(suggestionLabels).not.toContain('temp/');
+          expect(suggestionLabels).not.toContain('node_modules/');
         });
-
-        // Should not include anything from node_modules or dist
-        const suggestionLabels = result.current.suggestions.map((s) => s.label);
-        expect(suggestionLabels).not.toContain('temp/');
-        expect(suggestionLabels).not.toContain('node_modules/');
       });
     });
   });
@@ -1655,14 +1640,13 @@ describe('useSlashCompletion', () => {
         ),
       );
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+      let suggestion: { label: string; value: string } | undefined;
+      await waitFor(() => {
+        suggestion = result.current.suggestions.find(
+          (s) => s.label === 'my file.txt',
+        );
+        expect(suggestion).toBeDefined();
       });
-
-      const suggestion = result.current.suggestions.find(
-        (s) => s.label === 'my file.txt',
-      );
-      expect(suggestion).toBeDefined();
       expect(suggestion!.value).toBe('my\\ file.txt');
     });
 
@@ -1682,14 +1666,13 @@ describe('useSlashCompletion', () => {
         ),
       );
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+      let suggestion: { label: string; value: string } | undefined;
+      await waitFor(() => {
+        suggestion = result.current.suggestions.find(
+          (s) => s.label === 'document(final).docx',
+        );
+        expect(suggestion).toBeDefined();
       });
-
-      const suggestion = result.current.suggestions.find(
-        (s) => s.label === 'document(final).docx',
-      );
-      expect(suggestion).toBeDefined();
       expect(suggestion!.value).toBe('document\\(final\\).docx');
     });
 
@@ -1709,14 +1692,13 @@ describe('useSlashCompletion', () => {
         ),
       );
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+      let suggestion: { label: string; value: string } | undefined;
+      await waitFor(() => {
+        suggestion = result.current.suggestions.find(
+          (s) => s.label === 'backup[2024-01-01].zip',
+        );
+        expect(suggestion).toBeDefined();
       });
-
-      const suggestion = result.current.suggestions.find(
-        (s) => s.label === 'backup[2024-01-01].zip',
-      );
-      expect(suggestion).toBeDefined();
       expect(suggestion!.value).toBe('backup\\[2024-01-01\\].zip');
     });
 
@@ -1770,14 +1752,13 @@ describe('useSlashCompletion', () => {
         ),
       );
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+      let suggestion: { label: string; value: string } | undefined;
+      await waitFor(() => {
+        suggestion = result.current.suggestions.find((s) =>
+          s.label.includes('my project'),
+        );
+        expect(suggestion).toBeDefined();
       });
-
-      const suggestion = result.current.suggestions.find((s) =>
-        s.label.includes('my project'),
-      );
-      expect(suggestion).toBeDefined();
       // Should escape spaces and parentheses but preserve forward slashes
       expect(suggestion!.value).toMatch(/my\\ project\\ \\\(2024\\\)/);
       expect(suggestion!.value).toContain('/'); // Should contain forward slash for path separator
@@ -1805,14 +1786,13 @@ describe('useSlashCompletion', () => {
         ),
       );
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+      let suggestion: { label: string; value: string } | undefined;
+      await waitFor(() => {
+        suggestion = result.current.suggestions.find((s) =>
+          s.label.includes('special folder'),
+        );
+        expect(suggestion).toBeDefined();
       });
-
-      const suggestion = result.current.suggestions.find((s) =>
-        s.label.includes('special folder'),
-      );
-      expect(suggestion).toBeDefined();
       // Should use forward slashes for path separators and escape spaces
       expect(suggestion!.value).toContain('special\\ folder/');
       expect(suggestion!.value).not.toContain('\\\\'); // Should not contain double backslashes for path separators
@@ -1835,29 +1815,27 @@ describe('useSlashCompletion', () => {
         ),
       );
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+      await waitFor(() => {
+        const suggestions = result.current.suggestions;
+
+        const docSuggestion = suggestions.find(
+          (s) => s.label === 'my documents (personal)/',
+        );
+        expect(docSuggestion).toBeDefined();
+        expect(docSuggestion!.value).toBe('my\\ documents\\ \\(personal\\)/');
+
+        const configSuggestion = suggestions.find(
+          (s) => s.label === 'config [production]/',
+        );
+        expect(configSuggestion).toBeDefined();
+        expect(configSuggestion!.value).toBe('config\\ \\[production\\]/');
+
+        const dataSuggestion = suggestions.find(
+          (s) => s.label === 'data & logs/',
+        );
+        expect(dataSuggestion).toBeDefined();
+        expect(dataSuggestion!.value).toBe('data\\ \\&\\ logs/');
       });
-
-      const suggestions = result.current.suggestions;
-
-      const docSuggestion = suggestions.find(
-        (s) => s.label === 'my documents (personal)/',
-      );
-      expect(docSuggestion).toBeDefined();
-      expect(docSuggestion!.value).toBe('my\\ documents\\ \\(personal\\)/');
-
-      const configSuggestion = suggestions.find(
-        (s) => s.label === 'config [production]/',
-      );
-      expect(configSuggestion).toBeDefined();
-      expect(configSuggestion!.value).toBe('config\\ \\[production\\]/');
-
-      const dataSuggestion = suggestions.find(
-        (s) => s.label === 'data & logs/',
-      );
-      expect(dataSuggestion).toBeDefined();
-      expect(dataSuggestion!.value).toBe('data\\ \\&\\ logs/');
     });
 
     it('should handle files with various shell metacharacters', async () => {
@@ -1876,23 +1854,21 @@ describe('useSlashCompletion', () => {
         ),
       );
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+      await waitFor(() => {
+        const suggestions = result.current.suggestions;
+
+        const dollarSuggestion = suggestions.find(
+          (s) => s.label === 'file$var.txt',
+        );
+        expect(dollarSuggestion).toBeDefined();
+        expect(dollarSuggestion!.value).toBe('file\\$var.txt');
+
+        const importantSuggestion = suggestions.find(
+          (s) => s.label === 'important!.md',
+        );
+        expect(importantSuggestion).toBeDefined();
+        expect(importantSuggestion!.value).toBe('important\\!.md');
       });
-
-      const suggestions = result.current.suggestions;
-
-      const dollarSuggestion = suggestions.find(
-        (s) => s.label === 'file$var.txt',
-      );
-      expect(dollarSuggestion).toBeDefined();
-      expect(dollarSuggestion!.value).toBe('file\\$var.txt');
-
-      const importantSuggestion = suggestions.find(
-        (s) => s.label === 'important!.md',
-      );
-      expect(importantSuggestion).toBeDefined();
-      expect(importantSuggestion!.value).toBe('important\\!.md');
     });
   });
 });
