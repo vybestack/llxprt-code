@@ -178,20 +178,22 @@ export function AuthDialog({
             const newState =
               await oauthManager.toggleOAuthEnabled(providerName);
 
-            const newEnabledProviders = new Set(enabledProviders);
-            if (newState) {
-              newEnabledProviders.add(authMethod);
-            } else {
-              newEnabledProviders.delete(authMethod);
-            }
-            setEnabledProviders(newEnabledProviders);
+            setEnabledProviders((prev) => {
+              const next = new Set(prev);
+              if (newState) {
+                next.add(authMethod);
+              } else {
+                next.delete(authMethod);
+              }
+              return next;
+            });
           } catch (error) {
             setErrorMessage(`Failed to toggle ${providerName}: ${error}`);
           }
         })();
       }
     },
-    [onSelect, enabledProviders, runtime],
+    [onSelect, runtime],
   );
 
   useKeypress(
