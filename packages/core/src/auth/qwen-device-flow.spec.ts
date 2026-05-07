@@ -432,8 +432,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
     it('should use correct Qwen token endpoint', async () => {
       const realConfig: DeviceFlowConfig = {
         clientId: 'f0304373b74a44d2b584a3fb70ca9e56',
-        authorizationEndpoint:
-          'https://chat.qwen.ai/api/v1/oauth2/device/code',
+        authorizationEndpoint: 'https://chat.qwen.ai/api/v1/oauth2/device/code',
         tokenEndpoint: 'https://chat.qwen.ai/api/v1/oauth2/token',
         scopes: ['read'],
       };
@@ -452,9 +451,9 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
           },
         ),
       );
-      await expect(
-        realDeviceFlow.pollForToken('test_device'),
-      ).rejects.toThrow('HTTP 400: Bad Request');
+      await expect(realDeviceFlow.pollForToken('test_device')).rejects.toThrow(
+        'HTTP 400: Bad Request',
+      );
       fetchMock.mockRestore();
 
       // Verify the configuration contains the correct endpoint
