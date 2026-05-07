@@ -174,8 +174,15 @@ export class LoopDetectionService {
       /(^|\n)\s*[*-+]\s/.test(content) || /(^|\n)\s*\d+\.\s/.test(content);
     const hasHeading = /(^|\n)#+\s/.test(content);
     const hasBlockquote = /(^|\n)>\s/.test(content);
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    const isDivider = /^[+-_=*\u2500-\u257F]+$/.test(content);
+    const isDivider =
+      content.length > 0 &&
+      [...content].every((char) =>
+        [
+          char === '*',
+          char >= '+' && char <= '_',
+          char >= '─' && char <= '╿',
+        ].some(Boolean),
+      );
 
     if (
       // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.

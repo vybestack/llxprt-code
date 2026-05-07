@@ -8,6 +8,8 @@
 
 // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
 // createHash import removed - no longer needed without client caching
+import { randomUUID } from 'node:crypto';
+
 import { DebugLogger } from '../../debug/index.js';
 import { type IModel } from '../IModel.js';
 import {
@@ -952,7 +954,6 @@ export class GeminiProvider extends BaseProvider {
         () =>
           `invokeServerTool: globalConfig is null, creating minimal config for OAuth`,
       );
-      const { randomUUID } = await import('crypto');
       return new Config({
         sessionId: randomUUID(),
         targetDir: process.cwd(),
@@ -1799,7 +1800,7 @@ export class GeminiProvider extends BaseProvider {
         config: { ...requestConfig },
       },
       runtimeId,
-      sessionId: `oauth-session:${runtimeId}:${Math.random().toString(36).slice(2)}`,
+      sessionId: `oauth-session:${runtimeId}:${randomUUID()}`,
     };
   }
 
