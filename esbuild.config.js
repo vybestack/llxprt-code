@@ -121,6 +121,8 @@ const baseConfig = {
     '@ast-grep/lang-php',
     '@ast-grep/lang-scala',
     '@ast-grep/lang-swift',
+    // Optional prompt watcher dependency; runtime falls back to fs.watch when unavailable.
+    'chokidar',
   ],
   loader: { '.node': 'file' },
   write: true,
