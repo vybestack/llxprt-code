@@ -507,6 +507,19 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
           setPendingHistoryItem(null);
         }
       };
+      const flushPendingGeminiContentForContextClear = () => {
+        if (
+          pendingHistoryItemRef.current?.type === 'gemini' ||
+          pendingHistoryItemRef.current?.type === 'gemini_content'
+        ) {
+          flushPendingHistoryItem(userMessageTimestamp);
+          setPendingHistoryItem(null);
+        }
+
+        geminiMessageBuffer = '';
+        thinkingBlocksRef.current = [];
+        setThought(null);
+      };
       let iterator: AsyncIterator<GeminiEvent> | undefined;
 
       // Resolve the effective idle timeout from config
@@ -639,6 +652,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
                 userMessageTimestamp,
               );
               if (event.contextCleared) {
+                flushPendingGeminiContentForContextClear();
                 addItem(
                   {
                     type: MessageType.INFO,
@@ -657,6 +671,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
                 userMessageTimestamp,
               );
               if (event.contextCleared) {
+                flushPendingGeminiContentForContextClear();
                 addItem(
                   {
                     type: MessageType.INFO,
@@ -721,6 +736,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       setLastGeminiActivityTime,
       setThought,
       thinkingBlocksRef,
+      flushPendingHistoryItem,
     ],
   );
 

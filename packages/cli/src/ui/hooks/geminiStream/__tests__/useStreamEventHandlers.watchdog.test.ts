@@ -229,6 +229,210 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
       expect.any(Number),
     );
   });
+
+  it('flushes pending gemini content when AgentExecutionStopped clears context mid-stream', async () => {
+    const pendingHistoryItemRef = {
+      current: null as HistoryItemWithoutId | null,
+    };
+    const flushedItems: HistoryItemWithoutId[] = [];
+    const flushPendingHistoryItem = vi.fn(() => {
+      if (pendingHistoryItemRef.current) {
+        flushedItems.push(pendingHistoryItemRef.current);
+      }
+    });
+    setPendingHistoryItem = vi.fn((value) => {
+      pendingHistoryItemRef.current =
+        typeof value === 'function'
+          ? value(pendingHistoryItemRef.current)
+          : value;
+    });
+    const thinkingBlocksRef = { current: [] as ThinkingBlock[] };
+    const turnCancelledRef = { current: false };
+    const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
+    const loopDetectedRef = { current: false };
+    const lastProfileNameRef = { current: undefined as string | undefined };
+
+    const { result } = renderHook(() =>
+      useStreamEventHandlers({
+        config: mockConfig,
+        settings: mockSettings,
+        addItem: mockAddItem,
+        onDebugMessage: vi.fn(),
+        onCancelSubmit: vi.fn(),
+        sanitizeContent: (text: string) => ({ text, blocked: false }),
+        flushPendingHistoryItem,
+        pendingHistoryItemRef,
+        thinkingBlocksRef,
+        turnCancelledRef,
+        queuedSubmissionsRef,
+        setPendingHistoryItem,
+        setIsResponding: vi.fn(),
+        setThought,
+        setLastGeminiActivityTime,
+        scheduleToolCalls: mockScheduleToolCalls,
+        abortActiveStream,
+        handleShellCommand: vi.fn(() => false),
+        handleSlashCommand: vi.fn().mockResolvedValue(false),
+        logger: null,
+        shellModeActive: false,
+        loopDetectedRef,
+        lastProfileNameRef,
+      }),
+    );
+
+    const signalController = new AbortController();
+    const stream =
+      (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'Before clear',
+        };
+        yield {
+          type: ServerGeminiEventType.AgentExecutionStopped,
+          reason: 'Hook stopped execution',
+          contextCleared: true,
+        };
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'After clear',
+        };
+      })();
+
+    await result.current.processGeminiStreamEvents(
+      stream,
+      789,
+      signalController.signal,
+    );
+
+    expect(flushPendingHistoryItem).toHaveBeenCalledTimes(1);
+    expect(flushedItems[0]).toMatchObject({
+      type: 'gemini',
+      text: 'Before clear',
+    });
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: 'Execution stopped by hook: Hook stopped execution',
+      }),
+      789,
+    );
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: 'Conversation context has been cleared.',
+      }),
+      789,
+    );
+    expect(pendingHistoryItemRef.current).toMatchObject({
+      type: 'gemini',
+      text: 'After clear',
+    });
+    expect(pendingHistoryItemRef.current).not.toMatchObject({
+      text: 'Before clearAfter clear',
+    });
+  });
+
+  it('flushes pending gemini content when AgentExecutionBlocked clears context mid-stream', async () => {
+    const pendingHistoryItemRef = {
+      current: null as HistoryItemWithoutId | null,
+    };
+    const flushedItems: HistoryItemWithoutId[] = [];
+    const flushPendingHistoryItem = vi.fn(() => {
+      if (pendingHistoryItemRef.current) {
+        flushedItems.push(pendingHistoryItemRef.current);
+      }
+    });
+    setPendingHistoryItem = vi.fn((value) => {
+      pendingHistoryItemRef.current =
+        typeof value === 'function'
+          ? value(pendingHistoryItemRef.current)
+          : value;
+    });
+    const thinkingBlocksRef = { current: [] as ThinkingBlock[] };
+    const turnCancelledRef = { current: false };
+    const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
+    const loopDetectedRef = { current: false };
+    const lastProfileNameRef = { current: undefined as string | undefined };
+
+    const { result } = renderHook(() =>
+      useStreamEventHandlers({
+        config: mockConfig,
+        settings: mockSettings,
+        addItem: mockAddItem,
+        onDebugMessage: vi.fn(),
+        onCancelSubmit: vi.fn(),
+        sanitizeContent: (text: string) => ({ text, blocked: false }),
+        flushPendingHistoryItem,
+        pendingHistoryItemRef,
+        thinkingBlocksRef,
+        turnCancelledRef,
+        queuedSubmissionsRef,
+        setPendingHistoryItem,
+        setIsResponding: vi.fn(),
+        setThought,
+        setLastGeminiActivityTime,
+        scheduleToolCalls: mockScheduleToolCalls,
+        abortActiveStream,
+        handleShellCommand: vi.fn(() => false),
+        handleSlashCommand: vi.fn().mockResolvedValue(false),
+        logger: null,
+        shellModeActive: false,
+        loopDetectedRef,
+        lastProfileNameRef,
+      }),
+    );
+
+    const signalController = new AbortController();
+    const stream =
+      (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'Before block clear',
+        };
+        yield {
+          type: ServerGeminiEventType.AgentExecutionBlocked,
+          reason: 'Hook blocked execution',
+          contextCleared: true,
+        };
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'After block clear',
+        };
+      })();
+
+    await result.current.processGeminiStreamEvents(
+      stream,
+      790,
+      signalController.signal,
+    );
+
+    expect(flushPendingHistoryItem).toHaveBeenCalledTimes(1);
+    expect(flushedItems[0]).toMatchObject({
+      type: 'gemini',
+      text: 'Before block clear',
+    });
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: 'Execution blocked by hook: Hook blocked execution',
+      }),
+      790,
+    );
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: 'Conversation context has been cleared.',
+      }),
+      790,
+    );
+    expect(pendingHistoryItemRef.current).toMatchObject({
+      type: 'gemini',
+      text: 'After block clear',
+    });
+    expect(pendingHistoryItemRef.current).not.toMatchObject({
+      text: 'Before block clearAfter block clear',
+    });
+  });
 });
 
 describe('useStreamEventHandlers stream idle timeout behavioral tests', () => {
