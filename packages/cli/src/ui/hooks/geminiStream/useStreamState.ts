@@ -68,7 +68,10 @@ export interface UseStreamStateReturn {
 
 function useEmojiFilter(config: Config) {
   return useMemo(() => {
-    const rawMode = config.getEphemeralSetting('emojifilter');
+    const { getEphemeralSetting } = config as {
+      getEphemeralSetting?: Config['getEphemeralSetting'];
+    };
+    const rawMode = getEphemeralSetting?.call(config, 'emojifilter');
     const mode: EmojiFilterMode =
       typeof rawMode === 'string' && rawMode.length > 0
         ? (rawMode as EmojiFilterMode)
