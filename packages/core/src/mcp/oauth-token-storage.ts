@@ -17,6 +17,28 @@ export type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
 const DEFAULT_SERVICE_NAME = 'llxprt-cli-mcp-oauth';
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 
+function isInvalidExpiry(expiresAt: unknown): boolean {
+  if (expiresAt === undefined) {
+    return true;
+  }
+  if (expiresAt === null) {
+    return true;
+  }
+  if (expiresAt === false) {
+    return true;
+  }
+  if (expiresAt === '') {
+    return true;
+  }
+  if (expiresAt === 0) {
+    return true;
+  }
+  if (typeof expiresAt === 'number' && Number.isNaN(expiresAt)) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Token storage wrapper that bridges the legacy static API with the new
  * shared TokenStorage interface used across the MCP stack. By default it
@@ -106,10 +128,11 @@ export class MCPOAuthTokenStorage implements TokenStorage {
    * Determine whether a token is expired (with a buffer to avoid clock skew).
    */
   static isTokenExpired(token: MCPOAuthToken): boolean {
-    if (!token.expiresAt) {
+    const expiresAt = token.expiresAt as unknown;
+    if (isInvalidExpiry(expiresAt)) {
       return false;
     }
-    return Date.now() + EXPIRY_BUFFER_MS >= token.expiresAt;
+    return Date.now() + EXPIRY_BUFFER_MS >= (expiresAt as number);
   }
 
   /**
@@ -125,6 +148,7 @@ export class MCPOAuthTokenStorage implements TokenStorage {
     MCPOAuthTokenStorage.validateToken(credentials.token);
     await this.storage.setCredentials({
       ...credentials,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Malformed/partial OAuth credential boundary normalization preserves missing updatedAt fallback.
       updatedAt: credentials.updatedAt ?? Date.now(),
     });
   }
@@ -193,7 +217,7 @@ export class MCPOAuthTokenStorage implements TokenStorage {
   }
 
   private static validateToken(token: OAuthToken): void {
-    if (!token || typeof token !== 'object') {
+    if (typeof token !== 'object') {
       throw new Error('Token must be a valid object');
     }
     if (!token.accessToken || typeof token.accessToken !== 'string') {

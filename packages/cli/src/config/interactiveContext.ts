@@ -72,7 +72,7 @@ function resolveTrustAndIdeContext(
   const debugMode = isDebugMode(argv);
 
   const memoryImportFormat =
-    profileMergedSettings.ui?.memoryImportFormat || 'tree';
+    profileMergedSettings.ui?.memoryImportFormat ?? 'tree';
 
   let ideMode: boolean;
   if (argv.ideMode === 'enable') {
@@ -123,8 +123,9 @@ function resolveFiltering(
   };
 
   // Set the context filename BEFORE loading memory
-  if (profileMergedSettings.ui?.contextFileName) {
-    setServerGeminiMdFilename(profileMergedSettings.ui.contextFileName);
+  const contextFileName = profileMergedSettings.ui?.contextFileName;
+  if (contextFileName !== undefined && contextFileName !== '') {
+    setServerGeminiMdFilename(contextFileName);
   } else {
     setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
   }
@@ -142,8 +143,8 @@ function resolveIncludeDirectories(
   'includeDirectories' | 'resolvedLoadMemoryFromIncludeDirectories'
 > {
   const includeDirectoriesFromSettings =
-    profileMergedSettings.includeDirectories || [];
-  const includeDirectoriesFromCli = argv.includeDirectories || [];
+    profileMergedSettings.includeDirectories ?? [];
+  const includeDirectoriesFromCli = argv.includeDirectories ?? [];
   const includeDirectories = includeDirectoriesFromSettings
     .map(resolvePath)
     .concat(includeDirectoriesFromCli.map(resolvePath));
@@ -189,11 +190,11 @@ function resolveExtensions(
 
 function resolveInteractiveMode(argv: CliArgs): boolean {
   const hasPromptWords = argv.promptWords?.some((word) => word.trim() !== '');
-  return (
-    !!argv.promptInteractive ||
-    !!argv.experimentalAcp ||
-    (process.stdin.isTTY && !hasPromptWords && !argv.prompt)
-  );
+  const hasExplicitPromptArg =
+    argv.promptInteractive !== undefined || argv.experimentalAcp === true;
+  const isTtyWithoutPrompt =
+    process.stdin.isTTY && hasPromptWords !== true && argv.prompt === undefined;
+  return hasExplicitPromptArg || isTtyWithoutPrompt;
 }
 
 // ─── Main orchestrator ────────────────────────────────────────────────────────

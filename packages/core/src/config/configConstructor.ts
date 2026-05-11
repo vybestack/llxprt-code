@@ -6,6 +6,8 @@
  * and logs the configuration.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import * as path from 'node:path';
 import process from 'node:process';
 
@@ -304,7 +306,7 @@ function applyRuntimeFlags(
   config.checkpointing = params.checkpointing ?? false;
   config.dumpOnError = params.dumpOnError ?? false;
   config.proxy = params.proxy;
-  config.cwd = params.cwd ?? process.cwd();
+  config.cwd = params.cwd;
   config.fileDiscoveryService = params.fileDiscoveryService ?? null;
   config.bugCommand = params.bugCommand;
   config.model = params.model;
@@ -390,25 +392,25 @@ function applyPolicyAndLifecycle(
   };
   config.useWriteTodos = params.useWriteTodos ?? true;
 
-  if (params.contextFileName) {
+  if (params.contextFileName !== undefined && params.contextFileName !== '') {
     setLlxprtMdFilename(params.contextFileName);
   }
 
   // Telemetry initialization (intentional cast — avoids circular dep with Config)
   const isTestEnvironment =
-    process.env.NODE_ENV === 'test' || process.env.VITEST;
-  if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
+    process.env.NODE_ENV === 'test' || process.env.VITEST !== undefined;
+  if (process.env.VERBOSE === 'true' && isTestEnvironment === false) {
     debugLogger.log(
       `[CONFIG] Telemetry settings:`,
       JSON.stringify(config.telemetrySettings),
     );
   }
-  if (config.telemetrySettings.enabled) {
-    if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
+  if (config.telemetrySettings.enabled === true) {
+    if (process.env.VERBOSE === 'true' && isTestEnvironment === false) {
       debugLogger.log(`[CONFIG] Initializing telemetry`);
     }
     initializeTelemetry(config as unknown as Config);
-  } else if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
+  } else if (process.env.VERBOSE === 'true' && isTestEnvironment === false) {
     debugLogger.log(`[CONFIG] Telemetry disabled`);
   }
 

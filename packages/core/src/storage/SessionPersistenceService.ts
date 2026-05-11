@@ -65,7 +65,7 @@ export interface PersistedUIHistoryItem {
  */
 export interface PersistedSession {
   /** Schema version for future migrations */
-  version: 1;
+  version: number;
   /** Unique session identifier */
   sessionId: string;
   /** Hash of project root for validation */
@@ -264,6 +264,7 @@ export class SessionPersistenceService {
    */
   private createdAt: string | null = null;
   private getCreatedAt(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string | null type, falsy pattern guards both null and empty string
     if (!this.createdAt) {
       this.createdAt = new Date().toISOString();
     }

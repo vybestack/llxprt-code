@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'fs/promises';
+import type { Dirent } from 'fs';
 import * as path from 'path';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { FileFilteringOptions } from '../config/constants.js';
@@ -21,6 +22,93 @@ interface BfsFileSearchOptions {
   debug?: boolean;
   fileService?: FileDiscoveryService;
   fileFilteringOptions?: FileFilteringOptions;
+}
+
+async function readDirBatch(
+  batch: Array<{ dir: string; depth: number }>,
+  debug: boolean,
+): Promise<Array<{ currentDir: string; depth: number; entries: Dirent[] }>> {
+  const readPromises = batch.map(async ({ dir, depth }) => {
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      return { currentDir: dir, depth, entries };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      debugLogger.warn(
+        `[WARN] Skipping unreadable directory: ${dir} (${message})`,
+      );
+      if (debug) {
+        logger.debug(`Full error for ${dir}:`, error);
+      }
+      return { currentDir: dir, depth, entries: [] };
+    }
+  });
+  return Promise.all(readPromises);
+}
+
+function isIgnoredByFileService(
+  fullPath: string,
+  fileService: BfsFileSearchOptions['fileService'],
+  fileFilteringOptions: BfsFileSearchOptions['fileFilteringOptions'],
+): boolean {
+  return (
+    fileService?.shouldIgnoreFile(fullPath, {
+      respectGitIgnore: fileFilteringOptions?.respectGitIgnore,
+      respectLlxprtIgnore: fileFilteringOptions?.respectLlxprtIgnore,
+    }) === true
+  );
+}
+
+function enqueueDirectory(
+  entry: Dirent,
+  fullPath: string,
+  depth: number,
+  ignoreDirsSet: Set<string>,
+  maxDepth: number | undefined,
+  queue: string[],
+  depthQueue: number[],
+): void {
+  if (ignoreDirsSet.has(entry.name)) return;
+  const childDepth = depth + 1;
+  if (maxDepth === undefined || childDepth <= maxDepth) {
+    queue.push(fullPath);
+    depthQueue.push(childDepth);
+  }
+}
+
+function processBatchEntries(
+  results: Array<{ currentDir: string; depth: number; entries: Dirent[] }>,
+  fileName: string,
+  ignoreDirsSet: Set<string>,
+  maxDepth: number | undefined,
+  fileService: BfsFileSearchOptions['fileService'],
+  fileFilteringOptions: BfsFileSearchOptions['fileFilteringOptions'],
+  foundFiles: string[],
+  queue: string[],
+  depthQueue: number[],
+): void {
+  for (const { currentDir, depth, entries } of results) {
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+      if (isIgnoredByFileService(fullPath, fileService, fileFilteringOptions)) {
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        enqueueDirectory(
+          entry,
+          fullPath,
+          depth,
+          ignoreDirsSet,
+          maxDepth,
+          queue,
+          depthQueue,
+        );
+      } else if (entry.isFile() && entry.name === fileName) {
+        foundFiles.push(fullPath);
+      }
+    }
+  }
 }
 
 /**
@@ -47,16 +135,12 @@ export async function bfsFileSearch(
   const depthQueue: number[] = [0];
   const visited = new Set<string>();
   let scannedDirCount = 0;
-  let queueHead = 0; // Pointer-based queue head to avoid expensive splice operations
+  let queueHead = 0;
 
-  // Convert ignoreDirs array to Set for O(1) lookup performance
   const ignoreDirsSet = new Set(ignoreDirs);
-
-  // Process directories in parallel batches for maximum performance
-  const PARALLEL_BATCH_SIZE = 15; // Parallel processing batch size for optimal performance
+  const PARALLEL_BATCH_SIZE = 15;
 
   while (queueHead < queue.length && scannedDirCount < maxDirs) {
-    // Fill batch with unvisited directories up to the desired size
     const batchSize = Math.min(PARALLEL_BATCH_SIZE, maxDirs - scannedDirCount);
     const currentBatch: Array<{ dir: string; depth: number }> = [];
     while (currentBatch.length < batchSize && queueHead < queue.length) {
@@ -78,52 +162,19 @@ export async function bfsFileSearch(
       );
     }
 
-    // Read directories in parallel instead of one by one
-    const readPromises = currentBatch.map(async ({ dir, depth }) => {
-      try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        return { currentDir: dir, depth, entries };
-      } catch (error) {
-        // Warn user that a directory could not be read, as this affects search results.
-        const message = (error as Error)?.message ?? 'Unknown error';
-        debugLogger.warn(
-          `[WARN] Skipping unreadable directory: ${dir} (${message})`,
-        );
-        if (debug) {
-          logger.debug(`Full error for ${dir}:`, error);
-        }
-        return { currentDir: dir, depth, entries: [] };
-      }
-    });
+    const results = await readDirBatch(currentBatch, debug);
 
-    const results = await Promise.all(readPromises);
-
-    for (const { currentDir, depth, entries } of results) {
-      for (const entry of entries) {
-        const fullPath = path.join(currentDir, entry.name);
-        if (
-          fileService?.shouldIgnoreFile(fullPath, {
-            respectGitIgnore: options.fileFilteringOptions?.respectGitIgnore,
-            respectLlxprtIgnore:
-              options.fileFilteringOptions?.respectLlxprtIgnore,
-          })
-        ) {
-          continue;
-        }
-
-        if (entry.isDirectory()) {
-          if (!ignoreDirsSet.has(entry.name)) {
-            const childDepth = depth + 1;
-            if (maxDepth === undefined || childDepth <= maxDepth) {
-              queue.push(fullPath);
-              depthQueue.push(childDepth);
-            }
-          }
-        } else if (entry.isFile() && entry.name === fileName) {
-          foundFiles.push(fullPath);
-        }
-      }
-    }
+    processBatchEntries(
+      results,
+      fileName,
+      ignoreDirsSet,
+      maxDepth,
+      fileService,
+      options.fileFilteringOptions,
+      foundFiles,
+      queue,
+      depthQueue,
+    );
   }
 
   return foundFiles;

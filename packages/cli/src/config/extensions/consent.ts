@@ -299,21 +299,25 @@ async function extensionConsentString(
 ): Promise<string> {
   const sanitizedConfig = escapeAnsiCtrlCodes(extensionConfig);
   const output: string[] = [];
-  const mcpServerEntries = Object.entries(sanitizedConfig.mcpServers || {});
+  const mcpServerEntries = Object.entries(sanitizedConfig.mcpServers ?? {});
   output.push(`Installing extension "${sanitizedConfig.name}".`);
   output.push(INSTALL_WARNING_MESSAGE);
 
-  if (mcpServerEntries.length) {
+  if (mcpServerEntries.length > 0) {
     output.push('This extension will run the following MCP servers:');
     for (const [key, mcpServer] of mcpServerEntries) {
       const isLocal = !!mcpServer.command;
       const source =
         mcpServer.httpUrl ??
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string fallback for command display
         `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }
   }
-  if (sanitizedConfig.contextFileName) {
+  if (
+    sanitizedConfig.contextFileName !== undefined &&
+    sanitizedConfig.contextFileName !== ''
+  ) {
     output.push(
       `This extension will append info to your LLXPRT.md context using ${sanitizedConfig.contextFileName}`,
     );
@@ -323,7 +327,7 @@ async function extensionConsentString(
       `This extension will exclude the following core tools: ${sanitizedConfig.excludeTools}`,
     );
   }
-  if (hasHooks) {
+  if (hasHooks === true) {
     output.push(
       'This extension contains Hooks which can automatically execute commands.',
     );

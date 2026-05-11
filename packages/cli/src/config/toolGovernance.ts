@@ -41,14 +41,16 @@ export const normalizeToolNameForPolicy = (name: string): string =>
 
 export const buildNormalizedToolSet = (value: unknown): Set<string> => {
   const normalized = new Set<string>();
-  if (!value) {
+  if (value === null || value === undefined) {
     return normalized;
   }
 
   const entries =
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     Array.isArray(value) && value.length > 0
       ? value
-      : typeof value === 'string' && value.trim().length > 0
+      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        typeof value === 'string' && value.trim().length > 0
         ? [value]
         : [];
 
@@ -117,11 +119,11 @@ export function mergeExcludeTools(
   extraExcludes?: string[] | undefined,
 ): string[] {
   const allExcludeTools = new Set([
-    ...(settings.excludeTools || []),
-    ...(extraExcludes || []),
+    ...(settings.excludeTools ?? []),
+    ...(extraExcludes ?? []),
   ]);
   for (const extension of extensions) {
-    for (const tool of extension.excludeTools || []) {
+    for (const tool of extension.excludeTools ?? []) {
       allExcludeTools.add(tool);
     }
   }
@@ -137,7 +139,7 @@ export function resolveNonInteractiveExcludes(
   allowedToolsSet: Set<string>,
 ): readonly string[] {
   const extraExcludes: string[] = [];
-  if (!context.interactive && !argv.experimentalAcp) {
+  if (context.interactive !== true && argv.experimentalAcp !== true) {
     const defaultExcludes = [ShellTool.Name, EditTool.Name, WriteFileTool.Name];
     const autoEditExcludes = [ShellTool.Name];
     const toolExclusionFilter = createToolExclusionFilter(

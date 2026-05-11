@@ -101,7 +101,7 @@ async function statusAction(
   }
 
   const lspClient = config.getLspServiceClient?.();
-  if (!lspClient?.isAlive()) {
+  if (lspClient == null || lspClient.isAlive() !== true) {
     const reason =
       lspClient?.getUnavailableReason?.() ?? 'service startup failed';
     return {
@@ -139,10 +139,12 @@ async function statusAction(
   const lines = sortedIds.map((serverId: string) => {
     const status = statusMap.get(serverId);
     const rawStatus =
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       status?.state ??
       status?.status ??
       (typeof status?.healthy === 'boolean'
-        ? status.healthy
+        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          status.healthy
           ? 'active'
           : 'broken'
         : 'unavailable');

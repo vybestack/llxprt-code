@@ -51,9 +51,13 @@ export async function initializeLsp(
     );
     await state.lspServiceClient.start();
 
-    if (!state.lspServiceClient.isAlive()) {
+    if (state.lspServiceClient.isAlive() !== true) {
       const reason = state.lspServiceClient.getUnavailableReason();
-      if (reason?.includes('not found')) {
+      if (
+        typeof reason === 'string' &&
+        reason !== '' &&
+        reason.includes('not found')
+      ) {
         debugLogger.error(
           'LSP: @vybestack/llxprt-code-lsp package not found. Install with: npm install -g @vybestack/llxprt-code-lsp',
         );
@@ -66,6 +70,7 @@ export async function initializeLsp(
     ) {
       const streams = state.lspServiceClient.getMcpTransportStreams();
       if (streams) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           await Promise.race([
             registerMcpNavigationTools(state, host, streams),
@@ -90,7 +95,8 @@ export async function initializeLsp(
         }
       }
     }
-  } catch (_error) {
+  } catch {
+    // LSP service initialization failed - continue without LSP
     state.lspServiceClient = undefined;
   }
 }
@@ -108,7 +114,214 @@ export function parseLspConfig(
   if (lsp === true) {
     return { servers: [] };
   }
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
   return lsp.servers === undefined ? { ...lsp, servers: [] } : lsp;
+}
+
+const LSP_NAVIGATION_REQUEST_TIMEOUT_MS = 250;
+
+function createStreamTransport(streams: {
+  readable: Readable;
+  writable: Writable;
+}): Transport {
+  let readBuffer = '';
+  let started = false;
+
+  const transport: Transport = {
+    onclose: undefined,
+    onerror: undefined,
+    onmessage: undefined,
+    start: async () => {
+      if (started) {
+        return;
+      }
+      started = true;
+
+      const onData = (chunk: Buffer | string) => {
+        const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        readBuffer += text;
+
+        // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop, @typescript-eslint/no-unnecessary-condition -- Existing loop intentionally parses streamed LSP output across external server boundaries.
+        while (true) {
+          const newlineIndex = readBuffer.indexOf('\n');
+          if (newlineIndex === -1) {
+            break;
+          }
+
+          const line = readBuffer.slice(0, newlineIndex).trim();
+          readBuffer = readBuffer.slice(newlineIndex + 1);
+          if (!line) {
+            continue;
+          }
+
+          try {
+            const message = JSON.parse(line) as JSONRPCMessage;
+            transport.onmessage?.(message);
+          } catch {
+            // Ignore malformed transport messages.
+          }
+        }
+      };
+
+      const onError = (error: Error) => {
+        transport.onerror?.(error);
+      };
+
+      const onClose = () => {
+        transport.onclose?.();
+      };
+
+      streams.readable.on('data', onData);
+      streams.readable.on('error', onError);
+      streams.readable.on('close', onClose);
+      streams.readable.on('end', onClose);
+
+      const closeTransport = async () => {
+        if (!started) {
+          return;
+        }
+        started = false;
+        streams.readable.off('data', onData);
+        streams.readable.off('error', onError);
+        streams.readable.off('close', onClose);
+        streams.readable.off('end', onClose);
+        streams.writable.end();
+      };
+
+      transport.close = closeTransport;
+    },
+    send: async (message: JSONRPCMessage) => {
+      streams.writable.write(`${JSON.stringify(message)}\n`);
+    },
+    close: async () => {
+      if (!started) {
+        return;
+      }
+      started = false;
+      streams.writable.end();
+    },
+  };
+
+  return transport;
+}
+
+async function connectLspMcpClient(
+  state: LspState,
+  transport: Transport,
+): Promise<Client | null> {
+  const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+  const client = new Client(
+    { name: 'lsp-navigation-client', version: '1.0.0' },
+    { capabilities: {} },
+  );
+  state.lspMcpClient = client;
+
+  await client.connect(transport, {
+    timeout: LSP_NAVIGATION_REQUEST_TIMEOUT_MS,
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
+  const capabilities = client.getServerCapabilities?.();
+  if (!capabilities?.tools) {
+    return null;
+  }
+  return client;
+}
+
+async function fetchLspToolDefs(
+  client: Client,
+): Promise<
+  Array<{ name: string; description?: string; inputSchema?: unknown }>
+> {
+  const toolsResponse = await client.listTools(undefined, {
+    timeout: LSP_NAVIGATION_REQUEST_TIMEOUT_MS,
+  });
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
+  return toolsResponse.tools ?? [];
+}
+
+class LspNavigationCallableTool implements CallableTool {
+  constructor(
+    private readonly mcpClient: Client,
+    private readonly toolDef: {
+      name: string;
+      description?: string;
+      inputSchema?: unknown;
+    },
+  ) {}
+
+  async tool(): Promise<Tool> {
+    return {
+      functionDeclarations: [
+        {
+          name: this.toolDef.name,
+          description: this.toolDef.description,
+          parametersJsonSchema: this.toolDef.inputSchema,
+        },
+      ],
+    };
+  }
+
+  async callTool(functionCalls: FunctionCall[]): Promise<Part[]> {
+    if (functionCalls.length !== 1) {
+      throw new Error(
+        'LspNavigationCallableTool only supports single function call',
+      );
+    }
+    const call = functionCalls[0];
+    const result = await this.mcpClient.callTool(
+      {
+        name: call.name ?? this.toolDef.name,
+        arguments: call.args ?? {},
+      },
+      undefined,
+      { timeout: LSP_NAVIGATION_REQUEST_TIMEOUT_MS },
+    );
+
+    return [
+      {
+        functionResponse: {
+          name: call.name,
+          response: result,
+        },
+      },
+    ];
+  }
+}
+
+async function registerDiscoveredTools(
+  client: Client,
+  toolDefs: Array<{
+    name: string;
+    description?: string;
+    inputSchema?: unknown;
+  }>,
+  registry: ToolRegistry,
+  host: LspHost,
+): Promise<void> {
+  const { DiscoveredMCPTool } = await import('../tools/mcp-tool.js');
+
+  for (const toolDef of toolDefs) {
+    const callableTool = new LspNavigationCallableTool(client, toolDef);
+
+    const discoveredTool = new DiscoveredMCPTool(
+      callableTool,
+      'lsp-navigation',
+      toolDef.name,
+      toolDef.description ?? '',
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
+      toolDef.inputSchema ?? { type: 'object', properties: {} },
+      true,
+      undefined,
+      // LspHost is a strict subset of Config; the runtime value is always a
+      // full Config instance, but this module only depends on the narrow interface.
+      host as unknown as Config,
+    );
+
+    registry.registerTool(discoveredTool);
+  }
+
+  registry.sortTools();
 }
 
 /**
@@ -147,186 +360,22 @@ async function registerMcpNavigationTools(
   };
 
   try {
-    const { Client } = await import(
-      '@modelcontextprotocol/sdk/client/index.js'
-    );
-    const { DiscoveredMCPTool } = await import('../tools/mcp-tool.js');
-
-    let readBuffer = '';
-    let started = false;
-    const transport: Transport = {
-      onclose: undefined,
-      onerror: undefined,
-      onmessage: undefined,
-      start: async () => {
-        if (started) {
-          return;
-        }
-        started = true;
-
-        const onData = (chunk: Buffer | string) => {
-          const text =
-            typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-          readBuffer += text;
-
-          while (true) {
-            const newlineIndex = readBuffer.indexOf('\n');
-            if (newlineIndex === -1) {
-              break;
-            }
-
-            const line = readBuffer.slice(0, newlineIndex).trim();
-            readBuffer = readBuffer.slice(newlineIndex + 1);
-            if (!line) {
-              continue;
-            }
-
-            try {
-              const message = JSON.parse(line) as JSONRPCMessage;
-              transport.onmessage?.(message);
-            } catch {
-              // Ignore malformed transport messages.
-            }
-          }
-        };
-
-        const onError = (error: Error) => {
-          transport.onerror?.(error);
-        };
-
-        const onClose = () => {
-          transport.onclose?.();
-        };
-
-        streams.readable.on('data', onData);
-        streams.readable.on('error', onError);
-        streams.readable.on('close', onClose);
-        streams.readable.on('end', onClose);
-
-        const closeTransport = async () => {
-          if (!started) {
-            return;
-          }
-          started = false;
-          streams.readable.off('data', onData);
-          streams.readable.off('error', onError);
-          streams.readable.off('close', onClose);
-          streams.readable.off('end', onClose);
-          streams.writable.end();
-        };
-
-        transport.close = closeTransport;
-      },
-      send: async (message: JSONRPCMessage) => {
-        streams.writable.write(`${JSON.stringify(message)}\n`);
-      },
-      close: async () => {
-        if (!started) {
-          return;
-        }
-        started = false;
-        streams.writable.end();
-      },
-    };
-
+    const transport = createStreamTransport(streams);
     state.lspMcpTransport = transport;
 
-    const client = new Client(
-      {
-        name: 'lsp-navigation-client',
-        version: '1.0.0',
-      },
-      { capabilities: {} },
-    );
-    state.lspMcpClient = client;
-
-    const requestTimeoutMs = 250;
-    await client.connect(transport, { timeout: requestTimeoutMs });
-
-    const capabilities = client.getServerCapabilities?.();
-    if (!capabilities?.tools) {
+    const client = await connectLspMcpClient(state, transport);
+    if (!client) {
       await cleanup();
       return;
     }
 
-    const toolsResponse = await client.listTools(undefined, {
-      timeout: requestTimeoutMs,
-    });
-    const toolDefs = toolsResponse.tools ?? [];
+    const toolDefs = await fetchLspToolDefs(client);
     if (toolDefs.length === 0) {
       await cleanup();
       return;
     }
 
-    class LspNavigationCallableTool implements CallableTool {
-      constructor(
-        private readonly mcpClient: Client,
-        private readonly toolDef: {
-          name: string;
-          description?: string;
-          inputSchema?: unknown;
-        },
-      ) {}
-
-      async tool(): Promise<Tool> {
-        return {
-          functionDeclarations: [
-            {
-              name: this.toolDef.name,
-              description: this.toolDef.description,
-              parametersJsonSchema: this.toolDef.inputSchema,
-            },
-          ],
-        };
-      }
-
-      async callTool(functionCalls: FunctionCall[]): Promise<Part[]> {
-        if (functionCalls.length !== 1) {
-          throw new Error(
-            'LspNavigationCallableTool only supports single function call',
-          );
-        }
-        const call = functionCalls[0];
-        const result = await this.mcpClient.callTool(
-          {
-            name: call.name ?? this.toolDef.name,
-            arguments: call.args ?? {},
-          },
-          undefined,
-          { timeout: requestTimeoutMs },
-        );
-
-        return [
-          {
-            functionResponse: {
-              name: call.name,
-              response: result,
-            },
-          },
-        ];
-      }
-    }
-
-    for (const toolDef of toolDefs) {
-      const callableTool = new LspNavigationCallableTool(client, toolDef);
-
-      const discoveredTool = new DiscoveredMCPTool(
-        callableTool,
-        'lsp-navigation',
-        toolDef.name,
-        toolDef.description ?? '',
-        toolDef.inputSchema ?? { type: 'object', properties: {} },
-        true,
-        undefined,
-        // LspHost is a strict subset of Config; the runtime value is always a
-        // full Config instance, but this module only depends on the narrow interface.
-        host as unknown as Config,
-      );
-
-      registry.registerTool(discoveredTool);
-    }
-
-    registry.sortTools();
+    await registerDiscoveredTools(client, toolDefs, registry, host);
   } catch {
     await cleanup();
   }

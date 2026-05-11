@@ -49,7 +49,8 @@ async function getProcessTableWindows(): Promise<Map<number, ProcessInfo>> {
     let processes: RawProcessInfo | RawProcessInfo[];
     try {
       processes = JSON.parse(stdout);
-    } catch (_e) {
+    } catch {
+      // JSON parse failed; return empty map.
       return processMap;
     }
 
@@ -58,17 +59,24 @@ async function getProcessTableWindows(): Promise<Map<number, ProcessInfo>> {
     }
 
     for (const p of processes) {
-      if (p && typeof p.ProcessId === 'number') {
+      if (typeof p.ProcessId === 'number') {
         processMap.set(p.ProcessId, {
           pid: p.ProcessId,
-          parentPid: p.ParentProcessId || 0,
+          parentPid:
+            p.ParentProcessId !== undefined &&
+            p.ParentProcessId !== 0 &&
+            !Number.isNaN(p.ParentProcessId)
+              ? p.ParentProcessId
+              : 0,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional property
           name: p.Name || '',
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional property
           command: p.CommandLine || '',
         });
       }
     }
-  } catch (_e) {
-    // Fallback or error handling if PowerShell fails
+  } catch {
+    // PowerShell failed; return empty map.
   }
   return processMap;
 }
@@ -102,7 +110,8 @@ async function getProcessInfo(pid: number): Promise<{
       name: processName,
       command: fullCommand,
     };
-  } catch (_e) {
+  } catch {
+    // Process info unavailable; return defaults.
     return { parentPid: 0, name: '', command: '' };
   }
 }
@@ -123,6 +132,7 @@ async function getIdeProcessInfoForUnix(): Promise<{
   const shells = ['zsh', 'bash', 'sh', 'tcsh', 'csh', 'ksh', 'fish', 'dash'];
   let currentPid = process.pid;
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < MAX_TRAVERSAL_DEPTH; i++) {
     try {
       const { parentPid, name, command } = await getProcessInfo(currentPid);
@@ -144,6 +154,7 @@ async function getIdeProcessInfoForUnix(): Promise<{
         // Code's `ptyhost` process). To get the true IDE process, we need to
         // traverse one level higher to get the grandparent.
         let idePid = parentPid;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           const { parentPid: grandParentPid } = await getProcessInfo(parentPid);
           if (grandParentPid > 1) {

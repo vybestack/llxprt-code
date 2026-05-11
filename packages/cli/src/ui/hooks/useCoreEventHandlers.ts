@@ -41,12 +41,14 @@ export function useCoreEventHandlers({
   // Handle core event system for surfacing internal errors
   useEffect(() => {
     const handleUserFeedback = (payload: UserFeedbackPayload) => {
-      const messageType =
-        payload.severity === 'error'
-          ? 'error'
-          : payload.severity === 'warning'
-            ? 'warn'
-            : 'info';
+      let messageType: 'error' | 'warn' | 'info';
+      if (payload.severity === 'error') {
+        messageType = 'error';
+      } else if (payload.severity === 'warning') {
+        messageType = 'warn';
+      } else {
+        messageType = 'info';
+      }
       handleNewMessage({
         type: messageType,
         content: payload.message,

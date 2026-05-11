@@ -6,6 +6,8 @@
  * @pseudocode integration-wiring.md lines 170-212
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 // Time constants
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;

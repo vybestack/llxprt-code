@@ -18,11 +18,28 @@ export type HighlightToken = {
 // The @ pattern uses a negated character class to support URIs like `@file:///example.txt`
 // which contain colons. It matches any character except delimiters: comma, whitespace,
 // semicolon, common punctuation, and brackets.
+// Static regex for highlighting - no dynamic parts
+// eslint-disable-next-line sonarjs/regular-expr
 const HIGHLIGHT_REGEX = /(^\/[a-zA-Z0-9_-]+|@(?:\\ |[^,\s;!?()[\]{}])+)/g;
 
 const highlightCache = new LruCache<string, readonly HighlightToken[]>(
   LRU_BUFFER_PERF_CACHE_LIMIT,
 );
+
+function appendToken(tokens: HighlightToken[], token: HighlightToken): void {
+  if (tokens.length === 0) {
+    tokens.push(token);
+    return;
+  }
+
+  const lastToken = tokens[tokens.length - 1];
+  if (lastToken.type === token.type) {
+    lastToken.text += token.text;
+    return;
+  }
+
+  tokens.push(token);
+}
 
 export function parseInputForHighlighting(
   text: string,
@@ -83,12 +100,7 @@ export function parseInputForHighlighting(
     // Merge consecutive tokens of the same type
     const mergedTokens: HighlightToken[] = [];
     for (const token of tokens) {
-      const lastToken = mergedTokens[mergedTokens.length - 1];
-      if (lastToken && lastToken.type === token.type) {
-        lastToken.text += token.text;
-      } else {
-        mergedTokens.push(token);
-      }
+      appendToken(mergedTokens, token);
     }
 
     return mergedTokens;
@@ -97,7 +109,7 @@ export function parseInputForHighlighting(
   const tokens: HighlightToken[] = [];
 
   let column = 0;
-  const sortedTransformations = (transformations ?? [])
+  const sortedTransformations = transformations
     .slice()
     .sort((a, b) => a.logStart - b.logStart);
 
@@ -150,13 +162,7 @@ export function parseSegmentsFromTokens(
       const sliceStartInToken = overlapStart - tokenStart;
       const sliceEndInToken = overlapEnd - tokenStart;
       const rawSlice = cpSlice(token.text, sliceStartInToken, sliceEndInToken);
-
-      const last = segments[segments.length - 1];
-      if (last && last.type === token.type) {
-        last.text += rawSlice;
-      } else {
-        segments.push({ type: token.type, text: rawSlice });
-      }
+      appendToken(segments, { type: token.type, text: rawSlice });
     }
 
     tokenCpStart += tokenLen;

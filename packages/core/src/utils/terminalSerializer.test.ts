@@ -34,6 +34,7 @@ describe('terminalSerializer', () => {
       result.forEach((line) => {
         // Expect each line to be either empty or contain a single token with spaces
         if (line.length > 0) {
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(line[0].text.trim()).toBe('');
         }
       });

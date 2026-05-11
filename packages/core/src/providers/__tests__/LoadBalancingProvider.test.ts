@@ -14,6 +14,8 @@
  * 4. Constructor accepts ProviderManager dependency
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
@@ -384,7 +386,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           lbConfig,
           undefined as unknown as IProviderManager,
         );
-      }).toThrow();
+      }).toThrow(/requires a ProviderManager dependency/);
     });
   });
 
@@ -453,7 +455,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
       expect(() => {
         new LoadBalancingProvider(lbConfig, providerManager);
-      }).toThrow();
+      }).toThrow(/at least one sub-profile/);
     });
 
     it('should throw error if subProfile lacks required name field', () => {
@@ -475,7 +477,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
       expect(() => {
         new LoadBalancingProvider(lbConfig, providerManager);
-      }).toThrow();
+      }).toThrow(/valid "name" field/);
     });
 
     it('should throw error if subProfile lacks required providerName field', () => {
@@ -497,7 +499,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
       expect(() => {
         new LoadBalancingProvider(lbConfig, providerManager);
-      }).toThrow();
+      }).toThrow(/valid "providerName" field/);
     });
 
     it('should accept minimal valid configuration', () => {
@@ -576,7 +578,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           invalidConfig as unknown as LoadBalancingProviderConfig,
           providerManager,
         );
-      }).toThrow();
+      }).toThrow(/Invalid strategy/);
     });
   });
 
@@ -1363,14 +1365,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
         try {
           // Make 3 calls to cycle through all providers
           for (let i = 0; i < 3; i++) {
-            const iterator = provider.generateChatCompletion({
-              contents: [{ role: 'user', parts: [{ text: `test ${i}` }] }],
-            });
-            for await (const chunk of iterator) {
-              if (chunk.parts?.[0] && 'text' in chunk.parts[0]) {
-                responses.push(chunk.parts[0].text as string);
-              }
-            }
+            await collectResponseFromProvider(provider, `test ${i}`, responses);
           }
 
           // Verify responses came from different providers in order
@@ -1496,7 +1491,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
           const chunks: string[] = [];
           for await (const chunk of iterator) {
-            if (chunk.parts?.[0] && 'text' in chunk.parts[0]) {
+            if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
               chunks.push(chunk.parts[0].text as string);
             }
           }
@@ -1619,7 +1614,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
           });
           for await (const chunk of iterator1) {
-            if (chunk.parts?.[0] && 'text' in chunk.parts[0]) {
+            if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
               chunks1.push(chunk.parts[0].text as string);
             }
           }
@@ -1630,7 +1625,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
           });
           for await (const chunk of iterator2) {
-            if (chunk.parts?.[0] && 'text' in chunk.parts[0]) {
+            if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
               chunks2.push(chunk.parts[0].text as string);
             }
           }
@@ -1675,7 +1670,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             for await (const _chunk of iterator) {
               // Should not get here
             }
-          }).rejects.toThrow();
+          }).rejects.toThrow(/Provider.*not found/);
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
@@ -1789,7 +1784,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             for await (const _chunk of iterator2) {
               // Should not get here
             }
-          }).rejects.toThrow();
+          }).rejects.toThrow(/Provider.*not found/);
 
           // Third call - should succeed (sub-3) - counter should have advanced despite error
           const iterator3 = provider.generateChatCompletion({
@@ -2419,7 +2414,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           async *generateChatCompletion(
             options: GenerateChatOptions,
           ): AsyncIterableIterator<IContent> {
-            if (options.resolved?.authToken) {
+            if (options.resolved?.authToken != null) {
               capturedAuthTokens.push(options.resolved.authToken);
             }
             yield { role: 'model', parts: [{ text: 'response' }] };
@@ -2490,7 +2485,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           async *generateChatCompletion(
             options: GenerateChatOptions,
           ): AsyncIterableIterator<IContent> {
-            if (options.resolved?.baseURL) {
+            if (options.resolved?.baseURL != null) {
               capturedBaseURLs.push(options.resolved.baseURL);
             }
             yield { role: 'model', parts: [{ text: 'response' }] };
@@ -3862,3 +3857,36 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
     });
   });
 });
+
+/**
+ * Helper function to extract text from a chunk.
+ * Returns the text if present, or null if not.
+ */
+function extractTextFromChunk(chunk: unknown): string | null {
+  if (chunk === null || typeof chunk !== 'object') return null;
+  if (!('parts' in chunk)) return null;
+  const parts = (chunk as { parts: unknown[] }).parts;
+  if (!Array.isArray(parts) || parts[0] == null) return null;
+  if (!('text' in parts[0])) return null;
+  return (parts[0] as { text: string }).text;
+}
+
+/**
+ * Helper function to collect response text from a provider.
+ * Iterates through chunks and extracts text for testing.
+ */
+async function collectResponseFromProvider(
+  provider: IProvider,
+  testText: string,
+  responses: string[],
+): Promise<void> {
+  const iterator = provider.generateChatCompletion({
+    contents: [{ role: 'user', parts: [{ text: testText }] }],
+  });
+  for await (const chunk of iterator) {
+    const text = extractTextFromChunk(chunk);
+    if (text !== null) {
+      responses.push(text);
+    }
+  }
+}

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 import type OpenAI from 'openai';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { type DebugLogger } from '../../debug/index.js';
@@ -36,6 +38,149 @@ export interface RequestContext {
 }
 
 /**
+ * Convert tools to OpenAI format and handle empty-array guard.
+ */
+function convertAndGuardTools(
+  tools: NormalizedGenerateChatOptions['tools'],
+  model: string,
+  detectedFormat: string,
+  logger: DebugLogger,
+): OpenAITool[] | undefined {
+  let formattedTools: OpenAITool[] | undefined = convertToolsToOpenAI(tools);
+
+  // CRITICAL FIX: Ensure we never pass an empty tools array
+  if (Array.isArray(formattedTools) && formattedTools.length === 0) {
+    logger.warn(
+      () =>
+        `[OpenAIProvider] CRITICAL: Formatted tools is empty array! Setting to undefined to prevent API errors.`,
+      {
+        model,
+        inputTools: tools,
+        inputToolsLength: tools?.length,
+        inputFirstGroup: tools?.[0],
+        stackTrace: new Error().stack,
+      },
+    );
+    formattedTools = undefined;
+  }
+
+  // Debug log the conversion result
+  if (logger.enabled && formattedTools !== undefined) {
+    logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
+      detectedFormat,
+      inputHadTools: !!tools,
+      inputToolsLength: tools?.length,
+      inputFirstGroup: tools?.[0],
+      inputFunctionDeclarationsLength: tools?.[0]?.functionDeclarations?.length,
+      outputHasTools: formattedTools.length > 0,
+      outputToolsLength: formattedTools.length,
+      outputToolNames: formattedTools.map((t) => t.function.name),
+    });
+  }
+
+  return formattedTools;
+}
+
+/**
+ * Resolve the system prompt from user memory, MCP instructions, and config.
+ */
+async function resolveSystemPrompt(
+  options: NormalizedGenerateChatOptions,
+  tools: NormalizedGenerateChatOptions['tools'],
+  model: string,
+  config: Config | undefined,
+): Promise<string> {
+  const flattenedToolNames =
+    tools?.flatMap((group) =>
+      group.functionDeclarations
+        .map((decl) => decl.name)
+        .filter((name): name is string => !!name),
+    ) ?? [];
+  const toolNamesArg =
+    tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
+
+  const userMemory = await resolveUserMemory(
+    options.userMemory,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    () => options.invocation?.userMemory,
+  );
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+  const mcpInstructions = config?.getMcpClientManager?.()?.getMcpInstructions();
+  const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
+    toolNamesArg ?? [],
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    () => config?.getSubagentManager?.(),
+  );
+  return getCoreSystemPromptAsync({
+    userMemory,
+    mcpInstructions,
+    model,
+    tools: toolNamesArg,
+    includeSubagentDelegation,
+    interactionMode:
+      config != null &&
+      typeof config.isInteractive === 'function' &&
+      config.isInteractive() === true
+        ? 'interactive'
+        : 'non-interactive',
+  });
+}
+
+/**
+ * Apply reasoning, max-tokens, and stream-options to the request body.
+ */
+function applyRequestBodyOverrides(
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  options: NormalizedGenerateChatOptions,
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+  ephemeralSettings: Record<string, unknown>,
+  maxTokens: number | undefined,
+  streamingEnabled: boolean,
+  logger: DebugLogger,
+): void {
+  // Apply request overrides
+  const requestOverrides = extractModelParamsFromOptions(options);
+  if (requestOverrides) {
+    if (logger.enabled) {
+      logger.debug(() => `[OpenAIProvider] Applying request overrides`, {
+        overrideKeys: Object.keys(requestOverrides),
+      });
+    }
+    Object.assign(requestBody, requestOverrides);
+  }
+
+  // Inject thinking parameter for reasoning models
+  if (!('thinking' in requestBody) && !('reasoning_effort' in requestBody)) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    const reasoningEnabled = options.invocation?.modelBehavior?.[
+      'reasoning.enabled'
+    ] as boolean | undefined;
+    if (reasoningEnabled === true) {
+      (requestBody as unknown as Record<string, unknown>)['thinking'] = {
+        type: 'enabled',
+      };
+    } else if (reasoningEnabled === false) {
+      (requestBody as unknown as Record<string, unknown>)['thinking'] = {
+        type: 'disabled',
+      };
+    }
+  }
+
+  if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
+    requestBody.max_tokens = maxTokens;
+  }
+
+  // Add stream options if streaming is enabled
+  const streamOptions = (ephemeralSettings['stream-options'] as
+    | { include_usage?: boolean }
+    | undefined) ?? { include_usage: true };
+
+  if (streamingEnabled) {
+    Object.assign(requestBody, { stream_options: streamOptions });
+  }
+}
+
+/**
  * Prepare OpenAI API request from normalized options
  * Extracts all the request preparation logic from generateChatCompletionImpl
  */
@@ -47,6 +192,7 @@ export async function prepareRequest(
 ): Promise<RequestContext> {
   const { contents, tools, metadata } = options;
   const model = options.resolved.model || defaultModel;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   const ephemeralSettings = options.invocation?.ephemerals ?? {};
 
   // Detect the tool format to use BEFORE building messages
@@ -70,72 +216,20 @@ export async function prepareRequest(
     config,
   );
 
-  // Convert Gemini format tools to OpenAI format
-  let formattedTools: OpenAITool[] | undefined = convertToolsToOpenAI(tools);
-
-  // CRITICAL FIX: Ensure we never pass an empty tools array
-  if (Array.isArray(formattedTools) && formattedTools.length === 0) {
-    logger.warn(
-      () =>
-        `[OpenAIProvider] CRITICAL: Formatted tools is empty array! Setting to undefined to prevent API errors.`,
-      {
-        model,
-        inputTools: tools,
-        inputToolsLength: tools?.length,
-        inputFirstGroup: tools?.[0],
-        stackTrace: new Error().stack,
-      },
-    );
-    formattedTools = undefined;
-  }
-
-  // Debug log the conversion result
-  if (logger.enabled && formattedTools) {
-    logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
-      detectedFormat,
-      inputHadTools: !!tools,
-      inputToolsLength: tools?.length,
-      inputFirstGroup: tools?.[0],
-      inputFunctionDeclarationsLength: tools?.[0]?.functionDeclarations?.length,
-      outputHasTools: !!formattedTools,
-      outputToolsLength: formattedTools?.length,
-      outputToolNames: formattedTools?.map((t) => t.function.name),
-    });
-  }
+  // Convert tools and guard against empty array
+  const formattedTools = convertAndGuardTools(
+    tools,
+    model,
+    detectedFormat,
+    logger,
+  );
 
   // Get streaming setting
   const streamingSetting = ephemeralSettings['streaming'];
   const streamingEnabled = streamingSetting !== 'disabled';
 
-  // Build system prompt
-  const flattenedToolNames =
-    tools?.flatMap((group) =>
-      group.functionDeclarations
-        .map((decl) => decl.name)
-        .filter((name): name is string => !!name),
-    ) ?? [];
-  const toolNamesArg =
-    tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
-
-  const userMemory = await resolveUserMemory(
-    options.userMemory,
-    () => options.invocation?.userMemory,
-  );
-  const mcpInstructions = config?.getMcpClientManager?.()?.getMcpInstructions();
-  const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
-    toolNamesArg ?? [],
-    () => config?.getSubagentManager?.(),
-  );
-  const systemPrompt = await getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model,
-    tools: toolNamesArg,
-    includeSubagentDelegation,
-    interactionMode: config?.isInteractive?.()
-      ? 'interactive'
-      : 'non-interactive',
-  });
+  // Resolve and build system prompt
+  const systemPrompt = await resolveSystemPrompt(options, tools, model, config);
 
   // Add system prompt as the first message
   const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -144,6 +238,7 @@ export async function prepareRequest(
   ];
 
   const maxTokens =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     (metadata?.maxTokens as number | undefined) ??
     (ephemeralSettings['max-tokens'] as number | undefined);
 
@@ -159,45 +254,15 @@ export async function prepareRequest(
     requestBody.tool_choice = 'auto';
   }
 
-  // Apply request overrides
-  const requestOverrides = extractModelParamsFromOptions(options);
-  if (requestOverrides) {
-    if (logger.enabled) {
-      logger.debug(() => `[OpenAIProvider] Applying request overrides`, {
-        overrideKeys: Object.keys(requestOverrides),
-      });
-    }
-    Object.assign(requestBody, requestOverrides);
-  }
-
-  // Inject thinking parameter for reasoning models
-  if (!('thinking' in requestBody) && !('reasoning_effort' in requestBody)) {
-    const reasoningEnabled = options.invocation?.modelBehavior?.[
-      'reasoning.enabled'
-    ] as boolean | undefined;
-    if (reasoningEnabled === true) {
-      (requestBody as unknown as Record<string, unknown>)['thinking'] = {
-        type: 'enabled',
-      };
-    } else if (reasoningEnabled === false) {
-      (requestBody as unknown as Record<string, unknown>)['thinking'] = {
-        type: 'disabled',
-      };
-    }
-  }
-
-  if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
-    requestBody.max_tokens = maxTokens;
-  }
-
-  // Add stream options if streaming is enabled
-  const streamOptions = (ephemeralSettings['stream-options'] as
-    | { include_usage?: boolean }
-    | undefined) || { include_usage: true };
-
-  if (streamingEnabled && streamOptions) {
-    Object.assign(requestBody, { stream_options: streamOptions });
-  }
+  // Apply reasoning, max-tokens, and stream-options overrides
+  applyRequestBodyOverrides(
+    requestBody,
+    options,
+    ephemeralSettings,
+    maxTokens,
+    streamingEnabled,
+    logger,
+  );
 
   return {
     model,

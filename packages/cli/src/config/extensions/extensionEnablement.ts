@@ -20,6 +20,11 @@ export interface AllExtensionsEnablementConfig {
   [extensionName: string]: ExtensionEnablementConfig;
 }
 
+type RuntimeAllExtensionsEnablementConfig = Record<
+  string,
+  ExtensionEnablementConfig | undefined
+>;
+
 export class Override {
   constructor(
     public baseRule: string,
@@ -102,9 +107,14 @@ const ensureLeadingAndTrailingSlash = function (dirPath: string): string {
  * @returns A RegExp object.
  */
 function globToRegex(glob: string): RegExp {
+  // Glob patterns are sanitized: special regex chars are escaped above, only * wildcard allowed
+  /* eslint-disable sonarjs/regular-expr */
   const regexString = glob
     .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape special regex characters
     .replace(/(\/?)\*/g, '($1.*)?'); // Convert * to optional group
+  /* eslint-enable sonarjs/regular-expr */
+
+  // Dynamic regex safely constructed from sanitized glob input
 
   return new RegExp(`^${regexString}$`);
 }
@@ -169,7 +179,7 @@ export class ExtensionEnablementManager {
     }
 
     // Otherwise, we use the configuration settings
-    const config = this.readConfig();
+    const config = this.readRuntimeConfig();
     const extensionConfig = config[extensionName];
     // Extensions are enabled by default.
     let enabled = true;
@@ -183,10 +193,10 @@ export class ExtensionEnablementManager {
     return enabled;
   }
 
-  readConfig(): AllExtensionsEnablementConfig {
+  private readRuntimeConfig(): RuntimeAllExtensionsEnablementConfig {
     try {
       const content = fs.readFileSync(this.configFilePath, 'utf-8');
-      return JSON.parse(content);
+      return JSON.parse(content) as RuntimeAllExtensionsEnablementConfig;
     } catch (error) {
       if (
         error instanceof Error &&
@@ -204,7 +214,11 @@ export class ExtensionEnablementManager {
     }
   }
 
-  writeConfig(config: AllExtensionsEnablementConfig): void {
+  readConfig(): AllExtensionsEnablementConfig {
+    return this.readRuntimeConfig() as AllExtensionsEnablementConfig;
+  }
+
+  writeConfig(config: RuntimeAllExtensionsEnablementConfig): void {
     fs.mkdirSync(this.configDir, { recursive: true });
     fs.writeFileSync(this.configFilePath, JSON.stringify(config, null, 2));
   }
@@ -223,12 +237,10 @@ export class ExtensionEnablementManager {
 
     // Handle string path - existing disk-based logic
     const scopePath = scopeOrPath;
-    const config = this.readConfig();
-    if (!config[extensionName]) {
-      config[extensionName] = { overrides: [] };
-    }
+    const config = this.readRuntimeConfig();
+    const extensionConfig = (config[extensionName] ??= { overrides: [] });
     const override = Override.fromInput(scopePath, includeSubdirs);
-    const overrides = config[extensionName].overrides.filter((rule) => {
+    const overrides = extensionConfig.overrides.filter((rule) => {
       const fileOverride = Override.fromFileRule(rule);
       if (
         fileOverride.conflictsWith(override) ||
@@ -239,7 +251,7 @@ export class ExtensionEnablementManager {
       return !fileOverride.isChildOf(override);
     });
     overrides.push(override.output());
-    config[extensionName].overrides = overrides;
+    extensionConfig.overrides = overrides;
     this.writeConfig(config);
   }
 
@@ -260,8 +272,8 @@ export class ExtensionEnablementManager {
   }
 
   remove(extensionName: string): void {
-    const config = this.readConfig();
-    if (config[extensionName]) {
+    const config = this.readRuntimeConfig();
+    if (config[extensionName] !== undefined) {
       delete config[extensionName];
       this.writeConfig(config);
     }

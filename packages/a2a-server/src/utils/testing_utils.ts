@@ -24,10 +24,26 @@ import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core';
 
 import { expect, vi } from 'vitest';
 
-export function createMockConfig(
-  overrides: Partial<Config> = {},
-): Partial<Config> {
-  const defaultMessageBus = {
+type MockToolCall = {
+  request: ToolCallRequestInfo;
+  status: 'scheduled' | 'awaiting_approval' | 'executing' | 'success';
+  confirmationDetails?: ToolCallConfirmationDetails;
+  response?: {
+    callId: string;
+    responseParts: Array<{ text: string }>;
+    resultDisplay: string;
+    error: undefined;
+    errorType: undefined;
+  };
+};
+
+type MutableMockConfig = Partial<Config> & {
+  getApprovalMode: () => ApprovalMode;
+  getToolRegistry: () => unknown;
+};
+
+function createDefaultMessageBus() {
+  return {
     subscribe: vi.fn().mockReturnValue(() => vi.fn()),
     publish: vi.fn(),
     respondToConfirmation: vi.fn(),
@@ -35,7 +51,190 @@ export function createMockConfig(
     removeAllListeners: vi.fn(),
     listenerCount: vi.fn().mockReturnValue(0),
   };
+}
 
+function makeCall(
+  callId: string,
+  name: string,
+  status: MockToolCall['status'],
+  args: Record<string, unknown>,
+  confirmationDetails?: ToolCallConfirmationDetails,
+): MockToolCall {
+  return {
+    request: {
+      callId,
+      name,
+      args,
+      isClientInitiated: false,
+      prompt_id: 'prompt-id',
+    },
+    status,
+    confirmationDetails,
+  };
+}
+
+function makeResponse(callId: string, name: string) {
+  return {
+    callId,
+    responseParts: [{ text: `Mock response from ${name}` }],
+    resultDisplay: `Mock response from ${name}`,
+    error: undefined,
+    errorType: undefined,
+  };
+}
+
+function createConfirmationDetails(): ToolCallConfirmationDetails {
+  return {
+    type: 'exec',
+    title: 'Mock confirmation',
+    command: 'mock command',
+    rootCommand: 'mock',
+    rootCommands: ['mock'],
+    onConfirm: vi.fn(),
+  };
+}
+
+function createScheduledCalls(requests: ToolCallRequestInfo[]): MockToolCall[] {
+  return requests.map((requestItem, index) =>
+    makeCall(
+      // Test utility mock contract: callId fallback for defensive testing
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Permissive mock contract for test utilities
+      requestItem.callId ?? `call-${index}`,
+      requestItem.name,
+      'scheduled',
+      requestItem.args,
+    ),
+  );
+}
+
+async function callRequiresApproval(
+  mockConfig: MutableMockConfig,
+  call: MockToolCall,
+): Promise<boolean> {
+  const registry = mockConfig.getToolRegistry() as
+    | { getTool?: (name: string) => unknown }
+    | null
+    | undefined;
+  const tool = registry?.getTool?.(call.request.name) as
+    | { build?: (args: Record<string, unknown>) => unknown }
+    | undefined;
+  if (tool == null || typeof tool.build !== 'function') {
+    return false;
+  }
+  const invocation = tool.build(call.request.args) as
+    | {
+        shouldConfirmExecute?: (
+          signal: AbortSignal,
+        ) => boolean | Promise<boolean>;
+      }
+    | undefined;
+  if (
+    invocation == null ||
+    typeof invocation.shouldConfirmExecute !== 'function'
+  ) {
+    return false;
+  }
+  return invocation.shouldConfirmExecute(new AbortController().signal);
+}
+
+async function requiresApproval(
+  mockConfig: MutableMockConfig,
+  scheduledCalls: MockToolCall[],
+): Promise<boolean> {
+  const shouldBypassApproval =
+    mockConfig.getApprovalMode() === ApprovalMode.YOLO;
+  const confirmationResults = await Promise.all(
+    scheduledCalls.map((call) => callRequiresApproval(mockConfig, call)),
+  );
+  return !shouldBypassApproval && confirmationResults.some(Boolean);
+}
+
+function publishAwaitingApproval(
+  callbacks: SchedulerCallbacks,
+  scheduledCalls: MockToolCall[],
+): void {
+  const confirmationDetails = createConfirmationDetails();
+  const awaitingCalls = scheduledCalls.map((call) =>
+    makeCall(
+      call.request.callId,
+      call.request.name,
+      'awaiting_approval',
+      call.request.args,
+      confirmationDetails,
+    ),
+  );
+  callbacks.onToolCallsUpdate?.(awaitingCalls as ToolCall[]);
+}
+
+async function completeScheduledCalls(
+  callbacks: SchedulerCallbacks,
+  scheduledCalls: MockToolCall[],
+): Promise<void> {
+  const executingCalls = scheduledCalls.map((call) =>
+    makeCall(
+      call.request.callId,
+      call.request.name,
+      'executing',
+      call.request.args,
+    ),
+  );
+  callbacks.onToolCallsUpdate?.(executingCalls as ToolCall[]);
+
+  const successCalls = scheduledCalls.map((call) => ({
+    ...makeCall(
+      call.request.callId,
+      call.request.name,
+      'success',
+      call.request.args,
+    ),
+    response: makeResponse(call.request.callId, call.request.name),
+  }));
+  callbacks.onToolCallsUpdate?.(successCalls as ToolCall[]);
+  await callbacks.onAllToolCallsComplete?.(successCalls as CompletedToolCall[]);
+}
+
+function createSchedulerFactory(mockConfig: MutableMockConfig) {
+  return vi
+    .fn()
+    .mockImplementation(
+      async (_sessionId: string, callbacks: SchedulerCallbacks) => {
+        const schedule = vi
+          .fn()
+          .mockImplementation(
+            async (
+              request: ToolCallRequestInfo | ToolCallRequestInfo[],
+              _signal: AbortSignal,
+            ) => {
+              const requests = Array.isArray(request) ? request : [request];
+              const scheduledCalls = createScheduledCalls(requests);
+              callbacks.onToolCallsUpdate?.(scheduledCalls as ToolCall[]);
+
+              if (await requiresApproval(mockConfig, scheduledCalls)) {
+                publishAwaitingApproval(callbacks, scheduledCalls);
+                return;
+              }
+
+              await completeScheduledCalls(callbacks, scheduledCalls);
+            },
+          );
+
+        return {
+          schedule,
+          cancelAll: vi.fn(),
+          dispose: vi.fn(),
+          toolCalls: [],
+          getPreferredEditor: callbacks.getPreferredEditor,
+          config: mockConfig,
+          toolRegistry: mockConfig.getToolRegistry(),
+        } as unknown as CoreToolScheduler;
+      },
+    );
+}
+
+export function createMockConfig(
+  overrides: Partial<Config> = {},
+): Partial<Config> {
+  const defaultMessageBus = createDefaultMessageBus();
   const mockConfig = {
     getToolRegistry: vi.fn().mockReturnValue({
       getTool: vi.fn(),
@@ -81,163 +280,14 @@ export function createMockConfig(
         .fn()
         .mockReturnValue('/tmp/test-checkpoints'),
     } as unknown as Config['storage'],
-    getOrCreateScheduler: vi
-      .fn()
-      .mockImplementation(
-        async (_sessionId: string, callbacks: SchedulerCallbacks) => {
-          type MockToolCall = {
-            request: ToolCallRequestInfo;
-            status: 'scheduled' | 'awaiting_approval' | 'executing' | 'success';
-            confirmationDetails?: ToolCallConfirmationDetails;
-            response?: {
-              callId: string;
-              responseParts: Array<{ text: string }>;
-              resultDisplay: string;
-              error: undefined;
-              errorType: undefined;
-            };
-          };
-
-          const makeCall = (
-            callId: string,
-            name: string,
-            status: 'scheduled' | 'awaiting_approval' | 'executing' | 'success',
-            args: Record<string, unknown>,
-            confirmationDetails?: ToolCallConfirmationDetails,
-          ): MockToolCall => ({
-            request: {
-              callId,
-              name,
-              args,
-              isClientInitiated: false,
-              prompt_id: 'prompt-id',
-            },
-            status,
-            confirmationDetails,
-          });
-
-          const makeResponse = (callId: string, name: string) => ({
-            callId,
-            responseParts: [{ text: `Mock response from ${name}` }],
-            resultDisplay: `Mock response from ${name}`,
-            error: undefined,
-            errorType: undefined,
-          });
-
-          const confirmationDetails: ToolCallConfirmationDetails = {
-            type: 'exec',
-            title: 'Mock confirmation',
-            command: 'mock command',
-            rootCommand: 'mock',
-            rootCommands: ['mock'],
-            onConfirm: vi.fn(),
-          };
-
-          const schedule = vi
-            .fn()
-            .mockImplementation(
-              async (
-                request: ToolCallRequestInfo | ToolCallRequestInfo[],
-                _signal: AbortSignal,
-              ) => {
-                const requests = Array.isArray(request) ? request : [request];
-                const scheduledCalls = requests.map((requestItem, index) =>
-                  makeCall(
-                    requestItem.callId ?? `call-${index}`,
-                    requestItem.name,
-                    'scheduled',
-                    requestItem.args,
-                  ),
-                );
-                callbacks.onToolCallsUpdate?.(scheduledCalls as ToolCall[]);
-
-                const approvalMode = mockConfig.getApprovalMode();
-                const shouldBypassApproval = approvalMode === ApprovalMode.YOLO;
-
-                const confirmationResults = await Promise.all(
-                  scheduledCalls.map(async (call) => {
-                    const tool = mockConfig
-                      .getToolRegistry?.()
-                      ?.getTool?.(call.request.name);
-                    if (!tool || typeof tool.build !== 'function') {
-                      return false;
-                    }
-                    const invocation = tool.build(call.request.args);
-                    if (
-                      !invocation ||
-                      typeof invocation.shouldConfirmExecute !== 'function'
-                    ) {
-                      return false;
-                    }
-                    return invocation.shouldConfirmExecute(
-                      new AbortController().signal,
-                    );
-                  }),
-                );
-
-                const requiresApproval =
-                  !shouldBypassApproval && confirmationResults.some(Boolean);
-
-                if (requiresApproval) {
-                  const awaitingCalls = scheduledCalls.map((call) =>
-                    makeCall(
-                      call.request.callId,
-                      call.request.name,
-                      'awaiting_approval',
-                      call.request.args,
-                      confirmationDetails,
-                    ),
-                  );
-                  callbacks.onToolCallsUpdate?.(awaitingCalls as ToolCall[]);
-                  return;
-                }
-
-                const executingCalls = scheduledCalls.map((call) =>
-                  makeCall(
-                    call.request.callId,
-                    call.request.name,
-                    'executing',
-                    call.request.args,
-                  ),
-                );
-                callbacks.onToolCallsUpdate?.(executingCalls as ToolCall[]);
-
-                const successCalls = scheduledCalls.map((call) => ({
-                  ...makeCall(
-                    call.request.callId,
-                    call.request.name,
-                    'success',
-                    call.request.args,
-                  ),
-                  response: makeResponse(
-                    call.request.callId,
-                    call.request.name,
-                  ),
-                }));
-                callbacks.onToolCallsUpdate?.(successCalls as ToolCall[]);
-                await callbacks.onAllToolCallsComplete?.(
-                  successCalls as CompletedToolCall[],
-                );
-              },
-            );
-
-          const scheduler = {
-            schedule,
-            cancelAll: vi.fn(),
-            dispose: vi.fn(),
-            toolCalls: [],
-            getPreferredEditor: callbacks.getPreferredEditor ?? vi.fn(),
-            config: mockConfig,
-            toolRegistry: mockConfig?.getToolRegistry?.() || {
-              getTool: vi.fn(),
-            },
-          } as unknown as CoreToolScheduler;
-
-          return scheduler;
-        },
-      ),
     ...overrides,
-  };
+  } as MutableMockConfig;
+  if (
+    Object.prototype.hasOwnProperty.call(overrides, 'getOrCreateScheduler') ===
+    false
+  ) {
+    mockConfig.getOrCreateScheduler = createSchedulerFactory(mockConfig);
+  }
   return mockConfig;
 }
 
@@ -297,10 +347,11 @@ export function assertUniqueFinalEventIsLast(
 ) {
   // Final event is input-required & final
   const finalEvent = events[events.length - 1].result as TaskStatusUpdateEvent;
+  // metadata is optional per SDK type, test contract ensures it's present for final events
   expect(finalEvent.metadata?.['coderAgent']).toMatchObject({
     kind: 'state-change',
   });
-  expect(finalEvent.status?.state).toBe('input-required');
+  expect(finalEvent.status.state).toBe('input-required');
   expect(finalEvent.final).toBe(true);
 
   // There is only one event with final and its the last

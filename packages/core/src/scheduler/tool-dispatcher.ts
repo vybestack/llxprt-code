@@ -131,7 +131,7 @@ export class ToolDispatcher {
    */
   getToolSuggestion(unknownToolName: string, topN = 3): string {
     const allToolNames = this.toolRegistry.getAllToolNames();
-    if (!allToolNames.length) {
+    if (allToolNames.length === 0) {
       return '';
     }
 
@@ -143,7 +143,7 @@ export class ToolDispatcher {
       .sort((a, b) => a.distance - b.distance)
       .slice(0, topN);
 
-    if (!matches.length || matches[0].distance === Infinity) {
+    if (matches.length === 0 || matches[0].distance === Infinity) {
       return '';
     }
 

@@ -20,6 +20,91 @@ interface UseToolsDialogParams {
   config: Config;
 }
 
+function getDisabledToolsFromConfig(config: Config): string[] {
+  const ephemeralSettings = config.getEphemeralSettings() as
+    | Record<string, unknown>
+    | undefined;
+  const disabledToolsValue = ephemeralSettings?.['disabled-tools'];
+  return Array.isArray(disabledToolsValue)
+    ? (disabledToolsValue as string[])
+    : [];
+}
+
+function filterToolsByAction(
+  tools: AnyDeclarativeTool[],
+  disabledTools: string[],
+  action: 'enable' | 'disable',
+): AnyDeclarativeTool[] {
+  if (action === 'disable') {
+    // Show only enabled tools for disabling
+    return tools.filter(
+      (tool: AnyDeclarativeTool) => !disabledTools.includes(tool.name),
+    );
+  }
+  // Show only disabled tools for enabling
+  return tools.filter((tool: AnyDeclarativeTool) =>
+    disabledTools.includes(tool.name),
+  );
+}
+
+function buildNoToolsMessage(action: 'enable' | 'disable'): string {
+  return action === 'disable'
+    ? 'All tools are already disabled.'
+    : 'No tools are currently disabled.';
+}
+
+async function loadToolsForDialog(
+  config: Config,
+  action: 'enable' | 'disable',
+): Promise<AnyDeclarativeTool[] | null> {
+  const toolRegistry = config.getToolRegistry() as
+    | ReturnType<Config['getToolRegistry']>
+    | null
+    | undefined;
+  if (toolRegistry === null || toolRegistry === undefined) {
+    return null;
+  }
+
+  const disabledTools = getDisabledToolsFromConfig(config);
+  const allTools = toolRegistry.getAllTools();
+  const geminiTools = allTools.filter(
+    (tool: AnyDeclarativeTool) => !('serverName' in tool),
+  );
+
+  return filterToolsByAction(geminiTools, disabledTools, action);
+}
+
+function handleEmptyToolsList(
+  tools: AnyDeclarativeTool[],
+  action: 'enable' | 'disable',
+  addMessage: (msg: {
+    type: MessageType;
+    content: string;
+    timestamp: Date;
+  }) => void,
+): boolean {
+  if (tools.length === 0) {
+    addMessage({
+      type: MessageType.INFO,
+      content: buildNoToolsMessage(action),
+      timestamp: new Date(),
+    });
+    return true;
+  }
+  return false;
+}
+
+function updateDisabledToolsList(
+  action: 'enable' | 'disable',
+  disabledTools: string[],
+  toolName: string,
+): string[] {
+  if (action === 'disable') {
+    return [...disabledTools, toolName];
+  }
+  return disabledTools.filter((name) => name !== toolName);
+}
+
 export const useToolsDialog = ({
   addMessage,
   appState,
@@ -36,8 +121,8 @@ export const useToolsDialog = ({
   const openDialog = useCallback(
     async (dialogAction: 'enable' | 'disable') => {
       try {
-        const toolRegistry = config.getToolRegistry();
-        if (!toolRegistry) {
+        const tools = await loadToolsForDialog(config, dialogAction);
+        if (tools === null) {
           addMessage({
             type: MessageType.ERROR,
             content: 'Could not retrieve tool registry.',
@@ -46,44 +131,11 @@ export const useToolsDialog = ({
           return;
         }
 
-        // Get current disabled tools from ephemeral settings
-        const ephemeralSettings = config.getEphemeralSettings() || {};
-        const currentDisabledTools =
-          (ephemeralSettings['disabled-tools'] as string[]) || [];
-
-        // Get all non-MCP tools
-        const allTools = toolRegistry.getAllTools();
-        const geminiTools = allTools.filter(
-          (tool: AnyDeclarativeTool) => !('serverName' in tool),
-        );
-
-        // Filter tools based on the action
-        let tools: AnyDeclarativeTool[];
-        if (dialogAction === 'disable') {
-          // Show only enabled tools for disabling
-          tools = geminiTools.filter(
-            (tool: AnyDeclarativeTool) =>
-              !currentDisabledTools.includes(tool.name),
-          );
-        } else {
-          // Show only disabled tools for enabling
-          tools = geminiTools.filter((tool: AnyDeclarativeTool) =>
-            currentDisabledTools.includes(tool.name),
-          );
-        }
-
-        if (tools.length === 0) {
-          addMessage({
-            type: MessageType.INFO,
-            content:
-              dialogAction === 'disable'
-                ? 'All tools are already disabled.'
-                : 'No tools are currently disabled.',
-            timestamp: new Date(),
-          });
+        if (handleEmptyToolsList(tools, dialogAction, addMessage)) {
           return;
         }
 
+        const currentDisabledTools = getDisabledToolsFromConfig(config);
         setAction(dialogAction);
         setAvailableTools(tools);
         setDisabledTools(currentDisabledTools);
@@ -109,15 +161,11 @@ export const useToolsDialog = ({
       const selectedTool = availableTools.find((t) => t.name === toolName);
       if (!selectedTool) return;
 
-      // Update disabled tools list
-      let updatedDisabledTools: string[];
-      if (action === 'disable') {
-        updatedDisabledTools = [...disabledTools, toolName];
-      } else {
-        updatedDisabledTools = disabledTools.filter(
-          (name) => name !== toolName,
-        );
-      }
+      const updatedDisabledTools = updateDisabledToolsList(
+        action,
+        disabledTools,
+        toolName,
+      );
 
       // Update ephemeral settings
       config.setEphemeralSetting('disabled-tools', updatedDisabledTools);

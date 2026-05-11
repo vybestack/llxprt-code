@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 import type {
   IContent,
   TextBlock,
@@ -50,6 +52,118 @@ export type ResponsesInputItem =
       output: string;
     };
 
+function mediaBlockToContentPart(block: MediaBlock): ResponsesContentPart {
+  const category = classifyMediaBlock(block);
+  if (category === 'image') {
+    return {
+      type: 'input_image',
+      image_url: normalizeMediaToDataUri(block),
+    };
+  } else if (category === 'pdf') {
+    return {
+      type: 'input_file',
+      file_data: normalizeMediaToDataUri(block),
+      ...(block.filename ? { filename: block.filename } : {}),
+    };
+  }
+  return {
+    type: 'input_text',
+    text: buildUnsupportedMediaPlaceholder(block, 'OpenAI Responses'),
+  };
+}
+
+function processHumanContent(c: IContent): ResponsesInputItem | null {
+  const hasMedia = c.blocks.some((b) => b.type === 'media');
+
+  if (hasMedia) {
+    const parts: ResponsesContentPart[] = [];
+    for (const block of c.blocks) {
+      if (block.type === 'text' && block.text) {
+        parts.push({ type: 'input_text', text: block.text });
+      } else if (block.type === 'media') {
+        parts.push(mediaBlockToContentPart(block));
+      }
+    }
+    if (parts.length > 0) {
+      return { role: 'user', content: parts };
+    }
+  } else {
+    const text = c.blocks
+      .filter((b): b is TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n');
+    if (text) {
+      return { role: 'user', content: text };
+    }
+  }
+  return null;
+}
+
+function processAiContent(c: IContent): ResponsesInputItem[] {
+  const items: ResponsesInputItem[] = [];
+  const textBlocks = c.blocks.filter((b) => b.type === 'text');
+  const toolCallBlocks = c.blocks.filter((b) => b.type === 'tool_call');
+  const contentText = textBlocks.map((b) => b.text).join('');
+
+  if (contentText) {
+    items.push({ role: 'assistant', content: contentText });
+  }
+
+  for (const toolCall of toolCallBlocks) {
+    items.push({
+      type: 'function_call',
+      call_id: normalizeToOpenAIToolId(toolCall.id),
+      name: toolCall.name,
+      arguments: JSON.stringify(toolCall.parameters),
+    });
+  }
+  return items;
+}
+
+function processToolContent(
+  c: IContent,
+  config: Config | undefined,
+): ResponsesInputItem[] {
+  const items: ResponsesInputItem[] = [];
+  const toolResponseBlocks = c.blocks.filter((b) => b.type === 'tool_response');
+  const mediaBlocks = c.blocks.filter(
+    (b): b is MediaBlock => b.type === 'media',
+  );
+
+  for (const toolResponseBlock of toolResponseBlocks) {
+    const rawResult =
+      typeof toolResponseBlock.result === 'string'
+        ? toolResponseBlock.result
+        : JSON.stringify(toolResponseBlock.result);
+
+    const limited =
+      config === undefined
+        ? { content: rawResult, wasTruncated: false }
+        : limitOutputTokens(rawResult, config, toolResponseBlock.toolName);
+
+    const textResult =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty content should fall through to message
+      limited.content || limited.message || '';
+
+    items.push({
+      type: 'function_call_output',
+      call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
+      output: textResult,
+    });
+
+    if (mediaBlocks.length > 0) {
+      const mediaParts: ResponsesContentPart[] = [];
+      for (const media of mediaBlocks) {
+        mediaParts.push(mediaBlockToContentPart(media));
+      }
+      if (mediaParts.length > 0) {
+        items.push({ role: 'user', content: mediaParts });
+      }
+    }
+  }
+  return items;
+}
+
 export function buildResponsesInputFromContent(
   content: IContent[],
   systemPrompt?: string,
@@ -58,148 +172,19 @@ export function buildResponsesInputFromContent(
   const input: ResponsesInputItem[] = [];
 
   if (systemPrompt) {
-    input.push({
-      role: 'system',
-      content: systemPrompt,
-    });
+    input.push({ role: 'system', content: systemPrompt });
   }
 
   for (const c of content) {
     if (c.speaker === 'human') {
-      const hasMedia = c.blocks.some((b) => b.type === 'media');
-
-      if (hasMedia) {
-        const parts: ResponsesContentPart[] = [];
-
-        for (const block of c.blocks) {
-          if (block.type === 'text' && block.text) {
-            parts.push({ type: 'input_text', text: block.text });
-          } else if (block.type === 'media') {
-            const category = classifyMediaBlock(block);
-            if (category === 'image') {
-              parts.push({
-                type: 'input_image',
-                image_url: normalizeMediaToDataUri(block),
-              });
-            } else if (category === 'pdf') {
-              parts.push({
-                type: 'input_file',
-                file_data: normalizeMediaToDataUri(block),
-                ...(block.filename ? { filename: block.filename } : {}),
-              });
-            } else {
-              parts.push({
-                type: 'input_text',
-                text: buildUnsupportedMediaPlaceholder(
-                  block,
-                  'OpenAI Responses',
-                ),
-              });
-            }
-          }
-        }
-
-        if (parts.length > 0) {
-          input.push({ role: 'user', content: parts });
-        }
-      } else {
-        const text = c.blocks
-          .filter((b): b is TextBlock => b.type === 'text')
-          .map((b) => b.text)
-          .join('\n');
-        if (text) {
-          input.push({ role: 'user', content: text });
-        }
+      const humanItem = processHumanContent(c);
+      if (humanItem) {
+        input.push(humanItem);
       }
     } else if (c.speaker === 'ai') {
-      const textBlocks = c.blocks.filter((b) => b.type === 'text');
-      const toolCallBlocks = c.blocks.filter((b) => b.type === 'tool_call');
-
-      const contentText = textBlocks.map((b) => b.text).join('');
-
-      if (contentText) {
-        input.push({
-          role: 'assistant',
-          content: contentText,
-        });
-      }
-
-      for (const toolCall of toolCallBlocks) {
-        input.push({
-          type: 'function_call',
-          call_id: normalizeToOpenAIToolId(toolCall.id),
-          name: toolCall.name,
-          arguments: JSON.stringify(toolCall.parameters),
-        });
-      }
-    } else if (c.speaker === 'tool') {
-      const toolResponseBlocks = c.blocks.filter(
-        (b) => b.type === 'tool_response',
-      );
-      const mediaBlocks = c.blocks.filter(
-        (b): b is MediaBlock => b.type === 'media',
-      );
-
-      for (const toolResponseBlock of toolResponseBlocks) {
-        const rawResult =
-          typeof toolResponseBlock.result === 'string'
-            ? toolResponseBlock.result
-            : JSON.stringify(toolResponseBlock.result);
-
-        const limited =
-          config === undefined
-            ? { content: rawResult, wasTruncated: false }
-            : limitOutputTokens(
-                rawResult,
-                config,
-                toolResponseBlock.toolName ?? 'tool_response',
-              );
-
-        const textResult = limited.content || limited.message || '';
-
-        input.push({
-          type: 'function_call_output',
-          call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
-          output: textResult,
-        });
-
-        // OpenAI Responses API function_call_output.output only accepts a
-        // string.  When the tool response carried media blocks (e.g.
-        // screenshots, images from read_file), emit them as a synthetic
-        // user message so the model can still see the actual image data.
-        if (mediaBlocks.length > 0) {
-          const mediaParts: ResponsesContentPart[] = [];
-          for (const media of mediaBlocks) {
-            const category = classifyMediaBlock(media);
-            if (category === 'image') {
-              mediaParts.push({
-                type: 'input_image',
-                image_url: normalizeMediaToDataUri(media),
-              });
-            } else if (category === 'pdf') {
-              mediaParts.push({
-                type: 'input_file',
-                file_data: normalizeMediaToDataUri(media),
-                ...(media.filename ? { filename: media.filename } : {}),
-              });
-            } else {
-              mediaParts.push({
-                type: 'input_text',
-                text: buildUnsupportedMediaPlaceholder(
-                  media,
-                  'OpenAI Responses',
-                ),
-              });
-            }
-          }
-          if (mediaParts.length > 0) {
-            input.push({
-              role: 'user',
-              content: mediaParts,
-            });
-          }
-        }
-      }
+      input.push(...processAiContent(c));
+    } else {
+      input.push(...processToolContent(c, config));
     }
   }
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, max-lines -- Profile bootstrap coverage intentionally keeps many focused behavioral cases together. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -325,7 +325,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
    */
   it('should throw error when --profile has no value', () => {
     process.argv = ['node', 'llxprt', '--profile'];
-    expect(() => parseBootstrapArgs()).toThrow();
+    expect(() => parseBootstrapArgs()).toThrow(/--profile requires a value/);
   });
 
   /**
@@ -338,7 +338,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
    */
   it('should throw error when --profile is followed by another flag', () => {
     process.argv = ['node', 'llxprt', '--profile', '--provider', 'openai'];
-    expect(() => parseBootstrapArgs()).toThrow();
+    expect(() => parseBootstrapArgs()).toThrow(/--profile requires a value/);
   });
 
   /**
@@ -389,6 +389,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
       'my-profile',
     ];
     expect(() => parseBootstrapArgs()).toThrow(
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       /cannot use both.*--profile.*--profile-load/i,
     );
   });
@@ -411,6 +412,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
       '{"provider":"openai"}',
     ];
     expect(() => parseBootstrapArgs()).toThrow(
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       /cannot use both.*--profile.*--profile-load/i,
     );
   });
@@ -433,6 +435,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
       'my-profile',
     ];
     expect(() => parseBootstrapArgs()).toThrow(
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       /cannot use both.*--profile.*--profile-load.*use one at a time/i,
     );
   });
@@ -1231,7 +1234,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
         config: mockConfig,
         oauthManager: mockOAuthManager,
       });
-    }).toThrow();
+    }).toThrow(/JSON/);
   });
 
   /**
@@ -1261,7 +1264,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
         config: mockConfig,
         oauthManager: mockOAuthManager,
       });
-    }).toThrow();
+    }).toThrow(/provider/);
   });
 
   // Group 4: Backward Compatibility (2 tests)
@@ -1716,7 +1719,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
         config: mockConfig,
         oauthManager: {},
       });
-    }).toThrow();
+    }).toThrow(/JSON/);
   });
 
   /**
@@ -1746,7 +1749,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
         config: mockConfig,
         oauthManager: {},
       });
-    }).toThrow();
+    }).toThrow(/model/);
   });
 
   /**
@@ -1816,6 +1819,6 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
         config: mockConfig,
         oauthManager: {},
       });
-    }).toThrow();
+    }).toThrow(/provider/);
   });
 });

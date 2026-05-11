@@ -26,10 +26,13 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
 
       // Act & Assert: The condition should be true
-      const shouldAutoDismiss =
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- intentional test of true && true scenario */
+      const shouldAutoDismiss = !!(
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true;
+          true
+      );
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
       expect(shouldAutoDismiss).toBe(true);
     });
@@ -40,10 +43,13 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = false;
 
       // Act & Assert: The condition should be false
-      const shouldAutoDismiss =
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- intentional test of true && false scenario */
+      const shouldAutoDismiss = !!(
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true;
+          true
+      );
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
       expect(shouldAutoDismiss).toBe(false);
     });
@@ -54,10 +60,13 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       // __oauth_browser_auth_complete is undefined by default after delete in beforeEach
 
       // Act & Assert: The condition should be false (strict equality check)
-      const shouldAutoDismiss =
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- intentional test of true && undefined scenario */
+      const shouldAutoDismiss = !!(
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true;
+          true
+      );
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
       expect(shouldAutoDismiss).toBe(false);
     });
@@ -68,10 +77,13 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
 
       // Act & Assert: The condition should be false
-      const shouldAutoDismiss =
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- intentional test of false && true scenario */
+      const shouldAutoDismiss = !!(
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true;
+          true
+      );
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
       expect(shouldAutoDismiss).toBe(false);
     });
@@ -85,6 +97,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
 
       // Act: Simulate the useEffect logic
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- intentional test of true && true scenario */
+      /* eslint-disable vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context */
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -95,6 +109,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
           false;
         mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
       }
+      /* eslint-enable vitest/no-conditional-in-test */
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
       // Assert
       expect(mockDispatch).toHaveBeenCalledTimes(1);
@@ -115,6 +131,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = false;
 
       // Act: Simulate the useEffect logic
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- intentional test of true && false scenario */
+      /* eslint-disable vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context */
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -122,6 +140,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       ) {
         mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
       }
+      /* eslint-enable vitest/no-conditional-in-test */
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
       // Assert
       expect(mockDispatch).not.toHaveBeenCalled();
@@ -143,6 +163,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
 
       // Auto-dismiss should trigger (using distinct flag, not __oauth_needs_code)
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- intentional test of true && true scenario */
+      /* eslint-disable vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context */
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -150,6 +172,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       ) {
         mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
       }
+      /* eslint-enable vitest/no-conditional-in-test */
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
       expect(mockDispatch).toHaveBeenCalledTimes(1);
       mockDispatch.mockClear();
@@ -161,6 +185,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = false;
 
       // Dialog should NOT auto-dismiss (flag is false)
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- intentional test of true && false scenario */
+      /* eslint-disable vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context */
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -168,6 +194,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       ) {
         mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
       }
+      /* eslint-enable vitest/no-conditional-in-test */
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
       expect(mockDispatch).not.toHaveBeenCalled();
 
@@ -175,6 +203,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
 
       // Now dialog should auto-dismiss
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- intentional test of true && true scenario */
+      /* eslint-disable vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context */
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -182,6 +212,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       ) {
         mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
       }
+      /* eslint-enable vitest/no-conditional-in-test */
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
       expect(mockDispatch).toHaveBeenCalledTimes(1);
     });
@@ -198,6 +230,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
         undefined;
 
       // Dialog should NOT auto-dismiss - user can still paste code manually
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- intentional test of true && undefined scenario */
+      /* eslint-disable vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context */
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -205,6 +239,8 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       ) {
         mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
       }
+      /* eslint-enable vitest/no-conditional-in-test */
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
       expect(mockDispatch).not.toHaveBeenCalled();
     });

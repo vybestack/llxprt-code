@@ -76,6 +76,7 @@ describe('shell-parser', () => {
   describe('parseShellCommand', () => {
     it('should parse a simple command when parser is available', () => {
       // Skip if parser not available in test environment
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('ls -la');
@@ -84,6 +85,7 @@ describe('shell-parser', () => {
     });
 
     it('should parse complex pipelines when parser is available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('cat file.txt | grep pattern | wc -l');
@@ -106,6 +108,7 @@ describe('shell-parser', () => {
 
     it('should handle bash parser timeouts in parseShellCommand', async () => {
       await initializeParser();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
 
       const errorSpy = vi
@@ -126,6 +129,7 @@ describe('shell-parser', () => {
 
     it('should handle bash parser timeouts in parseCommandDetails', async () => {
       await initializeParser();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
 
       vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
@@ -145,6 +149,7 @@ describe('shell-parser', () => {
     });
 
     it('should extract simple command when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('ls -la');
@@ -154,6 +159,7 @@ describe('shell-parser', () => {
     });
 
     it('should extract commands from pipeline when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('cat file.txt | grep pattern | wc -l');
@@ -163,6 +169,7 @@ describe('shell-parser', () => {
     });
 
     it('should extract commands from && chain when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('npm install && npm test && npm build');
@@ -172,6 +179,7 @@ describe('shell-parser', () => {
     });
 
     it('should extract commands from || chain when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('test -f file || touch file');
@@ -181,6 +189,7 @@ describe('shell-parser', () => {
     });
 
     it('should handle commands with paths when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('/usr/bin/python script.py');
@@ -190,6 +199,7 @@ describe('shell-parser', () => {
     });
 
     it('should handle quoted commands when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('"my command" arg1 arg2');
@@ -205,6 +215,7 @@ describe('shell-parser', () => {
     });
 
     it('should detect $() substitution when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('echo $(whoami)');
@@ -213,6 +224,7 @@ describe('shell-parser', () => {
     });
 
     it('should detect backtick substitution when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('echo `date`');
@@ -221,6 +233,7 @@ describe('shell-parser', () => {
     });
 
     it('should detect process substitution <() when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('diff <(ls dir1) <(ls dir2)');
@@ -229,6 +242,7 @@ describe('shell-parser', () => {
     });
 
     it('should detect process substitution >() when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('tee >(cat > file.txt)');
@@ -237,6 +251,7 @@ describe('shell-parser', () => {
     });
 
     it('should not detect substitution in single quotes when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand("echo 'hello $(world)'");
@@ -246,6 +261,7 @@ describe('shell-parser', () => {
     });
 
     it('should return false for simple commands when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('ls -la /tmp');
@@ -254,6 +270,7 @@ describe('shell-parser', () => {
     });
 
     it('should return false for pipes (not substitution) when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('cat file | grep pattern');
@@ -262,6 +279,7 @@ describe('shell-parser', () => {
     });
 
     it('should detect nested substitution when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('echo $(cat $(ls))');
@@ -276,6 +294,7 @@ describe('shell-parser', () => {
     });
 
     it('should split && commands when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('cd /tmp && ls');
@@ -287,6 +306,7 @@ describe('shell-parser', () => {
     });
 
     it('should split || commands when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('test -f file || touch file');
@@ -296,6 +316,7 @@ describe('shell-parser', () => {
     });
 
     it('should handle semicolon separation when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('echo a; echo b; echo c');
@@ -305,6 +326,7 @@ describe('shell-parser', () => {
     });
 
     it('should handle pipeline as single command unit when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('cat file | grep pattern');
@@ -315,6 +337,7 @@ describe('shell-parser', () => {
     });
 
     it('should handle mixed operators when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('cmd1 && cmd2 || cmd3; cmd4');
@@ -324,6 +347,7 @@ describe('shell-parser', () => {
     });
 
     it('should handle empty input gracefully', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       // Empty string should produce an empty command list
@@ -334,6 +358,7 @@ describe('shell-parser', () => {
     });
 
     it('should handle subshells when parser available', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!parserInitialized) return;
 
       const tree = parseShellCommand('(cd /tmp && ls)');
@@ -363,6 +388,7 @@ describe('shell-parser', () => {
     });
 
     it('should extract commands from simple command', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
 
       const tree = parseShellCommand('echo hello');
@@ -373,6 +399,7 @@ describe('shell-parser', () => {
     });
 
     it('should extract commands from command substitution $()', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
 
       const tree = parseShellCommand('echo $(curl google.com)');
@@ -383,6 +410,7 @@ describe('shell-parser', () => {
     });
 
     it('should extract commands from backtick substitution', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
 
       const tree = parseShellCommand('echo `rm -rf /`');
@@ -393,6 +421,7 @@ describe('shell-parser', () => {
     });
 
     it('should extract commands from process substitution <()', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
 
       const tree = parseShellCommand('diff <(curl a) <(echo b)');
@@ -404,6 +433,7 @@ describe('shell-parser', () => {
     });
 
     it('should extract commands from function definitions', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
 
       const tree = parseShellCommand('echo () (curl google.com) ; echo Hello');

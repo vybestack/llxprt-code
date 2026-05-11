@@ -137,7 +137,8 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     });
 
     if (!lockAcquired) {
-      return this.handleAuthLockTimeout(providerName, bucket);
+      await this.handleAuthLockTimeout(providerName, bucket);
+      return;
     }
 
     try {
@@ -213,12 +214,15 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     logger.debug(
       () => `[FLOW] Calling provider.initiateAuth() for ${providerName}...`,
     );
-    const token = await provider.initiateAuth();
+    const token = (await provider.initiateAuth()) as
+      | OAuthToken
+      | null
+      | undefined;
     logger.debug(
       () => `[FLOW] provider.initiateAuth() returned token for ${providerName}`,
     );
 
-    if (!token) {
+    if (token == null) {
       throw new Error('Authentication completed but no token was returned');
     }
 
@@ -635,7 +639,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         buckets.length,
       );
 
-      if (showPrompt) {
+      if (showPrompt === true) {
         logger.debug(
           'Prompt mode enabled - waiting indefinitely for user approval',
         );

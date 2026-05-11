@@ -81,6 +81,251 @@ function normaliseArgValue(value: string | undefined | null): string | null {
   return value.trim();
 }
 
+interface BootstrapParseState {
+  bootstrapArgs: BootstrapProfileArgs;
+  profileLoadUsed: boolean;
+  profileUsed: boolean;
+}
+
+interface ConsumedArgValue {
+  value: string | null;
+  nextIndex: number;
+}
+
+interface ParsedFlagToken {
+  flag: string;
+  inline: string | undefined;
+}
+
+function createEmptyBootstrapArgs(): BootstrapProfileArgs {
+  return {
+    profileName: null,
+    profileJson: null,
+    providerOverride: null,
+    modelOverride: null,
+    keyOverride: null,
+    keyfileOverride: null,
+    keyNameOverride: null,
+    baseurlOverride: null,
+    setOverrides: null,
+  };
+}
+
+function createRuntimeMetadata(argv: string[]): RuntimeBootstrapMetadata {
+  return {
+    runtimeId: process.env.LLXPRT_RUNTIME_ID ?? DEFAULT_RUNTIME_ID,
+    metadata: {
+      source: 'cli.bootstrap',
+      argv: argv.slice(),
+      timestamp: Date.now(),
+    },
+  };
+}
+
+function consumeBootstrapValue(
+  tokens: string[],
+  currentIndex: number,
+  inlineValue: string | undefined,
+): ConsumedArgValue {
+  if (inlineValue !== undefined) {
+    return { value: normaliseArgValue(inlineValue), nextIndex: currentIndex };
+  }
+  const nextIndex = currentIndex + 1;
+  if (nextIndex < tokens.length) {
+    const nextToken = tokens[nextIndex];
+    if (!nextToken.startsWith('-')) {
+      return { value: normaliseArgValue(nextToken), nextIndex };
+    }
+  }
+  return { value: null, nextIndex: currentIndex };
+}
+
+function parseFlagToken(token: string): ParsedFlagToken {
+  const equalsIndex = token.indexOf('=');
+  if (equalsIndex === -1) {
+    return { flag: token, inline: undefined };
+  }
+  return {
+    flag: token.slice(0, equalsIndex),
+    inline: token.slice(equalsIndex + 1),
+  };
+}
+
+function applySimpleBootstrapFlag(
+  flag: string,
+  consumed: ConsumedArgValue,
+  state: BootstrapParseState,
+): boolean {
+  switch (flag) {
+    case '--profile-load':
+      state.bootstrapArgs.profileName = consumed.value;
+      state.profileLoadUsed = true;
+      return true;
+    case '--provider':
+      state.bootstrapArgs.providerOverride = consumed.value;
+      return true;
+    case '--model':
+    case '-m':
+      state.bootstrapArgs.modelOverride = consumed.value;
+      return true;
+    case '--key':
+      state.bootstrapArgs.keyOverride = consumed.value;
+      return true;
+    case '--keyfile':
+      state.bootstrapArgs.keyfileOverride = consumed.value;
+      return true;
+    case '--baseurl':
+      state.bootstrapArgs.baseurlOverride = consumed.value;
+      return true;
+    default:
+      return false;
+  }
+}
+
+function applyProfileJsonFlag(
+  consumed: ConsumedArgValue,
+  state: BootstrapParseState,
+): void {
+  if (consumed.value === null) {
+    throw new Error('--profile requires a value');
+  }
+  state.bootstrapArgs.profileJson = consumed.value;
+  state.profileUsed = true;
+}
+
+function applyKeyNameFlag(
+  consumed: ConsumedArgValue,
+  state: BootstrapParseState,
+): void {
+  if (consumed.value === null) {
+    throw new Error('--key-name requires a value');
+  }
+  state.bootstrapArgs.keyNameOverride = consumed.value;
+}
+
+function collectSetOverrideValues(
+  argv: string[],
+  startIndex: number,
+  inline: string | undefined,
+): { values: string[]; nextIndex: number } {
+  const values: string[] = [];
+  if (inline !== undefined) {
+    const value = normaliseArgValue(inline);
+    if (value) {
+      values.push(value);
+    }
+    return { values, nextIndex: startIndex };
+  }
+
+  let currentIndex = startIndex;
+  while (currentIndex < argv.length) {
+    const nextToken = argv[currentIndex + 1];
+    if (!nextToken || nextToken.startsWith('-')) {
+      break;
+    }
+    const value = normaliseArgValue(nextToken);
+    if (value) {
+      values.push(value);
+    }
+    currentIndex++;
+  }
+  return { values, nextIndex: currentIndex };
+}
+
+function applySetFlag(
+  argv: string[],
+  index: number,
+  inline: string | undefined,
+  state: BootstrapParseState,
+): number {
+  const { values, nextIndex } = collectSetOverrideValues(argv, index, inline);
+  if (values.length > 0) {
+    state.bootstrapArgs.setOverrides ??= [];
+    state.bootstrapArgs.setOverrides.push(...values);
+  }
+  return nextIndex;
+}
+
+function applyBootstrapFlag(
+  argv: string[],
+  index: number,
+  state: BootstrapParseState,
+): number {
+  const token = argv[index];
+  if (!token.startsWith('-')) {
+    return index;
+  }
+  const { flag, inline } = parseFlagToken(token);
+  const consumed = consumeBootstrapValue(argv, index, inline);
+  if (applySimpleBootstrapFlag(flag, consumed, state)) {
+    return consumed.nextIndex;
+  }
+  if (flag === '--profile') {
+    applyProfileJsonFlag(consumed, state);
+    return consumed.nextIndex;
+  }
+  if (flag === '--key-name') {
+    applyKeyNameFlag(consumed, state);
+    return consumed.nextIndex;
+  }
+  if (flag === '--set') {
+    return applySetFlag(argv, index, inline, state);
+  }
+  return index;
+}
+
+function validateBootstrapArgs(state: BootstrapParseState): void {
+  if (state.profileUsed && state.profileLoadUsed) {
+    throw new Error(
+      'Cannot use both --profile and --profile-load. Use one at a time.',
+    );
+  }
+  if (
+    state.bootstrapArgs.profileJson !== null &&
+    state.bootstrapArgs.profileJson.length > 10240
+  ) {
+    throw new Error('Profile JSON exceeds maximum size of 10KB');
+  }
+}
+
+function logBootstrapArgs(
+  logger: DebugLogger,
+  bootstrapArgs: BootstrapProfileArgs,
+): void {
+  logger.debug(
+    () =>
+      `parseBootstrapArgs result: ${JSON.stringify({
+        profileName: bootstrapArgs.profileName,
+        providerOverride: bootstrapArgs.providerOverride,
+        modelOverride: bootstrapArgs.modelOverride,
+        keyOverride: bootstrapArgs.keyOverride ? '***' : null,
+        keyfileOverride: bootstrapArgs.keyfileOverride,
+        keyNameOverride: bootstrapArgs.keyNameOverride,
+        baseurlOverride: bootstrapArgs.baseurlOverride,
+        setOverrides: bootstrapArgs.setOverrides,
+      })}`,
+  );
+}
+
+function parseProcessBootstrapArgs(argv: string[]): ParsedBootstrapArgs {
+  const state: BootstrapParseState = {
+    bootstrapArgs: createEmptyBootstrapArgs(),
+    profileLoadUsed: false,
+    profileUsed: false,
+  };
+  const runtimeMetadata = createRuntimeMetadata(argv);
+  const logger = new DebugLogger('llxprt:bootstrap');
+  logger.debug(
+    () => `parseBootstrapArgs called with argv: ${JSON.stringify(argv)}`,
+  );
+  for (let index = 0; index < argv.length; index += 1) {
+    index = applyBootstrapFlag(argv, index, state);
+  }
+  validateBootstrapArgs(state);
+  logBootstrapArgs(logger, state.bootstrapArgs);
+  return { bootstrapArgs: state.bootstrapArgs, runtimeMetadata };
+}
+
 /**
  * @plan PLAN-20251020-STATELESSPROVIDER3.P06
  * @requirement REQ-SP3-001
@@ -109,237 +354,7 @@ ${baseProfile.error}`);
       runtimeMetadata: metadata,
     };
   }
-  const argv = process.argv.slice(2);
-  const bootstrapArgs: BootstrapProfileArgs = {
-    profileName: null,
-    profileJson: null,
-    providerOverride: null,
-    modelOverride: null,
-    keyOverride: null,
-    keyfileOverride: null,
-    keyNameOverride: null,
-    baseurlOverride: null,
-    setOverrides: null,
-  };
-
-  /**
-   * @plan PLAN-20251118-ISSUE533.P05
-   * @requirement REQ-INT-001.2
-   * @pseudocode parse-bootstrap-args.md lines 013-014
-   */
-  let profileLoadUsed = false; // Track if --profile-load was used
-  let profileUsed = false; // Track if --profile was used
-
-  const runtimeMetadata: RuntimeBootstrapMetadata = {
-    runtimeId: process.env.LLXPRT_RUNTIME_ID ?? DEFAULT_RUNTIME_ID,
-    metadata: {
-      source: 'cli.bootstrap',
-      argv: argv.slice(),
-      timestamp: Date.now(),
-    },
-  };
-
-  // Debug: log what we're parsing
-  const logger = new DebugLogger('llxprt:bootstrap');
-  logger.debug(
-    () => `parseBootstrapArgs called with argv: ${JSON.stringify(argv)}`,
-  );
-
-  const consumeValue = (
-    tokens: string[],
-    currentIndex: number,
-    inlineValue: string | undefined,
-  ): { value: string | null; nextIndex: number } => {
-    if (inlineValue !== undefined) {
-      return { value: normaliseArgValue(inlineValue), nextIndex: currentIndex };
-    }
-    const nextToken = tokens[currentIndex + 1];
-    // Check for next token - empty string is valid, undefined means no value
-    if (nextToken !== undefined && !nextToken.startsWith('-')) {
-      return {
-        value: normaliseArgValue(nextToken),
-        nextIndex: currentIndex + 1,
-      };
-    }
-    return { value: null, nextIndex: currentIndex };
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    if (!token.startsWith('-')) {
-      continue;
-    }
-
-    let flag = token;
-    let inline: string | undefined;
-    const equalsIndex = token.indexOf('=');
-    if (equalsIndex !== -1) {
-      flag = token.slice(0, equalsIndex);
-      inline = token.slice(equalsIndex + 1);
-    }
-
-    switch (flag) {
-      case '--profile-load': {
-        /**
-         * @plan PLAN-20251118-ISSUE533.P05
-         * @requirement REQ-INT-001.2
-         * @pseudocode parse-bootstrap-args.md lines 042-048
-         */
-        const { value, nextIndex } = consumeValue(argv, index, inline);
-        bootstrapArgs.profileName = value;
-        profileLoadUsed = true; // Track usage
-        index = nextIndex;
-        break;
-      }
-      case '--profile': {
-        /**
-         * @plan PLAN-20251118-ISSUE533.P05
-         * @requirement REQ-PROF-001.1
-         * @pseudocode parse-bootstrap-args.md lines 031-040
-         */
-        const { value, nextIndex } = consumeValue(argv, index, inline);
-
-        // Verify value exists (null means no value provided)
-        // Note: empty string "" is a valid value - validation happens later
-        if (value === null) {
-          throw new Error('--profile requires a value');
-        }
-
-        // Store JSON string (empty string "" is allowed after normalization)
-        bootstrapArgs.profileJson = value;
-
-        // Track usage for mutual exclusivity
-        profileUsed = true;
-
-        // Update index
-        index = nextIndex;
-        break;
-      }
-      case '--provider': {
-        const { value, nextIndex } = consumeValue(argv, index, inline);
-        bootstrapArgs.providerOverride = value;
-        index = nextIndex;
-        break;
-      }
-      case '--model':
-      case '-m': {
-        const { value, nextIndex } = consumeValue(argv, index, inline);
-        bootstrapArgs.modelOverride = value;
-        index = nextIndex;
-        break;
-      }
-      case '--key': {
-        const { value, nextIndex } = consumeValue(argv, index, inline);
-        bootstrapArgs.keyOverride = value;
-        index = nextIndex;
-        break;
-      }
-      case '--keyfile': {
-        const { value, nextIndex } = consumeValue(argv, index, inline);
-        bootstrapArgs.keyfileOverride = value;
-        index = nextIndex;
-        break;
-      }
-      /**
-       * @plan PLAN-20260211-SECURESTORE.P16
-       * @requirement R22.2
-       */
-      case '--key-name': {
-        const { value, nextIndex } = consumeValue(argv, index, inline);
-        if (value === null) {
-          throw new Error('--key-name requires a value');
-        }
-        bootstrapArgs.keyNameOverride = value;
-        index = nextIndex;
-        break;
-      }
-      case '--baseurl': {
-        const { value, nextIndex } = consumeValue(argv, index, inline);
-        bootstrapArgs.baseurlOverride = value;
-        index = nextIndex;
-        break;
-      }
-      case '--set': {
-        const setValues: string[] = [];
-        let currentIndex = index;
-
-        if (inline !== undefined) {
-          const value = normaliseArgValue(inline);
-          if (value) {
-            setValues.push(value);
-          }
-        }
-
-        if (inline === undefined) {
-          while (currentIndex < argv.length) {
-            const nextToken = argv[currentIndex + 1];
-            if (nextToken && !nextToken.startsWith('-')) {
-              const value = normaliseArgValue(nextToken);
-              if (value) {
-                setValues.push(value);
-              }
-              currentIndex++;
-            } else {
-              break;
-            }
-          }
-        }
-
-        if (setValues.length > 0) {
-          if (!bootstrapArgs.setOverrides) {
-            bootstrapArgs.setOverrides = [];
-          }
-          bootstrapArgs.setOverrides.push(...setValues);
-        }
-
-        if (inline === undefined) {
-          index = currentIndex;
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  }
-
-  /**
-   * @plan PLAN-20251118-ISSUE533.P05
-   * @requirement REQ-INT-001.2
-   * @pseudocode parse-bootstrap-args.md lines 060-067
-   */
-  if (profileUsed && profileLoadUsed) {
-    throw new Error(
-      'Cannot use both --profile and --profile-load. Use one at a time.',
-    );
-  }
-
-  /**
-   * @plan PLAN-20251118-ISSUE533.P05
-   * @requirement REQ-PROF-003.3
-   * @pseudocode parse-bootstrap-args.md lines 070-074
-   */
-  if (bootstrapArgs.profileJson !== null) {
-    if (bootstrapArgs.profileJson.length > 10240) {
-      throw new Error('Profile JSON exceeds maximum size of 10KB');
-    }
-  }
-
-  // Debug: log what we parsed
-  logger.debug(
-    () =>
-      `parseBootstrapArgs result: ${JSON.stringify({
-        profileName: bootstrapArgs.profileName,
-        providerOverride: bootstrapArgs.providerOverride,
-        modelOverride: bootstrapArgs.modelOverride,
-        keyOverride: bootstrapArgs.keyOverride ? '***' : null,
-        keyfileOverride: bootstrapArgs.keyfileOverride,
-        keyNameOverride: bootstrapArgs.keyNameOverride,
-        baseurlOverride: bootstrapArgs.baseurlOverride,
-        setOverrides: bootstrapArgs.setOverrides,
-      })}`,
-  );
-
-  return { bootstrapArgs, runtimeMetadata };
+  return parseProcessBootstrapArgs(process.argv.slice(2));
 }
 
 /**
@@ -408,6 +423,97 @@ export async function prepareRuntimeForProfile(
   };
 }
 
+function isProfileValidationResult(
+  value: unknown,
+): value is ProfileApplicationResult {
+  return typeof value === 'object' && value !== null && 'error' in value;
+}
+
+function profileValidationError(error: string): ProfileApplicationResult {
+  return { providerName: '', modelName: '', warnings: [], error };
+}
+
+function parseInlineProfileJson(
+  jsonString: string,
+): unknown | ProfileApplicationResult {
+  if (!jsonString || jsonString.trim() === '') {
+    return profileValidationError('Profile JSON cannot be empty');
+  }
+  try {
+    return JSON.parse(jsonString) as unknown;
+  } catch (err) {
+    return profileValidationError(
+      `Invalid JSON in --profile: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+function validateInlineProfileObject(
+  parsed: unknown,
+): Record<string, unknown> | ProfileApplicationResult {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return profileValidationError(
+      'Profile must be a JSON object, not an array or primitive value',
+    );
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function validateRequiredProfileString(
+  obj: Record<string, unknown>,
+  field: 'provider' | 'model',
+): string | ProfileApplicationResult {
+  const value = obj[field];
+  if (value === undefined || value === null || typeof value !== 'string') {
+    return profileValidationError(
+      `'${field}' is required and must be a string`,
+    );
+  }
+  return value;
+}
+
+function validateProfileTemperature(
+  obj: Record<string, unknown>,
+): ProfileApplicationResult | undefined {
+  if (obj.temperature === undefined) {
+    return undefined;
+  }
+  if (typeof obj.temperature !== 'number') {
+    return profileValidationError(
+      "'temperature' must be a number between 0 and 2",
+    );
+  }
+  if (obj.temperature < 0 || obj.temperature > 2) {
+    return profileValidationError(
+      "'temperature' must be a number between 0 and 2",
+    );
+  }
+  return undefined;
+}
+
+function validateProfileDepth(
+  parsed: unknown,
+): ProfileApplicationResult | undefined {
+  const depth = getMaxNestingDepth(parsed);
+  if (depth > 5) {
+    return profileValidationError(
+      `Profile nesting depth exceeds maximum of 5 levels (found ${depth} levels). Simplify your profile structure.`,
+    );
+  }
+  return undefined;
+}
+
+function validateDangerousProfileFields(
+  parsed: unknown,
+): ProfileApplicationResult | undefined {
+  if (hasDangerousField(parsed, ['__proto__', 'constructor', 'prototype'])) {
+    return profileValidationError(
+      'Profile contains dangerous fields (__proto__, constructor, or prototype)',
+    );
+  }
+  return undefined;
+}
+
 /**
  * @plan PLAN-20251118-ISSUE533.P07
  * @requirement REQ-PROF-002.1
@@ -415,117 +521,30 @@ export async function prepareRuntimeForProfile(
 export function parseInlineProfile(
   jsonString: string,
 ): ProfileApplicationResult {
-  // Step 1: Check for empty/whitespace-only string
-  if (!jsonString || jsonString.trim() === '') {
-    return {
-      providerName: '',
-      modelName: '',
-      warnings: [],
-      error: 'Profile JSON cannot be empty',
-    };
+  const parsed = parseInlineProfileJson(jsonString);
+  if (isProfileValidationResult(parsed)) {
+    return parsed;
   }
-
-  // Step 2: Parse JSON and catch syntax errors
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonString);
-  } catch (err) {
-    return {
-      providerName: '',
-      modelName: '',
-      warnings: [],
-      error: `Invalid JSON in --profile: ${err instanceof Error ? err.message : String(err)}`,
-    };
+  const obj = validateInlineProfileObject(parsed);
+  if (isProfileValidationResult(obj)) {
+    return obj;
   }
-
-  // Step 3: Verify result is an object (not array or primitive)
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return {
-      providerName: '',
-      modelName: '',
-      warnings: [],
-      error: 'Profile must be a JSON object, not an array or primitive value',
-    };
+  const providerName = validateRequiredProfileString(obj, 'provider');
+  if (typeof providerName !== 'string') {
+    return providerName;
   }
-
-  // Cast to a record type for type safety
-  const obj = parsed as Record<string, unknown>;
-
-  // Step 4: Validate required fields (provider and model must be strings)
-  if (!obj.provider || typeof obj.provider !== 'string') {
-    return {
-      providerName: '',
-      modelName: '',
-      warnings: [],
-      error: "'provider' is required and must be a string",
-    };
+  const modelName = validateRequiredProfileString(obj, 'model');
+  if (typeof modelName !== 'string') {
+    return modelName;
   }
-
-  if (!obj.model || typeof obj.model !== 'string') {
-    return {
-      providerName: '',
-      modelName: '',
-      warnings: [],
-      error: "'model' is required and must be a string",
-    };
+  const validationError =
+    validateProfileTemperature(obj) ??
+    validateProfileDepth(parsed) ??
+    validateDangerousProfileFields(parsed);
+  if (validationError !== undefined) {
+    return validationError;
   }
-
-  // Step 5: Provider value validation removed - accept any provider name
-  // Provider existence is validated later when the profile is applied via
-  // selectAvailableProvider() and setActiveProvider(). This allows:
-  // - Custom provider aliases (e.g., "Synthetic", "Fireworks", "OpenRouter")
-  // - Future providers without code changes
-  // - Proper fallback behavior with warnings if provider unavailable
-
-  // Step 6: Optional validation - temperature range
-  if (obj.temperature !== undefined) {
-    if (typeof obj.temperature !== 'number') {
-      return {
-        providerName: '',
-        modelName: '',
-        warnings: [],
-        error: "'temperature' must be a number between 0 and 2",
-      };
-    }
-    if (obj.temperature < 0 || obj.temperature > 2) {
-      return {
-        providerName: '',
-        modelName: '',
-        warnings: [],
-        error: "'temperature' must be a number between 0 and 2",
-      };
-    }
-  }
-
-  // Step 7: Check nesting depth (max 5 levels)
-  const depth = getMaxNestingDepth(parsed);
-  if (depth > 5) {
-    return {
-      providerName: '',
-      modelName: '',
-      warnings: [],
-      error: `Profile nesting depth exceeds maximum of 5 levels (found ${depth} levels). Simplify your profile structure.`,
-    };
-  }
-
-  // Step 8: Check for dangerous fields
-  const dangerousFields = ['__proto__', 'constructor', 'prototype'];
-  if (hasDangerousField(parsed, dangerousFields)) {
-    return {
-      providerName: '',
-      modelName: '',
-      warnings: [],
-      error:
-        'Profile contains dangerous fields (__proto__, constructor, or prototype)',
-    };
-  }
-
-  // Step 9: Return successful result
-  return {
-    providerName: obj.provider,
-    modelName: obj.model,
-    warnings: [],
-  };
+  return { providerName, modelName, warnings: [] };
 }
 
 /**
@@ -557,10 +576,12 @@ function hasDangerousField(obj: unknown, dangerousFields: string[]): boolean {
   // Recursively check nested objects and arrays
   for (const key of Object.keys(record)) {
     const value = record[key];
-    if (typeof value === 'object' && value !== null) {
-      if (hasDangerousField(value, dangerousFields)) {
-        return true;
-      }
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      hasDangerousField(value, dangerousFields)
+    ) {
+      return true;
     }
   }
 
@@ -613,6 +634,108 @@ function getMaxNestingDepth(obj: unknown, currentDepth = 1): number {
 function _formatValidationErrors(_errors: unknown[]): string {
   return '';
 }
+interface FullBootstrapResultInput {
+  runtime: BootstrapRuntimeState['runtime'];
+  providerManager: BootstrapRuntimeState['providerManager'];
+  oauthManager?: BootstrapRuntimeState['oauthManager'];
+  bootstrapArgs: BootstrapProfileArgs;
+  profileApplication: ProfileApplicationResult;
+}
+
+function createInlineProfileBootstrapResult(
+  bootstrapArgs: BootstrapProfileArgs,
+): ProfileApplicationResult {
+  const baseProfile = parseInlineProfile(bootstrapArgs.profileJson ?? '');
+  if (baseProfile.error) {
+    throw new Error(`Failed to apply inline profile from --profile:
+${baseProfile.error}`);
+  }
+  return applyOverridesToProfile(baseProfile, bootstrapArgs);
+}
+
+function createLoadedProfileBootstrapResult(
+  bootstrapArgs: BootstrapProfileArgs,
+  runtimeMetadata: RuntimeBootstrapMetadata,
+): ProfileApplicationResult {
+  const settingsService = runtimeMetadata.settingsService;
+  if (settingsService) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const profile = (settingsService as any).getProfile(
+      bootstrapArgs.profileName,
+    );
+    if (profile !== null && profile !== undefined) {
+      return applyOverridesToProfile(
+        {
+          providerName: profile.provider ?? '',
+          modelName: profile.model ?? '',
+          warnings: [],
+        },
+        bootstrapArgs,
+      );
+    }
+  }
+  return {
+    providerName: '',
+    modelName: '',
+    warnings: [`Profile '${bootstrapArgs.profileName}' not found`],
+  };
+}
+
+function createOverrideOnlyBootstrapResult(
+  bootstrapArgs: BootstrapProfileArgs,
+): ProfileApplicationResult {
+  return {
+    providerName: bootstrapArgs.providerOverride ?? '',
+    modelName: bootstrapArgs.modelOverride ?? '',
+    baseUrl: bootstrapArgs.baseurlOverride ?? undefined,
+    warnings: [],
+  };
+}
+
+function createEmptyProfileBootstrapResult(): ProfileApplicationResult {
+  return {
+    providerName: null as unknown as string,
+    modelName: null as unknown as string,
+    warnings: [],
+  };
+}
+
+function createTestingBootstrapResult(
+  bootstrapArgs: BootstrapProfileArgs,
+  runtimeMetadata: RuntimeBootstrapMetadata,
+): ProfileApplicationResult {
+  if (bootstrapArgs.profileJson !== null) {
+    return createInlineProfileBootstrapResult(bootstrapArgs);
+  }
+  if (bootstrapArgs.profileName !== null) {
+    return createLoadedProfileBootstrapResult(bootstrapArgs, runtimeMetadata);
+  }
+  if (
+    bootstrapArgs.providerOverride !== null ||
+    bootstrapArgs.modelOverride !== null
+  ) {
+    return createOverrideOnlyBootstrapResult(bootstrapArgs);
+  }
+  return createEmptyProfileBootstrapResult();
+}
+
+function createFullBootstrapResult(
+  input: FullBootstrapResultInput,
+): BootstrapResult {
+  return {
+    runtime: {
+      ...input.runtime,
+      metadata: {
+        ...(input.runtime.metadata ?? {}),
+        stage: 'bootstrap-complete',
+      },
+    },
+    providerManager: input.providerManager,
+    oauthManager: input.oauthManager,
+    bootstrapArgs: input.bootstrapArgs,
+    profile: input.profileApplication,
+  };
+}
 
 /**
  * @plan PLAN-20251020-STATELESSPROVIDER3.P06
@@ -626,119 +749,23 @@ export function createBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
   runtimeMetadata: RuntimeBootstrapMetadata,
 ): ProfileApplicationResult;
-export function createBootstrapResult(input: {
-  runtime: BootstrapRuntimeState['runtime'];
-  providerManager: BootstrapRuntimeState['providerManager'];
-  oauthManager?: BootstrapRuntimeState['oauthManager'];
-  bootstrapArgs: BootstrapProfileArgs;
-  profileApplication: ProfileApplicationResult;
-}): BootstrapResult;
 export function createBootstrapResult(
-  inputOrBootstrapArgs:
-    | {
-        runtime: BootstrapRuntimeState['runtime'];
-        providerManager: BootstrapRuntimeState['providerManager'];
-        oauthManager?: BootstrapRuntimeState['oauthManager'];
-        bootstrapArgs: BootstrapProfileArgs;
-        profileApplication: ProfileApplicationResult;
-      }
-    | BootstrapProfileArgs,
+  input: FullBootstrapResultInput,
+): BootstrapResult;
+export function createBootstrapResult(
+  inputOrBootstrapArgs: FullBootstrapResultInput | BootstrapProfileArgs,
   runtimeMetadata?: RuntimeBootstrapMetadata,
 ): BootstrapResult | ProfileApplicationResult {
-  // Handle simplified two-argument call for testing
   if (
     runtimeMetadata !== undefined &&
     typeof inputOrBootstrapArgs === 'object' &&
     'profileName' in inputOrBootstrapArgs
   ) {
-    const bootstrapArgs = inputOrBootstrapArgs;
-
-    // Apply profile from profileJson if present
-    if (bootstrapArgs.profileJson !== null) {
-      const baseProfile = parseInlineProfile(bootstrapArgs.profileJson);
-      // If parseInlineProfile returned an error, throw it
-      if (baseProfile.error) {
-        throw new Error(`Failed to apply inline profile from --profile:
-${baseProfile.error}`);
-      }
-      return applyOverridesToProfile(baseProfile, bootstrapArgs);
-    }
-
-    // Handle profileName (from --profile-load)
-    if (bootstrapArgs.profileName !== null) {
-      const settingsService = runtimeMetadata.settingsService;
-      if (settingsService) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const profile = (settingsService as any).getProfile(
-          bootstrapArgs.profileName,
-        );
-        if (profile) {
-          const baseProfile: ProfileApplicationResult = {
-            providerName: profile.provider || '',
-            modelName: profile.model || '',
-            warnings: [],
-          };
-          return applyOverridesToProfile(baseProfile, bootstrapArgs);
-        }
-      }
-      // Profile not found
-      return {
-        providerName: '',
-        modelName: '',
-        warnings: [`Profile '${bootstrapArgs.profileName}' not found`],
-      };
-    }
-
-    // Handle command-line overrides without profile
-    if (
-      bootstrapArgs.providerOverride !== null ||
-      bootstrapArgs.modelOverride !== null
-    ) {
-      const baseProfile: ProfileApplicationResult = {
-        providerName: bootstrapArgs.providerOverride || '',
-        modelName: bootstrapArgs.modelOverride || '',
-        baseUrl: bootstrapArgs.baseurlOverride || undefined,
-        warnings: [],
-      };
-      // Don't call applyOverridesToProfile since we're using them directly
-      return baseProfile;
-    }
-
-    // Otherwise return null profile application result (no profile specified)
-    // Otherwise return null profile application result (no profile specified)
-    return {
-      providerName: null as unknown as string,
-      modelName: null as unknown as string,
-      warnings: [],
-    };
+    return createTestingBootstrapResult(inputOrBootstrapArgs, runtimeMetadata);
   }
-
-  // Handle full input object call (production)
-  const input = inputOrBootstrapArgs as {
-    runtime: BootstrapRuntimeState['runtime'];
-    providerManager: BootstrapRuntimeState['providerManager'];
-    oauthManager?: BootstrapRuntimeState['oauthManager'];
-    bootstrapArgs: BootstrapProfileArgs;
-    profileApplication: ProfileApplicationResult;
-  };
-
-  const runtimeMeta = {
-    ...(input.runtime.metadata ?? {}),
-    stage: 'bootstrap-complete',
-  };
-
-  const runtime: ProviderRuntimeContext = {
-    ...input.runtime,
-    metadata: runtimeMeta,
-  };
-
-  return {
-    runtime,
-    providerManager: input.providerManager,
-    oauthManager: input.oauthManager,
-    bootstrapArgs: input.bootstrapArgs,
-    profile: input.profileApplication,
-  };
+  return createFullBootstrapResult(
+    inputOrBootstrapArgs as FullBootstrapResultInput,
+  );
 }
 
 /**

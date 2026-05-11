@@ -32,7 +32,8 @@ export function isPrivateIp(url: string): boolean {
   try {
     const hostname = new URL(url).hostname;
     return PRIVATE_IP_RANGES.some((range) => range.test(hostname));
-  } catch (_e) {
+  } catch {
+    // Invalid URL - not a private IP
     return false;
   }
 }
@@ -70,7 +71,7 @@ export async function fetchWithTimeout(
       (error instanceof Error && error.name === 'AbortError')
     ) {
       // Check if it was our timeout or the external signal
-      if (signal?.aborted) {
+      if (signal?.aborted === true) {
         throw new FetchError('Request aborted by user', 'ABORT_ERR');
       }
       throw new FetchError(`Request timed out after ${timeout}ms`, 'ETIMEDOUT');

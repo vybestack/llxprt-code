@@ -43,7 +43,7 @@ describe('CodeSearchTool', () => {
   it('should fail validation if query is missing', () => {
     // @ts-expect-error Testing invalid params which are not allowed by types
     const params: CodeSearchToolParams = {};
-    expect(() => tool.build(params)).toThrow();
+    expect(() => tool.build(params)).toThrow(Error);
   });
 
   it('should execute search successfully with default tokens', async () => {

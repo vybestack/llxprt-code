@@ -65,7 +65,6 @@ const PROVIDER_INFO: Record<string, ProviderInfo> = {
   },
 };
 
-// Aliases for provider name variations
 const PROVIDER_ALIASES: Record<string, string> = {
   'lm-studio': 'local',
   lmstudio: 'local',
@@ -86,8 +85,90 @@ function formatProviderName(providerName: string): string {
   if (info) {
     return info.displayName;
   }
-  // Capitalize first letter for unknown providers
   return providerName.charAt(0).toUpperCase() + providerName.slice(1);
+}
+
+interface LocalProviderContentProps {
+  providerInfo: ProviderInfo | null;
+}
+
+function LocalProviderContent({ providerInfo }: LocalProviderContentProps) {
+  return (
+    <Box flexDirection="column">
+      <Text color={Colors.AccentGreen}>
+        Local models keep all data on your machine.
+      </Text>
+      {providerInfo?.keyPoints.map((point, index) => (
+        <Text key={index} color={Colors.Foreground}>
+          {'  '}- {point}
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
+interface KnownProviderContentProps {
+  providerInfo: ProviderInfo;
+}
+
+function KnownProviderContent({ providerInfo }: KnownProviderContentProps) {
+  return (
+    <Box flexDirection="column">
+      <Text color={Colors.Foreground}>
+        <Text color={Colors.AccentBlue}>[Terms]</Text> {providerInfo.tosUrl}
+      </Text>
+      <Text color={Colors.Foreground}>
+        <Text color={Colors.AccentGreen}>[Privacy]</Text>{' '}
+        {providerInfo.privacyUrl}
+      </Text>
+      <Newline />
+      <Text bold color={Colors.Foreground}>
+        Key points:
+      </Text>
+      {providerInfo.keyPoints.map((point, index) => (
+        <Text key={index} color={Colors.Foreground}>
+          {'  '}- {point}
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
+interface UnknownProviderContentProps {
+  displayName: string;
+}
+
+function UnknownProviderContent({ displayName }: UnknownProviderContentProps) {
+  return (
+    <Box flexDirection="column">
+      <Text color={Colors.Foreground}>
+        Please refer to {displayName}&apos;s terms of service and privacy policy
+      </Text>
+      <Text color={Colors.Foreground}>
+        for information about how your data is handled.
+      </Text>
+    </Box>
+  );
+}
+
+interface ProviderContentProps {
+  providerInfo: ProviderInfo | null;
+  isLocal: boolean;
+  displayName: string;
+}
+
+function ProviderContent({
+  providerInfo,
+  isLocal,
+  displayName,
+}: ProviderContentProps) {
+  if (isLocal) {
+    return <LocalProviderContent providerInfo={providerInfo} />;
+  }
+  if (providerInfo) {
+    return <KnownProviderContent providerInfo={providerInfo} />;
+  }
+  return <UnknownProviderContent displayName={displayName} />;
 }
 
 interface MultiProviderPrivacyNoticeProps {
@@ -134,54 +215,15 @@ export const MultiProviderPrivacyNotice = ({
         policies.
       </Text>
       <Newline />
-
       <Text bold color={Colors.AccentCyan}>
         Active Provider: {displayName}
       </Text>
       <Newline />
-
-      {isLocal ? (
-        <Box flexDirection="column">
-          <Text color={Colors.AccentGreen}>
-            Local models keep all data on your machine.
-          </Text>
-          {providerInfo?.keyPoints.map((point, index) => (
-            <Text key={index} color={Colors.Foreground}>
-              {'  '}- {point}
-            </Text>
-          ))}
-        </Box>
-      ) : providerInfo ? (
-        <Box flexDirection="column">
-          <Text color={Colors.Foreground}>
-            <Text color={Colors.AccentBlue}>[Terms]</Text> {providerInfo.tosUrl}
-          </Text>
-          <Text color={Colors.Foreground}>
-            <Text color={Colors.AccentGreen}>[Privacy]</Text>{' '}
-            {providerInfo.privacyUrl}
-          </Text>
-          <Newline />
-          <Text bold color={Colors.Foreground}>
-            Key points:
-          </Text>
-          {providerInfo.keyPoints.map((point, index) => (
-            <Text key={index} color={Colors.Foreground}>
-              {'  '}- {point}
-            </Text>
-          ))}
-        </Box>
-      ) : (
-        <Box flexDirection="column">
-          <Text color={Colors.Foreground}>
-            Please refer to {displayName}&apos;s terms of service and privacy
-            policy
-          </Text>
-          <Text color={Colors.Foreground}>
-            for information about how your data is handled.
-          </Text>
-        </Box>
-      )}
-
+      <ProviderContent
+        providerInfo={providerInfo}
+        isLocal={isLocal}
+        displayName={displayName}
+      />
       <Newline />
       <Text color={Colors.Gray}>
         For full provider information, see: docs/tos-privacy.md

@@ -53,7 +53,7 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
 
     // Find the usage/terminal message
     const terminalMessage = messages.find(
-      (m) => m.metadata?.usage || m.metadata?.stopReason,
+      (m) => m.metadata?.usage != null || m.metadata?.stopReason != null,
     );
     expect(terminalMessage).toBeDefined();
 
@@ -85,7 +85,7 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
     }
 
     const terminalMessage = messages.find(
-      (m) => m.metadata?.usage || m.metadata?.stopReason,
+      (m) => m.metadata?.usage != null || m.metadata?.stopReason != null,
     );
     expect(terminalMessage).toBeDefined();
     // stopReason is normalized (completed → end_turn), finishReason preserves raw value

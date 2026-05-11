@@ -57,6 +57,7 @@ describe('file-read-max-lines setting', () => {
       readFileTool = new ReadFileTool(mockConfigInstance);
       const invocation = readFileTool.build({ absolute_path: testFile });
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (typeof invocation === 'string') {
         throw new Error(`Unexpected validation error: ${invocation}`);
       }
@@ -86,6 +87,7 @@ describe('file-read-max-lines setting', () => {
       readFileTool = new ReadFileTool(mockConfigInstance);
       const invocation = readFileTool.build({ absolute_path: testFile });
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (typeof invocation === 'string') {
         throw new Error(`Unexpected validation error: ${invocation}`);
       }
@@ -118,6 +120,7 @@ describe('file-read-max-lines setting', () => {
         limit: 25,
       });
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (typeof invocation === 'string') {
         throw new Error(`Unexpected validation error: ${invocation}`);
       }
@@ -165,6 +168,7 @@ describe('file-read-max-lines setting', () => {
         paths: ['*.txt'],
       });
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (typeof invocation === 'string') {
         throw new Error(`Unexpected validation error: ${invocation}`);
       }
@@ -211,6 +215,7 @@ describe('file-read-max-lines setting', () => {
         paths: ['*.txt'],
       });
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (typeof invocation === 'string') {
         throw new Error(`Unexpected validation error: ${invocation}`);
       }

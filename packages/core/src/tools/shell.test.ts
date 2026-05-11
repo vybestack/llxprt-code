@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import {
   vi,
   describe,
@@ -201,7 +203,7 @@ describe('ShellTool', () => {
       result: Partial<ShellExecutionResult> = {},
     ) => {
       const fullResult: ShellExecutionResult = {
-        rawOutput: Buffer.from(result.output || ''),
+        rawOutput: Buffer.from(result.output ?? ''),
         output: 'Success',
         exitCode: 0,
         signal: null,
@@ -825,9 +827,10 @@ describe('ShellTool', () => {
       );
 
       expect(confirmation).not.toBe(false);
-      expect(confirmation && confirmation.type).toBe('exec');
+      expect(confirmation !== false && confirmation.type).toBe('exec');
 
-      if (!confirmation || confirmation.type !== 'exec') {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (confirmation === false || confirmation.type !== 'exec') {
         throw new Error('Expected exec confirmation details');
       }
 
@@ -848,7 +851,8 @@ describe('ShellTool', () => {
       );
 
       expect(confirmation).not.toBe(false);
-      if (!confirmation || confirmation.type !== 'exec') {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (confirmation === false || confirmation.type !== 'exec') {
         throw new Error('Expected exec confirmation details');
       }
 
@@ -866,7 +870,8 @@ describe('ShellTool', () => {
       );
 
       expect(confirmation).not.toBe(false);
-      if (!confirmation || confirmation.type !== 'exec') {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (confirmation === false || confirmation.type !== 'exec') {
         throw new Error('Expected exec confirmation details');
       }
 
@@ -876,7 +881,7 @@ describe('ShellTool', () => {
     });
 
     it('should throw an error if validation fails', () => {
-      expect(() => shellTool.build({ command: '' })).toThrow();
+      expect(() => shellTool.build({ command: '' })).toThrow(Error);
     });
 
     describe('in non-interactive mode', () => {
@@ -1396,7 +1401,7 @@ describe('Shell Tool Filtering Behavior', () => {
       // Assert: Should contain first 3 ERROR lines only
       const stdoutMatch = result.llmContent.match(/Stdout:([\s\S]*?)\nStderr:/);
       expect(stdoutMatch).not.toBeNull();
-      const stdoutBlock = stdoutMatch ? stdoutMatch[1].trim() : '';
+      const stdoutBlock = stdoutMatch != null ? stdoutMatch[1].trim() : '';
       const lines = stdoutBlock.split('\n').filter((line) => line.trim());
       expect(lines.length).toBeGreaterThan(0);
       expect(lines.length).toBeLessThanOrEqual(3);
@@ -1437,7 +1442,7 @@ describe('Shell Tool Filtering Behavior', () => {
       // Assert: Should contain last 2 ERROR lines only
       const stdoutMatch = result.llmContent.match(/Stdout:([\s\S]*?)\nStderr:/);
       expect(stdoutMatch).not.toBeNull();
-      const stdoutBlock = stdoutMatch ? stdoutMatch[1].trim() : '';
+      const stdoutBlock = stdoutMatch != null ? stdoutMatch[1].trim() : '';
       const lines = stdoutBlock.split('\n').filter((line) => line.trim());
       expect(lines.length).toBeGreaterThan(0);
       expect(lines.length).toBeLessThanOrEqual(2);
@@ -1545,7 +1550,7 @@ describe('Shell Tool Filtering Behavior', () => {
             grep_flags: ['-i', '-v', '-invalid'],
           })
           .execute(new AbortController().signal),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Invalid grep flag/);
     });
   });
 });

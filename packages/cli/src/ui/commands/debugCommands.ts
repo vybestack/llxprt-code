@@ -398,6 +398,8 @@ export function handleDebugCommand(args: string[]): MessageActionReturn {
  */
 function isValidNamespace(namespace: string): boolean {
   // Allow alphanumeric, colons, hyphens, underscores, and wildcards
+  // Static regex for namespace validation - no dynamic parts
+  // eslint-disable-next-line sonarjs/regular-expr
   const validPattern = /^[a-zA-Z0-9:_\-*]+$/;
   if (!validPattern.test(namespace)) {
     return false;

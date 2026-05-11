@@ -213,6 +213,6 @@ describe('CodeAssistServer', () => {
         model: 'test-model',
         contents: [{ role: 'user', parts: [{ text: 'request' }] }],
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(Error);
   });
 });

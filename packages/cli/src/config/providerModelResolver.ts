@@ -34,7 +34,7 @@ function getAliasDefaultModel(provider: string): string | undefined {
     const entry = loadProviderAliasEntries().find(
       (candidate: { alias: string }) => candidate.alias === provider,
     );
-    const candidate = entry?.config?.defaultModel;
+    const candidate = entry?.config.defaultModel;
     return typeof candidate === 'string' && candidate.trim()
       ? candidate.trim()
       : undefined;
@@ -81,13 +81,13 @@ export function resolveProviderAndModel(
 
   const aliasDefaultModel = getAliasDefaultModel(provider);
 
-  const model: string =
-    cliModel ||
-    profileModel ||
-    settingsModel ||
-    envDefaultModel ||
-    envGeminiModel ||
-    (provider === 'gemini' ? DEFAULT_GEMINI_MODEL : aliasDefaultModel || '');
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty model string should fall back to next source */
+  const providerDefault =
+    provider === 'gemini' ? DEFAULT_GEMINI_MODEL : aliasDefaultModel || '';
+  const cliOrProfileModel =
+    cliModel || profileModel || settingsModel || envDefaultModel;
+  const model: string = cliOrProfileModel || envGeminiModel || providerDefault;
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
   return { provider, model };
 }

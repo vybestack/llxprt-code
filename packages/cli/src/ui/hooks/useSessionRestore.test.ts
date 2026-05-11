@@ -50,6 +50,7 @@ describe('Session Restore Chat Initialization', () => {
       expect(mockGeminiClient.resetChat).not.toHaveBeenCalled();
 
       const geminiClient = mockConfig.getGeminiClient();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (geminiClient) {
         await geminiClient.resetChat();
       }
@@ -102,6 +103,7 @@ describe('Session Restore Chat Initialization', () => {
 
       const geminiClient = mockConfig.getGeminiClient();
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (geminiClient) {
         await geminiClient.resetChat();
         const historyService = geminiClient.getHistoryService();
@@ -133,6 +135,7 @@ describe('Session Restore Chat Initialization', () => {
 
       const geminiClient = mockConfig.getGeminiClient();
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (geminiClient) {
         await geminiClient.resetChat().catch(() => {});
         const historyService = geminiClient.getHistoryService();

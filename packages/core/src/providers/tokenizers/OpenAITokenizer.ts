@@ -36,7 +36,7 @@ export class OpenAITokenizer implements ITokenizer {
         try {
           encoder = encoding_for_model(model as TiktokenModel);
           this.encoderCache.set(model, encoder);
-        } catch (_error) {
+        } catch {
           // Fall back to o200k_base encoding for newer models
           this.logger.debug(
             () => `No specific encoding for model ${model}, using o200k_base`,

@@ -68,12 +68,12 @@ describe('ActivateSkillTool', () => {
     );
 
     expect(details).not.toBe(false);
-    if (details !== false) {
-      expect(details.title).toBe('Activate Skill: test-skill');
-      expect(details.prompt).toContain('enable the specialized agent skill');
-      expect(details.prompt).toContain('A test skill');
-      expect(details.prompt).toContain('Mock folder structure');
-    }
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (details === false) throw new Error('unreachable: narrowing failed');
+    expect(details.title).toBe('Activate Skill: test-skill');
+    expect(details.prompt).toContain('enable the specialized agent skill');
+    expect(details.prompt).toContain('A test skill');
+    expect(details.prompt).toContain('Mock folder structure');
   });
 
   it('should activate a valid skill and return its content in XML tags', async () => {
@@ -101,7 +101,7 @@ describe('ActivateSkillTool', () => {
 
   it('should throw error if skill is not in enum', async () => {
     const params = { name: 'non-existent' };
-    expect(() => tool.build(params as { name: string })).toThrow();
+    expect(() => tool.build(params as { name: string })).toThrow(Error);
   });
 
   it('should return an error if skill content cannot be read', async () => {
@@ -117,6 +117,6 @@ describe('ActivateSkillTool', () => {
   it('should validate that name is provided', () => {
     expect(() =>
       tool.build({ name: '' } as unknown as { name: string }),
-    ).toThrow();
+    ).toThrow(Error);
   });
 });

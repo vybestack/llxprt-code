@@ -97,7 +97,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     const serverAllowListKey = this.serverName;
     const toolAllowListKey = `${this.serverName}.${this.serverToolName}`;
 
-    if (this.cliConfig?.isTrustedFolder() && this.trust) {
+    if (this.cliConfig?.isTrustedFolder() === true && this.trust === true) {
       return false; // server is trusted, no confirmation needed
     }
 
@@ -132,6 +132,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
   // This is needed because CallToolResults should return errors inside the response.
   // ref: https://modelcontextprotocol.io/specification/2025-06-18/schema#calltoolresult
   isMCPToolError(rawResponseParts: Part[]): boolean {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- MCP tool payload data.
     const functionResponse = rawResponseParts?.[0]?.functionResponse;
     const response = functionResponse?.response;
 
@@ -147,6 +148,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
       }
 
       // Legacy check for nested error object (keep for backward compatibility if any tools rely on it)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- MCP tool payload data.
       const error = (response as { error?: McpError })?.error;
       const isError = error?.isError;
 
@@ -329,10 +331,13 @@ function transformResourceBlock(
   toolName: string,
 ): Part | Part[] | null {
   const resource = block.resource;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- MCP tool payload data.
   if (resource?.text) {
     return { text: resource.text };
   }
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- MCP tool payload data.
   if (resource?.blob) {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string mimeType is invalid, should fall through to default
     const mimeType = resource.mimeType || 'application/octet-stream';
     return [
       {
@@ -351,6 +356,7 @@ function transformResourceBlock(
 
 function transformResourceLinkBlock(block: McpResourceLinkBlock): Part {
   return {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string title should fall through to name
     text: `Resource Link: ${block.title || block.name} at ${block.uri}`,
   };
 }
@@ -362,8 +368,10 @@ function transformResourceLinkBlock(block: McpResourceLinkBlock): Part {
  * @returns A clean Part[] array ready for the scheduler.
  */
 function transformMcpContentToParts(sdkResponse: Part[]): Part[] {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- MCP tool payload data.
   const funcResponse = sdkResponse?.[0]?.functionResponse;
   const mcpContent = funcResponse?.response?.content as McpContentBlock[];
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string tool name should fall through to 'unknown tool'
   const toolName = funcResponse?.name || 'unknown tool';
 
   if (!Array.isArray(mcpContent)) {
@@ -400,6 +408,7 @@ function transformMcpContentToParts(sdkResponse: Part[]): Part[] {
  * @returns A formatted string representing the tool's output.
  */
 function getStringifiedResultForDisplay(rawResponse: Part[]): string {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- MCP tool payload data.
   const mcpContent = rawResponse?.[0]?.functionResponse?.response
     ?.content as McpContentBlock[];
 
@@ -416,14 +425,19 @@ function getStringifiedResultForDisplay(rawResponse: Part[]): string {
       case 'audio':
         return `[Audio: ${block.mimeType}]`;
       case 'resource_link':
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string title should fall through to name
         return `[Link to ${block.title || block.name}: ${block.uri}]`;
       case 'resource':
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- MCP tool payload data.
         if (block.resource?.text) {
           return block.resource.text;
         }
+        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string mimeType should fall through to 'unknown type' */
         return `[Embedded Resource: ${
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- MCP tool payload data.
           block.resource?.mimeType || 'unknown type'
         }]`;
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       default:
         return `[Unknown content type: ${(block as { type: string }).type}]`;
     }

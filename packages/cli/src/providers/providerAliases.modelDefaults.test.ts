@@ -21,6 +21,32 @@ import {
   type ModelDefaultRule,
 } from './providerAliases.js';
 
+/**
+ * Helper to load entries from a temp user alias dir via Storage mock.
+ * Shared across multiple test suites to avoid sonarjs/no-identical-functions.
+ */
+async function loadWithTempConfig(
+  tmpDir: string,
+  filename: string,
+  config: Record<string, unknown>,
+) {
+  const { Storage } = await import('@vybestack/llxprt-code-core');
+  const fakeLlxprtDir = path.join(tmpDir, '.llxprt');
+  const fakeProvidersDir = path.join(fakeLlxprtDir, 'providers');
+  fs.mkdirSync(fakeProvidersDir, { recursive: true });
+
+  const configPath = path.join(fakeProvidersDir, filename);
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+  vi.spyOn(Storage, 'getGlobalLlxprtDir').mockReturnValue(fakeLlxprtDir);
+
+  try {
+    return loadProviderAliasEntries();
+  } finally {
+    vi.mocked(Storage.getGlobalLlxprtDir).mockRestore();
+  }
+}
+
 describe('providerAliases modelDefaults parsing (Phase 01)', () => {
   let tmpDir: string;
   let warnSpy: ReturnType<typeof vi.spyOn>;
@@ -37,31 +63,9 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  // Helper to load entries from a temp user alias dir via Storage mock
-  async function loadWithTempConfig(
-    filename: string,
-    config: Record<string, unknown>,
-  ) {
-    const { Storage } = await import('@vybestack/llxprt-code-core');
-    const fakeLlxprtDir = path.join(tmpDir, '.llxprt');
-    const fakeProvidersDir = path.join(fakeLlxprtDir, 'providers');
-    fs.mkdirSync(fakeProvidersDir, { recursive: true });
-
-    const configPath = path.join(fakeProvidersDir, filename);
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-    vi.spyOn(Storage, 'getGlobalLlxprtDir').mockReturnValue(fakeLlxprtDir);
-
-    try {
-      return loadProviderAliasEntries();
-    } finally {
-      vi.mocked(Storage.getGlobalLlxprtDir).mockRestore();
-    }
-  }
-
   describe('valid modelDefaults in config', () => {
     it('parses modelDefaults from a .config file with valid modelDefaults array', async () => {
-      const entries = await loadWithTempConfig('test-provider.config', {
+      const entries = await loadWithTempConfig(tmpDir, 'test-provider.config', {
         name: 'test-provider',
         baseProvider: 'openai',
         modelDefaults: [
@@ -88,7 +92,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('invalid regex pattern', () => {
     it('strips invalid regex pattern and logs warning', async () => {
-      const entries = await loadWithTempConfig('regex-test.config', {
+      const entries = await loadWithTempConfig(tmpDir, 'regex-test.config', {
         name: 'regex-test',
         baseProvider: 'openai',
         modelDefaults: [
@@ -114,7 +118,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('mixed valid and invalid pattern rules', () => {
     it('keeps valid rules and strips invalid ones (length === 1)', async () => {
-      const entries = await loadWithTempConfig('mixed-rules.config', {
+      const entries = await loadWithTempConfig(tmpDir, 'mixed-rules.config', {
         name: 'mixed-rules',
         baseProvider: 'openai',
         modelDefaults: [
@@ -138,16 +142,20 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('pattern that is not a string', () => {
     it('skips entry with non-string pattern and logs warning', async () => {
-      const entries = await loadWithTempConfig('nonstring-pattern.config', {
-        name: 'nonstring-pattern',
-        baseProvider: 'openai',
-        modelDefaults: [
-          {
-            pattern: 123,
-            ephemeralSettings: { 'reasoning.enabled': true },
-          },
-        ],
-      });
+      const entries = await loadWithTempConfig(
+        tmpDir,
+        'nonstring-pattern.config',
+        {
+          name: 'nonstring-pattern',
+          baseProvider: 'openai',
+          modelDefaults: [
+            {
+              pattern: 123,
+              ephemeralSettings: { 'reasoning.enabled': true },
+            },
+          ],
+        },
+      );
 
       const entry = entries.find((e) => e.alias === 'nonstring-pattern');
       expect(entry).toBeDefined();
@@ -163,15 +171,19 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('missing ephemeralSettings', () => {
     it('skips entry with missing ephemeralSettings and logs warning', async () => {
-      const entries = await loadWithTempConfig('missing-ephemeral.config', {
-        name: 'missing-ephemeral',
-        baseProvider: 'openai',
-        modelDefaults: [
-          {
-            pattern: 'gpt-4.*',
-          },
-        ],
-      });
+      const entries = await loadWithTempConfig(
+        tmpDir,
+        'missing-ephemeral.config',
+        {
+          name: 'missing-ephemeral',
+          baseProvider: 'openai',
+          modelDefaults: [
+            {
+              pattern: 'gpt-4.*',
+            },
+          ],
+        },
+      );
 
       const entry = entries.find((e) => e.alias === 'missing-ephemeral');
       expect(entry).toBeDefined();
@@ -187,11 +199,15 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('empty modelDefaults array', () => {
     it('handles empty modelDefaults array without crash', async () => {
-      const entries = await loadWithTempConfig('empty-defaults.config', {
-        name: 'empty-defaults',
-        baseProvider: 'openai',
-        modelDefaults: [],
-      });
+      const entries = await loadWithTempConfig(
+        tmpDir,
+        'empty-defaults.config',
+        {
+          name: 'empty-defaults',
+          baseProvider: 'openai',
+          modelDefaults: [],
+        },
+      );
 
       const entry = entries.find((e) => e.alias === 'empty-defaults');
       expect(entry).toBeDefined();
@@ -201,7 +217,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('backward compatibility — no modelDefaults', () => {
     it('loads config without modelDefaults correctly', async () => {
-      const entries = await loadWithTempConfig('no-defaults.config', {
+      const entries = await loadWithTempConfig(tmpDir, 'no-defaults.config', {
         name: 'no-defaults',
         baseProvider: 'openai',
         defaultModel: 'gpt-4o',
@@ -216,7 +232,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('modelDefaults present but not an array', () => {
     it('drops the field entirely and logs warning', async () => {
-      const entries = await loadWithTempConfig('not-array.config', {
+      const entries = await loadWithTempConfig(tmpDir, 'not-array.config', {
         name: 'not-array',
         baseProvider: 'openai',
         modelDefaults: 'not-an-array',
@@ -234,11 +250,15 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
     });
 
     it('drops object modelDefaults and logs warning', async () => {
-      const entries = await loadWithTempConfig('object-defaults.config', {
-        name: 'object-defaults',
-        baseProvider: 'openai',
-        modelDefaults: { pattern: 'foo', ephemeralSettings: {} },
-      });
+      const entries = await loadWithTempConfig(
+        tmpDir,
+        'object-defaults.config',
+        {
+          name: 'object-defaults',
+          baseProvider: 'openai',
+          modelDefaults: { pattern: 'foo', ephemeralSettings: {} },
+        },
+      );
 
       const entry = entries.find((e) => e.alias === 'object-defaults');
       expect(entry).toBeDefined();
@@ -254,7 +274,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('non-object entries in modelDefaults array', () => {
     it('skips non-object entries (strings, numbers, null) with warning per entry', async () => {
-      const entries = await loadWithTempConfig('non-objects.config', {
+      const entries = await loadWithTempConfig(tmpDir, 'non-objects.config', {
         name: 'non-objects',
         baseProvider: 'openai',
         modelDefaults: ['a-string', 42, null],
@@ -276,16 +296,20 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('entry with pattern field that is not a string', () => {
     it('skips entry when pattern is a number', async () => {
-      const entries = await loadWithTempConfig('pattern-number.config', {
-        name: 'pattern-number',
-        baseProvider: 'openai',
-        modelDefaults: [
-          {
-            pattern: 999,
-            ephemeralSettings: { foo: 'bar' },
-          },
-        ],
-      });
+      const entries = await loadWithTempConfig(
+        tmpDir,
+        'pattern-number.config',
+        {
+          name: 'pattern-number',
+          baseProvider: 'openai',
+          modelDefaults: [
+            {
+              pattern: 999,
+              ephemeralSettings: { foo: 'bar' },
+            },
+          ],
+        },
+      );
 
       const entry = entries.find((e) => e.alias === 'pattern-number');
       expect(entry).toBeDefined();
@@ -299,7 +323,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
     });
 
     it('skips entry when pattern is boolean', async () => {
-      const entries = await loadWithTempConfig('pattern-bool.config', {
+      const entries = await loadWithTempConfig(tmpDir, 'pattern-bool.config', {
         name: 'pattern-bool',
         baseProvider: 'openai',
         modelDefaults: [
@@ -324,16 +348,20 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('ephemeralSettings is not a plain object', () => {
     it('skips entry when ephemeralSettings is an array', async () => {
-      const entries = await loadWithTempConfig('ephemeral-array.config', {
-        name: 'ephemeral-array',
-        baseProvider: 'openai',
-        modelDefaults: [
-          {
-            pattern: 'gpt-4.*',
-            ephemeralSettings: [1, 2, 3],
-          },
-        ],
-      });
+      const entries = await loadWithTempConfig(
+        tmpDir,
+        'ephemeral-array.config',
+        {
+          name: 'ephemeral-array',
+          baseProvider: 'openai',
+          modelDefaults: [
+            {
+              pattern: 'gpt-4.*',
+              ephemeralSettings: [1, 2, 3],
+            },
+          ],
+        },
+      );
 
       const entry = entries.find((e) => e.alias === 'ephemeral-array');
       expect(entry).toBeDefined();
@@ -347,16 +375,20 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
     });
 
     it('skips entry when ephemeralSettings is a string', async () => {
-      const entries = await loadWithTempConfig('ephemeral-string.config', {
-        name: 'ephemeral-string',
-        baseProvider: 'openai',
-        modelDefaults: [
-          {
-            pattern: 'gpt-4.*',
-            ephemeralSettings: 'not-an-object',
-          },
-        ],
-      });
+      const entries = await loadWithTempConfig(
+        tmpDir,
+        'ephemeral-string.config',
+        {
+          name: 'ephemeral-string',
+          baseProvider: 'openai',
+          modelDefaults: [
+            {
+              pattern: 'gpt-4.*',
+              ephemeralSettings: 'not-an-object',
+            },
+          ],
+        },
+      );
 
       const entry = entries.find((e) => e.alias === 'ephemeral-string');
       expect(entry).toBeDefined();
@@ -372,7 +404,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('non-scalar ephemeralSettings values (nested objects)', () => {
     it('allows non-scalar values through at parse time', async () => {
-      const entries = await loadWithTempConfig('nested-values.config', {
+      const entries = await loadWithTempConfig(tmpDir, 'nested-values.config', {
         name: 'nested-values',
         baseProvider: 'openai',
         modelDefaults: [
@@ -402,7 +434,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   describe('empty pattern string', () => {
     it('skips entry with empty pattern and logs warning', async () => {
-      const entries = await loadWithTempConfig('empty-pattern.config', {
+      const entries = await loadWithTempConfig(tmpDir, 'empty-pattern.config', {
         name: 'empty-pattern',
         baseProvider: 'openai',
         modelDefaults: [
@@ -600,29 +632,8 @@ describe('providerAliases sandbox field validation', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  async function loadWithTempConfig(
-    filename: string,
-    config: Record<string, unknown>,
-  ) {
-    const { Storage } = await import('@vybestack/llxprt-code-core');
-    const fakeLlxprtDir = path.join(tmpDir, '.llxprt');
-    const fakeProvidersDir = path.join(fakeLlxprtDir, 'providers');
-    fs.mkdirSync(fakeProvidersDir, { recursive: true });
-
-    const configPath = path.join(fakeProvidersDir, filename);
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-    vi.spyOn(Storage, 'getGlobalLlxprtDir').mockReturnValue(fakeLlxprtDir);
-
-    try {
-      return loadProviderAliasEntries();
-    } finally {
-      vi.mocked(Storage.getGlobalLlxprtDir).mockRestore();
-    }
-  }
-
   it('preserves valid sandbox-base-url string', async () => {
-    const entries = await loadWithTempConfig('sandbox-valid.config', {
+    const entries = await loadWithTempConfig(tmpDir, 'sandbox-valid.config', {
       name: 'sandbox-valid',
       baseProvider: 'openai',
       'sandbox-base-url': 'http://host.docker.internal:1234',
@@ -635,7 +646,7 @@ describe('providerAliases sandbox field validation', () => {
   });
 
   it('drops non-string sandbox-base-url and warns', async () => {
-    const entries = await loadWithTempConfig('sandbox-bad-url.config', {
+    const entries = await loadWithTempConfig(tmpDir, 'sandbox-bad-url.config', {
       name: 'sandbox-bad-url',
       baseProvider: 'openai',
       'sandbox-base-url': 12345,
@@ -649,7 +660,7 @@ describe('providerAliases sandbox field validation', () => {
   });
 
   it('preserves valid requires-auth boolean', async () => {
-    const entries = await loadWithTempConfig('auth-valid.config', {
+    const entries = await loadWithTempConfig(tmpDir, 'auth-valid.config', {
       name: 'auth-valid',
       baseProvider: 'openai',
       'requires-auth': false,
@@ -660,7 +671,7 @@ describe('providerAliases sandbox field validation', () => {
   });
 
   it('drops non-boolean requires-auth and warns', async () => {
-    const entries = await loadWithTempConfig('auth-bad.config', {
+    const entries = await loadWithTempConfig(tmpDir, 'auth-bad.config', {
       name: 'auth-bad',
       baseProvider: 'openai',
       'requires-auth': 'yes',

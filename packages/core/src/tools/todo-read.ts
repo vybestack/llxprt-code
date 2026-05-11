@@ -43,7 +43,7 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     // Get session and agent IDs from context
-    const sessionId = this.context?.sessionId || 'default';
+    const sessionId = this.context?.sessionId ?? 'default';
     const agentId = this.context?.agentId;
 
     const store = new TodoStore(sessionId, agentId);
@@ -59,7 +59,10 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
       const reminder =
         this.reminderService.getReminderForEmptyTodos(isComplexTask);
       return {
-        llmContent: output + (reminder || ''),
+        llmContent:
+          output +
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty reminder string should not be concatenated
+          (reminder || ''),
         returnDisplay: output,
       };
     }

@@ -16,8 +16,12 @@ export type IdeIntegrationNudgeResult = {
   isExtensionPreInstalled: boolean;
 };
 
+type IdeIntegrationNudgeIdeInfo = Omit<IdeInfo, 'displayName'> & {
+  displayName?: string;
+};
+
 interface IdeIntegrationNudgeProps {
-  ide: IdeInfo;
+  ide: IdeIntegrationNudgeIdeInfo;
   onComplete: (result: IdeIntegrationNudgeResult) => void;
 }
 
@@ -37,7 +41,7 @@ export function IdeIntegrationNudge({
     { isActive: true },
   );
 
-  const { displayName: ideName } = ide;
+  const ideName: string | undefined = ide.displayName;
   // Assume extension is already installed if the env variables are set.
   const isExtensionPreInstalled =
     !!process.env.LLXPRT_CODE_IDE_SERVER_PORT &&

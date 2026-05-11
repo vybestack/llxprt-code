@@ -54,8 +54,8 @@ export function encodeTagName(str: string): string {
 export function decodeTagName(str: string): string {
   try {
     return decodeURIComponent(str);
-  } catch (_e) {
-    // Fallback for old, potentially malformed encoding
+  } catch {
+    // Malformed encoding; use fallback decoder.
     return str.replace(/%([0-9A-F]{2})/g, (_, hex) =>
       String.fromCharCode(parseInt(hex, 16)),
     );
@@ -93,6 +93,7 @@ export class Logger {
       }
       return parsedLogs.filter(
         (entry) =>
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           typeof entry.sessionId === 'string' &&
           typeof entry.messageId === 'number' &&
           typeof entry.timestamp === 'string' &&
@@ -126,8 +127,8 @@ export class Logger {
     try {
       await fs.rename(this.logFilePath, backupPath);
       debugLogger.debug(`Backed up corrupted log file to ${backupPath}`);
-    } catch (_backupError) {
-      // If rename fails (e.g. file doesn't exist), no need to log an error here as the primary error (e.g. invalid JSON) is already handled.
+    } catch {
+      // Rename failed (e.g., file doesn't exist); primary error already handled.
     }
   }
 
@@ -145,7 +146,8 @@ export class Logger {
       let fileExisted = true;
       try {
         await fs.access(this.logFilePath);
-      } catch (_e) {
+      } catch {
+        // File doesn't exist yet.
         fileExisted = false;
       }
       this.logs = await this._readLogFile();
@@ -234,7 +236,10 @@ export class Logger {
 
   async getPreviousUserMessages(): Promise<string[]> {
     if (!this.initialized) return [];
-    return this.logs
+    const logsWithPersistedTypes: Array<
+      Omit<LogEntry, 'type'> & { type: string }
+    > = this.logs;
+    return logsWithPersistedTypes
       .filter((entry) => entry.type === MessageSenderType.USER)
       .sort((a, b) => {
         const dateA = new Date(a.timestamp).getTime();
@@ -269,13 +274,13 @@ export class Logger {
         // then this instance can increment its idea of the next messageId for this session.
         this.messageId = writtenEntry.messageId + 1;
       }
-    } catch (_error) {
-      // Error already logged by _updateLogFile or _readLogFile
+    } catch {
+      // Error already logged by _updateLogFile or _readLogFile.
     }
   }
 
   private _checkpointPath(tag: string): string {
-    if (!tag.length) {
+    if (tag.length === 0) {
       throw new Error('No checkpoint tag specified.');
     }
     if (!this.llxprtDir) {
@@ -366,6 +371,7 @@ export class Logger {
           const filteredItem = { ...item };
           if (Array.isArray(filteredItem.parts)) {
             filteredItem.parts = filteredItem.parts.map((part: Part) => {
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
               if (part.text) {
                 const filterResult = emojiFilter.filterText(part.text);
                 return { ...part, text: filterResult.filtered as string };

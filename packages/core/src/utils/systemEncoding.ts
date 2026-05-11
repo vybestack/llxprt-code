@@ -41,6 +41,7 @@ export function getCachedEncodingForBuffer(buffer: Buffer): string {
   }
 
   // Otherwise, detect from this specific buffer (don't cache this result)
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for encoding detection
   return detectEncodingFromBuffer(buffer) || 'utf-8';
 }
 
@@ -56,10 +57,13 @@ export function getSystemEncoding(): string | null {
   // Windows
   if (os.platform() === 'win32') {
     try {
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       const output = execSync('chcp', { encoding: 'utf8' });
+      // eslint-disable-next-line sonarjs/regular-expr -- Static regex parses bounded Windows chcp output; behavior preserved.
       const match = output.match(/:\s*(\d+)/);
       if (match) {
         const codePage = parseInt(match[1], 10);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (!isNaN(codePage)) {
           return windowsCodePageToEncoding(codePage);
         }
@@ -82,22 +86,25 @@ export function getSystemEncoding(): string | null {
   // system encoding. However, these environment variables might not always
   // be set or accurate. Handle cases where none of these variables are set.
   const env = process.env;
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env vars may be empty strings, should fall through
   let locale = env.LC_ALL || env.LC_CTYPE || env.LANG || '';
 
   // Fallback to querying the system directly when environment variables are missing
   if (!locale) {
     try {
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       locale = execSync('locale charmap', { encoding: 'utf8' })
         .toString()
         .trim();
-    } catch (_e) {
+    } catch {
+      // locale command failed
       debugLogger.warn('Failed to get locale charmap.');
       return null;
     }
   }
 
   const match = locale.match(/\.(.+)/); // e.g., "en_US.UTF-8"
-  if (match && match[1]) {
+  if (match?.[1]) {
     return match[1].toLowerCase();
   }
 

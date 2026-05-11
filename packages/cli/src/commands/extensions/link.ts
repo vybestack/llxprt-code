@@ -26,9 +26,10 @@ export async function handleLink(args: InstallArgs) {
       source: args.path,
       type: 'link',
     };
-    const requestConsent = args.consent
-      ? () => Promise.resolve(true)
-      : requestConsentNonInteractive;
+    const requestConsent =
+      args.consent === true
+        ? () => Promise.resolve(true)
+        : requestConsentNonInteractive;
     const workspaceDir = process.cwd();
     const extensionName = await installOrUpdateExtension(
       installMetadata,

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 import {
   type Profile,
   type ModelParams,
@@ -29,6 +31,43 @@ const {
   getProviderSettingsSnapshot,
   extractModelParams,
 } = runtimeAccessorsInternal;
+
+type CliRuntimeConfig = ReturnType<typeof getCliRuntimeServices>['config'];
+type CliSettingsService = ReturnType<
+  typeof getCliRuntimeServices
+>['settingsService'];
+type CliOAuthManager = NonNullable<ReturnType<typeof getCliOAuthManager>>;
+
+const resolveRuntimeProfileProviderName = resolveActiveProviderName as (
+  settingsService: CliSettingsService,
+  config: CliRuntimeConfig,
+) => string | null;
+
+type RuntimeSnapshotConfig = Omit<
+  CliRuntimeConfig,
+  | 'getProvider'
+  | 'getModel'
+  | 'getBucketFailoverHandler'
+  | 'setBucketFailoverHandler'
+> & {
+  getProvider?: () => string | null | undefined;
+  getModel?: () => string | null | undefined;
+  getBucketFailoverHandler?: () =>
+    | { getBuckets?: () => string[] | null | undefined }
+    | null
+    | undefined;
+  setBucketFailoverHandler?: (handler: undefined) => void;
+};
+
+type RuntimeSnapshotProviderManager = Omit<
+  ReturnType<typeof getCliRuntimeServices>['providerManager'],
+  'getActiveProviderName' | 'getProviderByName'
+> & {
+  getActiveProviderName?: () => string | null | undefined;
+  getProviderByName?: (
+    providerName: string,
+  ) => { getDefaultModel?: () => string | null | undefined } | null | undefined;
+};
 
 export const PROFILE_EPHEMERAL_KEYS: readonly string[] =
   getProfilePersistableKeys();
@@ -84,10 +123,13 @@ function getNestedValue(
 
 export function buildRuntimeProfileSnapshot(): Profile {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
+  const snapshotConfig = config as RuntimeSnapshotConfig;
+  const snapshotProviderManager =
+    providerManager as RuntimeSnapshotProviderManager;
   const providerName =
-    resolveActiveProviderName(settingsService, config) ??
-    providerManager.getActiveProviderName() ??
-    config.getProvider() ??
+    resolveRuntimeProfileProviderName(settingsService, config) ??
+    snapshotProviderManager.getActiveProviderName?.() ??
+    snapshotConfig.getProvider?.() ??
     'openai';
   const providerSettings = getProviderSettingsSnapshot(
     settingsService,
@@ -95,8 +137,10 @@ export function buildRuntimeProfileSnapshot(): Profile {
   );
   const currentModel =
     (providerSettings.model as string | undefined) ??
-    config.getModel() ??
-    providerManager.getProviderByName(providerName)?.getDefaultModel?.() ??
+    snapshotConfig.getModel?.() ??
+    snapshotProviderManager
+      .getProviderByName?.(providerName)
+      ?.getDefaultModel?.() ??
     'unknown';
 
   const ephemeralSettings = config.getEphemeralSettings();
@@ -109,6 +153,7 @@ export function buildRuntimeProfileSnapshot(): Profile {
     ephemeralRecord['auth-key-name'] !== undefined &&
     ephemeralRecord['auth-key-name'] !== null;
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const key of PROFILE_EPHEMERAL_KEYS) {
     if (key === 'auth-key' && (hasAuthKeyfile || hasAuthKeyName)) {
       continue;
@@ -120,6 +165,7 @@ export function buildRuntimeProfileSnapshot(): Profile {
     let value = getNestedValue(ephemeralRecord, key);
     if (value === undefined) {
       for (const [aliasKey, aliasValue] of Object.entries(ephemeralRecord)) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (aliasValue !== undefined && resolveAlias(aliasKey) === key) {
           value = aliasValue;
           break;
@@ -182,12 +228,6 @@ export interface RuntimeDiagnosticsSnapshot {
   ephemeralSettings: Record<string, unknown>;
 }
 
-type CliRuntimeConfig = ReturnType<typeof getCliRuntimeServices>['config'];
-type CliSettingsService = ReturnType<
-  typeof getCliRuntimeServices
->['settingsService'];
-type CliOAuthManager = NonNullable<ReturnType<typeof getCliOAuthManager>>;
-
 type ProfileAuthConfig = {
   type?: string;
   buckets?: string[];
@@ -207,7 +247,7 @@ function hasBucketSetChanged(
   );
 }
 
-function getFailoverBuckets(config: CliRuntimeConfig): string[] {
+function getFailoverBuckets(config: RuntimeSnapshotConfig): string[] {
   const handler = config.getBucketFailoverHandler?.();
   return handler?.getBuckets?.() ?? [];
 }
@@ -253,7 +293,7 @@ function scheduleProactiveRenewals(
 
 function clearProfileFailoverOnBucketChanges(
   oauthManager: CliOAuthManager,
-  config: CliRuntimeConfig,
+  config: RuntimeSnapshotConfig,
   profile: Profile,
 ): void {
   const authConfig = getProfileAuthConfig(profile);
@@ -362,10 +402,12 @@ function wireLoadBalancerSubProfile(
 
 async function wireLoadBalancerFailover(
   oauthManager: CliOAuthManager,
-  config: CliRuntimeConfig,
+  config: RuntimeSnapshotConfig,
   profile: LoadBalancerProfile,
 ): Promise<void> {
-  const subProfileNames = profile.profiles || [];
+  const subProfileNames: string[] = Array.isArray(profile.profiles)
+    ? profile.profiles
+    : [];
   logger.debug(
     () =>
       `[issue1250] LoadBalancer profile detected with ${subProfileNames.length} sub-profile(s)`,
@@ -519,16 +561,19 @@ export function setDefaultProfileName(profileName: string | null): void {
 
 export function getRuntimeDiagnosticsSnapshot(): RuntimeDiagnosticsSnapshot {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
+  const snapshotConfig = config as RuntimeSnapshotConfig;
+  const snapshotProviderManager =
+    providerManager as RuntimeSnapshotProviderManager;
 
   const providerName =
-    resolveActiveProviderName(settingsService, config) ??
-    providerManager.getActiveProviderName() ??
+    resolveRuntimeProfileProviderName(settingsService, config) ??
+    snapshotProviderManager.getActiveProviderName?.() ??
     null;
   const modelValue = getActiveModelName();
   const modelName =
     modelValue && modelValue.trim() !== ''
       ? modelValue
-      : (config.getModel() ?? null);
+      : (snapshotConfig.getModel?.() ?? null);
 
   const profileName = getActiveProfileName();
 

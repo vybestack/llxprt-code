@@ -59,9 +59,8 @@ export enum IDEConnectionStatus {
 function getRealPath(path: string): string {
   try {
     return fs.realpathSync(path);
-  } catch (_e) {
-    // If realpathSync fails, it might be because the path doesn't exist.
-    // In that case, we can fall back to the original path.
+  } catch {
+    // Path doesn't exist; return original path.
     return path;
   }
 }
@@ -70,7 +69,7 @@ function getRealPath(path: string): string {
  * Manages the connection to and interaction with the IDE server.
  */
 export class IdeClient {
-  private static instance: IdeClient;
+  private static instance: IdeClient | undefined;
   private client: Client | undefined = undefined;
   private state: IDEConnectionState = {
     status: IDEConnectionStatus.Disconnected,
@@ -238,7 +237,7 @@ export class IdeClient {
     } catch (err) {
       logger.debug(`closeDiff callTool for ${filePath} failed:`, err);
     }
-    return;
+    return undefined;
   }
 
   // Closes the diff. Instead of waiting for a notification,
@@ -403,8 +402,8 @@ export class IdeClient {
           ideInfo: configData?.ideInfo,
         };
       }
-    } catch (_) {
-      // Fall through to try old location
+    } catch {
+      // Port file in new location not found; try old location.
     }
 
     // For backwards compatibility, try old port file location
@@ -421,13 +420,15 @@ export class IdeClient {
         authToken: configData?.authToken,
         ideInfo: configData?.ideInfo,
       };
-    } catch (_) {
+    } catch {
+      // No port file found.
       return {};
     }
   }
 
   private createProxyAwareFetch() {
     // ignore proxy for '127.0.0.1' by default to allow connecting to the ide mcp server
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var may be empty string, both cases need same handling
     const existingNoProxy = process.env['NO_PROXY'] || '';
     const agent = new EnvHttpProxyAgent({
       noProxy: [existingNoProxy, '127.0.0.1'].filter(Boolean).join(','),
@@ -538,7 +539,7 @@ export class IdeClient {
     try {
       this.client = new Client({
         name: 'streamable-http-client',
-        // TODO(#3487): use the CLI version here.
+        // Task(#3487): use the CLI version here.
         version: '1.0.0',
       });
       transport = new StreamableHTTPClientTransport(
@@ -556,7 +557,8 @@ export class IdeClient {
       this.registerClientHandlers();
       this.setState(IDEConnectionStatus.Connected);
       return true;
-    } catch (_error) {
+    } catch {
+      // Connection failed; cleanup transport if created.
       if (transport) {
         try {
           await transport.close();

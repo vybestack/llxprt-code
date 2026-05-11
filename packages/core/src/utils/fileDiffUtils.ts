@@ -16,7 +16,12 @@ export function getFileDiffFromResultDisplay(
   resultDisplay: unknown,
 ): FileDiff | undefined {
   if (
-    resultDisplay &&
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    resultDisplay != null &&
+    resultDisplay !== false &&
+    resultDisplay !== 0 &&
+    resultDisplay !== '' &&
+    !Number.isNaN(resultDisplay) &&
     typeof resultDisplay === 'object' &&
     'diffStat' in resultDisplay &&
     typeof resultDisplay.diffStat === 'object' &&

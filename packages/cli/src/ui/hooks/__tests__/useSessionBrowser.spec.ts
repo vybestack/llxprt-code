@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P13
  * @requirement REQ-SB-002, REQ-SB-004, REQ-SB-005, REQ-SB-008, REQ-SB-009, REQ-SB-010
@@ -514,7 +516,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       // Wait for previews to load
       await waitFor(() => {
         const hasPreview = result.current.sessions.some(
-          (s) => s.previewState === 'loaded' && s.firstUserMessage,
+          (s) =>
+            s.previewState === 'loaded' && s.firstUserMessage !== undefined,
         );
         expect(hasPreview).toBe(true);
       });
@@ -2420,10 +2423,15 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
           ),
           (keys) => {
             for (const keyName of keys) {
-              result.current.handleKeypress(
-                keyName === 'a' ? 'a' : keyName === 'tab' ? '\t' : 's',
-                makeKey(keyName),
-              );
+              let keyChar: string;
+              if (keyName === 'a') {
+                keyChar = 'a';
+              } else if (keyName === 'tab') {
+                keyChar = '\t';
+              } else {
+                keyChar = 's';
+              }
+              result.current.handleKeypress(keyChar, makeKey(keyName));
             }
 
             const sessions = result.current.filteredSessions;
@@ -2433,14 +2441,18 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
                 const b = sessions[i + 1];
 
                 if (result.current.sortOrder === 'newest') {
+                  // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                   expect(a.lastModified.getTime()).toBeGreaterThanOrEqual(
                     b.lastModified.getTime(),
                   );
                 } else if (result.current.sortOrder === 'oldest') {
+                  // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                   expect(a.lastModified.getTime()).toBeLessThanOrEqual(
                     b.lastModified.getTime(),
                   );
-                } else if (result.current.sortOrder === 'size') {
+                } else {
+                  // sortOrder === 'size'
+                  // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                   expect(a.fileSize).toBeGreaterThanOrEqual(b.fileSize);
                 }
               }
@@ -2500,13 +2512,16 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         // Check priority order
         if (hasDeleteConfirm) {
           // Should have cleared delete confirm
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(result.current.deleteConfirmIndex).toBeNull();
           // Search term should be preserved
           if (hasSearchTerm) {
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(result.current.searchTerm).toBe('a');
           }
         } else if (hasSearchTerm) {
           // Should have cleared search term
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(result.current.searchTerm).toBe('');
         }
 

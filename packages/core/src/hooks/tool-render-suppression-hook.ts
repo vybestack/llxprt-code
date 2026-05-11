@@ -14,7 +14,7 @@ import { DEFAULT_AGENT_ID } from '../core/turn.js';
 export class ToolRenderSuppressionHook {
   /**
    * Checks if tool call rendering should be suppressed for the current session
-   * Tool calls are suppressed when there's an active todo, as they're displayed in the todo UI instead
+   * Tool calls are suppressed when there's an active task, as they're displayed in the task-list UI instead
    */
   static shouldSuppressToolCallRender(config: Config): boolean {
     // Get the session ID
@@ -29,8 +29,8 @@ export class ToolRenderSuppressionHook {
         ? agentAwareConfig.getAgentId()
         : DEFAULT_AGENT_ID;
 
-    // Check if there's an active todo - if yes, suppress tool rendering
-    // as it will be shown in the todo display instead
+    // Check if there's an active task - if yes, suppress tool rendering
+    // as it will be shown in the task-list display instead
     const contextTracker = TodoContextTracker.forAgent(sessionId, agentId);
     return contextTracker.getActiveTodoId() !== null;
   }

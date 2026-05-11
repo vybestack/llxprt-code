@@ -149,6 +149,7 @@ describe('dumpContext', () => {
 
       const filename = await dumpContext(request, response, 'openai');
       createdFiles.push(filename);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(filename).toMatch(/^\d{8}-\d{6}-openai-\w+\.json$/);
 
       const filepath = path.join(testDumpDir, filename);
@@ -196,6 +197,7 @@ describe('dumpContext', () => {
 
       const filename = await dumpContext(request, response, 'anthropic');
       createdFiles.push(filename);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(filename).toMatch(/^\d{8}-\d{6}-anthropic-\w+\.json$/);
 
       const filepath = path.join(testDumpDir, filename);
@@ -244,6 +246,7 @@ describe('dumpContext', () => {
 
       const filename = await dumpContext(request, response, 'gemini');
       createdFiles.push(filename);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(filename).toMatch(/^\d{8}-\d{6}-gemini-\w+\.json$/);
 
       const filepath = path.join(testDumpDir, filename);

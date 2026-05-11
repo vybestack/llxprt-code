@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, vi, type Mock } from 'vitest';
 import type {
   ToolCall,
@@ -519,7 +521,7 @@ describe('CoreToolScheduler', () => {
       const completedCallsAsk = onAllToolCallsComplete.mock.calls.at(
         -1,
       )?.[0] as ToolCall[];
-      expect(completedCallsAsk?.[0]?.status).toBe('success');
+      expect(completedCallsAsk[0]?.status).toBe('success');
     });
   });
 
@@ -652,7 +654,7 @@ describe('CoreToolScheduler', () => {
       const completedCallsAsk = onAllToolCallsComplete.mock.calls.at(
         -1,
       )?.[0] as ToolCall[];
-      expect(completedCallsAsk?.[0]?.status).toBe('success');
+      expect(completedCallsAsk[0]?.status).toBe('success');
     });
 
     expect(executeFn).toHaveBeenCalledWith({ command: 'npm install' });
@@ -1443,8 +1445,8 @@ describe('CoreToolScheduler with payload', () => {
     expect(completedCalls[0].status).toBe('success');
     const executeCall =
       mockTool.executeFn.mock.calls[mockTool.executeFn.mock.calls.length - 1];
-    expect(executeCall?.[0]).toStrictEqual({ newContent: 'final version' });
-    expect(executeCall?.[1]).toBeInstanceOf(AbortSignal);
+    expect(executeCall[0]).toStrictEqual({ newContent: 'final version' });
+    expect(executeCall[1]).toBeInstanceOf(AbortSignal);
   });
 
   it('should update shell command args and execute when suggest edit payload is provided', async () => {
@@ -1574,7 +1576,7 @@ describe('CoreToolScheduler with payload', () => {
     );
 
     const executeCall = executeFn.mock.calls[executeFn.mock.calls.length - 1];
-    expect(executeCall?.[0]).toStrictEqual({ command: 'npm install' });
+    expect(executeCall[0]).toStrictEqual({ command: 'npm install' });
   });
 });
 
@@ -1959,9 +1961,7 @@ describe('CoreToolScheduler edit cancellation', () => {
 
     // Cancel the edit
     const confirmationDetails = awaitingCall.confirmationDetails;
-    if (confirmationDetails) {
-      await confirmationDetails.onConfirm(ToolConfirmationOutcome.Cancel);
-    }
+    await confirmationDetails.onConfirm(ToolConfirmationOutcome.Cancel);
 
     expect(onAllToolCallsComplete).toHaveBeenCalled();
     const completedCalls = onAllToolCallsComplete.mock
@@ -2016,7 +2016,7 @@ describe('CoreToolScheduler edit cancellation', () => {
 });
 
 describe('CoreToolScheduler queue handling', () => {
-  // TODO: Fix these tests - the current implementation executes tools in parallel in YOLO mode
+  // Follow-up (#1569): Fix these tests - the current implementation executes tools in parallel in YOLO mode
   // rather than sequentially. The queue prevents errors but doesn't enforce sequential execution.
 
   describe('CoreToolScheduler YOLO mode', () => {
@@ -2101,12 +2101,12 @@ describe('CoreToolScheduler queue handling', () => {
       // 1. The tool's execute method was called directly.
       const executeCall =
         mockTool.executeFn.mock.calls[mockTool.executeFn.mock.calls.length - 1];
-      expect(executeCall?.[0]).toStrictEqual({ param: 'value' });
-      expect(executeCall?.[1]).toBeInstanceOf(AbortSignal);
+      expect(executeCall[0]).toStrictEqual({ param: 'value' });
+      expect(executeCall[1]).toBeInstanceOf(AbortSignal);
 
       // 2. The tool call status never entered 'awaiting_approval'.
       const statusUpdates = onToolCallsUpdate.mock.calls
-        .map((call) => (call[0][0] as ToolCall)?.status)
+        .flatMap((call) => (call[0] as ToolCall[]).map(({ status }) => status))
         .filter(Boolean);
       expect(statusUpdates).not.toContain('awaiting_approval');
       expect(statusUpdates).toStrictEqual([
@@ -2780,7 +2780,7 @@ describe('CoreToolScheduler queue handling', () => {
 
       await vi.waitFor(() => {
         const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
-        return calls?.some((c) => c.status === 'executing');
+        return calls.some((c) => c.status === 'executing');
       });
 
       scheduler.cancelAll();
@@ -2891,7 +2891,7 @@ describe('CoreToolScheduler queue handling', () => {
 
       await vi.waitFor(() => {
         const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
-        return calls?.filter((c) => c.status === 'executing').length === 2;
+        return calls.filter((c) => c.status === 'executing').length === 2;
       });
 
       scheduler.cancelAll();

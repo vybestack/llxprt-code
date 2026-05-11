@@ -62,7 +62,7 @@ describe('ProviderManager Settings Separation', () => {
     settingsService.set('temperature', 0.5);
     settingsService.setProviderSetting('openai', 'temperature', 0.9);
     expect(
-      (getSnapshot('openai').openai as Record<string, unknown>)?.temperature,
+      (getSnapshot('openai').openai as Record<string, unknown>).temperature,
     ).toBe(0.9);
   });
 

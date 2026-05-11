@@ -22,6 +22,7 @@ import { DebugLogger } from '../debug/index.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type {
   AgentRuntimeContext,
+  AgentRuntimeProviderAdapter,
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
@@ -71,6 +72,7 @@ export class AgentExecutionStoppedError extends Error {
     systemMessage?: string,
     contextCleared?: boolean,
   ) {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty systemMessage should fall through to reason
     super(`Agent execution stopped: ${systemMessage || reason}`);
     this.name = 'AgentExecutionStoppedError';
     this.reason = reason;
@@ -94,6 +96,7 @@ export class AgentExecutionBlockedError extends Error {
     systemMessage?: string,
     contextCleared?: boolean,
   ) {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty systemMessage should fall through to reason
     super(`Agent execution blocked: ${systemMessage || reason}`);
     this.name = 'AgentExecutionBlockedError';
     this.reason = reason;
@@ -132,7 +135,8 @@ export class GeminiChat {
     generationConfig: GenerateContentConfig = {},
     initialHistory: Content[] = [],
   ) {
-    if (!view) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
+    if (view == null) {
       throw new Error('AgentRuntimeContext is required for GeminiChat');
     }
 
@@ -151,7 +155,7 @@ export class GeminiChat {
     this.logger.debug('GeminiChat initialized:', {
       model,
       initialHistoryLength: initialHistory.length,
-      hasHistoryService: !!this.historyService,
+      hasHistoryService: true,
       hasRuntimeState: true,
     });
 
@@ -169,6 +173,7 @@ export class GeminiChat {
       this.generationConfig,
       providerResolver,
       async (context: CompressionContext) => {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
         const config = view.providerRuntime?.config;
         if (config) {
           await triggerPreCompressHook(
@@ -227,10 +232,11 @@ export class GeminiChat {
   private _installDensityWrapper(): void {
     if (typeof this.historyService.add !== 'function') return;
     const hs = this.historyService as unknown as Record<symbol, unknown>;
-    if (hs[GeminiChat.DENSITY_WRAPPED]) return;
+    if (hs[GeminiChat.DENSITY_WRAPPED] === true) return;
     const originalAdd = this.historyService.add.bind(this.historyService);
     this.historyService.add = (...args: Parameters<typeof originalAdd>) => {
       const result = originalAdd(...args);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
       this.compressionHandler?.markDensityDirty();
       return result;
     };
@@ -247,31 +253,48 @@ export class GeminiChat {
     }
   }
 
+  private lookupProviderByName(
+    adapter: AgentRuntimeProviderAdapter,
+    desiredProviderName: string,
+    contextLabel: string,
+  ): IProvider | undefined {
+    if (typeof adapter.getProviderByName !== 'function') {
+      return undefined;
+    }
+    try {
+      const candidate = adapter.getProviderByName(desiredProviderName);
+      if (candidate !== undefined) {
+        const active = this.getActiveProvider();
+        if (active !== undefined && active.name !== desiredProviderName) {
+          this.logger.debug(
+            () =>
+              `[GeminiChat] selected provider '${desiredProviderName}' via getProviderByName (active remains '${active.name}') [${contextLabel}]`,
+          );
+        }
+        return candidate;
+      }
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `[GeminiChat] provider lookup skipped (${contextLabel}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return undefined;
+  }
+
   resolveProviderForRuntime(contextLabel: string): IProvider {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
     const desiredProviderName = this.runtimeState.provider?.trim();
     const adapter = this.runtimeContext.provider;
 
     if (desiredProviderName) {
-      try {
-        const candidate =
-          typeof adapter.getProviderByName === 'function'
-            ? adapter.getProviderByName(desiredProviderName)
-            : undefined;
-        if (candidate) {
-          const active = this.getActiveProvider();
-          if (active && active.name !== desiredProviderName) {
-            this.logger.debug(
-              () =>
-                `[GeminiChat] selected provider '${desiredProviderName}' via getProviderByName (active remains '${active.name}') [${contextLabel}]`,
-            );
-          }
-          return candidate;
-        }
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `[GeminiChat] provider lookup skipped (${contextLabel}): ${error instanceof Error ? error.message : String(error)}`,
-        );
+      const candidate = this.lookupProviderByName(
+        adapter,
+        desiredProviderName,
+        contextLabel,
+      );
+      if (candidate) {
+        return candidate;
       }
     }
 
@@ -285,7 +308,8 @@ export class GeminiChat {
       try {
         adapter.setActiveProvider(desiredProviderName);
         const updatedProvider = adapter.getActiveProvider();
-        if (updatedProvider) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
+        if (updatedProvider != null) {
           provider = updatedProvider;
         }
         this.logger.debug(
@@ -321,6 +345,7 @@ export class GeminiChat {
   ): ProviderRuntimeContext {
     const baseRuntime = this.runtimeContext.providerRuntime;
     const runtimeId =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
       baseRuntime.runtimeId ?? this.runtimeState.runtimeId ?? 'geminiChat';
 
     return {
@@ -499,6 +524,7 @@ export class GeminiChat {
    * Used by Turn and other consumers to access ephemeral settings.
    */
   getConfig(): Config | undefined {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
     return this.runtimeContext.providerRuntime?.config;
   }
 }

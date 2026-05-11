@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { GenerateContentConfig, Tool, Part } from '@google/genai';
 import { GeminiChat } from './geminiChat.js';
@@ -168,7 +170,7 @@ describe('GeminiChat runtime context', () => {
 
     const contents = options.contents;
     expect(Array.isArray(contents)).toBe(true);
-    expect(contents?.length).toBeGreaterThan(0);
+    expect(contents.length).toBeGreaterThan(0);
   });
   it('aborts a stalled non-stream sendMessage response after partial provider output instead of hanging forever', async () => {
     vi.useFakeTimers();
@@ -637,7 +639,7 @@ describe('GeminiChat runtime context', () => {
     await chat.sendMessage({ message: 'Continue' }, 'prompt-123');
 
     expect(calls).toHaveLength(1);
-    const sent = calls[0].contents ?? [];
+    const sent = calls[0].contents;
     const toolCallIndex = sent.findIndex(
       (c) =>
         c.speaker === 'ai' &&

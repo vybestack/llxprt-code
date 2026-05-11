@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -45,6 +47,14 @@ const MAX_TASK_TIMEOUT_SECONDS = 1800;
 const normalizeToolNameForPolicy = (name: string): string =>
   canonicalizeToolName(name);
 
+function normalizeSubagentStreamingText(text: string): string {
+  if (!text) {
+    return '';
+  }
+  const lf = text.replace(/\r\n?/g, '\n');
+  return lf.endsWith('\n') ? lf : lf + '\n';
+}
+
 export interface TaskToolParams {
   subagent_name?: string;
   subagentName?: string;
@@ -83,6 +93,21 @@ export interface TaskToolDependencies {
   isInteractiveEnvironment?: () => boolean;
   getAsyncTaskManager?: () => AsyncTaskManager | undefined;
 }
+interface AsyncSetupResult {
+  launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>;
+  agentId: string;
+  scope: SubAgentScope;
+  contextState: ContextState;
+  dispose: () => Promise<void>;
+  asyncAbortController: AbortController;
+  timeoutId: NodeJS.Timeout | null;
+}
+
+function launchRequestName(
+  launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
+): string {
+  return launchResult.config.name;
+}
 
 interface TaskToolInvocationDeps {
   createOrchestrator: () => SubagentOrchestrator;
@@ -100,6 +125,7 @@ function formatSuccessDisplay(
   agentId: string,
   output: OutputObject,
 ): string {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   const emittedVars = Object.entries(output.emitted_vars ?? {});
   const finalMessageSection = output.final_message
     ? `Final message:\n${output.final_message}`
@@ -125,6 +151,7 @@ function formatSuccessContent(agentId: string, output: OutputObject): string {
   const payload: Record<string, unknown> = {
     agent_id: agentId,
     terminate_reason: output.terminate_reason,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     emitted_vars: output.emitted_vars ?? {},
   };
 
@@ -345,20 +372,100 @@ class TaskToolInvocation extends BaseToolInvocation<
     const launchRequest = this.createLaunchRequest(timeoutMs);
     taskLogger.debug(() => `Launching subagent '${launchRequest.name}'`);
 
-    let launchResult:
+    const abortResult = await this.launchSubagent(
+      orchestrator,
+      launchRequest,
+      signal,
+      timeoutController,
+      timeoutSeconds,
+      onUserAbort,
+      timeoutId,
+      updateOutput,
+    );
+
+    return abortResult;
+  }
+
+  private async launchSubagent(
+    orchestrator: SubagentOrchestrator,
+    launchRequest: SubagentLaunchRequest,
+    signal: AbortSignal,
+    timeoutController: AbortController,
+    timeoutSeconds: number | undefined,
+    onUserAbort: () => void,
+    timeoutId: ReturnType<typeof setTimeout> | null,
+    updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
+    const abortState = this.createAbortState(launchRequest, signal);
+
+    signal.addEventListener('abort', abortState.abortHandler, { once: true });
+
+    if (signal.aborted) {
+      abortState.abortHandler();
+      abortState.removeAbortHandler();
+      signal.removeEventListener('abort', onUserAbort);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      return this.createCancelledResult(
+        'Task execution aborted before launch.',
+      );
+    }
+
+    const launchResult = await this.attemptLaunch(
+      orchestrator,
+      launchRequest,
+      signal,
+      timeoutController,
+      timeoutSeconds,
+      onUserAbort,
+      timeoutId,
+      abortState,
+    );
+
+    if (launchResult === null) {
+      if (this.lastLaunchError !== undefined) {
+        const error = this.lastLaunchError;
+        this.lastLaunchError = undefined;
+        return this.createErrorResult(
+          error,
+          `Unable to launch subagent '${this.normalized.subagentName}'.`,
+        );
+      }
+      if (abortState.aborted.timedOut) {
+        return this.createTimeoutResult(timeoutSeconds);
+      }
+      return this.createCancelledResult('Task aborted during launch.');
+    }
+
+    return this.runSubagentExecution(
+      launchResult,
+      signal,
+      timeoutController,
+      timeoutSeconds,
+      onUserAbort,
+      timeoutId,
+      abortState,
+      updateOutput,
+    );
+  }
+
+  private createAbortState(
+    launchRequest: SubagentLaunchRequest,
+    signal: AbortSignal,
+  ) {
+    const state = { aborted: false, timedOut: false };
+    let liveScope:
       | Awaited<ReturnType<SubagentOrchestrator['launch']>>
       | undefined;
-    let aborted = false;
     const abortHandler = () => {
-      if (aborted) {
-        return;
-      }
-      aborted = true;
+      if (state.aborted) return;
+      state.aborted = true;
       taskLogger.warn(
         () => `Cancellation requested for subagent '${launchRequest.name}'`,
       );
       try {
-        const candidate = launchResult?.scope as
+        const candidate = liveScope?.scope as
           | { cancel?: (reason?: string) => void }
           | undefined;
         candidate?.cancel?.('User aborted task execution.');
@@ -372,56 +479,159 @@ class TaskToolInvocation extends BaseToolInvocation<
     const removeAbortHandler = () => {
       signal.removeEventListener('abort', abortHandler);
     };
-    signal.addEventListener('abort', abortHandler, { once: true });
-    if (signal.aborted) {
-      abortHandler();
-      removeAbortHandler();
-      signal.removeEventListener('abort', onUserAbort);
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-      }
-      return this.createCancelledResult(
-        'Task execution aborted before launch.',
-      );
-    }
+    const setLaunchResult = (
+      result: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
+    ) => {
+      liveScope = result;
+    };
+    return {
+      aborted: state,
+      abortHandler,
+      removeAbortHandler,
+      setLaunchResult,
+    };
+  }
 
+  private async attemptLaunch(
+    orchestrator: SubagentOrchestrator,
+    launchRequest: SubagentLaunchRequest,
+    signal: AbortSignal,
+    timeoutController: AbortController,
+    timeoutSeconds: number | undefined,
+    onUserAbort: () => void,
+    timeoutId: ReturnType<typeof setTimeout> | null,
+    abortState: {
+      aborted: { aborted: boolean; timedOut: boolean };
+      abortHandler: () => void;
+      removeAbortHandler: () => void;
+      setLaunchResult: (
+        result: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
+      ) => void;
+    },
+  ): Promise<Awaited<ReturnType<SubagentOrchestrator['launch']>> | null> {
+    let launchResult:
+      | Awaited<ReturnType<SubagentOrchestrator['launch']>>
+      | undefined;
     try {
       launchResult = await orchestrator.launch(
         launchRequest,
         timeoutController.signal,
       );
+      abortState.setLaunchResult(launchResult);
+      return launchResult;
     } catch (error) {
-      removeAbortHandler();
+      abortState.removeAbortHandler();
       signal.removeEventListener('abort', onUserAbort);
       if (timeoutId !== null) {
         clearTimeout(timeoutId);
       }
       if (this.isTimeoutError(signal, timeoutController, error)) {
-        return this.createTimeoutResult(
-          timeoutSeconds,
-          launchResult?.scope?.output,
-        );
+        abortState.aborted.timedOut = true;
+        return null;
       }
-      if (this.isAbortError(error) || aborted || signal.aborted) {
-        return this.createCancelledResult('Task aborted during launch.');
+
+      if (
+        this.isAbortError(error) ||
+        abortState.aborted.aborted ||
+        signal.aborted
+      ) {
+        return null;
       }
       taskLogger.warn(
         () =>
           `Launch failure for '${launchRequest.name}': ${error instanceof Error ? error.message : String(error)}`,
       );
-      return this.createErrorResult(
-        error,
-        `Unable to launch subagent '${this.normalized.subagentName}'.`,
-      );
+      this.lastLaunchError = error;
+      return null;
     }
+  }
 
+  private lastLaunchError: unknown = undefined;
+
+  private async runSubagentExecution(
+    launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
+    signal: AbortSignal,
+    timeoutController: AbortController,
+    timeoutSeconds: number | undefined,
+    onUserAbort: () => void,
+    timeoutId: ReturnType<typeof setTimeout> | null,
+    abortState: {
+      aborted: { aborted: boolean; timedOut: boolean };
+      abortHandler: () => void;
+      removeAbortHandler: () => void;
+      setLaunchResult: (
+        result: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
+      ) => void;
+    },
+    updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
     const { scope, agentId, dispose } = launchResult;
     taskLogger.debug(
-      () => `Subagent '${launchRequest.name}' started with agentId=${agentId}`,
+      () =>
+        `Subagent '${launchRequestName(launchResult)}' started with agentId=${agentId}`,
     );
     const contextState = this.buildContextState();
 
-    const teardown = async () => {
+    const teardown = this.buildTeardown(
+      dispose,
+      abortState.removeAbortHandler,
+      signal,
+      onUserAbort,
+      timeoutId,
+    );
+
+    if (signal.aborted || abortState.aborted.aborted) {
+      await teardown();
+      return this.createCancelledResult(
+        'Task aborted during launch.',
+        agentId,
+        scope.output,
+      );
+    }
+
+    const { emitClosingSubagentTag } = this.setupStreaming(
+      launchResult,
+      agentId,
+      scope,
+      updateOutput,
+    );
+
+    try {
+      await this.runSubagent(scope, contextState);
+
+      return await this.handleExecutionResult(
+        scope,
+        agentId,
+        signal,
+        timeoutController,
+        timeoutSeconds,
+        teardown,
+        abortState.aborted,
+      );
+    } catch (error) {
+      return await this.handleExecutionError(
+        error,
+        signal,
+        timeoutController,
+        timeoutSeconds,
+        agentId,
+        scope,
+        teardown,
+        abortState.aborted,
+      );
+    } finally {
+      emitClosingSubagentTag();
+    }
+  }
+
+  private buildTeardown(
+    dispose: () => Promise<void>,
+    removeAbortHandler: () => void,
+    signal: AbortSignal,
+    onUserAbort: () => void,
+    timeoutId: ReturnType<typeof setTimeout> | null,
+  ): () => Promise<void> {
+    return async () => {
       removeAbortHandler();
       signal.removeEventListener('abort', onUserAbort);
       if (timeoutId !== null) {
@@ -433,140 +643,149 @@ class TaskToolInvocation extends BaseToolInvocation<
         // Swallow dispose errors to avoid masking primary error.
       }
     };
+  }
 
-    if (signal.aborted || aborted) {
-      await teardown();
-      return this.createCancelledResult(
-        'Task aborted during launch.',
-        agentId,
-        scope.output,
-      );
-    }
-
+  private setupStreaming(
+    launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
+    agentId: string,
+    scope: SubAgentScope,
+    updateOutput?: (output: string) => void,
+  ): { emitClosingSubagentTag: () => void } {
+    const subagentName =
+      launchRequestName(launchResult) || this.normalized.subagentName;
     let xmlOutputOpen = false;
     const emitClosingSubagentTag = () => {
       if (!xmlOutputOpen || !updateOutput) {
         return;
       }
-      updateOutput(
-        `</subagent name="${launchRequest.name}" id="${agentId}">\n`,
-      );
+      updateOutput(`</subagent name="${subagentName}" id="${agentId}">\n`);
       xmlOutputOpen = false;
     };
 
     if (updateOutput) {
-      // Send opening XML tag to identify the subagent
-      updateOutput(`<subagent name="${launchRequest.name}" id="${agentId}">\n`);
+      updateOutput(`<subagent name="${subagentName}" id="${agentId}">\n`);
       xmlOutputOpen = true;
 
       const existingHandler = scope.onMessage;
-      // Ensure each streamed chunk renders on its own line in TTY/CLI UIs.
-      // - Normalize CR/CRLF to LF
-      // - Append a trailing newline if missing
-      const normalizeForStreaming = (text: string): string => {
-        if (!text) {
-          return '';
-        }
-        const lf = text.replace(/\r\n?/g, '\n');
-        return lf.endsWith('\n') ? lf : lf + '\n';
-      };
       scope.onMessage = (message: string) => {
-        const cleaned = normalizeForStreaming(message);
+        const cleaned = normalizeSubagentStreamingText(message);
         if (cleaned.trim().length > 0) {
           updateOutput(cleaned);
         }
-        // Preserve any existing handler behavior
         existingHandler?.(message);
       };
     }
 
-    try {
-      const environmentInteractive =
-        this.deps.isInteractiveEnvironment?.() ?? true;
-      const shouldRunInteractive = environmentInteractive;
+    return { emitClosingSubagentTag };
+  }
 
-      if (shouldRunInteractive && typeof scope.runInteractive === 'function') {
-        const schedulerFactory = this.deps.getSchedulerFactory?.();
-        const interactiveOptions = schedulerFactory
-          ? { schedulerFactory }
-          : undefined;
-        await scope.runInteractive(contextState, interactiveOptions);
-      } else {
-        await scope.runNonInteractive(contextState);
-      }
-      if (aborted) {
-        await teardown();
-        taskLogger.warn(
-          () => `Subagent '${launchRequest.name}' aborted before completion`,
-        );
-        return this.createCancelledResult(
-          'Task execution aborted before completion.',
-          agentId,
-          scope.output,
-        );
-      }
-      if (this.isTimeoutError(signal, timeoutController)) {
-        await teardown();
-        return this.createTimeoutResult(timeoutSeconds, scope.output);
-      }
-      const output = scope.output ?? {
-        terminate_reason: SubagentTerminateMode.ERROR,
-        emitted_vars: {},
-      };
-      taskLogger.debug(
-        () =>
-          `Subagent '${launchRequest.name}' finished with reason=${output.terminate_reason} emittedKeys=${Object.keys(output.emitted_vars ?? {}).join(', ')}`,
-      );
-      const llmContent = formatSuccessContent(agentId, output);
-      const returnDisplay = formatSuccessDisplay(
-        this.normalized.subagentName,
-        agentId,
-        output,
-      );
-      await teardown();
-      return {
-        llmContent,
-        returnDisplay,
-        metadata: {
-          agentId,
-          terminateReason: output.terminate_reason,
-          emittedVars: output.emitted_vars ?? {},
-          ...(output.final_message
-            ? { finalMessage: output.final_message }
-            : {}),
-        },
-      };
-    } catch (error) {
-      if (this.isTimeoutError(signal, timeoutController, error)) {
-        await teardown();
-        return this.createTimeoutResult(timeoutSeconds, scope.output, agentId);
-      }
-      if (this.isAbortError(error) || aborted || signal.aborted) {
-        await teardown();
-        return this.createCancelledResult(
-          'Task execution aborted before completion.',
-          agentId,
-          scope.output,
-        );
-      }
-      const result = this.createErrorResult(
-        error,
-        `Subagent '${this.normalized.subagentName}' failed during execution.`,
-        agentId,
-      );
-      await teardown();
-      taskLogger.warn(
-        () =>
-          `Subagent '${launchRequest.name}' execution error: ${result.error?.message ?? 'unknown'}`,
-      );
-      return result;
-    } finally {
-      emitClosingSubagentTag();
+  private async runSubagent(
+    scope: SubAgentScope,
+    contextState: ContextState,
+  ): Promise<void> {
+    const environmentInteractive =
+      this.deps.isInteractiveEnvironment?.() ?? true;
+
+    if (environmentInteractive && typeof scope.runInteractive === 'function') {
+      const schedulerFactory = this.deps.getSchedulerFactory?.();
+      const interactiveOptions = schedulerFactory
+        ? { schedulerFactory }
+        : undefined;
+      await scope.runInteractive(contextState, interactiveOptions);
+    } else {
+      await scope.runNonInteractive(contextState);
     }
   }
 
+  private async handleExecutionError(
+    error: unknown,
+    signal: AbortSignal,
+    timeoutController: AbortController,
+    timeoutSeconds: number | undefined,
+    agentId: string,
+    scope: SubAgentScope,
+    teardown: () => Promise<void>,
+    abortedState: { aborted: boolean; timedOut: boolean },
+  ): Promise<ToolResult> {
+    if (this.isTimeoutError(signal, timeoutController, error)) {
+      await teardown();
+      return this.createTimeoutResult(timeoutSeconds, scope.output, agentId);
+    }
+
+    if (this.isAbortError(error) || abortedState.aborted || signal.aborted) {
+      await teardown();
+      return this.createCancelledResult(
+        'Task execution aborted before completion.',
+        agentId,
+        scope.output,
+      );
+    }
+    const result = this.createErrorResult(
+      error,
+      `Subagent '${this.normalized.subagentName}' failed during execution.`,
+      agentId,
+    );
+    await teardown();
+    taskLogger.warn(
+      () => `Subagent execution error: ${result.error?.message ?? 'unknown'}`,
+    );
+    return result;
+  }
+
+  private async handleExecutionResult(
+    scope: SubAgentScope,
+    agentId: string,
+    signal: AbortSignal,
+    timeoutController: AbortController,
+    timeoutSeconds: number | undefined,
+    teardown: () => Promise<void>,
+    abortedState: { aborted: boolean; timedOut: boolean },
+  ): Promise<ToolResult> {
+    if (abortedState.aborted) {
+      await teardown();
+      taskLogger.warn(() => `Subagent aborted before completion`);
+      return this.createCancelledResult(
+        'Task execution aborted before completion.',
+        agentId,
+        scope.output,
+      );
+    }
+    if (this.isTimeoutError(signal, timeoutController)) {
+      await teardown();
+      return this.createTimeoutResult(timeoutSeconds, scope.output);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    const output = scope.output ?? {
+      terminate_reason: SubagentTerminateMode.ERROR,
+      emitted_vars: {},
+    };
+    taskLogger.debug(
+      () =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        `Subagent finished with reason=${output.terminate_reason} emittedKeys=${Object.keys(output.emitted_vars ?? {}).join(', ')}`,
+    );
+    const llmContent = formatSuccessContent(agentId, output);
+    const returnDisplay = formatSuccessDisplay(
+      this.normalized.subagentName,
+      agentId,
+      output,
+    );
+    await teardown();
+    return {
+      llmContent,
+      returnDisplay,
+      metadata: {
+        agentId,
+        terminateReason: output.terminate_reason,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        emittedVars: output.emitted_vars ?? {},
+        ...(output.final_message ? { finalMessage: output.final_message } : {}),
+      },
+    };
+  }
+
   private isAbortError(error: unknown): boolean {
-    if (!error || typeof error !== 'object') {
+    if (error === null || error === undefined || typeof error !== 'object') {
       return false;
     }
     const result = (error as { name?: string }).name === 'AbortError';
@@ -655,6 +874,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     timeoutId: ReturnType<typeof setTimeout> | null;
     onUserAbort: () => void;
   } {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const settings = this.config.getEphemeralSettings?.() ?? {};
     const defaultTimeoutSeconds =
       (settings['task-default-timeout-seconds'] as number | undefined) ??
@@ -724,7 +944,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     if (!timeoutController.signal.aborted || signal.aborted) {
       return false;
     }
-    if (!error) {
+    if (error === undefined || error === null) {
       return true;
     }
     return this.isAbortError(error);
@@ -767,8 +987,91 @@ class TaskToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
-    // Check global async setting (from /settings)
+    const settingsCheck = this.checkAsyncSettings();
+    if (settingsCheck) {
+      return settingsCheck;
+    }
+
+    const asyncTaskManager = this.deps.getAsyncTaskManager?.();
+    if (asyncTaskManager === undefined) {
+      return {
+        llmContent: 'Async mode requires AsyncTaskManager to be configured.',
+        returnDisplay: 'Error: Async mode not available.',
+        error: {
+          message: 'AsyncTaskManager not configured',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
+    let orchestrator: SubagentOrchestrator;
+    try {
+      orchestrator = this.deps.createOrchestrator();
+    } catch (error) {
+      return this.createErrorResult(
+        error,
+        'Failed to create orchestrator for async task.',
+      );
+    }
+
+    const bookingId = asyncTaskManager.tryReserveAsyncSlot();
+    if (!bookingId) {
+      return this.createAsyncSlotResult(asyncTaskManager);
+    }
+
+    const setupResult = await this.setupAsyncInfrastructure(
+      orchestrator,
+      asyncTaskManager,
+      bookingId,
+    );
+    if ('error' in setupResult && setupResult.error) {
+      return setupResult;
+    }
+
+    const {
+      launchResult: _launchResult,
+      agentId,
+      scope,
+      contextState,
+      dispose,
+      asyncAbortController,
+      timeoutId,
+    } = setupResult as AsyncSetupResult;
+
+    const asyncStreaming = this.setupAsyncStreaming(
+      scope,
+      agentId,
+      updateOutput,
+    );
+
+    this.executeInBackground(
+      scope,
+      contextState,
+      agentId,
+      asyncTaskManager,
+      dispose,
+      asyncAbortController.signal,
+      timeoutId,
+      asyncStreaming?.emitAsyncClosingSubagentTag,
+    );
+
+    return {
+      llmContent:
+        `Async task launched: subagent '${this.normalized.subagentName}' (ID: ${agentId}). ` +
+        `Task is running in background. Use 'check_async_tasks' to monitor progress.`,
+      returnDisplay: `Async task started: **${this.normalized.subagentName}** (\`${agentId}\`)`,
+      metadata: {
+        agentId,
+        async: true,
+        status: 'running',
+      },
+    };
+  }
+
+  private checkAsyncSettings(): ToolResult | undefined {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const settingsService = this.config.getSettingsService?.();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const globalSettings = settingsService?.getAllGlobalSettings?.() ?? {};
     const subagentsSettings = globalSettings['subagents'] as
       | { asyncEnabled?: boolean; maxAsync?: number }
@@ -786,7 +1089,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       };
     }
 
-    // Check profile async setting (from ephemeralSettings)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const ephemeralSettings = this.config.getEphemeralSettings?.() ?? {};
     const profileAsyncEnabled =
       ephemeralSettings['subagents.async.enabled'] !== false;
@@ -802,51 +1105,34 @@ class TaskToolInvocation extends BaseToolInvocation<
       };
     }
 
-    // Get AsyncTaskManager
-    const asyncTaskManager = this.deps.getAsyncTaskManager?.();
-    if (asyncTaskManager === undefined) {
-      return {
-        llmContent: 'Async mode requires AsyncTaskManager to be configured.',
-        returnDisplay: 'Error: Async mode not available.',
-        error: {
-          message: 'AsyncTaskManager not configured',
-          type: ToolErrorType.EXECUTION_FAILED,
-        },
-      };
-    }
+    return undefined;
+  }
 
-    // Step 1: Create orchestrator (same as sync)
-    let orchestrator: SubagentOrchestrator;
-    try {
-      orchestrator = this.deps.createOrchestrator();
-    } catch (error) {
-      return this.createErrorResult(
-        error,
-        'Failed to create orchestrator for async task.',
-      );
-    }
+  private createAsyncSlotResult(
+    asyncTaskManager: AsyncTaskManager,
+  ): ToolResult {
+    const canLaunch = asyncTaskManager.canLaunchAsync();
+    const baseReason = canLaunch.reason ?? 'Async task limit reached';
+    const guidance =
+      'You can: (1) wait for running async tasks to complete using check_async_tasks, ' +
+      '(2) launch this subagent synchronously (without async: true), or ' +
+      '(3) try again later when a slot is available.';
+    const errorMessage = `${baseReason}. ${guidance}`;
+    return {
+      llmContent: errorMessage,
+      returnDisplay: baseReason,
+      error: {
+        message: baseReason,
+        type: ToolErrorType.EXECUTION_FAILED,
+      },
+    };
+  }
 
-    // Step 2: Atomically reserve an async slot before launching
-    const bookingId = asyncTaskManager.tryReserveAsyncSlot();
-    if (!bookingId) {
-      const canLaunch = asyncTaskManager.canLaunchAsync();
-      const baseReason = canLaunch.reason ?? 'Async task limit reached';
-      const guidance =
-        'You can: (1) wait for running async tasks to complete using check_async_tasks, ' +
-        '(2) launch this subagent synchronously (without async: true), or ' +
-        '(3) try again later when a slot is available.';
-      const errorMessage = `${baseReason}. ${guidance}`;
-      return {
-        llmContent: errorMessage,
-        returnDisplay: baseReason,
-        error: {
-          message: baseReason,
-          type: ToolErrorType.EXECUTION_FAILED,
-        },
-      };
-    }
-
-    // Step 3: Set up async task infrastructure
+  private async setupAsyncInfrastructure(
+    orchestrator: SubagentOrchestrator,
+    asyncTaskManager: AsyncTaskManager,
+    bookingId: string | undefined,
+  ): Promise<(AsyncSetupResult & { error?: undefined }) | ToolResult> {
     let launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>;
     let agentId: string | undefined;
     let scope: SubAgentScope;
@@ -857,40 +1143,16 @@ class TaskToolInvocation extends BaseToolInvocation<
     let taskRegistered = false;
 
     try {
-      // Create launch request (no timeout for launch itself)
-      const launchRequest = this.createLaunchRequest(undefined);
-
-      // Launch subagent — pass undefined instead of the foreground signal so
-      // the scope is NOT wired to the foreground lifecycle (Ctrl+C, turn end).
-      // Async tasks manage their own lifecycle via asyncAbortController.
+      const launchRequest = this.createLaunchRequest();
       launchResult = await orchestrator.launch(launchRequest, undefined);
       agentId = launchResult.agentId;
       scope = launchResult.scope;
       dispose = launchResult.dispose;
       contextState = this.buildContextState();
 
-      // Set up timeout for async task (but don't wire to parent signal)
-      const settings = this.config.getEphemeralSettings?.() ?? {};
-      const defaultTimeoutSeconds =
-        (settings['task-default-timeout-seconds'] as number | undefined) ??
-        DEFAULT_TASK_TIMEOUT_SECONDS;
-      const maxTimeoutSeconds =
-        (settings['task-max-timeout-seconds'] as number | undefined) ??
-        MAX_TASK_TIMEOUT_SECONDS;
+      const timeoutSetup = this.setupAsyncTimeout(asyncAbortController);
+      timeoutId = timeoutSetup.timeoutId;
 
-      const timeoutSeconds = this.resolveTimeoutSeconds(
-        this.params.timeout_seconds,
-        defaultTimeoutSeconds,
-        maxTimeoutSeconds,
-      );
-      const timeoutMs =
-        timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
-      timeoutId =
-        timeoutMs === undefined
-          ? null
-          : setTimeout(() => asyncAbortController.abort(), timeoutMs);
-
-      // Register with AsyncTaskManager consuming the booking ID
       asyncTaskManager.registerTask(
         {
           id: agentId,
@@ -900,33 +1162,71 @@ class TaskToolInvocation extends BaseToolInvocation<
         },
         bookingId,
       );
-
       taskRegistered = true;
     } catch (error) {
-      // If any setup step fails, make sure to clean up the reservation
       if (!taskRegistered && bookingId) {
         asyncTaskManager.cancelReservation(bookingId);
       }
-
-      // Clean up any created resources
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
-
       if (dispose) {
         void dispose();
       }
-
       return this.createErrorResult(
         error,
         `Failed to launch async subagent '${this.normalized.subagentName}'.`,
       );
     }
 
-    // Set up message streaming (same as sync)
+    return {
+      launchResult,
+      agentId,
+      scope,
+      contextState,
+      dispose,
+      asyncAbortController,
+      timeoutId,
+    };
+  }
+
+  private setupAsyncTimeout(asyncAbortController: AbortController): {
+    timeoutId: NodeJS.Timeout | null;
+  } {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    const settings = this.config.getEphemeralSettings?.() ?? {};
+    const defaultTimeoutSeconds =
+      (settings['task-default-timeout-seconds'] as number | undefined) ??
+      DEFAULT_TASK_TIMEOUT_SECONDS;
+    const maxTimeoutSeconds =
+      (settings['task-max-timeout-seconds'] as number | undefined) ??
+      MAX_TASK_TIMEOUT_SECONDS;
+
+    const timeoutSeconds = this.resolveTimeoutSeconds(
+      this.params.timeout_seconds,
+      defaultTimeoutSeconds,
+      maxTimeoutSeconds,
+    );
+    const timeoutMs =
+      timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
+    const timeoutId =
+      timeoutMs === undefined
+        ? null
+        : setTimeout(() => asyncAbortController.abort(), timeoutMs);
+
+    return { timeoutId };
+  }
+
+  private setupAsyncStreaming(
+    scope: SubAgentScope,
+    agentId: string,
+    updateOutput?: (output: string) => void,
+  ): { emitAsyncClosingSubagentTag: () => void } | undefined {
+    if (!updateOutput) return undefined;
+
     let asyncXmlOutputOpen = false;
     const emitAsyncClosingSubagentTag = () => {
-      if (!asyncXmlOutputOpen || !updateOutput) {
+      if (!asyncXmlOutputOpen) {
         return;
       }
       updateOutput(
@@ -935,56 +1235,21 @@ class TaskToolInvocation extends BaseToolInvocation<
       asyncXmlOutputOpen = false;
     };
 
-    if (updateOutput) {
-      // Send opening XML tag to identify the subagent
-      // Use normalized.subagentName since launchRequest is scoped to inner try block
-      updateOutput(
-        `<subagent name="${this.normalized.subagentName}" id="${agentId}">\n`,
-      );
-      asyncXmlOutputOpen = true;
-
-      const existingHandler = scope.onMessage;
-      const normalizeForStreaming = (text: string): string => {
-        if (!text) {
-          return '';
-        }
-        const lf = text.replace(/\r\n?/g, '\n');
-        return lf.endsWith('\n') ? lf : lf + '\n';
-      };
-      scope.onMessage = (message: string) => {
-        const cleaned = normalizeForStreaming(message);
-        if (cleaned.trim().length > 0) {
-          updateOutput(cleaned);
-        }
-        existingHandler?.(message);
-      };
-    }
-
-    // DO NOT await this - execute in background
-    this.executeInBackground(
-      scope,
-      contextState,
-      agentId,
-      asyncTaskManager,
-      dispose,
-      asyncAbortController.signal,
-      timeoutId,
-      emitAsyncClosingSubagentTag,
+    updateOutput(
+      `<subagent name="${this.normalized.subagentName}" id="${agentId}">\n`,
     );
+    asyncXmlOutputOpen = true;
 
-    // Return immediately with launch status
-    return {
-      llmContent:
-        `Async task launched: subagent '${this.normalized.subagentName}' (ID: ${agentId}). ` +
-        `Task is running in background. Use 'check_async_tasks' to monitor progress.`,
-      returnDisplay: `Async task started: **${this.normalized.subagentName}** (\`${agentId}\`)`,
-
-      metadata: {
-        agentId,
-        async: true,
-        status: 'running',
-      },
+    const existingHandler = scope.onMessage;
+    scope.onMessage = (message: string) => {
+      const cleaned = normalizeSubagentStreamingText(message);
+      if (cleaned.trim().length > 0) {
+        updateOutput(cleaned);
+      }
+      existingHandler?.(message);
     };
+
+    return { emitAsyncClosingSubagentTag };
   }
 
   /**
@@ -1005,12 +1270,8 @@ class TaskToolInvocation extends BaseToolInvocation<
     timeoutId: ReturnType<typeof setTimeout> | null,
     emitClosingSubagentTag?: () => void,
   ): void {
-    // Use IIFE to avoid returning promise
     void (async () => {
       try {
-        // Use the SAME execution path as sync tasks:
-        // - Interactive environment → runInteractive() (tool calls go through shared scheduler/UI)
-        // - Non-interactive environment → runNonInteractive()
         const environmentInteractive =
           this.deps.isInteractiveEnvironment?.() ?? true;
 
@@ -1027,11 +1288,7 @@ class TaskToolInvocation extends BaseToolInvocation<
           await scope.runNonInteractive(contextState);
         }
 
-        // Check if aborted (by cancelTask or timeout)
         if (signal.aborted) {
-          // If cancelTask was called, status is already 'cancelled'.
-          // If timeout fired, status is still 'running' — record as failed
-          // so the task doesn't permanently occupy a concurrency slot.
           const task = asyncTaskManager.getTask(agentId);
           if (task?.status === 'running') {
             asyncTaskManager.failTask(agentId, 'Async task timed out');
@@ -1039,28 +1296,24 @@ class TaskToolInvocation extends BaseToolInvocation<
           return;
         }
 
-        // Get output
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         const output = scope.output ?? {
           terminate_reason: SubagentTerminateMode.ERROR,
           emitted_vars: {},
         };
 
-        // Update AsyncTaskManager
         asyncTaskManager.completeTask(agentId, output);
       } catch (error) {
-        // Update AsyncTaskManager with failure
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         asyncTaskManager.failTask(agentId, errorMessage);
       } finally {
         emitClosingSubagentTag?.();
 
-        // Clear timeout
         if (timeoutId !== null) {
           clearTimeout(timeoutId);
         }
 
-        // Always dispose
         try {
           await dispose();
         } catch {
@@ -1198,17 +1451,20 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
 
     const behaviourPrompts = [
       goalPrompt,
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       ...(params.behaviour_prompts ??
         params.behavior_prompts ??
         params.behaviourPrompts ??
         params.behaviorPrompts ??
         []),
     ]
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       .map((prompt) => prompt?.trim())
       .filter((prompt): prompt is string => Boolean(prompt))
       .filter((prompt, index, array) => array.indexOf(prompt) === index);
 
     const toolWhitelist = (params.tool_whitelist ?? params.toolWhitelist ?? [])
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       .map((tool) => tool?.trim())
       .filter((tool): tool is string => Boolean(tool));
 
@@ -1240,9 +1496,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
 
     const profileManager =
       this.dependencies.profileManager ??
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       configWithManagers.getProfileManager?.();
     const subagentManager =
       this.dependencies.subagentManager ??
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       configWithManagers.getSubagentManager?.();
 
     if (!profileManager || !subagentManager) {
@@ -1257,4 +1515,5 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       foregroundConfig: this.config,
     });
   }
+  /* eslint-enable complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
 }

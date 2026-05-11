@@ -216,7 +216,7 @@ describe('edit parameter consistency', () => {
 
     // Act
     const schema = tool.schema.parametersJsonSchema;
-    const required = schema.required || [];
+    const required = schema.required ?? [];
 
     // Assert
     // absolute_path should NOT be in required array (validation handles this)

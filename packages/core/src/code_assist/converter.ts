@@ -174,7 +174,7 @@ export function toContents(contents: ContentListUnion): Content[] {
 }
 
 function maybeToContent(content?: ContentUnion): Content | undefined {
-  if (!content) {
+  if (content == null) {
     return undefined;
   }
   return toContent(content);
@@ -199,9 +199,7 @@ function toContent(content: ContentUnion): Content {
     // it's a Content - process parts to handle thought filtering
     return {
       ...content,
-      parts: content.parts
-        ? toParts(content.parts.filter((p) => p != null))
-        : [],
+      parts: toParts(content.parts ?? []),
     };
   }
   // it's a Part
@@ -224,7 +222,7 @@ function toPart(part: PartUnion): Part {
   // Handle thought parts for CountToken API compatibility
   // The CountToken API expects parts to have certain required "oneof" fields initialized,
   // but thought parts don't conform to this schema and cause API failures
-  if ('thought' in part && part.thought) {
+  if ('thought' in part && Boolean(part.thought)) {
     const thoughtText = `[Thought: ${part.thought}]`;
 
     const newPart = { ...part };
@@ -244,10 +242,10 @@ function toPart(part: PartUnion): Part {
     // If no other valid API content, this must be a text part.
     // Combine existing text (if any) with the thought, preserving other properties.
     const text = (newPart as { text?: unknown }).text;
-    const existingText = text ? String(text) : '';
-    const combinedText = existingText
-      ? `${existingText}\n${thoughtText}`
-      : thoughtText;
+    const existingText =
+      text !== undefined && text !== null ? String(text) : '';
+    const combinedText =
+      existingText !== '' ? `${existingText}\n${thoughtText}` : thoughtText;
 
     return {
       ...newPart,

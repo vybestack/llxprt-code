@@ -172,10 +172,7 @@ export function normalizeShellReplacement(
   if (value === false || value === 'none') {
     return 'none';
   }
-  if (value === 'allowlist') {
-    return 'allowlist';
-  }
-  // Fallback for any unexpected value
+  // Fallback for allowlist and any unexpected value
   return 'allowlist';
 }
 

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * @plan PLAN-20251027-STATELESS5.P09
  * Note: Legacy tests updated with plan markers. Runtime state integration tests
@@ -142,7 +144,7 @@ vi.mock('../utils/getFolderStructure', () => ({
 vi.mock('../utils/errorReporting', () => ({ reportError: vi.fn() }));
 vi.mock('../utils/generateContentResponseUtilities', () => ({
   getResponseText: (result: GenerateContentResponse) =>
-    result.candidates?.[0]?.content?.parts?.map((part) => part.text).join('') ||
+    result.candidates?.[0]?.content?.parts?.map((part) => part.text).join('') ??
     undefined,
 }));
 vi.mock('../telemetry/index.js', () => ({
@@ -1136,10 +1138,9 @@ sub memory
       expect(forwardedRequests.length).toBe(3);
 
       const secondRequest = forwardedRequests[1];
-      const reminderPart = secondRequest?.find(
+      const reminderPart = secondRequest.find(
         (part) =>
           typeof part === 'object' &&
-          part !== null &&
           'text' in part &&
           typeof part.text === 'string' &&
           part.text.includes('System Note'),
@@ -1329,9 +1330,9 @@ sub memory
 
       // Consume the stream manually to get the final return value.
       let finalResult: Turn | undefined;
-      while (true) {
+      for (;;) {
         const result = await stream.next();
-        if (result.done) {
+        if (result.done === true) {
           finalResult = result.value;
           break;
         }
@@ -1703,7 +1704,6 @@ sub memory
         forwardedRequests[0]?.some(
           (part) =>
             typeof part === 'object' &&
-            part !== null &&
             'text' in part &&
             typeof part.text === 'string' &&
             part.text.includes(
@@ -1920,7 +1920,7 @@ sub memory
         events.every(
           (e) =>
             e.type === GeminiEventType.Error &&
-            (e.value as { error: { status?: number } }).error?.status === 413,
+            (e.value as { error: { status?: number } }).error.status === 413,
         ),
       ).toBe(true);
 
@@ -1989,10 +1989,9 @@ sub memory
       expect(forwardedRequests.length).toBe(2);
 
       const secondRequest = forwardedRequests[1];
-      const continuationPart = secondRequest?.find(
+      const continuationPart = secondRequest.find(
         (part) =>
           typeof part === 'object' &&
-          part !== null &&
           'text' in part &&
           typeof part.text === 'string' &&
           part.text.includes('Continue and take the next concrete action now'),
@@ -3044,12 +3043,10 @@ sub memory
       // Should yield an Error event with the blocking reason
       const errorEvent = events.find((e) => e.type === GeminiEventType.Error);
       expect(errorEvent).toBeDefined();
-      expect(errorEvent?.value?.error?.message).toContain(
+      expect(errorEvent?.value.error.message).toContain(
         'BeforeAgent hook blocked',
       );
-      expect(errorEvent?.value?.error?.message).toContain(
-        'Blocked by test hook',
-      );
+      expect(errorEvent?.value.error.message).toContain('Blocked by test hook');
 
       // Turn.run should NOT have been called because we blocked early
       expect(mockTurnRunFn).not.toHaveBeenCalled();

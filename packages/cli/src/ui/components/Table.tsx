@@ -34,7 +34,8 @@ export function Table<T>({ data, columns }: TableProps<T>) {
             width={col.width}
             flexGrow={col.flexGrow}
             flexShrink={col.flexShrink}
-            flexBasis={col.flexBasis ?? (col.width ? undefined : 0)}
+            // eslint-disable-next-line no-extra-boolean-cast -- preserve old truthiness: nonzero (incl negative) truthy, 0/null/undefined falsy
+            flexBasis={col.flexBasis ?? (Boolean(col.width) ? undefined : 0)}
             paddingRight={1}
           >
             {typeof col.header === 'string' ? (
@@ -68,7 +69,8 @@ export function Table<T>({ data, columns }: TableProps<T>) {
               width={col.width}
               flexGrow={col.flexGrow}
               flexShrink={col.flexShrink}
-              flexBasis={col.flexBasis ?? (col.width ? undefined : 0)}
+              // eslint-disable-next-line no-extra-boolean-cast -- preserve old truthiness: nonzero (incl negative) truthy, 0/null/undefined falsy
+              flexBasis={col.flexBasis ?? (Boolean(col.width) ? undefined : 0)}
               paddingRight={1}
             >
               {col.renderCell ? (

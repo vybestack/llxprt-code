@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 import { AsyncLocalStorage } from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -118,6 +120,12 @@ interface RuntimeActivationBindings {
   ) => void | Promise<void>;
 }
 
+interface RuntimeActivationState {
+  active: boolean;
+  currentRuntimeId: string;
+  currentMetadata: Record<string, unknown>;
+}
+
 /**
  * @plan:PLAN-20251018-STATELESSPROVIDER2.P03
  * @requirement:REQ-SP2-002
@@ -192,6 +200,200 @@ export function registerIsolatedRuntimeBindings(
   activationBindings = bindings;
 }
 
+/** Builds the Config and ensures ProfileManager/SubagentManager are attached. */
+function resolveRuntimeConfig(
+  options: IsolatedRuntimeContextOptions,
+  runtimeId: string,
+  settingsService: SettingsService,
+): Config {
+  const workspaceDir = options.workspaceDir ?? process.cwd();
+  const model = options.model ?? DEFAULT_MODEL;
+  const debugMode = options.debugMode ?? DEFAULT_DEBUG_MODE;
+
+  const config =
+    options.config ??
+    new Config({
+      sessionId: runtimeId,
+      targetDir: workspaceDir,
+      debugMode,
+      cwd: workspaceDir,
+      model,
+      settingsService,
+    });
+
+  const llxprtDir = path.join(os.homedir(), '.llxprt');
+  const resolvedProfileManager =
+    config.getProfileManager() ??
+    new ProfileManager(path.join(llxprtDir, 'profiles'));
+  const resolvedSubagentManager =
+    config.getSubagentManager() ??
+    new SubagentManager(
+      path.join(llxprtDir, 'subagents'),
+      resolvedProfileManager,
+    );
+
+  config.setProfileManager(resolvedProfileManager);
+  config.setSubagentManager(resolvedSubagentManager);
+  return config;
+}
+
+/** Creates the shared token store and OAuthManager for the runtime. */
+function resolveOAuthManager(
+  sessionMessageBus: MessageBus,
+  optionsOAuthManager: OAuthManager | undefined,
+): OAuthManager {
+  // @plan:PLAN-20250214-CREDPROXY.P33
+  const tokenStore =
+    sharedTokenStore ??
+    (sharedTokenStore = createTokenStore() as KeyringTokenStore);
+  return (
+    optionsOAuthManager ??
+    new OAuthManager(tokenStore, loadSettingsForIsolatedRuntime(), {
+      messageBus: sessionMessageBus,
+    })
+  );
+}
+
+/**
+ * @plan:PLAN-20251018-STATELESSPROVIDER2.P03
+ * @requirement:REQ-SP2-002
+ * @pseudocode multi-runtime-baseline.md lines 7-7
+ * Execute the activation flow in the reset → context → infrastructure → link order per Step 6.
+ */
+function buildActivateClosure(
+  runtimeId: string,
+  baseMetadata: Record<string, unknown>,
+  state: RuntimeActivationState,
+  resolvedSettingsService: SettingsService,
+  config: Config,
+  providerManager: ProviderManager,
+  oauthManager: OAuthManager,
+  options: IsolatedRuntimeContextOptions,
+  sessionMessageBus: MessageBus,
+): (activationOptions?: IsolatedRuntimeActivationOptions) => Promise<void> {
+  return async (
+    activationOptions?: IsolatedRuntimeActivationOptions,
+  ): Promise<void> => {
+    if (!activationBindings) {
+      throw new Error(
+        'Isolated runtime activation bindings must be registered before activation.',
+      );
+    }
+
+    const bindings = activationBindings;
+
+    state.currentRuntimeId = activationOptions?.runtimeId ?? runtimeId;
+    state.currentMetadata = {
+      ...baseMetadata,
+      ...(activationOptions?.metadata ?? {}),
+    };
+
+    const scope = {
+      runtimeId: state.currentRuntimeId,
+      metadata: state.currentMetadata,
+    };
+
+    enterRuntimeScope(scope);
+
+    await runWithRuntimeScope(scope, async () => {
+      const scopedRuntime = createProviderRuntimeContext({
+        settingsService: resolvedSettingsService,
+        config,
+        runtimeId: state.currentRuntimeId,
+        metadata: state.currentMetadata,
+      });
+      (
+        providerManager as unknown as { runtime?: ProviderRuntimeContext }
+      ).runtime = scopedRuntime;
+
+      await Promise.resolve(bindings.resetInfrastructure());
+      await Promise.resolve(
+        bindings.setRuntimeContext(resolvedSettingsService, config, {
+          runtimeId: state.currentRuntimeId,
+          metadata: state.currentMetadata,
+        }),
+      );
+
+      if (options.prepare) {
+        await options.prepare({
+          config,
+          settingsService: resolvedSettingsService,
+          providerManager,
+          oauthManager,
+          runtimeId: state.currentRuntimeId,
+          metadata: state.currentMetadata,
+        });
+      }
+
+      await Promise.resolve(
+        bindings.registerInfrastructure(providerManager, oauthManager, {
+          messageBus: sessionMessageBus,
+        }),
+      );
+      await Promise.resolve(
+        bindings.linkProviderManager(config, providerManager),
+      );
+
+      state.active = true;
+    });
+  };
+}
+
+/**
+ * @plan:PLAN-20251018-STATELESSPROVIDER2.P03
+ * @requirement:REQ-SP2-002
+ * @pseudocode multi-runtime-baseline.md lines 8-8
+ * Clear activation state and invoke onCleanup hooks in the reverse order detailed in Step 7.
+ */
+function buildCleanupClosure(
+  state: RuntimeActivationState,
+  resolvedSettingsService: SettingsService,
+  config: Config,
+  providerManager: ProviderManager,
+  options: IsolatedRuntimeContextOptions,
+): () => Promise<void> {
+  return async (): Promise<void> => {
+    if (!state.active && !options.onCleanup) {
+      return;
+    }
+
+    const scope = {
+      runtimeId: state.currentRuntimeId,
+      metadata: state.currentMetadata,
+    };
+    const bindings = activationBindings;
+
+    await runWithRuntimeScope(scope, async () => {
+      if (bindings) {
+        await Promise.resolve(bindings.resetInfrastructure());
+      }
+      clearActiveProviderRuntimeContext();
+
+      const revocation: RuntimeAuthScopeFlushResult = flushRuntimeAuthScope(
+        state.currentRuntimeId,
+      );
+
+      if (options.onCleanup) {
+        await options.onCleanup({
+          config,
+          settingsService: resolvedSettingsService,
+          providerManager,
+          runtimeId: state.currentRuntimeId,
+          metadata: state.currentMetadata,
+        });
+      }
+
+      if (bindings?.disposeRuntime) {
+        await Promise.resolve(
+          bindings.disposeRuntime(state.currentRuntimeId, revocation),
+        );
+      }
+    });
+
+    state.active = false;
+  };
+}
+
 /**
  * @plan:PLAN-20251018-STATELESSPROVIDER2.P03
  * @requirement:REQ-SP2-002
@@ -211,7 +413,6 @@ export function createIsolatedRuntimeContext(
     options.runtimeId ??
     `cli-isolated-${Date.now().toString(16)}-${(runtimeCounter += 1).toString(16)}`;
 
-  const workspaceDir = options.workspaceDir ?? process.cwd();
   const baseMetadata = {
     source: 'cli-isolated-runtime-factory',
     ...(options.metadata ?? {}),
@@ -221,64 +422,16 @@ export function createIsolatedRuntimeContext(
     options.settingsService ??
     new SettingsService();
 
-  const model = options.model ?? DEFAULT_MODEL;
-  const debugMode = options.debugMode ?? DEFAULT_DEBUG_MODE;
-
-  const config =
-    options.config ??
-    new Config({
-      sessionId: runtimeId,
-      targetDir: workspaceDir,
-      debugMode,
-      cwd: workspaceDir,
-      model,
-      settingsService,
-    });
-
-  const configWithManagers = config as Config & {
-    getProfileManager?: () => ProfileManager | undefined;
-    setProfileManager?: (manager: ProfileManager) => void;
-    getSubagentManager?: () => SubagentManager | undefined;
-    setSubagentManager?: (manager: SubagentManager) => void;
-  };
-  const optionsConfigWithManagers = options.config as
-    | (Config & {
-        getProfileManager?: () => ProfileManager | undefined;
-        getSubagentManager?: () => SubagentManager | undefined;
-      })
-    | undefined;
-
-  const llxprtDir = path.join(os.homedir(), '.llxprt');
-  const resolvedProfileManager =
-    optionsConfigWithManagers?.getProfileManager?.() ??
-    configWithManagers.getProfileManager?.() ??
-    new ProfileManager(path.join(llxprtDir, 'profiles'));
-  const resolvedSubagentManager =
-    optionsConfigWithManagers?.getSubagentManager?.() ??
-    configWithManagers.getSubagentManager?.() ??
-    new SubagentManager(
-      path.join(llxprtDir, 'subagents'),
-      resolvedProfileManager,
-    );
-
-  configWithManagers.setProfileManager?.(resolvedProfileManager);
-  configWithManagers.setSubagentManager?.(resolvedSubagentManager);
-
-  const resolvedSettingsService =
-    config.getSettingsService() ?? settingsService;
+  const config = resolveRuntimeConfig(options, runtimeId, settingsService);
+  const resolvedSettingsService = config.getSettingsService();
   const sessionMessageBus = new MessageBus(
     config.getPolicyEngine(),
     config.getDebugMode(),
   );
-  // @plan:PLAN-20250214-CREDPROXY.P33
-  const tokenStore =
-    sharedTokenStore ??
-    (sharedTokenStore = createTokenStore() as KeyringTokenStore); // Step 1 (multi-runtime-baseline.md line 2) keeps token storage shared.
-  const oauthManager =
-    options.oauthManager ??
-    new OAuthManager(tokenStore, loadSettingsForIsolatedRuntime(), {
-      messageBus: sessionMessageBus,
-    });
+  const oauthManager = resolveOAuthManager(
+    sessionMessageBus,
+    options.oauthManager,
+  );
 
   const initialRuntimeContext = createProviderRuntimeContext({
     settingsService: resolvedSettingsService,
@@ -286,6 +439,11 @@ export function createIsolatedRuntimeContext(
     runtimeId,
     metadata: baseMetadata,
   });
+  const activationState: RuntimeActivationState = {
+    active: false,
+    currentRuntimeId: runtimeId,
+    currentMetadata: baseMetadata,
+  };
 
   const providerManager = new ProviderManager({
     runtime: initialRuntimeContext,
@@ -293,128 +451,25 @@ export function createIsolatedRuntimeContext(
     config,
   });
 
-  let currentRuntimeId = runtimeId;
-  let currentMetadata = baseMetadata;
-  let active = false;
+  const activate = buildActivateClosure(
+    runtimeId,
+    baseMetadata,
+    activationState,
+    resolvedSettingsService,
+    config,
+    providerManager,
+    oauthManager,
+    options,
+    sessionMessageBus,
+  );
 
-  /**
-   * @plan:PLAN-20251018-STATELESSPROVIDER2.P03
-   * @requirement:REQ-SP2-002
-   * @pseudocode multi-runtime-baseline.md lines 7-7
-   * Execute the activation flow in the reset → context → infrastructure → link order per Step 6.
-   */
-  const activate = async (
-    activationOptions?: IsolatedRuntimeActivationOptions,
-  ): Promise<void> => {
-    if (!activationBindings) {
-      throw new Error(
-        'Isolated runtime activation bindings must be registered before activation.',
-      );
-    }
-
-    const bindings = activationBindings;
-
-    currentRuntimeId = activationOptions?.runtimeId ?? runtimeId;
-    currentMetadata = {
-      ...baseMetadata,
-      ...(activationOptions?.metadata ?? {}),
-    };
-
-    const scope = {
-      runtimeId: currentRuntimeId,
-      metadata: currentMetadata,
-    };
-
-    enterRuntimeScope(scope);
-
-    await runWithRuntimeScope(scope, async () => {
-      const scopedRuntime = createProviderRuntimeContext({
-        settingsService: resolvedSettingsService,
-        config,
-        runtimeId: currentRuntimeId,
-        metadata: currentMetadata,
-      });
-      (
-        providerManager as unknown as { runtime?: ProviderRuntimeContext }
-      ).runtime = scopedRuntime;
-
-      await Promise.resolve(bindings.resetInfrastructure());
-      await Promise.resolve(
-        bindings.setRuntimeContext(resolvedSettingsService, config, {
-          runtimeId: currentRuntimeId,
-          metadata: currentMetadata,
-        }),
-      );
-
-      if (options.prepare) {
-        await options.prepare({
-          config,
-          settingsService: resolvedSettingsService,
-          providerManager,
-          oauthManager,
-          runtimeId: currentRuntimeId,
-          metadata: currentMetadata,
-        });
-      }
-
-      await Promise.resolve(
-        bindings.registerInfrastructure(providerManager, oauthManager, {
-          messageBus: sessionMessageBus,
-        }),
-      );
-      await Promise.resolve(
-        bindings.linkProviderManager(config, providerManager),
-      );
-
-      active = true;
-    });
-  };
-
-  /**
-   * @plan:PLAN-20251018-STATELESSPROVIDER2.P03
-   * @requirement:REQ-SP2-002
-   * @pseudocode multi-runtime-baseline.md lines 8-8
-   * Clear activation state and invoke onCleanup hooks in the reverse order detailed in Step 7.
-   */
-  const cleanup = async (): Promise<void> => {
-    if (!active && !options.onCleanup) {
-      return;
-    }
-
-    const scope = {
-      runtimeId: currentRuntimeId,
-      metadata: currentMetadata,
-    };
-    const bindings = activationBindings;
-
-    await runWithRuntimeScope(scope, async () => {
-      if (bindings) {
-        await Promise.resolve(bindings.resetInfrastructure());
-      }
-      clearActiveProviderRuntimeContext();
-
-      const revocation: RuntimeAuthScopeFlushResult =
-        flushRuntimeAuthScope(currentRuntimeId);
-
-      if (options.onCleanup) {
-        await options.onCleanup({
-          config,
-          settingsService: resolvedSettingsService,
-          providerManager,
-          runtimeId: currentRuntimeId,
-          metadata: currentMetadata,
-        });
-      }
-
-      if (bindings?.disposeRuntime) {
-        await Promise.resolve(
-          bindings.disposeRuntime(currentRuntimeId, revocation),
-        );
-      }
-    });
-
-    active = false;
-  };
+  const cleanup = buildCleanupClosure(
+    activationState,
+    resolvedSettingsService,
+    config,
+    providerManager,
+    options,
+  );
 
   return {
     runtimeId,

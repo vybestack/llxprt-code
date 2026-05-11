@@ -96,7 +96,7 @@ export function usePermissionsModifyTrust(): UsePermissionsModifyTrustReturn {
   const commitTrustLevel = useCallback(
     (level?: TrustLevel) => {
       const nextLevel = level ?? pendingTrustLevel;
-      if (!nextLevel) {
+      if (nextLevel === undefined) {
         return;
       }
 

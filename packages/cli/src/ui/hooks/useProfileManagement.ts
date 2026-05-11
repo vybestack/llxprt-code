@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import { useCallback, useEffect, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
@@ -61,28 +63,24 @@ function validateProfileForSave(profile: unknown): string | null {
   return null;
 }
 
+interface AddMessageFn {
+  (msg: { type: MessageType; content: string; timestamp: Date }): void;
+}
+
 interface UseProfileManagementParams {
-  addMessage: (msg: {
-    type: MessageType;
-    content: string;
-    timestamp: Date;
-  }) => void;
+  addMessage: AddMessageFn;
   appState: AppState;
 }
 
-export const useProfileManagement = ({
-  addMessage,
-  appState,
-}: UseProfileManagementParams) => {
-  const appDispatch = useAppDispatch();
-  const runtime = useRuntimeApi();
+function useProfileDialogStates(appState: AppState) {
+  return {
+    showListDialog: appState.openDialogs.profileList,
+    showDetailDialog: appState.openDialogs.profileDetail,
+    showEditorDialog: appState.openDialogs.profileEditor,
+  };
+}
 
-  // Dialog visibility states
-  const showListDialog = appState.openDialogs.profileList;
-  const showDetailDialog = appState.openDialogs.profileDetail;
-  const showEditorDialog = appState.openDialogs.profileEditor;
-
-  // Data states
+function useProfileDataStates() {
   const [profiles, setProfiles] = useState<ProfileListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedProfileName, setSelectedProfileName] = useState<string | null>(
@@ -96,58 +94,75 @@ export const useProfileManagement = ({
     null,
   );
   const [profileError, setProfileError] = useState<string | null>(null);
-  // Track if detail was opened directly (vs from list)
   const [detailOpenedDirectly, setDetailOpenedDirectly] = useState(false);
-  // Track if editor was opened directly (vs from detail)
   const [editorOpenedDirectly, setEditorOpenedDirectly] = useState(false);
 
-  // Initialize activeProfileName on mount from runtime diagnostics
-  useEffect(() => {
-    try {
-      const diagnostics = runtime.getRuntimeDiagnosticsSnapshot();
-      const current = diagnostics?.profileName;
-      if (current) {
-        setActiveProfileName(current);
-      }
-    } catch {
-      // Ignore errors getting active profile on mount
-    }
-  }, [runtime]);
+  return {
+    profiles,
+    setProfiles,
+    isLoading,
+    setIsLoading,
+    selectedProfileName,
+    setSelectedProfileName,
+    selectedProfile,
+    setSelectedProfile,
+    defaultProfileName,
+    setDefaultProfileName,
+    activeProfileName,
+    setActiveProfileName,
+    profileError,
+    setProfileError,
+    detailOpenedDirectly,
+    setDetailOpenedDirectly,
+    editorOpenedDirectly,
+    setEditorOpenedDirectly,
+  };
+}
 
-  // Load profiles list
-  const loadProfiles = useCallback(async () => {
+async function fetchProfileItems(
+  runtime: ReturnType<typeof useRuntimeApi>,
+  profileNames: string[],
+): Promise<ProfileListItem[]> {
+  return Promise.all(
+    profileNames.map(async (name) => {
+      try {
+        const profile = await runtime.getProfileByName(name);
+        const isLB = profile.type === 'loadbalancer';
+        return {
+          name,
+          type: isLB ? 'loadbalancer' : 'standard',
+          provider: isLB ? undefined : profile.provider,
+          model: isLB ? undefined : profile.model,
+        } as ProfileListItem;
+      } catch {
+        return {
+          name,
+          type: 'standard',
+          loadError: true,
+        } as ProfileListItem;
+      }
+    }),
+  );
+}
+
+function useProfileLoader(
+  runtime: ReturnType<typeof useRuntimeApi>,
+  addMessage: AddMessageFn,
+  setProfiles: React.Dispatch<React.SetStateAction<ProfileListItem[]>>,
+  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>,
+  setProfileError: React.Dispatch<React.SetStateAction<string | null>>,
+  setDefaultProfileName: React.Dispatch<React.SetStateAction<string | null>>,
+  setActiveProfileName: React.Dispatch<React.SetStateAction<string | null>>,
+) {
+  return useCallback(async () => {
     setIsLoading(true);
     setProfileError(null);
 
     try {
       const profileNames = await runtime.listSavedProfiles();
-
-      // Get additional profile info (type, provider, model)
-      const profileItems: ProfileListItem[] = await Promise.all(
-        profileNames.map(async (name) => {
-          try {
-            const profile = await runtime.getProfileByName(name);
-            const isLB = profile.type === 'loadbalancer';
-            return {
-              name,
-              type: isLB ? 'loadbalancer' : 'standard',
-              provider: isLB ? undefined : profile.provider,
-              model: isLB ? undefined : profile.model,
-            } as ProfileListItem;
-          } catch {
-            // If we can't load the profile, return with error indicator
-            return {
-              name,
-              type: 'standard',
-              loadError: true,
-            } as ProfileListItem;
-          }
-        }),
-      );
-
+      const profileItems = await fetchProfileItems(runtime, profileNames);
       setProfiles(profileItems);
 
-      // Try to get default profile name from settings
       try {
         const services = runtime.getCliRuntimeServices();
         const defaultName = services.settingsService.get('defaultProfile') as
@@ -158,11 +173,9 @@ export const useProfileManagement = ({
         // Ignore errors getting default profile
       }
 
-      // Try to get active profile name
       try {
         const diagnostics = runtime.getRuntimeDiagnosticsSnapshot();
-        const current = diagnostics?.profileName;
-        setActiveProfileName(current ?? null);
+        setActiveProfileName(diagnostics.profileName);
       } catch {
         // Ignore errors getting active profile
       }
@@ -178,9 +191,21 @@ export const useProfileManagement = ({
     } finally {
       setIsLoading(false);
     }
-  }, [runtime, addMessage]);
+  }, [
+    runtime,
+    addMessage,
+    setProfiles,
+    setIsLoading,
+    setProfileError,
+    setDefaultProfileName,
+    setActiveProfileName,
+  ]);
+}
 
-  // Open list dialog
+function useListDialogActions(
+  appDispatch: ReturnType<typeof useAppDispatch>,
+  loadProfiles: () => Promise<void>,
+) {
   const openListDialog = useCallback(async () => {
     debug.log(() => 'openListDialog called');
     appDispatch({ type: 'OPEN_DIALOG', payload: 'profileList' });
@@ -189,13 +214,24 @@ export const useProfileManagement = ({
     debug.log(() => 'loadProfiles completed');
   }, [appDispatch, loadProfiles]);
 
-  // Close list dialog
   const closeListDialog = useCallback(() => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileList' });
   }, [appDispatch]);
 
-  // View profile detail
-  // openedDirectly: true when opened via /profile show, false when from list
+  return { openListDialog, closeListDialog };
+}
+
+function useDetailDialogActions(
+  appDispatch: ReturnType<typeof useAppDispatch>,
+  runtime: ReturnType<typeof useRuntimeApi>,
+  setSelectedProfileName: React.Dispatch<React.SetStateAction<string | null>>,
+  setSelectedProfile: React.Dispatch<React.SetStateAction<Profile | null>>,
+  setProfileError: React.Dispatch<React.SetStateAction<string | null>>,
+  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>,
+  setDetailOpenedDirectly: React.Dispatch<React.SetStateAction<boolean>>,
+  detailOpenedDirectly: boolean,
+  loadProfiles: () => Promise<void>,
+) {
   const viewProfileDetail = useCallback(
     async (profileName: string, openedDirectly = false) => {
       setSelectedProfileName(profileName);
@@ -204,7 +240,6 @@ export const useProfileManagement = ({
       setIsLoading(true);
       setDetailOpenedDirectly(openedDirectly);
 
-      // Close list, open detail
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileList' });
       appDispatch({ type: 'OPEN_DIALOG', payload: 'profileDetail' });
 
@@ -219,31 +254,52 @@ export const useProfileManagement = ({
         setIsLoading(false);
       }
     },
-    [appDispatch, runtime],
+    [
+      appDispatch,
+      runtime,
+      setSelectedProfileName,
+      setSelectedProfile,
+      setProfileError,
+      setIsLoading,
+      setDetailOpenedDirectly,
+    ],
   );
 
-  // Close detail dialog
   const closeDetailDialog = useCallback(async () => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileDetail' });
     setSelectedProfileName(null);
     setSelectedProfile(null);
     setProfileError(null);
 
-    // If opened directly via /profile show, just close
-    // If opened from list, go back to list
-    if (!detailOpenedDirectly) {
+    if (detailOpenedDirectly === false) {
       appDispatch({ type: 'OPEN_DIALOG', payload: 'profileList' });
       await loadProfiles();
     }
     setDetailOpenedDirectly(false);
-  }, [appDispatch, loadProfiles, detailOpenedDirectly]);
+  }, [
+    appDispatch,
+    loadProfiles,
+    detailOpenedDirectly,
+    setSelectedProfileName,
+    setSelectedProfile,
+    setProfileError,
+    setDetailOpenedDirectly,
+  ]);
 
-  // Load profile
-  const loadProfile = useCallback(
+  return { viewProfileDetail, closeDetailDialog };
+}
+
+function useLoadProfileAction(
+  addMessage: AddMessageFn,
+  appDispatch: ReturnType<typeof useAppDispatch>,
+  runtime: ReturnType<typeof useRuntimeApi>,
+  setActiveProfileName: React.Dispatch<React.SetStateAction<string | null>>,
+) {
+  return useCallback(
     async (profileName: string) => {
       try {
         const result = await runtime.loadProfileByName(profileName);
-        const extra = (result.infoMessages ?? [])
+        const extra = result.infoMessages
           .map((message: string) => `\n- ${message}`)
           .join('');
         addMessage({
@@ -251,16 +307,14 @@ export const useProfileManagement = ({
           content: `Profile '${profileName}' loaded${extra}`,
           timestamp: new Date(),
         });
-        for (const warning of result.warnings ?? []) {
+        for (const warning of result.warnings) {
           addMessage({
             type: MessageType.INFO,
             content: `\u26A0 ${warning}`,
             timestamp: new Date(),
           });
         }
-        // Update activeProfileName after successful load
         setActiveProfileName(profileName);
-        // Close all profile dialogs
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileDetail' });
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileList' });
       } catch (error) {
@@ -271,11 +325,17 @@ export const useProfileManagement = ({
         });
       }
     },
-    [addMessage, appDispatch, runtime],
+    [addMessage, appDispatch, runtime, setActiveProfileName],
   );
+}
 
-  // Delete profile
-  const deleteProfile = useCallback(
+function useDeleteProfileAction(
+  addMessage: AddMessageFn,
+  appDispatch: ReturnType<typeof useAppDispatch>,
+  runtime: ReturnType<typeof useRuntimeApi>,
+  loadProfiles: () => Promise<void>,
+) {
+  return useCallback(
     async (profileName: string) => {
       try {
         await runtime.deleteProfileByName(profileName);
@@ -284,7 +344,6 @@ export const useProfileManagement = ({
           content: `Profile '${profileName}' deleted`,
           timestamp: new Date(),
         });
-        // Close detail dialog and refresh list
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileDetail' });
         appDispatch({ type: 'OPEN_DIALOG', payload: 'profileList' });
         await loadProfiles();
@@ -298,9 +357,14 @@ export const useProfileManagement = ({
     },
     [addMessage, appDispatch, runtime, loadProfiles],
   );
+}
 
-  // Set default profile
-  const setDefault = useCallback(
+function useSetDefaultAction(
+  addMessage: AddMessageFn,
+  runtime: ReturnType<typeof useRuntimeApi>,
+  setDefaultProfileName: React.Dispatch<React.SetStateAction<string | null>>,
+) {
+  return useCallback(
     async (profileName: string) => {
       try {
         runtime.setDefaultProfileName(profileName);
@@ -318,18 +382,25 @@ export const useProfileManagement = ({
         });
       }
     },
-    [addMessage, runtime],
+    [addMessage, runtime, setDefaultProfileName],
   );
+}
 
-  // Open editor
-  // openedDirectly: true when opened via /profile edit, false when from detail
-  const openEditor = useCallback(
+function useOpenEditorAction(
+  appDispatch: ReturnType<typeof useAppDispatch>,
+  runtime: ReturnType<typeof useRuntimeApi>,
+  setSelectedProfileName: React.Dispatch<React.SetStateAction<string | null>>,
+  setSelectedProfile: React.Dispatch<React.SetStateAction<Profile | null>>,
+  setProfileError: React.Dispatch<React.SetStateAction<string | null>>,
+  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>,
+  setEditorOpenedDirectly: React.Dispatch<React.SetStateAction<boolean>>,
+) {
+  return useCallback(
     async (profileName: string, openedDirectly = false) => {
       setSelectedProfileName(profileName);
       setEditorOpenedDirectly(openedDirectly);
       setProfileError(null);
 
-      // If opened directly, need to load profile data first
       if (openedDirectly) {
         setIsLoading(true);
         try {
@@ -347,17 +418,33 @@ export const useProfileManagement = ({
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileDetail' });
       appDispatch({ type: 'OPEN_DIALOG', payload: 'profileEditor' });
     },
-    [appDispatch, runtime],
+    [
+      appDispatch,
+      runtime,
+      setSelectedProfileName,
+      setEditorOpenedDirectly,
+      setProfileError,
+      setIsLoading,
+      setSelectedProfile,
+    ],
   );
+}
 
-  // Close editor
-  const closeEditor = useCallback(async () => {
+function useCloseEditorAction(
+  appDispatch: ReturnType<typeof useAppDispatch>,
+  editorOpenedDirectly: boolean,
+  selectedProfileName: string | null,
+  detailOpenedDirectly: boolean,
+  viewProfileDetail: (name: string, direct: boolean) => Promise<void>,
+  setSelectedProfileName: React.Dispatch<React.SetStateAction<string | null>>,
+  setSelectedProfile: React.Dispatch<React.SetStateAction<Profile | null>>,
+  setProfileError: React.Dispatch<React.SetStateAction<string | null>>,
+  setEditorOpenedDirectly: React.Dispatch<React.SetStateAction<boolean>>,
+) {
+  return useCallback(async () => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileEditor' });
 
-    // If opened directly via /profile edit, just close
-    // If opened from detail, go back to detail (preserving detailOpenedDirectly)
-    if (!editorOpenedDirectly && selectedProfileName) {
-      // Preserve the original detailOpenedDirectly state when going back
+    if (editorOpenedDirectly === false && selectedProfileName) {
       await viewProfileDetail(selectedProfileName, detailOpenedDirectly);
     } else {
       setSelectedProfileName(null);
@@ -371,20 +458,29 @@ export const useProfileManagement = ({
     viewProfileDetail,
     editorOpenedDirectly,
     detailOpenedDirectly,
+    setSelectedProfileName,
+    setSelectedProfile,
+    setProfileError,
+    setEditorOpenedDirectly,
   ]);
+}
 
-  // Save edited profile
-  const saveProfile = useCallback(
+function useSaveProfileAction(
+  addMessage: AddMessageFn,
+  appDispatch: ReturnType<typeof useAppDispatch>,
+  editorOpenedDirectly: boolean,
+  viewProfileDetail: (name: string, direct: boolean) => Promise<void>,
+  setProfileError: React.Dispatch<React.SetStateAction<string | null>>,
+) {
+  return useCallback(
     async (profileName: string, updatedProfile: unknown) => {
       try {
-        // Comprehensive validation before save
         const validationError = validateProfileForSave(updatedProfile);
         if (validationError) {
           setProfileError(validationError);
           return;
         }
 
-        // Use ProfileManager directly to save
         const manager = new ProfileManager();
         await manager.saveProfile(profileName, updatedProfile as Profile);
         addMessage({
@@ -392,7 +488,6 @@ export const useProfileManagement = ({
           content: `Profile '${profileName}' saved`,
           timestamp: new Date(),
         });
-        // Close editor and reopen detail
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileEditor' });
         await viewProfileDetail(profileName, editorOpenedDirectly);
       } catch (error) {
@@ -401,23 +496,154 @@ export const useProfileManagement = ({
         );
       }
     },
-    [addMessage, appDispatch, viewProfileDetail, editorOpenedDirectly],
+    [
+      addMessage,
+      appDispatch,
+      viewProfileDetail,
+      editorOpenedDirectly,
+      setProfileError,
+    ],
+  );
+}
+
+function useProfileDispatchActions(
+  addMessage: AddMessageFn,
+  appDispatch: ReturnType<typeof useAppDispatch>,
+  runtime: ReturnType<typeof useRuntimeApi>,
+  loadProfiles: () => Promise<void>,
+  dataStates: ReturnType<typeof useProfileDataStates>,
+  viewProfileDetail: (name: string, direct: boolean) => Promise<void>,
+) {
+  const loadProfile = useLoadProfileAction(
+    addMessage,
+    appDispatch,
+    runtime,
+    dataStates.setActiveProfileName,
+  );
+  const deleteProfile = useDeleteProfileAction(
+    addMessage,
+    appDispatch,
+    runtime,
+    loadProfiles,
+  );
+  const setDefault = useSetDefaultAction(
+    addMessage,
+    runtime,
+    dataStates.setDefaultProfileName,
+  );
+  const openEditor = useOpenEditorAction(
+    appDispatch,
+    runtime,
+    dataStates.setSelectedProfileName,
+    dataStates.setSelectedProfile,
+    dataStates.setProfileError,
+    dataStates.setIsLoading,
+    dataStates.setEditorOpenedDirectly,
+  );
+  const closeEditor = useCloseEditorAction(
+    appDispatch,
+    dataStates.editorOpenedDirectly,
+    dataStates.selectedProfileName,
+    dataStates.detailOpenedDirectly,
+    viewProfileDetail,
+    dataStates.setSelectedProfileName,
+    dataStates.setSelectedProfile,
+    dataStates.setProfileError,
+    dataStates.setEditorOpenedDirectly,
+  );
+  const saveProfile = useSaveProfileAction(
+    addMessage,
+    appDispatch,
+    dataStates.editorOpenedDirectly,
+    viewProfileDetail,
+    dataStates.setProfileError,
+  );
+  return {
+    loadProfile,
+    deleteProfile,
+    setDefault,
+    openEditor,
+    closeEditor,
+    saveProfile,
+  };
+}
+
+export const useProfileManagement = ({
+  addMessage,
+  appState,
+}: UseProfileManagementParams) => {
+  const appDispatch = useAppDispatch();
+  const runtime = useRuntimeApi();
+
+  const dialogStates = useProfileDialogStates(appState);
+  const dataStates = useProfileDataStates();
+
+  // Initialize activeProfileName on mount from runtime diagnostics
+  useEffect(() => {
+    try {
+      const diagnostics = runtime.getRuntimeDiagnosticsSnapshot();
+      const current = diagnostics.profileName;
+      if (current) {
+        dataStates.setActiveProfileName(current);
+      }
+    } catch {
+      // Ignore errors getting active profile on mount
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dataStates setters are stable
+  }, [runtime]);
+
+  const loadProfiles = useProfileLoader(
+    runtime,
+    addMessage,
+    dataStates.setProfiles,
+    dataStates.setIsLoading,
+    dataStates.setProfileError,
+    dataStates.setDefaultProfileName,
+    dataStates.setActiveProfileName,
+  );
+  const { openListDialog, closeListDialog } = useListDialogActions(
+    appDispatch,
+    loadProfiles,
+  );
+  const { viewProfileDetail, closeDetailDialog } = useDetailDialogActions(
+    appDispatch,
+    runtime,
+    dataStates.setSelectedProfileName,
+    dataStates.setSelectedProfile,
+    dataStates.setProfileError,
+    dataStates.setIsLoading,
+    dataStates.setDetailOpenedDirectly,
+    dataStates.detailOpenedDirectly,
+    loadProfiles,
+  );
+  const {
+    loadProfile,
+    deleteProfile,
+    setDefault,
+    openEditor,
+    closeEditor,
+    saveProfile,
+  } = useProfileDispatchActions(
+    addMessage,
+    appDispatch,
+    runtime,
+    loadProfiles,
+    dataStates,
+    viewProfileDetail,
   );
 
   return {
     // Dialog states
-    showListDialog,
-    showDetailDialog,
-    showEditorDialog,
+    ...dialogStates,
 
     // Data
-    profiles,
-    isLoading,
-    selectedProfileName,
-    selectedProfile,
-    defaultProfileName,
-    activeProfileName,
-    profileError,
+    profiles: dataStates.profiles,
+    isLoading: dataStates.isLoading,
+    selectedProfileName: dataStates.selectedProfileName,
+    selectedProfile: dataStates.selectedProfile,
+    defaultProfileName: dataStates.defaultProfileName,
+    activeProfileName: dataStates.activeProfileName,
+    profileError: dataStates.profileError,
 
     // List dialog actions
     openListDialog,

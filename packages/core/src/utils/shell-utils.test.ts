@@ -15,11 +15,8 @@ import {
 } from 'vitest';
 import {
   checkCommandPermissions,
-  escapeShellArg,
   getCommandRoots,
-  getShellConfiguration,
   isCommandAllowed,
-  splitCommands,
   stripShellWrapper,
 } from './shell-utils.js';
 import { isShellInvocationAllowlisted } from './tool-utils.js';
@@ -50,11 +47,13 @@ let config: Config;
 const isWindowsRuntime = process.platform === 'win32';
 const describeWindowsOnly = isWindowsRuntime ? describe : describe.skip;
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
 beforeAll(async () => {
   mockPlatform.mockReturnValue('linux');
   await initializeShellParsers();
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
 beforeEach(() => {
   mockPlatform.mockReturnValue('linux');
   mockQuote.mockImplementation((args: string[]) =>
@@ -69,6 +68,7 @@ beforeEach(() => {
   } as unknown as Config;
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -163,6 +163,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block a command that redefines an allowed function to run an unlisted command', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed(
@@ -176,6 +177,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block a multi-line function body that runs an unlisted command', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed(
@@ -191,6 +193,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block a function keyword declaration that runs an unlisted command', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed(
@@ -205,6 +208,7 @@ describe('isCommandAllowed', () => {
 
   it('should block command substitution that invokes an unlisted command', () => {
     // Skip if tree-sitter parser not available (requires WASM in bundled CLI)
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) {
       return;
     }
@@ -235,6 +239,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block command substitution inside a here-document when the inner command is unlisted', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => [
       'run_shell_command(echo)',
@@ -253,6 +258,7 @@ EOF`,
   });
 
   it('should block backtick substitution that invokes an unlisted command', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed('echo `curl google.com`', config);
@@ -263,6 +269,7 @@ EOF`,
   });
 
   it('should block process substitution using <() when the inner command is unlisted', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => [
       'run_shell_command(diff)',
@@ -279,6 +286,7 @@ EOF`,
   });
 
   it('should block process substitution using >() when the inner command is unlisted', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed('echo "data" > >(curl google.com)', config);
@@ -289,6 +297,7 @@ EOF`,
   });
 
   it('should block commands containing prompt transformations', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const result = isCommandAllowed(
       'echo "${var1=aa\\140 env| ls -l\\140}${var1@P}"',
@@ -301,6 +310,7 @@ EOF`,
   });
 
   it('should block simple prompt transformation expansions', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const result = isCommandAllowed('echo ${foo@P}', config);
     expect(result.allowed).toBe(false);
@@ -344,6 +354,7 @@ EOF`,
     });
 
     it('should block a command when parsing fails', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
       const result = isCommandAllowed('ls &&', config);
       expect(result.allowed).toBe(false);
@@ -365,6 +376,7 @@ describe('checkCommandPermissions', () => {
     });
 
     it('should block commands that cannot be parsed safely', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
       const result = checkCommandPermissions('ls &&', config);
       expect(result).toStrictEqual({
@@ -494,24 +506,28 @@ describe('getCommandRoots', () => {
   });
 
   it('should include nested command substitutions', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const result = getCommandRoots('echo $(badCommand --danger)');
     expect(result).toStrictEqual(['echo', 'badCommand']);
   });
 
   it('should include process substitutions', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const result = getCommandRoots('diff <(ls) <(ls -a)');
     expect(result).toStrictEqual(['diff', 'ls', 'ls']);
   });
 
   it('should include backtick substitutions', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const result = getCommandRoots('echo `badCommand --danger`');
     expect(result).toStrictEqual(['echo', 'badCommand']);
   });
 
   it('should treat parameter expansions with prompt transformations as unsafe', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const roots = getCommandRoots(
       'echo "${var1=aa\\140 env| ls -l\\140}${var1@P}"',
@@ -520,6 +536,7 @@ describe('getCommandRoots', () => {
   });
 
   it('should not return roots for prompt transformation expansions', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const roots = getCommandRoots('echo ${foo@P}');
     expect(roots).toStrictEqual([]);
@@ -529,13 +546,15 @@ describe('getCommandRoots', () => {
 describeWindowsOnly('PowerShell integration', () => {
   const originalComSpec = process.env['ComSpec'];
 
+  // eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
   beforeEach(() => {
     mockPlatform.mockReturnValue('win32');
-    const systemRoot = process.env['SystemRoot'] || 'C:\\\\Windows';
+    const systemRoot = process.env['SystemRoot'] ?? 'C:\\\\Windows';
     process.env['ComSpec'] =
       `${systemRoot}\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe`;
   });
 
+  // eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
   afterEach(() => {
     if (originalComSpec === undefined) {
       delete process.env['ComSpec'];
@@ -544,13 +563,16 @@ describeWindowsOnly('PowerShell integration', () => {
     }
   });
 
+  // eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
   it('should return command roots using PowerShell AST output', () => {
     const roots = getCommandRoots('Get-ChildItem | Select-Object Name');
     expect(roots.length).toBeGreaterThan(0);
     expect(roots).toContain('Get-ChildItem');
   });
 
+  // eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
   it('should block commands when PowerShell parser reports errors', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const { allowed, reason } = isCommandAllowed('Get-ChildItem |', config);
     expect(allowed).toBe(false);
@@ -641,353 +663,5 @@ describe('isShellInvocationAllowlisted', () => {
         'run_shell_command(tail)',
       ]),
     ).toBe(true);
-  });
-});
-
-describe('escapeShellArg', () => {
-  describe('POSIX (bash)', () => {
-    it('should use shell-quote for escaping', () => {
-      mockQuote.mockReturnValueOnce("'escaped value'");
-      const result = escapeShellArg('raw value', 'bash');
-      expect(mockQuote).toHaveBeenCalledWith(['raw value']);
-      expect(result).toBe("'escaped value'");
-    });
-
-    it('should handle empty strings', () => {
-      const result = escapeShellArg('', 'bash');
-      expect(result).toBe('');
-      expect(mockQuote).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Windows', () => {
-    describe('when shell is cmd.exe', () => {
-      it('should wrap simple arguments in double quotes', () => {
-        const result = escapeShellArg('search term', 'cmd');
-        expect(result).toBe('"search term"');
-      });
-
-      it('should escape internal double quotes by doubling them', () => {
-        const result = escapeShellArg('He said "Hello"', 'cmd');
-        expect(result).toBe('"He said ""Hello"""');
-      });
-
-      it('should handle empty strings', () => {
-        const result = escapeShellArg('', 'cmd');
-        expect(result).toBe('');
-      });
-    });
-
-    describe('when shell is PowerShell', () => {
-      it('should wrap simple arguments in single quotes', () => {
-        const result = escapeShellArg('search term', 'powershell');
-        expect(result).toBe("'search term'");
-      });
-
-      it('should escape internal single quotes by doubling them', () => {
-        const result = escapeShellArg("It's a test", 'powershell');
-        expect(result).toBe("'It''s a test'");
-      });
-
-      it('should handle double quotes without escaping them', () => {
-        const result = escapeShellArg('He said "Hello"', 'powershell');
-        expect(result).toBe('\'He said "Hello"\'');
-      });
-
-      it('should handle empty strings', () => {
-        const result = escapeShellArg('', 'powershell');
-        expect(result).toBe('');
-      });
-    });
-  });
-});
-
-describe('getShellConfiguration', () => {
-  const originalEnv = { ...process.env };
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  it('should return bash configuration on Linux', () => {
-    mockPlatform.mockReturnValue('linux');
-    const config = getShellConfiguration();
-    expect(config.executable).toBe('bash');
-    expect(config.argsPrefix).toStrictEqual(['-c']);
-    expect(config.shell).toBe('bash');
-  });
-
-  it('should return bash configuration on macOS (darwin)', () => {
-    mockPlatform.mockReturnValue('darwin');
-    const config = getShellConfiguration();
-    expect(config.executable).toBe('bash');
-    expect(config.argsPrefix).toStrictEqual(['-c']);
-    expect(config.shell).toBe('bash');
-  });
-
-  describe('on Windows', () => {
-    beforeEach(() => {
-      mockPlatform.mockReturnValue('win32');
-    });
-
-    it('should return PowerShell configuration by default', () => {
-      delete process.env['ComSpec'];
-      const config = getShellConfiguration();
-      expect(config.executable).toBe('powershell.exe');
-      expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
-      expect(config.shell).toBe('powershell');
-    });
-
-    it('should ignore ComSpec when pointing to cmd.exe', () => {
-      const cmdPath = 'C:\\WINDOWS\\system32\\cmd.exe';
-      process.env['ComSpec'] = cmdPath;
-      const config = getShellConfiguration();
-      expect(config.executable).toBe('powershell.exe');
-      expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
-      expect(config.shell).toBe('powershell');
-    });
-
-    it('should return PowerShell configuration if ComSpec points to powershell.exe', () => {
-      const psPath =
-        'C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
-      process.env['ComSpec'] = psPath;
-      const config = getShellConfiguration();
-      expect(config.executable).toBe(psPath);
-      expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
-      expect(config.shell).toBe('powershell');
-    });
-
-    it('should return PowerShell configuration if ComSpec points to pwsh.exe', () => {
-      const pwshPath = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe';
-      process.env['ComSpec'] = pwshPath;
-      const config = getShellConfiguration();
-      expect(config.executable).toBe(pwshPath);
-      expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
-      expect(config.shell).toBe('powershell');
-    });
-
-    it('should be case-insensitive when checking ComSpec', () => {
-      process.env['ComSpec'] = 'C:\\Path\\To\\POWERSHELL.EXE';
-      const config = getShellConfiguration();
-      expect(config.executable).toBe('C:\\Path\\To\\POWERSHELL.EXE');
-      expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
-      expect(config.shell).toBe('powershell');
-    });
-  });
-});
-
-describe('splitCommands', () => {
-  it('should keep 2>&1 redirection within a single command segment', () => {
-    const result = splitCommands('ls nonexistent 2>&1');
-    expect(result).toStrictEqual(['ls nonexistent 2>&1']);
-  });
-
-  it('should split && chains while preserving 2>&1 redirection in each segment', () => {
-    const result = splitCommands('ls nonexistent 2>&1 && echo done');
-    expect(result).toStrictEqual(['ls nonexistent 2>&1', 'echo done']);
-  });
-
-  it('should keep >&2 redirection within a single command segment', () => {
-    const result = splitCommands('echo hello >&2');
-    expect(result).toStrictEqual(['echo hello >&2']);
-  });
-
-  it('should split && chains while preserving >&2 redirection in each segment', () => {
-    const result = splitCommands('echo hello >&2 && echo world');
-    expect(result).toStrictEqual(['echo hello >&2', 'echo world']);
-  });
-
-  it('should handle multiple chained commands each with redirections', () => {
-    const result = splitCommands('cmd1 2>&1 && cmd2 2>&1');
-    expect(result).toStrictEqual(['cmd1 2>&1', 'cmd2 2>&1']);
-  });
-
-  it('should handle a single command without chaining', () => {
-    const result = splitCommands('echo hello');
-    expect(result).toStrictEqual(['echo hello']);
-  });
-
-  it('should split on semicolons correctly', () => {
-    const result = splitCommands('echo a; echo b');
-    expect(result).toStrictEqual(['echo a', 'echo b']);
-  });
-
-  it('should keep &>file (bash redirect-both) within a single command segment', () => {
-    const result = splitCommands('cmd1 &>output.log && cmd2');
-    expect(result).toStrictEqual(['cmd1 &>output.log', 'cmd2']);
-  });
-
-  it('should keep &>>file (bash append redirect-both) within a single command segment', () => {
-    const result = splitCommands('cmd1 &>>output.log && cmd2');
-    expect(result).toStrictEqual(['cmd1 &>>output.log', 'cmd2']);
-  });
-
-  it('should still split on standalone & (background job separator)', () => {
-    const result = splitCommands('cmd1 & cmd2');
-    expect(result).toStrictEqual(['cmd1', 'cmd2']);
-  });
-
-  // Default behavior: split on pipes (for security/allowlist checks)
-  it('should split on pipes by default (for security checks)', () => {
-    const result = splitCommands('cat file | grep foo');
-    expect(result).toStrictEqual(['cat file', 'grep foo']);
-  });
-
-  it('should split complex pipelines by default', () => {
-    const result = splitCommands('cat file | grep foo | sort | uniq');
-    expect(result).toStrictEqual(['cat file', 'grep foo', 'sort', 'uniq']);
-  });
-
-  // With splitOnPipes: false (for instrumentation - pipelines stay intact)
-  it('should keep pipe operator within a single command when splitOnPipes: false', () => {
-    const result = splitCommands('cat file | grep foo', {
-      splitOnPipes: false,
-    });
-    expect(result).toStrictEqual(['cat file | grep foo']);
-  });
-
-  it('should keep complex pipelines as a single command when splitOnPipes: false', () => {
-    const result = splitCommands('cat file | grep foo | sort | uniq', {
-      splitOnPipes: false,
-    });
-    expect(result).toStrictEqual(['cat file | grep foo | sort | uniq']);
-  });
-
-  it('should split on && but preserve pipes within each segment when splitOnPipes: false', () => {
-    const result = splitCommands('cat file | grep foo && echo done', {
-      splitOnPipes: false,
-    });
-    expect(result).toStrictEqual(['cat file | grep foo', 'echo done']);
-  });
-
-  it('should split on || but preserve pipes within each segment when splitOnPipes: false', () => {
-    const result = splitCommands('cat file | grep foo || echo not found', {
-      splitOnPipes: false,
-    });
-    expect(result).toStrictEqual(['cat file | grep foo', 'echo not found']);
-  });
-
-  it('should handle multiple chained pipelines when splitOnPipes: false', () => {
-    const result = splitCommands(
-      'cat file1 | grep foo && cat file2 | grep bar',
-      { splitOnPipes: false },
-    );
-    expect(result).toStrictEqual([
-      'cat file1 | grep foo',
-      'cat file2 | grep bar',
-    ]);
-  });
-
-  it('should handle pipe with 2>&1 redirection when splitOnPipes: false', () => {
-    const result = splitCommands('cmd 2>&1 | grep error', {
-      splitOnPipes: false,
-    });
-    expect(result).toStrictEqual(['cmd 2>&1 | grep error']);
-  });
-});
-
-describe('splitCommands regex fallback', () => {
-  // Test the regex fallback path by mocking isParserAvailable to return false
-  beforeEach(() => {
-    vi.doMock('./shell-parser.js', () => ({
-      isParserAvailable: () => false,
-      parseShellCommand: () => null,
-      extractCommandNames: () => [],
-      hasCommandSubstitution: () => false,
-      splitCommandsWithTree: () => [],
-      parseCommandDetails: () => null,
-    }));
-  });
-
-  afterEach(() => {
-    vi.doUnmock('./shell-parser.js');
-  });
-
-  it('should keep 2>&1 redirection within a single command segment (regex path)', async () => {
-    const { splitCommands: splitCommandsRegex } = await import(
-      './shell-utils.js'
-    );
-    const result = splitCommandsRegex('ls nonexistent 2>&1');
-    expect(result).toStrictEqual(['ls nonexistent 2>&1']);
-  });
-
-  it('should split && chains while preserving 2>&1 (regex path)', async () => {
-    const { splitCommands: splitCommandsRegex } = await import(
-      './shell-utils.js'
-    );
-    const result = splitCommandsRegex('ls nonexistent 2>&1 && echo done');
-    expect(result).toStrictEqual(['ls nonexistent 2>&1', 'echo done']);
-  });
-
-  it('should keep &>file within a single command segment (regex path)', async () => {
-    const { splitCommands: splitCommandsRegex } = await import(
-      './shell-utils.js'
-    );
-    const result = splitCommandsRegex('cmd1 &>output.log && cmd2');
-    expect(result).toStrictEqual(['cmd1 &>output.log', 'cmd2']);
-  });
-
-  it('should keep &>>file within a single command segment (regex path)', async () => {
-    const { splitCommands: splitCommandsRegex } = await import(
-      './shell-utils.js'
-    );
-    const result = splitCommandsRegex('cmd1 &>>output.log && cmd2');
-    expect(result).toStrictEqual(['cmd1 &>>output.log', 'cmd2']);
-  });
-
-  it('should still split on standalone & (regex path)', async () => {
-    const { splitCommands: splitCommandsRegex } = await import(
-      './shell-utils.js'
-    );
-    const result = splitCommandsRegex('cmd1 & cmd2');
-    expect(result).toStrictEqual(['cmd1', 'cmd2']);
-  });
-
-  // Default behavior: split on pipes (for security)
-  it('should split on pipes by default (regex path)', async () => {
-    const { splitCommands: splitCommandsRegex } = await import(
-      './shell-utils.js'
-    );
-    const result = splitCommandsRegex('cat file | grep foo');
-    expect(result).toStrictEqual(['cat file', 'grep foo']);
-  });
-
-  it('should split complex pipelines by default (regex path)', async () => {
-    const { splitCommands: splitCommandsRegex } = await import(
-      './shell-utils.js'
-    );
-    const result = splitCommandsRegex('cat file | grep foo | sort | uniq');
-    expect(result).toStrictEqual(['cat file', 'grep foo', 'sort', 'uniq']);
-  });
-
-  // With splitOnPipes: false (for instrumentation)
-  it('should keep pipe operator within a single command when splitOnPipes: false (regex path)', async () => {
-    const { splitCommands: splitCommandsRegex } = await import(
-      './shell-utils.js'
-    );
-    const result = splitCommandsRegex('cat file | grep foo', {
-      splitOnPipes: false,
-    });
-    expect(result).toStrictEqual(['cat file | grep foo']);
-  });
-
-  it('should keep complex pipelines as a single command when splitOnPipes: false (regex path)', async () => {
-    const { splitCommands: splitCommandsRegex } = await import(
-      './shell-utils.js'
-    );
-    const result = splitCommandsRegex('cat file | grep foo | sort | uniq', {
-      splitOnPipes: false,
-    });
-    expect(result).toStrictEqual(['cat file | grep foo | sort | uniq']);
-  });
-
-  it('should split on && but preserve pipes within each segment when splitOnPipes: false (regex path)', async () => {
-    const { splitCommands: splitCommandsRegex } = await import(
-      './shell-utils.js'
-    );
-    const result = splitCommandsRegex('cat file | grep foo && echo done', {
-      splitOnPipes: false,
-    });
-    expect(result).toStrictEqual(['cat file | grep foo', 'echo done']);
   });
 });

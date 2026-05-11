@@ -50,11 +50,12 @@ export function shouldUpdateTokenMetrics(
     return true;
   }
   const next = toTokenMetricsSnapshot(metrics, usage);
-  return (
+  const rateChanged =
     next.tokensPerMinute !== previous.tokensPerMinute ||
+    next.tokensPerSecond !== previous.tokensPerSecond;
+  const timingChanged =
     next.throttleWaitTimeMs !== previous.throttleWaitTimeMs ||
-    next.sessionTokenTotal !== previous.sessionTokenTotal ||
-    next.timeToFirstToken !== previous.timeToFirstToken ||
-    next.tokensPerSecond !== previous.tokensPerSecond
-  );
+    next.timeToFirstToken !== previous.timeToFirstToken;
+  const totalChanged = next.sessionTokenTotal !== previous.sessionTokenTotal;
+  return rateChanged || timingChanged || totalChanged;
 }

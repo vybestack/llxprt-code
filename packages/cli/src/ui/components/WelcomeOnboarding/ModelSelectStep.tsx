@@ -22,10 +22,58 @@ interface ModelSelectStepProps {
   provider: string;
   models: ModelInfo[];
   modelsLoadStatus: ModelsLoadStatus;
-  onSelect: (modelId: string) => void;
+  onSelect: (modelId: string) => void | Promise<void>;
   onBack: () => void;
   isFocused?: boolean;
 }
+
+const ModelSelectHeader: React.FC<{ providerDisplay: string }> = ({
+  providerDisplay,
+}) => (
+  <Box flexDirection="column" marginBottom={1}>
+    <Text bold color={Colors.AccentCyan}>
+      Step 2 of 5: Choose Your Model
+    </Text>
+    <Text color={Colors.Foreground}> </Text>
+    <Text color={Colors.Foreground}>Select a model for {providerDisplay}:</Text>
+  </Box>
+);
+
+const ModelLoadingState: React.FC = () => (
+  <Box marginBottom={1}>
+    <Text color={Colors.Gray}>Loading models...</Text>
+  </Box>
+);
+
+const ModelErrorState: React.FC = () => (
+  <Box flexDirection="column" marginBottom={1}>
+    <Text color={Colors.AccentRed}>Failed to load models.</Text>
+    <Text color={Colors.Gray}>Press Esc to go back and try again.</Text>
+  </Box>
+);
+
+const ModelEmptyState: React.FC = () => (
+  <Box flexDirection="column" marginBottom={1}>
+    <Text color={Colors.AccentYellow}>
+      No models available for this provider.
+    </Text>
+    <Text color={Colors.Gray}>
+      Press Esc to go back and select a different provider.
+    </Text>
+  </Box>
+);
+
+const ModelFooterHint: React.FC<{ showNavHint: boolean }> = ({
+  showNavHint,
+}) => (
+  <Box marginTop={1}>
+    <Text color={Colors.Gray}>
+      {showNavHint
+        ? 'Use ↑↓ to navigate, Enter to select'
+        : 'Press Esc to go back'}
+    </Text>
+  </Box>
+);
 
 export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
   provider,
@@ -43,14 +91,11 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
       value: model.id,
       key: model.id,
     }));
-
-    // Add back option
     modelOptions.push({
       label: '← Back to provider selection',
       value: '__back__',
       key: '__back__',
     });
-
     return modelOptions;
   }, [models]);
 
@@ -59,13 +104,12 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
       if (value === '__back__') {
         onBack();
       } else {
-        onSelect(value);
+        void onSelect(value);
       }
     },
     [onBack, onSelect],
   );
 
-  // Handle Escape to go back (especially useful in error/empty states)
   useKeypress(
     (key) => {
       if (key.name === 'escape') {
@@ -75,31 +119,13 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
     { isActive: isFocused },
   );
 
+  const showNavHint = modelsLoadStatus === 'success' && models.length > 0;
+
   return (
     <Box flexDirection="column">
-      <Box flexDirection="column" marginBottom={1}>
-        <Text bold color={Colors.AccentCyan}>
-          Step 2 of 5: Choose Your Model
-        </Text>
-        <Text color={Colors.Foreground}> </Text>
-        <Text color={Colors.Foreground}>
-          Select a model for {providerDisplay}:
-        </Text>
-      </Box>
-
-      {modelsLoadStatus === 'loading' && (
-        <Box marginBottom={1}>
-          <Text color={Colors.Gray}>Loading models...</Text>
-        </Box>
-      )}
-
-      {modelsLoadStatus === 'error' && (
-        <Box flexDirection="column" marginBottom={1}>
-          <Text color={Colors.AccentRed}>Failed to load models.</Text>
-          <Text color={Colors.Gray}>Press Esc to go back and try again.</Text>
-        </Box>
-      )}
-
+      <ModelSelectHeader providerDisplay={providerDisplay} />
+      {modelsLoadStatus === 'loading' && <ModelLoadingState />}
+      {modelsLoadStatus === 'error' && <ModelErrorState />}
       {modelsLoadStatus === 'success' && models.length > 0 && (
         <RadioButtonSelect
           items={options}
@@ -108,25 +134,10 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
           maxItemsToShow={10}
         />
       )}
-
       {modelsLoadStatus === 'success' && models.length === 0 && (
-        <Box flexDirection="column" marginBottom={1}>
-          <Text color={Colors.AccentYellow}>
-            No models available for this provider.
-          </Text>
-          <Text color={Colors.Gray}>
-            Press Esc to go back and select a different provider.
-          </Text>
-        </Box>
+        <ModelEmptyState />
       )}
-
-      <Box marginTop={1}>
-        <Text color={Colors.Gray}>
-          {modelsLoadStatus === 'success' && models.length > 0
-            ? 'Use ↑↓ to navigate, Enter to select'
-            : 'Press Esc to go back'}
-        </Text>
-      </Box>
+      <ModelFooterHint showNavHint={showNavHint} />
     </Box>
   );
 };

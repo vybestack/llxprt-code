@@ -23,6 +23,7 @@ import { toCodePoints, cpLen } from '../../utils/textUtils.js';
  * @returns true if the character is a word character
  */
 export const isWordCharStrict = (char: string): boolean =>
+  /* eslint-disable-next-line sonarjs/regular-expr */
   /[\w\p{L}\p{N}]/u.test(char);
 
 /**
@@ -37,7 +38,10 @@ export const isWhitespace = (char: string): boolean => /\s/.test(char);
  * @param char - The character to check
  * @returns true if the character is a combining mark
  */
-export const isCombiningMark = (char: string): boolean => /\p{M}/u.test(char);
+export const isCombiningMark = (char: string): boolean =>
+  // Static regex for combining mark check - no dynamic parts
+
+  /\p{M}/u.test(char);
 
 /**
  * Checks if a character should be considered part of a word (including combining marks).
@@ -317,22 +321,44 @@ export const findNextWordAcrossLines = (
   }
 
   for (let row = cursorRow + 1; row < lines.length; row++) {
-    const line = lines[row] || '';
-    if (line.length === 0) {
-      if (!hasWordsInLaterLines(lines, row + 1)) return { row, col: 0 };
-      continue;
+    const result = findWordInLine(lines, row, searchForWordStart);
+    if (result.found) {
+      return { row, col: result.col };
     }
-
-    const firstNonWs = findFirstNonWhitespaceCol(line);
-    if (firstNonWs >= cpLen(line)) continue;
-
-    if (searchForWordStart) return { row, col: firstNonWs };
-    const endCol = findWordEndInLine(line, firstNonWs);
-    if (endCol !== null) return { row, col: endCol };
+    if (result.isEmpty && !hasWordsInLaterLines(lines, row + 1)) {
+      return { row, col: 0 };
+    }
+    // Skip this line and continue searching
   }
 
   return null;
 };
+
+/**
+ * Find word position in a specific line.
+ */
+function findWordInLine(
+  lines: string[],
+  row: number,
+  searchForWordStart: boolean,
+): { found: boolean; col: number; isEmpty: boolean } {
+  const line = lines[row] || '';
+  if (line.length === 0) {
+    return { found: false, col: 0, isEmpty: true };
+  }
+
+  const firstNonWs = findFirstNonWhitespaceCol(line);
+  if (firstNonWs >= cpLen(line)) {
+    return { found: false, col: 0, isEmpty: false };
+  }
+
+  if (searchForWordStart) {
+    return { found: true, col: firstNonWs, isEmpty: false };
+  }
+
+  const endCol = findWordEndInLine(line, firstNonWs);
+  return { found: endCol !== null, col: endCol ?? 0, isEmpty: false };
+}
 
 /**
  * Finds the previous word across multiple lines.

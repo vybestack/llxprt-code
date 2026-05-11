@@ -129,6 +129,7 @@ type ErrorShape = {
  * @returns A GoogleApiError object if the error matches, otherwise null.
  */
 export function parseGoogleApiError(error: unknown): GoogleApiError | null {
+  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy short-circuit for malformed error inputs.
   if (!error) {
     return null;
   }
@@ -139,7 +140,7 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
   if (typeof errorObj === 'string') {
     try {
       errorObj = JSON.parse(errorObj);
-    } catch (_) {
+    } catch {
       // Not a JSON string, can't parse.
       return null;
     }
@@ -153,72 +154,113 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
     return null;
   }
 
-  let currentError: ErrorShape | undefined =
-    fromGaxiosError(errorObj) ?? fromApiError(errorObj);
+  const currentError = resolveNestedError(
+    fromGaxiosError(errorObj) ?? fromApiError(errorObj),
+  );
 
+  return buildGoogleApiError(currentError);
+}
+
+function parseNestedMessage(message: string): ErrorShape | undefined {
+  try {
+    const parsedMessage = JSON.parse(
+      message.replace(/\u00A0/g, '').replace(/\n/g, ' '),
+    );
+    if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      typeof parsedMessage === 'object' &&
+      parsedMessage !== null &&
+      'error' in parsedMessage &&
+      parsedMessage.error !== undefined &&
+      parsedMessage.error !== null
+    ) {
+      return parsedMessage.error as ErrorShape;
+    }
+  } catch {
+    // Not a JSON string; drilling complete.
+  }
+  return undefined;
+}
+
+function resolveNestedError(
+  initialError: ErrorShape | undefined,
+): ErrorShape | undefined {
+  let currentError = initialError;
   let depth = 0;
   const maxDepth = 10;
-  // Handle cases where the actual error object is stringified inside the message
-  // by drilling down until we find an error that doesn't have a stringified message.
+
   while (
-    currentError &&
+    currentError !== undefined &&
     typeof currentError.message === 'string' &&
     depth < maxDepth
   ) {
-    try {
-      const parsedMessage = JSON.parse(
-        currentError.message.replace(/\u00A0/g, '').replace(/\n/g, ' '),
-      );
-      if (parsedMessage.error) {
-        currentError = parsedMessage.error;
-        depth++;
-      } else {
-        // The message is a JSON string, but not a nested error object.
-        break;
-      }
-    } catch (_error) {
-      // It wasn't a JSON string, so we've drilled down as far as we can.
-      break;
+    const parsedError = parseNestedMessage(currentError.message);
+    if (parsedError === undefined) {
+      return currentError;
     }
+    currentError = parsedError;
+    depth++;
   }
 
-  if (!currentError) {
+  return currentError;
+}
+
+function normalizeGoogleApiDetail(
+  detail: unknown,
+): GoogleApiErrorDetail | undefined {
+  if (detail === null || detail === undefined || typeof detail !== 'object') {
+    return undefined;
+  }
+
+  const detailObj = detail as Record<string, unknown>;
+  const typeKey = Object.keys(detailObj).find((key) => key.trim() === '@type');
+  if (typeKey === undefined) {
+    return undefined;
+  }
+
+  if (typeKey !== '@type') {
+    detailObj['@type'] = detailObj[typeKey];
+    delete detailObj[typeKey];
+  }
+  // We can just cast it; the consumer will have to switch on @type
+  return detailObj as unknown as GoogleApiErrorDetail;
+}
+
+function normalizeGoogleApiDetails(
+  errorDetails: unknown[] | undefined,
+): GoogleApiErrorDetail[] {
+  if (!Array.isArray(errorDetails)) {
+    return [];
+  }
+
+  return errorDetails.flatMap((detail) => {
+    const normalizedDetail = normalizeGoogleApiDetail(detail);
+    return normalizedDetail === undefined ? [] : [normalizedDetail];
+  });
+}
+
+function buildGoogleApiError(
+  currentError: ErrorShape | undefined,
+): GoogleApiError | null {
+  if (currentError === undefined) {
     return null;
   }
 
-  const code = currentError.code;
-  const message = currentError.message;
-  const errorDetails = currentError.details;
-
-  if (code && message) {
-    const details: GoogleApiErrorDetail[] = [];
-    if (Array.isArray(errorDetails)) {
-      for (const detail of errorDetails) {
-        if (detail && typeof detail === 'object') {
-          const detailObj = detail as Record<string, unknown>;
-          const typeKey = Object.keys(detailObj).find(
-            (key) => key.trim() === '@type',
-          );
-          if (typeKey) {
-            if (typeKey !== '@type') {
-              detailObj['@type'] = detailObj[typeKey];
-              delete detailObj[typeKey];
-            }
-            // We can just cast it; the consumer will have to switch on @type
-            details.push(detailObj as unknown as GoogleApiErrorDetail);
-          }
-        }
-      }
-    }
-
-    return {
-      code,
-      message,
-      details,
-    };
+  const { code, message, details: errorDetails } = currentError;
+  if (
+    typeof code !== 'number' ||
+    Number.isNaN(code) ||
+    typeof message !== 'string' ||
+    message === ''
+  ) {
+    return null;
   }
 
-  return null;
+  return {
+    code,
+    message,
+    details: normalizeGoogleApiDetails(errorDetails),
+  };
 }
 
 function fromGaxiosError(errorObj: object): ErrorShape | undefined {
@@ -236,13 +278,15 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
   };
 
   let outerError: ErrorShape | undefined;
+  // External data boundary: gaxios error response data from Google API may have unexpected shapes at runtime
+  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy fallback for external response data.
   if (gaxiosError.response?.data) {
     let data = gaxiosError.response.data;
 
     if (typeof data === 'string') {
       try {
         data = JSON.parse(data);
-      } catch (_) {
+      } catch {
         // Not a JSON string, can't parse.
       }
     }
@@ -251,16 +295,17 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object' && data !== null) {
-      if ('error' in data) {
-        outerError = (data as { error: ErrorShape }).error;
-      }
+    if (typeof data === 'object' && 'error' in data) {
+      outerError = (data as { error?: ErrorShape }).error;
     }
   }
 
-  if (!outerError) {
+  // External data boundary: outerError may be undefined after parsing attempts, and gaxiosError.error comes from external API
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (outerError === undefined || outerError === null) {
     // If the gaxios structure isn't there, check for a top-level `error` property.
-    if (gaxiosError.error) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (gaxiosError.error !== undefined && gaxiosError.error !== null) {
       outerError = gaxiosError.error;
     } else {
       return undefined;
@@ -280,24 +325,26 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
   };
 
   let outerError: ErrorShape | undefined;
+  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy fallback for external API error messages.
   if (apiError.message) {
     let data = apiError.message;
 
     if (typeof data === 'string') {
       try {
         data = JSON.parse(data);
-      } catch (_) {
+      } catch {
         // Not a JSON string, can't parse.
+        const stringData = String(data);
+
         // Try one more fallback: look for the first '{' and last '}'
-        if (typeof data === 'string') {
-          const firstBrace = data.indexOf('{');
-          const lastBrace = data.lastIndexOf('}');
-          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-            try {
-              data = JSON.parse(data.substring(firstBrace, lastBrace + 1));
-            } catch (__) {
-              // Still failed
-            }
+        const firstBrace = stringData.indexOf('{');
+        const lastBrace = stringData.lastIndexOf('}');
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          try {
+            data = JSON.parse(stringData.substring(firstBrace, lastBrace + 1));
+          } catch {
+            // Substring also not valid JSON.
           }
         }
       }
@@ -307,10 +354,8 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object' && data !== null) {
-      if ('error' in data) {
-        outerError = (data as { error: ErrorShape }).error;
-      }
+    if (typeof data === 'object' && 'error' in data) {
+      outerError = (data as { error?: ErrorShape }).error;
     }
   }
   return outerError;

@@ -175,6 +175,7 @@ const collectResults = async (
   return results;
 };
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   googleGenAIState.instances.length = 0;
   googleGenAIState.streamCalls.length = 0;
@@ -191,6 +192,7 @@ beforeEach(() => {
   );
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(() => {
   clearActiveProviderRuntimeContext();
 });
@@ -239,7 +241,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const request = googleGenAIState.streamCalls[0]?.request as {
       config?: { thinkingConfig?: Record<string, unknown> };
     };
-    expect(request?.config?.thinkingConfig).toStrictEqual({
+    expect(request.config?.thinkingConfig).toStrictEqual({
       includeThoughts: true,
       thinkingBudget: -1,
     });
@@ -289,14 +291,12 @@ describe('Gemini provider thinkingLevel tests', () => {
     const request = googleGenAIState.streamCalls[0]?.request as {
       config?: { thinkingConfig?: Record<string, unknown> };
     };
-    expect(request?.config?.thinkingConfig).toStrictEqual({
+    expect(request.config?.thinkingConfig).toStrictEqual({
       includeThoughts: true,
       thinkingLevel: 'HIGH',
     });
     // Gemini 3.x must NOT have thinkingBudget
-    expect(request?.config?.thinkingConfig).not.toHaveProperty(
-      'thinkingBudget',
-    );
+    expect(request.config?.thinkingConfig).not.toHaveProperty('thinkingBudget');
   });
 
   it('Gemini 3.x model maps each effort level correctly', async () => {
@@ -353,9 +353,9 @@ describe('Gemini provider thinkingLevel tests', () => {
       const request = googleGenAIState.streamCalls[0]?.request as {
         config?: { thinkingConfig?: Record<string, unknown> };
       };
-      expect(request?.config?.thinkingConfig?.thinkingLevel).toBe(expected);
-      expect(request?.config?.thinkingConfig?.includeThoughts).toBe(true);
-      expect(request?.config?.thinkingConfig).not.toHaveProperty(
+      expect(request.config?.thinkingConfig?.thinkingLevel).toBe(expected);
+      expect(request.config?.thinkingConfig?.includeThoughts).toBe(true);
+      expect(request.config?.thinkingConfig).not.toHaveProperty(
         'thinkingBudget',
       );
     }
@@ -406,13 +406,11 @@ describe('Gemini provider thinkingLevel tests', () => {
     const request = googleGenAIState.streamCalls[0]?.request as {
       config?: { thinkingConfig?: Record<string, unknown> };
     };
-    expect(request?.config?.thinkingConfig).toStrictEqual({
+    expect(request.config?.thinkingConfig).toStrictEqual({
       includeThoughts: true,
     });
-    expect(request?.config?.thinkingConfig).not.toHaveProperty('thinkingLevel');
-    expect(request?.config?.thinkingConfig).not.toHaveProperty(
-      'thinkingBudget',
-    );
+    expect(request.config?.thinkingConfig).not.toHaveProperty('thinkingLevel');
+    expect(request.config?.thinkingConfig).not.toHaveProperty('thinkingBudget');
   });
 
   it('Gemini 2.x model uses reasoningMaxTokens for thinkingBudget', async () => {
@@ -459,7 +457,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const request = googleGenAIState.streamCalls[0]?.request as {
       config?: { thinkingConfig?: Record<string, unknown> };
     };
-    expect(request?.config?.thinkingConfig).toStrictEqual({
+    expect(request.config?.thinkingConfig).toStrictEqual({
       includeThoughts: true,
       thinkingBudget: 4096,
     });
@@ -508,7 +506,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const request = googleGenAIState.streamCalls[0]?.request as {
       config?: { thinkingConfig?: Record<string, unknown> };
     };
-    expect(request?.config?.thinkingConfig).toStrictEqual({
+    expect(request.config?.thinkingConfig).toStrictEqual({
       includeThoughts: true,
       thinkingBudget: -1,
     });

@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const mockGenerateJson = vi.hoisted(() => vi.fn());
@@ -119,24 +121,22 @@ describe('EditTool', () => {
         const snippetMatch = promptText.match(
           /Problematic target snippet:\n```\n([\s\S]*?)\n```/,
         );
-        const problematicSnippet =
-          snippetMatch && snippetMatch[1] ? snippetMatch[1] : '';
+        const problematicSnippet = snippetMatch?.[1] ?? '';
 
-        if ((schema as any).properties?.corrected_target_snippet) {
+        const schemaProps = (schema as { properties?: Record<string, unknown> })
+          .properties;
+        if (schemaProps != null && 'corrected_target_snippet' in schemaProps) {
           return Promise.resolve({
             corrected_target_snippet: problematicSnippet,
           });
         }
-        if ((schema as any).properties?.corrected_new_string) {
+        if (schemaProps != null && 'corrected_new_string' in schemaProps) {
           // For new_string correction, we might need more sophisticated logic,
           // but for now, returning original is a safe default if not specified by a test.
           const originalNewStringMatch = promptText.match(
             /original_new_string \(what was intended to replace original_old_string\):\n```\n([\s\S]*?)\n```/,
           );
-          const originalNewString =
-            originalNewStringMatch && originalNewStringMatch[1]
-              ? originalNewStringMatch[1]
-              : '';
+          const originalNewString = originalNewStringMatch?.[1] ?? '';
           return Promise.resolve({ corrected_new_string: originalNewString });
         }
         return Promise.resolve({}); // Default empty object if schema doesn't match
@@ -535,6 +535,7 @@ describe('EditTool', () => {
       const display = result.returnDisplay as FileDiff;
 
       expect(display.fileDiff).toMatch(/-old text\n-old text\n-old text/);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(display.fileDiff).toMatch(/\+new text\n\+new text\n\+new text/);
       expect(display.fileName).toBe(testFile);
       expect((result.returnDisplay as FileDiff).diffStat).toStrictEqual({
@@ -584,6 +585,7 @@ describe('EditTool', () => {
         /0 occurrences found for old_string on line 2/,
       );
       expect(result.llmContent).toMatch(/Context around requested line:/);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(result.llmContent).toMatch(/->\s+2\s+\|/);
     });
 
@@ -1008,7 +1010,8 @@ describe('EditTool', () => {
 
       expect(ideClient.openDiff).toHaveBeenCalledWith(filePath, newContent);
 
-      if (confirmation && 'onConfirm' in confirmation) {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (confirmation !== false && 'onConfirm' in confirmation) {
         await confirmation.onConfirm(ToolConfirmationOutcome.ProceedOnce);
       }
 
@@ -1070,16 +1073,14 @@ describe('EditTool', () => {
         const invocation = tool.build(params);
         const result = await invocation.execute(new AbortController().signal);
 
+        const returnDisplay = result.returnDisplay;
         if (
-          result.returnDisplay &&
-          typeof result.returnDisplay === 'object' &&
-          'diffStat' in result.returnDisplay &&
-          result.returnDisplay.diffStat
+          typeof returnDisplay === 'object' &&
+          'diffStat' in returnDisplay &&
+          returnDisplay.diffStat != null
         ) {
-          actualLinesRemoved.push(
-            result.returnDisplay.diffStat?.ai_removed_lines,
-          );
-        } else if (result.error) {
+          actualLinesRemoved.push(returnDisplay.diffStat.ai_removed_lines);
+        } else if (result.error != null) {
           console.error(`Edit failed for ${file.path}:`, result.error);
         }
       }

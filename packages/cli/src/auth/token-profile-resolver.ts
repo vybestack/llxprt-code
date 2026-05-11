@@ -86,16 +86,15 @@ export async function loadProfileBuckets(
     return [];
   }
 
-  if (
-    'auth' in profile &&
-    profile.auth &&
-    typeof profile.auth === 'object' &&
-    'type' in profile.auth &&
-    profile.auth.type === 'oauth' &&
-    'buckets' in profile.auth &&
-    Array.isArray(profile.auth.buckets)
-  ) {
-    return profile.auth.buckets;
+  const auth = 'auth' in profile ? profile.auth : undefined;
+  if (!auth || typeof auth !== 'object') {
+    return [];
+  }
+  if (!('type' in auth) || auth.type !== 'oauth' || !('buckets' in auth)) {
+    return [];
+  }
+  if (Array.isArray(auth.buckets)) {
+    return auth.buckets;
   }
 
   return [];

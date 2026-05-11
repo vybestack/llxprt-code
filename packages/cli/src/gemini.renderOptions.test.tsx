@@ -80,6 +80,11 @@ const createLoadedSettings = () =>
 describe('startInteractiveUI ink render options', () => {
   let tempDir: string;
 
+  // Module loading (gemini.js + transitive deps) is expensive in jsdom;
+  // full-suite coverage runs can make the cold import exceed the workspace
+  // timeout. Per-test timeouts keep assertions intact while avoiding
+  // cross-test overlap when a test times out mid-import.
+
   beforeEach(() => {
     vi.clearAllMocks();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gemini-render-test-'));
@@ -99,64 +104,72 @@ describe('startInteractiveUI ink render options', () => {
     }
   });
 
-  it('passes computed Ink render options to ink.render()', async () => {
-    const { render } = await import('ink');
-    const renderSpy = vi.mocked(render);
+  it(
+    'passes computed Ink render options to ink.render()',
+    { timeout: 120_000 },
+    async () => {
+      const { render } = await import('ink');
+      const renderSpy = vi.mocked(render);
 
-    const { startInteractiveUI } = await import('./gemini.js');
-    const config = new Config({
-      sessionId: 'test-session',
-      targetDir: tempDir,
-      cwd: tempDir,
-      debugMode: false,
-      model: 'gemini-2.5-flash-lite',
-      accessibility: { screenReader: false },
-    });
+      const { startInteractiveUI } = await import('./gemini.js');
+      const config = new Config({
+        sessionId: 'test-session',
+        targetDir: tempDir,
+        cwd: tempDir,
+        debugMode: false,
+        model: 'gemini-2.5-flash-lite',
+        accessibility: { screenReader: false },
+      });
 
-    const settings = createLoadedSettings();
+      const settings = createLoadedSettings();
 
-    await startInteractiveUI(config, settings, [], tempDir);
+      await startInteractiveUI(config, settings, [], tempDir);
 
-    expect(renderSpy).toHaveBeenCalledTimes(1);
-    const [_reactElement, options] = renderSpy.mock.calls[0];
-    const expectedRenderOptions = inkRenderOptions(config, settings);
-    expect(options).toStrictEqual(
-      expect.objectContaining({
-        exitOnCtrlC: false,
-        patchConsole: false,
-        isScreenReaderEnabled: false,
-        alternateBuffer: expectedRenderOptions.alternateBuffer,
-        incrementalRendering: expectedRenderOptions.incrementalRendering,
-      }),
-    );
-  });
+      expect(renderSpy).toHaveBeenCalledTimes(1);
+      const [_reactElement, options] = renderSpy.mock.calls[0];
+      const expectedRenderOptions = inkRenderOptions(config, settings);
+      expect(options).toStrictEqual(
+        expect.objectContaining({
+          exitOnCtrlC: false,
+          patchConsole: false,
+          isScreenReaderEnabled: false,
+          alternateBuffer: expectedRenderOptions.alternateBuffer,
+          incrementalRendering: expectedRenderOptions.incrementalRendering,
+        }),
+      );
+    },
+  );
 
-  it('forces alternate buffer off when screen reader mode is enabled', async () => {
-    const { render } = await import('ink');
-    const renderSpy = vi.mocked(render);
+  it(
+    'forces alternate buffer off when screen reader mode is enabled',
+    { timeout: 120_000 },
+    async () => {
+      const { render } = await import('ink');
+      const renderSpy = vi.mocked(render);
 
-    const { startInteractiveUI } = await import('./gemini.js');
-    const config = new Config({
-      sessionId: 'test-session',
-      targetDir: tempDir,
-      cwd: tempDir,
-      debugMode: false,
-      model: 'gemini-2.5-flash-lite',
-      accessibility: { screenReader: true },
-    });
+      const { startInteractiveUI } = await import('./gemini.js');
+      const config = new Config({
+        sessionId: 'test-session',
+        targetDir: tempDir,
+        cwd: tempDir,
+        debugMode: false,
+        model: 'gemini-2.5-flash-lite',
+        accessibility: { screenReader: true },
+      });
 
-    await startInteractiveUI(config, createLoadedSettings(), [], tempDir);
+      await startInteractiveUI(config, createLoadedSettings(), [], tempDir);
 
-    expect(renderSpy).toHaveBeenCalledTimes(1);
-    const [_reactElement, options] = renderSpy.mock.calls[0];
-    expect(options).toStrictEqual(
-      expect.objectContaining({
-        exitOnCtrlC: false,
-        patchConsole: false,
-        isScreenReaderEnabled: true,
-        alternateBuffer: false,
-        incrementalRendering: false,
-      }),
-    );
-  });
+      expect(renderSpy).toHaveBeenCalledTimes(1);
+      const [_reactElement, options] = renderSpy.mock.calls[0];
+      expect(options).toStrictEqual(
+        expect.objectContaining({
+          exitOnCtrlC: false,
+          patchConsole: false,
+          isScreenReaderEnabled: true,
+          alternateBuffer: false,
+          incrementalRendering: false,
+        }),
+      );
+    },
+  );
 });

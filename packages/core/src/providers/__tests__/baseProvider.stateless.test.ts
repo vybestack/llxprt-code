@@ -197,10 +197,10 @@ class TestBaseProvider extends BaseProvider {
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
     const callId =
-      typeof options.metadata?.marker === 'string'
+      typeof options.metadata.marker === 'string'
         ? options.metadata.marker
         : 'unknown';
-    const captureAuth = options.metadata?.captureAuth === true;
+    const captureAuth = options.metadata.captureAuth === true;
 
     await this.recordSnapshot(callId, 'before-first-yield', captureAuth);
     await this.pause();
@@ -358,11 +358,7 @@ describe('BaseProvider stateless contract', () => {
     expect(baselineSnapshots).not.toHaveLength(0);
 
     const baselineTokens = Array.from(
-      new Set(
-        baselineSnapshots.map((snapshot) =>
-          snapshot.authToken === undefined ? '' : snapshot.authToken,
-        ),
-      ),
+      new Set(baselineSnapshots.map((snapshot) => snapshot.authToken ?? '')),
     ).sort();
 
     expect(baselineTokens).toStrictEqual(['']);

@@ -37,6 +37,30 @@ interface Keytar {
 const KEYCHAIN_TEST_PREFIX = '__keychain_test__';
 type KeytarModule = Keytar | { default: Keytar };
 
+function isKeychainModuleMissing(
+  err: NodeJS.ErrnoException | undefined,
+): boolean {
+  if (err === undefined) {
+    return false;
+  }
+  if (err.code === 'ERR_MODULE_NOT_FOUND') {
+    return true;
+  }
+  if (err.code === 'MODULE_NOT_FOUND') {
+    return true;
+  }
+  if (err.code === 'ERR_DLOPEN_FAILED') {
+    return true;
+  }
+  if (err.message.includes(`'keytar'`)) {
+    return true;
+  }
+  if (err.message.includes(`'@napi-rs/keyring'`)) {
+    return true;
+  }
+  return false;
+}
+
 export type KeytarLoader = () => Promise<KeytarModule>;
 
 const defaultKeytarLoader: KeytarLoader = async () => {
@@ -81,15 +105,11 @@ export class KeychainTokenStorage extends BaseTokenStorage {
       // Try to import keytar without any timeout - let the OS handle it
       const module = await keyringLoader();
       this.keytarModule =
-        'default' in module ? module.default || null : module || null;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Keychain token storage data.
+        'default' in module ? (module.default ?? null) : (module ?? null);
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
-      const isModuleMissing =
-        err?.code === 'ERR_MODULE_NOT_FOUND' ||
-        err?.code === 'MODULE_NOT_FOUND' ||
-        err?.code === 'ERR_DLOPEN_FAILED' ||
-        err?.message?.includes(`'keytar'`) ||
-        err?.message?.includes(`'@napi-rs/keyring'`);
+      const isModuleMissing = isKeychainModuleMissing(err);
 
       if (isModuleMissing) {
         debugLogger.warn(
@@ -301,7 +321,8 @@ export class KeychainTokenStorage extends BaseTokenStorage {
       const success = deleted && retrieved === testPassword;
       this.keychainAvailable = success;
       return success;
-    } catch (_error) {
+    } catch {
+      // Keychain test failed - mark as unavailable
       this.keychainAvailable = false;
       return false;
     }

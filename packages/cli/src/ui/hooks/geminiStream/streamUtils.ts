@@ -46,6 +46,17 @@ export const SYSTEM_NOTICE_EVENT = 'system_notice' as const;
 // ─── Pure utility functions ───────────────────────────────────────────────────
 
 /**
+ * Adds a part (string or Part object) to the result array.
+ */
+function addPartToResult(part: string | Part, resultParts: Part[]): void {
+  if (typeof part === 'string') {
+    resultParts.push({ text: part });
+  } else {
+    resultParts.push(part);
+  }
+}
+
+/**
  * Merges an array of PartListUnions into a single flat Part[].
  */
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
@@ -53,16 +64,10 @@ export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   for (const item of list) {
     if (Array.isArray(item)) {
       for (const part of item) {
-        if (typeof part === 'string') {
-          resultParts.push({ text: part });
-        } else {
-          resultParts.push(part);
-        }
+        addPartToResult(part, resultParts);
       }
-    } else if (typeof item === 'string') {
-      resultParts.push({ text: item });
     } else {
-      resultParts.push(item);
+      addPartToResult(item, resultParts);
     }
   }
   return resultParts;
@@ -150,9 +155,9 @@ export function splitPartsByRole(parts: Part[]): {
   const otherParts: Part[] = [];
 
   for (const part of parts) {
-    if (part && typeof part === 'object' && 'functionCall' in part) {
+    if ('functionCall' in part) {
       functionCalls.push(part);
-    } else if (part && typeof part === 'object' && 'functionResponse' in part) {
+    } else if ('functionResponse' in part) {
       functionResponses.push(part);
     } else {
       otherParts.push(part);
@@ -168,7 +173,7 @@ export function splitPartsByRole(parts: Part[]): {
 export function collectGeminiTools<
   T extends { request: { isClientInitiated?: boolean } },
 >(primaryTools: T[]): T[] {
-  return primaryTools.filter((t) => !t.request.isClientInitiated);
+  return primaryTools.filter((t) => t.request.isClientInitiated !== true);
 }
 
 /**
@@ -264,8 +269,10 @@ export function buildFullSplitItem(
     currentItem as HistoryItemGemini | HistoryItemGeminiContent | undefined
   )?.profileName;
   const profileName = liveProfileName ?? existingProfileName;
+  const type =
+    currentItem?.type === 'gemini_content' ? 'gemini_content' : 'gemini';
   return {
-    type: (currentItem?.type as 'gemini' | 'gemini_content') ?? 'gemini',
+    type,
     text: sanitizedCombined,
     ...(profileName != null ? { profileName } : {}),
     ...(thinkingBlocks.length > 0
@@ -414,25 +421,21 @@ export function showCitations(
   config: Config,
 ): boolean {
   try {
-    const settingsService = config.getSettingsService();
-    if (settingsService) {
-      const enabled = settingsService.get('ui.showCitations');
-      if (enabled !== undefined) {
-        return enabled as boolean;
-      }
+    const enabled = config.getSettingsService().get('ui.showCitations');
+    if (enabled !== undefined) {
+      return enabled as boolean;
     }
   } catch {
     // Fall through to other methods
   }
 
-  const enabled = (settings?.merged as { ui?: { showCitations?: boolean } })?.ui
-    ?.showCitations;
+  const enabled = settings.merged.ui.showCitations;
   if (enabled !== undefined) {
     return enabled;
   }
 
   const server = getCodeAssistServer(config);
-  return (server && server.userTier !== UserTierId.FREE) ?? false;
+  return server != null && server.userTier !== UserTierId.FREE;
 }
 
 /**
@@ -442,13 +445,7 @@ export function showCitations(
  */
 export function getCurrentProfileName(config: Config): string | null {
   try {
-    const settingsService = config.getSettingsService();
-    if (
-      settingsService &&
-      typeof settingsService.getCurrentProfileName === 'function'
-    ) {
-      return settingsService.getCurrentProfileName() ?? null;
-    }
+    return config.getSettingsService().getCurrentProfileName() ?? null;
   } catch {
     // Fall through if settings service unavailable
   }

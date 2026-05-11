@@ -54,7 +54,7 @@ class MockLspServiceClient {
     if (!this.alive) {
       return [];
     }
-    return this.diagnosticsByFile.get(filePath) || [];
+    return this.diagnosticsByFile.get(filePath) ?? [];
   }
 
   isAlive(): boolean {

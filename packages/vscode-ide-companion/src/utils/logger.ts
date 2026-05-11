@@ -17,7 +17,7 @@ export function createLogger(
       .getConfiguration('gemini-cli.debug')
       .get('logging.enabled');
 
-    if (isDevMode || isLoggingEnabled) {
+    if (isDevMode || isLoggingEnabled === true) {
       logger.appendLine(message);
     }
   };

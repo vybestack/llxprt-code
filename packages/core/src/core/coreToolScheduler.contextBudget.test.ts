@@ -368,7 +368,7 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
         (p) =>
           typeof p === 'object' &&
           'functionResponse' in p &&
-          p.functionResponse?.response,
+          p.functionResponse?.response != null,
       );
       expect(frPart).toBeDefined();
       const output = (

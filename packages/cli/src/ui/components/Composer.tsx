@@ -10,6 +10,24 @@ import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { InputPrompt } from './InputPrompt.js';
 
+/**
+ * Determines the placeholder text based on editor mode.
+ */
+function getComposerPlaceholder(
+  vimModeEnabled: boolean,
+  shellModeActive: boolean,
+  placeholder?: string,
+): string {
+  if (vimModeEnabled) {
+    return "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode.";
+  }
+  if (shellModeActive) {
+    return '  Type your shell command';
+  }
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty placeholder should use default prompt
+  return placeholder || '  Type your message or @path/to/file';
+}
+
 interface ComposerProps {
   config: Config;
   settings: LoadedSettings;
@@ -55,7 +73,7 @@ export const Composer = ({
       userMessages={inputHistory}
       onClearScreen={uiActions.handleClearScreen}
       config={config}
-      slashCommands={slashCommands || []}
+      slashCommands={slashCommands ?? []}
       commandContext={commandContext}
       shellModeActive={shellModeActive}
       setShellModeActive={uiActions.setShellModeActive}
@@ -63,13 +81,11 @@ export const Composer = ({
       onSuggestionsVisibilityChange={onSuggestionsVisibilityChange}
       focus={isFocused}
       vimHandleInput={uiActions.vimHandleInput}
-      placeholder={
-        vimModeEnabled
-          ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
-          : shellModeActive
-            ? '  Type your shell command'
-            : placeholder || '  Type your message or @path/to/file'
-      }
+      placeholder={getComposerPlaceholder(
+        vimModeEnabled,
+        shellModeActive,
+        placeholder,
+      )}
       approvalMode={showAutoAcceptIndicator}
       vimModeEnabled={vimModeEnabled}
       setQueueErrorMessage={uiActions.setQueueErrorMessage}

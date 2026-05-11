@@ -29,13 +29,16 @@ import {
   setActiveProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
-import {
-  createRuntimeInvocationContext,
-  type RuntimeInvocationContext,
-} from '../runtime/RuntimeInvocationContext.js';
+import type { RuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import { MissingProviderRuntimeError } from './errors.js';
+import {
+  assertProviderRuntimeContext,
+  normalizeProviderGenerateChatOptions,
+  resolveGenerateChatSettings,
+} from './BaseProviderNormalization.js';
+import { getProviderCustomHeaders } from './customHeaders.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -136,6 +139,7 @@ export abstract class BaseProvider implements IProvider {
 
     const precedenceConfig: AuthPrecedenceConfig = {
       apiKey: config.apiKey,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: array default for optional config property
       envKeyNames: config.envKeyNames || [],
       isOAuthEnabled: config.isOAuthEnabled ?? false,
       // Use supportsOAuth from config if provided (for cases where method can't be used in constructor)
@@ -180,7 +184,8 @@ export abstract class BaseProvider implements IProvider {
       return activeOptions.settings;
     }
 
-    if (this.defaultSettingsService) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (this.defaultSettingsService !== undefined) {
       return this.defaultSettingsService;
     }
 
@@ -274,6 +279,7 @@ export abstract class BaseProvider implements IProvider {
     }
 
     const providerSettings = settingsService.getProviderSettings(this.name);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const providerBaseUrl = normalizeBaseUrl(providerSettings?.['base-url']);
     if (providerBaseUrl) {
       return providerBaseUrl;
@@ -299,6 +305,7 @@ export abstract class BaseProvider implements IProvider {
     }
 
     const providerSettings = settingsService.getProviderSettings(this.name);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const providerModel = providerSettings?.model as string | undefined;
     if (providerModel) {
       return providerModel;
@@ -385,6 +392,7 @@ export abstract class BaseProvider implements IProvider {
         typeof manager.isOAuthEnabled === 'function'
       ) {
         const oauthProvider =
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to this.name
           this.baseProviderConfig.oauthProvider || this.name;
         return manager.isOAuthEnabled(oauthProvider);
       }
@@ -482,7 +490,8 @@ export abstract class BaseProvider implements IProvider {
   clearAuthCache(): void {
     // Invalidate cached tokens in the auth resolver
     if (
-      this.authResolver &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      this.authResolver !== undefined &&
       typeof this.authResolver.invalidateCache === 'function'
     ) {
       this.authResolver.invalidateCache();
@@ -507,9 +516,9 @@ export abstract class BaseProvider implements IProvider {
 
       // If no non-OAuth auth found, check if OAuth token exists without triggering flow
       if (
-        this.baseProviderConfig.isOAuthEnabled &&
-        this.baseProviderConfig.oauthManager &&
-        this.baseProviderConfig.oauthProvider
+        this.baseProviderConfig.isOAuthEnabled === true &&
+        this.baseProviderConfig.oauthManager !== undefined &&
+        this.baseProviderConfig.oauthProvider !== undefined
       ) {
         return await this.baseProviderConfig.oauthManager.isAuthenticated(
           this.baseProviderConfig.oauthProvider,
@@ -557,15 +566,13 @@ export abstract class BaseProvider implements IProvider {
     let underlyingIterator: AsyncIterableIterator<IContent> | undefined;
 
     const prepareIterator = async (): Promise<void> => {
-      if (!preparedIteratorPromise) {
-        preparedIteratorPromise = (async () => {
-          normalizedOptions = await normalizedPromise;
-          underlyingIterator = this.invokeWithNormalizedOptions(
-            normalizedOptions,
-            previousRuntimeContext ?? null,
-          );
-        })();
-      }
+      preparedIteratorPromise ??= (async () => {
+        normalizedOptions = await normalizedPromise;
+        underlyingIterator = this.invokeWithNormalizedOptions(
+          normalizedOptions,
+          previousRuntimeContext ?? null,
+        );
+      })();
       await preparedIteratorPromise;
     };
 
@@ -633,10 +640,12 @@ export abstract class BaseProvider implements IProvider {
     normalized: NormalizedGenerateChatOptions,
     previousContext: ProviderRuntimeContext | null,
   ): AsyncIterableIterator<IContent> {
-    const needsContextSwap =
+    const needsContextSwap: boolean =
       !previousContext ||
       previousContext.settingsService !== normalized.settings ||
-      (normalized.config && previousContext.config !== normalized.config);
+      Boolean(
+        normalized.config && previousContext.config !== normalized.config,
+      );
 
     const mergedMetadata: Record<string, unknown> = normalized.runtime
       ? {
@@ -670,7 +679,7 @@ export abstract class BaseProvider implements IProvider {
     return async function* (
       this: BaseProvider,
     ): AsyncIterableIterator<IContent> {
-      if (needsContextSwap) {
+      if (needsContextSwap === true) {
         setActiveProviderRuntimeContext(runtimeContext);
       }
 
@@ -680,7 +689,7 @@ export abstract class BaseProvider implements IProvider {
           yield chunk;
         }
       } finally {
-        if (needsContextSwap) {
+        if (needsContextSwap === true) {
           setActiveProviderRuntimeContext(previousContext ?? null);
         }
         normalized.resolved.authToken = '';
@@ -705,115 +714,33 @@ export abstract class BaseProvider implements IProvider {
     )
       ? { contents: contentsOrOptions, tools: maybeTools }
       : contentsOrOptions;
-
-    const settings =
-      providedOptions.settings ?? this.defaultSettingsService ?? null;
-
-    if (!settings) {
-      throw new MissingProviderRuntimeError({
-        providerKey: `BaseProvider.${this.name}`,
-        missingFields: ['settings'],
-        stage: 'normalizeGenerateChatOptions',
-        metadata: {
-          hint: 'ProviderManager must supply settings via GenerateChatOptions or setRuntimeSettingsService.',
-          requirement: 'REQ-SP4-001',
-        },
-      });
-    }
-
-    const runtimeConfig = providedOptions.runtime?.config ?? null;
-    const configCandidate =
-      providedOptions.config ?? runtimeConfig ?? this.defaultConfig ?? null;
-
-    const runtimeMetadata = providedOptions.runtime?.metadata ?? {};
-    const metadataFromOptions = providedOptions.metadata ?? {};
-    const metadata: Record<string, unknown> = {
-      ...runtimeMetadata,
-      ...metadataFromOptions,
-    };
-
-    const resolvedModel = this.computeModel(settings);
-    const resolvedBaseURL = this.computeBaseURL(settings);
-    // CRITICAL: includeOAuth: true for prompt sends - OAuth is allowed here
+    const settings = resolveGenerateChatSettings(
+      providedOptions,
+      this.defaultSettingsService,
+      this.name,
+    );
+    const providerSettings =
+      (settings.getProviderSettings(this.name) as
+        | ProviderSettings
+        | undefined) ?? ({} as ProviderSettings);
     const resolvedAuth =
       (await this.authResolver.resolveAuthentication({
         settingsService: settings,
         includeOAuth: true,
       })) ?? '';
 
-    const providerSettings =
-      settings.getProviderSettings(this.name) ??
-      ({} as Record<string, unknown>);
-    const resolvedTemperature =
-      providedOptions.resolved?.temperature ??
-      (providerSettings?.temperature as number | undefined);
-    const resolvedMaxTokens =
-      providedOptions.resolved?.maxTokens ??
-      (providerSettings?.maxTokens as number | undefined);
-    const resolvedStreaming =
-      providedOptions.resolved?.streaming ??
-      (providerSettings?.streaming as boolean | undefined);
-
-    // Use provided authToken if specified (e.g., from LoadBalancingProvider),
-    // otherwise fall back to resolved auth from auth resolver
-    const finalAuthToken = providedOptions.resolved?.authToken ?? resolvedAuth;
-    // Same for model and baseURL - providedOptions.resolved takes precedence
-    const finalModel = providedOptions.resolved?.model ?? resolvedModel;
-    const finalBaseURL = providedOptions.resolved?.baseURL ?? resolvedBaseURL;
-
-    const resolved = {
-      model: finalModel,
-      baseURL: finalBaseURL,
-      authToken: finalAuthToken,
-      telemetry: providedOptions.resolved?.telemetry,
-      temperature: resolvedTemperature,
-      maxTokens: resolvedMaxTokens,
-      streaming: resolvedStreaming,
-    };
-
-    const guard = this.assertRuntimeContext({
-      providerKey: `BaseProvider.${this.name}`,
-      settings,
-      config: configCandidate,
-      runtime: providedOptions.runtime,
-      metadata,
-      resolved,
-      stage: 'normalizeGenerateChatOptions',
+    return normalizeProviderGenerateChatOptions(this, providedOptions, {
+      providerName: this.name,
+      defaultSettingsService: settings,
+      defaultConfig: this.defaultConfig,
+      maybeTools,
+      authToken: resolvedAuth,
+      resolvedModel: this.computeModel(settings),
+      resolvedBaseURL: this.computeBaseURL(settings),
+      providerSettings,
+      buildEphemeralsSnapshot: (snapshotSettings) =>
+        this.buildEphemeralsSnapshot(snapshotSettings),
     });
-    const finalConfig = guard.runtime.config ?? configCandidate ?? undefined;
-    const normalizedRuntime: ProviderRuntimeContext = {
-      ...guard.runtime,
-      metadata: guard.metadata,
-      config: finalConfig,
-    };
-
-    const invocation =
-      providedOptions.invocation ??
-      createRuntimeInvocationContext({
-        runtime: normalizedRuntime,
-        settings,
-        providerName: this.name,
-        ephemeralsSnapshot: this.buildEphemeralsSnapshot(settings),
-        telemetry: resolved.telemetry,
-        metadata: guard.metadata,
-        userMemory:
-          typeof providedOptions.userMemory === 'string'
-            ? providedOptions.userMemory
-            : undefined,
-        fallbackRuntimeId: `${this.name}:normalizeGenerateChatOptions`,
-      });
-
-    return {
-      ...providedOptions,
-      contents: providedOptions.contents,
-      tools: providedOptions.tools ?? maybeTools,
-      settings,
-      config: finalConfig,
-      runtime: normalizedRuntime,
-      metadata: guard.metadata,
-      resolved,
-      invocation,
-    };
   }
 
   private buildEphemeralsSnapshot(
@@ -844,81 +771,7 @@ export abstract class BaseProvider implements IProvider {
     runtime: ProviderRuntimeContext;
     metadata: Record<string, unknown>;
   } {
-    const missing: string[] = [];
-    if (!input.settings) {
-      missing.push('settings');
-    }
-    if (!input.config) {
-      missing.push('config');
-    }
-    const resolvedMissing: string[] = [];
-    if (!input.resolved) {
-      resolvedMissing.push('resolved');
-    } else {
-      if (
-        typeof input.resolved.model !== 'string' ||
-        input.resolved.model.trim() === ''
-      ) {
-        resolvedMissing.push('resolved.model');
-      }
-      if (
-        input.resolved.baseURL !== undefined &&
-        input.resolved.baseURL !== null &&
-        typeof input.resolved.baseURL !== 'string'
-      ) {
-        resolvedMissing.push('resolved.baseURL');
-      }
-      if (
-        input.resolved.authToken === undefined ||
-        input.resolved.authToken === null
-      ) {
-        resolvedMissing.push('resolved.authToken');
-      }
-    }
-
-    const missingFields = [...missing, ...resolvedMissing];
-    if (missingFields.length > 0) {
-      throw new MissingProviderRuntimeError({
-        providerKey: input.providerKey,
-        missingFields,
-        stage: input.stage,
-        metadata: {
-          ...(input.metadata ?? {}),
-          requirement: 'REQ-SP4-001',
-        },
-      });
-    }
-
-    const metadata = {
-      ...(input.runtime?.metadata ?? {}),
-      ...(input.metadata ?? {}),
-      requirement: 'REQ-SP4-001',
-      stage: input.stage,
-    };
-
-    const runtimeMetadata = metadata as Record<string, unknown>;
-    const currentRuntimeId =
-      typeof runtimeMetadata.runtimeId === 'string'
-        ? runtimeMetadata.runtimeId
-        : undefined;
-
-    const runtime: ProviderRuntimeContext = input.runtime
-      ? {
-          ...input.runtime,
-          settingsService: input.settings!,
-          config: input.runtime.config ?? input.config ?? undefined,
-          metadata,
-        }
-      : {
-          settingsService: input.settings!,
-          config: input.config ?? undefined,
-          runtimeId: currentRuntimeId?.trim()
-            ? currentRuntimeId
-            : `${input.providerKey}:${input.stage}`,
-          metadata,
-        };
-
-    return { runtime, metadata };
+    return assertProviderRuntimeContext(input);
   }
 
   // Optional methods with default implementations
@@ -936,7 +789,7 @@ export abstract class BaseProvider implements IProvider {
     this.clearAuthCache();
   }
   setConfig?(config: unknown): void {
-    if (!config || typeof config !== 'object') {
+    if (config === null || config === undefined || typeof config !== 'object') {
       return;
     }
 
@@ -983,7 +836,9 @@ export abstract class BaseProvider implements IProvider {
 
     try {
       const settings = await settingsService.getSettings(this.name);
-      return (settings[key] as T) || fallback;
+      const value = settings[key];
+      const shouldUseFallback = isFalsyLikeValue(value);
+      return shouldUseFallback ? fallback : (value as T);
     } catch (error) {
       if (process.env.DEBUG) {
         debugLogger.error(
@@ -1162,44 +1017,25 @@ export abstract class BaseProvider implements IProvider {
   protected getCustomHeaders(
     options?: NormalizedGenerateChatOptions,
   ): Record<string, string> | undefined {
-    const baseHeaders =
-      this.providerConfig?.customHeaders &&
-      typeof this.providerConfig.customHeaders === 'object'
-        ? { ...this.providerConfig.customHeaders }
-        : undefined;
-
-    const ephemeralSettings = this.providerConfig?.getEphemeralSettings?.();
-    const ephemeralValue =
-      ephemeralSettings && typeof ephemeralSettings === 'object'
-        ? (ephemeralSettings['custom-headers'] as
-            | Record<string, string>
-            | undefined)
-        : undefined;
-
-    const userAgent =
-      ephemeralSettings && typeof ephemeralSettings === 'object'
-        ? (ephemeralSettings['user-agent'] as string | undefined)
-        : undefined;
-
-    const combined: Record<string, string> = {
-      ...(baseHeaders ?? {}),
-      ...(ephemeralValue ?? {}),
-    };
-
-    if (typeof userAgent === 'string' && userAgent.trim()) {
-      combined['User-Agent'] = userAgent.trim();
-    }
-
-    if (options?.invocation?.customHeaders) {
-      Object.assign(combined, options.invocation.customHeaders);
-    }
-
-    return Object.keys(combined).length > 0 ? combined : undefined;
+    return getProviderCustomHeaders(this.providerConfig, options);
   }
 }
 
 // Import ProviderSettings type to avoid circular dependency
-interface ProviderSettings {
+/**
+ * Helper function to check if a value is falsy-like.
+ * Used for determining when to use fallback values for provider settings.
+ */
+function isFalsyLikeValue(value: unknown): boolean {
+  // Check undefined/null first
+  if (value === undefined || value === null) return true;
+  // Check false, empty string, or 0
+  if (value === false || value === '' || value === 0) return true;
+  // Check NaN for numbers
+  return typeof value === 'number' && Number.isNaN(value);
+}
+
+export interface ProviderSettings {
   enabled: boolean;
   apiKey?: string;
   baseUrl?: string;

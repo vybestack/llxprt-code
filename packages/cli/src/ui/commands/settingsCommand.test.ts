@@ -17,6 +17,7 @@ describe('settingsCommand', () => {
   });
 
   it('should return a dialog action to open the settings dialog', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!settingsCommand.action) {
       throw new Error('The settings command must have an action.');
     }

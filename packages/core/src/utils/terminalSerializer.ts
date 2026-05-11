@@ -62,19 +62,19 @@ class Cell {
       return;
     }
 
-    if (cell.isInverse()) {
+    if (cell.isInverse() !== 0) {
       this.attributes += Attribute.inverse;
     }
-    if (cell.isBold()) {
+    if (cell.isBold() !== 0) {
       this.attributes += Attribute.bold;
     }
-    if (cell.isItalic()) {
+    if (cell.isItalic() !== 0) {
       this.attributes += Attribute.italic;
     }
-    if (cell.isUnderline()) {
+    if (cell.isUnderline() !== 0) {
       this.attributes += Attribute.underline;
     }
-    if (cell.isDim()) {
+    if (cell.isDim() !== 0) {
       this.attributes += Attribute.dim;
     }
 
@@ -116,6 +116,7 @@ class Cell {
   }
 
   getChars(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string from getChars() should become space
     return this.cell?.getChars() || ' ';
   }
 
@@ -125,6 +126,7 @@ class Cell {
 
   equals(other: Cell): boolean {
     return (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       this.attributes === other.attributes &&
       this.fg === other.fg &&
       this.bg === other.bg &&
@@ -157,9 +159,10 @@ export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
 
     for (let x = 0; x < terminal.cols; x++) {
       const cellData = line.getCell(x);
-      const cell = new Cell(cellData || null, x, y, cursorX, cursorY);
+      const cell = new Cell(cellData ?? null, x, y, cursorX, cursorY);
 
       if (x > 0 && !cell.equals(lastCell)) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (currentText) {
           const token: AnsiToken = {
             text: currentText,

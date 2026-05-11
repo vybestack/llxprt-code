@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * @plan PLAN-20260211-HIGHDENSITY.P19
  * @requirement REQ-HD-002.1, REQ-HD-002.2, REQ-HD-002.3, REQ-HD-002.4, REQ-HD-002.5,
@@ -960,6 +962,7 @@ describe('Density Optimization Orchestration (P19)', () => {
 
               await internals.ensureDensityOptimized();
 
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- property-based test asserts runtime postcondition across generated strategy fixtures.
               return internals.densityDirty === false;
             },
           ),

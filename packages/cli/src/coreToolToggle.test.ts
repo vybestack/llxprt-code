@@ -285,18 +285,15 @@ describe('generateDynamicToolSettings', () => {
       const currentExcludeTools: string[] = ['WriteFile', 'Shell'];
       const currentAllowedTools: string[] = [];
       const toolName = 'WriteFile';
-      const newValue = true;
 
       let newExcludeTools = [...currentExcludeTools];
       const newAllowedTools = [...currentAllowedTools];
 
-      if (newValue) {
-        // Tool is being enabled - remove from excludeTools if present
-        newExcludeTools = newExcludeTools.filter((name) => name !== toolName);
+      // Tool is being enabled - remove from excludeTools if present
+      newExcludeTools = newExcludeTools.filter((name) => name !== toolName);
 
-        // If allowedTools is being used (not empty), add the tool to it
-        // (In this test, allowedTools is empty, so this branch would not run)
-      }
+      // If allowedTools is being used (not empty), add the tool to it
+      // (In this test, allowedTools is empty, so this branch would not run)
 
       expect(currentAllowedTools.length).toBe(0);
       expect(newExcludeTools).not.toContain('WriteFile');
@@ -308,22 +305,18 @@ describe('generateDynamicToolSettings', () => {
       const currentExcludeTools: string[] = [];
       const currentAllowedTools: string[] = ['ReadFile', 'WriteFile'];
       const toolName = 'WriteFile';
-      const newValue = false;
 
+      // Tool being disabled would add to excludeTools if not present
       const newExcludeTools = [...currentExcludeTools];
       let newAllowedTools = [...currentAllowedTools];
 
-      if (!newValue) {
-        // Tool is being disabled - add to excludeTools
-        if (!newExcludeTools.includes(toolName)) {
-          // This would modify newExcludeTools, but it's const for this test
-        }
+      // Tool is being disabled - would add to excludeTools
+      // Remove from allowedTools if present
+      newAllowedTools = newAllowedTools.filter((name) => name !== toolName);
 
-        // Remove from allowedTools if present
-        newAllowedTools = newAllowedTools.filter((name) => name !== toolName);
-      }
-
-      // For this test, we'll just verify the logic conceptually
+      // Verify excludeTools would need the tool added (it's not in there yet)
+      expect(newExcludeTools.includes(toolName)).toBe(false);
+      // Verify allowedTools no longer has the disabled tool
       expect(newAllowedTools).not.toContain('WriteFile');
       expect(newAllowedTools).toContain('ReadFile');
     });
@@ -332,18 +325,15 @@ describe('generateDynamicToolSettings', () => {
       const currentExcludeTools: string[] = ['WriteFile'];
       const currentAllowedTools: string[] = ['ReadFile'];
       const toolName = 'WriteFile';
-      const newValue = true;
 
       let newExcludeTools = [...currentExcludeTools];
       const newAllowedTools = [...currentAllowedTools];
 
-      if (newValue) {
-        // Tool is being enabled - remove from excludeTools if present
-        newExcludeTools = newExcludeTools.filter((name) => name !== toolName);
+      // Tool is being enabled - remove from excludeTools if present
+      newExcludeTools = newExcludeTools.filter((name) => name !== toolName);
 
-        // If allowedTools is being used (not empty), add the tool to it
-        // (In this test, allowedTools has items, so this branch would run in real implementation)
-      }
+      // If allowedTools is being used (not empty), add the tool to it
+      // (In this test, allowedTools has items, so this branch would run in real implementation)
 
       expect(currentAllowedTools.length).toBeGreaterThan(0);
       expect(newExcludeTools).not.toContain('WriteFile');
@@ -355,11 +345,8 @@ describe('generateDynamicToolSettings', () => {
   describe('Error handling', () => {
     it('should handle missing config gracefully', () => {
       // Test that the function handles missing config
-      const config = undefined;
-
-      if (!config) {
-        console.error('Config is not available for core tool toggle');
-      }
+      // config is always undefined in this test
+      console.error('Config is not available for core tool toggle');
 
       expect(console.error).toHaveBeenCalledWith(
         'Config is not available for core tool toggle',
@@ -374,6 +361,7 @@ describe('generateDynamicToolSettings', () => {
         return toolName === toolKey;
       });
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!actualTool) {
         console.error(`Tool not found for key: ${toolKey}`);
       }
@@ -495,8 +483,9 @@ describe('generateDynamicToolSettings', () => {
         },
       );
 
-      const excludeTools = getEffectiveValue('excludeTools', {}, {}) || [];
-      const allowedTools = getEffectiveValue('allowedTools', {}, {}) || [];
+      const excludeTools = getEffectiveValue('excludeTools', {}, {}) ?? [];
+
+      const allowedTools = getEffectiveValue('allowedTools', {}, {}) ?? [];
 
       expect(excludeTools).toStrictEqual([]);
       expect(allowedTools).toStrictEqual([]);

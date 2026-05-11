@@ -24,6 +24,7 @@ describe('compressCommand', () => {
   });
 
   it('returns already-compressing error when a compression request is pending', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -50,6 +51,7 @@ describe('compressCommand', () => {
   });
 
   it('uses COMPRESSED when token count decreases after compression', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -109,6 +111,7 @@ describe('compressCommand', () => {
   });
 
   it('uses NOOP when token count is unchanged and compression did not run recently', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -151,6 +154,7 @@ describe('compressCommand', () => {
   });
 
   it('uses NOOP when token count is unchanged, result is SKIPPED_EMPTY, and compression ran recently', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -193,6 +197,7 @@ describe('compressCommand', () => {
   });
 
   it('shows unavailable-chat error when chat is not initialized', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -217,6 +222,7 @@ describe('compressCommand', () => {
   });
 
   it('uses COMPRESSION_FAILED when all strategies fail (PerformCompressionResult.FAILED)', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -258,6 +264,7 @@ describe('compressCommand', () => {
   });
 
   it('uses COMPRESSION_FAILED when compression is in cooldown (PerformCompressionResult.SKIPPED_COOLDOWN)', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -301,6 +308,7 @@ describe('compressCommand', () => {
   });
 
   it('uses ALREADY_COMPRESSED when core reports COMPRESSED but tokens did not decrease and compression was recent before command', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -342,6 +350,7 @@ describe('compressCommand', () => {
   });
 
   it('uses NOOP when core reports COMPRESSED but tokens did not decrease and compression was not recent before command', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -383,6 +392,7 @@ describe('compressCommand', () => {
   });
 
   it('uses COMPRESSION_FAILED_INFLATED_TOKEN_COUNT when core reports COMPRESSED but token count increases', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -425,6 +435,7 @@ describe('compressCommand', () => {
   });
 
   it('shows error when performCompression throws an exception', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -464,6 +475,7 @@ describe('compressCommand', () => {
   });
 
   it('checks wasRecentlyCompressed when result is FAILED', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -507,6 +519,7 @@ describe('compressCommand', () => {
   });
 
   it('checks wasRecentlyCompressed when result is SKIPPED_COOLDOWN', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -550,6 +563,7 @@ describe('compressCommand', () => {
   });
 
   it('uses COMPRESSION_FAILED when result is FAILED even if tokens decreased', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -591,6 +605,7 @@ describe('compressCommand', () => {
   });
 
   it('shows error when chat has no history service', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }

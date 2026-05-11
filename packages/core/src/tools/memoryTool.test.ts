@@ -333,6 +333,7 @@ describe('MemoryTool', () => {
 
       // Verify result is an edit confirmation
       expect(result).not.toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result === false) {
         throw new Error('Expected result to be a confirmation, not false');
       }
@@ -389,6 +390,7 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       // Verify result is an edit confirmation
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result === false) {
         throw new Error('Expected result to be a confirmation, not false');
       }
@@ -422,6 +424,7 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       // Verify result is an edit confirmation
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result === false) {
         throw new Error('Expected result to be a confirmation, not false');
       }
@@ -455,6 +458,7 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       // Verify result is an edit confirmation
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result === false) {
         throw new Error('Expected result to be a confirmation, not false');
       }
@@ -621,6 +625,7 @@ describe('MemoryTool', () => {
       const result = await invocation.shouldConfirmExecute(mockAbortSignal);
 
       expect(result).not.toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result === false) {
         throw new Error('Expected confirmation details');
       }

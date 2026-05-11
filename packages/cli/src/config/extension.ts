@@ -5,43 +5,40 @@
  */
 
 import {
-  type MCPServerConfig,
   type GeminiCLIExtension,
+  type MCPServerConfig,
   Storage,
-  getErrorMessage,
-  type SkillDefinition,
-  loadSkillsFromDirSync,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { simpleGit } from 'simple-git';
-import {
-  recursivelyHydrateStrings,
-  type JsonObject,
-} from './extensions/variables.js';
 import { SettingScope, loadSettings } from './settings.js';
 import {
   isWorkspaceTrusted,
   loadTrustedFolders,
   TrustLevel,
 } from './trustedFolders.js';
-import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import { downloadFromGitHubRelease } from './extensions/github.js';
 import type { LoadExtensionContext } from './extensions/variableSchema.js';
 import chalk from 'chalk';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import type { ConfirmationRequest } from '../ui/types.js';
-import { escapeAnsiCtrlCodes } from '../ui/utils/textUtils.js';
 import {
-  requestHookConsent,
-  computeHookConsentDelta,
-} from './extensions/consent.js';
+  recursivelyHydrateStrings,
+  type JsonObject,
+} from './extensions/variables.js';
+
+import { maybeRequestConsentOrFail } from './extensions/extensionConsent.js';
 import { validateHooks, type Hooks } from './extensions/hookSchema.js';
 
 export { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
-export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
+import {
+  loadExtensionFromDir,
+  loadInstallMetadataFromDir,
+} from './extensions/extensionLoader.js';
 
+export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
 export const EXTENSIONS_CONFIG_FILENAME = 'llxprt-extension.json';
 export const EXTENSIONS_CONFIG_FILENAME_FALLBACK = 'gemini-extension.json';
 export const INSTALL_METADATA_FILENAME = '.llxprt-extension-install.json';
@@ -167,7 +164,7 @@ export async function performWorkspaceExtensionMigration(
         type: 'local',
       };
       await installOrUpdateExtension(installMetadata, requestConsent);
-    } catch (_) {
+    } catch {
       failedInstallNames.push(extension.name);
     }
   }
@@ -186,7 +183,10 @@ export function loadExtensions(
 
   const allExtensions = [...loadUserExtensions()];
 
-  if ((isWorkspaceTrusted(settings) ?? true) && !settings.extensionManagement) {
+  if (
+    (isWorkspaceTrusted(settings) ?? true) &&
+    settings.extensionManagement !== true
+  ) {
     allExtensions.push(...getWorkspaceExtensions(workspaceDir));
   }
 
@@ -239,154 +239,20 @@ export function loadExtensionsFromDir(
   return extensions;
 }
 
+const extensionLoaderDeps = {
+  configFileName: EXTENSIONS_CONFIG_FILENAME,
+  fallbackConfigFileName: EXTENSIONS_CONFIG_FILENAME_FALLBACK,
+  installMetadataFileName: INSTALL_METADATA_FILENAME,
+  loadSettings,
+  validateName,
+  reportError: (message: string) => console.error(message),
+  reportWarning: (message: string) => console.warn(message),
+};
+
 export function loadExtension(
   context: LoadExtensionContext,
 ): GeminiCLIExtension | null {
-  const { extensionDir, workspaceDir } = context;
-  if (!fs.statSync(extensionDir).isDirectory()) {
-    console.error(
-      `Warning: unexpected file ${extensionDir} in extensions directory.`,
-    );
-    return null;
-  }
-
-  const installMetadata = loadInstallMetadata(extensionDir);
-  const settings = loadSettings(workspaceDir).merged;
-  if (
-    (installMetadata?.type === 'git' ||
-      installMetadata?.type === 'github-release') &&
-    settings.security?.blockGitExtensions
-  ) {
-    return null;
-  }
-
-  let effectiveExtensionPath = extensionDir;
-
-  if (installMetadata?.type === 'link') {
-    effectiveExtensionPath = installMetadata.source;
-  }
-
-  // Try llxprt-extension.json first, then fall back to gemini-extension.json
-  let configFilePath = path.join(
-    effectiveExtensionPath,
-    EXTENSIONS_CONFIG_FILENAME,
-  );
-  if (!fs.existsSync(configFilePath)) {
-    configFilePath = path.join(
-      effectiveExtensionPath,
-      EXTENSIONS_CONFIG_FILENAME_FALLBACK,
-    );
-  }
-  if (!fs.existsSync(configFilePath)) {
-    console.warn(
-      `Extension directory ${effectiveExtensionPath} does not contain a valid config file (${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK}). Skipping.`,
-    );
-    return null;
-  }
-
-  try {
-    const configContent = fs.readFileSync(configFilePath, 'utf-8');
-    let config = recursivelyHydrateStrings(JSON.parse(configContent), {
-      extensionPath: effectiveExtensionPath,
-      workspacePath: workspaceDir,
-      '/': path.sep,
-      pathSeparator: path.sep,
-    }) as unknown as ExtensionConfig;
-    if (!config.name || !config.version) {
-      console.error(
-        `Invalid extension config in ${configFilePath}: missing name or version.`,
-      );
-      return null;
-    }
-
-    try {
-      validateName(config.name);
-    } catch (e) {
-      console.error(getErrorMessage(e));
-      return null;
-    }
-
-    config = resolveEnvVarsInObject(config);
-
-    if (config.mcpServers) {
-      config.mcpServers = Object.fromEntries(
-        Object.entries(config.mcpServers).map(([key, value]) => [
-          key,
-          filterMcpConfig(value),
-        ]),
-      );
-    }
-
-    const contextFiles = getContextFileNames(config)
-      .map((contextFileName) =>
-        path.join(effectiveExtensionPath, contextFileName),
-      )
-      .filter((contextFilePath) => fs.existsSync(contextFilePath));
-
-    // Resolve settings if present
-    const resolvedSettings: ResolvedExtensionSetting[] = [];
-
-    // TODO: Settings resolution requires async operations which would make this
-    // function and all its callers async. For now, settings are passed through
-    // but not resolved. Resolution can be added in a separate async flow if needed.
-    // if (config.settings && config.settings.length > 0) {
-    //   const { getExtensionEnvironment } = await import(
-    //     './extensions/settingsIntegration.js'
-    //   );
-    //   const customEnv = await getExtensionEnvironment(effectiveExtensionPath);
-    //   for (const setting of config.settings) {
-    //     const value = customEnv[setting.envVar];
-    //     resolvedSettings.push({
-    //       name: setting.name,
-    //       envVar: setting.envVar,
-    //       value: value === undefined ? '[not set]' : setting.sensitive ? '***' : value,
-    //       sensitive: setting.sensitive ?? false,
-    //     });
-    //   }
-    // }
-
-    const hydrationContext = {
-      extensionPath: effectiveExtensionPath,
-      workspacePath: workspaceDir,
-      '/': path.sep,
-      pathSeparator: path.sep,
-    };
-
-    const rawSkills = loadSkillsFromDirSync(
-      path.join(effectiveExtensionPath, 'skills'),
-    );
-    const skills: SkillDefinition[] = rawSkills.map(
-      (skill) =>
-        recursivelyHydrateStrings(
-          skill as unknown as JsonObject,
-          hydrationContext,
-        ) as unknown as SkillDefinition,
-    );
-
-    const subagents = config.subagents ?? [];
-
-    return {
-      name: config.name,
-      version: config.version,
-      path: effectiveExtensionPath,
-      contextFiles,
-      installMetadata,
-      mcpServers: config.mcpServers,
-      excludeTools: config.excludeTools,
-      skills,
-      subagents,
-      isActive: true, // Barring any other signals extensions should be considered Active.
-      settings: config.settings as Array<Record<string, unknown>> | undefined,
-      resolvedSettings: resolvedSettings as unknown as Array<
-        Record<string, unknown>
-      >,
-    };
-  } catch (e) {
-    console.error(
-      `Warning: Skipping extension in ${effectiveExtensionPath}: ${getErrorMessage(e)}`,
-    );
-    return null;
-  }
+  return loadExtensionFromDir(context, extensionLoaderDeps);
 }
 
 /**
@@ -433,10 +299,14 @@ export async function resolveExtensionSettingsWithSource(
 
     // Workspace overrides user when workspace value is explicitly set
     if (workspaceValue !== undefined && workspaceValue !== '') {
-      value = setting.sensitive ? '[value stored in keychain]' : workspaceValue;
+      value =
+        setting.sensitive === true
+          ? '[value stored in keychain]'
+          : workspaceValue;
       source = 'workspace';
     } else if (userValue !== undefined && userValue !== '') {
-      value = setting.sensitive ? '[value stored in keychain]' : userValue;
+      value =
+        setting.sensitive === true ? '[value stored in keychain]' : userValue;
       source = 'user';
     } else {
       value = '[not set]';
@@ -477,32 +347,10 @@ export function loadExtensionByName(
   return null;
 }
 
-function filterMcpConfig(original: MCPServerConfig): MCPServerConfig {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { trust, ...rest } = original;
-  return Object.freeze(rest);
-}
-
 export function loadInstallMetadata(
   extensionDir: string,
 ): ExtensionInstallMetadata | undefined {
-  const metadataFilePath = path.join(extensionDir, INSTALL_METADATA_FILENAME);
-  try {
-    const configContent = fs.readFileSync(metadataFilePath, 'utf-8');
-    const metadata = JSON.parse(configContent) as ExtensionInstallMetadata;
-    return metadata;
-  } catch (_e) {
-    return undefined;
-  }
-}
-
-function getContextFileNames(config: ExtensionConfig): string[] {
-  if (!config.contextFileName) {
-    return ['LLXPRT.md'];
-  } else if (!Array.isArray(config.contextFileName)) {
-    return [config.contextFileName];
-  }
-  return config.contextFileName;
+  return loadInstallMetadataFromDir(extensionDir, INSTALL_METADATA_FILENAME);
 }
 
 export function annotateActiveExtensions(
@@ -527,7 +375,7 @@ async function cloneFromGit(
   destination: string,
 ): Promise<void> {
   try {
-    // TODO(chrstnb): Download the archive instead to avoid unnecessary .git info.
+    // Follow-up (#1569, chrstnb): Download the archive instead to avoid unnecessary .git info.
     await simpleGit().clone(gitUrl, destination, ['--depth', '1']);
   } catch (error) {
     throw new Error(`Failed to clone Git repository from ${gitUrl}`, {
@@ -654,7 +502,13 @@ export async function inferInstallMetadata(
   }
 
   // Local path - verify it exists
-  if (ref || autoUpdate) {
+  // Preserve old truthy behavior: reject only non-empty string ref or autoUpdate === true
+  if (typeof ref === 'string' && ref.length > 0) {
+    throw new Error(
+      'The --ref and --autoUpdate flags are only applicable for git-based installations.',
+    );
+  }
+  if (autoUpdate === true) {
     throw new Error(
       'The --ref and --autoUpdate flags are only applicable for git-based installations.',
     );
@@ -666,47 +520,55 @@ export async function inferInstallMetadata(
       source,
       type: 'local',
     };
-  } catch (_error) {
+  } catch {
     throw new Error(`Install source not found: ${source}`);
   }
 }
 
-export async function installOrUpdateExtension(
+interface ExtensionInstallPlan {
+  localSourcePath: string;
+  tempDir?: string;
+}
+
+function ensureRemoteExtensionAllowed(
   installMetadata: ExtensionInstallMetadata,
-  requestConsent: (consent: string) => Promise<boolean>,
-  cwd: string = process.cwd(),
-  previousExtensionConfig?: ExtensionConfig,
-): Promise<string> {
-  const isUpdate = !!previousExtensionConfig;
-  const settings = loadSettings(cwd).merged;
+  settings: ReturnType<typeof loadSettings>['merged'],
+): void {
   if (
     (installMetadata.type === 'git' ||
       installMetadata.type === 'github-release') &&
-    settings.security?.blockGitExtensions
+    (settings.security as { blockGitExtensions?: boolean } | undefined)
+      ?.blockGitExtensions === true
   ) {
     throw new Error(
       'Installing extensions from remote sources is disallowed by your current settings.',
     );
   }
-  if (isWorkspaceTrusted(settings) === false) {
-    if (
-      await requestConsent(
-        `The current workspace at "${cwd}" is not trusted. Do you want to trust this workspace to install extensions?`,
-      )
-    ) {
-      const trustedFolders = loadTrustedFolders();
-      trustedFolders.setValue(cwd, TrustLevel.TRUST_FOLDER);
-    } else {
-      throw new Error(
-        `Could not install extension because the current workspace at ${cwd} is not trusted.`,
-      );
-    }
+}
+
+async function ensureWorkspaceTrustedForInstall(
+  settings: ReturnType<typeof loadSettings>['merged'],
+  cwd: string,
+  requestConsent: (consent: string) => Promise<boolean>,
+): Promise<void> {
+  if (isWorkspaceTrusted(settings) !== false) {
+    return;
   }
+  const didTrust = await requestConsent(
+    `The current workspace at "${cwd}" is not trusted. Do you want to trust this workspace to install extensions?`,
+  );
+  if (!didTrust) {
+    throw new Error(
+      `Could not install extension because the current workspace at ${cwd} is not trusted.`,
+    );
+  }
+  const trustedFolders = loadTrustedFolders();
+  trustedFolders.setValue(cwd, TrustLevel.TRUST_FOLDER);
+}
 
-  const extensionsDir = ExtensionStorage.getUserExtensionsDir();
-  await fs.promises.mkdir(extensionsDir, { recursive: true });
-
-  // Convert relative paths to absolute paths for the metadata file.
+function normalizeInstallSource(
+  installMetadata: ExtensionInstallMetadata,
+): void {
   if (
     !path.isAbsolute(installMetadata.source) &&
     (installMetadata.type === 'local' || installMetadata.type === 'link')
@@ -716,80 +578,138 @@ export async function installOrUpdateExtension(
       installMetadata.source,
     );
   }
+}
 
-  let localSourcePath: string;
-  let tempDir: string | undefined;
-  let newExtensionName: string | undefined;
-
+async function createExtensionInstallPlan(
+  installMetadata: ExtensionInstallMetadata,
+): Promise<ExtensionInstallPlan> {
   if (installMetadata.type === 'git') {
-    tempDir = await ExtensionStorage.createTmpDir();
+    const tempDir = await ExtensionStorage.createTmpDir();
     await cloneFromGit(installMetadata.source, tempDir);
-    localSourcePath = tempDir;
-  } else if (installMetadata.type === 'github-release') {
-    tempDir = await ExtensionStorage.createTmpDir();
-    const result = await downloadFromGitHubRelease(installMetadata, tempDir);
-    // Update the ref in metadata to the actual tag that was downloaded
-    installMetadata.ref = result.tagName;
-    localSourcePath = tempDir;
-  } else if (
-    installMetadata.type === 'local' ||
-    installMetadata.type === 'link'
-  ) {
-    localSourcePath = installMetadata.source;
-  } else {
-    throw new Error(`Unsupported install type: ${installMetadata.type}`);
+    return { localSourcePath: tempDir, tempDir };
   }
+  if (installMetadata.type === 'github-release') {
+    const tempDir = await ExtensionStorage.createTmpDir();
+    const result = await downloadFromGitHubRelease(installMetadata, tempDir);
+    installMetadata.ref = result.tagName;
+    return { localSourcePath: tempDir, tempDir };
+  }
+  return { localSourcePath: installMetadata.source };
+}
 
+async function loadValidatedExtensionConfig(
+  localSourcePath: string,
+  source: string,
+  cwd: string,
+): Promise<ExtensionConfig> {
+  const newExtensionConfig = await loadExtensionConfig({
+    extensionDir: localSourcePath,
+    workspaceDir: cwd,
+  });
+  if (newExtensionConfig == null) {
+    throw new Error(
+      `Invalid extension at ${source}. Please make sure it has a valid ${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK} file.`,
+    );
+  }
+  return newExtensionConfig;
+}
+
+async function warnMissingExtensionSettings(
+  extensionConfig: ExtensionConfig,
+  destinationPath: string,
+  settings: ReturnType<typeof loadSettings>['merged'],
+): Promise<void> {
+  if (
+    extensionConfig.settings == null ||
+    extensionConfig.settings.length === 0 ||
+    (settings.experimental?.extensionConfig ?? false) === false
+  ) {
+    return;
+  }
+  const { getMissingSettings } = await import(
+    './extensions/settingsIntegration.js'
+  );
+  const missingSettings = await getMissingSettings(
+    extensionConfig.name,
+    destinationPath,
+  );
+  if (missingSettings.length === 0) {
+    return;
+  }
+  const settingNames = missingSettings
+    .map((setting) => setting.name)
+    .join(', ');
+  console.warn(
+    `Extension "${extensionConfig.name}" has missing settings: ${settingNames}. Please run "llxprt extensions config ${extensionConfig.name}" to configure them.`,
+  );
+}
+
+function ensureExtensionNotAlreadyInstalled(
+  newExtensionName: string,
+  isUpdate: boolean,
+): void {
+  if (isUpdate) {
+    return;
+  }
+  const installedExtensions = loadUserExtensions();
+  if (
+    installedExtensions.some((installed) => installed.name === newExtensionName)
+  ) {
+    throw new Error(
+      `Extension "${newExtensionName}" is already installed. Please uninstall it first.`,
+    );
+  }
+}
+
+async function installExtensionFiles(
+  installMetadata: ExtensionInstallMetadata,
+  localSourcePath: string,
+  destinationPath: string,
+): Promise<void> {
+  await fs.promises.mkdir(destinationPath, { recursive: true });
+  if (
+    installMetadata.type === 'local' ||
+    installMetadata.type === 'git' ||
+    installMetadata.type === 'github-release'
+  ) {
+    await copyExtension(localSourcePath, destinationPath);
+  }
+  const metadataString = JSON.stringify(installMetadata, null, 2);
+  const metadataPath = path.join(destinationPath, INSTALL_METADATA_FILENAME);
+  await fs.promises.writeFile(metadataPath, metadataString);
+}
+export async function installOrUpdateExtension(
+  installMetadata: ExtensionInstallMetadata,
+  requestConsent: (consent: string) => Promise<boolean>,
+  cwd: string = process.cwd(),
+  previousExtensionConfig?: ExtensionConfig,
+): Promise<string> {
+  const isUpdate = previousExtensionConfig != null;
+  const settings = loadSettings(cwd).merged;
+  ensureRemoteExtensionAllowed(installMetadata, settings);
+  await ensureWorkspaceTrustedForInstall(settings, cwd, requestConsent);
+  await fs.promises.mkdir(ExtensionStorage.getUserExtensionsDir(), {
+    recursive: true,
+  });
+  normalizeInstallSource(installMetadata);
+
+  const plan = await createExtensionInstallPlan(installMetadata);
   try {
-    const newExtensionConfig = await loadExtensionConfig({
-      extensionDir: localSourcePath,
-      workspaceDir: cwd,
-    });
-    if (!newExtensionConfig) {
-      throw new Error(
-        `Invalid extension at ${installMetadata.source}. Please make sure it has a valid ${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK} file.`,
-      );
-    }
-
-    // ~/.llxprt/extensions/{ExtensionConfig.name}.
-    newExtensionName = newExtensionConfig.name;
+    const newExtensionConfig = await loadValidatedExtensionConfig(
+      plan.localSourcePath,
+      installMetadata.source,
+      cwd,
+    );
+    const newExtensionName = newExtensionConfig.name;
     const extensionStorage = new ExtensionStorage(newExtensionName);
     const destinationPath = extensionStorage.getExtensionDir();
 
-    // Check for missing settings and warn user (only when extensionConfig is enabled)
-    if (
-      newExtensionConfig.settings &&
-      newExtensionConfig.settings.length > 0 &&
-      (settings.experimental?.extensionConfig ?? false)
-    ) {
-      const { getMissingSettings } = await import(
-        './extensions/settingsIntegration.js'
-      );
-      const missingSettings = await getMissingSettings(
-        newExtensionName,
-        destinationPath,
-      );
-
-      if (missingSettings.length > 0) {
-        const settingNames = missingSettings.map((s) => s.name).join(', ');
-        const message = `Extension "${newExtensionConfig.name}" has missing settings: ${settingNames}. Please run "llxprt extensions config ${newExtensionConfig.name}" to configure them.`;
-        console.warn(message);
-      }
-    }
-
-    if (!isUpdate) {
-      const installedExtensions = loadUserExtensions();
-      if (
-        installedExtensions.some(
-          (installed) => installed.name === newExtensionName,
-        )
-      ) {
-        throw new Error(
-          `Extension "${newExtensionName}" is already installed. Please uninstall it first.`,
-        );
-      }
-    }
-
+    await warnMissingExtensionSettings(
+      newExtensionConfig,
+      destinationPath,
+      settings,
+    );
+    ensureExtensionNotAlreadyInstalled(newExtensionName, isUpdate);
     await maybeRequestConsentOrFail(
       newExtensionConfig,
       requestConsent,
@@ -798,26 +718,17 @@ export async function installOrUpdateExtension(
     if (isUpdate) {
       await uninstallExtension(newExtensionName, true, cwd);
     }
-    await fs.promises.mkdir(destinationPath, { recursive: true });
-
-    if (
-      installMetadata.type === 'local' ||
-      installMetadata.type === 'git' ||
-      installMetadata.type === 'github-release'
-    ) {
-      await copyExtension(localSourcePath, destinationPath);
-    }
-
-    const metadataString = JSON.stringify(installMetadata, null, 2);
-    const metadataPath = path.join(destinationPath, INSTALL_METADATA_FILENAME);
-    await fs.promises.writeFile(metadataPath, metadataString);
+    await installExtensionFiles(
+      installMetadata,
+      plan.localSourcePath,
+      destinationPath,
+    );
+    return newExtensionName;
   } finally {
-    if (tempDir) {
-      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    if (plan.tempDir !== undefined) {
+      await fs.promises.rm(plan.tempDir, { recursive: true, force: true });
     }
   }
-
-  return newExtensionName;
 }
 
 /**
@@ -830,121 +741,6 @@ export function validateName(name: string): void {
     throw new Error(
       `Invalid extension name: "${name}". Only letters (a-z, A-Z), numbers (0-9), and dashes (-) are allowed.`,
     );
-  }
-}
-
-/**
- * Builds a consent string for installing an extension based on its
- * extensionConfig.
- */
-function extensionConsentString(extensionConfig: ExtensionConfig): string {
-  const sanitizedConfig = escapeAnsiCtrlCodes(extensionConfig);
-  const output: string[] = [];
-  const mcpServerEntries = Object.entries(sanitizedConfig.mcpServers || {});
-  output.push(`Installing extension "${sanitizedConfig.name}".`);
-  output.push(
-    '**Extensions may introduce unexpected behavior. Ensure you have investigated the extension source and trust the author.**',
-  );
-
-  if (mcpServerEntries.length) {
-    output.push('This extension will run the following MCP servers:');
-    for (const [key, mcpServer] of mcpServerEntries) {
-      const isLocal = !!mcpServer.command;
-      const source =
-        mcpServer.httpUrl ??
-        `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
-      output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
-    }
-  }
-  if (sanitizedConfig.hooks && Object.keys(sanitizedConfig.hooks).length > 0) {
-    output.push(
-      `This extension will register hooks: ${Object.keys(sanitizedConfig.hooks).join(', ')}`,
-    );
-    output.push(
-      'Note: Hooks can intercept and modify LLxprt Code behavior. Additional consent will be requested.',
-    );
-  }
-  if (sanitizedConfig.contextFileName) {
-    output.push(
-      `This extension will append info to your LLXPRT.md context using ${sanitizedConfig.contextFileName}`,
-    );
-  }
-  if (sanitizedConfig.excludeTools) {
-    output.push(
-      `This extension will exclude the following core tools: ${sanitizedConfig.excludeTools}`,
-    );
-  }
-  return output.join('\n');
-}
-
-/**
- * Requests consent from the user to perform an action, in non-interactive mode.
- *
- * This should not be called from interactive mode as it will break the CLI.
- *
- * @param consentDescription The description of the thing they will be consenting to.
- * @returns boolean, whether they consented or not.
- */
-
-/**
- * Requests consent from the user to install an extension (extensionConfig), if
- * there is any difference between the consent string for `extensionConfig` and
- * `previousExtensionConfig`.
- *
- * Always requests consent if previousExtensionConfig is null.
- *
- * Throws if the user does not consent.
- */
-async function maybeRequestConsentOrFail(
-  extensionConfig: ExtensionConfig,
-  requestConsent: (consent: string) => Promise<boolean>,
-  previousExtensionConfig?: ExtensionConfig,
-) {
-  const extensionConsent = extensionConsentString(extensionConfig);
-  if (previousExtensionConfig) {
-    const previousExtensionConsent = extensionConsentString(
-      previousExtensionConfig,
-    );
-    if (previousExtensionConsent === extensionConsent) {
-      // Extension consent string unchanged, but check for hook changes
-      const hookDelta = computeHookConsentDelta(
-        extensionConfig.hooks,
-        previousExtensionConfig.hooks,
-      );
-      if (
-        hookDelta.newHooks.length === 0 &&
-        hookDelta.changedHooks.length === 0
-      ) {
-        // No changes at all, skip consent
-        return;
-      }
-    }
-  }
-  if (!(await requestConsent(extensionConsent))) {
-    throw new Error(`Installation cancelled for "${extensionConfig.name}".`);
-  }
-
-  // Check for hook consent if extension has new or changed hooks
-  const hookDelta = computeHookConsentDelta(
-    extensionConfig.hooks,
-    previousExtensionConfig?.hooks,
-  );
-
-  if (hookDelta.newHooks.length > 0 || hookDelta.changedHooks.length > 0) {
-    const hooksRequiringConsent = [
-      ...hookDelta.newHooks,
-      ...hookDelta.changedHooks,
-    ];
-    const hookConsent = await requestHookConsent(
-      extensionConfig.name,
-      hooksRequiringConsent,
-      requestConsent,
-    );
-    if (!hookConsent) {
-      throw new Error(
-        `Hook registration declined for extension "${extensionConfig.name}". Installation cancelled.`,
-      );
-    }
   }
 }
 

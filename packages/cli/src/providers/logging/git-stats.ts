@@ -36,17 +36,18 @@ export interface LogEntry {
   timestamp: string;
 }
 
+type GitStatsConfig =
+  | Pick<Config, 'getConversationLoggingEnabled' | 'getSessionId'>
+  | Partial<Pick<Config, 'getConversationLoggingEnabled' | 'getSessionId'>>
+  | null
+  | undefined;
+
 export class GitStatsTracker {
   private enabled: boolean;
   private sessionStats: SessionStats;
 
-  constructor(private config: Config) {
-    // Handle invalid config gracefully
-    try {
-      this.enabled = this.config?.getConversationLoggingEnabled?.() ?? false;
-    } catch (_error) {
-      this.enabled = false;
-    }
+  constructor(private config: GitStatsConfig) {
+    this.enabled = this.readLoggingEnabled();
 
     this.sessionStats = {
       filesChanged: new Set<string>(),
@@ -56,30 +57,30 @@ export class GitStatsTracker {
   }
 
   async trackFileEdit(
-    filePath: string,
-    oldContent: string,
-    newContent: string,
+    filePath: unknown,
+    oldContent: unknown,
+    newContent: unknown,
   ): Promise<GitStats | null> {
     // Check current config state for each call (runtime toggle support)
     if (!this.isEnabled()) {
       return null;
     }
 
-    // Handle null/undefined content gracefully
-    if (oldContent === null || oldContent === undefined) {
-      oldContent = '';
-    }
-    if (newContent === null || newContent === undefined) {
-      newContent = '';
-    }
+    const normalizedOldContent =
+      typeof oldContent === 'string' ? oldContent : '';
+    const normalizedNewContent =
+      typeof newContent === 'string' ? newContent : '';
 
     // Handle invalid file paths gracefully
-    if (!filePath || typeof filePath !== 'string') {
+    if (typeof filePath !== 'string' || filePath === '') {
       return null;
     }
 
     // Calculate diff statistics
-    const stats = this.calculateStats(oldContent, newContent);
+    const stats = this.calculateStats(
+      normalizedOldContent,
+      normalizedNewContent,
+    );
 
     // Update session stats
     this.sessionStats.filesChanged.add(filePath);
@@ -142,12 +143,16 @@ export class GitStatsTracker {
 
   isEnabled(): boolean {
     // Update enabled state based on current config
-    try {
-      this.enabled = this.config?.getConversationLoggingEnabled?.() ?? false;
-    } catch (_error) {
-      this.enabled = false;
-    }
+    this.enabled = this.readLoggingEnabled();
     return this.enabled;
+  }
+
+  private readLoggingEnabled(): boolean {
+    try {
+      return this.config?.getConversationLoggingEnabled?.() ?? false;
+    } catch {
+      return false;
+    }
   }
 
   hasComplexSettings(): boolean {
@@ -173,12 +178,7 @@ export class GitStatsTracker {
   }
 
   getSummary(): SessionSummary {
-    let sessionId = '';
-    try {
-      sessionId = this.config?.getSessionId?.() ?? '';
-    } catch (_error) {
-      sessionId = '';
-    }
+    const sessionId = this.readSessionId();
 
     return {
       filesChanged: this.sessionStats.filesChanged.size,
@@ -186,5 +186,13 @@ export class GitStatsTracker {
       totalLinesRemoved: this.sessionStats.totalLinesRemoved,
       sessionId,
     };
+  }
+
+  private readSessionId(): string {
+    try {
+      return this.config?.getSessionId?.() ?? '';
+    } catch {
+      return '';
+    }
   }
 }

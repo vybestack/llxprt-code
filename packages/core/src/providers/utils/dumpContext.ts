@@ -131,9 +131,5 @@ export function shouldDump(
     return true;
   }
 
-  if (mode === 'error' && isError) {
-    return true;
-  }
-
-  return false;
+  return isError;
 }

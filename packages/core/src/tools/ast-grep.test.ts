@@ -236,7 +236,7 @@ class Foo {
       // Multi-node patterns fail in ast-grep — should get an error or empty results
       expect(result).toBeDefined();
       expect(
-        meta(result).matches?.length === 0 ||
+        meta(result).matches.length === 0 ||
           /error|parse|pattern/i.test(String(result.llmContent)),
       ).toBe(true);
     });

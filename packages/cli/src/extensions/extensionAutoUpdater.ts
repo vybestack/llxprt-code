@@ -52,7 +52,7 @@ interface EffectiveExtensionAutoUpdateSettings {
   checkIntervalHours: number;
   installMode: ExtensionAutoUpdateInstallMode;
   notificationLevel: ExtensionAutoUpdateNotificationLevel;
-  perExtension: Record<string, ExtensionAutoUpdatePerExtensionSetting>;
+  perExtension: Partial<Record<string, ExtensionAutoUpdatePerExtensionSetting>>;
 }
 
 export interface ExtensionUpdateHistoryEntry {
@@ -72,7 +72,8 @@ export interface ExtensionAutoUpdateStateStore {
 }
 
 function clampIntervalHours(value: number | undefined): number {
-  if (!value || Number.isNaN(value)) {
+  // Preserve old !value behavior: undefined, 0, and NaN all return default of 24
+  if (value === undefined || value === 0 || Number.isNaN(value)) {
     return 24;
   }
   return Math.max(1, value);
@@ -102,10 +103,10 @@ function createFileStateStore(): ExtensionAutoUpdateStateStore {
         return JSON.parse(data) as ExtensionUpdateStateFile;
       } catch (error) {
         if (
-          error &&
+          error !== null &&
           typeof error === 'object' &&
           'code' in error &&
-          error.code === 'ENOENT'
+          (error as NodeJS.ErrnoException).code === 'ENOENT'
         ) {
           return {};
         }
@@ -281,12 +282,13 @@ export class ExtensionAutoUpdater {
     state: ExtensionUpdateStateFile,
     extensionsByName: Map<string, GeminiCLIExtension>,
   ): Promise<void> {
-    for (const [name, entry] of Object.entries(state)) {
-      if (!entry.pendingInstall) {
-        continue;
-      }
+    const pendingEntries = Object.entries(state).filter(
+      ([, entry]) => entry.pendingInstall === true,
+    );
+
+    for (const [name, entry] of pendingEntries) {
       const extension = extensionsByName.get(name);
-      if (!extension?.installMetadata) {
+      if (extension?.installMetadata === undefined) {
         entry.pendingInstall = false;
         entry.lastError = `Extension "${name}" is no longer installed.`;
         entry.state = ExtensionUpdateState.ERROR;
@@ -301,19 +303,23 @@ export class ExtensionAutoUpdater {
     extension: GeminiCLIExtension,
     state: ExtensionUpdateStateFile,
   ): Promise<void> {
-    if (!extension.installMetadata) {
+    if (extension.installMetadata === undefined) {
       return;
     }
 
     const settings = this.getEffectiveSettingsForExtension(extension.name);
-    if (!settings.enabled) {
+    if (settings.enabled !== true) {
       return;
     }
 
     const entry = state[extension.name] ?? (state[extension.name] = {});
     const now = this.now();
     const intervalMs = settings.checkIntervalHours * HOUR_IN_MS;
-    if (entry.lastCheck && now - entry.lastCheck < intervalMs) {
+    if (
+      entry.lastCheck !== undefined &&
+      entry.lastCheck !== 0 &&
+      now - entry.lastCheck < intervalMs
+    ) {
       return;
     }
     entry.lastCheck = now;
@@ -327,7 +333,7 @@ export class ExtensionAutoUpdater {
         isActive: true,
         path: extension.path,
         installMetadata: extension.installMetadata,
-        contextFiles: extension.contextFiles || [],
+        contextFiles: extension.contextFiles,
       };
 
       // Call the update checker which will update entry.state via callback
@@ -403,7 +409,7 @@ export class ExtensionAutoUpdater {
         isActive: true,
         path: extension.path,
         installMetadata: extension.installMetadata,
-        contextFiles: extension.contextFiles || [],
+        contextFiles: extension.contextFiles,
       };
 
       const info = await this.updateExecutor(

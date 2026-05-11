@@ -10,7 +10,7 @@ import { StreamingState } from '../types.js';
 export interface UseMessageQueueOptions {
   isConfigInitialized: boolean;
   streamingState: StreamingState;
-  submitQuery: (query: string) => void;
+  submitQuery: (query: string) => void | Promise<void>;
   isMcpReady: boolean;
 }
 
@@ -44,7 +44,7 @@ export function useMessageQueue({
       // single conversational turn rather than triggering multiple round-trips.
       const combined = messageQueue.join('\n\n');
       setMessageQueue([]);
-      submitQuery(combined);
+      void submitQuery(combined);
     }
   }, [
     isConfigInitialized,

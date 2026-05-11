@@ -9,6 +9,8 @@
  * BEHAVIORAL TESTS - No mocks, testing actual retry and failover behavior
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect } from 'vitest';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
@@ -78,7 +80,7 @@ function createRateLimitError(retryAfter?: number): Error {
     response?: { headers?: { 'retry-after'?: string } };
   };
   error.status = 429;
-  if (retryAfter) {
+  if (retryAfter != null && retryAfter > 0) {
     error.response = {
       headers: {
         'retry-after': retryAfter.toString(),
@@ -1153,7 +1155,7 @@ describe('RetryOrchestrator', () => {
 
       await expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Rate limit exceeded/);
 
       // resetSession should NOT be called since request never succeeded
       expect(resetSessionCallCount).toBe(0);
@@ -1516,7 +1518,7 @@ describe('RetryOrchestrator', () => {
           // Simulate provider checking signal
           await delay(50);
 
-          if (options.invocation?.signal?.aborted) {
+          if (options.invocation?.signal?.aborted === true) {
             throw new Error('Aborted');
           }
 
@@ -1675,7 +1677,7 @@ describe('RetryOrchestrator', () => {
 
       await expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Rate limit exceeded/);
 
       // EXPECTATION: getLastFailoverReasons was called after tryFailover returned false
       expect(getLastFailoverReasonsCalled).toBe(true);
@@ -1728,19 +1730,26 @@ describe('RetryOrchestrator', () => {
         expect.fail('Should have thrown AllBucketsExhaustedError');
       } catch (error) {
         // EXPECTATION: Error includes bucketFailureReasons
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toHaveProperty('bucketFailureReasons');
         const reasons = (
           error as { bucketFailureReasons: Record<string, string> }
         ).bucketFailureReasons;
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(reasons.bucket1).toBe('quota-exhausted');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(reasons.bucket2).toBe('expired-refresh-failed');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(reasons.bucket3).toBe('no-token');
 
         // EXPECTATION: Error message includes detailed failure reasons
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect((error as Error).message).toContain('bucket1: quota-exhausted');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect((error as Error).message).toContain(
           'bucket2: expired-refresh-failed',
         );
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect((error as Error).message).toContain('bucket3: no-token');
       }
     });

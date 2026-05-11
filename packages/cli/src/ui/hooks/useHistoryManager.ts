@@ -53,10 +53,9 @@ interface HistoryLimits {
  * Encapsulates the history array, message ID generation, adding items,
  * updating items, and clearing the history.
  */
-export function useHistory(
+function useHistoryLimits(
   options?: UseHistoryOptions,
-): UseHistoryManagerReturn {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+): React.MutableRefObject<HistoryLimits> {
   const maxItems = options?.maxItems;
   const maxBytes = options?.maxBytes;
   const limits = useMemo(
@@ -67,21 +66,27 @@ export function useHistory(
 
   useEffect(() => {
     limitsRef.current = limits;
-    setHistory((prev) => trimHistory(prev, limits));
   }, [limits]);
 
-  // Generates a unique message ID based on a timestamp and a global counter.
-  // Using a global counter ensures uniqueness across all hook instances.
+  return limitsRef;
+}
+
+function useHistoryMutators(
+  setHistory: React.Dispatch<React.SetStateAction<HistoryItem[]>>,
+  limitsRef: React.MutableRefObject<HistoryLimits>,
+): Pick<UseHistoryManagerReturn, 'addItem' | 'updateItem' | 'loadHistory'> {
   const getNextMessageId = useCallback((baseTimestamp: number): number => {
     globalMessageIdCounter += 1;
     return baseTimestamp * 1000 + globalMessageIdCounter;
   }, []);
 
-  const loadHistory = useCallback((newHistory: HistoryItem[]) => {
-    setHistory(trimHistory(newHistory, limitsRef.current));
-  }, []);
+  const loadHistory = useCallback(
+    (newHistory: HistoryItem[]) => {
+      setHistory(trimHistory(newHistory, limitsRef.current));
+    },
+    [limitsRef, setHistory],
+  );
 
-  // Adds a new item to the history state with a unique ID.
   const addItem = useCallback(
     (
       itemData: Omit<HistoryItem, 'id'>,
@@ -90,34 +95,14 @@ export function useHistory(
     ): number => {
       const id = getNextMessageId(baseTimestamp);
       const newItem: HistoryItem = { ...itemData, id } as HistoryItem;
-
-      setHistory((prevHistory) => {
-        if (prevHistory.length > 0) {
-          const lastItem = prevHistory[prevHistory.length - 1];
-          // Prevent adding duplicate consecutive user messages
-          if (
-            lastItem.type === 'user' &&
-            newItem.type === 'user' &&
-            lastItem.text === newItem.text
-          ) {
-            return prevHistory; // Don't add the duplicate
-          }
-        }
-        return trimHistory([...prevHistory, newItem], limitsRef.current);
-      });
-
-      return id; // Return the generated ID (even if not added, to keep signature)
+      setHistory((prevHistory) =>
+        appendHistoryItem(prevHistory, newItem, limitsRef.current),
+      );
+      return id;
     },
-    [getNextMessageId],
+    [getNextMessageId, limitsRef, setHistory],
   );
 
-  /**
-   * Updates an existing history item identified by its ID.
-   * @deprecated Prefer not to update history item directly as we are currently
-   * rendering all history items in <Static /> for performance reasons. Only use
-   * if ABSOLUTELY NECESSARY
-   */
-  //
   const updateItem = useCallback(
     (
       id: number,
@@ -125,24 +110,31 @@ export function useHistory(
     ) => {
       setHistory((prevHistory) =>
         trimHistory(
-          prevHistory.map((item) => {
-            if (item.id === id) {
-              // Apply updates based on whether it's an object or a function
-              const newUpdates =
-                typeof updates === 'function' ? updates(item) : updates;
-              return { ...item, ...newUpdates } as HistoryItem;
-            }
-            return item;
-          }),
+          updateHistoryItems(prevHistory, id, updates),
           limitsRef.current,
         ),
       );
     },
-    [],
+    [limitsRef, setHistory],
   );
 
-  // Clears the entire history state. Note: we do NOT reset the global counter
-  // to ensure IDs remain unique across conversation clears within the same session.
+  return { addItem, updateItem, loadHistory };
+}
+
+export function useHistory(
+  options?: UseHistoryOptions,
+): UseHistoryManagerReturn {
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const limitsRef = useHistoryLimits(options);
+  const { addItem, updateItem, loadHistory } = useHistoryMutators(
+    setHistory,
+    limitsRef,
+  );
+
+  useEffect(() => {
+    setHistory((prev) => trimHistory(prev, limitsRef.current));
+  }, [limitsRef]);
+
   const clearItems = useCallback(() => {
     setHistory([]);
     ConversationContext.startNewConversation();
@@ -167,7 +159,10 @@ function normalizeHistoryLimits(options?: UseHistoryOptions): HistoryLimits {
   };
 }
 
-function normalizeLimit(value: number | undefined, fallback: number): number {
+function normalizeLimit(
+  value: number | null | undefined,
+  fallback: number,
+): number {
   if (value === undefined || value === null) {
     return fallback;
   }
@@ -218,4 +213,39 @@ function estimateHistoryItemBytes(item: HistoryItem): number {
   } catch {
     return 0;
   }
+}
+
+function appendHistoryItem(
+  prevHistory: HistoryItem[],
+  newItem: HistoryItem,
+  limits: HistoryLimits,
+): HistoryItem[] {
+  if (prevHistory.length === 0) {
+    return trimHistory([newItem], limits);
+  }
+
+  const lastItem = prevHistory[prevHistory.length - 1];
+  if (
+    lastItem.type === 'user' &&
+    newItem.type === 'user' &&
+    lastItem.text === newItem.text
+  ) {
+    return prevHistory;
+  }
+  return trimHistory([...prevHistory, newItem], limits);
+}
+
+function updateHistoryItems(
+  prevHistory: HistoryItem[],
+  id: number,
+  updates: Partial<Omit<HistoryItem, 'id'>> | HistoryItemUpdater,
+): HistoryItem[] {
+  return prevHistory.map((item) => {
+    if (item.id === id) {
+      const newUpdates =
+        typeof updates === 'function' ? updates(item) : updates;
+      return { ...item, ...newUpdates } as HistoryItem;
+    }
+    return item;
+  });
 }

@@ -9,6 +9,8 @@
  * Integrates bucket failover logic into GeminiChat provider execution flow
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import type { IContent, ContentBlock } from '../services/history/IContent.js';
 import type { IProvider, GenerateChatOptions } from '../providers/IProvider.js';
 import { DebugLogger } from '../debug/index.js';
@@ -45,6 +47,7 @@ function shouldFailover(error: Error): boolean {
   }
 
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     message.includes('429') ||
     message.includes('401') ||
     message.includes('403') ||
@@ -97,11 +100,11 @@ export async function executeProviderWithBucketFailover(
   const { buckets, provider, tokenRefreshCallback, notificationCallback } =
     config;
 
-  if (!buckets || buckets.length === 0) {
+  if (buckets.length === 0) {
     throw new Error('Bucket failover requires at least one bucket');
   }
 
-  if (!provider.generateChatCompletion) {
+  if (typeof provider.generateChatCompletion !== 'function') {
     throw new Error('Provider does not support generateChatCompletion');
   }
 
@@ -156,6 +159,7 @@ export async function executeProviderWithBucketFailover(
 
       // Check if this error should trigger failover
       if (shouldFailover(err)) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (i < buckets.length - 1) {
           const nextBucket = buckets[i + 1];
 

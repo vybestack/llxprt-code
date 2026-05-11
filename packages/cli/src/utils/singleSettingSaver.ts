@@ -23,7 +23,7 @@ function setNestedValue(
     return obj;
   }
 
-  if (!obj[first] || typeof obj[first] !== 'object') {
+  if (obj[first] == null || typeof obj[first] !== 'object') {
     obj[first] = {};
   }
 
@@ -71,7 +71,7 @@ export function saveSingleSetting(
     loadedSettings.forScope(scope).settings[parentKey];
 
   // Create a deep copy of the parent object to modify
-  const newParentObject = JSON.parse(JSON.stringify(currentParentObject || {}));
+  const newParentObject = JSON.parse(JSON.stringify(currentParentObject ?? {}));
 
   // Use the copied setNestedValue helper to update the specific nested key
   setNestedValue(newParentObject, pathParts.slice(1), value);

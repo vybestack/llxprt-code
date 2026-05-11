@@ -239,6 +239,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(false);
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         expect(result.reason).toMatch(/no.*active.*todo/i);
       });
 
@@ -423,6 +424,7 @@ describe('TodoContinuationService', () => {
       const result = service.checkContinuationConditions(context);
 
       expect(result.shouldContinue).toBe(false);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(result.reason).toMatch(/no.*active.*todo/i);
       expect(result.activeTodo).toBeUndefined();
     });
@@ -431,12 +433,12 @@ describe('TodoContinuationService', () => {
       expect(() => {
         const nullContext = null as unknown as ContinuationContext;
         service.checkContinuationConditions(nullContext);
-      }).toThrow();
+      }).toThrow(/Context is required/);
 
       expect(() => {
         const nullConfig = null as unknown as ContinuationPromptConfig;
         service.generateContinuationPrompt(nullConfig);
-      }).toThrow();
+      }).toThrow(/Configuration is required/);
     });
 
     it('handles empty task description strings', () => {

@@ -25,6 +25,8 @@
  *
  * These tests document the exact bugs that need to be fixed.
  */
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
@@ -112,9 +114,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
 
-    if (!runtimeContext.config) {
-      runtimeContext.config = createRuntimeConfigStub(settingsService);
-    }
+    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
 
     runtimeContext.config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),
@@ -411,11 +411,13 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       let toolUseMessageIndex = -1;
       for (let i = 0; i < request.messages.length; i++) {
         const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          if (msg.content.some((b) => b.type === 'tool_use')) {
-            toolUseMessageIndex = i;
-            break;
-          }
+        if (
+          msg.role === 'assistant' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((b) => b.type === 'tool_use')
+        ) {
+          toolUseMessageIndex = i;
+          break;
         }
       }
 
@@ -622,11 +624,13 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       let toolUseMessageIndex = -1;
       for (let i = 0; i < request.messages.length; i++) {
         const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          if (msg.content.some((b) => b.type === 'tool_use')) {
-            toolUseMessageIndex = i;
-            break;
-          }
+        if (
+          msg.role === 'assistant' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((b) => b.type === 'tool_use')
+        ) {
+          toolUseMessageIndex = i;
+          break;
         }
       }
 
@@ -739,10 +743,12 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       const toolUseIndices: number[] = [];
       for (let i = 0; i < request.messages.length; i++) {
         const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          if (msg.content.some((b) => b.type === 'tool_use')) {
-            toolUseIndices.push(i);
-          }
+        if (
+          msg.role === 'assistant' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((b) => b.type === 'tool_use')
+        ) {
+          toolUseIndices.push(i);
         }
       }
 
@@ -1147,11 +1153,13 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       let toolUseIdx = -1;
       for (let i = 0; i < request.messages.length; i++) {
         const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          if (msg.content.some((b) => b.type === 'tool_use')) {
-            toolUseIdx = i;
-            break;
-          }
+        if (
+          msg.role === 'assistant' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((b) => b.type === 'tool_use')
+        ) {
+          toolUseIdx = i;
+          break;
         }
       }
 
@@ -1364,6 +1372,12 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
 
+      // The output stream must still carry at least one user message and
+      // one assistant message and satisfy strict role alternation between
+      // every adjacent pair (the merge/pad logic is what this test guards).
+      expect(request.messages.length).toBeGreaterThanOrEqual(2);
+      expect(request.messages.some((m) => m.role === 'user')).toBe(true);
+      expect(request.messages.some((m) => m.role === 'assistant')).toBe(true);
       assertStrictAlternation(request.messages);
     });
 
@@ -1400,6 +1414,12 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
 
+      // The output stream must still carry at least one user message and
+      // one assistant message and satisfy strict role alternation between
+      // every adjacent pair (the merge/pad logic is what this test guards).
+      expect(request.messages.length).toBeGreaterThanOrEqual(2);
+      expect(request.messages.some((m) => m.role === 'user')).toBe(true);
+      expect(request.messages.some((m) => m.role === 'assistant')).toBe(true);
       assertStrictAlternation(request.messages);
     });
   });

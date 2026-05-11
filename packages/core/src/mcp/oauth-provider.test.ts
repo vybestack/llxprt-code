@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { vi } from 'vitest';
 
 // Mock dependencies AT THE TOP
@@ -56,7 +58,7 @@ const createMockResponse = (options: {
     headers: {
       get: (name: string) => {
         if (name.toLowerCase() === 'content-type') {
-          return options.contentType || null;
+          return options.contentType ?? null;
         }
         return null;
       },

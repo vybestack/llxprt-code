@@ -35,11 +35,11 @@ export class TerminalCapabilityManager {
   // eslint-disable-next-line no-control-regex
   private static readonly TERMINAL_NAME_REGEX = /\x1bP>\|(.+?)(\x1b\\|\x07)/;
   // Primary Device Attributes: CSI ? ID ; ... c
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex, sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   private static readonly DEVICE_ATTRIBUTES_REGEX = /\x1b\[\?(\d+)(;\d+)*c/;
   // OSC 11 response: OSC 11 ; rgb:rrrr/gggg/bbbb ST (or BEL)
   private static readonly OSC_11_REGEX =
-    // eslint-disable-next-line no-control-regex
+    // eslint-disable-next-line no-control-regex, sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /\x1b\]11;rgb:([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})(\x1b\\|\x07)?/;
   // modifyOtherKeys response: CSI > 4 ; level m
   // eslint-disable-next-line no-control-regex
@@ -60,9 +60,7 @@ export class TerminalCapabilityManager {
   private constructor() {}
 
   static getInstance(): TerminalCapabilityManager {
-    if (!this.instance) {
-      this.instance = new TerminalCapabilityManager();
-    }
+    this.instance ??= new TerminalCapabilityManager();
     return this.instance;
   }
 
@@ -77,13 +75,17 @@ export class TerminalCapabilityManager {
    * This should be called once at app startup.
    */
   async detectCapabilities(): Promise<void> {
-    if (this.detectionComplete) return;
+    if (this.detectionComplete) return undefined;
 
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       this.detectionComplete = true;
-      return;
+      return undefined;
     }
 
+    return this.runDetection();
+  }
+
+  private runDetection(): Promise<void> {
     return new Promise((resolve) => {
       this.removeProcessListeners();
 
@@ -109,7 +111,7 @@ export class TerminalCapabilityManager {
       let bgReceived = false;
       let modifyOtherKeysReceived = false;
       // eslint-disable-next-line prefer-const
-      let timeoutId: NodeJS.Timeout;
+      let timeoutId: NodeJS.Timeout | undefined;
 
       const cleanup = () => {
         if (timeoutId) {
@@ -121,9 +123,7 @@ export class TerminalCapabilityManager {
         }
         this.detectionComplete = true;
 
-        // Auto-enable supported modes
         this.enableSupportedModes();
-        // Register synchronous exit handler for robust kitty cleanup
         if (this.kittyEnabled && !this.disableKittyProtocolOnExitHandler) {
           this.disableKittyProtocolOnExitHandler = () =>
             this.disableKittyProtocolOnExit();
@@ -137,73 +137,29 @@ export class TerminalCapabilityManager {
         cleanup();
       };
 
-      // A somewhat long timeout is acceptable as all terminals should respond
-      // to the device attributes query used as a sentinel.
       timeoutId = setTimeout(onTimeout, 1000);
 
       const onData = (data: Buffer) => {
         buffer += data.toString();
 
-        // Check OSC 11
-        if (!bgReceived) {
-          const match = buffer.match(TerminalCapabilityManager.OSC_11_REGEX);
-          if (match) {
-            bgReceived = true;
-            this.terminalBackgroundColor = this.parseColor(
-              match[1],
-              match[2],
-              match[3],
-            );
-          }
-        }
-
-        if (
-          !kittyKeyboardReceived &&
-          TerminalCapabilityManager.KITTY_REGEX.test(buffer)
-        ) {
-          kittyKeyboardReceived = true;
-          this.kittySupported = true;
-        }
-
-        // check for modifyOtherKeys support
-        if (!modifyOtherKeysReceived) {
-          const match = buffer.match(
-            TerminalCapabilityManager.MODIFY_OTHER_KEYS_REGEX,
-          );
-          if (match) {
-            modifyOtherKeysReceived = true;
-            const level = parseInt(match[1], 10);
-            this.modifyOtherKeysSupported = level >= 2;
-            debugLogger.log(
-              `Detected modifyOtherKeys support: ${this.modifyOtherKeysSupported} (level ${level})`,
-            );
-          }
-        }
-
-        // Check for Terminal Name/Version response.
-        if (!terminalNameReceived) {
-          const match = buffer.match(
-            TerminalCapabilityManager.TERMINAL_NAME_REGEX,
-          );
-          if (match) {
-            terminalNameReceived = true;
-            this.terminalName = match[1];
-          }
-        }
-
-        // We use the Primary Device Attributes response as a sentinel to know
-        // that the terminal has processed all our queries. Since we send it
-        // last, receiving it means we can stop waiting.
-        if (!deviceAttributesReceived) {
-          const match = buffer.match(
-            TerminalCapabilityManager.DEVICE_ATTRIBUTES_REGEX,
-          );
-          if (match) {
-            deviceAttributesReceived = true;
-            this.deviceAttributesSupported = true;
-            cleanup();
-          }
-        }
+        bgReceived = this.parseBgColor(buffer, bgReceived);
+        kittyKeyboardReceived = this.parseKittyKeyboard(
+          buffer,
+          kittyKeyboardReceived,
+        );
+        modifyOtherKeysReceived = this.parseModifyOtherKeys(
+          buffer,
+          modifyOtherKeysReceived,
+        );
+        terminalNameReceived = this.parseTerminalName(
+          buffer,
+          terminalNameReceived,
+        );
+        deviceAttributesReceived = this.parseDeviceAttributes(
+          buffer,
+          deviceAttributesReceived,
+          cleanup,
+        );
       };
 
       process.stdin.on('data', onData);
@@ -217,10 +173,82 @@ export class TerminalCapabilityManager {
             TerminalCapabilityManager.MODIFY_OTHER_KEYS_QUERY +
             TerminalCapabilityManager.DEVICE_ATTRIBUTES_QUERY,
         );
-      } catch (_e) {
+      } catch {
         cleanup();
       }
     });
+  }
+
+  private parseBgColor(buffer: string, alreadyReceived: boolean): boolean {
+    if (alreadyReceived) return true;
+    const match = buffer.match(TerminalCapabilityManager.OSC_11_REGEX);
+    if (match) {
+      this.terminalBackgroundColor = this.parseColor(
+        match[1],
+        match[2],
+        match[3],
+      );
+      return true;
+    }
+    return false;
+  }
+
+  private parseKittyKeyboard(
+    buffer: string,
+    alreadyReceived: boolean,
+  ): boolean {
+    if (alreadyReceived) return true;
+    if (TerminalCapabilityManager.KITTY_REGEX.test(buffer)) {
+      this.kittySupported = true;
+      return true;
+    }
+    return false;
+  }
+
+  private parseModifyOtherKeys(
+    buffer: string,
+    alreadyReceived: boolean,
+  ): boolean {
+    if (alreadyReceived) return true;
+    const match = buffer.match(
+      TerminalCapabilityManager.MODIFY_OTHER_KEYS_REGEX,
+    );
+    if (match) {
+      const level = parseInt(match[1], 10);
+      this.modifyOtherKeysSupported = level >= 2;
+      debugLogger.log(
+        `Detected modifyOtherKeys support: ${this.modifyOtherKeysSupported} (level ${level})`,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  private parseTerminalName(buffer: string, alreadyReceived: boolean): boolean {
+    if (alreadyReceived) return true;
+    const match = buffer.match(TerminalCapabilityManager.TERMINAL_NAME_REGEX);
+    if (match) {
+      this.terminalName = match[1];
+      return true;
+    }
+    return false;
+  }
+
+  private parseDeviceAttributes(
+    buffer: string,
+    alreadyReceived: boolean,
+    onDone: () => void,
+  ): boolean {
+    if (alreadyReceived) return true;
+    const match = buffer.match(
+      TerminalCapabilityManager.DEVICE_ATTRIBUTES_REGEX,
+    );
+    if (match) {
+      this.deviceAttributesSupported = true;
+      onDone();
+      return true;
+    }
+    return false;
   }
 
   enableSupportedModes() {
@@ -280,7 +308,7 @@ export class TerminalCapabilityManager {
         enableKittyKeyboardProtocol();
         this.kittyEnabled = true;
       }
-    } catch (_e) {
+    } catch {
       // Ignore errors during enable (terminal may not support these modes)
     }
   }
@@ -291,7 +319,7 @@ export class TerminalCapabilityManager {
         disableKittyKeyboardProtocol();
         this.kittyEnabled = false;
       }
-    } catch (_e) {
+    } catch {
       // Ignore errors during disable (terminal may already be closed)
     }
   }
@@ -315,7 +343,7 @@ export class TerminalCapabilityManager {
         }
         this.kittyEnabled = false;
       }
-    } catch (_e) {
+    } catch {
       // Ignore errors during disable (terminal may already be closed)
     }
   }

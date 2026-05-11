@@ -3,6 +3,8 @@
  * @requirement REQ-SP3-002
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
 import path from 'node:path';
@@ -190,6 +192,7 @@ const keyStorageStub = {
 let savedGcpProject: string | undefined;
 let savedGcpLocation: string | undefined;
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   savedGcpProject = process.env.GOOGLE_CLOUD_PROJECT;
   savedGcpLocation = process.env.GOOGLE_CLOUD_LOCATION;
@@ -233,6 +236,7 @@ beforeEach(() => {
   isCliRuntimeStatelessReadyMock.mockReturnValue(true);
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(() => {
   if (savedGcpProject === undefined) {
     delete process.env.GOOGLE_CLOUD_PROJECT;
@@ -891,7 +895,7 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
         // At this point, check if auth is available
         const authKey = configStub.getEphemeralSetting('auth-key');
 
-        if (!authKey) {
+        if (authKey === undefined) {
           // OAuth would be triggered here if auth is not available
           oauthCalls.push('OAuth triggered during switch');
         }

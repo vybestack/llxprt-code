@@ -11,7 +11,7 @@ import { updateEventEmitter } from './updateEventEmitter.js';
 import type { HistoryItem } from '../ui/types.js';
 import { MessageType } from '../ui/types.js';
 import { spawnWrapper } from './spawnWrapper.js';
-import type { spawn } from 'child_process';
+import type { spawn, ChildProcess } from 'child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -52,6 +52,17 @@ function isLockStale(lockFilePath: string): boolean {
   }
 }
 
+/**
+ * Removes a lock file if it exists, handling errors silently.
+ */
+function removeLockFile(lockFilePath: string): void {
+  try {
+    fs.unlinkSync(lockFilePath);
+  } catch {
+    // Ignore errors removing lock file
+  }
+}
+
 function tryAcquireLock(): string | null {
   const homeDir = os.homedir();
   const locksDir = path.join(homeDir, '.llxprt', 'locks');
@@ -62,17 +73,12 @@ function tryAcquireLock(): string | null {
 
     // Check if lock exists and is stale
     if (fs.existsSync(lockFilePath)) {
-      if (isLockStale(lockFilePath)) {
-        // Remove stale lock
-        try {
-          fs.unlinkSync(lockFilePath);
-        } catch {
-          // Ignore errors removing stale lock
-        }
-      } else {
+      if (!isLockStale(lockFilePath)) {
         // Lock exists and is valid
         return null;
       }
+      // Remove stale lock
+      removeLockFile(lockFilePath);
     }
 
     // Try to create lock file atomically using O_EXCL flag
@@ -102,13 +108,7 @@ function tryAcquireLock(): string | null {
   }
 }
 
-function releaseLock(lockFilePath: string): void {
-  try {
-    fs.unlinkSync(lockFilePath);
-  } catch {
-    // Ignore errors releasing lock
-  }
-}
+const releaseLock = removeLockFile;
 
 function checkForTempDirectories(): string[] {
   const cliPath = process.argv[1];
@@ -119,6 +119,7 @@ function checkForTempDirectories(): string[] {
   try {
     const realPath = fs.realpathSync(cliPath);
     // Cross-platform regex for node_modules path
+    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
 
     if (!nodeModulesMatch) {
@@ -134,99 +135,46 @@ function checkForTempDirectories(): string[] {
   }
 }
 
-export function handleAutoUpdate(
-  info: UpdateObject | null,
-  settings: LoadedSettings,
-  projectRoot: string,
-  spawnFn: typeof spawn = spawnWrapper,
-) {
-  if (!info) {
-    return;
-  }
-
-  if (!settings.merged.enableAutoUpdateNotification) {
-    return;
-  }
-
-  const installationInfo = getInstallationInfo(
-    projectRoot,
-    settings.merged.enableAutoUpdate ?? true,
-  );
-
-  if (
-    [PackageManager.NPX, PackageManager.PNPX, PackageManager.BUNX].includes(
-      installationInfo.packageManager,
-    )
-  ) {
-    return;
-  }
-
-  let combinedMessage = info.message;
-  if (installationInfo.updateMessage) {
-    combinedMessage += `\n${installationInfo.updateMessage}`;
-  }
-
-  updateEventEmitter.emit('update-received', {
-    message: combinedMessage,
-  });
-
-  if (!installationInfo.updateCommand || !settings.merged.enableAutoUpdate) {
-    return;
-  }
-
-  // Check for temp directories
+function handleTempDirectoryCleanup(): boolean {
   const tempDirs = checkForTempDirectories();
-  if (tempDirs.length > 0) {
-    const cliPath = process.argv[1];
-    if (!cliPath) {
-      return;
-    }
-    const realPath = fs.realpathSync(cliPath);
-    // Cross-platform regex for node_modules path
-    const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
-    const cleanupPath = nodeModulesMatch
-      ? path.dirname(nodeModulesMatch[1])
-      : 'the parent directory of node_modules';
-
-    // Platform-appropriate cleanup command
-    const isWindows = process.platform === 'win32';
-    const cleanupCommand = isWindows
-      ? `rmdir /s /q ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`
-      : `rm -rf ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`;
-
-    updateEventEmitter.emit('update-info', {
-      message: `Temporary directories from a previous failed update were detected. Please clean them up manually:\n  ${cleanupCommand}`,
-    });
-    return;
+  if (tempDirs.length === 0) {
+    return false;
   }
 
-  // Try to acquire lock atomically
-  const lockFilePath = tryAcquireLock();
-  if (!lockFilePath) {
-    updateEventEmitter.emit('update-info', {
-      message: 'Another update is already in progress. Skipping auto-update.',
-    });
-    return;
+  const cliPath = process.argv[1];
+  if (!cliPath) {
+    return true;
   }
+  const realPath = fs.realpathSync(cliPath);
+  // Cross-platform regex for node_modules path
+  // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
+  const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
+  const cleanupPath = nodeModulesMatch
+    ? path.dirname(nodeModulesMatch[1])
+    : 'the parent directory of node_modules';
 
-  // Set up signal handlers to release lock on process termination
-  const cleanupLock = () => {
-    releaseLock(lockFilePath);
-  };
-  process.once('SIGTERM', cleanupLock);
-  process.once('SIGINT', cleanupLock);
+  const isWindows = process.platform === 'win32';
+  const cleanupCommand = isWindows
+    ? `rmdir /s /q ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`
+    : `rm -rf ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`;
 
-  const isNightly = info.update.latest.includes('nightly');
-  const updateCommand = installationInfo.updateCommand.replace(
-    '@latest',
-    isNightly ? '@nightly' : `@${info.update.latest}`,
-  );
+  updateEventEmitter.emit('update-info', {
+    message: `Temporary directories from a previous failed update were detected. Please clean them up manually:\n  ${cleanupCommand}`,
+  });
+  return true;
+}
+
+function spawnUpdateProcess(
+  updateCommand: string,
+  lockFilePath: string,
+  cleanupLock: () => void,
+  spawnFn: typeof spawn,
+): ChildProcess {
   const updateProcess = spawnFn(updateCommand, {
     stdio: 'ignore',
     shell: true,
     detached: true,
   });
-  // Un-reference the child process to allow the parent to exit independently.
   updateProcess.unref();
 
   updateProcess.on('close', (code) => {
@@ -256,6 +204,76 @@ export function handleAutoUpdate(
   });
 
   return updateProcess;
+}
+
+export function handleAutoUpdate(
+  info: UpdateObject | null,
+  settings: LoadedSettings,
+  projectRoot: string,
+  spawnFn: typeof spawn = spawnWrapper,
+): ChildProcess | undefined {
+  if (info == null) {
+    return undefined;
+  }
+
+  if (settings.merged.enableAutoUpdateNotification !== true) {
+    return undefined;
+  }
+
+  const installationInfo = getInstallationInfo(
+    projectRoot,
+    settings.merged.enableAutoUpdate ?? true,
+  );
+
+  if (
+    [PackageManager.NPX, PackageManager.PNPX, PackageManager.BUNX].includes(
+      installationInfo.packageManager,
+    )
+  ) {
+    return undefined;
+  }
+
+  let combinedMessage = info.message;
+  if (installationInfo.updateMessage) {
+    combinedMessage += `\n${installationInfo.updateMessage}`;
+  }
+
+  updateEventEmitter.emit('update-received', {
+    message: combinedMessage,
+  });
+
+  if (
+    installationInfo.updateCommand == null ||
+    settings.merged.enableAutoUpdate !== true
+  ) {
+    return undefined;
+  }
+
+  if (handleTempDirectoryCleanup()) {
+    return undefined;
+  }
+
+  const lockFilePath = tryAcquireLock();
+  if (!lockFilePath) {
+    updateEventEmitter.emit('update-info', {
+      message: 'Another update is already in progress. Skipping auto-update.',
+    });
+    return undefined;
+  }
+
+  const cleanupLock = () => {
+    releaseLock(lockFilePath);
+  };
+  process.once('SIGTERM', cleanupLock);
+  process.once('SIGINT', cleanupLock);
+
+  const isNightly = info.update.latest.includes('nightly');
+  const updateCommand = installationInfo.updateCommand.replace(
+    '@latest',
+    isNightly ? '@nightly' : `@${info.update.latest}`,
+  );
+
+  return spawnUpdateProcess(updateCommand, lockFilePath, cleanupLock, spawnFn);
 }
 
 export function setUpdateHandler(

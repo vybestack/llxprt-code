@@ -240,7 +240,7 @@ describe('API Key Security Integration Tests', () => {
         await fs.chmod(keyfilePath, 0o000);
 
         // Attempt to read should fail
-        await expect(fs.readFile(keyfilePath, 'utf8')).rejects.toThrow();
+        await expect(fs.readFile(keyfilePath, 'utf8')).rejects.toThrow(Error);
 
         // Restore permissions for cleanup
         await fs.chmod(keyfilePath, 0o600);
@@ -388,7 +388,7 @@ describe('API Key Security Integration Tests', () => {
       await expect(fs.access(validKeyfile)).resolves.not.toThrow();
 
       // Invalid keyfile should not exist
-      await expect(fs.access(invalidKeyfile)).rejects.toThrow();
+      await expect(fs.access(invalidKeyfile)).rejects.toThrow(/ENOENT/);
     });
   });
 

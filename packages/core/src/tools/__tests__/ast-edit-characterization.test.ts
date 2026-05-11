@@ -8,6 +8,8 @@
  * Phase 0, Step 0.1: Core characterization tests
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   ASTEditTool,
@@ -583,12 +585,11 @@ describe('ast-edit characterization tests', () => {
       const result = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
-      if (result) {
-        expect(result).toHaveProperty('metadata');
-        expect(result.metadata).toHaveProperty('astValidation');
-        expect(result.metadata).toHaveProperty('fileFreshness');
-        expect(result).toHaveProperty('type');
-      }
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('metadata');
+      expect(result!.metadata).toHaveProperty('astValidation');
+      expect(result!.metadata).toHaveProperty('fileFreshness');
+      expect(result).toHaveProperty('type');
     });
 
     it('ProceedAlways should call setApprovalMode(AUTO_EDIT)', async () => {
@@ -615,10 +616,12 @@ describe('ast-edit characterization tests', () => {
       expect(confirmationDetails).toBeDefined();
       expect(confirmationDetails?.onConfirm).toBeDefined();
 
-      if (confirmationDetails?.onConfirm) {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (confirmationDetails?.onConfirm != null) {
         await confirmationDetails.onConfirm(
           ToolConfirmationOutcome.ProceedAlways,
         );
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(setApprovalModeSpy).toHaveBeenCalledWith(ApprovalMode.AUTO_EDIT);
       }
     });
@@ -646,8 +649,10 @@ describe('ast-edit characterization tests', () => {
       const result = await invocation.execute(new AbortController().signal);
       // String.replace only replaces first occurrence
       // So 'hello hello hello' becomes 'goodbye hello hello'
-      if (!result.error) {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (result.error == null) {
         const display = result.returnDisplay as ToolReturnDisplay;
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(display.newContent).toBe('goodbye hello hello');
         // This proves countOccurrences returns 1 (not 3) since there's no "multiple occurrences" error
       }
@@ -696,8 +701,10 @@ describe('ast-edit characterization tests', () => {
       });
 
       const result = await invocation.execute(new AbortController().signal);
-      if (!result.error) {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (result.error == null) {
         const display = result.returnDisplay as ToolReturnDisplay;
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(display.fileDiff).toContain('Applied');
       }
     });
@@ -729,7 +736,8 @@ describe('ast-edit characterization tests', () => {
       );
 
       // Only proceed if preview succeeded
-      if (!previewResult.error) {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (previewResult.error == null) {
         const previewDisplay = previewResult.returnDisplay as ToolReturnDisplay;
         const previewNewContent = previewDisplay.newContent;
         const previewAstValidation = previewDisplay.metadata?.astValidation;
@@ -748,19 +756,25 @@ describe('ast-edit characterization tests', () => {
           new AbortController().signal,
         );
 
-        if (!applyResult.error) {
+        if (applyResult.error == null) {
           const applyDisplay = applyResult.returnDisplay as ToolReturnDisplay;
           const applyNewContent = applyDisplay.newContent;
           const applyAstValidation = applyDisplay.metadata?.astValidation;
 
           // Assert identical newContent
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(previewNewContent).toBe(applyNewContent);
 
           // Assert astValidation shape matches
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(previewAstValidation).toHaveProperty('valid');
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(previewAstValidation).toHaveProperty('errors');
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(applyAstValidation).toHaveProperty('valid');
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(applyAstValidation).toHaveProperty('errors');
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(previewAstValidation?.valid).toBe(applyAstValidation?.valid);
         }
       }
@@ -809,12 +823,16 @@ describe('ast-edit characterization tests', () => {
       });
 
       const result = await invocation.execute(new AbortController().signal);
-      if (!result.error) {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (result.error == null) {
         const display = result.returnDisplay as ToolReturnDisplay;
         // AST validation may pass or fail depending on the parser
         // The key is that the metadata structure exists
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(display.metadata?.astValidation).toHaveProperty('valid');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(display.metadata?.astValidation).toHaveProperty('errors');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(Array.isArray(display.metadata?.astValidation?.errors)).toBe(
           true,
         );

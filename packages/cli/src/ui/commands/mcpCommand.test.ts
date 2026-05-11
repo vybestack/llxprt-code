@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -73,6 +75,7 @@ const createMockMCPTool = (
     } as unknown as CallableTool,
     serverName,
     serverToolName,
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string description uses generated default
     description || `Description for ${serverToolName}`,
     { type: Type.OBJECT, properties: {} },
     true,
@@ -1101,6 +1104,7 @@ describe('mcpCommand', () => {
       const result = await authCommand!.action!(context, '');
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('info');
@@ -1128,6 +1132,7 @@ describe('mcpCommand', () => {
 
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('info');
@@ -1186,6 +1191,7 @@ describe('mcpCommand', () => {
 
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('info');
@@ -1215,6 +1221,7 @@ describe('mcpCommand', () => {
 
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('error');
@@ -1240,6 +1247,7 @@ describe('mcpCommand', () => {
 
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('error');
@@ -1293,6 +1301,7 @@ describe('mcpCommand', () => {
 
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('info');

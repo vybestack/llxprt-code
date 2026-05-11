@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 /**
  * MessageConverter - Pure functions for Gemini SDK ↔ IContent format translation.
  * Handles format conversion, speaker semantics, finish-reason mapping, and validation.
@@ -78,7 +80,9 @@ export function createUserContentWithFunctionResponseFix(
     // First check if this is an array of functionResponse Parts
     // This happens when multiple tool responses are sent together
     const allFunctionResponses = message.every(
-      (item) => item && typeof item === 'object' && 'functionResponse' in item,
+      (item) =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        item !== null && typeof item === 'object' && 'functionResponse' in item,
     );
 
     if (allFunctionResponses) {
@@ -89,6 +93,7 @@ export function createUserContentWithFunctionResponseFix(
     } else {
       // Process mixed content
       for (const item of message) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (typeof item === 'string') {
           parts.push({ text: item });
         } else if (Array.isArray(item)) {
@@ -96,7 +101,8 @@ export function createUserContentWithFunctionResponseFix(
           for (const subItem of item) {
             parts.push(subItem);
           }
-        } else if (item && typeof item === 'object') {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        } else if (item !== null && typeof item === 'object') {
           // Individual part (function response, text, etc.)
           parts.push(item);
         }
@@ -135,7 +141,9 @@ export function normalizeToolInteractionInput(
 
   // Detect if this is a tool response sequence (functionResponse parts only)
   const hasFunctionResponses = parts.some(
-    (part) => part && typeof part === 'object' && 'functionResponse' in part,
+    (part) =>
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      part !== null && typeof part === 'object' && 'functionResponse' in part,
   );
 
   // If no function responses, fall back to original behavior
@@ -152,8 +160,9 @@ export function normalizeToolInteractionInput(
  */
 export function isValidNonThoughtTextPart(part: Part): boolean {
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     typeof part.text === 'string' &&
-    !part.thought &&
+    part.thought !== true &&
     // Technically, the model should never generate parts that have text and
     // any of these but we don't trust them so check anyways.
     !part.functionCall &&
@@ -185,10 +194,11 @@ export function isValidContent(content: Content): boolean {
     return false;
   }
   for (const part of content.parts) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (part === undefined || Object.keys(part).length === 0) {
       return false;
     }
-    if (!part.thought && part.text !== undefined && part.text === '') {
+    if (part.thought !== true && part.text !== undefined && part.text === '') {
       return false;
     }
   }
@@ -213,6 +223,7 @@ export function validateHistory(history: Content[]): void {
 export function extractCuratedHistory(
   comprehensiveHistory: Content[],
 ): Content[] {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   if (comprehensiveHistory === undefined || comprehensiveHistory.length === 0) {
     return [];
   }
@@ -228,6 +239,7 @@ export function extractCuratedHistory(
       let isValid = true;
       while (i < length && comprehensiveHistory[i].role === 'model') {
         modelOutput.push(comprehensiveHistory[i]);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (isValid && !isValidContent(comprehensiveHistory[i])) {
           isValid = false;
         }
@@ -247,13 +259,14 @@ export function extractCuratedHistory(
 export function hasTextContent(
   content: Content | undefined,
 ): content is Content & { parts: [{ text: string }, ...Part[]] } {
-  return !!(
+  return Boolean(
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     content &&
-    content.role === 'model' &&
-    content.parts &&
-    content.parts.length > 0 &&
-    typeof content.parts[0].text === 'string' &&
-    content.parts[0].text !== ''
+      content.role === 'model' &&
+      content.parts &&
+      content.parts.length > 0 &&
+      typeof content.parts[0].text === 'string' &&
+      content.parts[0].text !== '',
   );
 }
 
@@ -282,7 +295,9 @@ export function convertPartListUnionToIContent(input: PartListUnion): IContent {
 export function convertMixedPartsToIContent(parts: Part[]): IContent {
   // Fast path: all function responses → tool message
   const allFunctionResponses = parts.every(
-    (part) => part && typeof part === 'object' && 'functionResponse' in part,
+    (part) =>
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider/runtime parts can be malformed at this boundary despite static Part typing.
+      part !== null && typeof part === 'object' && 'functionResponse' in part,
   );
   if (allFunctionResponses) {
     return convertAllFunctionResponses(parts);
@@ -292,6 +307,7 @@ export function convertMixedPartsToIContent(parts: Part[]): IContent {
   const { blocks, hasAIContent, hasToolContent } = classifyMixedParts(parts);
 
   return {
+    // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     speaker: hasToolContent ? 'tool' : hasAIContent ? 'ai' : 'human',
     blocks,
   };
@@ -301,16 +317,19 @@ function convertAllFunctionResponses(parts: Part[]): IContent {
   const blocks: ContentBlock[] = [];
   for (const part of parts) {
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider/runtime parts can be malformed at this boundary despite static Part typing.
+      part !== null &&
       typeof part === 'object' &&
       'functionResponse' in part &&
       part.functionResponse
     ) {
       blocks.push({
         type: 'tool_response',
-        callId: part.functionResponse.id || '',
-        toolName: part.functionResponse.name || '',
+        callId: part.functionResponse.id ?? '',
+        toolName: part.functionResponse.name ?? '',
         result:
-          (part.functionResponse.response as Record<string, unknown>) || {},
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+          (part.functionResponse.response as Record<string, unknown>) ?? {},
         error: undefined,
       } as ToolResponseBlock);
     }
@@ -348,18 +367,20 @@ function classifyMixedParts(parts: Part[]): {
       hasAIContent = true;
       blocks.push({
         type: 'tool_call',
-        id: part.functionCall.id || '',
-        name: part.functionCall.name || '',
-        parameters: (part.functionCall.args as Record<string, unknown>) || {},
+        id: part.functionCall.id ?? '',
+        name: part.functionCall.name ?? '',
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        parameters: (part.functionCall.args as Record<string, unknown>) ?? {},
       } as ToolCallBlock);
     } else if ('functionResponse' in part && part.functionResponse) {
       hasToolContent = true;
       blocks.push({
         type: 'tool_response',
-        callId: part.functionResponse.id || '',
-        toolName: part.functionResponse.name || '',
+        callId: part.functionResponse.id ?? '',
+        toolName: part.functionResponse.name ?? '',
         result:
-          (part.functionResponse.response as Record<string, unknown>) || {},
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+          (part.functionResponse.response as Record<string, unknown>) ?? {},
         error: undefined,
       } as ToolResponseBlock);
     }
@@ -460,40 +481,14 @@ export function convertIContentToResponse(
 }
 
 /**
- * Adds usage metadata, finish reason, and data property to the response.
+ * Maps termination reason (stopReason/finishReason) to Gemini FinishReason
+ * and applies it to the first candidate. Logs warnings for unmapped or
+ * missing-candidate cases.
  */
-export function applyResponseMetadata(
+function applyFinishReasonMapping(
   response: GenerateContentResponse,
   input: IContent,
-  _parts: Part[],
-): GenerateContentResponse {
-  // Add data property that returns self-reference
-  // Make it non-enumerable to avoid circular reference in JSON.stringify
-  Object.defineProperty(response, 'data', {
-    get() {
-      return response;
-    },
-    enumerable: false,
-    configurable: true,
-  });
-
-  // Add usage metadata if present
-  if (input.metadata?.usage) {
-    const usageMetadata: UsageMetadataWithCache = {
-      promptTokenCount: input.metadata.usage.promptTokens || 0,
-      candidatesTokenCount: input.metadata.usage.completionTokens || 0,
-      totalTokenCount: input.metadata.usage.totalTokens || 0,
-      cache_read_input_tokens:
-        input.metadata.usage.cache_read_input_tokens || 0,
-      cache_creation_input_tokens:
-        input.metadata.usage.cache_creation_input_tokens || 0,
-    };
-    response.usageMetadata = usageMetadata;
-  }
-
-  // Map terminal metadata to Gemini finishReason.
-  // Providers may emit stopReason (Anthropic/Gemini-style) or
-  // finishReason (OpenAI-style); coalesce them to a single lookup path.
+): void {
   const terminationReason =
     input.metadata?.stopReason ?? input.metadata?.finishReason;
 
@@ -519,7 +514,8 @@ export function applyResponseMetadata(
       failed: FinishReason.STOP,
     };
     const mappedReason = finishReasonByTerminationReason[terminationReason];
-    if (mappedReason) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (mappedReason !== undefined) {
       response.candidates[0].finishReason = mappedReason;
       logger.debug(
         () => `[stream:message-converter] applied terminal metadata`,
@@ -552,12 +548,52 @@ export function applyResponseMetadata(
       {
         speaker: input.speaker,
         blockCount: input.blocks.length,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         stopReason: input.metadata?.stopReason,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         finishReason: input.metadata?.finishReason,
         hasCandidate: Boolean(response.candidates?.[0]),
       },
     );
   }
+}
+
+/**
+ * Adds usage metadata, finish reason, and data property to the response.
+ */
+export function applyResponseMetadata(
+  response: GenerateContentResponse,
+  input: IContent,
+  _parts: Part[],
+): GenerateContentResponse {
+  // Add data property that returns self-reference
+  // Make it non-enumerable to avoid circular reference in JSON.stringify
+  Object.defineProperty(response, 'data', {
+    get() {
+      return response;
+    },
+    enumerable: false,
+    configurable: true,
+  });
+
+  // Add usage metadata if present
+  if (input.metadata?.usage) {
+    const usageMetadata: UsageMetadataWithCache = {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      promptTokenCount: input.metadata.usage.promptTokens ?? 0,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      candidatesTokenCount: input.metadata.usage.completionTokens ?? 0,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      totalTokenCount: input.metadata.usage.totalTokens ?? 0,
+      cache_read_input_tokens:
+        input.metadata.usage.cache_read_input_tokens ?? 0,
+      cache_creation_input_tokens:
+        input.metadata.usage.cache_creation_input_tokens ?? 0,
+    };
+    response.usageMetadata = usageMetadata;
+  }
+
+  applyFinishReasonMapping(response, input);
 
   return response;
 }

@@ -96,6 +96,7 @@ export async function processRestorableToolCalls<HistoryType>(
   const toolCallToCheckpointMap = new Map<string, string>();
   const errors: string[] = [];
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const toolCall of toolCalls) {
     try {
       let commitHash: string | undefined;
@@ -176,8 +177,8 @@ export function getCheckpointInfoList(
           checkpoint: file.replace('.json', ''),
         });
       }
-    } catch (_e) {
-      // Ignore invalid JSON files
+    } catch {
+      // Invalid JSON file - skip
     }
   }
   return checkpointInfoList;

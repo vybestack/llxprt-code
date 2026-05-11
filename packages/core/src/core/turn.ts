@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import type {
   GenerateContentResponse,
   FinishReason,
@@ -385,13 +387,262 @@ export class Turn {
       value: text,
     };
   }
+  private *emitFinishReason(
+    finishReason: FinishReason,
+    allParts: Part[],
+    functionCalls: FunctionCall[],
+    text: string | undefined,
+    usageMetadata: GenerateContentResponseUsageMetadata | undefined,
+    traceId: string | undefined,
+  ): Generator<ServerGeminiStreamEvent> {
+    this.logger.debug(() => `[stream:turn] emitting Finished event`, {
+      finishReason,
+      traceId,
+      partCount: allParts.length,
+      toolCallCount: functionCalls.length,
+      textLength: text?.length ?? 0,
+      hasUsageMetadata: Boolean(usageMetadata),
+    });
+    this.finishReason = finishReason;
+    yield {
+      type: GeminiEventType.Finished,
+      value: {
+        reason: finishReason,
+        usageMetadata,
+      },
+    };
+  }
+
+  private logNoFinishReason(
+    allParts: Part[],
+    functionCalls: FunctionCall[],
+    text: string | undefined,
+    usageMetadata: GenerateContentResponseUsageMetadata | undefined,
+    traceId: string | undefined,
+  ): void {
+    this.logger.debug(() => `[stream:turn] chunk had no finishReason`, {
+      traceId,
+      partCount: allParts.length,
+      toolCallCount: functionCalls.length,
+      textLength: text?.length ?? 0,
+      hasUsageMetadata: Boolean(usageMetadata),
+    });
+  }
+
+  private *processStreamChunk(
+    resp: GenerateContentResponse,
+    traceId: string | undefined,
+  ): Generator<ServerGeminiStreamEvent> {
+    this.debugResponses.push(resp);
+
+    // Check ALL parts for thinking, not just parts[0]
+    // Bug fix: Previously only checked parts[0], missing thoughts in other positions
+    // @plan PLAN-20251202-THINKING.P16
+    const allParts = resp.candidates?.[0]?.content?.parts ?? [];
+    for (const part of allParts) {
+      if ((part as unknown as { thought?: boolean }).thought === true) {
+        const thought = parseThought(
+          (part as unknown as { text?: string }).text ?? '',
+        );
+        yield {
+          type: GeminiEventType.Thought,
+          value: thought,
+          traceId,
+        };
+      }
+    }
+
+    const text = getResponseText(resp);
+    if (text) {
+      yield { type: GeminiEventType.Content, value: text, traceId };
+
+      // Emit citation event if conditions are met
+      // Based on upstream implementation - emit citation after content
+      const citationEvent = this.emitCitation(
+        'Response may contain information from external sources. Please verify important details independently.',
+      );
+      if (citationEvent) {
+        yield citationEvent;
+      }
+    }
+
+    // Handle function calls (requesting tool execution)
+    const functionCalls = getFunctionCalls(resp) ?? [];
+    for (const fnCall of functionCalls) {
+      const event = this.handlePendingFunctionCall(fnCall);
+      if (event) {
+        yield event;
+      }
+    }
+
+    // Check if response was truncated or stopped for various reasons
+    const finishReason = resp.candidates?.[0]?.finishReason;
+
+    // This is the key change: Only yield 'Finished' if there is a finishReason.
+    if (finishReason != null) {
+      yield* this.emitFinishReason(
+        finishReason,
+        allParts,
+        functionCalls,
+        text,
+        resp.usageMetadata,
+        traceId,
+      );
+    } else {
+      this.logNoFinishReason(
+        allParts,
+        functionCalls,
+        text,
+        resp.usageMetadata,
+        traceId,
+      );
+    }
+  }
+
+  private async *consumeStreamEvents(
+    streamIterator: AsyncIterator<StreamEvent>,
+    timeoutController: AbortController,
+    signal: AbortSignal,
+    effectiveTimeoutMs: number,
+    idleFlag: { timedOut: boolean },
+  ): AsyncGenerator<ServerGeminiStreamEvent> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Turn events cross provider/runtime boundaries despite declared types.
+    while (true) {
+      // Use watchdog if timeout > 0, otherwise call iterator.next() directly
+      let result: IteratorResult<StreamEvent>;
+      if (effectiveTimeoutMs > 0) {
+        result = await nextStreamEventWithIdleTimeout({
+          iterator: streamIterator,
+          timeoutMs: effectiveTimeoutMs,
+          signal: timeoutController.signal,
+          onTimeout: () => {
+            if (signal.aborted) {
+              return;
+            }
+            idleFlag.timedOut = true;
+            timeoutController.abort();
+          },
+          createTimeoutError: () =>
+            new Error(TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE),
+        });
+      } else {
+        // Watchdog disabled: call iterator.next() directly
+        result = await streamIterator.next();
+      }
+      if (result.done === true) {
+        break;
+      }
+
+      const streamEvent = result.value;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
+      if (signal?.aborted) {
+        yield { type: GeminiEventType.UserCancelled };
+        return;
+      }
+
+      // Handle the RETRY event
+      if (streamEvent.type === StreamEventType.RETRY) {
+        yield { type: GeminiEventType.Retry };
+        continue;
+      }
+
+      // Handle AGENT_EXECUTION_STOPPED event
+      if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
+        yield {
+          type: GeminiEventType.AgentExecutionStopped,
+          reason: streamEvent.reason,
+          systemMessage: streamEvent.systemMessage,
+          contextCleared: streamEvent.contextCleared,
+        };
+        return;
+      }
+
+      // Handle AGENT_EXECUTION_BLOCKED event
+      if (streamEvent.type === StreamEventType.AGENT_EXECUTION_BLOCKED) {
+        yield {
+          type: GeminiEventType.AgentExecutionBlocked,
+          reason: streamEvent.reason,
+          systemMessage: streamEvent.systemMessage,
+          contextCleared: streamEvent.contextCleared,
+        };
+        continue;
+      }
+
+      // Narrow to CHUNK — the only other variant in the discriminated union
+      const resp = streamEvent.value;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
+      if (resp === null || resp === undefined) continue;
+
+      const traceId = resp.responseId ?? undefined;
+      yield* this.processStreamChunk(resp, traceId as string);
+    }
+  }
+
+  private extractErrorStatus(error: unknown): number | undefined {
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    return typeof error === 'object' &&
+      error !== null &&
+      'status' in error &&
+      typeof (error as { status: unknown }).status === 'number'
+      ? (error as { status: number }).status
+      : undefined;
+  }
+
+  private async *handleRunError(
+    e: unknown,
+    req: PartListUnion,
+    signal: AbortSignal,
+    idleFlag: { timedOut: boolean },
+  ): AsyncGenerator<ServerGeminiStreamEvent> {
+    if (signal.aborted) {
+      yield { type: GeminiEventType.UserCancelled };
+      return;
+    }
+
+    if (idleFlag.timedOut) {
+      yield {
+        type: GeminiEventType.StreamIdleTimeout,
+        value: {
+          error: {
+            message: TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE,
+            status: undefined,
+          },
+        },
+      };
+      return;
+    }
+
+    if (e instanceof InvalidStreamError) {
+      yield { type: GeminiEventType.InvalidStream };
+      return;
+    }
+
+    const error = toFriendlyError(e);
+    if (error instanceof UnauthorizedError) {
+      throw error;
+    }
+
+    const contextForReport = [...this.chat.getHistory(/*curated*/ true), req];
+    await reportError(
+      error,
+      `Error when talking to ${this.providerName} API`,
+      contextForReport,
+      'Turn.run-sendMessageStream',
+    );
+    const status = this.extractErrorStatus(error);
+    const structuredError: StructuredError = {
+      message: getErrorMessage(error),
+      status,
+    };
+    yield { type: GeminiEventType.Error, value: { error: structuredError } };
+  }
+
   // The run method yields simpler events suitable for server logic
   async *run(
     req: PartListUnion,
     signal: AbortSignal,
   ): AsyncGenerator<ServerGeminiStreamEvent> {
-    let idleTimedOut = false;
-
+    const idleFlag: { timedOut: boolean } = { timedOut: false };
     this.logger.debug('Turn.run called', {
       req: JSON.stringify(req, null, 2),
       typeofReq: typeof req,
@@ -404,8 +655,6 @@ export class Turn {
         return;
       }
 
-      // Note: This assumes `sendMessageStream` yields events like
-      // { type: StreamEventType.RETRY } or { type: StreamEventType.CHUNK, value: GenerateContentResponse }
       const timeoutController = new AbortController();
       const timeoutSignal = timeoutController.signal;
       const onParentAbort = () => timeoutController.abort();
@@ -413,7 +662,6 @@ export class Turn {
 
       let streamIterator: AsyncIterator<StreamEvent> | undefined;
 
-      // Resolve the effective idle timeout, considering config and env var
       const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
         this.chat.getConfig(),
       );
@@ -430,204 +678,20 @@ export class Turn {
         );
         streamIterator = responseStream[Symbol.asyncIterator]();
 
-        while (true) {
-          // Use watchdog if timeout > 0, otherwise call iterator.next() directly
-          let result: IteratorResult<StreamEvent>;
-          if (effectiveTimeoutMs > 0) {
-            result = await nextStreamEventWithIdleTimeout({
-              iterator: streamIterator,
-              timeoutMs: effectiveTimeoutMs,
-              signal: timeoutSignal,
-              onTimeout: () => {
-                if (signal.aborted) {
-                  return;
-                }
-                idleTimedOut = true;
-                timeoutController.abort();
-              },
-              createTimeoutError: () =>
-                new Error(TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE),
-            });
-          } else {
-            // Watchdog disabled: call iterator.next() directly
-            result = await streamIterator.next();
-          }
-          if (result.done) {
-            break;
-          }
-
-          const streamEvent = result.value;
-          if (signal?.aborted) {
-            yield { type: GeminiEventType.UserCancelled };
-            return;
-          }
-
-          // Handle the RETRY event
-          if (streamEvent.type === StreamEventType.RETRY) {
-            yield { type: GeminiEventType.Retry };
-            continue;
-          }
-
-          // Handle AGENT_EXECUTION_STOPPED event
-          if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
-            yield {
-              type: GeminiEventType.AgentExecutionStopped,
-              reason: streamEvent.reason,
-              systemMessage: streamEvent.systemMessage,
-              contextCleared: streamEvent.contextCleared,
-            };
-            return;
-          }
-
-          // Handle AGENT_EXECUTION_BLOCKED event
-          if (streamEvent.type === StreamEventType.AGENT_EXECUTION_BLOCKED) {
-            yield {
-              type: GeminiEventType.AgentExecutionBlocked,
-              reason: streamEvent.reason,
-              systemMessage: streamEvent.systemMessage,
-              contextCleared: streamEvent.contextCleared,
-            };
-            continue;
-          }
-
-          // Narrow to CHUNK — the only other variant in the discriminated union
-          const resp = streamEvent.value;
-          if (!resp) continue; // Skip if there's no response body
-
-          this.debugResponses.push(resp);
-
-          const traceId = resp.responseId;
-
-          // Check ALL parts for thinking, not just parts[0]
-          // Bug fix: Previously only checked parts[0], missing thoughts in other positions
-          // @plan PLAN-20251202-THINKING.P16
-          const allParts = resp.candidates?.[0]?.content?.parts ?? [];
-          for (const part of allParts) {
-            if ((part as unknown as { thought?: boolean }).thought) {
-              const thought = parseThought(
-                (part as unknown as { text?: string }).text ?? '',
-              );
-              yield {
-                type: GeminiEventType.Thought,
-                value: thought,
-                traceId,
-              };
-            }
-          }
-
-          const text = getResponseText(resp);
-          if (text) {
-            yield { type: GeminiEventType.Content, value: text, traceId };
-
-            // Emit citation event if conditions are met
-            // Based on upstream implementation - emit citation after content
-            const citationEvent = this.emitCitation(
-              'Response may contain information from external sources. Please verify important details independently.',
-            );
-            if (citationEvent) {
-              yield citationEvent;
-            }
-          }
-
-          // Handle function calls (requesting tool execution)
-          const functionCalls = getFunctionCalls(resp) ?? [];
-          for (const fnCall of functionCalls) {
-            const event = this.handlePendingFunctionCall(fnCall);
-            if (event) {
-              yield event;
-            }
-          }
-
-          // Check if response was truncated or stopped for various reasons
-          const finishReason = resp.candidates?.[0]?.finishReason;
-
-          // This is the key change: Only yield 'Finished' if there is a finishReason.
-          if (finishReason) {
-            this.logger.debug(() => `[stream:turn] emitting Finished event`, {
-              finishReason,
-              traceId,
-              partCount: allParts.length,
-              toolCallCount: functionCalls.length,
-              textLength: text?.length ?? 0,
-              hasUsageMetadata: Boolean(resp.usageMetadata),
-            });
-            this.finishReason = finishReason;
-            yield {
-              type: GeminiEventType.Finished,
-              value: {
-                reason: finishReason,
-                usageMetadata: resp.usageMetadata,
-              },
-            };
-          } else {
-            this.logger.debug(() => `[stream:turn] chunk had no finishReason`, {
-              traceId,
-              partCount: allParts.length,
-              toolCallCount: functionCalls.length,
-              textLength: text?.length ?? 0,
-              hasUsageMetadata: Boolean(resp.usageMetadata),
-            });
-          }
-        }
+        yield* this.consumeStreamEvents(
+          streamIterator,
+          timeoutController,
+          signal,
+          effectiveTimeoutMs,
+          idleFlag,
+        );
       } finally {
-        // Don't await the return() call to avoid hanging on stuck generators.
-        // The generator will eventually be garbage collected.
-        streamIterator?.return?.().catch(() => {
-          // cleanup errors are non-fatal
-        });
+        streamIterator?.return?.().catch(() => {});
         timeoutController.abort();
         signal.removeEventListener('abort', onParentAbort);
       }
     } catch (e) {
-      if (signal.aborted) {
-        yield { type: GeminiEventType.UserCancelled };
-        // Regular cancellation error, fail gracefully.
-        return;
-      }
-
-      if (idleTimedOut) {
-        yield {
-          type: GeminiEventType.StreamIdleTimeout,
-          value: {
-            error: {
-              message: TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE,
-              status: undefined,
-            },
-          },
-        };
-        return;
-      }
-
-      if (e instanceof InvalidStreamError) {
-        yield { type: GeminiEventType.InvalidStream };
-        return;
-      }
-
-      const error = toFriendlyError(e);
-      if (error instanceof UnauthorizedError) {
-        throw error;
-      }
-
-      const contextForReport = [...this.chat.getHistory(/*curated*/ true), req];
-      await reportError(
-        error,
-        `Error when talking to ${this.providerName} API`,
-        contextForReport,
-        'Turn.run-sendMessageStream',
-      );
-      const status =
-        typeof error === 'object' &&
-        error !== null &&
-        'status' in error &&
-        typeof (error as { status: unknown }).status === 'number'
-          ? (error as { status: number }).status
-          : undefined;
-      const structuredError: StructuredError = {
-        message: getErrorMessage(error),
-        status,
-      };
-      yield { type: GeminiEventType.Error, value: { error: structuredError } };
-      return;
+      yield* this.handleRunError(e, req, signal, idleFlag);
     }
   }
 
@@ -654,7 +718,7 @@ export class Turn {
       }
     }
 
-    const args = fnCall.args || {};
+    const args = fnCall.args ?? {};
 
     const toolCallRequest: ToolCallRequestInfo = {
       callId,
@@ -662,6 +726,7 @@ export class Turn {
       args,
       isClientInitiated: false,
       prompt_id: this.prompt_id,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
       agentId: this.agentId ?? DEFAULT_AGENT_ID,
     };
 

@@ -63,8 +63,11 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     // Propagate to the orchestrator if it has been constructed.
     // During construction this.authFlowOrchestrator may not exist yet,
     // so the conditional guard is required.
-    if (this.authFlowOrchestrator) {
-      this.authFlowOrchestrator.setRuntimeMessageBus(bus);
+    const authFlowOrchestrator = (
+      this as unknown as { authFlowOrchestrator?: AuthFlowOrchestrator }
+    ).authFlowOrchestrator;
+    if (authFlowOrchestrator !== undefined) {
+      authFlowOrchestrator.setRuntimeMessageBus(bus);
     }
   }
 

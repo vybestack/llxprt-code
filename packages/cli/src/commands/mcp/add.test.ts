@@ -102,6 +102,23 @@ describe('mcp add command', () => {
     );
   });
 
+  it('should preserve legacy env parsing for extra separators and whitespace', async () => {
+    await parser.parseAsync(
+      'add my-server /path/to/server -e " TOKEN =alpha=beta"',
+    );
+
+    expect(mockSetValue).toHaveBeenCalledWith(
+      SettingScope.Workspace,
+      'mcpServers',
+      {
+        'my-server': expect.objectContaining({
+          command: '/path/to/server',
+          env: { ' TOKEN ': 'alpha' },
+        }),
+      },
+    );
+  });
+
   it('should add an sse server to user settings', async () => {
     await parser.parseAsync(
       'add --transport sse sse-server https://example.com/sse-endpoint --scope user -H "X-API-Key: your-key"',

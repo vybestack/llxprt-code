@@ -52,9 +52,25 @@ vi.mock('openai', () => ({
 vi.mock('../../../core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(
     async (options) =>
-      `mock system prompt with memory: ${options.userMemory || 'none'}`,
+      `mock system prompt with memory: ${options.userMemory ?? 'none'}`,
   ),
 }));
+
+/**
+ * Helper function to resolve user memory from various input types.
+ * Extracts the memory string or returns undefined.
+ */
+async function resolveUserMemory(
+  userMemoryInput: unknown,
+): Promise<string | undefined> {
+  if (typeof userMemoryInput === 'string') {
+    return userMemoryInput;
+  }
+  if (isUserMemoryProfileProvider(userMemoryInput)) {
+    return userMemoryInput.getProfile();
+  }
+  return undefined;
+}
 
 class TestResponsesProvider extends OpenAIResponsesProvider {
   private readonly cacheSizes: number[] = [];
@@ -76,14 +92,9 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
     >[0],
   ): AsyncGenerator<unknown> {
     // Extract memory and parameters from options for testing purposes
-    const userMemory =
-      typeof options.userMemory === 'string'
-        ? options.userMemory
-        : isUserMemoryProfileProvider(options.userMemory)
-          ? await options.userMemory.getProfile()
-          : undefined;
+    const userMemory = await resolveUserMemory(options.userMemory);
 
-    const runtimeConfigEphemeralSettings = options.invocation?.ephemerals;
+    const runtimeConfigEphemeralSettings = options.invocation.ephemerals;
 
     // Simulate the system prompt generation (don't actually call OpenAI)
     const promptSpy = vi.mocked(getCoreSystemPromptAsync);
@@ -104,10 +115,8 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
       stream: true,
     };
 
-    // Include ephemeral settings if any
-    if (runtimeConfigEphemeralSettings) {
-      Object.assign(request, runtimeConfigEphemeralSettings);
-    }
+    // Include ephemeral settings
+    Object.assign(request, runtimeConfigEphemeralSettings);
 
     // Store the request for test verification
     const Fake = OpenAI as unknown as typeof import('openai').default & {

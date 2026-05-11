@@ -321,7 +321,6 @@ describe('AgentRuntimeAdapter - Write Operations (Single Field)', () => {
     // @requirement REQ-STAT5-002.1
     // @pseudocode cli-runtime-adapter.md lines 229-231
 
-    expect(() => adapter.setProvider('invalid-provider')).toThrow();
     expect(() => adapter.setProvider('invalid-provider')).toThrow(/not found/);
   });
 
@@ -434,7 +433,6 @@ describe('AgentRuntimeAdapter - Batch Write Operations', () => {
     // @requirement REQ-STAT5-002.1
     // @pseudocode cli-runtime-adapter.md lines 286-289
 
-    expect(() => adapter.switchProvider('invalid-provider')).toThrow();
     expect(() => adapter.switchProvider('invalid-provider')).toThrow(
       /not found/,
     );
@@ -614,7 +612,7 @@ describe('AgentRuntimeAdapter - Global Registry', () => {
   afterEach(() => {
     // Reset global adapter after each test
     try {
-      getRuntimeAdapter()?.dispose();
+      getRuntimeAdapter().dispose();
     } catch {
       // No adapter set
     }
@@ -647,7 +645,6 @@ describe('AgentRuntimeAdapter - Global Registry', () => {
     // @requirement REQ-STAT5-002.1
     // @pseudocode cli-runtime-adapter.md lines 369-375
 
-    expect(() => getRuntimeAdapter()).toThrow();
     expect(() => getRuntimeAdapter()).toThrow(/not initialized/);
   });
 });
@@ -1015,7 +1012,6 @@ describe('AgentRuntimeAdapter - Error Handling', () => {
     // @requirement REQ-STAT5-001.1
     // @pseudocode cli-runtime-adapter.md lines 575-579
 
-    expect(() => adapter.setProvider('invalid-provider')).toThrow();
     expect(() => adapter.setProvider('invalid-provider')).toThrow(/not found/);
   });
 
@@ -1028,6 +1024,7 @@ describe('AgentRuntimeAdapter - Error Handling', () => {
       adapter.setProvider('invalid-provider');
       expect.fail('Should have thrown error');
     } catch (error) {
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect((error as Error).message).toMatch(/gemini|anthropic|openai/);
     }
   });

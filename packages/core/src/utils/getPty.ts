@@ -22,12 +22,14 @@ export const getPty = async (): Promise<PtyImplementation> => {
     const lydell = '@lydell/node-pty';
     const module = await import(lydell);
     return { module, name: 'lydell-node-pty' };
-  } catch (_e) {
+  } catch {
+    // Probe for alternative node-pty implementation
     try {
       const nodePty = 'node-pty';
       const module = await import(nodePty);
       return { module, name: 'node-pty' };
-    } catch (_e2) {
+    } catch {
+      // No node-pty implementation available
       return null;
     }
   }

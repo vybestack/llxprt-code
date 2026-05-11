@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import { Box, Text } from 'ink';
 import { useCallback, useMemo } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
@@ -22,7 +24,7 @@ import {
   type ResumeContext,
 } from '../../services/performResume.js';
 import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
-// import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
+// import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // NOTE: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
 
@@ -55,7 +57,7 @@ import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-// import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // TODO: Not yet ported from upstream
+// import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // NOTE: Not yet ported from upstream
 
 interface DialogManagerProps {
   addItem: UseHistoryManagerReturn['addItem'];
@@ -66,128 +68,104 @@ interface DialogManagerProps {
 
 const dialogManagerLogger = new DebugLogger('llxprt:ui:dialogmanager');
 
-// Props for DialogManager
-export const DialogManager = ({
-  addItem,
-  terminalWidth,
-  config,
-  settings,
-}: DialogManagerProps) => {
-  const uiState = useUIState();
-  const uiActions = useUIActions();
-  const runtime = useRuntimeApi();
-  const { constrainHeight, terminalHeight, mainAreaWidth, commandContext } =
-    uiState;
-  // staticExtraHeight not yet implemented in LLxprt
-  const staticExtraHeight = 0;
-
-  // Get current provider for ModelsDialog
-  const currentProvider = useMemo(() => {
-    try {
-      return runtime.getActiveProviderName() || null;
-    } catch {
-      return null;
-    }
-  }, [runtime]);
-
-  const handlePrivacyNoticeExit = useCallback(() => {
-    uiActions.handlePrivacyNoticeExit();
-  }, [uiActions]);
-
-  // Handler for ModelsDialog selection
-  const handleModelsDialogSelect = useCallback(
-    async (model: HydratedModel) => {
-      try {
-        const selectedProvider = model.provider;
-
-        // Check if we need to switch providers
-        // Switch if: provider differs OR no current provider set
-        if (selectedProvider !== currentProvider) {
-          // 1. Switch provider first
-          const switchResult = await runtime.switchActiveProvider(
-            selectedProvider,
-            { addItem },
-          );
-
-          // 2. Build messages in correct order
-          const messages: string[] = [];
-
-          // Provider switch message
-          messages.push(
-            currentProvider
-              ? `Switched from ${currentProvider} to ${switchResult.nextProvider}`
-              : `Switched to ${switchResult.nextProvider}`,
-          );
-
-          // Base URL message (extract from switchResult)
-          const baseUrlMsg = (switchResult.infoMessages ?? []).find(
-            (m) => m?.includes('Base URL') || m?.includes('base URL'),
-          );
-          if (baseUrlMsg) messages.push(baseUrlMsg);
-
-          // Set the selected model (override provider's default)
-          await runtime.setActiveModel(model.id);
-
-          // Model message with user's selected model
-          messages.push(
-            `Active model is '${model.id}' for provider '${selectedProvider}'.`,
-          );
-
-          // /key reminder (if not gemini)
-          if (selectedProvider !== 'gemini') {
-            messages.push('Use /key to set API key if needed.');
+function useModelDialogHandler(
+  runtime: ReturnType<typeof useRuntimeApi>,
+  addItem: UseHistoryManagerReturn['addItem'],
+  uiActions: ReturnType<typeof useUIActions>,
+  currentProvider: string | null,
+  commandContext: {
+    recordingIntegration?: {
+      recordProviderSwitch: (provider: string, model: string) => void;
+    };
+  },
+) {
+  return useCallback(
+    (model: HydratedModel) => {
+      void (async () => {
+        try {
+          const selectedProvider = model.provider;
+          if (selectedProvider !== currentProvider) {
+            const switchResult = await runtime.switchActiveProvider(
+              selectedProvider,
+              { addItem },
+            );
+            const messages: string[] = [];
+            messages.push(
+              currentProvider
+                ? `Switched from ${currentProvider} to ${switchResult.nextProvider}`
+                : `Switched to ${switchResult.nextProvider}`,
+            );
+            const baseUrlMsg = switchResult.infoMessages.find(
+              (m) => m.includes('Base URL') || m.includes('base URL'),
+            );
+            if (baseUrlMsg) messages.push(baseUrlMsg);
+            await runtime.setActiveModel(model.id);
+            messages.push(
+              `Active model is '${model.id}' for provider '${selectedProvider}'.`,
+            );
+            if (selectedProvider !== 'gemini') {
+              messages.push('Use /key to set API key if needed.');
+            }
+            for (const msg of messages) {
+              addItem({ type: 'info', text: msg });
+            }
+            commandContext.recordingIntegration?.recordProviderSwitch(
+              selectedProvider,
+              model.id,
+            );
+          } else {
+            const result = await runtime.setActiveModel(model.id);
+            addItem(
+              {
+                type: 'info',
+                text: `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
+              },
+              Date.now(),
+            );
+            commandContext.recordingIntegration?.recordProviderSwitch(
+              result.providerName,
+              result.nextModel,
+            );
           }
-
-          // Show all messages
-          for (const msg of messages) {
-            addItem({ type: 'info', text: msg });
-          }
-
-          commandContext.recordingIntegration?.recordProviderSwitch(
-            selectedProvider,
-            model.id,
-          );
-        } else {
-          // Same provider — just set model
-          const result = await runtime.setActiveModel(model.id);
+        } catch (e) {
+          const status = runtime.getActiveProviderStatus();
           addItem(
             {
-              type: 'info',
-              text: `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
+              type: 'error',
+              text: `Failed to switch model for provider '${status.providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
             },
             Date.now(),
           );
-          commandContext.recordingIntegration?.recordProviderSwitch(
-            result.providerName,
-            result.nextModel,
-          );
         }
-      } catch (e) {
-        const status = runtime.getActiveProviderStatus();
-        addItem(
-          {
-            type: 'error',
-            text: `Failed to switch model for provider '${status.providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
-          },
-          Date.now(),
-        );
-      }
-      uiActions.closeModelsDialog();
+        uiActions.closeModelsDialog();
+      })();
     },
     [runtime, addItem, uiActions, currentProvider, commandContext],
   );
+}
 
-  /**
-   * Handler for SessionBrowserDialog selection - performs real session resume.
-   * @plan PLAN-20260214-SESSIONBROWSER.P23
-   * @requirement REQ-PR-001, REQ-PR-002
-   */
-  const handleSessionBrowserSelect = useCallback(
+/**
+ * Handler for SessionBrowserDialog selection - performs real session resume.
+ * @plan PLAN-20260214-SESSIONBROWSER.P23
+ * @requirement REQ-PR-001, REQ-PR-002
+ */
+function useSessionBrowserHandler(
+  config: Config,
+  commandContext: {
+    ui: {
+      clear: () => void;
+      addItem: UseHistoryManagerReturn['addItem'];
+      pendingItem: unknown;
+    };
+    recordingSwapCallbacks?: unknown;
+  },
+  addItem: UseHistoryManagerReturn['addItem'],
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  return useCallback(
     async (session: SessionSummary): Promise<PerformResumeResult> => {
       const recordingSwapCallbacks = commandContext.recordingSwapCallbacks;
-
-      // Guard: recording infrastructure required
-      if (!recordingSwapCallbacks) {
+      if (recordingSwapCallbacks == null) {
         dialogManagerLogger.warn(
           'Cannot resume session: recording infrastructure not available.',
         );
@@ -196,15 +174,12 @@ export const DialogManager = ({
           error: 'Recording infrastructure not available.',
         };
       }
-
-      // Build ResumeContext
       const chatsDir = join(config.getProjectTempDir(), 'chats');
       const projectHash = getProjectHash(config.getProjectRoot());
       const currentSessionId = config.getSessionId();
       const currentProvider = config.getProvider() ?? 'unknown';
       const currentModel = config.getModel();
       const workspaceDirs = [...config.getWorkspaceContext().getDirectories()];
-
       const resumeContext: ResumeContext = {
         chatsDir,
         projectHash,
@@ -212,49 +187,40 @@ export const DialogManager = ({
         currentProvider,
         currentModel,
         workspaceDirs,
-        recordingCallbacks: recordingSwapCallbacks,
+        recordingCallbacks: recordingSwapCallbacks as NonNullable<
+          ResumeContext['recordingCallbacks']
+        >,
         logger: dialogManagerLogger,
       };
-
-      // Perform resume
       const resumeResult = await performResume(
         session.sessionId,
         resumeContext,
       );
-
       if (!resumeResult.ok) {
-        // Show error but keep dialog open for retry
         addItem({ type: 'error', text: resumeResult.error });
         return resumeResult;
       }
-
-      // Log warnings
       for (const warning of resumeResult.warnings) {
         addItem({ type: 'info', text: `Warning: ${warning}` });
       }
-
-      // Restore history to gemini client
-      await config.getGeminiClient()?.restoreHistory(resumeResult.history);
-
-      // Convert IContent[] to UI history items and load
+      await config.getGeminiClient().restoreHistory(resumeResult.history);
       const uiHistory = iContentToHistoryItems(resumeResult.history);
       commandContext.ui.clear();
       uiHistory.forEach((item, index) => {
         commandContext.ui.addItem(item, index);
       });
-
-      // Close dialog on success
       uiActions.closeSessionBrowserDialog();
-
       return resumeResult;
     },
     [config, commandContext, addItem, uiActions],
   );
+}
 
-  // TODO: IdeTrustChangeDialog not yet ported from upstream
-  // if (uiState.showIdeRestartPrompt) {
-  //   return <IdeTrustChangeDialog reason={uiState.ideTrustRestartReason} />;
-  // }
+function renderEarlyDialogs(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+  terminalWidth: number,
+) {
   if (uiState.showWorkspaceMigrationDialog) {
     return (
       <WorkspaceMigrationDialog
@@ -291,14 +257,6 @@ export const DialogManager = ({
       />
     );
   }
-  // TODO: LoopDetectionConfirmation not yet ported from upstream
-  // if (uiState.loopDetectionConfirmationRequest) {
-  //   return (
-  //     <LoopDetectionConfirmation
-  //       onComplete={uiState.loopDetectionConfirmationRequest.onComplete}
-  //     />
-  //   );
-  // }
   if (uiState.confirmationRequest) {
     return (
       <ConsentPrompt
@@ -318,24 +276,404 @@ export const DialogManager = ({
       />
     );
   }
+  return null;
+}
+
+function renderThemeDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+  settings: LoadedSettings,
+  constrainHeight: boolean,
+  terminalHeight: number,
+  staticExtraHeight: number,
+  mainAreaWidth: number,
+) {
+  return (
+    <Box flexDirection="column">
+      {uiState.themeError && (
+        <Box marginBottom={1}>
+          <Text color={theme.status.error}>{uiState.themeError}</Text>
+        </Box>
+      )}
+      <ThemeDialog
+        onSelect={uiActions.handleThemeSelect}
+        onHighlight={uiActions.handleThemeHighlight}
+        settings={settings}
+        availableTerminalHeight={
+          constrainHeight ? terminalHeight - staticExtraHeight : undefined
+        }
+        terminalWidth={mainAreaWidth}
+      />
+    </Box>
+  );
+}
+
+function renderAuthDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+  settings: LoadedSettings,
+) {
+  return (
+    <Box flexDirection="column">
+      <AuthDialog
+        onSelect={(method, scope) => {
+          void uiActions.handleAuthSelect(method, scope);
+        }}
+        settings={settings}
+        initialErrorMessage={uiState.authError}
+      />
+    </Box>
+  );
+}
+
+function renderOAuthCodeDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  const provider =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider should fall back to 'unknown'
+    (global as unknown as { __oauth_provider?: string }).__oauth_provider ||
+    'unknown';
+  return (
+    <OAuthCodeDialog
+      provider={provider}
+      onClose={uiActions.handleOAuthCodeDialogClose}
+      onSubmit={(code) => {
+        void uiActions.handleOAuthCodeSubmit(code);
+      }}
+    />
+  );
+}
+
+function renderEditorDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+  settings: LoadedSettings,
+) {
+  return (
+    <Box flexDirection="column">
+      {uiState.editorError && (
+        <Box marginBottom={1}>
+          <Text color={theme.status.error}>{uiState.editorError}</Text>
+        </Box>
+      )}
+      <EditorSettingsDialog
+        onSelect={uiActions.handleEditorSelect}
+        settings={settings}
+        onExit={uiActions.exitEditorDialog}
+      />
+    </Box>
+  );
+}
+
+function renderProviderDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  return (
+    <Box flexDirection="column">
+      <ProviderDialog
+        providers={uiState.providerOptions}
+        currentProvider={uiState.selectedProvider}
+        onSelect={(provider) => {
+          void uiActions.handleProviderSelect(provider);
+        }}
+        onClose={uiActions.exitProviderDialog}
+      />
+    </Box>
+  );
+}
+
+function renderLoadProfileDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  return (
+    <Box flexDirection="column">
+      <LoadProfileDialog
+        profiles={uiState.profiles}
+        onSelect={uiActions.handleProfileSelect}
+        onClose={uiActions.exitLoadProfileDialog}
+      />
+    </Box>
+  );
+}
+
+function renderCreateProfileDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  return (
+    <Box flexDirection="column">
+      <ProfileCreateWizard
+        onClose={uiActions.exitCreateProfileDialog}
+        onLoadProfile={uiActions.handleProfileSelect}
+        availableProviders={uiState.providerOptions}
+      />
+    </Box>
+  );
+}
+
+function renderProfileListDialogView(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  return (
+    <Box flexDirection="column">
+      <ProfileListDialog
+        profiles={uiState.profileListItems}
+        onSelect={uiActions.loadProfileFromDetail}
+        onClose={uiActions.closeProfileListDialog}
+        onViewDetail={uiActions.viewProfileDetail}
+        isLoading={uiState.profileDialogLoading}
+        defaultProfileName={uiState.defaultProfileName ?? undefined}
+        activeProfileName={uiState.activeProfileName ?? undefined}
+      />
+    </Box>
+  );
+}
+
+function renderProfileDetailDialogView(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  return (
+    <Box flexDirection="column">
+      <ProfileDetailDialog
+        profileName={uiState.selectedProfileName ?? ''}
+        profile={uiState.selectedProfileData as Profile | null}
+        onClose={uiActions.closeProfileDetailDialog}
+        onLoad={uiActions.loadProfileFromDetail}
+        onDelete={uiActions.deleteProfileFromDetail}
+        onSetDefault={uiActions.setProfileAsDefault}
+        onEdit={uiActions.openProfileEditor}
+        isLoading={uiState.profileDialogLoading}
+        isDefault={uiState.selectedProfileName === uiState.defaultProfileName}
+        isActive={uiState.selectedProfileName === uiState.activeProfileName}
+        error={uiState.profileDialogError ?? undefined}
+      />
+    </Box>
+  );
+}
+
+function renderProfileEditorDialogView(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  return (
+    <Box flexDirection="column">
+      <ProfileInlineEditor
+        profileName={uiState.selectedProfileName ?? ''}
+        profile={uiState.selectedProfileData as Profile}
+        onSave={
+          uiActions.saveProfileFromEditor as (
+            name: string,
+            profile: Profile,
+          ) => void
+        }
+        onCancel={uiActions.closeProfileEditor}
+        error={uiState.profileDialogError ?? undefined}
+      />
+    </Box>
+  );
+}
+
+function renderProfileDialogs(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  if (uiState.isLoadProfileDialogOpen) {
+    return renderLoadProfileDialog(uiState, uiActions);
+  }
+  if (uiState.isCreateProfileDialogOpen) {
+    return renderCreateProfileDialog(uiState, uiActions);
+  }
+  if (uiState.isProfileListDialogOpen) {
+    return renderProfileListDialogView(uiState, uiActions);
+  }
+  if (uiState.isProfileDetailDialogOpen) {
+    return renderProfileDetailDialogView(uiState, uiActions);
+  }
+  if (
+    uiState.isProfileEditorDialogOpen &&
+    uiState.selectedProfileData != null
+  ) {
+    return renderProfileEditorDialogView(uiState, uiActions);
+  }
+  return null;
+}
+
+function renderToolsDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  return (
+    <Box flexDirection="column">
+      <ToolsDialog
+        tools={uiState.toolsDialogTools}
+        action={uiState.toolsDialogAction}
+        disabledTools={uiState.toolsDialogDisabledTools}
+        onSelect={uiActions.handleToolsSelect}
+        onClose={uiActions.exitToolsDialog}
+      />
+    </Box>
+  );
+}
+
+function renderLoggingDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+) {
+  return (
+    <LoggingDialog
+      entries={
+        uiState.loggingDialogData.entries as Array<{
+          timestamp: string;
+          type: 'request' | 'response' | 'tool_call';
+          provider: string;
+          model?: string;
+          conversationId?: string;
+          messages?: Array<{ role: string; content: string }>;
+          response?: string;
+          tokens?: { input?: number; output?: number };
+          error?: string;
+          tool?: string;
+          duration?: number;
+          success?: boolean;
+          gitStats?: {
+            linesAdded: number;
+            linesRemoved: number;
+            filesChanged: number;
+          };
+        }>
+      }
+      onClose={uiActions.closeLoggingDialog}
+    />
+  );
+}
+
+function renderModelsDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+  handleModelsDialogSelect: (model: HydratedModel) => void,
+  currentProvider: string | null,
+) {
+  return (
+    <Box flexDirection="column">
+      <ModelsDialog
+        onSelect={handleModelsDialogSelect}
+        onClose={uiActions.closeModelsDialog}
+        initialSearch={uiState.modelsDialogData?.initialSearch}
+        initialFilters={uiState.modelsDialogData?.initialFilters}
+        includeDeprecated={uiState.modelsDialogData?.includeDeprecated}
+        currentProvider={currentProvider}
+        initialProviderFilter={uiState.modelsDialogData?.providerOverride}
+        showAllProviders={uiState.modelsDialogData?.showAllProviders}
+      />
+    </Box>
+  );
+}
+
+/**
+ * @plan PLAN-20260214-SESSIONBROWSER.P21
+ * @plan PLAN-20260214-SESSIONBROWSER.P23
+ */
+function renderSessionBrowserDialog(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+  config: Config,
+  commandContext: { ui: { pendingItem: unknown } },
+  handleSessionBrowserSelect: (
+    session: SessionSummary,
+  ) => Promise<PerformResumeResult>,
+) {
+  const chatsDir = join(config.getProjectTempDir(), 'chats');
+  const projectHash = getProjectHash(config.getProjectRoot());
+  const currentSessionId = config.getSessionId();
+  const hasActiveConversation = commandContext.ui.pendingItem !== null;
+  return (
+    <Box flexDirection="column">
+      <SessionBrowserDialog
+        chatsDir={chatsDir}
+        projectHash={projectHash}
+        currentSessionId={currentSessionId}
+        hasActiveConversation={hasActiveConversation}
+        onSelect={handleSessionBrowserSelect}
+        onClose={uiActions.closeSessionBrowserDialog}
+      />
+    </Box>
+  );
+}
+
+function useDialogManagerState(
+  addItem: UseHistoryManagerReturn['addItem'],
+  config: Config,
+  settings: LoadedSettings,
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+  runtime: ReturnType<typeof useRuntimeApi>,
+  _terminalWidth: number,
+) {
+  const { constrainHeight, terminalHeight, mainAreaWidth, commandContext } =
+    uiState;
+  const staticExtraHeight = 0;
+
+  const currentProvider = useMemo(() => {
+    try {
+      return runtime.getActiveProviderName() || null;
+    } catch {
+      return null;
+    }
+  }, [runtime]);
+
+  const handlePrivacyNoticeExit = useCallback(() => {
+    uiActions.handlePrivacyNoticeExit();
+  }, [uiActions]);
+
+  const handleModelsDialogSelect = useModelDialogHandler(
+    runtime,
+    addItem,
+    uiActions,
+    currentProvider,
+    commandContext,
+  );
+
+  const handleSessionBrowserSelect = useSessionBrowserHandler(
+    config,
+    commandContext,
+    addItem,
+    uiActions,
+  );
+
+  return {
+    constrainHeight,
+    terminalHeight,
+    mainAreaWidth,
+    commandContext,
+    staticExtraHeight,
+    currentProvider,
+    handlePrivacyNoticeExit,
+    handleModelsDialogSelect,
+    handleSessionBrowserSelect,
+  };
+}
+
+function renderDialogBodyFirstHalf(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+  settings: LoadedSettings,
+  config: Config,
+  state: ReturnType<typeof useDialogManagerState>,
+) {
   if (uiState.isThemeDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        {uiState.themeError && (
-          <Box marginBottom={1}>
-            <Text color={theme.status.error}>{uiState.themeError}</Text>
-          </Box>
-        )}
-        <ThemeDialog
-          onSelect={uiActions.handleThemeSelect}
-          onHighlight={uiActions.handleThemeHighlight}
-          settings={settings}
-          availableTerminalHeight={
-            constrainHeight ? terminalHeight - staticExtraHeight : undefined
-          }
-          terminalWidth={mainAreaWidth}
-        />
-      </Box>
+    return renderThemeDialog(
+      uiState,
+      uiActions,
+      settings,
+      state.constrainHeight,
+      state.terminalHeight,
+      state.staticExtraHeight,
+      state.mainAreaWidth,
     );
   }
   if (uiState.isSettingsDialogOpen) {
@@ -351,147 +689,35 @@ export const DialogManager = ({
     );
   }
   if (uiState.isAuthDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <AuthDialog
-          onSelect={uiActions.handleAuthSelect}
-          settings={settings}
-          initialErrorMessage={uiState.authError}
-        />
-      </Box>
-    );
+    return renderAuthDialog(uiState, uiActions, settings);
   }
   if (uiState.isOAuthCodeDialogOpen) {
-    const provider =
-      (global as unknown as { __oauth_provider?: string }).__oauth_provider ||
-      'unknown';
-    return (
-      <OAuthCodeDialog
-        provider={provider}
-        onClose={uiActions.handleOAuthCodeDialogClose}
-        onSubmit={uiActions.handleOAuthCodeSubmit}
-      />
-    );
+    return renderOAuthCodeDialog(uiState, uiActions);
   }
   if (uiState.isEditorDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        {uiState.editorError && (
-          <Box marginBottom={1}>
-            <Text color={theme.status.error}>{uiState.editorError}</Text>
-          </Box>
-        )}
-        <EditorSettingsDialog
-          onSelect={uiActions.handleEditorSelect}
-          settings={settings}
-          onExit={uiActions.exitEditorDialog}
-        />
-      </Box>
-    );
+    return renderEditorDialog(uiState, uiActions, settings);
   }
   if (uiState.isProviderDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <ProviderDialog
-          providers={uiState.providerOptions}
-          currentProvider={uiState.selectedProvider}
-          onSelect={uiActions.handleProviderSelect}
-          onClose={uiActions.exitProviderDialog}
-        />
-      </Box>
-    );
+    return renderProviderDialog(uiState, uiActions);
   }
-  if (uiState.isLoadProfileDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <LoadProfileDialog
-          profiles={uiState.profiles}
-          onSelect={uiActions.handleProfileSelect}
-          onClose={uiActions.exitLoadProfileDialog}
-        />
-      </Box>
-    );
-  }
-  if (uiState.isCreateProfileDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <ProfileCreateWizard
-          onClose={uiActions.exitCreateProfileDialog}
-          onLoadProfile={uiActions.handleProfileSelect}
-          availableProviders={uiState.providerOptions}
-        />
-      </Box>
-    );
-  }
-  if (uiState.isProfileListDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <ProfileListDialog
-          profiles={uiState.profileListItems}
-          onSelect={uiActions.loadProfileFromDetail}
-          onClose={uiActions.closeProfileListDialog}
-          onViewDetail={uiActions.viewProfileDetail}
-          isLoading={uiState.profileDialogLoading}
-          defaultProfileName={uiState.defaultProfileName ?? undefined}
-          activeProfileName={uiState.activeProfileName ?? undefined}
-        />
-      </Box>
-    );
-  }
-  if (uiState.isProfileDetailDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <ProfileDetailDialog
-          profileName={uiState.selectedProfileName ?? ''}
-          profile={uiState.selectedProfileData as Profile | null}
-          onClose={uiActions.closeProfileDetailDialog}
-          onLoad={uiActions.loadProfileFromDetail}
-          onDelete={uiActions.deleteProfileFromDetail}
-          onSetDefault={uiActions.setProfileAsDefault}
-          onEdit={uiActions.openProfileEditor}
-          isLoading={uiState.profileDialogLoading}
-          isDefault={uiState.selectedProfileName === uiState.defaultProfileName}
-          isActive={uiState.selectedProfileName === uiState.activeProfileName}
-          error={uiState.profileDialogError ?? undefined}
-        />
-      </Box>
-    );
-  }
-  if (uiState.isProfileEditorDialogOpen && uiState.selectedProfileData) {
-    return (
-      <Box flexDirection="column">
-        <ProfileInlineEditor
-          profileName={uiState.selectedProfileName ?? ''}
-          profile={uiState.selectedProfileData as Profile}
-          onSave={
-            uiActions.saveProfileFromEditor as (
-              name: string,
-              profile: Profile,
-            ) => void
-          }
-          onCancel={uiActions.closeProfileEditor}
-          error={uiState.profileDialogError ?? undefined}
-        />
-      </Box>
-    );
-  }
+  return undefined;
+}
+
+function renderDialogBodySecondHalf(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+  config: Config,
+  addItem: UseHistoryManagerReturn['addItem'],
+  state: ReturnType<typeof useDialogManagerState>,
+) {
   if (uiState.isToolsDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <ToolsDialog
-          tools={uiState.toolsDialogTools}
-          action={uiState.toolsDialogAction}
-          disabledTools={uiState.toolsDialogDisabledTools}
-          onSelect={uiActions.handleToolsSelect}
-          onClose={uiActions.exitToolsDialog}
-        />
-      </Box>
-    );
+    return renderToolsDialog(uiState, uiActions);
   }
   if (uiState.showPrivacyNotice) {
-    return <PrivacyNotice onExit={handlePrivacyNoticeExit} config={config} />;
+    return (
+      <PrivacyNotice onExit={state.handlePrivacyNoticeExit} config={config} />
+    );
   }
-
   if (uiState.isPermissionsDialogOpen) {
     return (
       <PermissionsModifyTrustDialog
@@ -500,36 +726,9 @@ export const DialogManager = ({
       />
     );
   }
-
   if (uiState.isLoggingDialogOpen) {
-    return (
-      <LoggingDialog
-        entries={
-          (uiState.loggingDialogData?.entries || []) as Array<{
-            timestamp: string;
-            type: 'request' | 'response' | 'tool_call';
-            provider: string;
-            model?: string;
-            conversationId?: string;
-            messages?: Array<{ role: string; content: string }>;
-            response?: string;
-            tokens?: { input?: number; output?: number };
-            error?: string;
-            tool?: string;
-            duration?: number;
-            success?: boolean;
-            gitStats?: {
-              linesAdded: number;
-              linesRemoved: number;
-              filesChanged: number;
-            };
-          }>
-        }
-        onClose={uiActions.closeLoggingDialog}
-      />
-    );
+    return renderLoggingDialog(uiState, uiActions);
   }
-
   if (uiState.isSubagentDialogOpen) {
     return (
       <SubagentManagerDialog
@@ -539,53 +738,73 @@ export const DialogManager = ({
       />
     );
   }
-
   if (uiState.isModelsDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <ModelsDialog
-          onSelect={handleModelsDialogSelect}
-          onClose={uiActions.closeModelsDialog}
-          initialSearch={uiState.modelsDialogData?.initialSearch}
-          initialFilters={uiState.modelsDialogData?.initialFilters}
-          includeDeprecated={uiState.modelsDialogData?.includeDeprecated}
-          currentProvider={currentProvider}
-          initialProviderFilter={uiState.modelsDialogData?.providerOverride}
-          showAllProviders={uiState.modelsDialogData?.showAllProviders}
-        />
-      </Box>
+    return renderModelsDialog(
+      uiState,
+      uiActions,
+      state.handleModelsDialogSelect,
+      state.currentProvider,
     );
   }
-
-  /**
-   * Session browser dialog rendering
-   * @plan PLAN-20260214-SESSIONBROWSER.P21
-   */
-  /**
-   * Session browser dialog rendering
-   * @plan PLAN-20260214-SESSIONBROWSER.P23
-   * Uses commandContext.ui.pendingItem to determine if there's an active conversation.
-   */
   if (uiState.isSessionBrowserDialogOpen) {
-    const chatsDir = join(config.getProjectTempDir(), 'chats');
-    const projectHash = getProjectHash(config.getProjectRoot());
-    const currentSessionId = config.getSessionId();
-    // Determine if there's an active conversation based on pendingItem
-    const hasActiveConversation = commandContext.ui.pendingItem !== null;
-
-    return (
-      <Box flexDirection="column">
-        <SessionBrowserDialog
-          chatsDir={chatsDir}
-          projectHash={projectHash}
-          currentSessionId={currentSessionId}
-          hasActiveConversation={hasActiveConversation}
-          onSelect={handleSessionBrowserSelect}
-          onClose={uiActions.closeSessionBrowserDialog}
-        />
-      </Box>
+    return renderSessionBrowserDialog(
+      uiState,
+      uiActions,
+      config,
+      state.commandContext,
+      state.handleSessionBrowserSelect,
     );
   }
-
   return null;
+}
+
+function renderDialogBody(
+  uiState: ReturnType<typeof useUIState>,
+  uiActions: ReturnType<typeof useUIActions>,
+  settings: LoadedSettings,
+  config: Config,
+  addItem: UseHistoryManagerReturn['addItem'],
+  state: ReturnType<typeof useDialogManagerState>,
+) {
+  const firstHalf = renderDialogBodyFirstHalf(
+    uiState,
+    uiActions,
+    settings,
+    config,
+    state,
+  );
+  if (firstHalf !== undefined) return firstHalf;
+
+  const profileDialog = renderProfileDialogs(uiState, uiActions);
+  if (profileDialog) return profileDialog;
+
+  return renderDialogBodySecondHalf(uiState, uiActions, config, addItem, state);
+}
+
+// Props for DialogManager
+export const DialogManager = ({
+  addItem,
+  terminalWidth,
+  config,
+  settings,
+}: DialogManagerProps) => {
+  const uiState = useUIState();
+  const uiActions = useUIActions();
+  const runtime = useRuntimeApi();
+
+  const state = useDialogManagerState(
+    addItem,
+    config,
+    settings,
+    uiState,
+    uiActions,
+    runtime,
+    terminalWidth,
+  );
+
+  // NOTE: IdeTrustChangeDialog not yet ported from upstream
+  const earlyDialog = renderEarlyDialogs(uiState, uiActions, terminalWidth);
+  if (earlyDialog) return earlyDialog;
+
+  return renderDialogBody(uiState, uiActions, settings, config, addItem, state);
 };

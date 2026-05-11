@@ -22,6 +22,82 @@ interface AboutBoxProps {
   baseURL: string;
 }
 
+interface InfoRowProps {
+  label: string;
+  value: string;
+}
+
+const InfoRow: React.FC<InfoRowProps> = ({ label, value }) => (
+  <Box flexDirection="row">
+    <Box width="35%">
+      <Text bold color={Colors.LightBlue}>
+        {label}
+      </Text>
+    </Box>
+    <Box>
+      <Text color={Colors.Foreground}>{value}</Text>
+    </Box>
+  </Box>
+);
+
+interface ConditionalInfoRowProps {
+  label: string;
+  value: string | undefined;
+}
+
+const ConditionalInfoRow: React.FC<ConditionalInfoRowProps> = ({
+  label,
+  value,
+}) => {
+  if (!value) {
+    return null;
+  }
+  return <InfoRow label={label} value={value} />;
+};
+
+const AboutBoxHeader: React.FC = () => (
+  <Box marginBottom={1}>
+    <Text bold color={Colors.AccentPurple}>
+      About LLxprt Code
+    </Text>
+  </Box>
+);
+
+const AboutBoxContent: React.FC<{
+  cliVersion: string;
+  modelVersion: string;
+  provider: string;
+  sandboxEnv: string;
+  osVersion: string;
+  gcpProject: string;
+  baseURL: string;
+  ideClient: string;
+}> = ({
+  cliVersion,
+  modelVersion,
+  provider,
+  sandboxEnv,
+  osVersion,
+  gcpProject,
+  baseURL,
+  ideClient,
+}) => (
+  <>
+    <AboutBoxHeader />
+    <InfoRow label="CLI Version" value={cliVersion} />
+    {!['', 'N/A'].includes(GIT_COMMIT_INFO) && (
+      <InfoRow label="Git Commit" value={GIT_COMMIT_INFO} />
+    )}
+    <InfoRow label="Model" value={modelVersion} />
+    <InfoRow label="Provider" value={provider} />
+    <ConditionalInfoRow label="Base URL" value={baseURL} />
+    <InfoRow label="Sandbox" value={sandboxEnv} />
+    <InfoRow label="OS" value={osVersion} />
+    <ConditionalInfoRow label="GCP Project" value={gcpProject} />
+    <ConditionalInfoRow label="IDE Client" value={ideClient} />
+  </>
+);
+
 export const AboutBox: React.FC<AboutBoxProps> = ({
   cliVersion,
   osVersion,
@@ -41,108 +117,15 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
     width="100%"
     backgroundColor={Colors.Background}
   >
-    <Box marginBottom={1}>
-      <Text bold color={Colors.AccentPurple}>
-        About LLxprt Code
-      </Text>
-    </Box>
-    <Box flexDirection="row">
-      <Box width="35%">
-        <Text bold color={Colors.LightBlue}>
-          CLI Version
-        </Text>
-      </Box>
-      <Box>
-        <Text color={Colors.Foreground}>{cliVersion}</Text>
-      </Box>
-    </Box>
-    {GIT_COMMIT_INFO && !['N/A'].includes(GIT_COMMIT_INFO) && (
-      <Box flexDirection="row">
-        <Box width="35%">
-          <Text bold color={Colors.LightBlue}>
-            Git Commit
-          </Text>
-        </Box>
-        <Box>
-          <Text color={Colors.Foreground}>{GIT_COMMIT_INFO}</Text>
-        </Box>
-      </Box>
-    )}
-    <Box flexDirection="row">
-      <Box width="35%">
-        <Text bold color={Colors.LightBlue}>
-          Model
-        </Text>
-      </Box>
-      <Box>
-        <Text color={Colors.Foreground}>{modelVersion}</Text>
-      </Box>
-    </Box>
-    <Box flexDirection="row">
-      <Box width="35%">
-        <Text bold color={Colors.LightBlue}>
-          Provider
-        </Text>
-      </Box>
-      <Box>
-        <Text color={Colors.Foreground}>{provider}</Text>
-      </Box>
-    </Box>
-    {baseURL && (
-      <Box flexDirection="row">
-        <Box width="35%">
-          <Text bold color={Colors.LightBlue}>
-            Base URL
-          </Text>
-        </Box>
-        <Box>
-          <Text color={Colors.Foreground}>{baseURL}</Text>
-        </Box>
-      </Box>
-    )}
-    <Box flexDirection="row">
-      <Box width="35%">
-        <Text bold color={Colors.LightBlue}>
-          Sandbox
-        </Text>
-      </Box>
-      <Box>
-        <Text color={Colors.Foreground}>{sandboxEnv}</Text>
-      </Box>
-    </Box>
-    <Box flexDirection="row">
-      <Box width="35%">
-        <Text bold color={Colors.LightBlue}>
-          OS
-        </Text>
-      </Box>
-      <Box>
-        <Text color={Colors.Foreground}>{osVersion}</Text>
-      </Box>
-    </Box>
-    {gcpProject && (
-      <Box flexDirection="row">
-        <Box width="35%">
-          <Text bold color={Colors.LightBlue}>
-            GCP Project
-          </Text>
-        </Box>
-        <Box>
-          <Text color={Colors.Foreground}>{gcpProject}</Text>
-        </Box>
-      </Box>
-    )}
-    {ideClient && (
-      <Box flexDirection="row">
-        <Box width="35%">
-          <Text bold color={Colors.LightBlue}>
-            IDE Client
-          </Text>
-        </Box>
-        <Box>
-          <Text color={Colors.Foreground}>{ideClient}</Text>
-        </Box>
-      </Box>
-    )}
+    <AboutBoxContent
+      cliVersion={cliVersion}
+      modelVersion={modelVersion}
+      provider={provider}
+      sandboxEnv={sandboxEnv}
+      osVersion={osVersion}
+      gcpProject={gcpProject}
+      baseURL={baseURL}
+      ideClient={ideClient}
+    />
   </Box>
 );

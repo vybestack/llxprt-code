@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable sonarjs/nested-control-flow, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import type {
   ConversationRecord,
   BaseMessageRecord,
@@ -136,6 +138,94 @@ export function calculateRewindImpact(
 }
 
 /**
+ * Reads the current on-disk content of a file targeted for revert.
+ * Returns null if the file does not exist (ENOENT) — the caller decides
+ * how to handle that case.  Propagates unexpected read errors as a
+ * thrown exception so the outer catch can emit feedback.
+ */
+async function readCurrentContent(
+  filePath: string,
+  fileName: string,
+): Promise<string | null> {
+  try {
+    return await fs.readFile(filePath, 'utf8');
+  } catch (e) {
+    const error = e as Error;
+    if ('code' in error && error.code === 'ENOENT') {
+      debugLogger.debug(
+        `File ${fileName} not found during revert, proceeding as it may be a new file deletion.`,
+      );
+      return null;
+    }
+    coreEvents.emitFeedback(
+      'error',
+      `Error reading ${fileName} during revert: ${error.message}`,
+      e,
+    );
+    throw e;
+  }
+}
+
+/**
+ * Attempts to revert a single file to its original content.
+ * Handles exact-match revert, smart-patch revert, and missing-file scenarios.
+ */
+async function revertSingleFile(
+  filePath: string,
+  fileName: string,
+  newContent: string,
+  originalContent: string | null,
+  isNewFile: boolean | undefined = undefined,
+): Promise<void> {
+  try {
+    const currentContent = await readCurrentContent(filePath, fileName);
+
+    // 1. Exact Match: Safe to revert directly
+    if (currentContent === newContent) {
+      if (isNewFile !== true) {
+        await fs.writeFile(filePath, originalContent ?? '');
+      } else {
+        await fs.unlink(filePath);
+      }
+      return;
+    }
+
+    // 2. Mismatch: Attempt Smart Revert (Patch)
+    if (currentContent !== null) {
+      const originalText = originalContent ?? '';
+      const undoPatch = Diff.createPatch(fileName, newContent, originalText);
+      const patchedContent = Diff.applyPatch(currentContent, undoPatch);
+
+      if (typeof patchedContent === 'string') {
+        if (patchedContent === '' && isNewFile === true) {
+          await fs.unlink(filePath);
+        } else {
+          await fs.writeFile(filePath, patchedContent);
+        }
+      } else {
+        coreEvents.emitFeedback(
+          'warning',
+          `Smart revert for ${fileName} failed. The file may have been modified in a way that conflicts with the undo operation.`,
+        );
+      }
+      return;
+    }
+
+    // 3. File was deleted by the user, but we expected content.
+    coreEvents.emitFeedback(
+      'warning',
+      `Cannot revert changes for ${fileName} because it was not found on disk. This is expected if a file created by the agent was deleted before rewind`,
+    );
+  } catch (e) {
+    coreEvents.emitFeedback(
+      'error',
+      `An unexpected error occurred while reverting ${fileName}.`,
+      e,
+    );
+  }
+}
+
+/**
  * Reverts file changes made by the model from the end of the conversation
  * back to a specific target message.
  *
@@ -159,7 +249,6 @@ export async function revertFileChanges(
     return;
   }
 
-  // Iterate backwards from the end to the message being rewound (exclusive of the messageId itself)
   for (let i = conversation.messages.length - 1; i > messageIndex; i--) {
     const msg = conversation.messages[i];
     if (msg.type === 'gemini' && msg.toolCalls) {
@@ -173,82 +262,15 @@ export async function revertFileChanges(
             debugLogger.debug(
               `Skipping revert for ${fileName}: no file path available`,
             );
-            return;
+            continue;
           }
-          try {
-            let currentContent: string | null = null;
-            try {
-              currentContent = await fs.readFile(filePath, 'utf8');
-            } catch (e) {
-              const error = e as Error;
-              if ('code' in error && error.code === 'ENOENT') {
-                // File does not exist, which is fine in some revert scenarios.
-                debugLogger.debug(
-                  `File ${fileName} not found during revert, proceeding as it may be a new file deletion.`,
-                );
-              } else {
-                // Other read errors are unexpected.
-                coreEvents.emitFeedback(
-                  'error',
-                  `Error reading ${fileName} during revert: ${error.message}`,
-                  e,
-                );
-                // Continue to next tool call
-                return;
-              }
-            }
-            // 1. Exact Match: Safe to revert directly
-            if (currentContent === newContent) {
-              if (!isNewFile) {
-                await fs.writeFile(filePath, originalContent ?? '');
-              } else {
-                // Original content was null (new file), so we delete the file
-                await fs.unlink(filePath);
-              }
-            }
-            // 2. Mismatch: Attempt Smart Revert (Patch)
-            else if (currentContent !== null) {
-              const originalText = originalContent ?? '';
-
-              // Create a patch that transforms Agent -> Original
-              const undoPatch = Diff.createPatch(
-                fileName,
-                newContent,
-                originalText,
-              );
-
-              // Apply that patch to the Current content
-              const patchedContent = Diff.applyPatch(currentContent, undoPatch);
-
-              if (typeof patchedContent === 'string') {
-                if (patchedContent === '' && isNewFile) {
-                  // If the result is empty and the file didn't exist originally, delete it
-                  await fs.unlink(filePath);
-                } else {
-                  await fs.writeFile(filePath, patchedContent);
-                }
-              } else {
-                // Patch failed
-                coreEvents.emitFeedback(
-                  'warning',
-                  `Smart revert for ${fileName} failed. The file may have been modified in a way that conflicts with the undo operation.`,
-                );
-              }
-            } else {
-              // File was deleted by the user, but we expected content.
-              // This can happen if a file created by the agent is deleted before rewind.
-              coreEvents.emitFeedback(
-                'warning',
-                `Cannot revert changes for ${fileName} because it was not found on disk. This is expected if a file created by the agent was deleted before rewind`,
-              );
-            }
-          } catch (e) {
-            coreEvents.emitFeedback(
-              'error',
-              `An unexpected error occurred while reverting ${fileName}.`,
-              e,
-            );
-          }
+          await revertSingleFile(
+            filePath,
+            fileName,
+            newContent,
+            originalContent,
+            isNewFile,
+          );
         }
       }
     }

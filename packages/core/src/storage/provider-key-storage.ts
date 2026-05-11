@@ -131,9 +131,7 @@ let providerKeyStorageInstance: ProviderKeyStorage | null = null;
  * @plan PLAN-20250214-CREDPROXY.P36
  */
 export function getProviderKeyStorage(): ProviderKeyStorage {
-  if (providerKeyStorageInstance === null) {
-    providerKeyStorageInstance = new ProviderKeyStorage();
-  }
+  providerKeyStorageInstance ??= new ProviderKeyStorage();
   return providerKeyStorageInstance;
 }
 

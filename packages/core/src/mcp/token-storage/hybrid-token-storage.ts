@@ -36,8 +36,8 @@ export class HybridTokenStorage extends BaseTokenStorage {
           this.storageType = TokenStorageType.KEYCHAIN;
           return this.storage;
         }
-      } catch (_e) {
-        // Fallback to file storage if keychain fails to initialize
+      } catch {
+        // Keychain unavailable - fallback to file storage
       }
     }
 
@@ -52,9 +52,7 @@ export class HybridTokenStorage extends BaseTokenStorage {
     }
 
     // Use a single initialization promise to avoid race conditions
-    if (!this.storageInitPromise) {
-      this.storageInitPromise = this.initializeStorage();
-    }
+    this.storageInitPromise ??= this.initializeStorage();
 
     // Wait for initialization to complete
     return this.storageInitPromise;

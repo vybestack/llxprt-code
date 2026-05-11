@@ -23,7 +23,8 @@ function validateUrl(url: string): void {
 
   try {
     parsedUrl = new URL(url);
-  } catch (_error) {
+  } catch {
+    // URL parsing failed - rethrow with context
     throw new Error(`Invalid URL: ${url}`);
   }
 
@@ -124,6 +125,7 @@ export async function openBrowserSecurely(url: string): Promise<void> {
       ];
 
       for (const fallbackCommand of fallbackCommands) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           await execFileAsync(fallbackCommand, [url], options);
           return; // Success!
@@ -152,7 +154,7 @@ export async function openBrowserSecurely(url: string): Promise<void> {
 export function shouldLaunchBrowser(
   options?: { forceManual?: boolean } | undefined,
 ): boolean {
-  if (options?.forceManual) {
+  if (options?.forceManual === true) {
     return false;
   }
   // A list of browser names that indicate we should not attempt to open a

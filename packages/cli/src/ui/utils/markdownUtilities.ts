@@ -76,15 +76,18 @@ const findEnclosingCodeBlockStart = (
   while (currentSearchPos < index) {
     const blockStartIndex = content.indexOf('```', currentSearchPos);
     if (blockStartIndex === -1 || blockStartIndex >= index) {
-      break;
+      return -1;
     }
     const blockEndIndex = content.indexOf('```', blockStartIndex + 3);
-    if (blockStartIndex < index) {
-      if (blockEndIndex === -1 || index < blockEndIndex + 3) {
-        return blockStartIndex;
-      }
+    if (
+      blockStartIndex < index &&
+      (blockEndIndex === -1 || index < blockEndIndex + 3)
+    ) {
+      return blockStartIndex;
     }
-    if (blockEndIndex === -1) break;
+    if (blockEndIndex === -1) {
+      return -1;
+    }
     currentSearchPos = blockEndIndex + 3;
   }
   return -1;

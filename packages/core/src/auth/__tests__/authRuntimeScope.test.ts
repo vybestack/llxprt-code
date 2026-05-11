@@ -133,7 +133,7 @@ describe('auth runtime scope gaps', () => {
 
     const scopedMetadata = runtimeContext.metadata as Record<string, unknown>;
 
-    expect(scopedMetadata?.runtimeAuthScope).toStrictEqual(
+    expect(scopedMetadata.runtimeAuthScope).toStrictEqual(
       expect.objectContaining({
         cacheEntries: expect.any(Array),
         cancellationHooks: expect.arrayContaining([expect.any(Function)]),

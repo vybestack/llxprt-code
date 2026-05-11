@@ -104,6 +104,7 @@ export function isDeepSeekReasonerModel(model: string): boolean {
 export function isMistralModel(model: string): boolean {
   const lowerModel = model.toLowerCase();
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     lowerModel.includes('mistral') ||
     lowerModel.includes('devstral') ||
     lowerModel.includes('codestral') ||
@@ -222,13 +223,14 @@ function toMistralToolId(id: string, used: Set<string>): string {
   }
 
   let salt = 0;
-  while (true) {
+  while (salt <= Number.MAX_SAFE_INTEGER) {
     const candidate = generateDeterministicMistralId(id, salt);
     if (!used.has(candidate)) {
       return candidate;
     }
     salt += 1;
   }
+  throw new Error('Unable to generate a unique Mistral tool ID.');
 }
 
 /**
@@ -250,12 +252,10 @@ export const mistralStrategy: ToolIdStrategy = {
       if (content.speaker !== 'ai') continue;
 
       for (const block of content.blocks) {
-        if (isToolCallBlock(block)) {
-          if (!idToMistralId.has(block.id)) {
-            const mistralId = toMistralToolId(block.id, usedIds);
-            idToMistralId.set(block.id, mistralId);
-            usedIds.add(mistralId);
-          }
+        if (isToolCallBlock(block) && !idToMistralId.has(block.id)) {
+          const mistralId = toMistralToolId(block.id, usedIds);
+          idToMistralId.set(block.id, mistralId);
+          usedIds.add(mistralId);
         }
       }
     }

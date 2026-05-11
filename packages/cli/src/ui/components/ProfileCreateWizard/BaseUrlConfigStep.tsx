@@ -15,6 +15,16 @@ import { validateBaseUrl } from './validation.js';
 import { getStepPosition } from './utils.js';
 import type { WizardState } from './types.js';
 
+const CustomProviderExamples: React.FC = () => (
+  <>
+    <Text color={Colors.Gray}>Examples:</Text>
+    <Text color={Colors.Gray}> • https://api.x.ai/v1/</Text>
+    <Text color={Colors.Gray}> • https://openrouter.ai/api/v1/</Text>
+    <Text color={Colors.Gray}> • https://api.fireworks.ai/inference/v1/</Text>
+    <Text color={Colors.Foreground}> </Text>
+  </>
+);
+
 interface BaseUrlConfigStepProps {
   state: WizardState;
   onUpdateBaseUrl: (baseUrl: string) => void;
@@ -28,7 +38,6 @@ export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({
   onContinue,
   onBack,
 }) => {
-  // Handle Escape key to go back
   useKeypress(
     (key) => {
       if (key.name === 'escape') {
@@ -41,10 +50,10 @@ export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({
   const providerOption = PROVIDER_OPTIONS.find(
     (p) => p.value === state.config.provider,
   );
-  const defaultBaseUrl = providerOption?.defaultBaseUrl || '';
+  const defaultBaseUrl = providerOption?.defaultBaseUrl ?? '';
 
-  // Initialize with default URL if available and not already set
   const [inputValue, setInputValue] = useState(
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (empty string baseUrl means "not set")
     state.config.baseUrl || defaultBaseUrl,
   );
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -53,7 +62,7 @@ export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({
     (value: string) => {
       setInputValue(value);
       const validation = validateBaseUrl(value);
-      setValidationError(validation.valid ? null : validation.error || null);
+      setValidationError(validation.valid ? null : (validation.error ?? null));
       if (validation.valid) {
         onUpdateBaseUrl(value);
       }
@@ -66,14 +75,14 @@ export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({
     if (validation.valid) {
       onContinue();
     } else {
-      setValidationError(validation.error || 'Invalid URL');
+      setValidationError(validation.error ?? 'Invalid URL');
     }
   }, [inputValue, onContinue]);
 
   const isCustomProvider = state.config.provider === 'custom';
   const helpText = isCustomProvider
     ? 'Enter the API endpoint for your custom provider:'
-    : `${providerOption?.label || 'This provider'} typically runs on the default port. Edit if using a different configuration.`;
+    : `${providerOption?.label ?? 'This provider'} typically runs on the default port. Edit if using a different configuration.`;
 
   const { current, total } = getStepPosition(state);
 
@@ -86,19 +95,7 @@ export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({
       <Text color={Colors.Foreground}>Configure Base URL:</Text>
       <Text color={Colors.Gray}>{helpText}</Text>
       <Text color={Colors.Foreground}> </Text>
-
-      {isCustomProvider && (
-        <>
-          <Text color={Colors.Gray}>Examples:</Text>
-          <Text color={Colors.Gray}> • https://api.x.ai/v1/</Text>
-          <Text color={Colors.Gray}> • https://openrouter.ai/api/v1/</Text>
-          <Text color={Colors.Gray}>
-            • https://api.fireworks.ai/inference/v1/
-          </Text>
-          <Text color={Colors.Foreground}> </Text>
-        </>
-      )}
-
+      {isCustomProvider && <CustomProviderExamples />}
       <Text color={Colors.Foreground}>Base URL:</Text>
       <TextInput
         value={inputValue}

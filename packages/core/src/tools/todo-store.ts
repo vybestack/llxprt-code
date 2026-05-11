@@ -11,8 +11,8 @@ import * as os from 'os';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
 /**
- * File format for todo storage.
- * Supports both legacy format (just Todo[]) and new format with metadata.
+ * File format for task storage.
+ * Supports both legacy format (just an array) and new format with metadata for tasks.
  */
 interface TodoFileData {
   todos: Todo[];
@@ -38,14 +38,19 @@ export class TodoStore {
   }
 
   /**
-   * Parse file content handling both legacy (Todo[]) and new ({ todos, paused }) formats.
+   * Parse file content handling both legacy (array) and new ({ todos, paused }) task formats.
    */
   private parseFileContent(content: string): TodoFileData {
     const rawData = JSON.parse(content);
 
     // Check if it's the new format (object with todos property)
     if (
-      rawData &&
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      rawData != null &&
+      rawData !== false &&
+      rawData !== 0 &&
+      rawData !== '' &&
+      !Number.isNaN(rawData) &&
       typeof rawData === 'object' &&
       !Array.isArray(rawData) &&
       'todos' in rawData
@@ -83,7 +88,8 @@ export class TodoStore {
 
       const content = await fs.promises.readFile(this.filePath, 'utf8');
       return this.parseFileContent(content);
-    } catch (_error) {
+    } catch {
+      // Reading persisted task-list data failed; return empty state.
       return { todos: [], paused: false };
     }
   }
@@ -124,7 +130,7 @@ export class TodoStore {
   }
 
   /**
-   * Read the paused state from the todo file.
+   * Read the paused state from the task file.
    * Returns false if file doesn't exist or is in legacy format.
    */
   async readPausedState(): Promise<boolean> {
@@ -133,7 +139,7 @@ export class TodoStore {
   }
 
   /**
-   * Write the paused state to the todo file.
+   * Write the paused state to the task file.
    * Preserves existing todos.
    */
   async writePausedState(paused: boolean): Promise<void> {

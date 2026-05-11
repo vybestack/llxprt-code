@@ -67,7 +67,7 @@ describe('Test Utilities', () => {
       await cleanupTempDirectory(dir);
 
       // Directory should no longer exist
-      await expect(fs.access(dir)).rejects.toThrow();
+      await expect(fs.access(dir)).rejects.toThrow(/ENOENT/);
     });
 
     it('should not throw if directory does not exist', async () => {

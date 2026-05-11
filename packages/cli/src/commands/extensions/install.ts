@@ -29,89 +29,14 @@ interface InstallArgs {
 
 export async function handleInstall(args: InstallArgs) {
   try {
-    let installMetadata: ExtensionInstallMetadata;
-    if (args.source) {
-      const { source } = args;
-      if (
-        source.startsWith('http://') ||
-        source.startsWith('https://') ||
-        source.startsWith('git@')
-      ) {
-        installMetadata = {
-          source,
-          type: 'git',
-          ref: args.ref,
-          autoUpdate: args.autoUpdate,
-        };
-      } else if (source.startsWith('sso://')) {
-        console.warn(
-          'sso:// URLs require a git-remote-sso helper to be installed. See https://github.com/google/git-remote-sso for more information.',
-        );
-        installMetadata = {
-          source,
-          type: 'git',
-          ref: args.ref,
-          autoUpdate: args.autoUpdate,
-        };
-      } else {
-        // Try to parse as org/repo format first
-        try {
-          const { owner, repo } = parseGitHubRepoForReleases(source);
-          // Check if releases exist
-          let hasReleases = false;
-          try {
-            hasReleases = await checkGitHubReleasesExist(owner, repo);
-          } catch {
-            // If check fails, fall back to git
-            hasReleases = false;
-          }
-
-          if (hasReleases) {
-            installMetadata = {
-              source,
-              type: 'github-release',
-              ref: args.ref,
-              autoUpdate: args.autoUpdate,
-            };
-          } else {
-            // Fall back to git clone
-            installMetadata = {
-              source: `https://github.com/${owner}/${repo}.git`,
-              type: 'git',
-              ref: args.ref,
-              autoUpdate: args.autoUpdate,
-            };
-          }
-        } catch {
-          // Not org/repo format, check if it's a local path
-          try {
-            await fs.stat(source);
-            // It's a local path
-            installMetadata = {
-              source,
-              type: 'local',
-              autoUpdate: args.autoUpdate,
-            };
-          } catch {
-            console.error('Install source not found.');
-            await exitCli(1);
-          }
-        }
-      }
-    } else if (args.path) {
-      installMetadata = {
-        source: args.path,
-        type: 'local',
-        autoUpdate: args.autoUpdate,
-      };
-    } else {
-      // This should not be reached due to the yargs check.
-      throw new Error('Either --source or --path must be provided.');
+    const installMetadata = await resolveInstallMetadata(args);
+    if (!installMetadata) {
+      return;
     }
 
     const workspaceDir = process.cwd();
     const extensionName = await installOrUpdateExtension(
-      installMetadata!,
+      installMetadata,
       requestConsentNonInteractive,
       workspaceDir,
     );
@@ -122,6 +47,124 @@ export async function handleInstall(args: InstallArgs) {
   } catch (error) {
     console.error(getErrorMessage(error));
     await exitCli(1);
+  }
+}
+
+/**
+ * Resolves the install metadata based on the provided arguments.
+ */
+async function resolveInstallMetadata(
+  args: InstallArgs,
+): Promise<ExtensionInstallMetadata | undefined> {
+  const source = args.source;
+  if (source) {
+    return resolveSourceInstallMetadata(source, args);
+  }
+  if (args.path) {
+    return {
+      source: args.path,
+      type: 'local',
+      autoUpdate: args.autoUpdate,
+    };
+  }
+  throw new Error('Either --source or --path must be provided.');
+}
+
+/**
+ * Resolves install metadata for source-based installs.
+ */
+async function resolveSourceInstallMetadata(
+  source: string,
+  args: InstallArgs,
+): Promise<ExtensionInstallMetadata | undefined> {
+  if (
+    source.startsWith('http://') ||
+    source.startsWith('https://') ||
+    source.startsWith('git@')
+  ) {
+    return {
+      source,
+      type: 'git',
+      ref: args.ref,
+      autoUpdate: args.autoUpdate,
+    };
+  }
+  if (source.startsWith('sso://')) {
+    console.warn(
+      'sso:// URLs require a git-remote-sso helper to be installed. See https://github.com/google/git-remote-sso for more information.',
+    );
+    return {
+      source,
+      type: 'git',
+      ref: args.ref,
+      autoUpdate: args.autoUpdate,
+    };
+  }
+  return resolveOrgRepoOrLocalSource(source, args);
+}
+
+/**
+ * Resolves source that may be org/repo format or a local path.
+ */
+async function resolveOrgRepoOrLocalSource(
+  source: string,
+  args: InstallArgs,
+): Promise<ExtensionInstallMetadata | undefined> {
+  try {
+    const { owner, repo } = parseGitHubRepoForReleases(source);
+    const hasReleases = await checkReleasesOrFalse(owner, repo);
+    if (hasReleases) {
+      return {
+        source,
+        type: 'github-release',
+        ref: args.ref,
+        autoUpdate: args.autoUpdate,
+      };
+    }
+    return {
+      source: `https://github.com/${owner}/${repo}.git`,
+      type: 'git',
+      ref: args.ref,
+      autoUpdate: args.autoUpdate,
+    };
+  } catch {
+    // Not org/repo format, check if it's a local path
+    return resolveLocalPathSource(source, args);
+  }
+}
+
+/**
+ * Checks if GitHub releases exist, returning false on error.
+ */
+async function checkReleasesOrFalse(
+  owner: string,
+  repo: string,
+): Promise<boolean> {
+  try {
+    return await checkGitHubReleasesExist(owner, repo);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolves a local path source, exiting CLI if not found.
+ */
+async function resolveLocalPathSource(
+  source: string,
+  args: InstallArgs,
+): Promise<ExtensionInstallMetadata | undefined> {
+  try {
+    await fs.stat(source);
+    return {
+      source,
+      type: 'local',
+      autoUpdate: args.autoUpdate,
+    };
+  } catch {
+    console.error('Install source not found.');
+    await exitCli(1);
+    return undefined;
   }
 }
 

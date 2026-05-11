@@ -38,6 +38,7 @@ interface RuntimeFixture {
 
 const runtimeFixtures: RuntimeFixture[] = [];
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(async () => {
   resetCliProviderInfrastructure();
   while (runtimeFixtures.length > 0) {
@@ -170,7 +171,7 @@ async function bootstrapRuntimeFixture(options: {
         options.model,
       );
 
-      const baseUrl = profile.ephemeralSettings?.['base-url'];
+      const baseUrl = profile.ephemeralSettings['base-url'];
       settingsService.setProviderSetting(
         options.providerName,
         'baseUrl',

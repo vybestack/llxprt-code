@@ -57,23 +57,32 @@ export interface ConfigBuildInput {
 // ─── Sub-builders ────────────────────────────────────────────────────────────
 
 function buildTelemetryConfig(argv: CliArgs, settings: Settings) {
+  const telemetrySettings = settings.telemetry;
   return {
-    enabled: argv.telemetry ?? settings.telemetry?.enabled,
+    enabled: argv.telemetry ?? telemetrySettings?.enabled,
     target: (argv.telemetryTarget ??
-      settings.telemetry?.target) as TelemetryTarget,
+      telemetrySettings?.target) as TelemetryTarget,
     otlpEndpoint:
       argv.telemetryOtlpEndpoint ??
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
-      settings.telemetry?.otlpEndpoint,
-    logPrompts: argv.telemetryLogPrompts ?? settings.telemetry?.logPrompts,
-    outfile: argv.telemetryOutfile ?? settings.telemetry?.outfile,
-    logConversations: settings.telemetry?.logConversations,
-    logResponses: settings.telemetry?.logResponses,
-    redactSensitiveData: settings.telemetry?.redactSensitiveData,
-    redactFilePaths: settings.telemetry?.redactFilePaths,
-    redactUrls: settings.telemetry?.redactUrls,
-    redactEmails: settings.telemetry?.redactEmails,
-    redactPersonalInfo: settings.telemetry?.redactPersonalInfo,
+      telemetrySettings?.otlpEndpoint,
+    logPrompts: argv.telemetryLogPrompts ?? telemetrySettings?.logPrompts,
+    outfile: argv.telemetryOutfile ?? telemetrySettings?.outfile,
+    ...buildTelemetryRedactionConfig(telemetrySettings),
+  };
+}
+
+function buildTelemetryRedactionConfig(
+  telemetrySettings: Settings['telemetry'],
+) {
+  return {
+    logConversations: telemetrySettings?.logConversations,
+    logResponses: telemetrySettings?.logResponses,
+    redactSensitiveData: telemetrySettings?.redactSensitiveData,
+    redactFilePaths: telemetrySettings?.redactFilePaths,
+    redactUrls: telemetrySettings?.redactUrls,
+    redactEmails: telemetrySettings?.redactEmails,
+    redactPersonalInfo: telemetrySettings?.redactPersonalInfo,
   };
 }
 
@@ -95,7 +104,7 @@ function buildHooksConfig(
   adminSkillsEnabled: boolean,
   cwd: string,
 ) {
-  const hooksConfig = settings.hooks || {};
+  const hooksConfig = settings.hooks ?? {};
   const { disabled: _disabled, ...eventHooks } = hooksConfig as {
     disabled?: string[];
     [key: string]: unknown;
@@ -126,7 +135,7 @@ function buildToolConfig(
   policyEngineConfig: PolicyEngineConfig,
 ) {
   return {
-    coreTools: profileSettingsWithTools.coreTools || undefined,
+    coreTools: profileSettingsWithTools.coreTools ?? undefined,
     allowedTools: allowedTools.length > 0 ? [...allowedTools] : undefined,
     policyEngineConfig,
     excludeTools: [...excludeTools],
@@ -186,11 +195,11 @@ function buildSessionBaseArgs(
     llxprtMdFilePaths: [...filePaths],
     approvalMode,
     showMemoryUsage:
-      argv.showMemoryUsage ||
-      profileSettingsWithTools.ui?.showMemoryUsage ||
+      argv.showMemoryUsage ??
+      profileSettingsWithTools.ui?.showMemoryUsage ??
       false,
     disableYoloMode:
-      profileSettingsWithTools.security?.disableYoloMode ||
+      profileSettingsWithTools.security?.disableYoloMode ??
       profileSettingsWithTools.admin?.secureModeEnabled,
     accessibility: { ...profileSettingsWithTools.accessibility, screenReader },
     telemetry,
@@ -198,14 +207,11 @@ function buildSessionBaseArgs(
       profileSettingsWithTools.ui?.usageStatisticsEnabled ?? true,
     fileFiltering: context.fileFiltering,
     checkpointing:
-      argv.checkpointing || profileSettingsWithTools.checkpointing?.enabled,
-    dumpOnError: argv.dumponerror || false,
-    proxy:
-      argv.proxy ||
-      process.env.HTTPS_PROXY ||
-      process.env.https_proxy ||
-      process.env.HTTP_PROXY ||
-      process.env.http_proxy,
+      argv.checkpointing ?? profileSettingsWithTools.checkpointing?.enabled,
+    dumpOnError: argv.dumponerror ?? false,
+
+    proxy: resolveProxy(argv.proxy),
+
     cwd,
     fileDiscoveryService: context.fileService,
     bugCommand: profileSettingsWithTools.bugCommand,
@@ -229,8 +235,8 @@ function buildFeatureArgs(
   return {
     extensionContextFilePaths: [...context.extensionContextFilePaths],
     maxSessionTurns: profileSettingsWithTools.ui?.maxSessionTurns ?? -1,
-    experimentalZedIntegration: argv.experimentalAcp || false,
-    listExtensions: argv.listExtensions || false,
+    experimentalZedIntegration: argv.experimentalAcp ?? false,
+    listExtensions: argv.listExtensions ?? false,
     activeExtensions: context.activeExtensions.map((e) => ({
       name: e.name,
       version: e.version,
@@ -268,7 +274,7 @@ function buildFeatureArgs(
     continueSession:
       argv.continue === '' || argv.continue === true
         ? true
-        : argv.continue || false,
+        : (argv.continue ?? false),
     jitContextEnabled: context.jitContextEnabled,
     ...hooksConfig,
   };
@@ -313,4 +319,17 @@ export function buildConfig(input: ConfigBuildInput): Config {
     ...buildSessionBaseArgs(input, toolConfig, telemetry, sanitizationConfig),
     ...buildFeatureArgs(input, hooksConfig),
   });
+}
+
+/**
+ * Resolves proxy URL from CLI arg or environment variables.
+ * Priority: CLI arg > HTTPS_PROXY > https_proxy > HTTP_PROXY > http_proxy
+ * Intentionally uses falsy coalescing (empty string should fall back to env vars).
+ */
+function resolveProxy(cliProxy: string | undefined): string | undefined {
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall back to env vars, and env vars should fall back to next var */
+  const httpsProxy = process.env.HTTPS_PROXY || process.env.https_proxy;
+  const httpProxy = process.env.HTTP_PROXY || process.env.http_proxy;
+  return cliProxy || httpsProxy || httpProxy;
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 }

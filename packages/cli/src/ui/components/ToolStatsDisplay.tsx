@@ -52,41 +52,142 @@ const StatRow: React.FC<{
   );
 };
 
-export const ToolStatsDisplay: React.FC = () => {
-  const { stats } = useSessionStats();
-  const { tools } = stats.metrics;
-  const activeTools = Object.entries(tools.byName).filter(
-    ([, metrics]: [string, ToolCallStats]) => metrics.count > 0,
-  );
+const ToolTableHeader: React.FC = () => (
+  <Box>
+    <Box width={TOOL_NAME_COL_WIDTH}>
+      <Text bold color={Colors.Foreground}>
+        Tool Name
+      </Text>
+    </Box>
+    <Box width={CALLS_COL_WIDTH} justifyContent="flex-end">
+      <Text bold color={Colors.Foreground}>
+        Calls
+      </Text>
+    </Box>
+    <Box width={SUCCESS_RATE_COL_WIDTH} justifyContent="flex-end">
+      <Text bold color={Colors.Foreground}>
+        Success Rate
+      </Text>
+    </Box>
+    <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
+      <Text bold color={Colors.Foreground}>
+        Avg Duration
+      </Text>
+    </Box>
+  </Box>
+);
 
-  if (activeTools.length === 0) {
-    return (
+const TableDivider: React.FC = () => (
+  <Box
+    borderStyle="single"
+    borderBottom={true}
+    borderTop={false}
+    borderLeft={false}
+    borderRight={false}
+    borderColor={Colors.Gray}
+    width="100%"
+  />
+);
+
+interface DecisionRowProps {
+  label: string;
+  value: number;
+  color: string;
+}
+
+const DecisionRow: React.FC<DecisionRowProps> = ({ label, value, color }) => (
+  <Box>
+    <Box width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}>
+      <Text color={Colors.DimComment}> {label}</Text>
+    </Box>
+    <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
+      <Text color={color}>{value}</Text>
+    </Box>
+  </Box>
+);
+
+interface UserDecisionSummaryProps {
+  totalReviewed: number;
+  totalDecisions: {
+    accept: number;
+    reject: number;
+    modify: number;
+  };
+  agreementRate: number;
+  agreementColor: string;
+}
+
+const UserDecisionSummary: React.FC<UserDecisionSummaryProps> = ({
+  totalReviewed,
+  totalDecisions,
+  agreementRate,
+  agreementColor,
+}) => (
+  <>
+    <Text bold color={Colors.Foreground}>
+      User Decision Summary
+    </Text>
+    <Box>
       <Box
-        borderStyle="round"
-        borderColor={Colors.Gray}
-        paddingY={1}
-        paddingX={2}
+        width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
       >
-        <Text color={Colors.Foreground}>
-          No tool calls have been made in this session.
+        <Text color={Colors.LightBlue}>Total Reviewed Suggestions:</Text>
+      </Box>
+      <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
+        <Text color={Colors.Foreground}>{totalReviewed}</Text>
+      </Box>
+    </Box>
+    <DecisionRow
+      label="» Accepted:"
+      value={totalDecisions.accept}
+      color={Colors.AccentGreen}
+    />
+    <DecisionRow
+      label="» Rejected:"
+      value={totalDecisions.reject}
+      color={Colors.AccentRed}
+    />
+    <DecisionRow
+      label="» Modified:"
+      value={totalDecisions.modify}
+      color={Colors.AccentYellow}
+    />
+    <TableDivider />
+    <Box>
+      <Box
+        width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
+      >
+        <Text color={Colors.DimComment}> Overall Agreement Rate:</Text>
+      </Box>
+      <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
+        <Text
+          bold
+          color={totalReviewed > 0 ? agreementColor : Colors.Foreground}
+        >
+          {totalReviewed > 0 ? `${agreementRate.toFixed(1)}%` : '--'}
         </Text>
       </Box>
-    );
-  }
+    </Box>
+  </>
+);
 
-  const totalDecisions = Object.values(tools.byName).reduce(
-    (
-      acc: { accept: number; reject: number; modify: number },
-      tool: ToolCallStats,
-    ) => {
-      acc.accept += tool.decisions.accept;
-      acc.reject += tool.decisions.reject;
-      acc.modify += tool.decisions.modify;
-      return acc;
-    },
-    { accept: 0, reject: 0, modify: 0 },
-  );
+const EmptyToolStats: React.FC = () => (
+  <Box borderStyle="round" borderColor={Colors.Gray} paddingY={1} paddingX={2}>
+    <Text color={Colors.Foreground}>
+      No tool calls have been made in this session.
+    </Text>
+  </Box>
+);
 
+interface ToolStatsContentProps {
+  activeTools: Array<[string, ToolCallStats]>;
+  totalDecisions: { accept: number; reject: number; modify: number };
+}
+
+const ToolStatsContent: React.FC<ToolStatsContentProps> = ({
+  activeTools,
+  totalDecisions,
+}) => {
   const totalReviewed =
     totalDecisions.accept + totalDecisions.reject + totalDecisions.modify;
   const agreementRate =
@@ -109,120 +210,50 @@ export const ToolStatsDisplay: React.FC = () => {
         Tool Stats
       </Text>
       <Box height={1} />
-
-      {/* Header */}
-      <Box>
-        <Box width={TOOL_NAME_COL_WIDTH}>
-          <Text bold color={Colors.Foreground}>
-            Tool Name
-          </Text>
-        </Box>
-        <Box width={CALLS_COL_WIDTH} justifyContent="flex-end">
-          <Text bold color={Colors.Foreground}>
-            Calls
-          </Text>
-        </Box>
-        <Box width={SUCCESS_RATE_COL_WIDTH} justifyContent="flex-end">
-          <Text bold color={Colors.Foreground}>
-            Success Rate
-          </Text>
-        </Box>
-        <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
-          <Text bold color={Colors.Foreground}>
-            Avg Duration
-          </Text>
-        </Box>
-      </Box>
-
-      {/* Divider */}
-      <Box
-        borderStyle="single"
-        borderBottom={true}
-        borderTop={false}
-        borderLeft={false}
-        borderRight={false}
-        borderColor={Colors.Gray}
-        width="100%"
-      />
-
-      {/* Tool Rows */}
+      <ToolTableHeader />
+      <TableDivider />
       {activeTools.map(([name, stats]) => (
         <StatRow key={name} name={name} stats={stats} />
       ))}
-
       <Box height={1} />
-
-      {/* User Decision Summary */}
-      <Text bold color={Colors.Foreground}>
-        User Decision Summary
-      </Text>
-      <Box>
-        <Box
-          width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
-        >
-          <Text color={Colors.LightBlue}>Total Reviewed Suggestions:</Text>
-        </Box>
-        <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
-          <Text color={Colors.Foreground}>{totalReviewed}</Text>
-        </Box>
-      </Box>
-      <Box>
-        <Box
-          width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
-        >
-          <Text color={Colors.DimComment}> » Accepted:</Text>
-        </Box>
-        <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
-          <Text color={Colors.AccentGreen}>{totalDecisions.accept}</Text>
-        </Box>
-      </Box>
-      <Box>
-        <Box
-          width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
-        >
-          <Text color={Colors.DimComment}> » Rejected:</Text>
-        </Box>
-        <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
-          <Text color={Colors.AccentRed}>{totalDecisions.reject}</Text>
-        </Box>
-      </Box>
-      <Box>
-        <Box
-          width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
-        >
-          <Text color={Colors.DimComment}> » Modified:</Text>
-        </Box>
-        <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
-          <Text color={Colors.AccentYellow}>{totalDecisions.modify}</Text>
-        </Box>
-      </Box>
-
-      {/* Divider */}
-      <Box
-        borderStyle="single"
-        borderBottom={true}
-        borderTop={false}
-        borderLeft={false}
-        borderRight={false}
-        borderColor={Colors.Gray}
-        width="100%"
+      <UserDecisionSummary
+        totalReviewed={totalReviewed}
+        totalDecisions={totalDecisions}
+        agreementRate={agreementRate}
+        agreementColor={agreementColor}
       />
-
-      <Box>
-        <Box
-          width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
-        >
-          <Text color={Colors.DimComment}> Overall Agreement Rate:</Text>
-        </Box>
-        <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
-          <Text
-            bold
-            color={totalReviewed > 0 ? agreementColor : Colors.Foreground}
-          >
-            {totalReviewed > 0 ? `${agreementRate.toFixed(1)}%` : '--'}
-          </Text>
-        </Box>
-      </Box>
     </Box>
+  );
+};
+
+export const ToolStatsDisplay: React.FC = () => {
+  const { stats } = useSessionStats();
+  const { tools } = stats.metrics;
+  const activeTools = Object.entries(tools.byName).filter(
+    ([, metrics]: [string, ToolCallStats]) => metrics.count > 0,
+  );
+
+  if (activeTools.length === 0) {
+    return <EmptyToolStats />;
+  }
+
+  const totalDecisions = Object.values(tools.byName).reduce(
+    (
+      acc: { accept: number; reject: number; modify: number },
+      tool: ToolCallStats,
+    ) => {
+      acc.accept += tool.decisions.accept;
+      acc.reject += tool.decisions.reject;
+      acc.modify += tool.decisions.modify;
+      return acc;
+    },
+    { accept: 0, reject: 0, modify: 0 },
+  );
+
+  return (
+    <ToolStatsContent
+      activeTools={activeTools}
+      totalDecisions={totalDecisions}
+    />
   );
 };

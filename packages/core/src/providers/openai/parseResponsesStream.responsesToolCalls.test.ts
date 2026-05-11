@@ -110,7 +110,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
     const tool1 = toolCallMessages.find((m) => {
       const toolBlock = m.blocks.find((block) => block.type === 'tool_call');
       return (
-        (toolBlock as { type: 'tool_call'; name: string })?.name === 'tool1'
+        (toolBlock as { type: 'tool_call'; name: string }).name === 'tool1'
       );
     });
     const tool1Block = tool1?.blocks[0] as {
@@ -129,7 +129,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
     const tool2 = toolCallMessages.find((m) => {
       const toolBlock = m.blocks.find((block) => block.type === 'tool_call');
       return (
-        (toolBlock as { type: 'tool_call'; name: string })?.name === 'tool2'
+        (toolBlock as { type: 'tool_call'; name: string }).name === 'tool2'
       );
     });
     const tool2Block = tool2?.blocks[0] as {

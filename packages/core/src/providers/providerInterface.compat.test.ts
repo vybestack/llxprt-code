@@ -67,6 +67,7 @@ class OptionRecorderProvider extends BaseProvider {
 
 let legacyProvider: OptionRecorderProvider;
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   legacyProvider = new OptionRecorderProvider({ name: 'compat' });
 });
@@ -116,9 +117,7 @@ describe('generateChatCompletion compatibility', () => {
       metadata: { requestId: 'options-test' },
     } satisfies Parameters<OptionRecorderProvider['generateChatCompletion']>[0];
 
-    if (!runtime.config) {
-      runtime.config = fakeConfig;
-    }
+    runtime.config ??= fakeConfig;
 
     setActiveProviderRuntimeContext(runtime);
     try {

@@ -16,6 +16,11 @@ import {
 
 const execAsync = promisify(exec);
 
+type ClipboardImageFormat = {
+  class: string;
+  extension: string;
+};
+
 /**
  * Supported image file extensions based on Gemini API.
  * See: https://ai.google.dev/gemini-api/docs/image-understanding
@@ -44,11 +49,11 @@ async function spawnAsync(
     let stdout = '';
     let stderr = '';
 
-    proc.stdout?.on('data', (data) => {
+    proc.stdout.on('data', (data) => {
       stdout += data.toString();
     });
 
-    proc.stderr?.on('data', (data) => {
+    proc.stderr.on('data', (data) => {
       stderr += data.toString();
     });
 
@@ -79,7 +84,7 @@ export async function clipboardHasImage(): Promise<boolean> {
         'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::ContainsImage()',
       ]);
       return stdout.trim() === 'True';
-    } catch (_error) {
+    } catch {
       // Silent fail on Windows clipboard check
       return false;
     }
@@ -95,10 +100,113 @@ export async function clipboardHasImage(): Promise<boolean> {
     const imageRegex =
       /«class PNGf»|TIFF picture|JPEG picture|GIF picture|«class JPEG»|«class TIFF»/;
     return imageRegex.test(stdout);
-  } catch (_error) {
+  } catch {
     // Silent fail on macOS clipboard check
     return false;
   }
+}
+
+async function verifyNonEmptyFile(filePath: string): Promise<string | null> {
+  try {
+    const stats = await fs.stat(filePath);
+    if (stats.size > 0) {
+      return filePath;
+    }
+  } catch {
+    // File doesn't exist
+  }
+  return null;
+}
+
+function getClipboardTempDir(targetDir: string | undefined): string {
+  const baseDir = targetDir ?? process.cwd();
+  return path.join(baseDir, '.llxprt-clipboard');
+}
+
+async function saveWindowsClipboardImage(
+  tempDir: string,
+  timestamp: number,
+): Promise<string | null> {
+  const tempFilePath = path.join(tempDir, `clipboard-${timestamp}.png`);
+  const psPath = tempFilePath.replace(/'/g, "''");
+
+  const script = `
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    if ([System.Windows.Forms.Clipboard]::ContainsImage()) {
+      $image = [System.Windows.Forms.Clipboard]::GetImage()
+      $image.Save('${psPath}', [System.Drawing.Imaging.ImageFormat]::Png)
+      Write-Output "success"
+    }
+  `;
+
+  const { stdout } = await spawnAsync('powershell', [
+    '-NoProfile',
+    '-Command',
+    script,
+  ]);
+
+  if (stdout.trim() === 'success') {
+    return verifyNonEmptyFile(tempFilePath);
+  }
+  return null;
+}
+
+async function saveMacClipboardFormat(
+  tempDir: string,
+  timestamp: number,
+  format: ClipboardImageFormat,
+): Promise<string | null> {
+  const tempFilePath = path.join(
+    tempDir,
+    `clipboard-${timestamp}.${format.extension}`,
+  );
+
+  const script = `
+    try
+      set imageData to the clipboard as «class ${format.class}»
+      set fileRef to open for access POSIX file "${tempFilePath}" with write permission
+      write imageData to fileRef
+      close access fileRef
+      return "success"
+    on error errMsg
+      try
+        close access POSIX file "${tempFilePath}"
+      end try
+      return "error"
+    end try
+  `;
+
+  const { stdout } = await execAsync(`osascript -e '${script}'`);
+
+  if (stdout.trim() === 'success') {
+    return verifyNonEmptyFile(tempFilePath);
+  }
+
+  try {
+    await fs.unlink(tempFilePath);
+  } catch {
+    // Ignore cleanup errors
+  }
+  return null;
+}
+
+async function saveMacClipboardImage(
+  tempDir: string,
+  timestamp: number,
+): Promise<string | null> {
+  const formats: ClipboardImageFormat[] = [
+    { class: 'PNGf', extension: 'png' },
+    { class: 'JPEG', extension: 'jpg' },
+  ];
+
+  for (const format of formats) {
+    const savedPath = await saveMacClipboardFormat(tempDir, timestamp, format);
+    if (savedPath !== null) {
+      return savedPath;
+    }
+  }
+  return null;
 }
 
 /**
@@ -114,102 +222,15 @@ export async function saveClipboardImage(
   }
 
   try {
-    // Create a temporary directory for clipboard images within the target directory
-    // This avoids security restrictions on paths outside the target directory
-    const baseDir = targetDir || process.cwd();
-    const tempDir = path.join(baseDir, '.llxprt-clipboard');
+    const tempDir = getClipboardTempDir(targetDir);
     await fs.mkdir(tempDir, { recursive: true });
-
-    // Generate a unique filename with timestamp
     const timestamp = new Date().getTime();
 
     if (process.platform === 'win32') {
-      const tempFilePath = path.join(tempDir, `clipboard-${timestamp}.png`);
-      // The path is used directly in the PowerShell script.
-      const psPath = tempFilePath.replace(/'/g, "''");
-
-      const script = `
-        Add-Type -AssemblyName System.Windows.Forms
-        Add-Type -AssemblyName System.Drawing
-        if ([System.Windows.Forms.Clipboard]::ContainsImage()) {
-          $image = [System.Windows.Forms.Clipboard]::GetImage()
-          $image.Save('${psPath}', [System.Drawing.Imaging.ImageFormat]::Png)
-          Write-Output "success"
-        }
-      `;
-
-      const { stdout } = await spawnAsync('powershell', [
-        '-NoProfile',
-        '-Command',
-        script,
-      ]);
-
-      if (stdout.trim() === 'success') {
-        try {
-          const stats = await fs.stat(tempFilePath);
-          if (stats.size > 0) {
-            return tempFilePath;
-          }
-        } catch {
-          // File doesn't exist
-        }
-      }
-      return null;
+      return await saveWindowsClipboardImage(tempDir, timestamp);
     }
 
-    // AppleScript clipboard classes to try, in order of preference.
-    // macOS converts clipboard images to these formats (WEBP/HEIC/HEIF not supported by osascript).
-    const formats = [
-      { class: 'PNGf', extension: 'png' },
-      { class: 'JPEG', extension: 'jpg' },
-    ];
-
-    for (const format of formats) {
-      const tempFilePath = path.join(
-        tempDir,
-        `clipboard-${timestamp}.${format.extension}`,
-      );
-
-      // Try to save clipboard as this format
-      const script = `
-        try
-          set imageData to the clipboard as «class ${format.class}»
-          set fileRef to open for access POSIX file "${tempFilePath}" with write permission
-          write imageData to fileRef
-          close access fileRef
-          return "success"
-        on error errMsg
-          try
-            close access POSIX file "${tempFilePath}"
-          end try
-          return "error"
-        end try
-      `;
-
-      const { stdout } = await execAsync(`osascript -e '${script}'`);
-
-      if (stdout.trim() === 'success') {
-        // Verify the file was created and has content
-        try {
-          const stats = await fs.stat(tempFilePath);
-          if (stats.size > 0) {
-            return tempFilePath;
-          }
-        } catch {
-          // File doesn't exist, continue to next format
-        }
-      }
-
-      // Clean up failed attempt
-      try {
-        await fs.unlink(tempFilePath);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-
-    // No format worked
-    return null;
+    return await saveMacClipboardImage(tempDir, timestamp);
   } catch (error) {
     debugLogger.error('Error saving clipboard image:', error);
     return null;
@@ -225,7 +246,7 @@ export async function cleanupOldClipboardImages(
   targetDir?: string,
 ): Promise<void> {
   try {
-    const baseDir = targetDir || process.cwd();
+    const baseDir = targetDir ?? process.cwd();
     const tempDir = path.join(baseDir, '.llxprt-clipboard');
     const files = await fs.readdir(tempDir);
     const oneHourAgo = Date.now() - 60 * 60 * 1000;
@@ -235,6 +256,7 @@ export async function cleanupOldClipboardImages(
       if (file.startsWith('clipboard-') && IMAGE_EXTENSIONS.includes(ext)) {
         const filePath = path.join(tempDir, file);
         const stats = await fs.stat(filePath);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (stats.mtimeMs < oneHourAgo) {
           await fs.unlink(filePath);
         }
@@ -306,18 +328,24 @@ export function parsePastedPaths(
     return null;
   }
 
-  let anyValidPath = false;
-  const processedPaths = segments.map((segment) => {
-    if (!PATH_PREFIX_PATTERN.test(segment)) {
-      return segment;
-    }
-    const unescaped = unescapePath(segment);
-    if (isValidPath(unescaped)) {
-      anyValidPath = true;
-      return `@${segment}`;
-    }
-    return segment;
-  });
+  const processed = segments.reduce(
+    (result, segment) => {
+      if (!PATH_PREFIX_PATTERN.test(segment)) {
+        result.paths.push(segment);
+        return result;
+      }
 
-  return anyValidPath ? processedPaths.join(' ') + ' ' : null;
+      const unescaped = unescapePath(segment);
+      if (isValidPath(unescaped)) {
+        result.anyValidPath = true;
+        result.paths.push(`@${segment}`);
+      } else {
+        result.paths.push(segment);
+      }
+      return result;
+    },
+    { anyValidPath: false, paths: [] as string[] },
+  );
+
+  return processed.anyValidPath ? processed.paths.join(' ') + ' ' : null;
 }

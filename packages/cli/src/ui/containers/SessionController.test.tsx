@@ -465,7 +465,7 @@ describe('SessionController', () => {
     );
 
     // Change the model
-    (mockConfig.getModel as ReturnType<typeof vi.fn>)?.mockReturnValue(
+    (mockConfig.getModel as ReturnType<typeof vi.fn>).mockReturnValue(
       'new-model',
     );
     mockGetProviderManager.mockReturnValue({

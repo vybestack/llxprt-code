@@ -31,7 +31,7 @@ export const LLXPRT_DIR = '.llxprt';
  */
 function findEnvFile(startDir: string): string | null {
   let currentDir = path.resolve(startDir);
-  while (true) {
+  for (;;) {
     // prefer gemini-specific .env under LLXPRT_DIR
     const geminiEnvPath = path.join(currentDir, LLXPRT_DIR, '.env');
     if (fs.existsSync(geminiEnvPath)) {
@@ -69,7 +69,7 @@ export function loadEnvironment(): void {
 /** Return true when debug mode is active via CLI flag or environment variable. */
 export function isDebugMode(argv: CliArgs): boolean {
   return (
-    argv.debug ||
+    argv.debug === true ||
     [process.env['DEBUG'], process.env['DEBUG_MODE']].some(
       (v) => v === 'true' || v === '1',
     )

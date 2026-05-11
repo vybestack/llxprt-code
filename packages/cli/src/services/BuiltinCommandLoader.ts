@@ -156,26 +156,31 @@ export class BuiltinCommandLoader implements ICommandLoader {
       statsCommand,
       themeCommand,
       toolsCommand,
-      ...(this.config?.isSkillsSupportEnabled()
-        ? this.config?.getSkillManager()?.isAdminEnabled() === false
-          ? [
-              {
-                name: 'skills',
-                description: 'Manage skills',
-                kind: CommandKind.BUILT_IN,
-                autoExecute: false,
-                subCommands: [],
-                action: async (
-                  _context: CommandContext,
-                ): Promise<MessageActionReturn> => ({
-                  type: 'message',
-                  messageType: 'error',
-                  content: 'Skills are disabled by your admin.',
-                }),
-              },
-            ]
-          : [skillsCommand]
-        : []),
+      // Determine skills command based on config and admin settings
+      ...((): SlashCommand[] => {
+        if (this.config?.isSkillsSupportEnabled() !== true) {
+          return [];
+        }
+        if (this.config.getSkillManager().isAdminEnabled() === false) {
+          return [
+            {
+              name: 'skills',
+              description: 'Manage skills',
+              kind: CommandKind.BUILT_IN,
+              autoExecute: false,
+              subCommands: [],
+              action: async (
+                _context: CommandContext,
+              ): Promise<MessageActionReturn> => ({
+                type: 'message',
+                messageType: 'error',
+                content: 'Skills are disabled by your admin.',
+              }),
+            },
+          ];
+        }
+        return [skillsCommand];
+      })(),
       settingsCommand,
       vimCommand,
       providerCommand,
@@ -200,7 +205,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       todoCommand,
       setupCommand,
       ...tasksCommands,
-      ...(this.config?.getEnableHooksUI() ? [hooksCommand] : []),
+      ...(this.config?.getEnableHooksUI() === true ? [hooksCommand] : []),
       /**
        * @plan PLAN-20260214-SESSIONBROWSER.P21
        */

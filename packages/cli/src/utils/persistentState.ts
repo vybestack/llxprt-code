@@ -22,9 +22,7 @@ export class PersistentState {
   private filePath: string | null = null;
 
   private getPath(): string {
-    if (!this.filePath) {
-      this.filePath = path.join(Storage.getGlobalLlxprtDir(), STATE_FILENAME);
-    }
+    this.filePath ??= path.join(Storage.getGlobalLlxprtDir(), STATE_FILENAME);
     return this.filePath;
   }
 
@@ -38,7 +36,7 @@ export class PersistentState {
         const content = fs.readFileSync(filePath, 'utf-8');
         const parsed = JSON.parse(content);
         this.cache =
-          parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+          parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)
             ? parsed
             : {};
       } else {

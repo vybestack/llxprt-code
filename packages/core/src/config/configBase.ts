@@ -4,6 +4,8 @@
  * Complex method implementations live in Config (extends ConfigBase) in config.ts.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { GitService } from '../services/gitService.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
@@ -57,10 +59,8 @@ export abstract class ConfigBase extends ConfigBaseCore {
   }
 
   resetModelToDefault(): void {
-    if (this.contentGeneratorConfig) {
-      this.contentGeneratorConfig.model = this.originalModel;
-      this.inFallbackMode = false;
-    }
+    this.contentGeneratorConfig.model = this.originalModel;
+    this.inFallbackMode = false;
     this.model = this.originalModel;
   }
 
@@ -231,37 +231,43 @@ export abstract class ConfigBase extends ConfigBaseCore {
     }
 
     // Clear provider caches when auth settings or base-url change
-    if (
-      key === 'auth-key' ||
-      key === 'auth-keyfile' ||
-      key === 'base-url' ||
-      key === 'socket-timeout' ||
-      key === 'socket-keepalive' ||
-      key === 'socket-nodelay' ||
-      key === 'streaming'
-    ) {
-      if (this.providerManager) {
-        const activeProvider = this.providerManager.getActiveProvider();
-        if (activeProvider) {
-          if (
-            'clearClientCache' in activeProvider &&
-            typeof activeProvider.clearClientCache === 'function'
-          ) {
-            const providerWithClearCache = activeProvider as {
-              clearClientCache: () => void;
-            };
-            providerWithClearCache.clearClientCache();
-          }
-          if (
-            'clearAuthCache' in activeProvider &&
-            typeof activeProvider.clearAuthCache === 'function'
-          ) {
-            const providerWithClearAuth = activeProvider as {
-              clearAuthCache: () => void;
-            };
-            providerWithClearAuth.clearAuthCache();
-          }
-        }
+    const cacheClearKeys = new Set([
+      'auth-key',
+      'auth-keyfile',
+      'base-url',
+      'socket-timeout',
+      'socket-keepalive',
+      'socket-nodelay',
+      'streaming',
+    ]);
+    if (cacheClearKeys.has(key)) {
+      if (!this.providerManager) {
+        return;
+      }
+
+      const activeProvider = this.providerManager.getActiveProvider();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider manager may have no active provider during settings updates.
+      if (activeProvider === undefined || activeProvider === null) {
+        return;
+      }
+
+      if (
+        'clearClientCache' in activeProvider &&
+        typeof activeProvider.clearClientCache === 'function'
+      ) {
+        const providerWithClearCache = activeProvider as {
+          clearClientCache: () => void;
+        };
+        providerWithClearCache.clearClientCache();
+      }
+      if (
+        'clearAuthCache' in activeProvider &&
+        typeof activeProvider.clearAuthCache === 'function'
+      ) {
+        const providerWithClearAuth = activeProvider as {
+          clearAuthCache: () => void;
+        };
+        providerWithClearAuth.clearAuthCache();
       }
     }
   }

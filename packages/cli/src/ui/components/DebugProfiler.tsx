@@ -198,7 +198,7 @@ export const DebugProfiler = () => {
   // Effect for updating stats
   useEffect(() => {
     if (!showDebugProfiler) {
-      return;
+      return undefined;
     }
     // Only update the UX infrequently as updating the UX itself will cause
     // frames to run so can disturb what we are measuring.

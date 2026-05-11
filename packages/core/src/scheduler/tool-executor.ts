@@ -66,15 +66,17 @@ function checkHookDecision(
     | undefined,
   hookPhase: string,
 ): void {
-  if (hookResult?.shouldStopExecution()) {
+  if (hookResult?.shouldStopExecution() === true) {
     const stopError = new Error(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string reason should fall through to default message
       hookResult.getEffectiveReason() || `Stopped by ${hookPhase} hook`,
     );
     (stopError as Error & { isStopExecution?: boolean }).isStopExecution = true;
     throw stopError;
   }
-  if (hookResult?.isBlockingDecision()) {
+  if (hookResult?.isBlockingDecision() === true) {
     throw new Error(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string reason should fall through to default message
       hookResult.getEffectiveReason() || `Blocked by ${hookPhase} hook`,
     );
   }
@@ -116,7 +118,7 @@ function applyHookOutputModifications(
     };
   }
 
-  if (hookResult.suppressOutput) {
+  if (hookResult.suppressOutput === true) {
     finalResult = { ...finalResult, suppressDisplay: true };
   }
   return finalResult;

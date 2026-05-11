@@ -17,6 +17,7 @@ export interface ApiError {
 
 export function isApiError(error: unknown): error is ApiError {
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     typeof error === 'object' &&
     error !== null &&
     'error' in error &&
@@ -57,28 +58,40 @@ export function isProQuotaExceededError(error: unknown): boolean {
     return checkMessage(error.error.message);
   }
 
-  // Check if it's a Gaxios error with response data
-  if (error && typeof error === 'object' && 'response' in error) {
-    const gaxiosError = error as {
-      response?: {
-        data?: unknown;
-      };
+  return isGaxiosProQuotaExceededError(error, checkMessage);
+}
+
+function isGaxiosProQuotaExceededError(
+  error: unknown,
+  checkMessage: (message: string) => boolean,
+): boolean {
+  if (
+    error === null ||
+    error === undefined ||
+    typeof error !== 'object' ||
+    !('response' in error)
+  ) {
+    return false;
+  }
+
+  const gaxiosError = error as {
+    response?: {
+      data?: unknown;
     };
-    if (gaxiosError.response?.data) {
-      if (typeof gaxiosError.response.data === 'string') {
-        return checkMessage(gaxiosError.response.data);
-      }
-      if (
-        typeof gaxiosError.response.data === 'object' &&
-        gaxiosError.response.data !== null &&
-        'error' in gaxiosError.response.data
-      ) {
-        const errorData = gaxiosError.response.data as {
-          error?: { message?: string };
-        };
-        return checkMessage(errorData.error?.message || '');
-      }
-    }
+  };
+  const responseData = gaxiosError.response?.data;
+  if (responseData === undefined || responseData === null) {
+    return false;
+  }
+  if (typeof responseData === 'string') {
+    return checkMessage(responseData);
+  }
+  if (typeof responseData === 'object' && 'error' in responseData) {
+    const errorData = responseData as {
+      error?: { message?: string };
+    };
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: error message may be empty string, should still check
+    return checkMessage(errorData.error?.message || '');
   }
   return false;
 }

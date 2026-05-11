@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 import {
   ApprovalMode,
   checkCommandPermissions,
@@ -11,6 +13,7 @@ import {
   getShellConfiguration,
   ShellExecutionService,
 } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 
 import type { CommandContext } from '../../ui/commands/types.js';
 import type { IPromptProcessor } from './types.js';
@@ -57,7 +60,7 @@ export class ShellProcessor implements IPromptProcessor {
   constructor(private readonly commandName: string) {}
 
   async process(prompt: string, context: CommandContext): Promise<string> {
-    const userArgsRaw = context.invocation?.args || '';
+    const userArgsRaw = context.invocation?.args ?? '';
 
     if (!prompt.includes(SHELL_INJECTION_TRIGGER)) {
       return prompt.replaceAll(SHORTHAND_ARGS_PLACEHOLDER, userArgsRaw);
@@ -80,50 +83,75 @@ export class ShellProcessor implements IPromptProcessor {
     const { shell } = getShellConfiguration();
     const userArgsEscaped = escapeShellArg(userArgsRaw, shell);
 
-    const resolvedInjections = injections.map((injection) => {
+    const resolvedInjections = this.resolveInjections(
+      injections,
+      userArgsEscaped,
+    );
+    this.checkPermissions(resolvedInjections, config, sessionShellAllowlist);
+
+    return this.executeInjections(
+      prompt,
+      resolvedInjections,
+      config,
+      userArgsRaw,
+    );
+  }
+
+  private resolveInjections(
+    injections: ShellInjection[],
+    userArgsEscaped: string,
+  ): ShellInjection[] {
+    return injections.map((injection) => {
       if (injection.command === '') {
         return injection;
       }
-      // Replace {{args}} inside the command string with the escaped version.
       const resolvedCommand = injection.command.replaceAll(
         SHORTHAND_ARGS_PLACEHOLDER,
         userArgsEscaped,
       );
       return { ...injection, resolvedCommand };
     });
+  }
 
+  private checkPermissions(
+    resolvedInjections: ShellInjection[],
+    config: Config,
+    sessionShellAllowlist: Set<string>,
+  ): void {
     const commandsToConfirm = new Set<string>();
     for (const injection of resolvedInjections) {
       const command = injection.resolvedCommand;
-
       if (!command) continue;
 
-      // Security check on the final, escaped command string.
       const { allAllowed, disallowedCommands, blockReason, isHardDenial } =
         checkCommandPermissions(command, config, sessionShellAllowlist);
 
-      if (!allAllowed) {
-        if (isHardDenial) {
+      if (allAllowed !== true) {
+        if (isHardDenial === true) {
           throw new Error(
-            `Blocked command: "${command}". Reason: ${blockReason || 'Blocked by configuration.'}`,
+            `Blocked command: "${command}". Reason: ${blockReason ?? 'Blocked by configuration.'}`,
           );
         }
-
-        // If not a hard denial, respect YOLO mode and auto-approve.
         if (config.getApprovalMode() !== ApprovalMode.YOLO) {
           disallowedCommands.forEach((uc) => commandsToConfirm.add(uc));
         }
       }
     }
 
-    // Handle confirmation requirements.
     if (commandsToConfirm.size > 0) {
       throw new ConfirmationRequiredError(
         'Shell command confirmation required',
         Array.from(commandsToConfirm),
       );
     }
+  }
 
+  private async executeInjections(
+    prompt: string,
+    resolvedInjections: ShellInjection[],
+    config: Config,
+    userArgsRaw: string,
+  ): Promise<string> {
     let processedPrompt = '';
     let lastIndex = 0;
 
@@ -185,6 +213,40 @@ export class ShellProcessor implements IPromptProcessor {
   }
 
   /**
+   * Finds the closing brace for a shell injection starting at startIndex.
+   * Returns the end index and command content, or null if not found.
+   */
+  private findInjectionEnd(
+    prompt: string,
+    startIndex: number,
+  ): { endIndex: number; command: string } | null {
+    let currentIndex = startIndex + SHELL_INJECTION_TRIGGER.length;
+    let braceCount = 1;
+
+    while (currentIndex < prompt.length) {
+      const char = prompt[currentIndex];
+
+      if (char === '{') {
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          const commandContent = prompt.substring(
+            startIndex + SHELL_INJECTION_TRIGGER.length,
+            currentIndex,
+          );
+          return {
+            endIndex: currentIndex + 1,
+            command: commandContent.trim(),
+          };
+        }
+      }
+      currentIndex++;
+    }
+    return null;
+  }
+
+  /**
    * Iteratively parses the prompt string to extract shell injections (!{...}),
    * correctly handling nested braces within the command.
    *
@@ -203,45 +265,21 @@ export class ShellProcessor implements IPromptProcessor {
         break;
       }
 
-      let currentIndex = startIndex + SHELL_INJECTION_TRIGGER.length;
-      let braceCount = 1;
-      let foundEnd = false;
+      const result = this.findInjectionEnd(prompt, startIndex);
 
-      while (currentIndex < prompt.length) {
-        const char = prompt[currentIndex];
-
-        // We count literal braces. This parser does not interpret shell quoting/escaping.
-        if (char === '{') {
-          braceCount++;
-        } else if (char === '}') {
-          braceCount--;
-          if (braceCount === 0) {
-            const commandContent = prompt.substring(
-              startIndex + SHELL_INJECTION_TRIGGER.length,
-              currentIndex,
-            );
-            const endIndex = currentIndex + 1;
-
-            injections.push({
-              command: commandContent.trim(),
-              startIndex,
-              endIndex,
-            });
-
-            index = endIndex;
-            foundEnd = true;
-            break;
-          }
-        }
-        currentIndex++;
-      }
-
-      // Check if the inner loop finished without finding the closing brace.
-      if (!foundEnd) {
+      if (result === null) {
         throw new Error(
           `Invalid syntax in command '${this.commandName}': Unclosed shell injection starting at index ${startIndex} ('!{'). Ensure braces are balanced.`,
         );
       }
+
+      injections.push({
+        command: result.command,
+        startIndex,
+        endIndex: result.endIndex,
+      });
+
+      index = result.endIndex;
     }
 
     return injections;

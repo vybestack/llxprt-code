@@ -53,7 +53,7 @@ export async function activateIsolatedRuntimeContext(
 ): Promise<void> {
   const runtimeId = options.runtimeId ?? handle.runtimeId;
   const mergedMetadata = {
-    ...(handle.metadata ?? {}),
+    ...handle.metadata,
     ...(options.metadata ?? {}),
   };
   const overrides: IsolatedRuntimeActivationOptions = {
@@ -96,7 +96,7 @@ export function registerCliProviderInfrastructure(
 
     logger.debug(
       () =>
-        `[cli-runtime] ProviderManager#setConfig applied (loggingEnabled=${config.getConversationLoggingEnabled?.() ?? false})`,
+        `[cli-runtime] ProviderManager#setConfig applied (loggingEnabled=${config.getConversationLoggingEnabled()})`,
     );
     upsertRuntimeEntry(runtimeId, { config });
   }

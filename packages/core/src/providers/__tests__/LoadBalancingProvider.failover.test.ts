@@ -10,6 +10,8 @@
  * These tests verify the failover policy for load balancing.
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '../../settings/SettingsService.js';
@@ -120,6 +122,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(() => {
         new LoadBalancingProvider(lbConfig, providerManager);
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       }).toThrow(/round-robin.*failover|failover.*round-robin/i);
     });
   });
@@ -810,6 +813,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         for await (const chunk of provider.generateChatCompletion(options)) {
           results.push(chunk);
         }
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       }).rejects.toThrow(/backend-one.*backend-two|backend-two.*backend-one/i);
     });
   });
@@ -1124,7 +1128,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         for await (const chunk of provider.generateChatCompletion(options)) {
           results.push(chunk);
         }
-      }).rejects.toThrow();
+      }).rejects.toThrow(/failover exhausted/);
     });
   });
 
@@ -1613,7 +1617,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         for await (const _chunk of provider.generateChatCompletion(options)) {
           // consume
         }
-      }).rejects.toThrow();
+      }).rejects.toThrow(Error);
 
       // Should try each backend exactly once (no infinite loop)
       expect(totalAttempts).toBe(3);

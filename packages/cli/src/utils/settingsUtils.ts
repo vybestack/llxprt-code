@@ -20,14 +20,20 @@ import { SETTINGS_SCHEMA } from '../config/settingsSchema.js';
 // with a flattened structure and dot-notation keys. This section flattens the
 // schema into a map for easier lookups.
 
+type FlattenedSettingDefinition = SettingDefinition & { key: string };
+
+type FlattenedSettingsSchema = Record<
+  string,
+  FlattenedSettingDefinition | undefined
+>;
+
 function flattenSchema(
   schema: SettingsSchema,
   prefix = '',
-): Record<string, SettingDefinition & { key: string }> {
-  let result: Record<string, SettingDefinition & { key: string }> = {};
-  for (const key in schema) {
+): FlattenedSettingsSchema {
+  let result: FlattenedSettingsSchema = {};
+  for (const [key, definition] of Object.entries(schema)) {
     const newKey = prefix ? `${prefix}.${key}` : key;
-    const definition = schema[key];
     result[newKey] = { ...definition, key: newKey };
     if (definition.properties) {
       result = { ...result, ...flattenSchema(definition.properties, newKey) };
@@ -38,27 +44,46 @@ function flattenSchema(
 
 const FLATTENED_SCHEMA = flattenSchema(SETTINGS_SCHEMA);
 
+function getStaticSettings(): FlattenedSettingDefinition[] {
+  return Object.values(FLATTENED_SCHEMA).filter(
+    (definition): definition is FlattenedSettingDefinition =>
+      definition !== undefined,
+  );
+}
+
+function getOrCreateCategory(
+  categories: Partial<Record<string, FlattenedSettingDefinition[]>>,
+  category: string,
+): FlattenedSettingDefinition[] {
+  const existingCategory = categories[category];
+  if (existingCategory !== undefined) {
+    return existingCategory;
+  }
+
+  const newCategory: FlattenedSettingDefinition[] = [];
+  categories[category] = newCategory;
+  return newCategory;
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 /**
  * Get all settings grouped by category
  */
 export function getSettingsByCategory(): Record<
   string,
-  Array<SettingDefinition & { key: string }>
+  FlattenedSettingDefinition[]
 > {
-  const categories: Record<
-    string,
-    Array<SettingDefinition & { key: string }>
-  > = {};
+  const categories: Partial<Record<string, FlattenedSettingDefinition[]>> = {};
 
-  Object.values(FLATTENED_SCHEMA).forEach((definition) => {
+  getStaticSettings().forEach((definition) => {
     const category = definition.category;
-    if (!categories[category]) {
-      categories[category] = [];
-    }
-    categories[category].push(definition);
+    getOrCreateCategory(categories, category).push(definition);
   });
 
-  return categories;
+  return categories as Record<string, FlattenedSettingDefinition[]>;
 }
 
 /**
@@ -66,10 +91,10 @@ export function getSettingsByCategory(): Record<
  */
 export function getSettingDefinition(
   key: string,
-): (SettingDefinition & { key: string }) | undefined {
+): FlattenedSettingDefinition | undefined {
   // First check static settings
   const staticDef = FLATTENED_SCHEMA[key];
-  if (staticDef) return staticDef;
+  if (staticDef !== undefined) return staticDef;
 
   // Then check dynamic settings
   const dynamicDef = dynamicSettingsRegistry.get(key);
@@ -85,7 +110,7 @@ export function getSettingDefinition(
  */
 export function requiresRestart(key: string): boolean {
   // First check static settings
-  if (FLATTENED_SCHEMA[key]?.requiresRestart) {
+  if (FLATTENED_SCHEMA[key]?.requiresRestart === true) {
     return true;
   }
 
@@ -112,7 +137,7 @@ export function getDefaultValue(key: string): SettingDefinition['default'] {
  * Get all setting keys that require restart
  */
 export function getRestartRequiredSettings(): string[] {
-  const staticKeys = Object.values(FLATTENED_SCHEMA)
+  const staticKeys = getStaticSettings()
     .filter((definition) => definition.requiresRestart)
     .map((definition) => definition.key);
 
@@ -137,8 +162,8 @@ export function getNestedValue(
   if (rest.length === 0) {
     return value;
   }
-  if (value && typeof value === 'object' && value !== null) {
-    return getNestedValue(value as Record<string, unknown>, rest);
+  if (isObjectRecord(value)) {
+    return getNestedValue(value, rest);
   }
   return undefined;
 }
@@ -186,7 +211,7 @@ export function getAllSettingKeys(): string[] {
  * Get all setting keys that should be shown in dialog
  */
 export function getDialogSettingKeys(): string[] {
-  return Object.values(FLATTENED_SCHEMA)
+  return getStaticSettings()
     .filter((definition) => definition.showInDialog !== false)
     .map((definition) => definition.key);
 }
@@ -196,23 +221,15 @@ export function getDialogSettingKeys(): string[] {
  */
 export function getSettingsByType(
   type: SettingDefinition['type'],
-): Array<SettingDefinition & { key: string }> {
-  return Object.values(FLATTENED_SCHEMA).filter(
-    (definition) => definition.type === type,
-  );
+): FlattenedSettingDefinition[] {
+  return getStaticSettings().filter((definition) => definition.type === type);
 }
 
 /**
  * Get settings that require restart
  */
-export function getSettingsRequiringRestart(): Array<
-  SettingDefinition & {
-    key: string;
-  }
-> {
-  return Object.values(FLATTENED_SCHEMA).filter(
-    (definition) => definition.requiresRestart,
-  );
+export function getSettingsRequiringRestart(): FlattenedSettingDefinition[] {
+  return getStaticSettings().filter((definition) => definition.requiresRestart);
 }
 
 /**
@@ -241,24 +258,18 @@ export function shouldShowInDialog(key: string): boolean {
  */
 export function getDialogSettingsByCategory(): Record<
   string,
-  Array<SettingDefinition & { key: string }>
+  FlattenedSettingDefinition[]
 > {
-  const categories: Record<
-    string,
-    Array<SettingDefinition & { key: string }>
-  > = {};
+  const categories: Partial<Record<string, FlattenedSettingDefinition[]>> = {};
 
-  Object.values(FLATTENED_SCHEMA)
+  getStaticSettings()
     .filter((definition) => definition.showInDialog !== false)
     .forEach((definition) => {
       const category = definition.category;
-      if (!categories[category]) {
-        categories[category] = [];
-      }
-      categories[category].push(definition);
+      getOrCreateCategory(categories, category).push(definition);
     });
 
-  return categories;
+  return categories as Record<string, FlattenedSettingDefinition[]>;
 }
 
 /**
@@ -266,8 +277,8 @@ export function getDialogSettingsByCategory(): Record<
  */
 export function getDialogSettingsByType(
   type: SettingDefinition['type'],
-): Array<SettingDefinition & { key: string }> {
-  return Object.values(FLATTENED_SCHEMA).filter(
+): FlattenedSettingDefinition[] {
+  return getStaticSettings().filter(
     (definition) =>
       definition.type === type && definition.showInDialog !== false,
   );
@@ -353,11 +364,15 @@ function setNestedValue(
     return obj;
   }
 
-  if (!obj[first] || typeof obj[first] !== 'object') {
-    obj[first] = {};
+  const child = obj[first];
+  if (isObjectRecord(child)) {
+    setNestedValue(child, rest, value);
+    return obj;
   }
 
-  setNestedValue(obj[first] as Record<string, unknown>, rest, value);
+  const newChild: Record<string, unknown> = {};
+  obj[first] = newChild;
+  setNestedValue(newChild, rest, value);
   return obj;
 }
 
@@ -434,7 +449,8 @@ export function saveModifiedSettings(
       loadedSettings.forScope(scope).settings,
     );
 
-    const isDefaultValue = value === getDefaultValue(settingKey);
+    const defaultValue = getDefaultValue(settingKey);
+    const isDefaultValue = Object.is(value, defaultValue);
 
     if (existsInOriginalFile || !isDefaultValue) {
       saveSingleSetting(settingKey, value, loadedSettings, scope);
@@ -478,7 +494,7 @@ export function getDisplayValue(
   if (settingExistsInScope(key, settings) || isInModifiedSettings) {
     return `${valueString}*`; // * indicates setting is set in current scope
   }
-  if (isChangedFromDefault || isInModifiedSettings) {
+  if (isChangedFromDefault) {
     return `${valueString}*`; // * indicates changed from default value
   }
 

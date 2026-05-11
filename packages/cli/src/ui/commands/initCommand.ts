@@ -21,6 +21,7 @@ import { PromptService, debugLogger } from '@vybestack/llxprt-code-core';
 async function getInitCommandPrompt(): Promise<string> {
   try {
     const baseDir =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string LLXPRT_PROMPTS_DIR means "unset"
       process.env.LLXPRT_PROMPTS_DIR ||
       path.join(os.homedir(), '.llxprt', 'prompts');
     const promptService = new PromptService({

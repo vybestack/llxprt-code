@@ -19,7 +19,7 @@ import type { MediaBlock } from '../../services/history/IContent.js';
 export type MediaCategory = 'image' | 'pdf' | 'audio' | 'video' | 'unknown';
 
 export function classifyMediaBlock(media: MediaBlock): MediaCategory {
-  const mime = (media.mimeType ?? '').toLowerCase();
+  const mime = media.mimeType.toLowerCase();
   if (mime.startsWith('image/')) return 'image';
   if (mime === 'application/pdf') return 'pdf';
   if (mime.startsWith('audio/')) return 'audio';
@@ -34,9 +34,17 @@ export function buildUnsupportedMediaPlaceholder(
   const mime = media.mimeType || 'unknown';
   const filePart = media.filename ? ` (${media.filename})` : '';
   const category = classifyMediaBlock(media);
-  const label =
-    category === 'pdf' ? 'PDF' : category === 'unknown' ? 'media' : category;
+  const label = getMediaLabel(category);
   return `[Unsupported ${label}: ${mime}${filePart} — ${providerName} does not support ${label} input]`;
+}
+
+/**
+ * Get human-readable label for media category.
+ */
+function getMediaLabel(category: string): string {
+  if (category === 'pdf') return 'PDF';
+  if (category === 'unknown') return 'media';
+  return category;
 }
 
 /**

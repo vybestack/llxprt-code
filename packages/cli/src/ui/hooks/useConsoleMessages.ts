@@ -34,9 +34,9 @@ function consoleMessagesReducer(
     case 'ADD_MESSAGES': {
       const newMessages = [...state];
       for (const queuedMessage of action.payload) {
-        const lastMessage = newMessages[newMessages.length - 1];
+        const lastMessage = newMessages.at(-1);
         if (
-          lastMessage &&
+          lastMessage !== undefined &&
           lastMessage.type === queuedMessage.type &&
           lastMessage.content === queuedMessage.content
         ) {
@@ -84,11 +84,9 @@ export function useConsoleMessages(): UseConsoleMessagesReturn {
   const handleNewMessage = useCallback(
     (message: ConsoleMessageItem) => {
       messageQueueRef.current.push(message);
-      if (!timeoutRef.current) {
-        // Batch updates using a timeout. 16ms is a reasonable delay to batch
-        // rapid-fire messages without noticeable lag.
-        timeoutRef.current = setTimeout(processQueue, 16);
-      }
+      // Batch updates using a timeout. 16ms is a reasonable delay to batch
+      // rapid-fire messages without noticeable lag.
+      timeoutRef.current ??= setTimeout(processQueue, 16);
     },
     [processQueue],
   );

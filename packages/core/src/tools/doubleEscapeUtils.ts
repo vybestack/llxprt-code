@@ -41,6 +41,34 @@ export function shouldUseDoubleEscapeHandling(toolFormat: string): boolean {
 }
 
 /**
+ * Fixes stringified values in a parsed object by parsing any string values
+ * that contain valid JSON objects or arrays.
+ * @returns The fixed object and whether any values were double-escaped
+ */
+function fixStringifiedValues(parsed: Record<string, unknown>): {
+  fixed: Record<string, unknown>;
+  wasDoubleEscaped: boolean;
+} {
+  const fixed = { ...parsed };
+  let wasDoubleEscaped = false;
+  for (const [key, value] of Object.entries(fixed)) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+    try {
+      const testParse = JSON.parse(value);
+      if (typeof testParse === 'object') {
+        fixed[key] = testParse;
+        wasDoubleEscaped = true;
+      }
+    } catch {
+      // Keep original value if can't parse
+    }
+  }
+  return { fixed, wasDoubleEscaped };
+}
+
+/**
  * Checks if a JSON string appears to be double-stringified
  * @param jsonString - The JSON string to check
  * @returns Object with detection results and corrected value if applicable
@@ -89,18 +117,17 @@ export function detectDoubleEscaping(jsonString: string): {
           secondParse: doubleParsed,
           originalLength: jsonString.length,
         });
-      } catch (_secondParseError) {
+      } catch {
         // Not double-stringified, just single stringified
         logger.debug(() => `JSON parameters are single-stringified (normal)`);
         result.correctedValue = parsed;
       }
     } else if (typeof parsed === 'object' && parsed !== null) {
-      // Check if it's an object with stringified values (common pattern)
       const hasStringifiedValues = Object.values(parsed).some((value) => {
         if (typeof value === 'string') {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           try {
             const testParse = JSON.parse(value);
-            // If we can parse it and it's an array or object, it's likely stringified
             return typeof testParse === 'object';
           } catch {
             return false;
@@ -110,23 +137,11 @@ export function detectDoubleEscaping(jsonString: string): {
       });
 
       if (hasStringifiedValues) {
-        // Fix stringified values
-        const fixed = { ...parsed };
-        for (const [key, value] of Object.entries(fixed)) {
-          if (typeof value === 'string') {
-            try {
-              const testParse = JSON.parse(value);
-              if (typeof testParse === 'object') {
-                fixed[key] = testParse;
-                result.isDoubleEscaped = true;
-              }
-            } catch {
-              // Keep original value if can't parse
-            }
-          }
-        }
+        const { fixed, wasDoubleEscaped } = fixStringifiedValues(parsed);
+        result.isDoubleEscaped = wasDoubleEscaped;
         result.correctedValue = fixed;
-        if (result.isDoubleEscaped) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (wasDoubleEscaped) {
           logger.error(() => `Fixed stringified parameter values`, {
             original: parsed,
             fixed,
@@ -136,7 +151,6 @@ export function detectDoubleEscaping(jsonString: string): {
         result.correctedValue = parsed;
       }
     } else {
-      // Already parsed correctly
       result.correctedValue = parsed;
     }
   } catch (parseError) {
@@ -162,6 +176,7 @@ export function detectDoubleEscapingInChunk(chunk: string): boolean {
   const endPattern = String.raw`\\"`;
 
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     chunk.includes(backslashBracket) ||
     chunk.includes(doubleBackslash) ||
     chunk.includes(backslashQuote) ||
@@ -221,14 +236,16 @@ function tryMultipleParsingStrategies(
 
   // Strategy 2: Detect and repair double escaping (existing logic, no format dependency)
   const detection = detectDoubleEscaping(parametersString);
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: format is optional string, empty string should fall through to 'auto'
+  const formatLabel = format || 'auto';
   if (detection.correctedValue !== undefined) {
     if (detection.isDoubleEscaped) {
       logger.error(
         () =>
-          `[${format || 'auto'}] Fixed double-escaped parameters for ${toolName}`,
+          `[${formatLabel}] Fixed double-escaped parameters for ${toolName}`,
         {
           tool: toolName,
-          format: format || 'auto',
+          format: formatLabel,
           originalLength: parametersString.length,
           fixed: true,
         },
@@ -245,10 +262,10 @@ function tryMultipleParsingStrategies(
   // Strategy 3: Return original string (last resort)
   if (detection.detectionDetails.error) {
     logger.error(
-      () => `[${format || 'auto'}] Failed to parse parameters for ${toolName}`,
+      () => `[${formatLabel}] Failed to parse parameters for ${toolName}`,
       {
         tool: toolName,
-        format: format || 'auto',
+        format: formatLabel,
         error: detection.detectionDetails.error,
       },
     );
@@ -267,6 +284,7 @@ function convertStringNumbersToNumbers(obj: unknown): unknown {
   if (obj == null) return obj;
 
   if (typeof obj === 'string') {
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     if (/^-?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$/.test(obj)) {
       const num = Number(obj);
       if (Number.isFinite(num)) return num;

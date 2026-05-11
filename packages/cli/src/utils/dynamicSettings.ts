@@ -8,24 +8,45 @@ import type { SettingDefinition } from '../config/settingsSchema.js';
 const logger = new DebugLogger('llxprt:dynamic-settings');
 
 type DynamicSettings = Record<string, SettingDefinition>;
+type DynamicSettingsInput = Record<string, unknown>;
+
+const allowedTypes = [
+  'boolean',
+  'string',
+  'number',
+  'array',
+  'object',
+  'enum',
+] as const;
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isAllowedType(value: unknown): value is SettingDefinition['type'] {
+  return (
+    typeof value === 'string' &&
+    allowedTypes.includes(value as SettingDefinition['type'])
+  );
+}
 
 class DynamicSettingsRegistry {
   private dynamicSettings: DynamicSettings = {};
   private isInitialized = false;
 
-  register(settings: DynamicSettings): void {
+  register(settings: DynamicSettingsInput): void {
     if (this.isInitialized) {
       throw new Error(
         'DynamicSettingsRegistry: Already initialized. Use reset() if needed.',
       );
     }
-    this.validateSettings(settings);
-    this.dynamicSettings = settings;
+    const validatedSettings = this.validateSettings(settings);
+    this.dynamicSettings = validatedSettings;
     this.isInitialized = true;
   }
 
-  private validateSettings(settings: DynamicSettings): void {
-    if (!settings || typeof settings !== 'object') {
+  private validateSettings(settings: unknown): DynamicSettings {
+    if (typeof settings !== 'object' || settings === null) {
       throw new Error('Settings must be a valid object');
     }
 
@@ -33,40 +54,33 @@ class DynamicSettingsRegistry {
       throw new Error('Settings must be an object, not an array');
     }
 
+    const validatedSettings: DynamicSettings = {};
     for (const [key, definition] of Object.entries(settings)) {
-      if (!definition || typeof definition !== 'object') {
+      if (!isObjectRecord(definition)) {
         throw new Error(
           `Setting definition for key '${key}' must be an object`,
         );
       }
 
-      if (!definition.type || typeof definition.type !== 'string') {
+      if (!isAllowedType(definition.type)) {
         throw new Error(
           `Setting definition for key '${key}' must have a valid type`,
         );
       }
 
-      if (!definition.label || typeof definition.label !== 'string') {
+      if (
+        typeof definition.label !== 'string' ||
+        definition.label.length === 0
+      ) {
         throw new Error(
           `Setting definition for key '${key}' must have a valid label`,
         );
       }
 
-      // Validate type is one of the allowed types
-      const allowedTypes = [
-        'boolean',
-        'string',
-        'number',
-        'array',
-        'object',
-        'enum',
-      ];
-      if (!allowedTypes.includes(definition.type)) {
-        throw new Error(
-          `Setting definition for key '${key}' has invalid type '${definition.type}'. Allowed types: ${allowedTypes.join(', ')}`,
-        );
-      }
+      validatedSettings[key] = definition as unknown as SettingDefinition;
     }
+
+    return validatedSettings;
   }
 
   reset(): void {
@@ -83,12 +97,13 @@ class DynamicSettingsRegistry {
   }
 
   requiresRestart(key: string): boolean {
-    return this.dynamicSettings[key]?.requiresRestart ?? false;
+    const definition = this.get(key);
+    return definition?.requiresRestart ?? false;
   }
 
   getAllRestartRequiredKeys(): string[] {
     return Object.entries(this.dynamicSettings)
-      .filter(([, definition]) => definition.requiresRestart)
+      .filter(([, definition]) => definition.requiresRestart === true)
       .map(([key]) => key);
   }
 }
@@ -114,7 +129,7 @@ export function generateDynamicToolSettings(
     );
 
     // Detailed output only in verbose mode
-    const verboseDebug = process.env.DEBUG?.includes('verbose');
+    const verboseDebug = process.env.DEBUG?.includes('verbose') === true;
 
     // Process registered tools
     for (const { displayName } of toolRegistryInfo.registered) {

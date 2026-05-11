@@ -43,11 +43,9 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
   });
 
   afterEach(async () => {
-    if (testServer) {
-      await new Promise<void>((resolve) => {
-        testServer.close(() => resolve());
-      });
-    }
+    await new Promise<void>((resolve) => {
+      testServer.close(() => resolve());
+    });
   });
 
   describe('Device Flow Initiation', () => {
@@ -192,7 +190,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       });
 
       // Should throw validation error due to missing required fields
-      await expect(deviceFlow.initiateDeviceFlow()).rejects.toThrow();
+      await expect(deviceFlow.initiateDeviceFlow()).rejects.toThrow(Error);
     });
   });
 
@@ -292,14 +290,14 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       let verifierVerified = false;
 
       testServer.on('request', (req, res) => {
-        if (req.url?.includes('device/code')) {
+        if (req.url?.includes('device/code') === true) {
           let body = '';
           req.on('data', (chunk) => {
             body += chunk;
           });
           req.on('end', () => {
             const params = new URLSearchParams(body);
-            storedChallenge = params.get('code_challenge') || undefined;
+            storedChallenge = params.get('code_challenge') ?? undefined;
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(
@@ -312,7 +310,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
               }),
             );
           });
-        } else if (req.url?.includes('token')) {
+        } else if (req.url?.includes('token') === true) {
           let body = '';
           req.on('data', (chunk) => {
             body += chunk;
@@ -325,6 +323,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
               const expectedChallenge = createHash('sha256')
                 .update(verifier)
                 .digest('base64url');
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(expectedChallenge).toBe(storedChallenge);
               verifierVerified = true;
             }
@@ -374,42 +373,42 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
 
         testServer.removeAllListeners('request');
         testServer.on('request', (req, res) => {
-          if (req.url?.includes('token')) {
-            pollCount++;
+          if (req.url?.includes('token') !== true)
+            throw new Error('unreachable: narrowing failed');
+          pollCount++;
 
-            let body = '';
-            req.on('data', (chunk) => {
-              body += chunk;
-            });
-            req.on('end', () => {
-              const params = new URLSearchParams(body);
-              expect(params.get('grant_type')).toBe(
-                'urn:ietf:params:oauth:grant-type:device_code',
-              );
-              expect(params.get('device_code')).toBe('test_device_code');
-              expect(params.get('client_id')).toBe(
-                'f0304373b74a44d2b584a3fb70ca9e56',
-              );
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', () => {
+            const params = new URLSearchParams(body);
+            expect(params.get('grant_type')).toBe(
+              'urn:ietf:params:oauth:grant-type:device_code',
+            );
+            expect(params.get('device_code')).toBe('test_device_code');
+            expect(params.get('client_id')).toBe(
+              'f0304373b74a44d2b584a3fb70ca9e56',
+            );
 
-              if (pollCount < 3) {
-                // First few attempts return pending
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'authorization_pending' }));
-              } else {
-                // Eventually return success
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(
-                  JSON.stringify({
-                    access_token: mockToken.access_token,
-                    token_type: mockToken.token_type,
-                    expires_in: 3600,
-                    refresh_token: mockToken.refresh_token,
-                    scope: mockToken.scope,
-                  }),
-                );
-              }
-            });
-          }
+            if (pollCount < 3) {
+              // First few attempts return pending
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'authorization_pending' }));
+            } else {
+              // Eventually return success
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  access_token: mockToken.access_token,
+                  token_type: mockToken.token_type,
+                  expires_in: 3600,
+                  refresh_token: mockToken.refresh_token,
+                  scope: mockToken.scope,
+                }),
+              );
+            }
+          });
         });
 
         // This will actually poll and succeed after the third attempt
@@ -430,30 +429,38 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
      * @when requesting token
      * @then Uses https://chat.qwen.ai/api/v1/oauth2/token
      */
-    it(
-      'should use correct Qwen token endpoint',
-      { timeout: 10000 },
-      async () => {
-        const realConfig: DeviceFlowConfig = {
-          clientId: 'f0304373b74a44d2b584a3fb70ca9e56',
-          authorizationEndpoint:
-            'https://chat.qwen.ai/api/v1/oauth2/device/code',
-          tokenEndpoint: 'https://chat.qwen.ai/api/v1/oauth2/token',
-          scopes: ['read'],
-        };
+    it('should use correct Qwen token endpoint', async () => {
+      const realConfig: DeviceFlowConfig = {
+        clientId: 'f0304373b74a44d2b584a3fb70ca9e56',
+        authorizationEndpoint: 'https://chat.qwen.ai/api/v1/oauth2/device/code',
+        tokenEndpoint: 'https://chat.qwen.ai/api/v1/oauth2/token',
+        scopes: ['read'],
+      };
 
-        const realDeviceFlow = new QwenDeviceFlow(realConfig);
-        // This will fail with a real network request, which is expected
-        await expect(
-          realDeviceFlow.pollForToken('test_device'),
-        ).rejects.toThrow('HTTP 400: Bad Request');
+      const realDeviceFlow = new QwenDeviceFlow(realConfig);
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'invalid_request',
+            error_description: 'Bad Request',
+          }),
+          {
+            status: 400,
+            statusText: 'Bad Request',
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      );
+      await expect(realDeviceFlow.pollForToken('test_device')).rejects.toThrow(
+        'HTTP 400: Bad Request',
+      );
+      fetchMock.mockRestore();
 
-        // Verify the configuration contains the correct endpoint
-        expect(realConfig.tokenEndpoint).toBe(
-          'https://chat.qwen.ai/api/v1/oauth2/token',
-        );
-      },
-    );
+      // Verify the configuration contains the correct endpoint
+      expect(realConfig.tokenEndpoint).toBe(
+        'https://chat.qwen.ai/api/v1/oauth2/token',
+      );
+    });
 
     /**
      * @requirement REQ-002.1
@@ -499,11 +506,13 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
         expect(timestamps.length).toBeGreaterThanOrEqual(3);
 
         // Verify the intervals are at least close to 5 seconds (allowing some variance)
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (timestamps.length > 1) {
           const intervals = timestamps
             .slice(1)
             .map((t, i) => t - timestamps[i]);
           intervals.forEach((interval) =>
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(interval).toBeGreaterThanOrEqual(4000),
           ); // Allow some variance
         }
@@ -531,7 +540,9 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       });
 
       // Should throw validation error due to missing access_token
-      await expect(deviceFlow.pollForToken('test_device')).rejects.toThrow();
+      await expect(deviceFlow.pollForToken('test_device')).rejects.toThrow(
+        Error,
+      );
     });
   });
 
@@ -737,7 +748,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       });
 
       // Should throw a JSON parsing error
-      await expect(deviceFlow.initiateDeviceFlow()).rejects.toThrow();
+      await expect(deviceFlow.initiateDeviceFlow()).rejects.toThrow(Error);
     });
 
     /**
@@ -850,12 +861,14 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
         req.on('end', () => {
           const params = new URLSearchParams(body);
 
-          if (req.url?.includes('device/code')) {
+          if (req.url?.includes('device/code') === true) {
             requiredDeviceParams.forEach((param) => {
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(params.has(param)).toBe(true);
             });
-          } else if (req.url?.includes('token')) {
+          } else if (req.url?.includes('token') === true) {
             requiredTokenParams.forEach((param) => {
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(params.has(param)).toBe(true);
             });
           }

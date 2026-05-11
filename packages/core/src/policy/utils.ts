@@ -8,6 +8,7 @@
  * Escapes special regex characters in a string.
  */
 export function escapeRegex(text: string): string {
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
@@ -26,6 +27,7 @@ function validatePolicyRegex(source: string): void {
     );
   }
   // Reject patterns with nested quantifiers that can cause catastrophic backtracking (ReDoS)
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   if (/([+*]|\{\d+,\d*\})\??([+*]|\{\d+,\d*\})/.test(source)) {
     throw new Error(
       'Policy regex contains nested quantifiers (potential ReDoS)',
@@ -44,7 +46,7 @@ export function buildArgsPatterns(
 ): RegExp[] {
   const patterns: RegExp[] = [];
 
-  if (commandPrefix) {
+  if (commandPrefix != null && commandPrefix !== '') {
     const prefixes = Array.isArray(commandPrefix)
       ? commandPrefix
       : [commandPrefix];
@@ -57,13 +59,13 @@ export function buildArgsPatterns(
     }
   }
 
-  if (commandRegex) {
+  if (commandRegex !== undefined && commandRegex !== '') {
     validatePolicyRegex(commandRegex);
     // Use non-backtracking prefix with bounded match length
     patterns.push(new RegExp(`"command":"(?:${commandRegex})`));
   }
 
-  if (argsPattern) {
+  if (argsPattern instanceof RegExp) {
     validatePolicyRegex(argsPattern.source);
     // Rebuild regex with .* replaced by [^"]* to prevent polynomial
     // backtracking when matching JSON-serialized tool arguments.

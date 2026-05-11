@@ -71,6 +71,7 @@ describe('toolkeyCommand', () => {
   describe('schema completion', () => {
     it('suggests tool names for first argument with descriptions', async () => {
       const schema = toolkeyCommand.schema;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!schema) {
         throw new Error('toolkey schema missing');
       }
@@ -95,6 +96,7 @@ describe('toolkeyCommand', () => {
 
     it('suggests none and shows key hint after selecting tool', async () => {
       const schema = toolkeyCommand.schema;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!schema) {
         throw new Error('toolkey schema missing');
       }

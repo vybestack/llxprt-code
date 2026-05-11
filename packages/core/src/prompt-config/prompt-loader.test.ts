@@ -369,6 +369,7 @@ describe('PromptLoader', () => {
       expect(env.isSandboxed).toBe(true);
 
       // Restore original value
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (originalSandbox === undefined) {
         delete process.env.SANDBOX;
       } else {
@@ -385,6 +386,7 @@ describe('PromptLoader', () => {
       expect(env.isSandboxed).toBe(true);
 
       // Restore original value
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (originalContainer === undefined) {
         delete process.env.CONTAINER;
       } else {
@@ -401,6 +403,7 @@ describe('PromptLoader', () => {
       expect(env.hasIdeCompanion).toBe(true);
 
       // Restore original value
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (originalIDE === undefined) {
         delete process.env.IDE_COMPANION;
       } else {

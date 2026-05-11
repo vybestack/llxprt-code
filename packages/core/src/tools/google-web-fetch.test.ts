@@ -343,8 +343,9 @@ describe('GoogleWebFetchTool', () => {
         new AbortController().signal,
       );
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
-        confirmationDetails &&
+        confirmationDetails !== false &&
         typeof confirmationDetails === 'object' &&
         'onConfirm' in confirmationDetails
       ) {

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 /**
  * Universal content representation that is provider-agnostic.
  * All conversation content is represented as blocks within a speaker's turn.
@@ -220,20 +222,20 @@ export const ContentValidation = {
    * Check if IContent has valid content (non-empty blocks, at least one block with actual content)
    */
   hasContent(content: IContent): boolean {
-    if (!content.blocks || content.blocks.length === 0) {
+    if (content.blocks.length === 0) {
       return false;
     }
 
     // Check if any block has actual content
     return content.blocks.some((block) => {
       if (block.type === 'text') {
-        return !!block.text && block.text.trim().length > 0;
+        return Boolean(block.text) && block.text.trim().length > 0;
       }
       if (block.type === 'tool_call') {
-        return !!block.name && !!block.parameters;
+        return Boolean(block.name) && Boolean(block.parameters);
       }
       if (block.type === 'tool_response') {
-        return !!block.callId && block.result !== undefined;
+        return Boolean(block.callId) && block.result !== undefined;
       }
       if (block.type === 'media') {
         return !!block.data && !!block.mimeType;
@@ -242,9 +244,13 @@ export const ContentValidation = {
         // A thinking block is valid if it has:
         // 1. Thought content (text), OR
         // 2. Encrypted content (for OpenAI Codex round-trip reasoning)
-        const hasThought = !!block.thought && block.thought.trim().length > 0;
+        const hasThought =
+          Boolean(block.thought) && block.thought.trim().length > 0;
+        const encryptedContent = block.encryptedContent as unknown;
         const hasEncrypted =
-          !!block.encryptedContent && block.encryptedContent.trim().length > 0;
+          typeof encryptedContent === 'string' &&
+          Boolean(encryptedContent) &&
+          encryptedContent.trim().length > 0;
 
         // For Anthropic extended thinking, require signature
         if (block.sourceField === 'thinking') {
@@ -254,10 +260,8 @@ export const ContentValidation = {
         // For OpenAI/Codex, either thought OR encrypted content is valid
         return hasThought || hasEncrypted;
       }
-      if (block.type === 'code') {
-        return !!block.code && block.code.trim().length > 0;
-      }
-      return false;
+      // CodeBlock - code is always a string on this type
+      return Boolean(block.code) && block.code.trim().length > 0;
     });
   },
 };

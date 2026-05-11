@@ -81,7 +81,7 @@ const createFakeCompletedToolCall = (
           },
         },
       ],
-      error: error || new Error('Tool failed'),
+      error: error ?? new Error('Tool failed'),
       errorType: ToolErrorType.UNKNOWN,
       resultDisplay: 'Failure!',
       agentId: 'primary',

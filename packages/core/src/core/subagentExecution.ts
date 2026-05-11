@@ -76,7 +76,10 @@ export function checkTerminationConditions(
     'runConfig' | 'subagentId' | 'output' | 'logger'
   >,
 ): TerminationCheck {
-  if (ctx.runConfig.max_turns && turnCounter >= ctx.runConfig.max_turns) {
+  if (
+    ctx.runConfig.max_turns !== undefined &&
+    turnCounter >= ctx.runConfig.max_turns
+  ) {
     ctx.output.terminate_reason = SubagentTerminateMode.MAX_TURNS;
     ctx.logger.warn(
       () =>
@@ -138,7 +141,7 @@ export function filterTextWithEmoji(
 
 /**
  * After a turn with no tool calls, determine what to send next:
- * - A todo-completion reminder, or
+ * - A task-list-completion reminder, or
  * - A nudge for missing output variables, or
  * - null (goal is met — caller should break the loop).
  */
@@ -316,10 +319,8 @@ export function handleExecutionError(
       `Error during subagent execution for ${ctx.subagentId}: ${error instanceof Error ? error.message : String(error)}`,
   );
   ctx.output.terminate_reason = SubagentTerminateMode.ERROR;
-  if (!ctx.output.final_message) {
-    ctx.output.final_message =
-      error instanceof Error ? error.message : String(error);
-  }
+  ctx.output.final_message ??=
+    error instanceof Error ? error.message : String(error);
 }
 
 // ---------------------------------------------------------------------------
@@ -391,7 +392,7 @@ export function createCompletionChannel(
       pendingCompletedCalls = null;
       return Promise.resolve(calls);
     }
-    if (signal?.aborted) {
+    if (signal?.aborted === true) {
       return Promise.reject(createAbortError());
     }
     const completionPromise = new Promise<CompletedToolCall[]>(
@@ -415,7 +416,7 @@ export function createCompletionChannel(
   };
 
   const outputUpdateHandler: OutputUpdateHandler = (_toolCallId, output) => {
-    if (output && ctx.onMessage) {
+    if ((output as unknown) != null && ctx.onMessage != null) {
       const textOutput =
         typeof output === 'string'
           ? output
@@ -493,14 +494,17 @@ export async function initInteractiveScheduler(
     throw error;
   }
 
-  const schedulerDispose = options?.schedulerFactory
-    ? typeof scheduler.dispose === 'function'
-      ? async () => scheduler.dispose?.()
-      : async () => {}
-    : async () =>
-        ctx.schedulerConfig.disposeScheduler(
-          ctx.schedulerConfig.getSessionId(),
-        );
+  let schedulerDispose: () => Promise<void>;
+  if (options?.schedulerFactory) {
+    if (typeof scheduler.dispose === 'function') {
+      schedulerDispose = async () => scheduler.dispose?.();
+    } else {
+      schedulerDispose = async () => {};
+    }
+  } else {
+    schedulerDispose = async () =>
+      ctx.schedulerConfig.disposeScheduler(ctx.schedulerConfig.getSessionId());
+  }
 
   return {
     scheduler: {

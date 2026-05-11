@@ -67,8 +67,12 @@ export class StartSessionEvent {
     const generatorConfig = config.getContentGeneratorConfig();
     const mcpServers = config.getMcpServers();
 
-    const useGemini = !!generatorConfig?.apiKey && !generatorConfig?.vertexai;
-    const useVertex = !!generatorConfig?.vertexai;
+    const useGemini =
+      generatorConfig !== undefined &&
+      (generatorConfig.apiKey?.length ?? 0) > 0 &&
+      generatorConfig.vertexai !== true;
+    const useVertex =
+      generatorConfig !== undefined && generatorConfig.vertexai === true;
 
     this['event.name'] = 'cli_config';
     this.model = config.getModel();
@@ -139,9 +143,10 @@ export class ToolCallEvent {
     this.function_args = call.request.args;
     this.duration_ms = call.durationMs ?? 0;
     this.success = call.status === 'success';
-    this.decision = call.outcome
-      ? getDecisionFromOutcome(call.outcome)
-      : undefined;
+    this.decision =
+      call.outcome !== undefined
+        ? getDecisionFromOutcome(call.outcome)
+        : undefined;
     this.error = call.response.error?.message;
     this.error_type = call.response.errorType;
     this.prompt_id = call.request.prompt_id;
@@ -151,13 +156,13 @@ export class ToolCallEvent {
         : 'native';
     this.agent_id = call.request.agentId ?? DEFAULT_AGENT_ID;
 
+    const resultDisplay = call.response.resultDisplay;
     if (
       call.status === 'success' &&
-      typeof call.response.resultDisplay === 'object' &&
-      call.response.resultDisplay !== null &&
-      'diffStat' in call.response.resultDisplay
+      typeof resultDisplay === 'object' &&
+      'diffStat' in resultDisplay
     ) {
-      const diffStat = call.response.resultDisplay.diffStat;
+      const diffStat = resultDisplay.diffStat;
       if (diffStat) {
         this.metadata = {
           ai_added_lines: diffStat.ai_added_lines,
@@ -192,6 +197,7 @@ export class HookCallEvent {
     this['event.name'] = 'hook_call';
     this['event.timestamp'] = new Date().toISOString();
     this.hook_event_name = eventName;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, command/name are strings with fallthrough intent
     this.hook_name = result.hookConfig.command || result.hookConfig.name || '';
     this.hook_input = input;
     this.hook_output =
@@ -497,10 +503,13 @@ export class EnhancedConversationResponseEvent extends ConversationResponseEvent
       tool_calls,
     );
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default array shape pattern
     this.tool_calls_detailed = tool_calls || [];
     this.performance_metrics =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default object shape pattern
       performance_metrics || this.createDefaultMetrics(provider_name);
     this.provider_context =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default object shape pattern
       provider_context || this.createDefaultContext(provider_name);
   }
 

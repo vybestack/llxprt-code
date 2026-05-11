@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 import type { DebugLogger } from '../../debug/index.js';
 
 export interface RetryOptions {
@@ -35,7 +37,7 @@ export function shouldRetryOnStatus(
   const logger = options?.logger;
 
   if (
-    error &&
+    error !== null &&
     typeof error === 'object' &&
     'status' in error &&
     (error as { status?: number }).status === 200
@@ -45,31 +47,46 @@ export function shouldRetryOnStatus(
 
   let status: number | undefined;
 
-  if (error && typeof error === 'object' && 'status' in error) {
+  if (error !== null && typeof error === 'object' && 'status' in error) {
     status = (error as { status?: number }).status;
   }
 
-  if (!status && error && typeof error === 'object' && 'response' in error) {
+  if (
+    isInvalidStatus(status) &&
+    error !== null &&
+    typeof error === 'object' &&
+    'response' in error
+  ) {
     const response = (error as { response?: { status?: number } }).response;
-    if (response && typeof response === 'object' && 'status' in response) {
+    if (
+      response !== undefined &&
+      typeof response === 'object' &&
+      'status' in response
+    ) {
       status = response.status;
     }
   }
 
-  if (!status && error instanceof Error) {
-    if (error.message.includes('429')) {
-      status = 429;
-    }
+  if (
+    isInvalidStatus(status) &&
+    error instanceof Error &&
+    error.message.includes('429')
+  ) {
+    status = 429;
   }
 
   logger?.debug(() => `shouldRetryOnStatus checking error:`, {
-    hasError: !!error,
-    errorType: error?.constructor?.name,
+    hasError: error !== null && error !== undefined,
+    errorType:
+      error !== null && error !== undefined
+        ? (error as { constructor?: { name?: string } }).constructor?.name
+        : undefined,
     status,
     errorMessage: error instanceof Error ? error.message : String(error),
-    errorKeys: error && typeof error === 'object' ? Object.keys(error) : [],
+    errorKeys:
+      error !== null && typeof error === 'object' ? Object.keys(error) : [],
     errorData:
-      error && typeof error === 'object' && 'error' in error
+      error !== null && typeof error === 'object' && 'error' in error
         ? (error as { error?: unknown }).error
         : undefined,
   });
@@ -78,7 +95,11 @@ export function shouldRetryOnStatus(
     status === 429 || (status !== undefined && status >= 500 && status < 600),
   );
 
-  if (!shouldRetry && options?.checkNetworkTransient?.(error)) {
+  if (
+    !shouldRetry &&
+    typeof options?.checkNetworkTransient === 'function' &&
+    options.checkNetworkTransient(error)
+  ) {
     logger?.debug(
       () =>
         `Will retry request due to network transient error: ${error instanceof Error ? error.message : String(error)}`,
@@ -91,4 +112,11 @@ export function shouldRetryOnStatus(
   }
 
   return shouldRetry;
+}
+
+/**
+ * Helper function to check if a status value is invalid (undefined, 0, or NaN).
+ */
+function isInvalidStatus(status: number | undefined): boolean {
+  return status === undefined || status === 0 || Number.isNaN(status);
 }

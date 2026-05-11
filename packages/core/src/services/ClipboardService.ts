@@ -24,9 +24,14 @@ export class ClipboardService {
         const child = spawn(cmd, args);
         let stderr = '';
         child.stderr.on('data', (chunk) => (stderr += chunk.toString()));
-        child.on('error', rejectInner);
+        child.on('error', (err) => {
+          rejectInner(err);
+        });
         child.on('close', (code) => {
-          if (code === 0) return resolveInner();
+          if (code === 0) {
+            resolveInner();
+            return;
+          }
           const errorMsg = stderr.trim();
           rejectInner(
             new Error(
@@ -34,7 +39,9 @@ export class ClipboardService {
             ),
           );
         });
-        child.stdin.on('error', rejectInner);
+        child.stdin.on('error', (err) => {
+          rejectInner(err);
+        });
         child.stdin.write(text);
         child.stdin.end();
       });

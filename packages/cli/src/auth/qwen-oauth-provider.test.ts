@@ -174,9 +174,9 @@ describe('Qwen Provider Refactor Tests (Issue #1652 Phase 3)', () => {
       expect(result).toHaveProperty('access_token');
       expect(result).toHaveProperty('token_type');
       expect(result).toHaveProperty('expiry');
-      expect(typeof result?.access_token).toBe('string');
-      expect(typeof result?.token_type).toBe('string');
-      expect(typeof result?.expiry).toBe('number');
+      expect(typeof result.access_token).toBe('string');
+      expect(typeof result.token_type).toBe('string');
+      expect(typeof result.expiry).toBe('number');
       expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
     });
   });

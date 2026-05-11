@@ -297,7 +297,7 @@ describe('DirectWebFetchTool', () => {
         (_url: string, opts?: { signal?: AbortSignal }) =>
           new Promise((resolve, reject) => {
             const signal = opts?.signal;
-            if (signal?.aborted) {
+            if (signal?.aborted === true) {
               reject(
                 new DOMException('The operation was aborted', 'AbortError'),
               );

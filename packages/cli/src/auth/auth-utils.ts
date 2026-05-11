@@ -39,7 +39,8 @@ function isLoggingWrapperCandidate(
   provider: unknown,
 ): provider is { wrappedProvider?: unknown } {
   return (
-    !!provider &&
+    provider !== null &&
+    provider !== undefined &&
     typeof provider === 'object' &&
     Object.prototype.hasOwnProperty.call(provider, 'wrappedProvider')
   );
@@ -53,7 +54,8 @@ export function hasRequestMetadata(handler: unknown): handler is {
   getRequestMetadata: () => OAuthTokenRequestMetadata | undefined;
 } {
   return (
-    !!handler &&
+    handler !== null &&
+    handler !== undefined &&
     typeof handler === 'object' &&
     typeof (handler as { getRequestMetadata?: unknown }).getRequestMetadata ===
       'function'
@@ -81,12 +83,12 @@ export function unwrapLoggingProvider<T extends { name: string } | undefined>(
 
   while (isLoggingWrapperCandidate(current)) {
     if (visited.has(current)) {
-      break;
+      return current as T;
     }
     visited.add(current);
     const next = current.wrappedProvider;
-    if (!next) {
-      break;
+    if (next === null || next === undefined) {
+      return current as T;
     }
     current = next;
   }

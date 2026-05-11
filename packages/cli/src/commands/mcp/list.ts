@@ -31,10 +31,10 @@ async function getMcpServersFromConfig(): Promise<
     new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
   );
 
-  const mcpServers = { ...(settings.merged.mcpServers || {}) };
+  const mcpServers = { ...(settings.merged.mcpServers ?? {}) };
   for (const extension of extensions) {
-    Object.entries(extension.mcpServers || {}).forEach(([key, server]) => {
-      if (mcpServers[key]) {
+    Object.entries(extension.mcpServers ?? {}).forEach(([key, server]) => {
+      if (Object.prototype.hasOwnProperty.call(mcpServers, key)) {
         return;
       }
       mcpServers[key] = {
@@ -59,7 +59,8 @@ async function testMCPConnection(
   try {
     // Use the same transport creation logic as core
     transport = await createTransport(serverName, config, false);
-  } catch (_error) {
+  } catch {
+    // Transport creation failed
     await client.close();
     return MCPServerStatus.DISCONNECTED;
   }
@@ -73,7 +74,8 @@ async function testMCPConnection(
 
     await client.close();
     return MCPServerStatus.CONNECTED;
-  } catch (_error) {
+  } catch {
+    // Connection or ping failed
     await transport.close();
     return MCPServerStatus.DISCONNECTED;
   }
@@ -132,10 +134,10 @@ export async function listMcpServers(): Promise<void> {
         );
       }
     } else if (server.url) {
-      const type = server.type || 'http';
+      const type = server.type ?? 'http';
       serverInfo += `${server.url} (${type})`;
     } else if (server.command) {
-      serverInfo += `${server.command} ${server.args?.join(' ') || ''} (stdio)`;
+      serverInfo += `${server.command} ${server.args?.join(' ') ?? ''} (stdio)`;
     }
 
     debugLogger.log(`${statusIndicator} ${serverInfo} - ${statusText}`);

@@ -40,6 +40,7 @@ export class UserAccountManager {
       }
       const { active, old } = parsed as Partial<UserAccounts>;
       const isValid =
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         (active === undefined ||
           active === null ||
           typeof active === 'string') &&
@@ -106,10 +107,12 @@ export class UserAccountManager {
 
     const accounts = await this.readAccounts(filePath);
 
-    if (accounts.active && accounts.active !== email) {
-      if (!accounts.old.includes(accounts.active)) {
-        accounts.old.push(accounts.active);
-      }
+    if (
+      accounts.active &&
+      accounts.active !== email &&
+      !accounts.old.includes(accounts.active)
+    ) {
+      accounts.old.push(accounts.active);
     }
 
     // If the new email was in the old list, remove it

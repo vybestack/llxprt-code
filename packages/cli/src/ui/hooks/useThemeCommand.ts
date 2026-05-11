@@ -22,24 +22,79 @@ interface UseThemeCommandReturn {
   handleThemeHighlight: (themeName: string | undefined) => void;
 }
 
-export const useThemeCommand = (
+function getMergedCustomThemes(
   loadedSettings: LoadedSettings,
-  appState: AppState,
-  addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
-): UseThemeCommandReturn => {
-  // Determine the effective theme
-  const effectiveTheme = loadedSettings.merged.ui.theme;
-  const appDispatch = useAppDispatch();
-  const isThemeDialogOpen = appState.openDialogs.theme;
+): Record<string, unknown> {
+  return {
+    ...(loadedSettings.user.settings.ui?.customThemes ?? {}),
+    ...(loadedSettings.workspace.settings.ui?.customThemes ?? {}),
+  };
+}
 
-  // Set initial dialog state based on theme availability
+function isThemeAvailable(
+  themeName: string | undefined,
+  mergedCustomThemes: Record<string, unknown>,
+): boolean {
+  const isBuiltIn = themeManager.findThemeByName(themeName);
+  const isBuiltInFound = isBuiltIn !== undefined;
+  const isCustom =
+    themeName !== undefined && Boolean(mergedCustomThemes[themeName]);
+  return isBuiltInFound || isCustom;
+}
+
+function reportThemeSelectionError(
+  themeName: string | undefined,
+  appDispatch: ReturnType<typeof useAppDispatch>,
+): void {
+  appDispatch({
+    type: 'SET_THEME_ERROR',
+    payload: `Theme "${themeName}" not found in selected scope.`,
+  });
+  appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
+}
+
+function performThemeSelection(
+  themeName: string | undefined,
+  scope: SettingScope,
+  loadedSettings: LoadedSettings,
+  applyTheme: (themeName: string | undefined) => void,
+  appDispatch: ReturnType<typeof useAppDispatch>,
+): void {
+  try {
+    const mergedCustomThemes = getMergedCustomThemes(loadedSettings);
+
+    if (!isThemeAvailable(themeName, mergedCustomThemes)) {
+      reportThemeSelectionError(themeName, appDispatch);
+      return;
+    }
+
+    loadedSettings.setValue(scope, 'ui.theme', themeName);
+    if (loadedSettings.merged.ui.customThemes) {
+      themeManager.loadCustomThemes(loadedSettings.merged.ui.customThemes);
+    }
+    applyTheme(loadedSettings.merged.ui.theme);
+    appDispatch({ type: 'SET_THEME_ERROR', payload: null });
+  } finally {
+    appDispatch({ type: 'CLOSE_DIALOG', payload: 'theme' });
+  }
+}
+
+function useInitialDialogState(
+  effectiveTheme: string | undefined,
+  appDispatch: ReturnType<typeof useAppDispatch>,
+): void {
   useEffect(() => {
     if (effectiveTheme === undefined && !process.env.NO_COLOR) {
       appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
     }
-  }, [effectiveTheme, appDispatch]); // Run only on mount
+  }, [effectiveTheme, appDispatch]);
+}
 
-  // Apply initial theme on component mount
+function useThemeValidation(
+  effectiveTheme: string | undefined,
+  appDispatch: ReturnType<typeof useAppDispatch>,
+  addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
+): void {
   useEffect(() => {
     if (effectiveTheme === undefined) {
       if (process.env.NO_COLOR) {
@@ -51,11 +106,9 @@ export const useThemeCommand = (
           Date.now(),
         );
       }
-      // If no theme is set and NO_COLOR is not set, the dialog is already open.
       return;
     }
 
-    // Check for invalid theme configuration on startup
     if (effectiveTheme && !themeManager.findThemeByName(effectiveTheme)) {
       appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
       appDispatch({
@@ -65,7 +118,21 @@ export const useThemeCommand = (
     } else {
       appDispatch({ type: 'SET_THEME_ERROR', payload: null });
     }
-  }, [effectiveTheme, appDispatch, addItem]); // Re-run if effectiveTheme or appDispatch changes
+  }, [effectiveTheme, appDispatch, addItem]);
+}
+
+export const useThemeCommand = (
+  loadedSettings: LoadedSettings,
+  appState: AppState,
+  addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
+): UseThemeCommandReturn => {
+  // Determine the effective theme
+  const effectiveTheme = loadedSettings.merged.ui.theme;
+  const appDispatch = useAppDispatch();
+  const isThemeDialogOpen = appState.openDialogs.theme;
+
+  useInitialDialogState(effectiveTheme, appDispatch);
+  useThemeValidation(effectiveTheme, appDispatch, addItem);
 
   const openThemeDialog = useCallback(() => {
     if (process.env.NO_COLOR) {
@@ -112,32 +179,13 @@ export const useThemeCommand = (
 
   const handleThemeSelect = useCallback(
     (themeName: string | undefined, scope: SettingScope) => {
-      try {
-        // Merge user and workspace custom themes (workspace takes precedence)
-        const mergedCustomThemes = {
-          ...(loadedSettings.user.settings.ui?.customThemes || {}),
-          ...(loadedSettings.workspace.settings.ui?.customThemes || {}),
-        };
-        // Only allow selecting themes available in the merged custom themes or built-in themes
-        const isBuiltIn = themeManager.findThemeByName(themeName);
-        const isCustom = themeName && mergedCustomThemes[themeName];
-        if (!isBuiltIn && !isCustom) {
-          appDispatch({
-            type: 'SET_THEME_ERROR',
-            payload: `Theme "${themeName}" not found in selected scope.`,
-          });
-          appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
-          return;
-        }
-        loadedSettings.setValue(scope, 'ui.theme', themeName); // Update the merged settings
-        if (loadedSettings.merged.ui.customThemes) {
-          themeManager.loadCustomThemes(loadedSettings.merged.ui.customThemes);
-        }
-        applyTheme(loadedSettings.merged.ui.theme); // Apply the current theme
-        appDispatch({ type: 'SET_THEME_ERROR', payload: null });
-      } finally {
-        appDispatch({ type: 'CLOSE_DIALOG', payload: 'theme' }); // Close the dialog
-      }
+      performThemeSelection(
+        themeName,
+        scope,
+        loadedSettings,
+        applyTheme,
+        appDispatch,
+      );
     },
     [applyTheme, loadedSettings, appDispatch],
   );

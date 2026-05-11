@@ -102,7 +102,7 @@ describe('GeminiChat Context Limit Enforcement', () => {
     // Mock the tokenLimit function to track calls
     vi.spyOn(tokenLimitsModule, 'tokenLimit').mockImplementation(
       (model, userContextLimit) => {
-        if (userContextLimit) {
+        if (userContextLimit != null && userContextLimit > 0) {
           return userContextLimit;
         }
         return DEFAULT_TOKEN_LIMIT;
@@ -138,10 +138,10 @@ describe('GeminiChat Context Limit Enforcement', () => {
         },
       },
       provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager?.(),
+        mockConfig.getProviderManager(),
       ),
       telemetry: createTelemetryAdapterFromConfig(mockConfig),
-      tools: createToolRegistryViewFromRegistry(mockConfig.getToolRegistry?.()),
+      tools: createToolRegistryViewFromRegistry(),
       providerRuntime: providerRuntimeSnapshot,
     });
 
@@ -195,10 +195,10 @@ describe('GeminiChat Context Limit Enforcement', () => {
         },
       },
       provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager?.(),
+        mockConfig.getProviderManager(),
       ),
       telemetry: createTelemetryAdapterFromConfig(mockConfig),
-      tools: createToolRegistryViewFromRegistry(mockConfig.getToolRegistry?.()),
+      tools: createToolRegistryViewFromRegistry(),
       providerRuntime: providerRuntimeSnapshot,
     });
 

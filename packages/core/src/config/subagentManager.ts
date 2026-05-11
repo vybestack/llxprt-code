@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { type SubagentConfig } from '../config/types.js';
@@ -35,6 +37,20 @@ const ERROR_MESSAGES = {
   FILENAME_MISMATCH:
     "Subagent filename mismatch: expected '{expected}', found '{actual}'",
 };
+
+function validateSettingsSubagent(
+  name: string,
+  def: { profile: string; systemPrompt: string },
+  validNameRegex: RegExp,
+): string | null {
+  if (!validNameRegex.test(name)) {
+    return `Settings subagent '${name}' has invalid name format (must be alphanumeric, hyphens, and underscores only). Skipping.`;
+  }
+  if (!def.profile || !def.systemPrompt) {
+    return `Settings subagent '${name}' is missing required fields (profile and systemPrompt). Skipping.`;
+  }
+  return null;
+}
 
 /**
  * Manages subagent configuration files in ~/.llxprt/subagents/
@@ -121,19 +137,13 @@ export class SubagentManager {
     const sentinelTimestamp = '1970-01-01T00:00:00.000Z';
 
     for (const [name, def] of Object.entries(definitions)) {
-      // Validate name format
-      if (!validNameRegex.test(name)) {
-        console.warn(
-          `Settings subagent '${name}' has invalid name format (must be alphanumeric, hyphens, and underscores only). Skipping.`,
-        );
-        continue;
-      }
-
-      // Validate required fields
-      if (!def.profile || !def.systemPrompt) {
-        console.warn(
-          `Settings subagent '${name}' is missing required fields (profile and systemPrompt). Skipping.`,
-        );
+      const validationError = validateSettingsSubagent(
+        name,
+        def,
+        validNameRegex,
+      );
+      if (validationError !== null) {
+        console.warn(validationError);
         continue;
       }
 
@@ -199,10 +209,12 @@ export class SubagentManager {
     profile: string,
     systemPrompt: string,
   ): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
     if (profile === undefined || profile.trim() === '') {
       throw new Error('Profile name is required.');
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
     if (systemPrompt === undefined || systemPrompt.trim() === '') {
       throw new Error(ERROR_MESSAGES.PROMPT_REQUIRED);
     }
@@ -584,7 +596,7 @@ export class SubagentManager {
     let filePath: string;
     try {
       filePath = this.getSubagentPath(name);
-    } catch (_error) {
+    } catch {
       // getSubagentPath throws for invalid names. If it throws here, the agent doesn't exist.
       return false;
     }
@@ -615,7 +627,9 @@ export class SubagentManager {
   async validateProfileReference(profileName: string): Promise<boolean> {
     // Validate input
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
       profileName === undefined ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
       profileName === null ||
       profileName.trim() === ''
     ) {
@@ -645,6 +659,7 @@ export class SubagentManager {
   private getSubagentPath(name: string): string {
     // Centralize all name validation in this helper
     // 1. Validate name is not undefined or null
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
     if (name === undefined || name === null) {
       throw new Error(ERROR_MESSAGES.NAME_REQUIRED);
     }
@@ -664,7 +679,9 @@ export class SubagentManager {
 
     // 5. Validate baseDir is provided to the instance
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
       this.baseDir === undefined ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
       this.baseDir === null ||
       this.baseDir.trim() === ''
     ) {
@@ -672,6 +689,7 @@ export class SubagentManager {
     }
 
     // 6. Validate profileManager is provided to the instance
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
     if (this.profileManager === undefined || this.profileManager === null) {
       throw new Error('ProfileManager instance is required');
     }

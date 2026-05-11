@@ -55,12 +55,15 @@ export type ContentGeneratorConfig = {
 export function createContentGeneratorConfig(
   config: Config,
 ): ContentGeneratorConfig {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string API key means "not configured"
   const geminiApiKey = process.env.GEMINI_API_KEY || undefined;
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string API key means "not configured"
   const googleApiKey = process.env.GOOGLE_API_KEY || undefined;
   const googleCloudProject =
-    process.env['GOOGLE_CLOUD_PROJECT'] ||
-    process.env['GOOGLE_CLOUD_PROJECT_ID'] ||
+    process.env['GOOGLE_CLOUD_PROJECT'] ??
+    process.env['GOOGLE_CLOUD_PROJECT_ID'] ??
     undefined;
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string location means "not configured"
   const googleCloudLocation = process.env.GOOGLE_CLOUD_LOCATION || undefined;
 
   // Use runtime model from config if available; otherwise, fall back to parameter or default
@@ -68,7 +71,7 @@ export function createContentGeneratorConfig(
 
   const contentGeneratorConfig: ContentGeneratorConfig = {
     model: effectiveModel,
-    proxy: config?.getProxy(),
+    proxy: config.getProxy(),
   };
 
   if (geminiApiKey) {
@@ -91,6 +94,7 @@ export async function createContentGenerator(
   gcConfig: Config,
   sessionId?: string,
 ): Promise<ContentGenerator> {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty version string should fall back to process.version
   const version = process.env.CLI_VERSION || process.version;
   const httpOptions = {
     headers: {
@@ -98,11 +102,11 @@ export async function createContentGenerator(
     },
   };
   // Always use provider path if a provider manager exists
-  if (config.providerManager) {
+  if (config.providerManager != null) {
     return new ProviderContentGenerator(config.providerManager, config);
   }
 
-  if (config.vertexai) {
+  if (config.vertexai === true) {
     return createCodeAssistContentGenerator(
       httpOptions,
       gcConfig,
@@ -121,7 +125,7 @@ export async function createContentGenerator(
   }
 
   const requestOptions = { headers: {} as Record<string, string> };
-  if (gcConfig?.getUsageStatisticsEnabled()) {
+  if (gcConfig.getUsageStatisticsEnabled()) {
     const installationManager = new InstallationManager();
     const installationId = installationManager.getInstallationId();
     requestOptions.headers['x-gemini-api-privileged-user-id'] =

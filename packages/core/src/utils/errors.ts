@@ -88,10 +88,19 @@ interface ResponseData {
 }
 
 export function toFriendlyError(error: unknown): unknown {
-  if (error && typeof error === 'object' && 'response' in error) {
+  if (
+    error !== null &&
+    error !== undefined &&
+    typeof error === 'object' &&
+    'response' in error
+  ) {
     const gaxiosError = error as GaxiosError;
     const data = parseResponseData(gaxiosError);
-    if (data?.error?.message && data.error.code) {
+    if (
+      data?.error?.message !== undefined &&
+      data.error.message !== '' &&
+      typeof data.error.code === 'number'
+    ) {
       switch (data.error.code) {
         case 400:
           return new BadRequestError(data.error.message);
@@ -113,7 +122,7 @@ function parseResponseData(error: GaxiosError): ResponseData | undefined {
   // Inexplicably, Gaxios sometimes doesn't JSONify the response data.
   if (typeof error.response?.data === 'string') {
     try {
-      return JSON.parse(error.response?.data) as ResponseData;
+      return JSON.parse(error.response.data) as ResponseData;
     } catch {
       return undefined;
     }
@@ -147,13 +156,12 @@ export function isAuthenticationError(error: unknown): boolean {
   }
 
   // Cross-realm duck-typing (check both constructor name and error name)
-  if (error instanceof Error) {
-    if (
-      error.constructor.name === 'UnauthorizedError' ||
-      error.name === 'UnauthorizedError'
-    ) {
-      return true;
-    }
+  if (
+    error instanceof Error &&
+    (error.constructor.name === 'UnauthorizedError' ||
+      error.name === 'UnauthorizedError')
+  ) {
+    return true;
   }
 
   // Anchored message pattern — must not match '401' appearing in model names, IDs, etc.

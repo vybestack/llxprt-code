@@ -35,10 +35,7 @@ export class ProviderContentGenerator implements ContentGenerator {
   }
 
   private getWrapper(): unknown {
-    const provider = this.providerManager.getActiveProvider();
-    if (!provider) {
-      throw new Error('No active provider');
-    }
+    this.providerManager.getActiveProvider();
     throw new Error(
       'GeminiCompatibleWrapper has been removed - direct IContent interface is now used',
     );
@@ -69,8 +66,8 @@ export class ProviderContentGenerator implements ContentGenerator {
       text = request.contents;
     } else if (Array.isArray(request.contents)) {
       text = request.contents
-        .flatMap((c: Content) => c.parts || [])
-        .map((p: Part) => (p as { text: string }).text || '')
+        .flatMap((c: Content) => c.parts)
+        .map((p: Part | undefined) => p?.text ?? '')
         .join(' ');
     }
     // Very rough approximation: ~4 characters per token

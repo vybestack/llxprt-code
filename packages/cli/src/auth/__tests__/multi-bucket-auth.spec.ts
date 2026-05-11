@@ -809,6 +809,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       // Spy on stdin.setRawMode to detect fallback usage
       const setRawModeSpy = vi.fn();
       const originalSetRawMode = process.stdin.setRawMode;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (process.stdin.isTTY) {
         process.stdin.setRawMode = setRawModeSpy;
       }
@@ -833,8 +834,9 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       // Verify stdin.setRawMode was never called (no stdin fallback occurred)
       expect(setRawModeSpy).not.toHaveBeenCalled();
 
-      // Restore original setRawMode
-      if (originalSetRawMode) {
+      // Restore original setRawMode (platform-specific: setRawMode may not exist on non-TTY)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, vitest/no-conditional-in-test -- setRawMode may be undefined on non-TTY platforms
+      if (originalSetRawMode !== undefined) {
         process.stdin.setRawMode = originalSetRawMode;
       }
     });

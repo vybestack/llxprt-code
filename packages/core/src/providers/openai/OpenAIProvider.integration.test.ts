@@ -59,8 +59,8 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     settingsService = runtimeSettings;
 
     provider = new OpenAIProvider(OPENAI_API_KEY, OPENAI_BASE_URL);
-    provider.setRuntimeSettingsService?.(settingsService);
-    provider.setConfig?.(config);
+    provider.setRuntimeSettingsService(settingsService);
+    provider.setConfig(config);
 
     settingsService.set('activeProvider', provider.name);
     const defaultModel = resolveDefaultModel();
@@ -69,6 +69,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   });
 
   it('should fetch real models from OpenAI API', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!provider) return; // Skip if no API key
     const models = await provider.getModels();
 
@@ -97,6 +98,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   });
 
   it('should generate real chat completion', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!provider) return; // Skip if no API key
     const messages: IContent[] = [
       {
@@ -141,6 +143,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   });
 
   it('should handle tool calls', { timeout: 10000 }, async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!provider) return; // Skip if no API key
     const messages: IContent[] = [
       {
@@ -188,7 +191,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     expect(toolCallMessage).toBeDefined();
 
     const toolCallBlocks =
-      toolCallMessage?.blocks.filter((b) => b.type === 'tool_call') || [];
+      toolCallMessage?.blocks.filter((b) => b.type === 'tool_call') ?? [];
     expect(toolCallBlocks.length).toBeGreaterThan(0);
 
     const toolCall = toolCallBlocks[0] as {

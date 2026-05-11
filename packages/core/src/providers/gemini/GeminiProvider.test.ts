@@ -211,12 +211,11 @@ describe('GeminiProvider', () => {
     await generator.next();
 
     const request = generateContentStreamMock.mock.calls[0][0];
-    const toolMessage = request.contents.find(
-      (msg: { parts: Part[] }) =>
-        msg.parts &&
-        msg.parts.some(
-          (part: Part) => 'functionResponse' in part && part.functionResponse,
-        ),
+    const toolMessage = request.contents.find((msg: { parts: Part[] }) =>
+      msg.parts.some(
+        (part: Part) =>
+          'functionResponse' in part && part.functionResponse != null,
+      ),
     ) as { parts: Part[] };
     const functionResponsePart = toolMessage.parts.find(
       (part) => 'functionResponse' in part,
@@ -567,7 +566,7 @@ describe('GeminiProvider', () => {
       const toolMessage = request.contents.find(
         (msg: { role: string }) =>
           msg.role === 'user' &&
-          msg.parts?.some((p: Part) => 'functionResponse' in p),
+          msg.parts.some((p: Part) => 'functionResponse' in p),
       );
       expect(toolMessage).toBeDefined();
 
@@ -618,7 +617,7 @@ describe('GeminiProvider', () => {
       const toolMessage = request.contents.find(
         (msg: { role: string }) =>
           msg.role === 'user' &&
-          msg.parts?.some((p: Part) => 'functionResponse' in p),
+          msg.parts.some((p: Part) => 'functionResponse' in p),
       );
       expect(toolMessage).toBeDefined();
 
@@ -662,7 +661,7 @@ describe('GeminiProvider', () => {
       const toolMessage = request.contents.find(
         (msg: { role: string }) =>
           msg.role === 'user' &&
-          msg.parts?.some((p: Part) => 'functionResponse' in p),
+          msg.parts.some((p: Part) => 'functionResponse' in p),
       );
       const frPart = toolMessage.parts.find(
         (p: Part) => 'functionResponse' in p,
@@ -699,7 +698,7 @@ describe('GeminiProvider', () => {
       const toolMessage = request.contents.find(
         (msg: { role: string }) =>
           msg.role === 'user' &&
-          msg.parts?.some((p: Part) => 'functionResponse' in p),
+          msg.parts.some((p: Part) => 'functionResponse' in p),
       );
       const frPart = toolMessage.parts.find(
         (p: Part) => 'functionResponse' in p,
@@ -754,7 +753,7 @@ describe('GeminiProvider', () => {
       const toolMessage = request.contents.find(
         (msg: { role: string }) =>
           msg.role === 'user' &&
-          msg.parts?.some((p: Part) => 'functionResponse' in p),
+          msg.parts.some((p: Part) => 'functionResponse' in p),
       );
       const frPart = toolMessage.parts.find(
         (p: Part) => 'functionResponse' in p,

@@ -55,6 +55,34 @@ export {
   JAVASCRIPT_FAMILY_EXTENSIONS,
 };
 
+/**
+ * Shared validation logic for file path parameters.
+ * Used by both ASTEditTool and ASTReadFileTool.
+ */
+function validateFilePathParam(
+  config: Config,
+  params: { file_path: string },
+): string | null {
+  if (!params.file_path) {
+    return "The 'file_path' parameter must be non-empty.";
+  }
+
+  if (!path.isAbsolute(params.file_path)) {
+    return `File path must be absolute: ${params.file_path}`;
+  }
+
+  const workspaceContext = config.getWorkspaceContext();
+  const pathError = validatePathWithinWorkspace(
+    workspaceContext,
+    params.file_path,
+  );
+  if (pathError) {
+    return pathError;
+  }
+
+  return null;
+}
+
 // ===== ASTEdit Tool Implementation =====
 export class ASTEditTool
   extends BaseDeclarativeTool<ASTEditToolParams, ToolResult>
@@ -121,24 +149,7 @@ export class ASTEditTool
   protected override validateToolParamValues(
     params: ASTEditToolParams,
   ): string | null {
-    if (!params.file_path) {
-      return "The 'file_path' parameter must be non-empty.";
-    }
-
-    if (!path.isAbsolute(params.file_path)) {
-      return `File path must be absolute: ${params.file_path}`;
-    }
-
-    const workspaceContext = this.config.getWorkspaceContext();
-    const pathError = validatePathWithinWorkspace(
-      workspaceContext,
-      params.file_path,
-    );
-    if (pathError) {
-      return pathError;
-    }
-
-    return null;
+    return validateFilePathParam(this.config, params);
   }
 
   protected createInvocation(
@@ -250,24 +261,7 @@ export class ASTReadFileTool extends BaseDeclarativeTool<
   protected override validateToolParamValues(
     params: ASTReadFileToolParams,
   ): string | null {
-    if (!params.file_path) {
-      return "The 'file_path' parameter must be non-empty.";
-    }
-
-    if (!path.isAbsolute(params.file_path)) {
-      return `File path must be absolute: ${params.file_path}`;
-    }
-
-    const workspaceContext = this.config.getWorkspaceContext();
-    const pathError = validatePathWithinWorkspace(
-      workspaceContext,
-      params.file_path,
-    );
-    if (pathError) {
-      return pathError;
-    }
-
-    return null;
+    return validateFilePathParam(this.config, params);
   }
 
   protected createInvocation(

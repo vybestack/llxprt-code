@@ -129,24 +129,10 @@ class TestProvider extends BaseProvider {
   }
 }
 
-// Non-OAuth provider for testing
-class NonOAuthTestProvider extends BaseProvider {
-  protected supportsOAuth(): boolean {
+// Non-OAuth provider for testing.
+class NonOAuthTestProvider extends TestProvider {
+  protected override supportsOAuth(): boolean {
     return false;
-  }
-
-  constructor(
-    config: BaseProviderConfig,
-    runtimeConfig?: Config,
-    settingsOverride?: SettingsService,
-  ) {
-    const settingsService = settingsOverride ?? getSettingsService();
-    super(
-      config,
-      undefined,
-      runtimeConfig ?? createRuntimeConfigStub(settingsService),
-      settingsService,
-    );
   }
 
   async getModels(): Promise<IModel[]> {
@@ -589,7 +575,7 @@ describe('BaseProvider', () => {
 
       // When: Update API key through SettingsService
       settingsService.set('auth-key', 'new-key');
-      provider.clearAuthCache?.();
+      provider.clearAuthCache();
 
       // Then: Should use new key
       const response = await provider
@@ -622,7 +608,7 @@ describe('BaseProvider', () => {
       // Update to use API key via SettingsService
       const settingsService = getSettingsService();
       settingsService.set('auth-key', 'new-api-key');
-      provider.clearAuthCache?.();
+      provider.clearAuthCache();
 
       // Second call should use new API key, not cached OAuth
       const response = await provider

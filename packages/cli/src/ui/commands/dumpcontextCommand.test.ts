@@ -38,6 +38,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!dumpcontextCommand.action) {
         throw new Error('dumpcontextCommand must have an action');
       }
@@ -57,6 +58,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!dumpcontextCommand.action) {
         throw new Error('dumpcontextCommand must have an action');
       }
@@ -76,6 +78,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!dumpcontextCommand.action) {
         throw new Error('dumpcontextCommand must have an action');
       }
@@ -98,6 +101,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!dumpcontextCommand.action) {
         throw new Error('dumpcontextCommand must have an action');
       }
@@ -121,6 +125,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!dumpcontextCommand.action) {
         throw new Error('dumpcontextCommand must have an action');
       }
@@ -147,6 +152,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!dumpcontextCommand.action) {
         throw new Error('dumpcontextCommand must have an action');
       }
@@ -173,6 +179,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!dumpcontextCommand.action) {
         throw new Error('dumpcontextCommand must have an action');
       }
@@ -200,6 +207,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!dumpcontextCommand.action) {
         throw new Error('dumpcontextCommand must have an action');
       }

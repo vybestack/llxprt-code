@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import type {
   SlashCommand,
   CommandContext,
@@ -23,21 +25,25 @@ import {
 import type { IProvider } from '@vybestack/llxprt-code-core/providers/IProvider.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
-function unwrapProvider(provider: IProvider): IProvider {
-  if (
-    provider &&
-    typeof provider === 'object' &&
+type WrappedProvider = IProvider & { wrappedProvider: IProvider };
+
+function hasWrappedProvider(provider: IProvider): provider is WrappedProvider {
+  return (
     'wrappedProvider' in provider &&
-    provider.wrappedProvider
-  ) {
-    return (provider as unknown as { wrappedProvider: IProvider })
-      .wrappedProvider;
+    (provider as { wrappedProvider?: unknown }).wrappedProvider !== undefined &&
+    (provider as { wrappedProvider?: unknown }).wrappedProvider !== null
+  );
+}
+
+function unwrapProvider(provider: IProvider): IProvider {
+  if (hasWrappedProvider(provider)) {
+    return provider.wrappedProvider;
   }
   return provider;
 }
 
 function resolveBaseProviderId(provider: IProvider): string {
-  const constructorName = provider?.constructor?.name ?? '';
+  const constructorName = provider.constructor.name;
   if (constructorName === 'OpenAIProvider') {
     return 'openai';
   }
@@ -70,6 +76,38 @@ function getProviderBaseUrl(provider: IProvider): string | undefined {
   }
 
   return undefined;
+}
+
+function buildAliasConfig(
+  provider: IProvider,
+  configBaseUrl: string | undefined,
+): ProviderAliasConfig | null {
+  const unwrapped = unwrapProvider(provider);
+  const baseProviderId = resolveBaseProviderId(unwrapped);
+
+  const resolvedBaseUrl =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: filter out 'none' and empty string
+    (configBaseUrl && configBaseUrl !== 'none' ? configBaseUrl : undefined) ||
+    getProviderBaseUrl(unwrapped);
+
+  if (!resolvedBaseUrl) {
+    return null;
+  }
+
+  const defaultModel =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- provider boundary: empty model from runtime should fall back to the provider default
+    unwrapped.getCurrentModel?.() || unwrapped.getDefaultModel();
+
+  const aliasConfig: ProviderAliasConfig = {
+    baseProvider: baseProviderId,
+    'base-url': resolvedBaseUrl,
+    description: `User-defined alias for ${baseProviderId}`,
+  };
+
+  if (defaultModel) {
+    aliasConfig.defaultModel = defaultModel;
+  }
+  return aliasConfig;
 }
 
 async function handleSaveAlias(
@@ -118,40 +156,19 @@ async function handleSaveAlias(
     };
   }
 
-  const unwrappedProvider = unwrapProvider(activeProvider);
-  const baseProviderId = resolveBaseProviderId(unwrappedProvider);
-
   const configBaseUrl =
     typeof config.getEphemeralSetting === 'function'
       ? (config.getEphemeralSetting('base-url') as string | undefined)
       : undefined;
 
-  const resolvedBaseUrl =
-    (configBaseUrl && configBaseUrl !== 'none' ? configBaseUrl : undefined) ||
-    getProviderBaseUrl(unwrappedProvider);
-
-  if (!resolvedBaseUrl) {
+  const aliasConfig = buildAliasConfig(activeProvider, configBaseUrl);
+  if (!aliasConfig) {
     return {
       type: 'message',
       messageType: 'error',
       content:
         'Unable to determine a base URL for the current provider. Use /baseurl to set one before saving an alias.',
     };
-  }
-
-  const defaultModel =
-    unwrappedProvider.getCurrentModel?.() ||
-    unwrappedProvider.getDefaultModel?.() ||
-    '';
-
-  const aliasConfig: ProviderAliasConfig = {
-    baseProvider: baseProviderId,
-    'base-url': resolvedBaseUrl,
-    description: `User-defined alias for ${baseProviderId}`,
-  };
-
-  if (defaultModel) {
-    aliasConfig.defaultModel = defaultModel;
   }
 
   try {
@@ -174,6 +191,83 @@ async function handleSaveAlias(
   };
 }
 
+function resolveCurrentProvider(
+  runtime: ReturnType<typeof getRuntimeApi>,
+  providerManager: ReturnType<typeof getProviderManager>,
+): string | null {
+  try {
+    return runtime.getActiveProviderName();
+  } catch {
+    try {
+      return providerManager.getActiveProviderName();
+    } catch {
+      return null;
+    }
+  }
+}
+
+async function switchProvider(
+  context: CommandContext,
+  providerName: string,
+): Promise<MessageActionReturn> {
+  const runtime = getRuntimeApi();
+  const providerManager = getProviderManager();
+  const currentProvider = resolveCurrentProvider(runtime, providerManager);
+
+  if (providerName === currentProvider) {
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Already using provider: ${currentProvider}`,
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: null and empty string should both fall back to 'none'
+  const fromProvider = currentProvider || 'none';
+
+  let switchResult;
+  try {
+    switchResult = await runtime.switchActiveProvider(providerName, {
+      addItem: context.ui.addItem,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Failed to switch provider: ${message}`,
+    };
+  }
+
+  for (const info of switchResult.infoMessages) {
+    if (!info) {
+      continue;
+    }
+    context.ui.addItem({ type: MessageType.INFO, text: info }, Date.now());
+  }
+
+  context.recordingIntegration?.recordProviderSwitch(
+    switchResult.nextProvider,
+    switchResult.defaultModel ?? runtime.getActiveModelName(),
+  );
+
+  const extendedContext = context as CommandContext & {
+    checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
+  };
+  if (extendedContext.checkPaymentModeChange) {
+    setTimeout(
+      () => extendedContext.checkPaymentModeChange!(fromProvider),
+      100,
+    );
+  }
+
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: `Switched from ${fromProvider} to ${switchResult.nextProvider}`,
+  };
+}
+
 export const providerCommand: SlashCommand = {
   name: 'provider',
   description:
@@ -183,94 +277,18 @@ export const providerCommand: SlashCommand = {
     context: CommandContext,
     args: string,
   ): Promise<OpenDialogActionReturn | MessageActionReturn | void> => {
-    const providerManager = getProviderManager();
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
-      // Open interactive provider selection dialog
-      return {
-        type: 'dialog',
-        dialog: 'provider',
-      };
+      return { type: 'dialog', dialog: 'provider' };
     }
 
     if (/^save\b/i.test(trimmedArgs)) {
-      return handleSaveAlias(providerManager, context, trimmedArgs);
+      return handleSaveAlias(getProviderManager(), context, trimmedArgs);
     }
 
-    const providerName = trimmedArgs;
-
     try {
-      const runtime = getRuntimeApi();
-      let currentProvider: string | null = null;
-      try {
-        currentProvider = runtime.getActiveProviderName();
-      } catch (_error) {
-        try {
-          currentProvider = providerManager.getActiveProviderName();
-        } catch {
-          currentProvider = null;
-        }
-      }
-
-      if (providerName === currentProvider) {
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Already using provider: ${currentProvider}`,
-        };
-      }
-
-      const fromProvider = currentProvider || 'none';
-
-      let switchResult;
-      try {
-        switchResult = await runtime.switchActiveProvider(providerName, {
-          addItem: context.ui.addItem,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Failed to switch provider: ${message}`,
-        };
-      }
-
-      for (const info of switchResult.infoMessages ?? []) {
-        if (!info) {
-          continue;
-        }
-        context.ui.addItem(
-          {
-            type: MessageType.INFO,
-            text: info,
-          },
-          Date.now(),
-        );
-      }
-
-      context.recordingIntegration?.recordProviderSwitch(
-        switchResult.nextProvider,
-        switchResult.defaultModel ?? runtime.getActiveModelName(),
-      );
-
-      // Trigger payment mode check if available
-      const extendedContext = context as CommandContext & {
-        checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
-      };
-      if (extendedContext.checkPaymentModeChange) {
-        setTimeout(
-          () => extendedContext.checkPaymentModeChange!(fromProvider),
-          100,
-        );
-      }
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Switched from ${fromProvider} to ${switchResult.nextProvider}`,
-      };
+      return await switchProvider(context, trimmedArgs);
     } catch (error) {
       return {
         type: 'message',

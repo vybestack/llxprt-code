@@ -441,6 +441,7 @@ describe('OneShotStrategy', () => {
                     b.id === toolCallId.callId,
                 ),
             );
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(hasCall).toBe(true);
           }
         }
@@ -523,7 +524,9 @@ describe('OneShotStrategy', () => {
       try {
         await strategy.compress(ctx);
       } catch (error) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toBeInstanceOf(EmptySummaryError);
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(isTransientCompressionError(error)).toBe(false);
       }
     });
@@ -544,7 +547,9 @@ describe('OneShotStrategy', () => {
       try {
         await strategy.compress(ctx);
       } catch (error) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toBeInstanceOf(EmptySummaryError);
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(isTransientCompressionError(error)).toBe(false);
       }
     });

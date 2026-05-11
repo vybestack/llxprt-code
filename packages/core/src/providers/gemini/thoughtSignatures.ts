@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 import type { Part } from '@google/genai';
 
 /**
@@ -56,7 +58,14 @@ export function ensureActiveLoopHasThoughtSignatures(
     const content = requestContents[i];
     if (
       content.role === 'user' &&
-      content.parts?.some((part) => 'text' in part && part.text)
+      // Preserve old truthiness semantics: falsy text is treated as absent.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini history payloads cross provider boundaries despite declared types.
+      content.parts?.some(
+        (part) =>
+          'text' in part &&
+          typeof part.text === 'string' &&
+          part.text.length > 0,
+      )
     ) {
       activeLoopStartIndex = i;
       break;
@@ -74,11 +83,19 @@ export function ensureActiveLoopHasThoughtSignatures(
   // Check if we need to modify anything
   for (let i = activeLoopStartIndex; i < requestContents.length; i++) {
     const content = requestContents[i];
-    if (content.role === 'model' && content.parts) {
+    // Defensive runtime check: parts could be null/undefined despite type.
+    // Cast to unknown to satisfy strict-boolean while preserving guard.
+
+    if (content.role === 'model' && (content.parts as unknown) != null) {
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const part of content.parts) {
-        if ('functionCall' in part && part.functionCall) {
+        // Check for functionCall with truthy value (object with properties)
+
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if ('functionCall' in part && Boolean(part.functionCall)) {
           const partWithSig = part as PartWithThoughtSignature;
-          if (!partWithSig.thoughtSignature) {
+          // eslint-disable-next-line no-extra-boolean-cast -- Preserve old truthiness semantics: empty signatures are missing.
+          if (!Boolean(partWithSig.thoughtSignature)) {
             needsModification = true;
             break;
           }
@@ -100,15 +117,22 @@ export function ensureActiveLoopHasThoughtSignatures(
 
   for (let i = activeLoopStartIndex; i < newContents.length; i++) {
     const content = newContents[i];
-    if (content.role === 'model' && content.parts) {
+    // Defensive runtime check: parts could be null/undefined despite type.
+    // Cast to unknown to satisfy strict-boolean while preserving guard.
+
+    if (content.role === 'model' && (content.parts as unknown) != null) {
       const newParts = content.parts.slice();
       let modified = false;
 
       for (let j = 0; j < newParts.length; j++) {
         const part = newParts[j];
-        if ('functionCall' in part && part.functionCall) {
+
+        // Check for functionCall with truthy value (object with properties)
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if ('functionCall' in part && Boolean(part.functionCall)) {
           const partWithSig = part as PartWithThoughtSignature;
-          if (!partWithSig.thoughtSignature) {
+          // eslint-disable-next-line no-extra-boolean-cast -- Preserve old truthiness semantics: empty signatures are missing.
+          if (!Boolean(partWithSig.thoughtSignature)) {
             // Create new part with signature
             newParts[j] = {
               ...part,
@@ -174,9 +198,14 @@ export function stripThoughtsFromHistory(
   let needsModification = false;
 
   // Check if we need to modify anything
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
-    if (content.role !== 'model' || !content.parts) continue;
+    // Defensive runtime check: parts could be null/undefined despite type.
+    // Cast to unknown to satisfy strict-boolean while preserving guard.
+
+    if (content.role !== 'model' || (content.parts as unknown) == null)
+      continue;
 
     // Skip last model turn if policy is 'allButLast'
     if (policy === 'allButLast' && i === lastModelTurnIndex) continue;
@@ -184,7 +213,13 @@ export function stripThoughtsFromHistory(
     for (const part of content.parts) {
       const partWithThought = part as PartWithThought;
       const partWithSig = part as PartWithThoughtSignature;
-      if (partWithThought.thought || partWithSig.thoughtSignature) {
+      // Preserve old falsy semantics: thought===true or truthy thoughtSignature
+      // (non-empty string) means present. null/undefined/'' treated as missing.
+      if (
+        partWithThought.thought === true ||
+        (typeof partWithSig.thoughtSignature === 'string' &&
+          partWithSig.thoughtSignature.length > 0)
+      ) {
         needsModification = true;
         break;
       }
@@ -199,10 +234,14 @@ export function stripThoughtsFromHistory(
   // Create new array with thoughts stripped
   const newContents: Content[] = [];
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
 
-    if (content.role !== 'model' || !content.parts) {
+    // Defensive runtime check: parts could be null/undefined despite type.
+    // Cast to unknown to satisfy strict-boolean while preserving guard.
+
+    if (content.role !== 'model' || (content.parts as unknown) == null) {
       newContents.push(content);
       continue;
     }
@@ -217,11 +256,16 @@ export function stripThoughtsFromHistory(
     const filteredParts = content.parts
       .filter((part) => {
         const partWithThought = part as PartWithThought;
-        return !partWithThought.thought;
+        // Preserve old falsy semantics: only filter out when thought===true
+        return partWithThought.thought !== true;
       })
       .map((part) => {
         const partWithSig = part as PartWithThoughtSignature;
-        if (partWithSig.thoughtSignature) {
+        // Preserve old truthiness semantics: only remove when signature is truthy string
+        if (
+          typeof partWithSig.thoughtSignature === 'string' &&
+          partWithSig.thoughtSignature.length > 0
+        ) {
           const { thoughtSignature: _, ...restPart } = partWithSig;
           return restPart as Part;
         }

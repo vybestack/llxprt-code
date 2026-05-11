@@ -139,7 +139,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
     // Optional verification pass — gated by compressionVerification flag (default off)
     let finalSummary = summary;
-    if (context.compressionVerification) {
+    if (context.compressionVerification === true) {
       finalSummary = await runVerificationPass(
         provider,
         summary,
@@ -250,15 +250,13 @@ export class MiddleOutStrategy implements CompressionStrategy {
       let capturedUsage: UsageStats | undefined;
 
       for await (const chunk of stream) {
-        if (chunk.blocks) {
-          const result = aggregateTextFromBlocks(
-            chunk.blocks,
-            summary,
-            lastBlockWasNonText,
-          );
-          summary = result.text;
-          lastBlockWasNonText = result.lastBlockWasNonText;
-        }
+        const result = aggregateTextFromBlocks(
+          chunk.blocks,
+          summary,
+          lastBlockWasNonText,
+        );
+        summary = result.text;
+        lastBlockWasNonText = result.lastBlockWasNonText;
         if (chunk.metadata?.usage) {
           capturedUsage = chunk.metadata.usage;
         }

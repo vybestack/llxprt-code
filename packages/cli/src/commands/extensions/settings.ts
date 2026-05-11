@@ -115,12 +115,7 @@ async function handleList(args: ListArgs): Promise<void> {
   }
 
   // Parse scope argument
-  const scope =
-    args.scope === 'workspace'
-      ? ExtensionSettingScope.WORKSPACE
-      : args.scope === 'user'
-        ? ExtensionSettingScope.USER
-        : undefined; // undefined means merge both scopes
+  const scope = resolveScope(args.scope);
 
   const contents = await getEnvContents(
     extensionConfig.name,
@@ -133,7 +128,8 @@ async function handleList(args: ListArgs): Promise<void> {
     return;
   }
 
-  const scopeLabel = scope ? ` (${scope} scope)` : ' (merged user + workspace)';
+  const scopeLabel =
+    scope != null ? ` (${scope} scope)` : ' (merged user + workspace)';
   console.log(`Settings for extension "${args.name}"${scopeLabel}:`);
   for (const { name, value } of contents) {
     console.log(`  ${name}: ${value}`);
@@ -228,3 +224,19 @@ export const settingsCommand: CommandModule = {
     // This handler is not called when a subcommand is provided.
   },
 };
+
+/**
+ * Resolves the scope argument to an ExtensionSettingScope value.
+ */
+function resolveScope(
+  scope: string | undefined,
+): ExtensionSettingScope.WORKSPACE | ExtensionSettingScope.USER | undefined {
+  if (scope === 'workspace') {
+    return ExtensionSettingScope.WORKSPACE;
+  }
+  if (scope === 'user') {
+    return ExtensionSettingScope.USER;
+  }
+  // undefined means merge both scopes
+  return undefined;
+}

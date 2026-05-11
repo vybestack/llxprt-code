@@ -37,6 +37,7 @@ export function doesToolInvocationMatch(
     toolNames = [...new Set([...toolNames, ...SHELL_TOOL_NAMES])];
   }
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const pattern of patterns) {
     const openParen = pattern.indexOf('(');
 
@@ -70,10 +71,11 @@ export function doesToolInvocationMatch(
       command = String((invocation.params as { command: string }).command);
     }
 
-    if (toolNames.some((name) => SHELL_TOOL_NAMES.includes(name))) {
-      if (command === argPattern || command.startsWith(argPattern + ' ')) {
-        return true;
-      }
+    if (
+      toolNames.some((name) => SHELL_TOOL_NAMES.includes(name)) &&
+      (command === argPattern || command.startsWith(argPattern + ' '))
+    ) {
+      return true;
     }
   }
 
@@ -93,7 +95,7 @@ export function isShellInvocationAllowlisted(
   invocation: AnyToolInvocation,
   allowedPatterns: string[],
 ): boolean {
-  if (!allowedPatterns.length) {
+  if (allowedPatterns.length === 0) {
     return false;
   }
 
@@ -112,16 +114,13 @@ export function isShellInvocationAllowlisted(
     return true;
   }
 
-  if (
-    !('params' in invocation) ||
-    typeof invocation.params !== 'object' ||
-    invocation.params === null ||
-    !('command' in invocation.params)
-  ) {
+  const params = invocation.params as unknown;
+  if (typeof params !== 'object' || params === null || !('command' in params)) {
     return false;
   }
 
-  const commandValue = (invocation.params as { command?: unknown }).command;
+  const commandValue = (params as { command?: unknown }).command;
+
   if (typeof commandValue !== 'string' || !commandValue.trim()) {
     return false;
   }
@@ -160,7 +159,7 @@ export function getToolSuggestion(
   allToolNames: string[],
   topN = 3,
 ): string {
-  if (!allToolNames.length) {
+  if (allToolNames.length === 0) {
     return '';
   }
 
@@ -172,7 +171,7 @@ export function getToolSuggestion(
     .sort((a, b) => a.distance - b.distance)
     .slice(0, topN);
 
-  if (!matches.length || matches[0].distance === Infinity) {
+  if (matches.length === 0 || matches[0].distance === Infinity) {
     return '';
   }
 

@@ -55,7 +55,7 @@ async function validateExtension(args: ValidateArgs) {
   const warnings: string[] = [];
   const errors: string[] = [];
 
-  if (extensionConfig.contextFileName) {
+  if (extensionConfig.contextFileName != null) {
     const contextFileNames = Array.isArray(extensionConfig.contextFileName)
       ? extensionConfig.contextFileName
       : [extensionConfig.contextFileName];

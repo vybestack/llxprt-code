@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import type { SlashCommand, CommandContext } from './types.js';
 import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';
@@ -23,6 +25,86 @@ export function expandHomeDir(p: string): string {
     expandedPath = os.homedir() + p.substring(1);
   }
   return path.normalize(expandedPath);
+}
+
+type ConfigType = NonNullable<CommandContext['services']['config']>;
+
+function addDirectoriesToWorkspace(
+  config: ConfigType,
+  pathsToAdd: string[],
+  added: string[],
+  errors: string[],
+): void {
+  const workspaceContext = config.getWorkspaceContext();
+  const folderTrustEnabled = config.getFolderTrust();
+  const trustedFolders = folderTrustEnabled ? loadTrustedFolders() : null;
+
+  for (const pathToAdd of pathsToAdd) {
+    const expandedPath = expandHomeDir(pathToAdd.trim());
+
+    if (trustedFolders) {
+      const isTrusted = trustedFolders.isPathTrusted(expandedPath);
+      if (isTrusted === false) {
+        errors.push(
+          `Directory '${pathToAdd.trim()}' is not trusted. Use the '/permissions' command to change the trust level.`,
+        );
+        continue;
+      }
+    }
+
+    try {
+      workspaceContext.addDirectory(expandedPath);
+      added.push(expandedPath);
+    } catch (e) {
+      const error = e as Error;
+      errors.push(`Error adding '${pathToAdd.trim()}': ${error.message}`);
+    }
+  }
+}
+
+async function refreshMemoryAfterAdd(
+  context: CommandContext,
+  config: ConfigType,
+  added: string[],
+  errors: string[],
+): Promise<void> {
+  const {
+    ui: { addItem },
+  } = context;
+
+  try {
+    if (config.shouldLoadMemoryFromIncludeDirectories()) {
+      const memoryImportFormat =
+        context.services.settings.merged.ui.memoryImportFormat;
+      const effectiveMemoryImportFormat =
+        memoryImportFormat === 'tree' || memoryImportFormat === 'flat'
+          ? memoryImportFormat
+          : 'tree';
+      const { memoryContent, fileCount } = await loadServerHierarchicalMemory(
+        config.getWorkingDir(),
+        [...config.getWorkspaceContext().getDirectories(), ...added],
+        config.getDebugMode(),
+        config.getFileService(),
+        config.getExtensions(),
+        config.getFolderTrust(),
+        effectiveMemoryImportFormat,
+        config.getFileFilteringOptions(),
+        context.services.settings.merged.ui.memoryDiscoveryMaxDirs,
+      );
+      config.setUserMemory(memoryContent);
+      config.setLlxprtMdFileCount(fileCount);
+      context.ui.setLlxprtMdFileCount(fileCount);
+    }
+    addItem(
+      {
+        type: MessageType.INFO,
+        text: `Successfully added GEMINI.md files from the following directories if there are:\n- ${added.join('\n- ')}`,
+      },
+      Date.now(),
+    );
+  } catch (error) {
+    errors.push(`Error refreshing memory: ${(error as Error).message}`);
+  }
 }
 
 export const directoryCommand: SlashCommand = {
@@ -51,7 +133,7 @@ export const directoryCommand: SlashCommand = {
             },
             Date.now(),
           );
-          return;
+          return undefined;
         }
 
         const workspaceContext = config.getWorkspaceContext();
@@ -68,7 +150,7 @@ export const directoryCommand: SlashCommand = {
             },
             Date.now(),
           );
-          return;
+          return undefined;
         }
 
         if (config.isRestrictiveSandbox()) {
@@ -83,68 +165,11 @@ export const directoryCommand: SlashCommand = {
         const added: string[] = [];
         const errors: string[] = [];
 
-        // Check folder trust before adding directories (only if folder trust is enabled)
-        const folderTrustEnabled = config.getFolderTrust();
-        const trustedFolders = folderTrustEnabled ? loadTrustedFolders() : null;
-
-        for (const pathToAdd of pathsToAdd) {
-          const expandedPath = expandHomeDir(pathToAdd.trim());
-
-          // Check if path is trusted (only if folder trust is enabled)
-          if (trustedFolders) {
-            const isTrusted = trustedFolders.isPathTrusted(expandedPath);
-            if (isTrusted === false) {
-              errors.push(
-                `Directory '${pathToAdd.trim()}' is not trusted. Use the '/permissions' command to change the trust level.`,
-              );
-              continue;
-            }
-          }
-
-          try {
-            workspaceContext.addDirectory(expandedPath);
-            added.push(expandedPath);
-          } catch (e) {
-            const error = e as Error;
-            errors.push(`Error adding '${pathToAdd.trim()}': ${error.message}`);
-          }
-        }
-
-        try {
-          if (config.shouldLoadMemoryFromIncludeDirectories()) {
-            const { memoryContent, fileCount } =
-              await loadServerHierarchicalMemory(
-                config.getWorkingDir(),
-                [...config.getWorkspaceContext().getDirectories(), ...added],
-                config.getDebugMode(),
-                config.getFileService(),
-                config.getExtensions(),
-                config.getFolderTrust(),
-                context.services.settings.merged.ui.memoryImportFormat ||
-                  'tree', // Use setting or default to 'tree'
-                config.getFileFilteringOptions(),
-                context.services.settings.merged.ui.memoryDiscoveryMaxDirs,
-              );
-            config.setUserMemory(memoryContent);
-            config.setLlxprtMdFileCount(fileCount);
-            context.ui.setLlxprtMdFileCount(fileCount);
-          }
-          addItem(
-            {
-              type: MessageType.INFO,
-              text: `Successfully added GEMINI.md files from the following directories if there are:\n- ${added.join('\n- ')}`,
-            },
-            Date.now(),
-          );
-        } catch (error) {
-          errors.push(`Error refreshing memory: ${(error as Error).message}`);
-        }
+        addDirectoriesToWorkspace(config, pathsToAdd, added, errors);
+        await refreshMemoryAfterAdd(context, config, added, errors);
 
         if (added.length > 0) {
-          const gemini = config.getGeminiClient();
-          if (gemini) {
-            await gemini.addDirectoryContext();
-          }
+          await config.getGeminiClient().addDirectoryContext();
           addItem(
             {
               type: MessageType.INFO,
@@ -163,7 +188,7 @@ export const directoryCommand: SlashCommand = {
             Date.now(),
           );
         }
-        return;
+        return undefined;
       },
     },
     {

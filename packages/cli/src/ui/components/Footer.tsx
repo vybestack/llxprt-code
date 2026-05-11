@@ -7,6 +7,8 @@
  * @requirement REQ-INT-001.1
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 /* eslint-disable react/prop-types */
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
@@ -201,7 +203,8 @@ const DebouncedWaitDisplay = React.memo<{
     <Text color={SemanticColors.status.warning}>
       {displayWait < 1000
         ? `Wait: ${displayWait}ms`
-        : displayWait < 60000
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          displayWait < 60000
           ? `Wait: ${(displayWait / 1000).toFixed(1)}s`
           : `Wait: ${(displayWait / 60000).toFixed(1)}m`}
     </Text>
@@ -230,6 +233,392 @@ const ResponsiveTimestamp = React.memo(() => {
 });
 ResponsiveTimestamp.displayName = 'ResponsiveTimestamp';
 
+// Branch display sub-component
+const BranchDisplay = React.memo<{
+  branchName: string;
+  nightly: boolean;
+  maxBranchLength: number;
+}>(({ branchName, nightly, maxBranchLength }) => {
+  const displayBranch =
+    branchName.length > maxBranchLength
+      ? truncateMiddle(branchName, maxBranchLength)
+      : branchName;
+  if (nightly) {
+    return (
+      <ThemedGradient colors={Colors.GradientColors}>
+        <Text color={Colors.Foreground}>({displayBranch}*)</Text>
+      </ThemedGradient>
+    );
+  }
+  return <Text color={SemanticColors.text.accent}>({displayBranch}*)</Text>;
+});
+BranchDisplay.displayName = 'BranchDisplay';
+
+// Model name sub-component with load-balancer logic
+const ModelNameDisplay = React.memo<{
+  model: string;
+  showModelName: boolean;
+  runtime: ReturnType<typeof useRuntimeApi>;
+}>(({ model, showModelName, runtime }) => {
+  if (!showModelName) return null;
+  const providerStatus = runtime.getActiveProviderStatus();
+  const lbDisplay = tryGetLBDisplayName(runtime, providerStatus);
+  if (lbDisplay !== null) return lbDisplay;
+  return <Text color={SemanticColors.text.primary}>{model}</Text>;
+});
+ModelNameDisplay.displayName = 'ModelNameDisplay';
+
+function tryGetLBDisplayName(
+  runtime: ReturnType<typeof useRuntimeApi>,
+  providerStatus: { providerName: string | null },
+): React.ReactNode | null {
+  if (providerStatus.providerName !== 'load-balancer') return null;
+  try {
+    const providerManager = runtime.getCliProviderManager();
+    const lbProvider = providerManager.getProviderByName('load-balancer');
+    if (
+      lbProvider &&
+      'getStats' in lbProvider &&
+      typeof (lbProvider as { getStats?: () => unknown }).getStats ===
+        'function'
+    ) {
+      const lbStats = (
+        lbProvider as {
+          getStats: () => {
+            lastSelected: string | null;
+            profileName: string;
+          };
+        }
+      ).getStats();
+      if (lbStats.lastSelected) {
+        return (
+          <>
+            <Text color={SemanticColors.text.primary}>
+              {lbStats.lastSelected}
+            </Text>
+            <Text color={SemanticColors.text.secondary}>
+              {' '}
+              via {lbStats.profileName}
+            </Text>
+          </>
+        );
+      }
+    }
+  } catch {
+    // Silently ignore errors fetching LB stats in the footer
+  }
+  return null;
+}
+
+// Paid/free mode sub-component
+const PaidModeDisplay = React.memo<{
+  isPaidMode: boolean | undefined;
+  showModelName: boolean;
+  runtime: ReturnType<typeof useRuntimeApi>;
+}>(({ isPaidMode, showModelName, runtime }) => {
+  if (isPaidMode === undefined) return null;
+  const status = runtime.getActiveProviderStatus();
+  if (status.providerName !== 'gemini') return null;
+  return (
+    <>
+      {showModelName && <Text color={SemanticColors.text.secondary}> | </Text>}
+      <Text
+        color={
+          isPaidMode
+            ? SemanticColors.status.warning
+            : SemanticColors.status.success
+        }
+      >
+        {isPaidMode ? 'paid mode' : 'free mode'}
+      </Text>
+    </>
+  );
+});
+PaidModeDisplay.displayName = 'PaidModeDisplay';
+
+// Sandbox status sub-component
+const SandboxStatusDisplay = React.memo<{
+  hideSandboxStatus: boolean;
+  isCompact: boolean;
+}>(({ hideSandboxStatus, isCompact }) => {
+  if (isCompact || hideSandboxStatus) return null;
+  return (
+    <Box marginLeft={2}>
+      {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
+        <Text color={SemanticColors.status.success}>
+          [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
+        </Text>
+      ) : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      process.env.SANDBOX === 'sandbox-exec' ? (
+        <Text color={SemanticColors.status.warning}>
+          [macOS Seatbelt{' '}
+          <Text color={SemanticColors.text.secondary}>
+            ({process.env.SEATBELT_PROFILE})
+          </Text>
+          ]
+        </Text>
+      ) : (
+        <Text color={SemanticColors.status.error}>
+          [no sandbox{' '}
+          <Text color={SemanticColors.text.secondary}>(see /docs)</Text>]
+        </Text>
+      )}
+    </Box>
+  );
+});
+SandboxStatusDisplay.displayName = 'SandboxStatusDisplay';
+
+// Right side: Memory | Context | TPM | Wait Time | Time
+const FooterMetricsRow = React.memo<{
+  hideModelInfo: boolean;
+  showMemoryUsage?: boolean;
+  isCompact: boolean;
+  isDetailed: boolean;
+  historyTokenCount: number;
+  model: string;
+  contextLimit?: number;
+  tokensPerMinute?: number;
+  throttleWaitTimeMs?: number;
+  themeName?: string;
+  showTimestamp: boolean;
+}>(
+  ({
+    hideModelInfo,
+    showMemoryUsage,
+    isCompact,
+    isDetailed,
+    historyTokenCount,
+    model,
+    contextLimit,
+    tokensPerMinute,
+    throttleWaitTimeMs,
+    themeName,
+    showTimestamp,
+  }) => {
+    if (hideModelInfo) return null;
+    return (
+      <Box flexDirection="row" alignItems="center">
+        {(showMemoryUsage ?? false) && (
+          <>
+            <ResponsiveMemoryDisplay
+              compact={isCompact}
+              detailed={isDetailed}
+            />
+            <Text color={SemanticColors.text.secondary}> | </Text>
+          </>
+        )}
+        <ResponsiveContextDisplay
+          historyTokenCount={historyTokenCount}
+          model={model}
+          contextLimit={contextLimit}
+          compact={isCompact}
+          detailed={isDetailed}
+        />
+        {tokensPerMinute !== undefined && (
+          <>
+            <Text color={SemanticColors.text.secondary}> | </Text>
+            <DebouncedTPMDisplay
+              tokensPerMinute={tokensPerMinute}
+              themeName={themeName}
+            />
+          </>
+        )}
+        {throttleWaitTimeMs !== undefined && (
+          <>
+            <Text color={SemanticColors.text.secondary}> | </Text>
+            <DebouncedWaitDisplay
+              throttleWaitTimeMs={throttleWaitTimeMs}
+              themeName={themeName}
+            />
+          </>
+        )}
+        {showTimestamp && (
+          <>
+            <Text color={SemanticColors.text.secondary}> | </Text>
+            <ResponsiveTimestamp />
+          </>
+        )}
+      </Box>
+    );
+  },
+);
+FooterMetricsRow.displayName = 'FooterMetricsRow';
+
+// Footer first line: Branch (left) | Memory | Context | Time (right)
+const FooterFirstLine = React.memo<{
+  branchName?: string;
+  nightly: boolean;
+  isTrustedFolder?: boolean;
+  debugMode: boolean;
+  debugMessage: string;
+  vimMode?: string;
+  maxBranchLength: number;
+  hideModelInfo: boolean;
+  showMemoryUsage?: boolean;
+  isCompact: boolean;
+  isDetailed: boolean;
+  historyTokenCount: number;
+  model: string;
+  contextLimit?: number;
+  tokensPerMinute?: number;
+  throttleWaitTimeMs?: number;
+  themeName?: string;
+  showTimestamp: boolean;
+}>((props) => {
+  const {
+    branchName,
+    nightly,
+    isTrustedFolder,
+    debugMode,
+    debugMessage,
+    vimMode,
+    maxBranchLength,
+    hideModelInfo,
+    showMemoryUsage,
+    isCompact,
+    isDetailed,
+    historyTokenCount,
+    model,
+    contextLimit,
+    tokensPerMinute,
+    throttleWaitTimeMs,
+    themeName,
+    showTimestamp,
+  } = props;
+  return (
+    <Box justifyContent="space-between" width="100%" alignItems="center">
+      <Box flexDirection="row" alignItems="center">
+        {branchName && (
+          <BranchDisplay
+            branchName={branchName}
+            nightly={nightly}
+            maxBranchLength={maxBranchLength}
+          />
+        )}
+        {isTrustedFolder === false && (
+          <Text color={SemanticColors.status.warning}> (untrusted)</Text>
+        )}
+        {debugMode && (
+          <>
+            <DebugProfiler />
+            <Text color={SemanticColors.status.error}>
+              {' ' + (debugMessage || '--debug')}
+            </Text>
+          </>
+        )}
+        {vimMode && (
+          <Text color={SemanticColors.text.secondary}>[{vimMode}] </Text>
+        )}
+      </Box>
+      <FooterMetricsRow
+        hideModelInfo={hideModelInfo}
+        showMemoryUsage={showMemoryUsage}
+        isCompact={isCompact}
+        isDetailed={isDetailed}
+        historyTokenCount={historyTokenCount}
+        model={model}
+        contextLimit={contextLimit}
+        tokensPerMinute={tokensPerMinute}
+        throttleWaitTimeMs={throttleWaitTimeMs}
+        themeName={themeName}
+        showTimestamp={showTimestamp}
+      />
+    </Box>
+  );
+});
+FooterFirstLine.displayName = 'FooterFirstLine';
+
+// Footer second line: Path (left) | Model | Session Tokens (right)
+const FooterSecondLine = React.memo<{
+  hideCWD: boolean;
+  nightly: boolean;
+  targetDir: string;
+  isCompact: boolean;
+  hideSandboxStatus: boolean;
+  hideModelInfo: boolean;
+  showModelName: boolean;
+  model: string;
+  runtime: ReturnType<typeof useRuntimeApi>;
+  isPaidMode: boolean | undefined;
+  sessionTokenTotal: number | undefined;
+  showErrorDetails: boolean;
+  errorCount: number;
+}>((props) => {
+  const {
+    hideCWD,
+    nightly,
+    targetDir,
+    isCompact,
+    hideSandboxStatus,
+    hideModelInfo,
+    showModelName,
+    model,
+    runtime,
+    isPaidMode,
+    sessionTokenTotal,
+    showErrorDetails,
+    errorCount,
+  } = props;
+  return (
+    <Box justifyContent="space-between" width="100%" alignItems="center">
+      {!hideCWD && (
+        <Box flexDirection="row" alignItems="center">
+          {nightly ? (
+            <ThemedGradient colors={Colors.GradientColors}>
+              <Text color={Colors.Foreground}>
+                {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
+              </Text>
+            </ThemedGradient>
+          ) : (
+            <Text color={SemanticColors.text.secondary}>
+              {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
+            </Text>
+          )}
+          <SandboxStatusDisplay
+            hideSandboxStatus={hideSandboxStatus}
+            isCompact={isCompact}
+          />
+        </Box>
+      )}
+      {!hideModelInfo && (
+        <Box flexDirection="row" alignItems="center">
+          <ModelNameDisplay
+            model={model}
+            showModelName={showModelName}
+            runtime={runtime}
+          />
+          <PaidModeDisplay
+            isPaidMode={isPaidMode}
+            showModelName={showModelName}
+            runtime={runtime}
+          />
+          {sessionTokenTotal !== undefined && (
+            <>
+              <Text color={SemanticColors.text.secondary}> | </Text>
+              <Text color={SemanticColors.text.accent}>
+                Tokens: {sessionTokenTotal.toLocaleString()}
+              </Text>
+            </>
+          )}
+          {!showErrorDetails && errorCount > 0 && (
+            <>
+              <Text color={SemanticColors.text.secondary}> | </Text>
+              <ConsoleSummaryDisplay errorCount={errorCount} />
+            </>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+});
+FooterSecondLine.displayName = 'FooterSecondLine';
+
+function getMaxBranchLength(breakpoint: string): number {
+  if (breakpoint === 'NARROW') return 15;
+  if (breakpoint === 'STANDARD') return 35;
+  return 100;
+}
+
 export const Footer = React.memo<FooterProps>(
   ({
     model,
@@ -256,269 +645,56 @@ export const Footer = React.memo<FooterProps>(
   }) => {
     const { breakpoint } = useResponsive();
     const runtime = useRuntimeApi();
-
-    // Define what to show at each breakpoint
     const showTimestamp = breakpoint === 'WIDE';
     const showModelName = breakpoint !== 'NARROW';
     const isCompact = breakpoint === 'NARROW';
     const isDetailed = breakpoint === 'WIDE';
-
-    // Calculate max length for branch truncation based on breakpoint
-    let maxBranchLength: number;
-    if (isCompact) {
-      maxBranchLength = 15;
-    } else if (breakpoint === 'STANDARD') {
-      maxBranchLength = 35;
-    } else {
-      maxBranchLength = 100; // Don't truncate at wide width
-    }
+    const maxBranchLength = getMaxBranchLength(breakpoint);
 
     return (
       <Box flexDirection="column" width="100%">
-        {/* First Line: Branch (left) | Memory | Context | Time (right) */}
-        <Box justifyContent="space-between" width="100%" alignItems="center">
-          {/* Left: Branch Display */}
-          <Box flexDirection="row" alignItems="center">
-            {branchName && (
-              <>
-                {nightly ? (
-                  <ThemedGradient colors={Colors.GradientColors}>
-                    <Text color={Colors.Foreground}>
-                      (
-                      {branchName.length > maxBranchLength
-                        ? truncateMiddle(branchName, maxBranchLength)
-                        : branchName}
-                      *)
-                    </Text>
-                  </ThemedGradient>
-                ) : (
-                  <Text color={SemanticColors.text.accent}>
-                    (
-                    {branchName.length > maxBranchLength
-                      ? truncateMiddle(branchName, maxBranchLength)
-                      : branchName}
-                    *)
-                  </Text>
-                )}
-              </>
-            )}
-            {isTrustedFolder === false && (
-              <Text color={SemanticColors.status.warning}> (untrusted)</Text>
-            )}
-            {debugMode && (
-              <>
-                <DebugProfiler />
-                <Text color={SemanticColors.status.error}>
-                  {' ' + (debugMessage || '--debug')}
-                </Text>
-              </>
-            )}
-            {vimMode && (
-              <Text color={SemanticColors.text.secondary}>[{vimMode}] </Text>
-            )}
-          </Box>
-
-          {/* Right: Memory | Context | TPM | Wait Time | Time */}
-          {!hideModelInfo && (
-            <Box flexDirection="row" alignItems="center">
-              {showMemoryUsage && (
-                <>
-                  <ResponsiveMemoryDisplay
-                    compact={isCompact}
-                    detailed={isDetailed}
-                  />
-                  <Text color={SemanticColors.text.secondary}> | </Text>
-                </>
-              )}
-
-              <ResponsiveContextDisplay
-                historyTokenCount={historyTokenCount}
-                model={model}
-                contextLimit={contextLimit}
-                compact={isCompact}
-                detailed={isDetailed}
-              />
-
-              {/* Token tracking metrics - Debounced */}
-              {tokensPerMinute !== undefined && (
-                <>
-                  <Text color={SemanticColors.text.secondary}> | </Text>
-                  <DebouncedTPMDisplay
-                    tokensPerMinute={tokensPerMinute}
-                    themeName={themeName}
-                  />
-                </>
-              )}
-
-              {throttleWaitTimeMs !== undefined && (
-                <>
-                  <Text color={SemanticColors.text.secondary}> | </Text>
-                  <DebouncedWaitDisplay
-                    throttleWaitTimeMs={throttleWaitTimeMs}
-                    themeName={themeName}
-                  />
-                </>
-              )}
-
-              {/* Show timestamp only at wide width */}
-              {showTimestamp && (
-                <>
-                  <Text color={SemanticColors.text.secondary}> | </Text>
-                  <ResponsiveTimestamp />
-                </>
-              )}
-            </Box>
-          )}
-        </Box>
-
-        {/* Second Line: Path (left) | Model | Session Tokens (right) */}
-        <Box justifyContent="space-between" width="100%" alignItems="center">
-          {/* Left: Path and Sandbox Info */}
-          {!hideCWD && (
-            <Box flexDirection="row" alignItems="center">
-              {nightly ? (
-                <ThemedGradient colors={Colors.GradientColors}>
-                  <Text color={Colors.Foreground}>
-                    {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
-                  </Text>
-                </ThemedGradient>
-              ) : (
-                <Text color={SemanticColors.text.secondary}>
-                  {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
-                </Text>
-              )}
-
-              {/* Sandbox info (only show at standard+ widths) */}
-              {!isCompact && !hideSandboxStatus && (
-                <Box marginLeft={2}>
-                  {process.env.SANDBOX &&
-                  process.env.SANDBOX !== 'sandbox-exec' ? (
-                    <Text color={SemanticColors.status.success}>
-                      [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
-                    </Text>
-                  ) : process.env.SANDBOX === 'sandbox-exec' ? (
-                    <Text color={SemanticColors.status.warning}>
-                      [macOS Seatbelt{' '}
-                      <Text color={SemanticColors.text.secondary}>
-                        ({process.env.SEATBELT_PROFILE})
-                      </Text>
-                      ]
-                    </Text>
-                  ) : (
-                    <Text color={SemanticColors.status.error}>
-                      [no sandbox{' '}
-                      <Text color={SemanticColors.text.secondary}>
-                        (see /docs)
-                      </Text>
-                      ]
-                    </Text>
-                  )}
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {/* Right: Model, Session Tokens and other status */}
-          {!hideModelInfo && (
-            <Box flexDirection="row" alignItems="center">
-              {/* Show model name - for load balancer, show sub-profile name instead */}
-              {showModelName &&
-                (() => {
-                  const providerStatus = runtime.getActiveProviderStatus();
-                  if (providerStatus.providerName === 'load-balancer') {
-                    try {
-                      const providerManager = runtime.getCliProviderManager();
-                      const lbProvider =
-                        providerManager.getProviderByName('load-balancer');
-                      if (
-                        lbProvider &&
-                        'getStats' in lbProvider &&
-                        typeof (lbProvider as { getStats?: () => unknown })
-                          .getStats === 'function'
-                      ) {
-                        const lbStats = (
-                          lbProvider as {
-                            getStats: () => {
-                              lastSelected: string | null;
-                              profileName: string;
-                            };
-                          }
-                        ).getStats();
-                        if (lbStats?.lastSelected) {
-                          return (
-                            <>
-                              <Text color={SemanticColors.text.primary}>
-                                {lbStats.lastSelected}
-                              </Text>
-                              <Text color={SemanticColors.text.secondary}>
-                                {' '}
-                                via {lbStats.profileName}
-                              </Text>
-                            </>
-                          );
-                        }
-                      }
-                    } catch {
-                      // Silently ignore errors fetching LB stats in the footer
-                    }
-                  }
-                  // Default: show model name in primary color (not accent)
-                  return (
-                    <Text color={SemanticColors.text.primary}>{model}</Text>
-                  );
-                })()}
-
-              {/* Show paid/free mode for Gemini provider */}
-              {isPaidMode !== undefined &&
-                (() => {
-                  const status = runtime.getActiveProviderStatus();
-                  if (status.providerName === 'gemini') {
-                    return (
-                      <>
-                        {showModelName && (
-                          <Text color={SemanticColors.text.secondary}> | </Text>
-                        )}
-                        <Text
-                          color={
-                            isPaidMode
-                              ? SemanticColors.status.warning
-                              : SemanticColors.status.success
-                          }
-                        >
-                          {isPaidMode ? 'paid mode' : 'free mode'}
-                        </Text>
-                      </>
-                    );
-                  }
-                  return null;
-                })()}
-
-              {/* Show session token total */}
-              {sessionTokenTotal !== undefined && (
-                <>
-                  <Text color={SemanticColors.text.secondary}> | </Text>
-                  <Text color={SemanticColors.text.accent}>
-                    Tokens: {sessionTokenTotal.toLocaleString()}
-                  </Text>
-                </>
-              )}
-
-              {/* Show error count */}
-              {!showErrorDetails && errorCount > 0 && (
-                <>
-                  <Text color={SemanticColors.text.secondary}> | </Text>
-                  <ConsoleSummaryDisplay errorCount={errorCount} />
-                </>
-              )}
-            </Box>
-          )}
-        </Box>
+        <FooterFirstLine
+          branchName={branchName}
+          nightly={nightly}
+          isTrustedFolder={isTrustedFolder}
+          debugMode={debugMode}
+          debugMessage={debugMessage}
+          vimMode={vimMode}
+          maxBranchLength={maxBranchLength}
+          hideModelInfo={hideModelInfo}
+          showMemoryUsage={showMemoryUsage}
+          isCompact={isCompact}
+          isDetailed={isDetailed}
+          historyTokenCount={historyTokenCount}
+          model={model}
+          contextLimit={contextLimit}
+          tokensPerMinute={tokensPerMinute}
+          throttleWaitTimeMs={throttleWaitTimeMs}
+          themeName={themeName}
+          showTimestamp={showTimestamp}
+        />
+        <FooterSecondLine
+          hideCWD={hideCWD}
+          nightly={nightly}
+          targetDir={targetDir}
+          isCompact={isCompact}
+          hideSandboxStatus={hideSandboxStatus}
+          hideModelInfo={hideModelInfo}
+          showModelName={showModelName}
+          model={model}
+          runtime={runtime}
+          isPaidMode={isPaidMode}
+          sessionTokenTotal={sessionTokenTotal}
+          showErrorDetails={showErrorDetails}
+          errorCount={errorCount}
+        />
       </Box>
     );
   },
   (prevProps, nextProps) =>
     // Custom comparison function - ignore rapidly changing values
     // Only re-render if important props change
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     prevProps.model === nextProps.model &&
     prevProps.targetDir === nextProps.targetDir &&
     prevProps.branchName === nextProps.branchName &&

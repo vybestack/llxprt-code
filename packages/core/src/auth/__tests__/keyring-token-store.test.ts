@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * Behavioral tests for KeyringTokenStore.
  *
@@ -326,6 +328,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
   it('rejects invalid provider name with space', async () => {
     const token = makeMinimalToken();
     await expect(tokenStore.saveToken('invalid name', token)).rejects.toThrow(
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       /invalid.*provider.*name/i,
     );
   });
@@ -341,6 +344,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     const token = makeMinimalToken();
     await expect(
       tokenStore.saveToken('anthropic', token, 'bad/bucket'),
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     ).rejects.toThrow(/invalid.*bucket.*name/i);
   });
 
@@ -355,7 +359,9 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     const token = makeMinimalToken();
     // Pre-verify SecureStore is empty
     const keysBefore = await secureStore.list();
-    await expect(tokenStore.saveToken('bad/name', token)).rejects.toThrow();
+    await expect(tokenStore.saveToken('bad/name', token)).rejects.toThrow(
+      /Invalid.*name/,
+    );
     // Verify no keys were written
     const keysAfter = await secureStore.list();
     expect(keysAfter).toStrictEqual(keysBefore);
@@ -993,16 +999,18 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    */
   it('error message includes invalid name and allowed character set', async () => {
     const token = makeMinimalToken();
+    let e: unknown;
     try {
       await tokenStore.saveToken('my provider', token);
-      expect.unreachable('Should have thrown');
-    } catch (e) {
-      const msg = (e as Error).message;
-      expect(msg).toContain('my provider');
-      expect(msg).toContain(
-        'Allowed: letters, numbers, dashes, underscores, dots, @ (1-64 chars).',
-      );
+    } catch (__caught) {
+      e = __caught;
     }
+    expect(e).toBeDefined();
+    const msg = (e as Error).message;
+    expect(msg).toContain('my provider');
+    expect(msg).toContain(
+      'Allowed: letters, numbers, dashes, underscores, dots, @ (1-64 chars).',
+    );
   });
 
   // ─── Property-Based Tests ──────────────────────────────────────────────
@@ -1045,7 +1053,9 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     await fc.assert(
       fc.asyncProperty(invalidNameArb, async (badName) => {
         const token = makeMinimalToken();
-        await expect(tokenStore.saveToken(badName, token)).rejects.toThrow();
+        await expect(tokenStore.saveToken(badName, token)).rejects.toThrow(
+          /Invalid.*name/,
+        );
       }),
       { numRuns: 20 },
     );
@@ -1382,7 +1392,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
         const token = makeMinimalToken();
         await expect(
           tokenStore.saveToken('validprov', token, badBucket),
-        ).rejects.toThrow();
+        ).rejects.toThrow(/Invalid.*name/);
       }),
       { numRuns: 20 },
     );

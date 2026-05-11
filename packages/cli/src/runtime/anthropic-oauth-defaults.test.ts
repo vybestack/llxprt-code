@@ -31,9 +31,7 @@ const {
     }
 
     setProviderSetting(provider: string, key: string, value: unknown): void {
-      if (!this.providers[provider]) {
-        this.providers[provider] = {};
-      }
+      this.providers[provider] ??= {};
       if (value === undefined) {
         delete this.providers[provider][key];
       } else {
@@ -42,7 +40,7 @@ const {
     }
 
     getProviderSettings(provider: string): Record<string, unknown> {
-      return this.providers[provider] || {};
+      return this.providers[provider] ?? {};
     }
 
     switchProvider = vi.fn(async (provider: string) => {
@@ -56,7 +54,6 @@ const {
       ) => {
         if (
           typeof providerOrChanges === 'string' &&
-          maybeChanges &&
           typeof maybeChanges === 'object'
         ) {
           for (const [key, value] of Object.entries(maybeChanges)) {

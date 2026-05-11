@@ -30,8 +30,8 @@ function getBestAvailableUpdate(
   nightly?: UpdateInfo,
   stable?: UpdateInfo,
 ): UpdateInfo | null {
-  if (!nightly) return stable || null;
-  if (!stable) return nightly || null;
+  if (!nightly) return stable ?? null;
+  if (!stable) return nightly;
 
   const nightlyVer = nightly.latest;
   const stableVer = stable.latest;
@@ -49,7 +49,7 @@ export async function checkForUpdates(
   settings: LoadedSettings,
 ): Promise<UpdateObject | null> {
   try {
-    if (!settings.merged.enableAutoUpdateNotification) {
+    if (settings.merged.enableAutoUpdateNotification !== true) {
       return null;
     }
     // Skip update check when running from source (development mode)
@@ -93,8 +93,8 @@ export async function checkForUpdates(
       ]);
 
       const bestUpdate = getBestAvailableUpdate(
-        nightlyUpdateInfo || undefined,
-        latestUpdateInfo || undefined,
+        nightlyUpdateInfo ?? undefined,
+        latestUpdateInfo ?? undefined,
       );
 
       if (bestUpdate && semver.gt(bestUpdate.latest, currentVersion)) {

@@ -20,7 +20,11 @@ import {
 } from '../../config/extensions/update.js';
 import { checkForExtensionUpdate } from '../../config/extensions/github.js';
 import { getErrorMessage } from '../../utils/errors.js';
-import { ExtensionUpdateState } from '../../ui/state/extensions.js';
+import {
+  type ExtensionUpdateAction,
+  type ExtensionUpdateStatus,
+  ExtensionUpdateState,
+} from '../../ui/state/extensions.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
 
 interface UpdateArgs {
@@ -31,8 +35,11 @@ interface UpdateArgs {
 const updateOutput = (info: ExtensionUpdateInfo) =>
   `Extension "${info.name}" successfully updated: ${info.originalVersion} → ${info.updatedVersion}.`;
 
-export async function handleUpdate(args: UpdateArgs) {
-  const workingDir = process.cwd();
+type LoadedExtension = ReturnType<typeof annotateActiveExtensions>[number];
+
+type ExtensionStateMap = Map<string, ExtensionUpdateStatus>;
+
+function loadUpdateExtensions(args: UpdateArgs, workingDir: string) {
   const extensionEnablementManager = new ExtensionEnablementManager(
     ExtensionStorage.getUserExtensionsDir(),
     // Force enable named extensions, otherwise we will only update the enabled
@@ -40,99 +47,119 @@ export async function handleUpdate(args: UpdateArgs) {
     args.name ? [args.name] : [],
   );
   const allExtensions = loadExtensions(extensionEnablementManager);
-  const extensions = annotateActiveExtensions(
+  return annotateActiveExtensions(
     allExtensions,
     workingDir,
     extensionEnablementManager,
   );
-  if (args.name) {
-    try {
-      const extension = extensions.find(
-        (extension) => extension.name === args.name,
-      );
-      if (!extension) {
-        console.log(`Extension "${args.name}" not found.`);
-        return;
-      }
-      if (!extension.installMetadata) {
-        console.log(
-          `Unable to install extension "${args.name}" due to missing install metadata`,
-        );
-        return;
-      }
-      let updateState = ExtensionUpdateState.UNKNOWN as ExtensionUpdateState;
-      await checkForExtensionUpdate(extension, (state) => {
-        updateState = state;
-      });
-      if (updateState !== ExtensionUpdateState.UPDATE_AVAILABLE) {
-        console.log(`Extension "${args.name}" is already up to date.`);
-        return;
-      }
-      // TODO(chrstnb): we should list extensions if the requested extension is not installed.
-      const updatedExtensionInfo = (await updateExtension(
-        extension,
-        workingDir,
-        requestConsentNonInteractive,
-        updateState,
-        (action) => {
-          if (action.type === 'SET_STATE') {
-            updateState = action.payload.state;
-          }
-        },
-        undefined, // enableExtensionReloading - undefined means use default behavior
-      ))!;
-      if (
-        updatedExtensionInfo.originalVersion !==
-        updatedExtensionInfo.updatedVersion
-      ) {
-        console.log(
-          `Extension "${args.name}" successfully updated: ${updatedExtensionInfo.originalVersion} → ${updatedExtensionInfo.updatedVersion}.`,
-        );
-      } else {
-        console.log(`Extension "${args.name}" is already up to date.`);
-      }
-    } catch (error) {
-      console.error(getErrorMessage(error));
-    }
+}
+
+function findNamedExtension(
+  extensions: LoadedExtension[],
+  name: string,
+): LoadedExtension | undefined {
+  const extension = extensions.find((extension) => extension.name === name);
+  if (!extension) {
+    console.log(`Extension "${name}" not found.`);
+    return undefined;
   }
-  if (args.all) {
-    try {
-      const extensionState = new Map();
-      await checkForAllExtensionUpdates(
-        extensions,
-        (action) => {
-          if (action.type === 'SET_STATE') {
-            extensionState.set(action.payload.name, {
-              status: action.payload.state,
-            });
-          }
-        },
-        workingDir,
-      );
-      let updateInfos = await updateAllUpdatableExtensions(
+  if (!extension.installMetadata) {
+    console.log(
+      `Unable to install extension "${name}" due to missing install metadata`,
+    );
+    return undefined;
+  }
+  return extension;
+}
+
+async function updateNamedExtension(
+  name: string,
+  extensions: LoadedExtension[],
+  workingDir: string,
+) {
+  try {
+    const extension = findNamedExtension(extensions, name);
+    if (!extension) return;
+
+    let updateState = ExtensionUpdateState.UNKNOWN as ExtensionUpdateState;
+    await checkForExtensionUpdate(extension, (state) => {
+      updateState = state;
+    });
+    if (updateState !== ExtensionUpdateState.UPDATE_AVAILABLE) {
+      console.log(`Extension "${name}" is already up to date.`);
+      return;
+    }
+    const updatedExtensionInfo = (await updateExtension(
+      extension,
+      workingDir,
+      requestConsentNonInteractive,
+      updateState,
+      (action) => {
+        if (action.type === 'SET_STATE') {
+          updateState = action.payload.state;
+        }
+      },
+      undefined, // enableExtensionReloading - undefined means use default behavior
+    ))!;
+    if (
+      updatedExtensionInfo.originalVersion !==
+      updatedExtensionInfo.updatedVersion
+    ) {
+      console.log(updateOutput({ ...updatedExtensionInfo, name }));
+    } else {
+      console.log(`Extension "${name}" is already up to date.`);
+    }
+  } catch (error) {
+    console.error(getErrorMessage(error));
+  }
+}
+
+function recordExtensionState(extensionState: ExtensionStateMap) {
+  return (action: ExtensionUpdateAction) => {
+    if (action.type === 'SET_STATE') {
+      extensionState.set(action.payload.name, {
+        status: action.payload.state,
+        notified: false,
+      });
+    }
+  };
+}
+
+async function updateAllExtensions(
+  extensions: LoadedExtension[],
+  workingDir: string,
+) {
+  try {
+    const extensionState: ExtensionStateMap = new Map();
+    const dispatch = recordExtensionState(extensionState);
+    await checkForAllExtensionUpdates(extensions, dispatch, workingDir);
+    const updateInfos = (
+      await updateAllUpdatableExtensions(
         workingDir,
         requestConsentNonInteractive,
         extensions,
         extensionState,
-        (action) => {
-          if (action.type === 'SET_STATE') {
-            extensionState.set(action.payload.name, {
-              status: action.payload.state,
-            });
-          }
-        },
-      );
-      updateInfos = updateInfos.filter(
-        (info) => info.originalVersion !== info.updatedVersion,
-      );
-      if (updateInfos.length === 0) {
-        console.log('No extensions to update.');
-        return;
-      }
-      console.log(updateInfos.map((info) => updateOutput(info)).join('\n'));
-    } catch (error) {
-      console.error(getErrorMessage(error));
+        dispatch,
+      )
+    ).filter((info) => info.originalVersion !== info.updatedVersion);
+    if (updateInfos.length === 0) {
+      console.log('No extensions to update.');
+      return;
     }
+    console.log(updateInfos.map((info) => updateOutput(info)).join('\n'));
+  } catch (error) {
+    console.error(getErrorMessage(error));
+  }
+}
+
+export async function handleUpdate(args: UpdateArgs) {
+  const workingDir = process.cwd();
+  const extensions = loadUpdateExtensions(args, workingDir);
+  if (args.name) {
+    await updateNamedExtension(args.name, extensions, workingDir);
+  }
+  if (args.all === true) {
+    await updateAllExtensions(extensions, workingDir);
   }
 }
 
@@ -152,7 +179,11 @@ export const updateCommand: CommandModule = {
       })
       .conflicts('name', 'all')
       .check((argv) => {
-        if (!argv.all && !argv.name) {
+        // argv.all is boolean | undefined, argv.name is string | undefined
+        if (
+          argv.all !== true &&
+          (argv.name === undefined || argv.name === '')
+        ) {
           throw new Error('Either an extension name or --all must be provided');
         }
         return true;

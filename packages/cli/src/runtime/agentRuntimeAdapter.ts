@@ -323,7 +323,7 @@ export class AgentRuntimeAdapter {
     }
 
     // Determine model (explicit or default)
-    const targetModel = options?.model || provider.getDefaultModel();
+    const targetModel = options?.model ?? provider.getDefaultModel();
 
     // Build batch update
     const updates: Partial<RuntimeStateParams> = {
@@ -497,7 +497,7 @@ export function resolveRuntimeStateFromFlags(
   // Start with config defaults
   const params: RuntimeStateParams = {
     runtimeId: 'foreground-agent',
-    provider: config.getProvider() || 'gemini',
+    provider: config.getProvider() ?? 'gemini',
     model: config.getModel(),
     sessionId: config.getSessionId(),
     proxyUrl: config.getProxy(),
@@ -519,7 +519,7 @@ export function resolveRuntimeStateFromFlags(
         params.baseUrl = value;
       } else {
         // Model params
-        params.modelParams = params.modelParams || {};
+        params.modelParams ??= {};
         params.modelParams[key] = value;
       }
     }

@@ -34,20 +34,27 @@ async function readHistoryFile(filePath: string): Promise<string[]> {
     const result: string[] = [];
     let cur = '';
 
-    for (const raw of text.split(/\r?\n/)) {
-      if (!raw.trim()) continue;
-      const line = raw;
-
+    const processLine = (line: string): void => {
+      // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       const m = cur.match(/(\\+)$/);
-      if (m && m[1].length % 2) {
-        // odd number of trailing '\'
+      const isContinuation = m != null && m[1].length % 2 !== 0;
+      if (isContinuation) {
+        // odd number of trailing '\' - continuation line
         cur = cur.slice(0, -1) + ' ' + line;
       } else {
+        // Normal line - push previous if exists, start new
         if (cur) result.push(cur);
         cur = line;
       }
+    };
+
+    for (const raw of text.split(/\r?\n/)) {
+      if (raw.trim()) {
+        processLine(raw);
+      }
     }
 
+    // Push any remaining content
     if (cur) result.push(cur);
     return result;
   } catch (err) {

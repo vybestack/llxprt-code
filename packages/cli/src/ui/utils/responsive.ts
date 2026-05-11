@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 export const BREAKPOINTS = {
   NARROW: 80,
   STANDARD: 120,
@@ -56,6 +58,7 @@ export function truncateMiddle(text: string, maxLength: number): string {
       if (parentDir && segments.length >= 3) {
         const candidate =
           firstDir + ellipsis + '/' + parentDir + '/' + filename;
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (candidate.length <= maxLength) {
           return candidate;
         }
@@ -72,6 +75,7 @@ export function truncateMiddle(text: string, maxLength: number): string {
         const firstChar = firstDir.length > 0 ? firstDir.charAt(0) : '/';
         const availableForEnd =
           maxLength - firstChar.length - ellipsis.length - 1; // -1 for '/'
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (availableForEnd > 0) {
           const endPart =
             filename.length <= availableForEnd

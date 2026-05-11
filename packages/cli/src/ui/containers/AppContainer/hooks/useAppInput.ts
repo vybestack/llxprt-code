@@ -113,7 +113,7 @@ function useInputCoreCallbacks(p: AppInputParams) {
     const editorType = settings.merged.ui.preferredEditor;
     if (!isEditorAvailable(editorType)) {
       openEditorDialog();
-      return;
+      return undefined;
     }
     return editorType as EditorType;
   }, [settings, openEditorDialog]);
@@ -285,9 +285,9 @@ function useInputBuffer(
   );
   const handleUserCancel = useCallback(
     (shouldRestorePrompt?: boolean) => {
-      if (shouldRestorePrompt) {
+      if (shouldRestorePrompt === true) {
         const last = lastSubmittedPromptRef.current;
-        if (last) buffer.setText(last);
+        if (last != null) buffer.setText(last);
       } else buffer.setText('');
     },
     [buffer],
@@ -342,8 +342,8 @@ function useInputStreamSetup(
     refreshStatic,
     handleUserCancel,
     setEmbeddedShellFocused,
-    stdout?.columns,
-    stdout?.rows,
+    stdout.columns,
+    stdout.rows,
     registerTodoPause,
     handleExternalEditorOpen,
     recordingIntegration,
@@ -485,7 +485,7 @@ function useInputFinish(
       settings.merged.wittyPhraseStyle ??
       'default',
     settings.merged.ui.customWittyPhrases ?? settings.merged.customWittyPhrases,
-    !!stream.activeShellPtyId && !p.embeddedShellFocused,
+    stream.activeShellPtyId != null && !p.embeddedShellFocused,
     stream.lastOutputTime,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({
@@ -496,9 +496,11 @@ function useInputFinish(
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     handleSlashCommand('/quit');
   }, [handleSlashCommand]);
+  const isStreamingIdleOrResponding =
+    streamingState === StreamingState.Idle ||
+    streamingState === StreamingState.Responding;
   const isInputActive =
-    (streamingState === StreamingState.Idle ||
-      streamingState === StreamingState.Responding) &&
+    isStreamingIdleOrResponding &&
     !initError &&
     !isProcessing &&
     !!slashCommands;

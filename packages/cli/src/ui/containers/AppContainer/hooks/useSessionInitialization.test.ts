@@ -169,7 +169,10 @@ describe('useSessionInitialization', () => {
       await Promise.resolve();
     });
 
-    // No errors thrown = abort controller cleaned up properly
+    // The hook must not continue to load history after unmount; with no
+    // resumedHistory supplied, loadHistory is never called anyway, and the
+    // abort must not cause a spurious invocation either.
+    expect(loadHistory).not.toHaveBeenCalled();
   });
 
   it('does not duplicate history seeding across renders', async () => {

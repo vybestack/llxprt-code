@@ -15,6 +15,7 @@ export class ConversationFileWriter {
 
   constructor(logPath?: string) {
     this.logPath =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty logPath string should fall through to default path
       logPath || path.join(os.homedir(), '.llxprt', 'conversations');
     this.currentLogFile = path.join(
       this.logPath,
@@ -88,8 +89,6 @@ let fileWriter: ConversationFileWriter | null = null;
 export function getConversationFileWriter(
   logPath?: string,
 ): ConversationFileWriter {
-  if (!fileWriter) {
-    fileWriter = new ConversationFileWriter(logPath);
-  }
+  fileWriter ??= new ConversationFileWriter(logPath);
   return fileWriter;
 }

@@ -32,12 +32,30 @@ import { type CommandArgumentSchema } from './schema/types.js';
 import { type Part } from '@google/genai';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
+/**
+ * Resolve emoji filter mode setting, defaulting to 'auto' for invalid values.
+ */
+function resolveEmojiFilterMode(setting: unknown): EmojiFilterMode {
+  // Check for invalid/falsy values that should default to 'auto'
+  const isInvalid =
+    setting === undefined ||
+    setting === null ||
+    setting === false ||
+    setting === '';
+  const isNumericInvalid = setting === 0 || Number.isNaN(setting);
+
+  if (isInvalid || isNumericInvalid) {
+    return 'auto';
+  }
+  return setting as EmojiFilterMode;
+}
+
 const getSavedChatTags = async (
   context: CommandContext,
   mtSortDesc: boolean,
 ): Promise<ChatDetail[]> => {
   const cfg = context.services.config;
-  const geminiDir = cfg?.storage?.getProjectTempDir();
+  const geminiDir = cfg?.storage.getProjectTempDir();
   if (!geminiDir) {
     return [];
   }
@@ -66,7 +84,7 @@ const getSavedChatTags = async (
     );
 
     return chatDetails;
-  } catch (_err) {
+  } catch {
     return [];
   }
 };
@@ -127,7 +145,7 @@ const saveCommand: SlashCommand = {
     await logger.initialize();
 
     // Check for overwrite confirmation first
-    if (!context.overwriteConfirmed) {
+    if (context.overwriteConfirmed !== true) {
       const exists = await logger.checkpointExists(tag);
       if (exists) {
         return {
@@ -140,7 +158,7 @@ const saveCommand: SlashCommand = {
             ' already exists. Do you want to overwrite it?',
           ),
           originalInvocation: {
-            raw: context.invocation?.raw || `/chat save ${tag}`,
+            raw: context.invocation?.raw ?? `/chat save ${tag}`,
           },
         };
       }
@@ -148,7 +166,7 @@ const saveCommand: SlashCommand = {
 
     const client = config?.getGeminiClient();
     // Check if chat is initialized before accessing it
-    if (!client?.hasChatInitialized()) {
+    if (client?.hasChatInitialized() !== true) {
       return {
         type: 'message',
         messageType: 'error',
@@ -196,8 +214,9 @@ const resumeCommand: SlashCommand = {
     await logger.initialize();
 
     // Get emoji filter mode from settings
-    const emojiFilterMode =
-      (config?.getEphemeralSetting('emojifilter') as EmojiFilterMode) || 'auto';
+    const emojiFilterSetting = config?.getEphemeralSetting('emojifilter');
+    // Determine emoji filter mode - use 'auto' for falsy/invalid values
+    const emojiFilterMode = resolveEmojiFilterMode(emojiFilterSetting);
 
     // Create emoji filter if not in 'allowed' mode
     const emojiFilter =
@@ -236,10 +255,12 @@ const resumeCommand: SlashCommand = {
     // Convert checkpoint history to UI history items for display
     // Use LoadHistoryActionReturn to properly sync both UI and client history
     const uiHistory: HistoryItemWithoutId[] = conversation.map((content) => {
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string from join should be preserved, parts may be undefined */
       const text =
         content.parts
           ?.map((part: Part) => (part.text ? part.text : ''))
           .join('') || '';
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       return {
         type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
         text,
@@ -277,7 +298,7 @@ const deleteCommand: SlashCommand = {
     const { logger } = context.services;
     await logger.initialize();
 
-    if (!force && !context.overwriteConfirmed) {
+    if (force === false && context.overwriteConfirmed !== true) {
       return {
         type: 'confirm_action',
         prompt: React.createElement(
@@ -288,7 +309,7 @@ const deleteCommand: SlashCommand = {
           '?',
         ),
         originalInvocation: {
-          raw: context.invocation?.raw || `/chat delete ${tag}`,
+          raw: context.invocation?.raw ?? `/chat delete ${tag}`,
         },
       };
     }
@@ -340,7 +361,7 @@ const renameCommand: SlashCommand = {
     }
 
     if (await logger.checkpointExists(newTag)) {
-      if (!context.overwriteConfirmed) {
+      if (context.overwriteConfirmed !== true) {
         return {
           type: 'confirm_action',
           prompt: React.createElement(
@@ -351,7 +372,7 @@ const renameCommand: SlashCommand = {
             ' already exists. Do you want to overwrite it?',
           ),
           originalInvocation: {
-            raw: context.invocation?.raw || `/chat rename ${oldTag} ${newTag}`,
+            raw: context.invocation?.raw ?? `/chat rename ${oldTag} ${newTag}`,
           },
         };
       }
@@ -379,7 +400,7 @@ const clearCommand: SlashCommand = {
   action: async (context): Promise<MessageActionReturn | void> => {
     const client = context.services.config?.getGeminiClient();
     // Check if chat is initialized before clearing
-    if (!client?.hasChatInitialized()) {
+    if (client?.hasChatInitialized() !== true) {
       return {
         type: 'message',
         messageType: 'info',
@@ -403,6 +424,7 @@ const clearCommand: SlashCommand = {
     context.ui.clear();
     // Note: context.ui.clear() clears the screen, so we don't return a message
     // The clear is visible to the user through the UI reset itself
+    return undefined;
   },
 };
 
@@ -417,7 +439,7 @@ const restoreHistory = async (
   turns: number,
 ): Promise<SlashCommandActionReturn> => {
   const client = context.services.config?.getGeminiClient();
-  if (!client?.hasChatInitialized()) {
+  if (client?.hasChatInitialized() !== true) {
     return {
       type: 'message',
       messageType: 'error',
@@ -455,10 +477,12 @@ const restoreHistory = async (
 
   // Convert to UI history items for display
   const uiHistory: HistoryItemWithoutId[] = newHistory.map((content) => {
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string from join should be preserved, parts may be undefined */
     const text =
       content.parts
         ?.map((part: Part) => (part.text ? part.text : ''))
         .join('') || '';
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
     return {
       type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
       text,
@@ -522,7 +546,7 @@ const debugCommand: SlashCommand = {
         const chat = client.getChat();
         const history = chat.getHistory();
         debugInfo.push(`History entries: ${history.length}`);
-      } catch (_err) {
+      } catch {
         debugInfo.push('History entries: unavailable');
       }
     } else {
@@ -534,7 +558,7 @@ const debugCommand: SlashCommand = {
       try {
         const model = config.getModel();
         debugInfo.push(`Current model: ${model}`);
-      } catch (_err) {
+      } catch {
         debugInfo.push('Current model: unavailable');
       }
     } else {
@@ -542,7 +566,7 @@ const debugCommand: SlashCommand = {
     }
 
     // Checkpoint directory information
-    const checkpointDir = config?.storage?.getProjectTempDir();
+    const checkpointDir = config?.storage.getProjectTempDir();
     if (checkpointDir) {
       debugInfo.push(`Checkpoint directory: ${checkpointDir}`);
     } else {

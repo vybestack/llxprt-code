@@ -73,6 +73,7 @@ let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
 const findSubCommand = (name: string) =>
   subagentCommand.subCommands!.find((cmd) => cmd.name === name)!;
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeAll(async () => {
   // Reset modules to ensure fresh import with mocks
   vi.resetModules();
@@ -698,6 +699,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     // Verify success message type and content
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!result || result.type !== 'message') {
       throw new Error('Expected message action return');
     }
@@ -722,6 +724,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!result || result.type !== 'message') {
       throw new Error('Expected message action return');
     }
@@ -753,6 +756,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!result || result.type !== 'message') {
       throw new Error('Expected message action return');
     }
@@ -803,6 +807,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     );
     expect(actionResult).toBeDefined();
     expect(actionResult?.type).toBe('message');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!actionResult || actionResult.type !== 'message') {
       throw new Error('Expected message action return');
     }
@@ -826,6 +831,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     // Verify prompt includes instructions
     expect(callArgs.message).toMatch(/comprehensive/i);
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     expect(callArgs.message).toMatch(/role.*capabilities.*behavior/i);
     expect(callArgs.message).toMatch(/output.*only/i);
   });

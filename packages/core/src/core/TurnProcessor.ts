@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import type { GenerateContentResponse } from '@google/genai';
 import {
   type Content,
@@ -179,12 +181,14 @@ export class TurnProcessor {
   ): AsyncGenerator<StreamEvent> {
     try {
       let lastError: unknown = new Error('Request failed after all retries.');
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (
         let attempt = 0;
         attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts;
         attempt++
       ) {
         try {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (attempt > 0) yield { type: StreamEventType.RETRY };
 
           const currentParams = this._applyRetryTemperature(params, attempt);
@@ -194,6 +198,7 @@ export class TurnProcessor {
             pendingTokens,
             userContent,
           );
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for await (const chunk of stream) {
             yield { type: StreamEventType.CHUNK, value: chunk };
           }
@@ -201,6 +206,7 @@ export class TurnProcessor {
           break;
         } catch (error) {
           // Handle hook execution control errors before retry logic
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (error instanceof AgentExecutionStoppedError) {
             yield {
               type: StreamEventType.AGENT_EXECUTION_STOPPED,
@@ -212,6 +218,7 @@ export class TurnProcessor {
             break;
           }
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (error instanceof AgentExecutionBlockedError) {
             yield {
               type: StreamEventType.AGENT_EXECUTION_BLOCKED,
@@ -231,6 +238,7 @@ export class TurnProcessor {
           }
 
           lastError = error;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (
             (error instanceof InvalidStreamError ||
               error instanceof EmptyStreamError) &&
@@ -247,7 +255,7 @@ export class TurnProcessor {
           break;
         }
       }
-      if (lastError) throw lastError;
+      if (lastError != null) throw lastError;
     } finally {
       onDone();
     }
@@ -411,6 +419,7 @@ export class TurnProcessor {
       () => '[TurnProcessor] Active provider snapshot before send',
       {
         providerName: provider.name,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
         providerDefaultModel: provider.getDefaultModel?.(),
         configModel: this.runtimeContext.state.model,
         baseUrl: this.resolveProviderBaseUrl(provider),
@@ -444,7 +453,7 @@ export class TurnProcessor {
     const upstreamAbortSignal = params.config?.abortSignal;
     const onAbort = () => timeoutController.abort();
     upstreamAbortSignal?.addEventListener('abort', onAbort, { once: true });
-    if (upstreamAbortSignal?.aborted) {
+    if (upstreamAbortSignal?.aborted === true) {
       onAbort();
     }
 
@@ -458,6 +467,7 @@ export class TurnProcessor {
       } as unknown as GenerateChatOptions['invocation'],
       settings: runtimeContext.settingsService,
       metadata: runtimeContext.metadata,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
       userMemory: runtimeContext.config?.getUserMemory?.(),
     });
 
@@ -470,6 +480,7 @@ export class TurnProcessor {
 
     try {
       const iterator = streamResponse[Symbol.asyncIterator]();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
       while (true) {
         // Use watchdog if timeout > 0, otherwise call iterator.next() directly
         let nextResponse: IteratorResult<IContent, unknown>;
@@ -479,7 +490,8 @@ export class TurnProcessor {
             timeoutMs: effectiveTimeoutMs,
             signal: timeoutSignal,
             onTimeout: () => {
-              if (upstreamAbortSignal?.aborted) {
+              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+              if (upstreamAbortSignal?.aborted === true) {
                 return;
               }
               timeoutController.abort();
@@ -490,7 +502,7 @@ export class TurnProcessor {
           // Watchdog disabled: call iterator.next() directly
           nextResponse = await iterator.next();
         }
-        if (nextResponse.done) {
+        if (nextResponse.done === true) {
           break;
         }
 
@@ -498,9 +510,9 @@ export class TurnProcessor {
         const promptTokens = iContent.metadata?.usage?.promptTokens;
         if (promptTokens !== undefined) {
           const cacheReads =
-            iContent.metadata?.usage?.cache_read_input_tokens || 0;
+            iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
           const cacheWrites =
-            iContent.metadata?.usage?.cache_creation_input_tokens || 0;
+            iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
           this.lastPromptTokenCount = promptTokens + cacheReads + cacheWrites;
           this.compressionHandler.lastPromptTokenCount =
             this.lastPromptTokenCount;
@@ -521,10 +533,11 @@ export class TurnProcessor {
     tools: unknown,
     baseUrl: string | undefined,
   ): void {
-    if (tools && Array.isArray(tools)) {
+    if (Array.isArray(tools)) {
       const total = tools.reduce((sum, g) => {
         if (
-          g &&
+          typeof g === 'object' &&
+          g !== null &&
           'functionDeclarations' in g &&
           Array.isArray(g.functionDeclarations)
         )
@@ -543,6 +556,7 @@ export class TurnProcessor {
       {
         providerName: provider.name,
         model: this.runtimeContext.state.model,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
         toolCount: (tools as unknown[])?.length ?? 0,
         baseUrl,
       },
@@ -578,6 +592,7 @@ export class TurnProcessor {
   ): void {
     const curatedHistory = this.historyService.getCurated();
     const index = ContentConverters.toGeminiContents(curatedHistory).length;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
     const newEntries = afcHistory.slice(index) ?? [];
     const matcher = this.makePositionMatcher();
     for (const content of newEntries) {
@@ -636,7 +651,7 @@ export class TurnProcessor {
         );
       }
     } else if (
-      response.candidates?.length &&
+      (response.candidates?.length ?? 0) > 0 &&
       (!afcHistory || afcHistory.length === 0)
     ) {
       const turnKey = this.historyService.generateTurnKey();
@@ -663,19 +678,21 @@ export class TurnProcessor {
     if (usageMetadata?.promptTokenCount !== undefined) {
       const combined =
         usageMetadata.promptTokenCount +
-        (usageMetadata.cache_read_input_tokens || 0) +
-        (usageMetadata.cache_creation_input_tokens || 0);
+        (usageMetadata.cache_read_input_tokens ?? 0) +
+        (usageMetadata.cache_creation_input_tokens ?? 0);
       if (combined > 0) {
         this.historyService.syncTotalTokens(combined);
         await this.historyService.waitForTokenUpdates();
       }
-    } else if (this.lastPromptTokenCount) {
+    } else if (
+      this.lastPromptTokenCount != null &&
+      this.lastPromptTokenCount > 0 &&
+      !Number.isNaN(this.lastPromptTokenCount)
+    ) {
       // lastPromptTokenCount is already cache-adjusted (includes
       // cache_read + cache_creation tokens) from the provider call path
-      if (this.lastPromptTokenCount > 0) {
-        this.historyService.syncTotalTokens(this.lastPromptTokenCount);
-        await this.historyService.waitForTokenUpdates();
-      }
+      this.historyService.syncTotalTokens(this.lastPromptTokenCount);
+      await this.historyService.waitForTokenUpdates();
     }
   }
 
@@ -685,11 +702,11 @@ export class TurnProcessor {
   private _enrichSchemaDepthError(error: unknown): void {
     if (
       error instanceof ApiError &&
-      error.message &&
+      error.message !== '' &&
       isSchemaDepthError(error.message)
     ) {
       const tools = this.generationConfig.tools;
-      if (!tools || !Array.isArray(tools)) {
+      if (!Array.isArray(tools)) {
         return;
       }
 
@@ -698,24 +715,23 @@ export class TurnProcessor {
 
       for (const toolGroup of tools) {
         if (
-          toolGroup &&
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool groups can be malformed at runtime.
+          toolGroup !== null &&
+          typeof toolGroup === 'object' &&
           'functionDeclarations' in toolGroup &&
           Array.isArray(toolGroup.functionDeclarations)
         ) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const funcDecl of toolGroup.functionDeclarations) {
-            const name = funcDecl.name || 'unknown';
+            const name = funcDecl.name ?? 'unknown';
             toolNames.push(name);
+            const schema = funcDecl.parametersJsonSchema;
             if (
-              funcDecl.parametersJsonSchema &&
-              typeof funcDecl.parametersJsonSchema === 'object'
+              schema != null &&
+              typeof schema === 'object' &&
+              hasCycleInSchema(schema as Record<string, unknown>)
             ) {
-              if (
-                hasCycleInSchema(
-                  funcDecl.parametersJsonSchema as Record<string, unknown>,
-                )
-              ) {
-                cyclicSchemaTools.push(name);
-              }
+              cyclicSchemaTools.push(name);
             }
           }
         }

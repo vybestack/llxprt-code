@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import stripAnsi from 'strip-ansi';
 import { act } from 'react';
@@ -233,17 +235,18 @@ describe('textBufferReducer', () => {
     });
   });
 
-  describe('delete_word_left action', () => {
-    const createSingleLineState = (
-      text: string,
-      col: number,
-    ): TextBufferState => ({
-      ...initialState,
-      lines: [text],
-      cursorRow: 0,
-      cursorCol: col,
-    });
+  // Shared helper for single-line state creation (used by delete_word_left and delete_word_right tests)
+  const createSingleLineState = (
+    text: string,
+    col: number,
+  ): TextBufferState => ({
+    ...initialState,
+    lines: [text],
+    cursorRow: 0,
+    cursorCol: col,
+  });
 
+  describe('delete_word_left action', () => {
     it.each([
       {
         input: 'hello world',
@@ -295,16 +298,6 @@ describe('textBufferReducer', () => {
   });
 
   describe('delete_word_right action', () => {
-    const createSingleLineState = (
-      text: string,
-      col: number,
-    ): TextBufferState => ({
-      ...initialState,
-      lines: [text],
-      cursorRow: 0,
-      cursorCol: col,
-    });
-
     it.each([
       {
         input: 'hello world',

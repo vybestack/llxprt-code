@@ -316,8 +316,10 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
       chunks.forEach((chunk) => {
         const result = filter.filterStreamChunk(chunk);
         expect(result.filtered).toBeDefined();
-        fullResult += result.filtered || '';
-        detectedEmojis = detectedEmojis || result.emojiDetected;
+
+        fullResult +=
+          typeof result.filtered === 'string' ? result.filtered : '';
+        detectedEmojis = detectedEmojis || result.emojiDetected === true;
       });
 
       // Flush any remaining content

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
@@ -882,8 +884,8 @@ describe('HistoryService - Behavioral Tests', () => {
       expect(
         curated.some(
           (content) =>
-            content.metadata?.synthetic &&
-            content.metadata?.reason === 'reconstructed_tool_call',
+            content.metadata?.synthetic === true &&
+            content.metadata.reason === 'reconstructed_tool_call',
         ),
       ).toBe(false);
     });
@@ -941,9 +943,9 @@ describe('HistoryService - Behavioral Tests', () => {
       expect(toolCallIndex).toBeGreaterThanOrEqual(0);
 
       const toolResultMessage = curated[toolCallIndex + 1];
-      expect(toolResultMessage?.speaker).toBe('tool');
+      expect(toolResultMessage.speaker).toBe('tool');
       expect(
-        toolResultMessage?.blocks.some(
+        toolResultMessage.blocks.some(
           (block) => block.type === 'tool_response' && block.callId === callId,
         ),
       ).toBe(true);
@@ -988,9 +990,9 @@ describe('HistoryService - Behavioral Tests', () => {
       expect(toolCallIndex).toBeGreaterThanOrEqual(0);
 
       const toolResultMessage = curated[toolCallIndex + 1];
-      expect(toolResultMessage?.speaker).toBe('tool');
+      expect(toolResultMessage.speaker).toBe('tool');
       expect(
-        toolResultMessage?.blocks.some(
+        toolResultMessage.blocks.some(
           (block) => block.type === 'tool_response' && block.callId === callId,
         ),
       ).toBe(true);

@@ -356,9 +356,11 @@ describe('TopDownTruncationStrategy', () => {
       for (const msg of result.newHistory) {
         for (const block of msg.blocks) {
           if (block.type === 'text' && 'text' in block) {
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect((block as { text: string }).text).not.toContain(
               'state_snapshot',
             );
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect((block as { text: string }).text).not.toContain(
               'Understood. Continuing with the current task.',
             );
@@ -487,7 +489,9 @@ describe('TopDownTruncationStrategy', () => {
       const result = await strategy.compress(ctx);
 
       // Verify no orphaned tool responses: first message should not be a tool response
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.newHistory.length > 0) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.newHistory[0].speaker).not.toBe('tool');
       }
 
@@ -508,6 +512,7 @@ describe('TopDownTruncationStrategy', () => {
                     b.callId === callId,
                 ),
             );
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(hasResponse).toBe(true);
           }
         }
@@ -562,6 +567,7 @@ describe('TopDownTruncationStrategy', () => {
                   (b) => b.type === 'tool_call' && 'id' in b && b.id === callId,
                 ),
             );
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(hasCall).toBe(true);
           }
         }

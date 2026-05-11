@@ -16,7 +16,7 @@ export interface DebugSettings {
 }
 
 export class MockConfigurationManager {
-  private static instance: MockConfigurationManager;
+  private static instance: MockConfigurationManager | undefined;
   private config: DebugSettings = {
     enabled: true,
     namespaces: ['*'],
@@ -27,9 +27,7 @@ export class MockConfigurationManager {
   private listeners = new Set<() => void>();
 
   static getInstance(): MockConfigurationManager {
-    if (!MockConfigurationManager.instance) {
-      MockConfigurationManager.instance = new MockConfigurationManager();
-    }
+    MockConfigurationManager.instance ??= new MockConfigurationManager();
     return MockConfigurationManager.instance;
   }
 
@@ -43,10 +41,12 @@ export class MockConfigurationManager {
   }
 
   getOutputTarget(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string target should fall back to default
     return this.config.output?.target || 'file stderr';
   }
 
   getRedactPatterns(): string[] {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty array vs undefined - treating undefined as no patterns
     return this.config.redactPatterns || [];
   }
 

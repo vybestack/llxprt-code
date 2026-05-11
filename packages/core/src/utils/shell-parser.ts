@@ -73,7 +73,15 @@ export async function initializeParser(): Promise<boolean> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const TreeSitter = (await import('web-tree-sitter')) as any;
     // web-tree-sitter exports Parser directly as a named export, not default
-    const Parser = TreeSitter.Parser || TreeSitter.default || TreeSitter;
+    const parserCandidate = TreeSitter.Parser;
+    const defaultCandidate = TreeSitter.default;
+    const Parser =
+      typeof parserCandidate === 'function'
+        ? parserCandidate
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          typeof defaultCandidate === 'function'
+          ? defaultCandidate
+          : TreeSitter;
 
     await Parser.init();
     parser = new Parser();
@@ -118,19 +126,20 @@ export function parseShellCommand(
   }
 
   const deadline = performance.now() + timeoutMicros / 1000;
-  let timedOut = false;
+  const parseState = { timedOut: false };
 
   try {
     const tree = parser.parse(command, null, {
       progressCallback: () => {
         if (performance.now() > deadline) {
-          timedOut = true;
+          parseState.timedOut = true;
           return true as unknown as void; // Returning true cancels parsing
         }
+        return undefined;
       },
     });
 
-    if (timedOut) {
+    if (parseState.timedOut) {
       debugLogger.error('Bash command parsing timed out for command:', command);
       return null;
     }
@@ -162,6 +171,7 @@ export function extractCommandNames(tree: Tree): string[] {
         const cmdText = capture.node.text;
         // Extract just the command name (last path component if it's a path)
         const cmdName = cmdText.split(/[\\/]/).pop();
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (cmdName) {
           commands.push(cmdName);
         }
@@ -292,9 +302,10 @@ function hasPromptCommandTransform(root: Node): boolean {
         const operatorNode = current.child(i);
         const transformNode = current.child(i + 1);
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (
           operatorNode?.text === '@' &&
-          transformNode?.text?.toLowerCase() === 'p'
+          transformNode?.text.toLowerCase() === 'p'
         ) {
           return true;
         }
@@ -354,8 +365,8 @@ export function parseCommandDetails(
           'Syntax Errors:',
           syntaxErrors,
         );
-      } catch (_e) {
-        // Ignore query errors
+      } catch {
+        // AST query failed - ignore syntax error detection
       } finally {
         query?.delete();
       }
@@ -426,6 +437,7 @@ export function splitCommandsWithTree(
         if (splitOnPipes) {
           // Recurse into pipeline children to get individual commands
           for (const child of node.children) {
+            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (child) extractCommands(child);
           }
         } else {
@@ -434,21 +446,15 @@ export function splitCommandsWithTree(
         }
         break;
       case 'list':
-        // Lists are command chains (&&, ||, ;) - recurse into children
-        for (const child of node.children) {
-          if (child) extractCommands(child);
-        }
-        break;
+      // Lists are command chains (&&, ||, ;) - recurse into children
+      // falls through to program/default
       case 'program':
+      default:
+        // For other node types (and program), check children
         for (const child of node.children) {
           if (child) extractCommands(child);
         }
         break;
-      default:
-        // For other node types, check children
-        for (const child of node.children) {
-          if (child) extractCommands(child);
-        }
     }
   }
 

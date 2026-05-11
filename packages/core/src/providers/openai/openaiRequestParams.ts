@@ -64,11 +64,17 @@ const OPENAI_REASONING_INTERNAL_KEYS = new Set<string>([
 function stripInternalReasoningKeys(
   value: unknown,
 ): Record<string, unknown> | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value)
+  ) {
     return undefined;
   }
 
   const sanitized: Record<string, unknown> = {};
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const [key, nestedValue] of Object.entries(
     value as Record<string, unknown>,
   )) {
@@ -97,6 +103,7 @@ export function filterOpenAIRequestParams(
   }
 
   const filtered: Record<string, unknown> = {};
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const [rawKey, value] of Object.entries(source)) {
     if (value === undefined || value === null) {
       continue;

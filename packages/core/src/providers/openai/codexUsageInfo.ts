@@ -155,49 +155,13 @@ export async function fetchCodexUsage(
   const endpoints = buildCodexUsageEndpoints(baseUrl);
 
   for (const endpoint of endpoints) {
-    try {
-      const response = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'ChatGPT-Account-Id': accountId,
-          Accept: 'application/json',
-        },
-        signal: AbortSignal.timeout(10_000),
-      });
-
-      if (!response.ok) {
-        logger.debug(
-          () =>
-            `Usage endpoint ${endpoint} returned ${response.status}: ${response.statusText}`,
-        );
-        continue;
-      }
-
-      const data = await response.json();
-
-      const parsedData = CodexUsageInfoSchema.safeParse(data);
-      if (!parsedData.success) {
-        logger.debug(
-          () =>
-            `Failed to parse usage response from ${endpoint}: ${JSON.stringify(parsedData.error)}`,
-        );
-        continue;
-      }
-
-      logger.debug(
-        () =>
-          `Fetched Codex usage info from ${endpoint}: ${JSON.stringify(parsedData.data)}`,
-      );
-
-      return parsedData.data;
-    } catch (error) {
-      logger.debug(
-        () =>
-          `Error fetching Codex usage info from ${endpoint}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
+    const result = await tryFetchCodexEndpoint(
+      endpoint,
+      accessToken,
+      accountId,
+    );
+    if (result !== null) {
+      return result;
     }
   }
 
@@ -273,4 +237,60 @@ export function formatCodexUsage(usage: CodexUsageInfo): string[] {
   }
 
   return lines;
+}
+
+/**
+ * Helper function to try fetching from a single Codex endpoint.
+ * Returns parsed data on success, null on failure.
+ */
+async function tryFetchCodexEndpoint(
+  endpoint: string,
+  accessToken: string,
+  accountId: string,
+): Promise<CodexUsageInfo | null> {
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'ChatGPT-Account-Id': accountId,
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      logger.debug(
+        () =>
+          `Usage endpoint ${endpoint} returned ${response.status}: ${response.statusText}`,
+      );
+      return null;
+    }
+
+    const data = await response.json();
+
+    const parsedData = CodexUsageInfoSchema.safeParse(data);
+    if (!parsedData.success) {
+      logger.debug(
+        () =>
+          `Failed to parse usage response from ${endpoint}: ${JSON.stringify(parsedData.error)}`,
+      );
+      return null;
+    }
+
+    logger.debug(
+      () =>
+        `Fetched Codex usage info from ${endpoint}: ${JSON.stringify(parsedData.data)}`,
+    );
+
+    return parsedData.data;
+  } catch (error) {
+    logger.debug(
+      () =>
+        `Error fetching Codex usage info from ${endpoint}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
+    return null;
+  }
 }

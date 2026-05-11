@@ -104,7 +104,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
   }
 
   private async ensureInitialized(): Promise<void> {
-    return this.initGuard.ensureInitialized(() => this.initializeToken());
+    await this.initGuard.ensureInitialized(() => this.initializeToken());
+    return;
   }
 
   async initializeToken(): Promise<void> {
@@ -112,19 +113,18 @@ export class GeminiOAuthProvider implements OAuthProvider {
       return;
     }
 
-    return this.errorHandler.handleGracefully(
+    await this.errorHandler.handleGracefully(
       async () => {
         // Try to load from new location first
         let savedToken = await this.tokenStore!.getToken('gemini');
 
-        if (!savedToken) {
-          // Try to migrate from legacy locations
-          savedToken = await this.migrateFromLegacyTokens();
-        }
+        // Try to migrate from legacy locations
+        savedToken ??= await this.migrateFromLegacyTokens();
 
         if (savedToken) {
           this.currentToken = savedToken;
         }
+        return undefined;
       },
       undefined, // No fallback needed - graceful failure is acceptable
       this.name,
@@ -165,7 +165,10 @@ export class GeminiOAuthProvider implements OAuthProvider {
       const { getEphemeralSetting } = await import(
         '../runtime/runtimeSettings.js'
       );
-      noBrowser = (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+      const noBrowserSetting = getEphemeralSetting('auth.noBrowser') as
+        | boolean
+        | undefined;
+      noBrowser = noBrowserSetting ?? false;
     } catch {
       // Runtime not initialized (e.g., tests) — use default
     }
@@ -249,7 +252,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
   private async extractAndPersistToken(
     credentials: Credentials,
   ): Promise<OAuthToken> {
-    if (!credentials?.access_token) {
+    if (!credentials.access_token) {
       throw OAuthErrorFactory.authenticationRequired(this.name, {
         reason: 'No valid credentials received from Google OAuth',
       });
@@ -379,14 +382,25 @@ export class GeminiOAuthProvider implements OAuthProvider {
       return null;
     }
 
+    // Google OAuth uses expiry_date (milliseconds), we need expiry (seconds)
+    // Explicitly check for valid timestamp (non-nullish, non-zero, non-NaN)
+    const expiryDate = creds.expiry_date;
+    const hasValidExpiryDate =
+      expiryDate !== null &&
+      expiryDate !== undefined &&
+      expiryDate > 0 &&
+      !Number.isNaN(expiryDate);
+    const expiry = hasValidExpiryDate
+      ? Math.floor(expiryDate / 1000)
+      : Math.floor(Date.now() / 1000) + 3600;
+
     const token: OAuthToken = {
       access_token: creds.access_token,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalize null/undefined/empty-string to undefined
       refresh_token: creds.refresh_token || undefined,
-      // Google OAuth uses expiry_date (milliseconds), we need expiry (seconds)
-      expiry: creds.expiry_date
-        ? Math.floor(creds.expiry_date / 1000)
-        : Math.floor(Date.now() / 1000) + 3600,
+      expiry,
       token_type: 'Bearer' as const,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalize null/undefined/empty-string to undefined
       scope: creds.scope || undefined,
     };
 
@@ -488,7 +502,10 @@ export class GeminiOAuthProvider implements OAuthProvider {
    */
   private installPersistentAuthCodeHook(): void {
     const globalObj = global as Record<string, unknown>;
-    if (!globalObj.__oauth_wait_for_code) {
+    if (
+      globalObj.__oauth_wait_for_code === undefined ||
+      globalObj.__oauth_wait_for_code === null
+    ) {
       globalObj.__oauth_wait_for_code = () => this.waitForAuthCode();
       globalObj.__oauth_provider = this.name;
     }

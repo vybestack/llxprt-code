@@ -123,9 +123,7 @@ export function validateAfterAgentInput(
 export function validateBeforeModelInput(
   input: unknown,
 ): input is BeforeModelInput {
-  if (!isObject(input)) return false;
-  if (!isObject(input['llm_request'])) return false;
-  return true;
+  return hasLlmRequest(input);
 }
 
 /**
@@ -145,6 +143,16 @@ export function validateAfterModelInput(
 }
 
 /**
+ * Shared helper: checks if input has a valid llm_request object.
+ * Used by validateBeforeModelInput and validateBeforeToolSelectionInput.
+ */
+function hasLlmRequest(input: unknown): boolean {
+  if (!isObject(input)) return false;
+  if (!isObject(input['llm_request'])) return false;
+  return true;
+}
+
+/**
  * Validates BeforeToolSelection event input.
  * Required fields: llm_request (object)
  *
@@ -154,9 +162,7 @@ export function validateAfterModelInput(
 export function validateBeforeToolSelectionInput(
   input: unknown,
 ): input is BeforeToolSelectionInput {
-  if (!isObject(input)) return false;
-  if (!isObject(input['llm_request'])) return false;
-  return true;
+  return hasLlmRequest(input);
 }
 
 /**

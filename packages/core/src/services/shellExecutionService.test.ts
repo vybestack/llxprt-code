@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import {
   vi,
   describe,
@@ -473,7 +475,7 @@ describe('ShellExecutionService', () => {
 
       // Emit output every 50ms (within the 100ms inactivity window)
       const outputInterval = setInterval(() => {
-        if (mockPtyProcess.onData.mock.calls[0]) {
+        if (mockPtyProcess.onData.mock.calls.length > 0) {
           mockPtyProcess.onData.mock.calls[0][0]('output\n');
         }
       }, 50);

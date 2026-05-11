@@ -92,7 +92,7 @@ export default tseslint.config(
     rules: {
       ...importPlugin.configs.recommended.rules,
       ...importPlugin.configs.typescript.rules,
-      'import/no-default-export': 'warn',
+      'import/no-default-export': 'error',
       'import/no-unresolved': 'off', // Disable for now, can be noisy with monorepos/paths
     },
   },
@@ -201,9 +201,9 @@ export default tseslint.config(
       // --- Strict rules modeled after lsp/ui packages (enabled as warnings for core/cli) ---
 
       // Strict TypeScript rules
-      '@typescript-eslint/no-misused-promises': 'warn',
+      '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/strict-boolean-expressions': [
-        'warn',
+        'error',
         {
           allowString: true,
           allowNumber: false,
@@ -218,25 +218,28 @@ export default tseslint.config(
         'error',
         { prefer: 'type-imports' },
       ],
-      '@typescript-eslint/switch-exhaustiveness-check': 'warn',
-      '@typescript-eslint/no-unnecessary-condition': 'warn',
-      '@typescript-eslint/prefer-nullish-coalescing': 'warn',
-      '@typescript-eslint/prefer-optional-chain': 'warn',
+      '@typescript-eslint/switch-exhaustiveness-check': [
+        'error',
+        { considerDefaultExhaustiveForUnions: true },
+      ],
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+      '@typescript-eslint/prefer-optional-chain': 'error',
 
       // General code quality
       'no-console': 'warn',
-      'no-else-return': 'warn',
-      'no-lonely-if': 'warn',
-      'no-unneeded-ternary': 'warn',
+      'no-else-return': 'error',
+      'no-lonely-if': 'error',
+      'no-unneeded-ternary': 'error',
 
       // Complexity limits
       complexity: ['warn', 15],
       'max-lines': [
-        'warn',
+        'error',
         { max: 800, skipBlankLines: true, skipComments: true },
       ],
       'max-lines-per-function': [
-        'warn',
+        'error',
         { max: 80, skipBlankLines: true, skipComments: true },
       ],
 
@@ -246,7 +249,23 @@ export default tseslint.config(
           ([rule, config]) => [rule, Array.isArray(config) ? ['warn', ...config.slice(1)] : 'warn'],
         ),
       ),
-      'sonarjs/cognitive-complexity': ['warn', 30],
+      'sonarjs/cognitive-complexity': ['error', 30],
+      'sonarjs/todo-tag': 'error',
+      'sonarjs/no-ignored-exceptions': 'error',
+      'sonarjs/regular-expr': 'error',
+      'sonarjs/slow-regex': 'error',
+      'sonarjs/os-command': 'error',
+      'sonarjs/no-os-command-from-path': 'error',
+      'sonarjs/no-all-duplicated-branches': 'error',
+      'sonarjs/no-duplicated-branches': 'error',
+      'sonarjs/no-identical-functions': 'error',
+      'sonarjs/no-inconsistent-returns': 'error',
+      'sonarjs/no-collapsible-if': 'error',
+      'sonarjs/nested-control-flow': 'error',
+      'sonarjs/expression-complexity': 'error',
+      'sonarjs/no-nested-conditional': 'error',
+      'sonarjs/too-many-break-or-continue-in-loop': 'error',
+
       'sonarjs/function-return-type': 'off',
       'sonarjs/no-wildcard-import': 'off',
       'sonarjs/file-header': 'off',
@@ -488,13 +507,18 @@ export default tseslint.config(
       ],
 
       // Stricter vitest rules (warnings for now)
-      'vitest/expect-expect': 'warn',
-      'vitest/no-conditional-expect': 'warn',
-      'vitest/no-conditional-in-test': 'warn',
-      'vitest/require-to-throw-message': 'warn',
+      // fast-check's `fc.assert` is a real assertion helper; tests using
+      // `fc.assert(fc.property(...))` do assert but use no literal `expect`.
+      'vitest/expect-expect': [
+        'error',
+        { assertFunctionNames: ['expect', 'fc.assert'] },
+      ],
+      'vitest/no-conditional-expect': 'error',
+      'vitest/no-conditional-in-test': 'error',
+      'vitest/require-to-throw-message': 'error',
       'vitest/prefer-strict-equal': 'error',
-      'vitest/max-nested-describe': ['warn', { max: 3 }],
-      'vitest/require-top-level-describe': 'warn',
+      'vitest/max-nested-describe': ['error', { max: 3 }],
+      'vitest/require-top-level-describe': 'error',
 
       // Relax complexity rules for test files
       'max-lines-per-function': 'off',
@@ -504,104 +528,6 @@ export default tseslint.config(
 
     },
   },
-  // ============================================================================
-  // Issue #1569: Batch T1C - vitest/require-to-throw-message enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  // This is a phased rollout; the rule remains at 'warn' for other test files.
-  {
-    files: [
-      'packages/a2a-server/src/agent/task.test.ts',
-      'packages/a2a-server/src/commands/restore.test.ts',
-    ],
-    plugins: {
-      vitest,
-    },
-    rules: {
-      'vitest/require-to-throw-message': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569
-  // ============================================================================
-  // ============================================================================
-  // Issue #1569: Batch T1D - vitest/expect-expect enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  // This is a phased rollout; the rule remains at 'warn' for other test files.
-  {
-    files: [
-      'packages/core/src/tools/todo-read.test.ts',
-      'packages/core/src/tools/todo-write.test.ts',
-    ],
-    plugins: {
-      vitest,
-    },
-    rules: {
-      'vitest/expect-expect': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 T1D
-  // ============================================================================
-  // ============================================================================
-  // Issue #1569: Batch R3A - no-else-return enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  {
-    files: [
-      'packages/a2a-server/src/config/config.ts',
-      'packages/a2a-server/src/commands/extensions.ts',
-      'packages/a2a-server/src/commands/restore.ts',
-    ],
-    rules: {
-      'no-else-return': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 R3A
-  // ============================================================================
-  // ============================================================================
-  // Issue #1569: Batch R3B - prefer-optional-chain enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  {
-    files: [
-      'packages/a2a-server/src/config/config.ts',
-      'packages/a2a-server/src/commands/restore.ts',
-    ],
-    rules: {
-      '@typescript-eslint/prefer-optional-chain': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 R3B
-  // ============================================================================
-  // ============================================================================
-  // Issue #1569: Batch BN4A - switch-exhaustiveness-check enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  {
-    files: ['packages/a2a-server/src/agent/task.ts'],
-    rules: {
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 BN4A
-  // ============================================================================
-  // ============================================================================
-  // Issue #1569: Batch BN4B - prefer-nullish-coalescing enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  {
-    files: ['packages/a2a-server/src/config/config.ts'],
-    rules: {
-      '@typescript-eslint/prefer-nullish-coalescing': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 BN4B
   // ============================================================================
   // Issue #1569: Batch BN4C - no-unnecessary-condition enforcement
   // ============================================================================
@@ -690,21 +616,6 @@ export default tseslint.config(
     },
   },
   // ============================================================================
-  // End Issue #1569 C5D
-  // ============================================================================
-  // Issue #1569: Batch S6A - sonarjs/todo-tag enforcement
-  // ============================================================================
-  // Enforce no TODO/FIXME/XXX/HACK comments in production code.
-  // These tags indicate incomplete work that should be tracked properly.
-  {
-    files: [
-      'packages/a2a-server/src/config/config.ts',
-      'packages/a2a-server/src/agent/task.ts',
-    ],
-    rules: {
-      'sonarjs/todo-tag': 'error',
-    },
-  },
   // ============================================================================
   // End Issue #1569 S6A
   // ============================================================================
@@ -722,38 +633,6 @@ export default tseslint.config(
   },
   // ============================================================================
   // End Issue #1569 S6B
-  // ============================================================================
-  // Issue #1569: Batch S6C - sonarjs/regular-expr enforcement
-  // ============================================================================
-  // Enforce proper regular expression construction and usage.
-  {
-    files: [
-      'packages/core/src/providers/anthropic/AnthropicResponseParser.ts',
-      'packages/core/src/providers/anthropic/AnthropicMessageNormalizer.ts',
-    ],
-    rules: {
-      'sonarjs/regular-expr': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 S6C
-  // ============================================================================
-  // Issue #1569: Batch S6D - sonarjs/os-command enforcement
-  // ============================================================================
-  // Enforce safe OS command execution patterns.
-  {
-    files: ['packages/a2a-server/src/agent/executor.ts'],
-    plugins: {
-      sonarjs,
-    },
-    rules: {
-      'sonarjs/os-command': 'error',
-      'sonarjs/no-os-command-from-path': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 S6D
-  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
@@ -1052,7 +931,7 @@ export default tseslint.config(
         { max: 800, skipBlankLines: true, skipComments: true },
       ],
       'max-lines-per-function': [
-        'warn',
+        'error',
         { max: 80, skipBlankLines: true, skipComments: true },
       ],
     },
@@ -1122,7 +1001,7 @@ export default tseslint.config(
     rules: {
       // Custom rules
       // 'custom/react-render-safety': 'error', // TODO: Fix for ESLint 9 API
-      'custom/no-inline-deps': 'warn', // Set to warn initially, can be changed to error later
+      'custom/no-inline-deps': 'error',
       'custom/ink-text-color-required': 'error',
     },
   },

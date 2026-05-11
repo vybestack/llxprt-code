@@ -279,9 +279,9 @@ describe('getPathSuggestions', () => {
     const results = await getPathSuggestions('./', testRootDir);
     const firstDirIdx = results.findIndex((r) => r.isDirectory);
     const firstFileIdx = results.findIndex((r) => !r.isDirectory);
-    if (firstDirIdx !== -1 && firstFileIdx !== -1) {
-      expect(firstDirIdx).toBeLessThan(firstFileIdx);
-    }
+    expect(firstDirIdx).toBeGreaterThanOrEqual(0);
+    expect(firstFileIdx).toBeGreaterThanOrEqual(0);
+    expect(firstDirIdx).toBeLessThan(firstFileIdx);
   });
 
   it('should return empty array for empty partial path', async () => {

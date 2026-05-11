@@ -195,6 +195,7 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       expect(fulfilled.length).toBeGreaterThanOrEqual(1);
 
       // All successful results should have the same refreshed token
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (fulfilled.length > 0) {
         const firstToken = (
           fulfilled[0] as PromiseFulfilledResult<OAuthToken | null>
@@ -204,6 +205,7 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
             (r as PromiseFulfilledResult<OAuthToken | null>).value
               ?.access_token === firstToken,
         );
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(allSame).toBe(true);
       }
     });

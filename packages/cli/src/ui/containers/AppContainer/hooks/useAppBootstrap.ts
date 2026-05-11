@@ -171,7 +171,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   };
 }
 
-/** Initializes todo state and pause controller */
+/** Initializes task-list state and pause controller */
 function useBootstrapTodo() {
   const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
@@ -223,9 +223,9 @@ function useBootstrapEvents(
     }
   }, [config]);
   const shouldShowIdePrompt =
-    currentIDE &&
+    Boolean(currentIDE) &&
     !config.getIdeMode() &&
-    !settings.merged.hasSeenIdeIntegrationNudge &&
+    settings.merged.hasSeenIdeIntegrationNudge !== true &&
     !idePromptAnswered;
   useUpdateAndOAuthBridges({
     addItem,

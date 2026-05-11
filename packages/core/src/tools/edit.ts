@@ -35,135 +35,19 @@ import {
 } from './modifiable-tool.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
-import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
 import { EDIT_TOOL_NAME } from './tool-names.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { ensureParentDirectoriesExist } from './ensure-dirs.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
-
-/**
- * Gets emoji filter instance based on configuration
- */
-function getEmojiFilter(config: Config): EmojiFilter {
-  // Get emojifilter from ephemeral settings or default to 'auto'
-  const mode =
-    (config.getEphemeralSetting('emojifilter') as
-      | 'allowed'
-      | 'auto'
-      | 'warn'
-      | 'error') || 'auto';
-
-  // Map auto to warn for file operations (we want warnings when filtering files)
-  let filterMode: 'allowed' | 'warn' | 'error';
-  if (mode === 'allowed') {
-    filterMode = 'allowed';
-  } else if (mode === 'auto' || mode === 'warn') {
-    filterMode = 'warn';
-  } else {
-    filterMode = 'error';
-  }
-
-  return new EmojiFilter({ mode: filterMode });
-}
-
-export function applyReplacement(
-  currentContent: string | null,
-  oldString: string,
-  newString: string,
-  isNewFile: boolean,
-  expectedReplacements: number = 1,
-): string {
-  if (isNewFile) {
-    return newString;
-  }
-  if (currentContent === null) {
-    // Should not happen if not a new file, but defensively return empty or newString if oldString is also empty
-    return oldString === '' ? newString : '';
-  }
-
-  const preserveTrailingNewline = currentContent.endsWith('\n');
-  // If oldString is empty and it's not a new file, do not modify the content.
-  if (oldString === '' && !isNewFile) {
-    return currentContent;
-  }
-
-  // Prevent infinite loop: empty oldString with multiple replacements is invalid
-  if (oldString === '' && expectedReplacements > 1) {
-    // This would cause an infinite loop as indexOf("", n) always returns n
-    throw new Error(
-      'Cannot perform multiple replacements with empty old_string',
-    );
-  }
-
-  // Try fuzzy matching first
-  const fuzzyResult = fuzzyReplace(
-    currentContent,
-    oldString,
-    newString,
-    expectedReplacements > 1,
-  );
-
-  if (fuzzyResult) {
-    // Verify the number of replacements matches expectations
-    if (fuzzyResult.occurrences === expectedReplacements) {
-      const result = fuzzyResult.result;
-      if (
-        preserveTrailingNewline &&
-        result.length > 0 &&
-        !result.endsWith('\n')
-      ) {
-        return `${result}\n`;
-      }
-      return result;
-    }
-    // If fuzzy matching found a different number of occurrences,
-    // fall through to the strict matching below which will properly report the error
-  }
-
-  // Fall back to strict matching (original behavior)
-  // Use a more precise replacement that only replaces the expected number of occurrences
-  if (expectedReplacements === 1) {
-    // For single replacement, use replace() instead of replaceAll().
-    // Use a replacer function so `$` in `newString` is treated literally.
-    const result = currentContent.replace(oldString, () => newString);
-    if (
-      preserveTrailingNewline &&
-      result.length > 0 &&
-      !result.endsWith('\n')
-    ) {
-      return `${result}\n`;
-    }
-    return result;
-  }
-  // For multiple replacements, we need to count and limit replacements
-  let result = currentContent;
-  let replacementCount = 0;
-  let searchIndex = 0;
-
-  while (replacementCount < expectedReplacements) {
-    const foundIndex = result.indexOf(oldString, searchIndex);
-    if (foundIndex === -1) {
-      break; // No more occurrences found
-    }
-
-    // Replace only this specific occurrence
-    result =
-      result.substring(0, foundIndex) +
-      newString +
-      result.substring(foundIndex + oldString.length);
-
-    replacementCount++;
-    // Update search index to continue after the replacement
-    searchIndex = foundIndex + newString.length;
-  }
-
-  if (preserveTrailingNewline && result.length > 0 && !result.endsWith('\n')) {
-    return `${result}\n`;
-  }
-  return result;
-}
+import {
+  getEmojiFilter,
+  validateEditState,
+  applyReplacement,
+  type EditErrorInfo,
+} from './edit-utils.js';
+export { applyReplacement } from './edit-utils.js';
 
 /**
  * Parameters for the Edit tool
@@ -243,11 +127,261 @@ class EditToolInvocation extends BaseToolInvocation<
 
   private getFilePath(): string {
     // Use absolute_path if provided, otherwise fall back to file_path
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
     return this.params.absolute_path || this.params.file_path || '';
   }
 
   override toolLocations(): ToolLocation[] {
     return [{ path: this.getFilePath() }];
+  }
+
+  /**
+   * Counts occurrences of oldString in content, trying fuzzy then strict.
+   */
+  private countOccurrences(
+    currentContent: string,
+    finalOldString: string,
+    finalNewString: string,
+    expectedReplacements: number,
+    replaceLine: number | undefined,
+    filePath: string,
+  ): {
+    occurrences: number;
+    error: { display: string; raw: string; type: ToolErrorType } | undefined;
+  } {
+    if (finalOldString === '') {
+      return { occurrences: 0, error: undefined };
+    }
+
+    if (replaceLine !== undefined && replaceLine > 0) {
+      const lines = currentContent.split('\n');
+
+      if (replaceLine > lines.length) {
+        return {
+          occurrences: 0,
+          error: {
+            display: `Failed to edit: replaceBeginLineNumber is out of range.`,
+            raw: `Failed to edit: replaceBeginLineNumber=${replaceLine} is out of range for ${filePath} (total lines: ${lines.length}). No edits made.`,
+            type: ToolErrorType.INVALID_TOOL_PARAMS,
+          },
+        };
+      }
+      const lineText = lines[replaceLine - 1];
+      let count = 0;
+      let pos = lineText.indexOf(finalOldString);
+      while (pos !== -1) {
+        count++;
+        pos = lineText.indexOf(finalOldString, pos + finalOldString.length);
+      }
+      return { occurrences: count, error: undefined };
+    }
+
+    const fuzzyResult = fuzzyReplace(
+      currentContent,
+      finalOldString,
+      finalNewString,
+      expectedReplacements > 1,
+    );
+
+    if (fuzzyResult) {
+      return { occurrences: fuzzyResult.occurrences, error: undefined };
+    }
+
+    let count = 0;
+    let pos = currentContent.indexOf(finalOldString);
+    while (pos !== -1) {
+      count++;
+      pos = currentContent.indexOf(finalOldString, pos + finalOldString.length);
+    }
+    return { occurrences: count, error: undefined };
+  }
+
+  /**
+   * Validates the edit parameters after reading file content and builds the
+   * appropriate error object if any validation fails.
+   */
+  private validateEditState(
+    filteredParams: EditToolParams,
+    currentContent: string | null,
+    fileExists: boolean,
+    filePath: string,
+    occurrences: number,
+    expectedReplacements: number,
+    finalOldString: string,
+    finalNewString: string,
+  ): EditErrorInfo | undefined {
+    return validateEditState(
+      filteredParams,
+      currentContent,
+      fileExists,
+      filePath,
+      occurrences,
+      expectedReplacements,
+      finalOldString,
+      finalNewString,
+    );
+  }
+
+  /**
+   * Applies the replacement to produce newContent, handling replaceLine.
+   */
+  private computeNewContent(
+    currentContent: string | null,
+    fileExists: boolean,
+    isNewFile: boolean,
+    filteredParams: EditToolParams,
+    finalOldString: string,
+    finalNewString: string,
+    expectedReplacements: number,
+    filePath: string,
+  ): {
+    newContent: string;
+    error: { display: string; raw: string; type: ToolErrorType } | undefined;
+  } {
+    const replaceLine = filteredParams.replaceBeginLineNumber;
+    if (
+      fileExists &&
+      replaceLine !== undefined &&
+      replaceLine > 0 &&
+      currentContent !== null
+    ) {
+      const lines = currentContent.split('\n');
+      if (replaceLine > lines.length) {
+        return {
+          newContent: currentContent,
+          error: {
+            display: `Failed to edit: replaceBeginLineNumber is out of range.`,
+            raw: `Failed to edit: replaceBeginLineNumber=${replaceLine} is out of range for ${filePath} (total lines: ${lines.length}). No edits made.`,
+            type: ToolErrorType.INVALID_TOOL_PARAMS,
+          },
+        };
+      }
+      let offset = 0;
+
+      for (let i = 0; i < replaceLine - 1; i++) {
+        offset += lines[i].length + 1; // +1 for the '\n'
+      }
+      const lineText = lines[replaceLine - 1];
+      const beforeLine = currentContent.substring(0, offset);
+      const afterLine = currentContent.substring(offset + lineText.length);
+
+      const updatedLine = applyReplacement(
+        lineText,
+        finalOldString,
+        finalNewString,
+        false,
+        expectedReplacements,
+      );
+
+      return {
+        newContent: beforeLine + updatedLine + afterLine,
+        error: undefined,
+      };
+    }
+
+    const newContent = applyReplacement(
+      currentContent,
+      finalOldString,
+      finalNewString,
+      isNewFile,
+      expectedReplacements,
+    );
+    return { newContent, error: undefined };
+  }
+
+  /**
+   * Reads the current file content, handling ENOENT for new files.
+   */
+  private async readFileState(filePath: string): Promise<{
+    currentContent: string | null;
+    fileExists: boolean;
+  }> {
+    try {
+      let currentContent = await this.config
+        .getFileSystemService()
+        .readTextFile(filePath);
+      currentContent = currentContent.replace(/\r\n/g, '\n');
+      return { currentContent, fileExists: true };
+    } catch (err: unknown) {
+      if (!isNodeError(err) || err.code !== 'ENOENT') {
+        throw err;
+      }
+      return { currentContent: null, fileExists: false };
+    }
+  }
+
+  /**
+   * Reads file state and validates the edit, returning resolved values.
+   */
+  private async resolveFileEditState(
+    filteredParams: EditToolParams,
+    filePath: string,
+    expectedReplacements: number,
+  ): Promise<{
+    currentContent: string | null;
+    fileExists: boolean;
+    isNewFile: boolean;
+    finalOldString: string;
+    finalNewString: string;
+    occurrences: number;
+    error: { display: string; raw: string; type: ToolErrorType } | undefined;
+  }> {
+    const { currentContent, fileExists } = await this.readFileState(filePath);
+    let isNewFile = false;
+    const finalOldString = filteredParams.old_string;
+    const finalNewString = filteredParams.new_string;
+    let occurrences = 0;
+    let error:
+      | { display: string; raw: string; type: ToolErrorType }
+      | undefined = undefined;
+
+    if (filteredParams.old_string === '' && !fileExists) {
+      isNewFile = true;
+    } else if (!fileExists) {
+      error = {
+        display: `File not found. Cannot apply edit. Use an empty old_string to create a new file.`,
+        raw: `File not found: ${filePath}`,
+        type: ToolErrorType.FILE_NOT_FOUND,
+      };
+    } else if (currentContent !== null) {
+      const countResult = this.countOccurrences(
+        currentContent,
+        finalOldString,
+        finalNewString,
+        expectedReplacements,
+        filteredParams.replaceBeginLineNumber,
+        filePath,
+      );
+      occurrences = countResult.occurrences;
+      error = countResult.error;
+
+      error ??= this.validateEditState(
+        filteredParams,
+        currentContent,
+        fileExists,
+        filePath,
+        occurrences,
+        expectedReplacements,
+        finalOldString,
+        finalNewString,
+      );
+    } else {
+      error = {
+        display: `Failed to read content of file.`,
+        raw: `Failed to read content of existing file: ${filePath}`,
+        type: ToolErrorType.READ_CONTENT_FAILURE,
+      };
+    }
+
+    return {
+      currentContent,
+      fileExists,
+      isNewFile,
+      finalOldString,
+      finalNewString,
+      occurrences,
+      error,
+    };
   }
 
   /**
@@ -288,235 +422,50 @@ class EditToolInvocation extends BaseToolInvocation<
       new_string: newStringResult.filtered as string,
     };
     const expectedReplacements = filteredParams.expected_replacements ?? 1;
-    let currentContent: string | null = null;
-    let fileExists = false;
-    let isNewFile = false;
-    let finalNewString = filteredParams.new_string;
-    let finalOldString = filteredParams.old_string;
-    let occurrences = 0;
-    let error:
-      | { display: string; raw: string; type: ToolErrorType }
-      | undefined = undefined;
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
     const filePath = params.absolute_path || params.file_path || '';
 
-    try {
-      currentContent = await this.config
-        .getFileSystemService()
-        .readTextFile(filePath);
-      // Normalize line endings to LF for consistent processing.
-      currentContent = currentContent.replace(/\r\n/g, '\n');
-      fileExists = true;
-    } catch (err: unknown) {
-      if (!isNodeError(err) || err.code !== 'ENOENT') {
-        // Rethrow unexpected FS errors (permissions, etc.)
-        throw err;
-      }
-      fileExists = false;
-    }
-
-    if (filteredParams.old_string === '' && !fileExists) {
-      // Creating a new file
-      isNewFile = true;
-    } else if (!fileExists) {
-      // Trying to edit a nonexistent file (and old_string is not empty)
-      error = {
-        display: `File not found. Cannot apply edit. Use an empty old_string to create a new file.`,
-        raw: `File not found: ${filePath}`,
-        type: ToolErrorType.FILE_NOT_FOUND,
-      };
-    } else if (currentContent !== null) {
-      // Editing an existing file - count occurrences
-      finalOldString = filteredParams.old_string;
-      finalNewString = filteredParams.new_string;
-
-      if (finalOldString === '') {
-        occurrences = 0;
-      } else {
-        const replaceLine = filteredParams.replaceBeginLineNumber;
-
-        if (replaceLine && replaceLine > 0) {
-          // Restrict search to the specified line only
-          const lines = currentContent.split('\n');
-          if (replaceLine > lines.length) {
-            error = {
-              display: `Failed to edit: replaceBeginLineNumber is out of range.`,
-              raw: `Failed to edit: replaceBeginLineNumber=${replaceLine} is out of range for ${filePath} (total lines: ${lines.length}). No edits made.`,
-              type: ToolErrorType.INVALID_TOOL_PARAMS,
-            };
-            occurrences = 0;
-          } else {
-            const lineText = lines[replaceLine - 1];
-
-            let count = 0;
-            let pos = lineText.indexOf(finalOldString);
-            while (pos !== -1) {
-              count++;
-              pos = lineText.indexOf(
-                finalOldString,
-                pos + finalOldString.length,
-              );
-            }
-            occurrences = count;
-          }
-        } else {
-          // Try fuzzy matching first to count occurrences
-          const fuzzyResult = fuzzyReplace(
-            currentContent,
-            finalOldString,
-            finalNewString,
-            expectedReplacements > 1,
-          );
-
-          if (fuzzyResult) {
-            occurrences = fuzzyResult.occurrences;
-          } else {
-            // Fall back to strict counting
-            let count = 0;
-            let pos = currentContent.indexOf(finalOldString);
-            while (pos !== -1) {
-              count++;
-              pos = currentContent.indexOf(
-                finalOldString,
-                pos + finalOldString.length,
-              );
-            }
-            occurrences = count;
-          }
-        }
-      }
-
-      if (filteredParams.old_string === '' && expectedReplacements > 1) {
-        // Error: Invalid combination that would cause infinite loop
-        error = {
-          display: `Failed to edit. Cannot perform multiple replacements with empty old_string.`,
-          raw: `Invalid parameters: empty old_string with expected_replacements=${expectedReplacements} would cause infinite loop`,
-          type: ToolErrorType.INVALID_TOOL_PARAMS,
-        };
-      } else if (filteredParams.old_string === '') {
-        // Error: Trying to create a file that already exists
-        error = {
-          display: `Failed to edit. Attempted to create a file that already exists.`,
-          raw: `File already exists, cannot create: ${filePath}`,
-          type: ToolErrorType.ATTEMPT_TO_CREATE_EXISTING_FILE,
-        };
-      } else if (occurrences === 0) {
-        const replaceLine = filteredParams.replaceBeginLineNumber;
-
-        if (replaceLine && replaceLine > 0 && currentContent !== null) {
-          const lines = currentContent.split('\n');
-
-          if (replaceLine > lines.length) {
-            error = {
-              display: `Failed to edit: replaceBeginLineNumber is out of range.`,
-              raw: `Failed to edit: replaceBeginLineNumber=${replaceLine} is out of range for ${filePath} (total lines: ${lines.length}). No edits made.`,
-              type: ToolErrorType.INVALID_TOOL_PARAMS,
-            };
-          } else {
-            const lineIndex = replaceLine - 1;
-            const startContext = Math.max(0, lineIndex - 2);
-            const endContext = Math.min(lines.length - 1, lineIndex + 2);
-
-            let preview = 'Context around requested line:';
-            for (let i = startContext; i <= endContext; i++) {
-              const lineNumber = i + 1;
-              const prefix = lineNumber === replaceLine ? '->' : '  ';
-              preview += `\n${prefix} ${lineNumber.toString().padStart(4, ' ')} | ${lines[i]}`;
-            }
-
-            error = {
-              display: `Failed to edit: no occurrences of old_string found on the specified line ${replaceLine}.`,
-              raw: `Failed to edit, 0 occurrences found for old_string on line ${replaceLine} in ${filePath}. No edits made. The exact text in old_string was not found on that line.\n\n${preview}`,
-              type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
-            };
-          }
-        } else {
-          error = {
-            display: `Failed to edit, could not find the string to replace.`,
-            raw: `Failed to edit, 0 occurrences found for old_string in ${filePath}. No edits made. The exact text in old_string was not found. Ensure you're not escaping content incorrectly and check whitespace, indentation, and context. Use ${ReadFileTool.Name} tool to verify.`,
-            type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
-          };
-        }
-      } else if (occurrences !== expectedReplacements) {
-        const occurrenceTerm =
-          expectedReplacements === 1 ? 'occurrence' : 'occurrences';
-
-        error = {
-          display: `Failed to edit, expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences}.`,
-          raw: `Failed to edit, Expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences} for old_string in file: ${filePath}`,
-          type: ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
-        };
-      } else if (finalOldString === finalNewString) {
-        error = {
-          display: `No changes to apply. The old_string and new_string are identical.`,
-          raw: `No changes to apply. The old_string and new_string are identical in file: ${filePath}`,
-          type: ToolErrorType.EDIT_NO_CHANGE,
-        };
-      }
-    } else {
-      // Should not happen if fileExists and no exception was thrown, but defensively:
-      error = {
-        display: `Failed to read content of file.`,
-        raw: `Failed to read content of existing file: ${filePath}`,
-        type: ToolErrorType.READ_CONTENT_FAILURE,
-      };
-    }
+    const {
+      currentContent,
+      fileExists,
+      isNewFile,
+      finalOldString,
+      finalNewString,
+      occurrences,
+      error,
+    } = await this.resolveFileEditState(
+      filteredParams,
+      filePath,
+      expectedReplacements,
+    );
 
     let newContent: string;
-    if (!error) {
-      const replaceLine = filteredParams.replaceBeginLineNumber;
-      if (
-        fileExists &&
-        replaceLine &&
-        replaceLine > 0 &&
-        currentContent !== null
-      ) {
-        const lines = currentContent.split('\n');
-        if (replaceLine > lines.length) {
-          error = {
-            display: `Failed to edit: replaceBeginLineNumber is out of range.`,
-            raw: `Failed to edit: replaceBeginLineNumber=${replaceLine} is out of range for ${filePath} (total lines: ${lines.length}). No edits made.`,
-            type: ToolErrorType.INVALID_TOOL_PARAMS,
-          };
-          newContent = currentContent;
-        } else {
-          let offset = 0;
-          for (let i = 0; i < replaceLine - 1; i++) {
-            offset += lines[i].length + 1; // +1 for the '\n'
-          }
-          const lineText = lines[replaceLine - 1];
-          const beforeLine = currentContent.substring(0, offset);
-          const afterLine = currentContent.substring(offset + lineText.length);
-
-          const updatedLine = applyReplacement(
-            lineText,
-            finalOldString,
-            finalNewString,
-            false,
-            expectedReplacements,
-          );
-
-          newContent = beforeLine + updatedLine + afterLine;
-        }
-      } else {
-        newContent = applyReplacement(
-          currentContent,
-          finalOldString,
-          finalNewString,
-          isNewFile,
-          expectedReplacements,
-        );
-      }
+    let resolvedError = error;
+    if (!resolvedError) {
+      const contentResult = this.computeNewContent(
+        currentContent,
+        fileExists,
+        isNewFile,
+        filteredParams,
+        finalOldString,
+        finalNewString,
+        expectedReplacements,
+        filePath,
+      );
+      newContent = contentResult.newContent;
+      resolvedError = contentResult.error;
     } else {
       newContent = currentContent ?? '';
     }
 
-    if (!error && fileExists && currentContent === newContent) {
-      const filePath = params.absolute_path || params.file_path || '';
-      error = {
+    if (!resolvedError && fileExists && currentContent === newContent) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
+      const fp = params.absolute_path || params.file_path || '';
+      resolvedError = {
         display:
           'No changes to apply. The new content is identical to the current content.',
-        raw: `No changes to apply. The new content is identical to the current content in file: ${filePath}`,
+        raw: `No changes to apply. The new content is identical to the current content in file: ${fp}`,
         type: ToolErrorType.EDIT_NO_CHANGE,
       };
     }
@@ -525,7 +474,7 @@ class EditToolInvocation extends BaseToolInvocation<
       currentContent,
       newContent,
       occurrences,
-      error,
+      error: resolvedError,
       isNewFile,
       filterResult: newStringResult,
     };
@@ -625,7 +574,7 @@ class EditToolInvocation extends BaseToolInvocation<
         if (ideConfirmation) {
           const result = await ideConfirmation;
           if (result.status === 'accepted' && result.content) {
-            // TODO(chrstn): See https://github.com/google-gemini/gemini-cli/pull/5618#discussion_r2255413084
+            // Task(chrstn): See https://github.com/google-gemini/gemini-cli/pull/5618#discussion_r2255413084
             // for info on a possible race condition where the file is modified on disk while being edited.
             // FIX: IDE confirmation is for visual review only
             // The IDE returns the entire file content, not just the replacement text
@@ -662,6 +611,138 @@ class EditToolInvocation extends BaseToolInvocation<
       return `No file changes to ${shortenPath(relativePath)}`;
     }
     return `${shortenPath(relativePath)}: ${oldStringSnippet} => ${newStringSnippet}`;
+  }
+
+  /**
+   * Tracks git stats for the edit if logging is enabled.
+   */
+  private async trackGitStats(
+    filePath: string,
+    currentContent: string | null,
+    newContent: string,
+  ): Promise<unknown | null> {
+    if (!this.config.getConversationLoggingEnabled()) return null;
+    const gitStatsService = getGitStatsService();
+    if (!gitStatsService) return null;
+
+    try {
+      return await gitStatsService.trackFileEdit(
+        filePath,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined currentContent should default to empty
+        currentContent || '',
+        newContent,
+      );
+    } catch (error) {
+      debugLogger.warn('Failed to track git stats:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Builds the LLM success message parts for a successful edit.
+   */
+  private buildSuccessMessage(
+    editData: CalculatedEdit,
+    filePath: string,
+  ): string[] {
+    const parts = [
+      editData.isNewFile
+        ? `Created new file: ${filePath} with provided content.`
+        : `Successfully modified file: ${filePath} (${editData.occurrences} replacements).`,
+    ];
+    if (this.params.modified_by_user === true) {
+      parts.push(
+        `User modified the \`new_string\` content to be: ${this.params.new_string}.`,
+      );
+    }
+
+    if (editData.filterResult?.systemFeedback) {
+      parts.push(
+        `\n\n<system-reminder>\n${editData.filterResult.systemFeedback}\n</system-reminder>`,
+      );
+    }
+
+    return parts;
+  }
+
+  /**
+   * Appends LSP diagnostics to the message parts.
+   */
+  private async appendDiagnostics(
+    llmParts: string[],
+    filePath: string,
+  ): Promise<void> {
+    try {
+      const diagBlock = await collectLspDiagnosticsBlock(this.config, filePath);
+      if (diagBlock) {
+        llmParts.push(diagBlock);
+      }
+    } catch {
+      // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
+    }
+  }
+
+  /**
+   * Builds the ToolResult for a successful write, including diff, diagnostics,
+   * and optional git-stats metadata.
+   */
+  private async buildWriteResult(
+    editData: CalculatedEdit,
+    filePath: string,
+  ): Promise<ToolResult> {
+    const gitStats = await this.trackGitStats(
+      filePath,
+      editData.currentContent,
+      editData.newContent,
+    );
+
+    const fileName = path.basename(filePath);
+    const originallyProposedContent =
+      this.params.ai_proposed_content ?? editData.newContent;
+    const diffStat = getDiffStat(
+      fileName,
+      editData.currentContent ?? '',
+      originallyProposedContent,
+      editData.newContent,
+    );
+
+    const fileDiff = Diff.createPatch(
+      fileName,
+      editData.currentContent ?? '',
+      editData.newContent,
+      'Current',
+      'Proposed',
+      DEFAULT_CREATE_PATCH_OPTIONS,
+    );
+    const displayResult = {
+      fileDiff,
+      fileName,
+      filePath: this.params.file_path,
+      originalContent: editData.currentContent,
+      newContent: editData.newContent,
+      diffStat,
+      isNewFile: editData.isNewFile,
+    };
+
+    const llmSuccessMessageParts = this.buildSuccessMessage(editData, filePath);
+
+    // @plan PLAN-20250212-LSP.P31
+    // @requirement REQ-DIAG-010
+    await this.appendDiagnostics(llmSuccessMessageParts, filePath);
+
+    const result: ToolResult = {
+      llmContent: llmSuccessMessageParts.join('\n\n'),
+      returnDisplay: displayResult,
+    };
+
+    if (gitStats != null) {
+      result.metadata = {
+        ...result.metadata,
+        gitStats,
+      };
+    }
+
+    return result;
   }
 
   /**
@@ -706,102 +787,7 @@ class EditToolInvocation extends BaseToolInvocation<
         .getFileSystemService()
         .writeTextFile(filePath, editData.newContent);
 
-      // Track git stats if logging is enabled and service is available
-      let gitStats = null;
-      if (this.config.getConversationLoggingEnabled()) {
-        const gitStatsService = getGitStatsService();
-        if (gitStatsService) {
-          try {
-            gitStats = await gitStatsService.trackFileEdit(
-              filePath,
-              editData.currentContent || '',
-              editData.newContent,
-            );
-          } catch (error) {
-            // Don't fail the edit if git stats tracking fails
-            debugLogger.warn('Failed to track git stats:', error);
-          }
-        }
-      }
-
-      // Always return diff stats as per upstream
-      const fileName = path.basename(filePath);
-      const originallyProposedContent =
-        this.params.ai_proposed_content || editData.newContent;
-      const diffStat = getDiffStat(
-        fileName,
-        editData.currentContent ?? '',
-        originallyProposedContent,
-        editData.newContent,
-      );
-
-      const fileDiff = Diff.createPatch(
-        fileName,
-        editData.currentContent ?? '', // Should not be null here if not isNewFile
-        editData.newContent,
-        'Current',
-        'Proposed',
-        DEFAULT_CREATE_PATCH_OPTIONS,
-      );
-      const displayResult = {
-        fileDiff,
-        fileName,
-        filePath: this.params.file_path,
-        originalContent: editData.currentContent,
-        newContent: editData.newContent,
-        diffStat,
-        isNewFile: editData.isNewFile,
-      };
-
-      const llmSuccessMessageParts = [
-        editData.isNewFile
-          ? `Created new file: ${filePath} with provided content.`
-          : `Successfully modified file: ${filePath} (${editData.occurrences} replacements).`,
-      ];
-      if (this.params.modified_by_user) {
-        llmSuccessMessageParts.push(
-          `User modified the \`new_string\` content to be: ${this.params.new_string}.`,
-        );
-      }
-
-      // Add system feedback for emoji filtering if detected
-      if (editData.filterResult?.systemFeedback) {
-        llmSuccessMessageParts.push(
-          `\n\n<system-reminder>\n${editData.filterResult.systemFeedback}\n</system-reminder>`,
-        );
-      }
-
-      // @plan PLAN-20250212-LSP.P31
-      // @requirement REQ-DIAG-010
-      // @pseudocode edit-integration.md lines 10-44
-      // Append LSP diagnostics after successful edit
-      try {
-        const diagBlock = await collectLspDiagnosticsBlock(
-          this.config,
-          filePath,
-        );
-        if (diagBlock) {
-          llmSuccessMessageParts.push(diagBlock);
-        }
-      } catch (_error) {
-        // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
-        // Silently continue - edit was already successful
-      }
-
-      const result: ToolResult = {
-        llmContent: llmSuccessMessageParts.join('\n\n'),
-        returnDisplay: displayResult,
-      };
-
-      // Include git stats in metadata if available
-      if (gitStats) {
-        result.metadata = {
-          ...result.metadata,
-          gitStats,
-        };
-      }
-
-      return result;
+      return await this.buildWriteResult(editData, filePath);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       return {
@@ -898,6 +884,7 @@ Expectation for required parameters:
     params: EditToolParams,
   ): string | null {
     // Accept either absolute_path or file_path
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid
     const filePath = params.absolute_path || params.file_path || '';
 
     if (filePath.trim() === '') {
@@ -921,14 +908,13 @@ Expectation for required parameters:
     }
 
     const replaceLine = params.replaceBeginLineNumber;
-    if (replaceLine !== undefined) {
-      if (
-        !Number.isFinite(replaceLine) ||
+    if (
+      replaceLine !== undefined &&
+      (!Number.isFinite(replaceLine) ||
         !Number.isInteger(replaceLine) ||
-        replaceLine <= 0
-      ) {
-        return `replaceBeginLineNumber must be a positive integer (1-based)`;
-      }
+        replaceLine <= 0)
+    ) {
+      return `replaceBeginLineNumber must be a positive integer (1-based)`;
     }
 
     return null;
@@ -957,8 +943,10 @@ Expectation for required parameters:
   getModifyContext(_: AbortSignal): ModifyContext<EditToolParams> {
     return {
       getFilePath: (params: EditToolParams) =>
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         params.absolute_path || params.file_path || '',
       getCurrentContent: async (params: EditToolParams): Promise<string> => {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         const filePath = params.absolute_path || params.file_path || '';
         try {
           return await this.config
@@ -970,6 +958,7 @@ Expectation for required parameters:
         }
       },
       getProposedContent: async (params: EditToolParams): Promise<string> => {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         const filePath = params.absolute_path || params.file_path || '';
         try {
           const currentContent = await this.config

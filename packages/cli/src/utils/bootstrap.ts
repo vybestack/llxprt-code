@@ -88,13 +88,19 @@ export function parseDockerMemoryToMB(memoryStr: string): number | undefined {
     return undefined;
   }
 
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const match = memoryStr.match(/^(\d+(?:\.\d+)?)\s*([bkmg])?$/i);
   if (!match) {
     return undefined;
   }
 
-  const value = parseFloat(match[1]);
-  const suffix = (match[2] ?? '').toLowerCase();
+  const [, valueMatch, suffixMatch] = match as [
+    string,
+    string,
+    string | undefined,
+  ];
+  const value = parseFloat(valueMatch);
+  const suffix = (suffixMatch ?? '').toLowerCase();
 
   switch (suffix) {
     case 'g':

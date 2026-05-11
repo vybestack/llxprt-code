@@ -238,6 +238,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
       // Spy on stdin.setRawMode if it exists
       const setRawModeSpy = vi.fn();
       const originalSetRawMode = process.stdin.setRawMode;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (process.stdin.isTTY) {
         process.stdin.setRawMode = setRawModeSpy;
       }
@@ -258,8 +259,9 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
       // setRawMode should NOT have been called (no stdin fallback)
       expect(setRawModeSpy).not.toHaveBeenCalled();
 
-      // Restore
-      if (originalSetRawMode) {
+      // Restore (platform-specific: setRawMode may not exist on non-TTY)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, vitest/no-conditional-in-test -- setRawMode may be undefined on non-TTY platforms
+      if (originalSetRawMode !== undefined) {
         process.stdin.setRawMode = originalSetRawMode;
       }
     });

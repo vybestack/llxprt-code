@@ -209,22 +209,19 @@ export class AnthropicDeviceFlow {
 
         const error = await response.json();
 
-        // Check for pending authorization
+        // Handle polling errors
+        let sleepMs = interval;
         if (error.error === 'authorization_pending') {
-          await new Promise((resolve) => setTimeout(resolve, interval));
-          continue;
+          // Continue polling
+        } else if (error.error === 'slow_down') {
+          sleepMs = interval * 2;
+        } else {
+          // Handle other errors
+          throw new Error(
+            `Token polling failed: ${error.error_description ?? error.error}`,
+          );
         }
-
-        // Check for slow down request
-        if (error.error === 'slow_down') {
-          await new Promise((resolve) => setTimeout(resolve, interval * 2));
-          continue;
-        }
-
-        // Handle other errors
-        throw new Error(
-          `Token polling failed: ${error.error_description || error.error}`,
-        );
+        await new Promise((resolve) => setTimeout(resolve, sleepMs));
       } catch (error) {
         if (
           error instanceof Error &&
@@ -271,10 +268,14 @@ export class AnthropicDeviceFlow {
    * Maps Anthropic's token response to our standard OAuthToken format.
    */
   private mapTokenResponse(data: Record<string, unknown>): OAuthToken {
+    const expiresIn = data.expires_in;
+    const expiresInSeconds =
+      typeof expiresIn === 'number' && !isNaN(expiresIn) && expiresIn > 0
+        ? expiresIn
+        : 3600;
     return {
       access_token: data.access_token as string,
-      expiry:
-        Math.floor(Date.now() / 1000) + ((data.expires_in as number) || 3600),
+      expiry: Math.floor(Date.now() / 1000) + expiresInSeconds,
       refresh_token: data.refresh_token as string | undefined,
       scope: data.scope as string | undefined,
       token_type: 'Bearer',

@@ -23,7 +23,7 @@ export async function createCodeAssistContentGenerator(
 
   logger.debug(
     () =>
-      `createCodeAssistContentGenerator: config=${!!config}, baseURL=${baseURL}`,
+      `createCodeAssistContentGenerator: config=defined, baseURL=${baseURL}`,
   );
 
   try {
@@ -83,7 +83,7 @@ export function emitCitationEvent(config: Config, citationText: string): void {
     // Use the provider manager's event system to emit citation events
     // This ensures the event flows through the proper channels to reach the CLI
     try {
-      // TODO: Implement provider-neutral event emission
+      // Follow-up (#1569): Implement provider-neutral event emission
       // For now, this is a placeholder that can be extended when we have
       // a provider-neutral event emission system
       debugLogger.debug('Citation event would be emitted:', citationText);

@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 import { DebugLogger, type Profile } from '@vybestack/llxprt-code-core';
-import {
-  applyProfileSnapshot,
-  type ProfileLoadResult,
-} from '../runtime/profileSnapshot.js';
+import { applyProfileSnapshot } from '../runtime/profileSnapshot.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { BootstrapProfileArgs } from './profileBootstrap.js';
 
@@ -47,15 +46,53 @@ interface SnapshotLocalState {
   resolvedBaseUrlAfterProfile: string | undefined;
 }
 
-/** Maps snapshot result fields and warnings into the shared local-state object. */
-function collectSnapshotResult(
-  snapshotResult: ProfileLoadResult,
+/** Builds a synthetic Profile from CLI auth overrides (e.g. --key, --baseurl). */
+function buildSyntheticProfile(
+  argv: CliArgs,
+  finalModel: string,
+  bootstrapArgs: BootstrapProfileArgs,
+): Profile {
+  const syntheticProfile: Profile = {
+    version: 1,
+    provider: argv.provider!,
+    model: argv.model ?? finalModel,
+    modelParams: {},
+    ephemeralSettings: {},
+  };
+
+  if (bootstrapArgs.keyOverride) {
+    syntheticProfile.ephemeralSettings['auth-key'] = bootstrapArgs.keyOverride;
+  }
+  if (bootstrapArgs.keyfileOverride) {
+    syntheticProfile.ephemeralSettings['auth-keyfile'] =
+      bootstrapArgs.keyfileOverride;
+  }
+  if (bootstrapArgs.keyNameOverride) {
+    syntheticProfile.ephemeralSettings['auth-key-name'] =
+      bootstrapArgs.keyNameOverride;
+  }
+  if (bootstrapArgs.baseurlOverride) {
+    syntheticProfile.ephemeralSettings['base-url'] =
+      bootstrapArgs.baseurlOverride;
+  }
+
+  return syntheticProfile;
+}
+
+/** Applies a profile snapshot and collects the result into a flat return. */
+async function applyProfileSnapshotAndCollect(
+  profile: Profile,
+  profileName: string,
   mutableWarnings: string[],
-): SnapshotLocalState {
+  finalProvider: string,
+): Promise<SnapshotLocalState & { resolvedFinalProvider: string }> {
+  const snapshotResult = await applyProfileSnapshot(profile, {
+    profileName,
+  });
   if (snapshotResult.warnings.length > 0) {
     mutableWarnings.push(...snapshotResult.warnings);
   }
-  return {
+  const base: SnapshotLocalState = {
     appliedResult: {
       providerName: snapshotResult.providerName,
       modelName: snapshotResult.modelName,
@@ -65,6 +102,62 @@ function collectSnapshotResult(
     resolvedProviderAfterProfile: snapshotResult.providerName,
     resolvedModelAfterProfile: snapshotResult.modelName,
     resolvedBaseUrlAfterProfile: snapshotResult.baseUrl,
+  };
+  const resolvedFinalProvider =
+    base.resolvedProviderAfterProfile &&
+    base.resolvedProviderAfterProfile.trim() !== ''
+      ? base.resolvedProviderAfterProfile
+      : finalProvider;
+  return { ...base, resolvedFinalProvider };
+}
+
+/** Resolves the correct profile branch and applies it, returning full state. */
+async function resolveAndApplyProfile(
+  input: ProfileRuntimeApplicationInput,
+  mutableWarnings: string[],
+): Promise<SnapshotLocalState & { resolvedFinalProvider: string }> {
+  const {
+    loadedProfile,
+    profileToLoad,
+    bootstrapArgs,
+    argv,
+    finalModel,
+    finalProvider,
+  } = input;
+  const hasAnyAuthOverride =
+    Boolean(bootstrapArgs.keyOverride) ||
+    Boolean(bootstrapArgs.keyfileOverride) ||
+    Boolean(bootstrapArgs.keyNameOverride) ||
+    Boolean(bootstrapArgs.baseurlOverride);
+
+  if (argv.provider && hasAnyAuthOverride) {
+    return applyProfileSnapshotAndCollect(
+      buildSyntheticProfile(argv, finalModel, bootstrapArgs),
+      'cli-args',
+      mutableWarnings,
+      finalProvider,
+    );
+  }
+
+  if (
+    loadedProfile &&
+    (profileToLoad ?? bootstrapArgs.profileJson) != null &&
+    argv.provider === undefined
+  ) {
+    return applyProfileSnapshotAndCollect(
+      loadedProfile,
+      profileToLoad ?? 'inline-profile',
+      mutableWarnings,
+      finalProvider,
+    );
+  }
+
+  return {
+    appliedResult: null,
+    resolvedProviderAfterProfile: undefined,
+    resolvedModelAfterProfile: undefined,
+    resolvedBaseUrlAfterProfile: undefined,
+    resolvedFinalProvider: finalProvider,
   };
 }
 
@@ -76,124 +169,22 @@ function collectSnapshotResult(
 export async function applyProfileToRuntime(
   input: ProfileRuntimeApplicationInput,
 ): Promise<ProfileRuntimeApplicationResult> {
-  const {
-    loadedProfile,
-    profileToLoad,
-    bootstrapArgs,
-    argv,
-    finalModel,
-    finalProvider,
-    profileWarnings,
-  } = input;
-
+  const { profileWarnings } = input;
   const mutableWarnings = [...profileWarnings];
-  let appliedResult: ProfileSnapshotResult | null = null;
-  let resolvedProviderAfterProfile: string | undefined;
-  let resolvedModelAfterProfile: string | undefined;
-  let resolvedBaseUrlAfterProfile: string | undefined;
-  let resolvedFinalProvider = finalProvider;
 
   logger.debug(
     () =>
-      `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
+      `[bootstrap] profileToLoad=${input.profileToLoad ?? 'none'} providerArg=${input.argv.provider ?? 'unset'} loadedProfile=${input.loadedProfile ? 'yes' : 'no'}`,
   );
 
-  if (
-    argv.provider &&
-    (bootstrapArgs.keyOverride ||
-      bootstrapArgs.keyfileOverride ||
-      bootstrapArgs.keyNameOverride ||
-      bootstrapArgs.baseurlOverride)
-  ) {
-    // CRITICAL FIX for #492: synthetic profile for CLI auth args
-    logger.debug(
-      () => '[bootstrap] Creating synthetic profile for CLI auth args',
-    );
-    const syntheticProfile: Profile = {
-      version: 1,
-      provider: argv.provider,
-      model: argv.model ?? finalModel,
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    if (bootstrapArgs.keyOverride) {
-      syntheticProfile.ephemeralSettings['auth-key'] =
-        bootstrapArgs.keyOverride;
-    }
-    if (bootstrapArgs.keyfileOverride) {
-      syntheticProfile.ephemeralSettings['auth-keyfile'] =
-        bootstrapArgs.keyfileOverride;
-    }
-    if (bootstrapArgs.keyNameOverride) {
-      syntheticProfile.ephemeralSettings['auth-key-name'] =
-        bootstrapArgs.keyNameOverride;
-    }
-    if (bootstrapArgs.baseurlOverride) {
-      syntheticProfile.ephemeralSettings['base-url'] =
-        bootstrapArgs.baseurlOverride;
-    }
-
-    const snapshotResult = await applyProfileSnapshot(syntheticProfile, {
-      profileName: 'cli-args',
-    });
-
-    ({
-      appliedResult,
-      resolvedProviderAfterProfile,
-      resolvedModelAfterProfile,
-      resolvedBaseUrlAfterProfile,
-    } = collectSnapshotResult(snapshotResult, mutableWarnings));
-    if (
-      resolvedProviderAfterProfile &&
-      resolvedProviderAfterProfile.trim() !== ''
-    ) {
-      resolvedFinalProvider = resolvedProviderAfterProfile;
-    }
-    logger.debug(
-      () =>
-        `[bootstrap] Applied CLI auth -> provider=${resolvedProviderAfterProfile}, model=${resolvedModelAfterProfile}, baseUrl=${resolvedBaseUrlAfterProfile ?? 'default'}`,
-    );
-  } else if (
-    loadedProfile &&
-    (profileToLoad || bootstrapArgs.profileJson !== null) &&
-    argv.provider === undefined
-  ) {
-    // @plan:PLAN-20251118-ISSUE533.P13 - Apply inline or file-based profile
-    const snapshotResult = await applyProfileSnapshot(loadedProfile, {
-      profileName: profileToLoad || 'inline-profile',
-    });
-
-    ({
-      appliedResult,
-      resolvedProviderAfterProfile,
-      resolvedModelAfterProfile,
-      resolvedBaseUrlAfterProfile,
-    } = collectSnapshotResult(snapshotResult, mutableWarnings));
-    // @plan:PLAN-20251211issue486b - Update finalProvider after applyProfile
-    if (
-      resolvedProviderAfterProfile &&
-      resolvedProviderAfterProfile.trim() !== ''
-    ) {
-      resolvedFinalProvider = resolvedProviderAfterProfile;
-    }
-    logger.debug(
-      () =>
-        `[bootstrap] Applied profile '${profileToLoad || 'inline'}' -> provider=${resolvedProviderAfterProfile}, model=${resolvedModelAfterProfile}, baseUrl=${resolvedBaseUrlAfterProfile ?? 'default'}`,
-    );
-  } else if (profileToLoad && argv.provider !== undefined) {
-    logger.debug(
-      () =>
-        `[bootstrap] Skipping profile application for '${profileToLoad}' because --provider was specified.`,
-    );
-  }
+  const result = await resolveAndApplyProfile(input, mutableWarnings);
 
   return {
-    appliedResult,
-    resolvedProviderAfterProfile,
-    resolvedModelAfterProfile,
-    resolvedBaseUrlAfterProfile,
-    resolvedFinalProvider,
+    appliedResult: result.appliedResult,
+    resolvedProviderAfterProfile: result.resolvedProviderAfterProfile,
+    resolvedModelAfterProfile: result.resolvedModelAfterProfile,
+    resolvedBaseUrlAfterProfile: result.resolvedBaseUrlAfterProfile,
+    resolvedFinalProvider: result.resolvedFinalProvider,
     profileWarnings: mutableWarnings,
   };
 }

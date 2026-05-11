@@ -84,8 +84,9 @@ export interface GenerateContentOptions {
  */
 function extractJsonFromMarkdown(text: string): string {
   // Try to match ```json ... ``` or ``` ... ```
+  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   const markdownMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (markdownMatch && markdownMatch[1]) {
+  if (markdownMatch?.[1]) {
     return markdownMatch[1].trim();
   }
 
@@ -162,8 +163,9 @@ export class BaseLLMClient {
         const cleanedText = extractJsonFromMarkdown(text);
         JSON.parse(cleanedText);
         return false; // Valid JSON, don't retry
-      } catch (_e) {
-        return true; // Invalid JSON, retry
+      } catch {
+        // Invalid JSON - trigger retry
+        return true;
       }
     };
 
@@ -323,7 +325,7 @@ export class BaseLLMClient {
       abortSignal,
     };
 
-    if (systemInstruction) {
+    if (systemInstruction !== undefined && systemInstruction !== '') {
       config.systemInstruction = systemInstruction;
     }
 
@@ -363,7 +365,7 @@ export class BaseLLMClient {
         maxAttempts: maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
       });
     } catch (error) {
-      if (abortSignal?.aborted) {
+      if (abortSignal?.aborted === true) {
         throw error;
       }
 

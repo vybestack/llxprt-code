@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import {
   isValidColor,
   resolveColor,
@@ -267,7 +269,7 @@ export class Theme {
     this._colorMap = Object.freeze(this._buildColorMap(rawMappings)); // Build and freeze the map
 
     // Determine the default foreground color
-    const rawDefaultColor = rawMappings['hljs']?.color;
+    const rawDefaultColor = rawMappings['hljs'].color;
     this.defaultColor =
       (rawDefaultColor ? Theme._resolveColor(rawDefaultColor) : undefined) ??
       ''; // Default to empty string if not found or resolvable
@@ -308,7 +310,7 @@ export class Theme {
       }
 
       const style = hljsTheme[key];
-      if (style?.color) {
+      if (style.color) {
         const resolvedColor = Theme._resolveColor(style.color);
         if (resolvedColor !== undefined) {
           // Use the original key from the hljsTheme (e.g., 'hljs-keyword')
@@ -329,8 +331,8 @@ export class Theme {
  * @param customTheme The custom theme configuration.
  * @returns A new Theme instance.
  */
-export function createCustomTheme(customTheme: CustomTheme): Theme {
-  const colors: ColorsTheme = {
+function buildColorsFromCustomTheme(customTheme: CustomTheme): ColorsTheme {
+  return {
     type: 'custom',
     Background: customTheme.background?.primary ?? customTheme.Background ?? '',
     Foreground: customTheme.text?.primary ?? customTheme.Foreground ?? '',
@@ -359,9 +361,12 @@ export function createCustomTheme(customTheme: CustomTheme): Theme {
       ),
     GradientColors: customTheme.ui?.gradient ?? customTheme.GradientColors,
   };
+}
 
-  // Generate CSS properties mappings based on the custom theme colors
-  const rawMappings: Record<string, HighlightJSStyle> = {
+function buildRawMappingsFromCustomTheme(
+  customTheme: CustomTheme,
+): Record<string, HighlightJSStyle> {
+  return {
     hljs: {
       display: 'block',
       overflowX: 'auto',
@@ -369,123 +374,47 @@ export function createCustomTheme(customTheme: CustomTheme): Theme {
       background: customTheme.Background,
       color: customTheme.Foreground,
     },
-    'hljs-keyword': {
-      color: customTheme.AccentBlue,
-    },
-    'hljs-literal': {
-      color: customTheme.AccentBlue,
-    },
-    'hljs-symbol': {
-      color: customTheme.AccentBlue,
-    },
-    'hljs-name': {
-      color: customTheme.AccentBlue,
-    },
+    'hljs-keyword': { color: customTheme.AccentBlue },
+    'hljs-literal': { color: customTheme.AccentBlue },
+    'hljs-symbol': { color: customTheme.AccentBlue },
+    'hljs-name': { color: customTheme.AccentBlue },
     'hljs-link': {
       color: customTheme.AccentBlue,
       textDecoration: 'underline',
     },
-    'hljs-built_in': {
-      color: customTheme.AccentCyan,
-    },
-    'hljs-type': {
-      color: customTheme.AccentCyan,
-    },
-    'hljs-number': {
-      color: customTheme.AccentGreen,
-    },
-    'hljs-class': {
-      color: customTheme.AccentGreen,
-    },
-    'hljs-string': {
-      color: customTheme.AccentYellow,
-    },
-    'hljs-meta-string': {
-      color: customTheme.AccentYellow,
-    },
-    'hljs-regexp': {
-      color: customTheme.AccentRed,
-    },
-    'hljs-template-tag': {
-      color: customTheme.AccentRed,
-    },
-    'hljs-subst': {
-      color: customTheme.Foreground,
-    },
-    'hljs-function': {
-      color: customTheme.Foreground,
-    },
-    'hljs-title': {
-      color: customTheme.Foreground,
-    },
-    'hljs-params': {
-      color: customTheme.Foreground,
-    },
-    'hljs-formula': {
-      color: customTheme.Foreground,
-    },
-    'hljs-comment': {
-      color: customTheme.Comment,
-      fontStyle: 'italic',
-    },
-    'hljs-quote': {
-      color: customTheme.Comment,
-      fontStyle: 'italic',
-    },
-    'hljs-doctag': {
-      color: customTheme.Comment,
-    },
-    'hljs-meta': {
-      color: customTheme.Gray,
-    },
-    'hljs-meta-keyword': {
-      color: customTheme.Gray,
-    },
-    'hljs-tag': {
-      color: customTheme.Gray,
-    },
-    'hljs-variable': {
-      color: customTheme.AccentPurple,
-    },
-    'hljs-template-variable': {
-      color: customTheme.AccentPurple,
-    },
-    'hljs-attr': {
-      color: customTheme.LightBlue,
-    },
-    'hljs-attribute': {
-      color: customTheme.LightBlue,
-    },
-    'hljs-builtin-name': {
-      color: customTheme.LightBlue,
-    },
-    'hljs-section': {
-      color: customTheme.AccentYellow,
-    },
-    'hljs-emphasis': {
-      fontStyle: 'italic',
-    },
-    'hljs-strong': {
-      fontWeight: 'bold',
-    },
-    'hljs-bullet': {
-      color: customTheme.AccentYellow,
-    },
-    'hljs-selector-tag': {
-      color: customTheme.AccentYellow,
-    },
-    'hljs-selector-id': {
-      color: customTheme.AccentYellow,
-    },
-    'hljs-selector-class': {
-      color: customTheme.AccentYellow,
-    },
-    'hljs-selector-attr': {
-      color: customTheme.AccentYellow,
-    },
-    'hljs-selector-pseudo': {
-      color: customTheme.AccentYellow,
-    },
+    'hljs-built_in': { color: customTheme.AccentCyan },
+    'hljs-type': { color: customTheme.AccentCyan },
+    'hljs-number': { color: customTheme.AccentGreen },
+    'hljs-class': { color: customTheme.AccentGreen },
+    'hljs-string': { color: customTheme.AccentYellow },
+    'hljs-meta-string': { color: customTheme.AccentYellow },
+    'hljs-regexp': { color: customTheme.AccentRed },
+    'hljs-template-tag': { color: customTheme.AccentRed },
+    'hljs-subst': { color: customTheme.Foreground },
+    'hljs-function': { color: customTheme.Foreground },
+    'hljs-title': { color: customTheme.Foreground },
+    'hljs-params': { color: customTheme.Foreground },
+    'hljs-formula': { color: customTheme.Foreground },
+    'hljs-comment': { color: customTheme.Comment, fontStyle: 'italic' },
+    'hljs-quote': { color: customTheme.Comment, fontStyle: 'italic' },
+    'hljs-doctag': { color: customTheme.Comment },
+    'hljs-meta': { color: customTheme.Gray },
+    'hljs-meta-keyword': { color: customTheme.Gray },
+    'hljs-tag': { color: customTheme.Gray },
+    'hljs-variable': { color: customTheme.AccentPurple },
+    'hljs-template-variable': { color: customTheme.AccentPurple },
+    'hljs-attr': { color: customTheme.LightBlue },
+    'hljs-attribute': { color: customTheme.LightBlue },
+    'hljs-builtin-name': { color: customTheme.LightBlue },
+    'hljs-section': { color: customTheme.AccentYellow },
+    'hljs-emphasis': { fontStyle: 'italic' },
+    'hljs-strong': { fontWeight: 'bold' },
+    'hljs-bullet': { color: customTheme.AccentYellow },
+    'hljs-selector-tag': { color: customTheme.AccentYellow },
+    'hljs-selector-id': { color: customTheme.AccentYellow },
+    'hljs-selector-class': { color: customTheme.AccentYellow },
+    'hljs-selector-attr': { color: customTheme.AccentYellow },
+    'hljs-selector-pseudo': { color: customTheme.AccentYellow },
     'hljs-addition': {
       backgroundColor: customTheme.AccentGreen,
       display: 'inline-block',
@@ -497,8 +426,13 @@ export function createCustomTheme(customTheme: CustomTheme): Theme {
       width: '100%',
     },
   };
+}
 
-  const semanticColors: SemanticColors = {
+function buildSemanticColorsFromCustomTheme(
+  customTheme: CustomTheme,
+  colors: ColorsTheme,
+): SemanticColors {
+  return {
     text: {
       primary: customTheme.text?.primary ?? colors.Foreground,
       secondary: customTheme.text?.secondary ?? colors.Gray,
@@ -532,6 +466,15 @@ export function createCustomTheme(customTheme: CustomTheme): Theme {
       warning: customTheme.status?.warning ?? colors.AccentYellow,
     },
   };
+}
+
+export function createCustomTheme(customTheme: CustomTheme): Theme {
+  const colors = buildColorsFromCustomTheme(customTheme);
+  const rawMappings = buildRawMappingsFromCustomTheme(customTheme);
+  const semanticColors = buildSemanticColorsFromCustomTheme(
+    customTheme,
+    colors,
+  );
 
   return new Theme(
     customTheme.name,
@@ -576,7 +519,7 @@ export function validateCustomTheme(customTheme: Partial<CustomTheme>): {
   ];
 
   for (const field of requiredFields) {
-    if (!customTheme[field]) {
+    if (customTheme[field] == null || customTheme[field] === '') {
       return {
         isValid: false,
         error: `Missing required field: ${field}`,
@@ -587,7 +530,7 @@ export function validateCustomTheme(customTheme: Partial<CustomTheme>): {
   const missingFields: string[] = [];
 
   for (const field of recommendedFields) {
-    if (!customTheme[field]) {
+    if (customTheme[field] == null || customTheme[field] === '') {
       missingFields.push(field);
     }
   }

@@ -32,6 +32,15 @@ export interface MultiBucketAuthOptions {
 /**
  * Callback types for multi-bucket authentication
  */
+
+interface MultiBucketAuthState {
+  authenticatedBuckets: string[];
+  failedBuckets: string[];
+  firstError?: string;
+  effectiveDelay: number;
+  effectiveShowPrompt: boolean;
+}
+
 export interface MultiBucketAuthCallbacks {
   onAuthBucket: (
     provider: string,
@@ -108,10 +117,31 @@ export class MultiBucketAuthenticator {
       };
     }
 
-    const authenticatedBuckets: string[] = [];
-    const failedBuckets: string[] = [];
-    let firstError: string | undefined;
+    const state = this.createAuthState(options);
 
+    for (let i = 0; i < buckets.length; i++) {
+      const cancellationResult = this.handleCancellation(buckets, i, state);
+      if (cancellationResult !== undefined) return cancellationResult;
+
+      const bucket = buckets[i];
+      const promptResult = await this.handleBucketPrompt(
+        provider,
+        bucket,
+        buckets,
+        i,
+        state,
+      );
+      if (promptResult !== undefined) return promptResult;
+
+      await this.authenticateBucket(provider, bucket, i, buckets.length, state);
+    }
+
+    return this.completeAuth(state);
+  }
+
+  private createAuthState(
+    options: MultiBucketAuthOptions,
+  ): MultiBucketAuthState {
     const effectiveDelay =
       options.delay ??
       this.getEphemeralSetting<number>('auth-bucket-delay') ??
@@ -128,67 +158,93 @@ export class MultiBucketAuthenticator {
       effectiveDelay,
     });
 
-    for (let i = 0; i < buckets.length; i++) {
-      if (this.cancelled) {
-        logger.debug('Multi-bucket auth cancelled', {
-          authenticated: authenticatedBuckets.length,
-          remaining: buckets.length - i,
-        });
-        failedBuckets.push(...buckets.slice(i));
-        return {
-          authenticatedBuckets,
-          failedBuckets,
-          cancelled: true,
-          error: firstError,
-        };
-      }
+    return {
+      authenticatedBuckets: [],
+      failedBuckets: [],
+      effectiveDelay,
+      effectiveShowPrompt,
+    };
+  }
 
-      const bucket = buckets[i];
+  private handleCancellation(
+    buckets: string[],
+    index: number,
+    state: MultiBucketAuthState,
+  ): MultiBucketAuthResult | undefined {
+    if (!this.cancelled) return undefined;
 
-      if (effectiveShowPrompt) {
-        const shouldContinue = await this.onPrompt(provider, bucket);
-        if (!shouldContinue) {
-          logger.debug('User cancelled at prompt', { bucket });
-          failedBuckets.push(...buckets.slice(i));
-          return {
-            authenticatedBuckets,
-            failedBuckets,
-            cancelled: true,
-            error: firstError,
-          };
-        }
-      } else {
-        // Apply delay before EVERY bucket (including first) so user can pick browser
-        await this.onDelay(effectiveDelay, bucket);
-      }
+    logger.debug('Multi-bucket auth cancelled', {
+      authenticated: state.authenticatedBuckets.length,
+      remaining: buckets.length - index,
+    });
+    state.failedBuckets.push(...buckets.slice(index));
+    return this.createCancelledResult(state);
+  }
 
-      try {
-        await this.onAuthBucket(provider, bucket, i + 1, buckets.length);
-        authenticatedBuckets.push(bucket);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        logger.error('Bucket authentication failed', {
-          bucket,
-          error: errorMessage,
-        });
-        failedBuckets.push(bucket);
-        if (!firstError) {
-          firstError = errorMessage;
-        }
-      }
+  private async handleBucketPrompt(
+    provider: string,
+    bucket: string,
+    buckets: string[],
+    index: number,
+    state: MultiBucketAuthState,
+  ): Promise<MultiBucketAuthResult | undefined> {
+    if (!state.effectiveShowPrompt) {
+      await this.onDelay(state.effectiveDelay, bucket);
+      return undefined;
     }
 
+    const shouldContinue = await this.onPrompt(provider, bucket);
+    if (shouldContinue) return undefined;
+
+    logger.debug('User cancelled at prompt', { bucket });
+    state.failedBuckets.push(...buckets.slice(index));
+    return this.createCancelledResult(state);
+  }
+
+  private async authenticateBucket(
+    provider: string,
+    bucket: string,
+    index: number,
+    total: number,
+    state: MultiBucketAuthState,
+  ): Promise<void> {
+    try {
+      await this.onAuthBucket(provider, bucket, index + 1, total);
+      state.authenticatedBuckets.push(bucket);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      logger.error('Bucket authentication failed', {
+        bucket,
+        error: errorMessage,
+      });
+      state.failedBuckets.push(bucket);
+      state.firstError ??= errorMessage;
+    }
+  }
+
+  private createCancelledResult(
+    state: MultiBucketAuthState,
+  ): MultiBucketAuthResult {
+    return {
+      authenticatedBuckets: state.authenticatedBuckets,
+      failedBuckets: state.failedBuckets,
+      cancelled: true,
+      error: state.firstError,
+    };
+  }
+
+  private completeAuth(state: MultiBucketAuthState): MultiBucketAuthResult {
     const result: MultiBucketAuthResult = {
-      authenticatedBuckets,
-      failedBuckets,
+      authenticatedBuckets: state.authenticatedBuckets,
+      failedBuckets: state.failedBuckets,
       cancelled: false,
-      error: firstError,
+      error: state.firstError,
     };
 
     logger.debug('Multi-bucket auth complete', {
-      authenticated: authenticatedBuckets.length,
-      failed: failedBuckets.length,
+      authenticated: state.authenticatedBuckets.length,
+      failed: state.failedBuckets.length,
     });
 
     return result;

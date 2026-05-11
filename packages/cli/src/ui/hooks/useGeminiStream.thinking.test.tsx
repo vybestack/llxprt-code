@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * @plan:PLAN-20251202-THINKING-UI.P07
  * @requirement:REQ-THINK-UI-001
@@ -139,7 +141,7 @@ const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const actualSchedulerModule = (await importOriginal()) as any;
   return {
-    ...(actualSchedulerModule || {}),
+    ...(actualSchedulerModule ?? {}),
     useReactToolScheduler: vi.fn(),
   };
 });
@@ -290,8 +292,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockUseReactToolScheduler.mockReturnValue([
       [],
       mockScheduleToolCalls,
-      mockCancelAllToolCalls,
       mockMarkToolsAsSubmitted,
+      mockCancelAllToolCalls,
     ]);
 
     mockStartChat.mockClear().mockResolvedValue({
@@ -323,11 +325,11 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockUseReactToolScheduler.mockImplementation(() => [
       currentToolCalls,
       mockScheduleToolCalls,
-      mockCancelAllToolCalls,
       mockMarkToolsAsSubmitted,
+      mockCancelAllToolCalls,
     ]);
 
-    const client = geminiClient || mockConfig.getGeminiClient();
+    const client = geminiClient ?? mockConfig.getGeminiClient();
 
     const { result, rerender } = renderHook(
       (props: {
@@ -1131,7 +1133,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
       // Count how many items have thinkingBlocks
       const itemsWithThinking = committedItems.filter(
-        (item) => item.thinkingBlocks && item.thinkingBlocks.length > 0,
+        (item) => item.thinkingBlocks != null && item.thinkingBlocks.length > 0,
       );
 
       // Exactly one item should own thinkingBlocks

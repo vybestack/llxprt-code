@@ -233,10 +233,13 @@ describe('Platform Matrix Tests (Phase 38)', () => {
         const resolvedTmpdir = fs.realpathSync(rawTmpdir);
 
         // On macOS, /var is typically a symlink to /private/var
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (rawTmpdir.startsWith('/var')) {
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(resolvedTmpdir.startsWith('/private/var')).toBe(true);
         } else {
           // If not starting with /var, they should still match
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(fs.existsSync(resolvedTmpdir)).toBe(true);
         }
       },

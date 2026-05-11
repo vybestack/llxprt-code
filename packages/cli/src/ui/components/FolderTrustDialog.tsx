@@ -27,37 +27,11 @@ interface FolderTrustDialogProps {
   isRestarting?: boolean;
 }
 
-export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
-  onSelect,
-  isRestarting,
-}) => {
-  const [exiting, setExiting] = useState(false);
-
-  useKeypress(
-    (key) => {
-      if (key.name === 'escape') {
-        setExiting(true);
-        setTimeout(() => {
-          process.exit(ExitCodes.FATAL_CONFIG_ERROR);
-        }, 100);
-      }
-    },
-    { isActive: !isRestarting },
-  );
-
-  useKeypress(
-    (key) => {
-      if (key.name === 'r') {
-        process.exit(ExitCodes.SUCCESS);
-      }
-    },
-    { isActive: !!isRestarting },
-  );
-
-  const currentFolder = path.basename(process.cwd());
-  const parentFolder = path.basename(path.dirname(process.cwd()));
-
-  const options: Array<RadioSelectItem<FolderTrustChoice>> = [
+function buildTrustOptions(
+  currentFolder: string,
+  parentFolder: string,
+): Array<RadioSelectItem<FolderTrustChoice>> {
+  return [
     {
       label: 'Trust folder',
       value: FolderTrustChoice.TRUST_FOLDER,
@@ -74,6 +48,68 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
       key: "Don't trust",
     },
   ];
+}
+
+const TrustDialogHeader: React.FC = () => (
+  <Box flexDirection="column" marginBottom={1}>
+    <Text bold color={Colors.Foreground}>
+      Do you trust this folder?
+    </Text>
+    <Text color={Colors.DimComment}>
+      Trusting a folder allows llxprt to execute commands it suggests. This is a
+      security feature to prevent accidental execution in untrusted directories.
+    </Text>
+  </Box>
+);
+
+interface RestartingMessageProps {
+  exiting: boolean;
+}
+
+const RestartingMessage: React.FC<RestartingMessageProps> = ({ exiting }) => {
+  if (!exiting) {
+    return null;
+  }
+  return (
+    <Box marginLeft={1} marginTop={1}>
+      <Text color={theme.status.warning}>
+        A folder trust level must be selected to continue. Exiting since escape
+        was pressed.
+      </Text>
+    </Box>
+  );
+};
+
+export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
+  onSelect,
+  isRestarting,
+}) => {
+  const [exiting, setExiting] = useState(false);
+
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        setExiting(true);
+        setTimeout(() => {
+          process.exit(ExitCodes.FATAL_CONFIG_ERROR);
+        }, 100);
+      }
+    },
+    { isActive: isRestarting !== true },
+  );
+
+  useKeypress(
+    (key) => {
+      if (key.name === 'r') {
+        process.exit(ExitCodes.SUCCESS);
+      }
+    },
+    { isActive: isRestarting === true },
+  );
+
+  const currentFolder = path.basename(process.cwd());
+  const parentFolder = path.basename(path.dirname(process.cwd()));
+  const options = buildTrustOptions(currentFolder, parentFolder);
 
   return (
     <Box flexDirection="column" width="100%">
@@ -85,24 +121,15 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
         marginLeft={1}
         marginRight={1}
       >
-        <Box flexDirection="column" marginBottom={1}>
-          <Text bold color={Colors.Foreground}>
-            Do you trust this folder?
-          </Text>
-          <Text color={Colors.DimComment}>
-            Trusting a folder allows llxprt to execute commands it suggests.
-            This is a security feature to prevent accidental execution in
-            untrusted directories.
-          </Text>
-        </Box>
+        <TrustDialogHeader />
 
         <RadioButtonSelect
           items={options}
           onSelect={onSelect}
-          isFocused={!isRestarting}
+          isFocused={isRestarting !== true}
         />
       </Box>
-      {isRestarting && (
+      {isRestarting === true && (
         <Box marginLeft={1} marginTop={1}>
           <Text color={Colors.AccentYellow}>
             To see changes, llxprt must be restarted. Press r to exit and apply
@@ -110,14 +137,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
           </Text>
         </Box>
       )}
-      {exiting && (
-        <Box marginLeft={1} marginTop={1}>
-          <Text color={theme.status.warning}>
-            A folder trust level must be selected to continue. Exiting since
-            escape was pressed.
-          </Text>
-        </Box>
-      )}
+      <RestartingMessage exiting={exiting} />
     </Box>
   );
 };

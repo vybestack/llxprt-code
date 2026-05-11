@@ -402,7 +402,7 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
     // Get the correlationId
     const correlationId = (waitingCall as WaitingToolCall).confirmationDetails
-      ?.correlationId;
+      .correlationId;
     expect(correlationId).toBeDefined();
 
     // Simulate message bus confirmation
@@ -517,7 +517,7 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
     // Get the correlationId
     const correlationId = (waitingCall as WaitingToolCall).confirmationDetails
-      ?.correlationId;
+      .correlationId;
     expect(correlationId).toBeDefined();
 
     // Simulate message bus confirmation - this will be received by BOTH schedulers
@@ -630,7 +630,7 @@ describe('BUG: Tool executing before user approval in DEFAULT mode', () => {
 
     // Get the correlationId
     const correlationId = (waitingCall as WaitingToolCall).confirmationDetails
-      ?.correlationId;
+      .correlationId;
     expect(correlationId).toBeDefined();
 
     // Now simulate user confirmation via message bus

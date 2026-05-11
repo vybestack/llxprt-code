@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type { ITool } from '../ITool.js';
@@ -51,7 +53,7 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       if (format === 'anthropic') {
         return tools.map((tool) => ({
           name: tool.function.name,
-          description: tool.function.description || '',
+          description: tool.function.description ?? '',
           input_schema: {
             type: 'object',
             ...tool.function.parameters,
@@ -73,7 +75,8 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
             type: 'function',
             function: {
               name: toolCall.name,
-              arguments: toolCall.input ? JSON.stringify(toolCall.input) : '',
+              arguments:
+                toolCall.input != null ? JSON.stringify(toolCall.input) : '',
             },
           },
         ];
@@ -81,19 +84,24 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       return [rawToolCall];
     }),
     convertGeminiToAnthropic: vi.fn((geminiTools) => {
-      if (!geminiTools || !Array.isArray(geminiTools)) return [];
+      if (
+        typeof geminiTools !== 'object' ||
+        geminiTools === null ||
+        !Array.isArray(geminiTools)
+      )
+        return [];
 
       const tools = [];
       for (const group of geminiTools) {
-        if (group.functionDeclarations) {
+        if (group.functionDeclarations != null) {
           for (const func of group.functionDeclarations) {
             tools.push({
               name: func.name,
-              description: func.description || '',
+              description: func.description ?? '',
               input_schema: {
                 type: 'object',
-                properties: func.parametersJsonSchema?.properties || {},
-                required: func.parametersJsonSchema?.required || [],
+                properties: func.parametersJsonSchema?.properties ?? {},
+                required: func.parametersJsonSchema?.required ?? [],
               },
             });
           }
@@ -102,45 +110,19 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       return tools;
     }),
     convertGeminiToFormat: vi.fn((geminiTools, format = 'openai') => {
-      if (!geminiTools || !Array.isArray(geminiTools)) return undefined;
+      if (
+        typeof geminiTools !== 'object' ||
+        geminiTools === null ||
+        !Array.isArray(geminiTools)
+      )
+        return undefined;
 
       if (format === 'anthropic') {
-        const tools = [];
-        for (const group of geminiTools) {
-          if (group.functionDeclarations) {
-            for (const func of group.functionDeclarations) {
-              tools.push({
-                name: func.name,
-                description: func.description || '',
-                input_schema: {
-                  type: 'object',
-                  properties: func.parametersJsonSchema?.properties || {},
-                  required: func.parametersJsonSchema?.required || [],
-                },
-              });
-            }
-          }
-        }
-        return tools;
+        return convertGeminiToolsToAnthropicFormat(geminiTools);
       }
 
       // For other formats (openai, etc.), return OpenAI format
-      const tools = [];
-      for (const group of geminiTools) {
-        if (group.functionDeclarations) {
-          for (const func of group.functionDeclarations) {
-            tools.push({
-              type: 'function',
-              function: {
-                name: func.name,
-                description: func.description || '',
-                parameters: func.parametersJsonSchema,
-              },
-            });
-          }
-        }
-      }
-      return tools;
+      return convertGeminiToolsToOpenAIFormat(geminiTools);
     }),
   })),
 }));
@@ -246,9 +228,7 @@ describe('AnthropicProvider', () => {
     provider = result.provider;
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
-    if (!runtimeContext.config) {
-      runtimeContext.config = createRuntimeConfigStub(settingsService);
-    }
+    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
     runtimeContext.config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),
       ...settingsService.getProviderSettings(provider.name),
@@ -483,7 +463,7 @@ describe('AnthropicProvider', () => {
       const call = mockMessagesCreate.mock.calls[0];
       expect(call).toBeDefined();
 
-      const options = call?.[1];
+      const options = call[1];
       expect(options).toBeDefined();
       expect(options?.headers).toMatchObject({
         ...customHeaders,
@@ -1926,7 +1906,7 @@ describe('AnthropicProvider', () => {
         const call = mockMessagesCreate.mock.calls[0];
         expect(call).toBeDefined();
 
-        const options = call?.[1];
+        const options = call[1];
         expect(options).toBeDefined();
         expect(options?.headers).toBeDefined();
         expect(options?.headers?.['anthropic-beta']).toContain(
@@ -1958,14 +1938,16 @@ describe('AnthropicProvider', () => {
         await generator.next();
 
         const call = mockMessagesCreate.mock.calls[0];
-        const options = call?.[1];
+        const options = call[1];
 
         // Check beta header - should not contain extended TTL
-        const betaHeader = options?.headers?.['anthropic-beta'];
+        const betaHeader = options?.headers?.['anthropic-beta'] as
+          | string
+          | undefined;
         // Either undefined or doesn't contain the extended TTL
-        const isValidHeader =
-          betaHeader === undefined ||
-          !betaHeader.includes('extended-cache-ttl-2025-04-11');
+        const isValidHeader = !(
+          betaHeader?.includes('extended-cache-ttl-2025-04-11') ?? false
+        );
         expect(isValidHeader).toBe(true);
       });
 
@@ -3763,7 +3745,7 @@ describe('AnthropicProvider', () => {
 
         // Consume the generator
         let result = await generator.next();
-        while (!result.done) {
+        while (result.done !== true) {
           result = await generator.next();
         }
 
@@ -3835,7 +3817,7 @@ describe('AnthropicProvider', () => {
       const call = mockMessagesCreate.mock.calls[0];
       expect(call).toBeDefined();
 
-      const requestBody = call?.[0];
+      const requestBody = call[0];
       expect(requestBody).toBeDefined();
       expect(requestBody.tools).toBeDefined();
       expect(requestBody.tools[0].name).toBe('llxprt_read_file');
@@ -3899,7 +3881,7 @@ describe('AnthropicProvider', () => {
         mockMessagesCreate.mock.calls[mockMessagesCreate.mock.calls.length - 1];
       expect(call).toBeDefined();
 
-      const requestBody = call?.[0];
+      const requestBody = call[0];
       expect(requestBody).toBeDefined();
       expect(requestBody.tools).toBeDefined();
       expect(requestBody.tools[0].name).toBe('read_file'); // NO prefix
@@ -4100,7 +4082,7 @@ describe('AnthropicProvider', () => {
       const call = mockMessagesCreate.mock.calls[0];
       expect(call).toBeDefined();
 
-      const options = call?.[1];
+      const options = call[1];
       expect(options).toBeDefined();
       expect(options?.headers).toBeDefined();
       expect(options?.headers?.['User-Agent']).toBe(
@@ -4157,7 +4139,7 @@ describe('AnthropicProvider', () => {
       const call = mockMessagesCreate.mock.calls[0];
       expect(call).toBeDefined();
 
-      const options = call?.[1];
+      const options = call[1];
       expect(options).toBeDefined();
       expect(options?.headers).toBeDefined();
       const betaHeader = options?.headers?.['anthropic-beta'];
@@ -4210,7 +4192,7 @@ describe('AnthropicProvider', () => {
         mockMessagesCreate.mock.calls[mockMessagesCreate.mock.calls.length - 1];
       expect(call).toBeDefined();
 
-      const options = call?.[1];
+      const options = call[1];
       expect(options).toBeDefined();
 
       // Should NOT have User-Agent header for non-OAuth requests
@@ -4407,3 +4389,86 @@ describe('AnthropicProvider', () => {
     });
   });
 });
+
+/**
+ * Helper function to convert Gemini tools to Anthropic format.
+ */
+function convertGeminiToolsToAnthropicFormat(
+  geminiTools: Array<{
+    functionDeclarations?: Array<{
+      name?: string;
+      description?: string;
+      parametersJsonSchema?: { properties?: unknown; required?: string[] };
+    }>;
+  }>,
+): Array<{
+  name: string | undefined;
+  description: string;
+  input_schema: { type: string; properties: unknown; required: string[] };
+}> {
+  const tools: Array<{
+    name: string | undefined;
+    description: string;
+    input_schema: { type: string; properties: unknown; required: string[] };
+  }> = [];
+  for (const group of geminiTools) {
+    if (group.functionDeclarations != null) {
+      for (const func of group.functionDeclarations) {
+        tools.push({
+          name: func.name,
+          description: func.description ?? '',
+          input_schema: {
+            type: 'object',
+            properties: func.parametersJsonSchema?.properties ?? {},
+            required: func.parametersJsonSchema?.required ?? [],
+          },
+        });
+      }
+    }
+  }
+  return tools;
+}
+
+/**
+ * Helper function to convert Gemini tools to OpenAI format.
+ */
+function convertGeminiToolsToOpenAIFormat(
+  geminiTools: Array<{
+    functionDeclarations?: Array<{
+      name?: string;
+      description?: string;
+      parametersJsonSchema?: unknown;
+    }>;
+  }>,
+): Array<{
+  type: string;
+  function: {
+    name: string | undefined;
+    description: string;
+    parameters: unknown;
+  };
+}> {
+  const tools: Array<{
+    type: string;
+    function: {
+      name: string | undefined;
+      description: string;
+      parameters: unknown;
+    };
+  }> = [];
+  for (const group of geminiTools) {
+    if (group.functionDeclarations != null) {
+      for (const func of group.functionDeclarations) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: func.name,
+            description: func.description ?? '',
+            parameters: func.parametersJsonSchema,
+          },
+        });
+      }
+    }
+  }
+  return tools;
+}

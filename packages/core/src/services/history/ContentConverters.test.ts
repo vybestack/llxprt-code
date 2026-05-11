@@ -38,6 +38,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
       );
       const toolCall = iContent.blocks[0] as ToolCallBlock;
 
+      expect(toolCall.id).not.toBe('692a5fddc');
       expectCanonical(toolCall.id);
     });
 
@@ -63,6 +64,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
       );
       const toolResponse = iContent.blocks[0] as ToolResponseBlock;
 
+      expect(toolResponse.callId).not.toBe('692a5fddc');
       expectCanonical(toolResponse.callId);
     });
 
@@ -179,6 +181,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
       );
       const toolCall = iContent.blocks[0] as ToolCallBlock;
 
+      expect(toolCall.id).toBeTruthy();
       expectCanonical(toolCall.id);
     });
 

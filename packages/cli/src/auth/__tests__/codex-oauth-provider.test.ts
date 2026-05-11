@@ -226,7 +226,9 @@ describe('CodexOAuthProvider', () => {
         token_type: 'Bearer',
         expiry: Math.floor(Date.now() / 1000) + 3600,
       };
-      expect(() => CodexOAuthTokenSchema.parse(invalidToken)).toThrow();
+      expect(() => CodexOAuthTokenSchema.parse(invalidToken)).toThrow(
+        /account_id/,
+      );
     });
 
     it('should accept optional id_token field', () => {

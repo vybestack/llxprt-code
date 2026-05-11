@@ -156,11 +156,12 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(mockTool.executeFn).not.toHaveBeenCalled();
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
-    if (completedCalls[0].status === 'error') {
-      expect(completedCalls[0].response.error.message).toBe(
-        'blocked by before hook',
-      );
-    }
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (completedCalls[0].status !== 'error')
+      throw new Error('unreachable: narrowing failed');
+    expect(completedCalls[0].response.error.message).toBe(
+      'blocked by before hook',
+    );
   });
 
   it('surfaces an error and skips tool execution when a before-hook requests stop', async () => {
@@ -201,11 +202,12 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(mockTool.executeFn).not.toHaveBeenCalled();
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
-    if (completedCalls[0].status === 'error') {
-      expect(completedCalls[0].response.error.message).toBe(
-        'stop requested by before hook',
-      );
-    }
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (completedCalls[0].status !== 'error')
+      throw new Error('unreachable: narrowing failed');
+    expect(completedCalls[0].response.error.message).toBe(
+      'stop requested by before hook',
+    );
   });
 
   it('executes the tool with modified input when a before-hook returns tool_input', async () => {
@@ -286,12 +288,13 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     });
 
     expect(completedCalls[0].status).toBe('success');
-    if (completedCalls[0].status === 'success') {
-      const responsePart = completedCalls[0].response.responseParts[0];
-      expect(responsePart.functionResponse?.response).toStrictEqual({
-        output: 'tool output\n\nafter hook note',
-      });
-    }
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (completedCalls[0].status !== 'success')
+      throw new Error('unreachable: narrowing failed');
+    const responsePart = completedCalls[0].response.responseParts[0];
+    expect(responsePart.functionResponse?.response).toStrictEqual({
+      output: 'tool output\n\nafter hook note',
+    });
   });
 
   it('appends before-hook systemMessage text to the successful result content', async () => {
@@ -329,12 +332,13 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     });
 
     expect(completedCalls[0].status).toBe('success');
-    if (completedCalls[0].status === 'success') {
-      const responsePart = completedCalls[0].response.responseParts[0];
-      expect(responsePart.functionResponse?.response).toStrictEqual({
-        output: 'tool output\n\nbefore hook note',
-      });
-    }
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (completedCalls[0].status !== 'success')
+      throw new Error('unreachable: narrowing failed');
+    const responsePart = completedCalls[0].response.responseParts[0];
+    expect(responsePart.functionResponse?.response).toStrictEqual({
+      output: 'tool output\n\nbefore hook note',
+    });
   });
 
   it('surfaces an error when an after-hook requests stop', async () => {
@@ -375,11 +379,12 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(mockTool.executeFn).toHaveBeenCalledTimes(1);
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
-    if (completedCalls[0].status === 'error') {
-      expect(completedCalls[0].response.error.message).toBe(
-        'stop requested by after hook',
-      );
-    }
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (completedCalls[0].status !== 'error')
+      throw new Error('unreachable: narrowing failed');
+    expect(completedCalls[0].response.error.message).toBe(
+      'stop requested by after hook',
+    );
   });
 
   it('surfaces an error when an after-hook blocks after tool execution', async () => {
@@ -420,11 +425,12 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(mockTool.executeFn).toHaveBeenCalledTimes(1);
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
-    if (completedCalls[0].status === 'error') {
-      expect(completedCalls[0].response.error.message).toBe(
-        'blocked by after hook',
-      );
-    }
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (completedCalls[0].status !== 'error')
+      throw new Error('unreachable: narrowing failed');
+    expect(completedCalls[0].response.error.message).toBe(
+      'blocked by after hook',
+    );
   });
 
   it('sets suppressDisplay when an after-hook requests suppressOutput', async () => {
@@ -462,9 +468,10 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     });
 
     expect(completedCalls[0].status).toBe('success');
-    if (completedCalls[0].status === 'success') {
-      expect(completedCalls[0].response.suppressDisplay).toBe(true);
-    }
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (completedCalls[0].status !== 'success')
+      throw new Error('unreachable: narrowing failed');
+    expect(completedCalls[0].response.suppressDisplay).toBe(true);
   });
 
   it('preserves parallel batching while publishing results in request order', async () => {
