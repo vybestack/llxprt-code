@@ -179,6 +179,20 @@ describe('buildStartArgs', () => {
       '--yolo',
     ]);
   });
+
+  it('rejects invalid script start commands', async () => {
+    const { buildStartArgs } = await importHarness();
+    const message =
+      'Invalid script.startCommand: expected non-empty array of strings';
+
+    expect(() => buildStartArgs({ startCommand: [] }, false)).toThrow(message);
+    expect(() => buildStartArgs({ startCommand: 'node' }, false)).toThrow(
+      message,
+    );
+    expect(() => buildStartArgs({ startCommand: ['node', 42] }, false)).toThrow(
+      message,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -221,6 +235,14 @@ describe('matchText', () => {
     expect(matchText('hello world', { kind: 'contains', value: 'xyz' })).toBe(
       false,
     );
+  });
+
+  it('resets stateful regex matchers before each test', async () => {
+    const { matchText } = await importHarness();
+    const matcher = { kind: 'regex', value: /hello/g };
+
+    expect(matchText('hello', matcher)).toBe(true);
+    expect(matchText('hello', matcher)).toBe(true);
   });
 
   it('matches regex', async () => {

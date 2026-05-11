@@ -214,6 +214,8 @@ export function matchText(text, matcher) {
   if (matcher.kind === 'contains') {
     return text.includes(matcher.value);
   }
+  matcher.value.lastIndex = 0;
+
   return matcher.value.test(text);
 }
 
@@ -1023,9 +1025,19 @@ function startTmuxSession(sessionName, startArgs, tmuxConfig) {
 }
 
 export function buildStartArgs(script, shouldYolo) {
-  const startArgs = Array.isArray(script?.startCommand)
-    ? [...script.startCommand]
-    : ['node', 'scripts/start.js'];
+  const command = script?.startCommand;
+  if (
+    command !== undefined &&
+    (!Array.isArray(command) ||
+      command.length === 0 ||
+      command.some((item) => typeof item !== 'string'))
+  ) {
+    throw new Error(
+      'Invalid script.startCommand: expected non-empty array of strings',
+    );
+  }
+
+  const startArgs = command ? [...command] : ['node', 'scripts/start.js'];
   if (shouldYolo && !startArgs.includes('--yolo')) {
     startArgs.push('--yolo');
   }
