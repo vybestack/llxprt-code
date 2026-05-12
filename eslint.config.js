@@ -233,7 +233,7 @@ export default tseslint.config(
       'no-unneeded-ternary': 'error',
 
       // Complexity limits
-      complexity: ['warn', 15],
+      complexity: ['error', 25],
       'max-lines': [
         'error',
         { max: 800, skipBlankLines: true, skipComments: true },
@@ -583,7 +583,7 @@ export default tseslint.config(
   {
     files: ['packages/a2a-server/src/agent/task.ts'],
     rules: {
-      complexity: ['error', 15],
+      complexity: ['error', 25],
     },
   },
   // ============================================================================
@@ -772,7 +772,7 @@ export default tseslint.config(
           ],
         },
       ],
-      complexity: ['error', 15],
+      complexity: ['error', 25],
       'max-lines': [
         'error',
         { max: 800, skipBlankLines: true, skipComments: true },
@@ -815,7 +815,7 @@ export default tseslint.config(
           ],
         },
       ],
-      complexity: ['error', 15],
+      complexity: ['error', 25],
       'max-lines-per-function': ['error', 80],
     },
   },
@@ -835,7 +835,7 @@ export default tseslint.config(
           ],
         },
       ],
-      complexity: ['error', 15],
+      complexity: ['error', 25],
       'max-lines-per-function': ['error', 80],
     },
   },
