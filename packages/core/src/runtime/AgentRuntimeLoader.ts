@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { Config } from '../config/config.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
@@ -88,21 +90,27 @@ function buildToolGovernance(
   profile: AgentRuntimeProfileSnapshot,
 ): ToolGovernance {
   const allowedRaw = Array.isArray(profile.settings.tools?.allowed)
-    ? profile.settings.tools?.allowed
+    ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
+      profile.settings.tools?.allowed
     : undefined;
   const disabledRaw = Array.isArray(profile.settings.tools?.disabled)
-    ? profile.settings.tools?.disabled
+    ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
+      profile.settings.tools?.disabled
     : undefined;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
   const excludedRaw = profile.config.getExcludeTools?.() ?? [];
 
   return {
     allowed: new Set(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalizeToolName returns string, empty string should fall through to original tool name
       (allowedRaw ?? []).map((tool) => normalizeToolName(tool) || tool),
     ),
     disabled: new Set(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalizeToolName returns string, empty string should fall through to original tool name
       (disabledRaw ?? []).map((tool) => normalizeToolName(tool) || tool),
     ),
     excluded: new Set(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalizeToolName returns string, empty string should fall through to original tool name
       excludedRaw.map((tool) => normalizeToolName(tool) || tool),
     ),
   };
@@ -112,6 +120,7 @@ function isToolPermitted(
   toolName: string,
   governance: ToolGovernance,
 ): boolean {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalizeToolName returns string, empty string should fall through to original toolName
   const canonical = normalizeToolName(toolName) || toolName;
   if (governance.excluded.has(canonical)) {
     return false;
@@ -154,15 +163,11 @@ function createFilteredToolRegistryView(
       }
       const schema = (tool as unknown as { schema?: Record<string, unknown> })
         .schema;
-      const description =
-        typeof schema?.description === 'string'
-          ? schema.description
-          : typeof (tool as { description?: string }).description === 'string'
-            ? (tool as { description: string }).description
-            : '';
-      const parameterSchema = (
-        schema as { parametersJsonSchema?: Record<string, unknown> }
-      )?.parametersJsonSchema;
+      const description = resolveToolDescriptionFromSchema(tool, schema);
+      const runtimeSchema = schema as
+        | { parametersJsonSchema?: Record<string, unknown> }
+        | undefined;
+      const parameterSchema = runtimeSchema?.parametersJsonSchema;
 
       return {
         name: (tool as { name?: string }).name ?? name,
@@ -173,15 +178,32 @@ function createFilteredToolRegistryView(
   };
 }
 
+/**
+ * Helper function to resolve tool description from schema or tool object.
+ */
+function resolveToolDescriptionFromSchema(
+  tool: unknown,
+  schema: Record<string, unknown> | undefined,
+): string {
+  if (typeof schema?.description === 'string') {
+    return schema.description;
+  }
+  if (typeof (tool as { description?: string }).description === 'string') {
+    return (tool as { description: string }).description;
+  }
+  return '';
+}
+
 export async function loadAgentRuntime(
   options: AgentRuntimeLoaderOptions,
 ): Promise<AgentRuntimeLoaderResult> {
   const { profile, overrides = {}, signal } = options;
-  if (!profile) {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
+  if (profile == null) {
     throw new Error('AgentRuntimeLoader requires a profile option.');
   }
 
-  if (signal?.aborted) {
+  if (signal?.aborted === true) {
     const error = new Error('Runtime load aborted');
     error.name = 'AbortError';
     throw error;
@@ -192,6 +214,7 @@ export async function loadAgentRuntime(
   const providerAdapter: AgentRuntimeProviderAdapter =
     overrides.providerAdapter ??
     createProviderAdapterFromManager(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
       profile.providerManager ?? profile.config.getProviderManager?.(),
     );
 
@@ -203,6 +226,7 @@ export async function loadAgentRuntime(
   const toolsView: ToolRegistryView =
     overrides.toolsView ??
     createFilteredToolRegistryView(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
       profile.toolRegistry ?? profile.config.getToolRegistry?.(),
       governance,
     );

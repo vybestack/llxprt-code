@@ -14,10 +14,7 @@
 import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { ModelDefaultRule } from '../providers/providerAliases.js';
-import { getCliRuntimeServices } from './runtimeAccessors.js';
-
-// Import internal helpers from runtimeAccessors
-import { _internal } from './runtimeAccessors.js';
+import { getCliRuntimeServices, _internal } from './runtimeAccessors.js';
 
 const logger = new DebugLogger('llxprt:runtime:providerMutations');
 
@@ -74,7 +71,7 @@ function extractWrappedProviderBaseUrl(
 ): string | undefined {
   const wrappedProvider = (provider as { wrappedProvider?: unknown })
     .wrappedProvider;
-  if (!wrappedProvider) {
+  if (wrappedProvider == null) {
     return undefined;
   }
   return extractProviderBaseUrl(wrappedProvider, visited);
@@ -155,13 +152,20 @@ export function extractProviderBaseUrl(
   }
   visited.add(provider);
 
-  return (
-    extractWrappedProviderBaseUrl(provider, visited) ??
-    extractDirectProviderBaseUrl(provider) ??
-    extractConfiguredProviderBaseUrl(provider) ??
-    extractBaseProviderConfigUrl(provider) ??
-    extractProviderGetBaseUrl(provider)
-  );
+  for (const extractor of [
+    () => extractWrappedProviderBaseUrl(provider, visited),
+    () => extractDirectProviderBaseUrl(provider),
+    () => extractConfiguredProviderBaseUrl(provider),
+    () => extractBaseProviderConfigUrl(provider),
+    () => extractProviderGetBaseUrl(provider),
+  ]) {
+    const baseUrl = extractor();
+    if (baseUrl !== undefined) {
+      return baseUrl;
+    }
+  }
+
+  return undefined;
 }
 
 export interface ApiKeyUpdateResult {
@@ -235,9 +239,10 @@ function recomputeAndApplyModelDefaultsDiff(
   // Apply new defaults: only if key is undefined or current value matches old default.
   for (const [key, newValue] of Object.entries(newDefaults)) {
     const currentValue = config.getEphemeralSetting(key);
-    if (currentValue === undefined) {
-      config.setEphemeralSetting(key, newValue);
-    } else if (key in oldDefaults && currentValue === oldDefaults[key]) {
+    if (
+      currentValue === undefined ||
+      (key in oldDefaults && currentValue === oldDefaults[key])
+    ) {
       config.setEphemeralSetting(key, newValue);
     }
   }
@@ -398,7 +403,10 @@ export async function setActiveModel(
 ): Promise<ModelChangeResult> {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
 
-  const activeProvider = providerManager.getActiveProvider();
+  const activeProvider = providerManager.getActiveProvider() as
+    | ReturnType<typeof providerManager.getActiveProvider>
+    | null
+    | undefined;
   if (!activeProvider) {
     throw new Error('No active provider is available.');
   }
@@ -408,7 +416,7 @@ export async function setActiveModel(
     activeProvider.name,
   );
   const previousModel =
-    (providerSettings.model as string | undefined) || config.getModel();
+    (providerSettings.model as string | undefined) ?? config.getModel();
 
   const authRefreshed = false;
   try {

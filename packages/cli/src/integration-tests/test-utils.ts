@@ -30,11 +30,12 @@ export async function cleanupTempDirectory(dir: string): Promise<void> {
     await fs.rm(dir, { recursive: true, force: true });
   } catch (error: unknown) {
     // Ignore errors if directory doesn't exist
+
     if (
-      error &&
+      error !== null &&
       typeof error === 'object' &&
       'code' in error &&
-      error.code !== 'ENOENT'
+      (error as { code: string }).code !== 'ENOENT'
     ) {
       throw error;
     }
@@ -106,7 +107,7 @@ export async function readSettingsFile(dir: string): Promise<unknown> {
     return JSON.parse(content);
   } catch (error: unknown) {
     if (
-      error &&
+      error !== null &&
       typeof error === 'object' &&
       'code' in error &&
       error.code === 'ENOENT'
@@ -231,7 +232,7 @@ export async function createMockApiServer(): Promise<MockApiServer> {
   });
 
   const address = server.address();
-  if (!address || typeof address === 'string') {
+  if (address === null || typeof address === 'string') {
     throw new Error('Failed to get server port');
   }
 

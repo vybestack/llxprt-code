@@ -15,6 +15,36 @@ import path from 'path';
 import { homedir } from 'os';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
+/**
+ * Searches for a keyfile for the given provider.
+ * Returns the first accessible keyfile path, or null if none found.
+ */
+async function findKeyfileForProvider(
+  providerName: string,
+): Promise<string | null> {
+  const keyfilePaths = [
+    path.join(homedir(), `.${providerName}_key`),
+    path.join(homedir(), `.${providerName}-key`),
+    path.join(homedir(), `.${providerName}_api_key`),
+  ];
+
+  if (providerName === 'openai') {
+    keyfilePaths.unshift(path.join(homedir(), '.openai_key'));
+  } else if (providerName === 'anthropic') {
+    keyfilePaths.unshift(path.join(homedir(), '.anthropic_key'));
+  }
+
+  for (const candidate of keyfilePaths) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // continue searching
+    }
+  }
+  return null;
+}
+
 export const keyfileCommand: SlashCommand = {
   name: 'keyfile',
   description: 'manage API key file for the current provider',
@@ -23,7 +53,7 @@ export const keyfileCommand: SlashCommand = {
     context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
-    const filePath = args?.trim();
+    const filePath = args.trim();
     const runtime = getRuntimeApi();
     const status = runtime.getActiveProviderStatus();
     const providerName = status.providerName;
@@ -39,28 +69,7 @@ export const keyfileCommand: SlashCommand = {
 
     try {
       if (!filePath || filePath === '') {
-        const keyfilePaths = [
-          path.join(homedir(), `.${providerName}_key`),
-          path.join(homedir(), `.${providerName}-key`),
-          path.join(homedir(), `.${providerName}_api_key`),
-        ];
-
-        if (providerName === 'openai') {
-          keyfilePaths.unshift(path.join(homedir(), '.openai_key'));
-        } else if (providerName === 'anthropic') {
-          keyfilePaths.unshift(path.join(homedir(), '.anthropic_key'));
-        }
-
-        let foundKeyfile: string | null = null;
-        for (const candidate of keyfilePaths) {
-          try {
-            await fs.access(candidate);
-            foundKeyfile = candidate;
-            break;
-          } catch {
-            // continue searching
-          }
-        }
+        const foundKeyfile = await findKeyfileForProvider(providerName);
 
         if (foundKeyfile) {
           return {
@@ -80,7 +89,7 @@ export const keyfileCommand: SlashCommand = {
       if (filePath === 'none') {
         await runtime.updateActiveProviderApiKey(null);
         runtime.setEphemeralSetting('auth-keyfile', undefined);
-        context.services.settings.removeProviderKeyfile?.(providerName);
+        context.services.settings.removeProviderKeyfile(providerName);
 
         return {
           type: 'message',
@@ -103,21 +112,19 @@ export const keyfileCommand: SlashCommand = {
       const result = await runtime.updateActiveProviderApiKey(apiKey);
       runtime.setEphemeralSetting('auth-keyfile', resolvedPath);
       runtime.setEphemeralSetting('auth-key', undefined);
-      context.services.settings.setProviderKeyfile?.(
-        providerName,
-        resolvedPath,
-      );
+      context.services.settings.setProviderKeyfile(providerName, resolvedPath);
 
       const extendedContext = context as CommandContext & {
         checkPaymentModeChange?: () => void;
       };
-      if (extendedContext.checkPaymentModeChange) {
+      if (typeof extendedContext.checkPaymentModeChange === 'function') {
         setTimeout(extendedContext.checkPaymentModeChange, 100);
       }
 
-      const paymentWarning = result.isPaidMode
-        ? '\nWARNING: You are now in PAID MODE - API usage will be charged to your account'
-        : '';
+      const paymentWarning =
+        result.isPaidMode === true
+          ? '\nWARNING: You are now in PAID MODE - API usage will be charged to your account'
+          : '';
 
       return {
         type: 'message',

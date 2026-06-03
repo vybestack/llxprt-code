@@ -18,15 +18,13 @@ export const ShowMoreLines = ({ constrainHeight }: ShowMoreLinesProps) => {
   const overflowState = useOverflowState();
   const streamingState = useStreamingContext();
 
-  if (
-    overflowState === undefined ||
-    overflowState.overflowingIds.size === 0 ||
-    !constrainHeight ||
-    !(
-      streamingState === StreamingState.Idle ||
-      streamingState === StreamingState.WaitingForConfirmation
-    )
-  ) {
+  const hasOverflow =
+    overflowState !== undefined && overflowState.overflowingIds.size > 0;
+  const isIdleState =
+    streamingState === StreamingState.Idle ||
+    streamingState === StreamingState.WaitingForConfirmation;
+
+  if (!hasOverflow || !constrainHeight || !isIdleState) {
     return null;
   }
 

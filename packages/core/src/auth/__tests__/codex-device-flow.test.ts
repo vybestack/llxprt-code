@@ -137,11 +137,9 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
   });
 
   afterEach(async () => {
-    if (testServer) {
-      await new Promise<void>((resolve) => {
-        testServer.close(() => resolve());
-      });
-    }
+    await new Promise<void>((resolve) => {
+      testServer.close(() => resolve());
+    });
   });
 
   /**
@@ -410,7 +408,7 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
     // Should throw error because id_token is required to extract account_id
     await expect(
       deviceFlow.exchangeCodeForToken(authCode, redirectUri, testState),
-    ).rejects.toThrow();
+    ).rejects.toThrow(Error);
 
     global.fetch = originalFetch;
   });

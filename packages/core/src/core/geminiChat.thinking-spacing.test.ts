@@ -31,7 +31,7 @@ function aggregateTextFromStream(streamChunks: IContent[]): string {
 
   for (const iContent of streamChunks) {
     const result = aggregateTextWithSpacing(
-      iContent.blocks ?? [],
+      iContent.blocks,
       aggregatedText,
       lastBlockWasNonText,
     );

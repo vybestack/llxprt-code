@@ -101,6 +101,7 @@ describe('directoryCommand', () => {
 
   describe('show', () => {
     it('should display the list of directories', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!showCommand?.action) throw new Error('No action');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       showCommand.action(mockContext, '');
@@ -119,6 +120,7 @@ describe('directoryCommand', () => {
 
   describe('add', () => {
     it('should show an error if no path is provided', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!addCommand?.action) throw new Error('No action');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       addCommand.action(mockContext, '');
@@ -133,6 +135,7 @@ describe('directoryCommand', () => {
 
     it('should call addDirectory and show a success message for a single path', async () => {
       const newPath = path.normalize('/home/user/new-project');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!addCommand?.action) throw new Error('No action');
       await addCommand.action(mockContext, newPath);
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(newPath);
@@ -148,6 +151,7 @@ describe('directoryCommand', () => {
     it('should call addDirectory for each path and show a success message for multiple paths', async () => {
       const newPath1 = path.normalize('/home/user/new-project1');
       const newPath2 = path.normalize('/home/user/new-project2');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!addCommand?.action) throw new Error('No action');
       await addCommand.action(mockContext, `${newPath1},${newPath2}`);
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(newPath1);
@@ -167,6 +171,7 @@ describe('directoryCommand', () => {
         throw error;
       });
       const newPath = path.normalize('/home/user/invalid-project');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!addCommand?.action) throw new Error('No action');
       await addCommand.action(mockContext, newPath);
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
@@ -190,6 +195,7 @@ describe('directoryCommand', () => {
         },
       );
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!addCommand?.action) throw new Error('No action');
       await addCommand.action(mockContext, `${validPath},${invalidPath}`);
 
@@ -241,6 +247,7 @@ describe('directoryCommand', () => {
         },
       };
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!addCommand?.action) throw new Error('No action');
       await addCommand.action(mockContext, untrustedPath);
 
@@ -284,6 +291,7 @@ describe('directoryCommand', () => {
         },
       };
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!addCommand?.action) throw new Error('No action');
       await addCommand.action(mockContext, trustedPath);
 
@@ -323,6 +331,7 @@ describe('directoryCommand', () => {
         },
       };
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!addCommand?.action) throw new Error('No action');
       await addCommand.action(mockContext, `${trustedPath},${untrustedPath}`);
 
@@ -381,6 +390,7 @@ describe('directoryCommand', () => {
         },
       };
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!addCommand?.action) throw new Error('No action');
       const result = await addCommand.action(mockContext, trustedPath);
 
@@ -423,6 +433,7 @@ describe('directoryCommand', () => {
         },
       };
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!addCommand?.action) throw new Error('No action');
       await addCommand.action(mockContext, `${trustedPath},${rejectedRawPath}`);
 

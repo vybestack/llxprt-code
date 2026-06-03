@@ -95,7 +95,7 @@ describe('GrepTool timeout functionality', () => {
       vi.mocked(glob.globStream).mockImplementation((_pattern, options) => {
         // Return an async iterator that delays before yielding
         // This simulates a slow file system traversal
-        const signal = options?.signal;
+        const signal = options.signal;
         return {
           // eslint-disable-next-line require-yield
           async *[Symbol.asyncIterator]() {
@@ -184,7 +184,7 @@ describe('GrepTool timeout functionality', () => {
     it('should provide helpful suggestions in timeout error message', async () => {
       // Mock glob to be slow
       vi.mocked(glob.globStream).mockImplementation((_pattern, options) => {
-        const signal = options?.signal;
+        const signal = options.signal;
         return {
           // eslint-disable-next-line require-yield
           async *[Symbol.asyncIterator]() {

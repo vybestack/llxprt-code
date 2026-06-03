@@ -152,9 +152,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
       const customContext = buildRuntimeContext(new HistoryService(), {
         topPreserveThreshold: 0.25,
       });
-      const customThreshold = customContext.ephemerals.topPreserveThreshold
-        ? customContext.ephemerals.topPreserveThreshold()
-        : undefined;
+      const customThreshold = customContext.ephemerals.topPreserveThreshold();
       expect(customThreshold).toBe(0.25);
     });
   });

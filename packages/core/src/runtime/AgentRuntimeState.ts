@@ -231,6 +231,7 @@ export function createAgentRuntimeState(
 
   // Generate sessionId if not provided (line 101)
   const sessionId =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string sessionId should generate new ID
     params.sessionId ||
     `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
@@ -261,7 +262,7 @@ function deepFreeze<T>(obj: T): T {
   Object.freeze(obj);
   Object.getOwnPropertyNames(obj).forEach((prop) => {
     const value = (obj as Record<string, unknown>)[prop];
-    if (value && typeof value === 'object') {
+    if (typeof value === 'object' && value !== null) {
       deepFreeze(value);
     }
   });
@@ -298,20 +299,22 @@ export function updateAgentRuntimeState(
   }
 
   // Validate updated fields (lines 219-225)
-  if (updates.provider !== undefined) {
-    if (!updates.provider || typeof updates.provider !== 'string') {
-      throw new RuntimeStateError(RuntimeStateErrorCode.PROVIDER_INVALID, {
-        provider: updates.provider,
-      });
-    }
+  if (
+    updates.provider !== undefined &&
+    (!updates.provider || typeof updates.provider !== 'string')
+  ) {
+    throw new RuntimeStateError(RuntimeStateErrorCode.PROVIDER_INVALID, {
+      provider: updates.provider,
+    });
   }
 
-  if (updates.model !== undefined) {
-    if (!updates.model || typeof updates.model !== 'string') {
-      throw new RuntimeStateError(RuntimeStateErrorCode.MODEL_INVALID, {
-        model: updates.model,
-      });
-    }
+  if (
+    updates.model !== undefined &&
+    (!updates.model || typeof updates.model !== 'string')
+  ) {
+    throw new RuntimeStateError(RuntimeStateErrorCode.MODEL_INVALID, {
+      model: updates.model,
+    });
   }
 
   // Get timestamp ensuring it's > oldState.updatedAt (lines 226)
@@ -441,7 +444,8 @@ export function subscribeToAgentRuntimeState(
   // Store subscription (lines 298-302)
   subscribers.set(subscriptionId, {
     callback,
-    async: options?.async || false,
+
+    async: options?.async ?? false,
   });
 
   // Return unsubscribe function (lines 303-306)
@@ -472,25 +476,38 @@ function invokeSubscribers(
 
   // Invoke each subscriber (lines 309-315)
   for (const subscription of subscribers.values()) {
-    try {
-      if (subscription.async) {
-        // Async callback - queue as microtask (line 311-312)
-        queueMicrotask(() => {
-          try {
-            subscription.callback(event);
-          } catch (error) {
-            // Error handling to prevent cascade failures (line 315)
-            debugLogger.error('Error in async runtime state callback:', error);
-          }
-        });
-      } else {
-        // Synchronous callback (line 313-314)
-        subscription.callback(event);
-      }
-    } catch (error) {
-      // Error handling to prevent cascade failures (line 315)
-      debugLogger.error('Error in runtime state callback:', error);
+    invokeSubscription(subscription, event);
+  }
+}
+
+/**
+ * Invoke a single subscription callback, handling both async and sync modes.
+ */
+function invokeSubscription(
+  subscription: {
+    async: boolean;
+    callback: (event: RuntimeStateChangedEvent) => void;
+  },
+  event: RuntimeStateChangedEvent,
+): void {
+  try {
+    if (subscription.async) {
+      // Async callback - queue as microtask (line 311-312)
+      queueMicrotask(() => {
+        try {
+          subscription.callback(event);
+        } catch (error) {
+          // Error handling to prevent cascade failures (line 315)
+          debugLogger.error('Error in async runtime state callback:', error);
+        }
+      });
+    } else {
+      // Synchronous callback (line 313-314)
+      subscription.callback(event);
     }
+  } catch (error) {
+    // Error handling to prevent cascade failures (line 315)
+    debugLogger.error('Error in runtime state callback:', error);
   }
 }
 

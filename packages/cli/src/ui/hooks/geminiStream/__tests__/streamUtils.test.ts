@@ -572,12 +572,15 @@ describe('handleSubmissionError', () => {
 
 // ─── showCitations ────────────────────────────────────────────────────────────
 
+// Shared helper for creating mock Config objects in tests
+const makeTestConfig = (overrides?: Record<string, unknown>): Config =>
+  ({
+    getSettingsService: vi.fn(() => null),
+    ...overrides,
+  }) as unknown as Config;
+
 describe('showCitations', () => {
-  const makeConfig = (overrides?: Record<string, unknown>): Config =>
-    ({
-      getSettingsService: vi.fn(() => null),
-      ...overrides,
-    }) as unknown as Config;
+  const makeConfig = makeTestConfig;
 
   const makeSettings = (showCitationsValue?: boolean): LoadedSettings =>
     ({
@@ -651,11 +654,7 @@ describe('showCitations', () => {
 // ─── getCurrentProfileName ────────────────────────────────────────────────────
 
 describe('getCurrentProfileName', () => {
-  const makeConfig = (overrides?: Record<string, unknown>): Config =>
-    ({
-      getSettingsService: vi.fn(() => null),
-      ...overrides,
-    }) as unknown as Config;
+  const makeConfig = makeTestConfig;
 
   it('returns profile name from settingsService.getCurrentProfileName', () => {
     const mockSettingsService = {

@@ -93,6 +93,8 @@ async function main() {
       // Tree-sitter is only used for CLI shell parsing, not needed in VS Code extension
       'web-tree-sitter',
       'tree-sitter-bash',
+      // Prompt watching falls back to fs.watch when chokidar is unavailable.
+      'chokidar',
     ],
     logLevel: 'silent',
     banner: {

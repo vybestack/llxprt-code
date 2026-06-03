@@ -148,5 +148,6 @@ export function findMatchingTool(
     return toolLower.includes(nameLower) || nameLower.includes(toolLower);
   });
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: partialMatch is string | undefined, return null explicitly for clarity
   return partialMatch || null;
 }

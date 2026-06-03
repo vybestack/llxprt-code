@@ -207,7 +207,7 @@ export class UiTelemetryService extends EventEmitter {
   }
 
   private getOrCreateModelMetrics(modelName: string): ModelMetrics {
-    if (!this.#metrics.models[modelName]) {
+    if (!(modelName in this.#metrics.models)) {
       this.#metrics.models[modelName] = createInitialModelMetrics();
     }
     return this.#metrics.models[modelName];
@@ -249,7 +249,7 @@ export class UiTelemetryService extends EventEmitter {
       tools.totalFail++;
     }
 
-    if (!tools.byName[event.function_name]) {
+    if (!(event.function_name in tools.byName)) {
       tools.byName[event.function_name] = {
         count: 0,
         success: 0,
@@ -273,9 +273,13 @@ export class UiTelemetryService extends EventEmitter {
       toolStats.fail++;
     }
 
-    if (event.decision) {
-      tools.totalDecisions[event.decision]++;
-      toolStats.decisions[event.decision]++;
+    const decision = event.decision as unknown;
+    if (decision !== undefined && decision !== '') {
+      const toolDecision = event.decision;
+      if (toolDecision !== undefined) {
+        tools.totalDecisions[toolDecision]++;
+        toolStats.decisions[toolDecision]++;
+      }
     }
 
     // Aggregate line count data from metadata

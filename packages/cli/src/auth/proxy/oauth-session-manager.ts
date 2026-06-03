@@ -140,13 +140,12 @@ export class PKCESessionStore {
   private isUidPeerIdentity(
     peerIdentity: unknown,
   ): peerIdentity is { type: 'uid'; uid: number } {
+    if (typeof peerIdentity !== 'object' || peerIdentity === null) {
+      return false;
+    }
+    const p = peerIdentity as Record<string, unknown>;
     return (
-      typeof peerIdentity === 'object' &&
-      peerIdentity !== null &&
-      'type' in peerIdentity &&
-      'uid' in peerIdentity &&
-      (peerIdentity as { type?: unknown }).type === 'uid' &&
-      typeof (peerIdentity as { uid?: unknown }).uid === 'number'
+      'type' in p && 'uid' in p && p.type === 'uid' && typeof p.uid === 'number'
     );
   }
 }

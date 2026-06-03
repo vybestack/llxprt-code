@@ -141,8 +141,12 @@ describe('modifyWithEditor', () => {
       );
 
       // Check that temp files are deleted.
-      await expect(fsp.access(oldFilePath)).rejects.toThrow();
-      await expect(fsp.access(newFilePath)).rejects.toThrow();
+      await expect(fsp.access(oldFilePath)).rejects.toThrow(
+        /ENOENT|no such file/,
+      );
+      await expect(fsp.access(newFilePath)).rejects.toThrow(
+        /ENOENT|no such file/,
+      );
 
       expect(result).toStrictEqual({
         updatedParams: {
@@ -180,7 +184,7 @@ describe('modifyWithEditor', () => {
       const [oldFilePath] = mockOpenDiff.mock.calls[0];
       const diffDir = path.dirname(oldFilePath);
       // Temp directory should be cleaned up after modification
-      await expect(fsp.stat(diffDir)).rejects.toThrow();
+      await expect(fsp.stat(diffDir)).rejects.toThrow(/ENOENT|no such file/);
     });
   });
 
@@ -320,8 +324,12 @@ describe('modifyWithEditor', () => {
     const oldFilePath = writeSpy.mock.calls[0][0] as string;
     const newFilePath = writeSpy.mock.calls[1][0] as string;
 
-    await expect(fsp.access(oldFilePath)).rejects.toThrow();
-    await expect(fsp.access(newFilePath)).rejects.toThrow();
+    await expect(fsp.access(oldFilePath)).rejects.toThrow(
+      /ENOENT|no such file/,
+    );
+    await expect(fsp.access(newFilePath)).rejects.toThrow(
+      /ENOENT|no such file/,
+    );
 
     writeSpy.mockRestore();
   });

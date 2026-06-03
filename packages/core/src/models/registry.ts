@@ -72,7 +72,10 @@ export class ModelRegistry {
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    if (this.initPromise) return this.initPromise;
+    if (this.initPromise) {
+      await this.initPromise;
+      return;
+    }
 
     this.initPromise = (async () => {
       await this.loadModels();
@@ -218,7 +221,7 @@ export class ModelRegistry {
     }, REFRESH_INTERVAL_MS);
 
     // Don't prevent process exit
-    this.refreshTimer.unref?.();
+    this.refreshTimer.unref();
   }
 
   /**
@@ -283,7 +286,7 @@ export class ModelRegistry {
 
     if (query.maxPrice !== undefined) {
       results = results.filter(
-        (m) => m.pricing && m.pricing.input <= query.maxPrice!,
+        (m) => m.pricing !== undefined && m.pricing.input <= query.maxPrice!,
       );
     }
 
@@ -374,7 +377,7 @@ export class ModelRegistry {
    * Emit an event
    */
   private emit(event: ModelRegistryEvent): void {
-    const callbacks = this.listeners.get(event) || [];
+    const callbacks = this.listeners.get(event) ?? [];
     callbacks.forEach((cb) => cb());
   }
 }
@@ -386,6 +389,7 @@ let registryInstance: ModelRegistry | null = null;
  * Get the global ModelRegistry instance
  */
 export function getModelRegistry(): ModelRegistry {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional singleton initialization pattern
   if (!registryInstance) {
     registryInstance = new ModelRegistry();
   }

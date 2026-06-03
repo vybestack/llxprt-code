@@ -20,9 +20,12 @@ const runningInCI = process.env.CI === 'true';
 const realProviderOptIn = process.env.LLXPRT_RUN_REAL_PROVIDER_TESTS === 'true';
 
 describe('Multi-Provider Integration Tests', () => {
-  let apiKey: string | null = null;
-  let baseURL: string | undefined = undefined;
-  let skipTests = false;
+  const apiKey: string | null = process.env.OPENAI_API_KEY ?? null;
+  const baseURL: string | undefined = process.env.OPENAI_BASE_URL ?? undefined;
+  const skipTests =
+    (runningInCI && !realProviderOptIn) ||
+    !apiKey ||
+    Boolean(baseURL?.includes('openrouter'));
   let manager: ProviderManager;
   let settingsService: SettingsService;
   let runtimeConfig: Config;
@@ -32,13 +35,7 @@ describe('Multi-Provider Integration Tests', () => {
       console.log(
         '\nINFO: Skipping Multi-Provider Integration Tests in CI. Set LLXPRT_RUN_REAL_PROVIDER_TESTS=true to enable.',
       );
-      skipTests = true;
-      return;
     }
-
-    // Only load OpenAI API key from environment variable
-    apiKey = process.env.OPENAI_API_KEY || null;
-    baseURL = process.env.OPENAI_BASE_URL || undefined;
 
     if (!apiKey) {
       console.log(
@@ -47,18 +44,15 @@ describe('Multi-Provider Integration Tests', () => {
       console.log(
         '   To run these tests, set the OPENAI_API_KEY environment variable\n',
       );
-      skipTests = true;
     }
 
-    // Skip tests when using OpenRouter for now
-    if (baseURL?.includes('openrouter')) {
+    if (baseURL != null && baseURL.includes('openrouter') === true) {
       console.log(
         '\nWARNING:  Skipping Multi-Provider Integration Tests: OpenRouter detected',
       );
       console.log(
         '   These tests are currently not compatible with OpenRouter\n',
       );
-      skipTests = true;
     }
   });
 
@@ -95,7 +89,7 @@ describe('Multi-Provider Integration Tests', () => {
 
   const createOpenAIProvider = (): OpenAIProvider => {
     const provider = new OpenAIProvider(apiKey!, baseURL);
-    provider.setRuntimeSettingsService?.(settingsService);
+    provider.setRuntimeSettingsService(settingsService);
     provider.setConfig?.(runtimeConfig);
     return provider;
   };
@@ -104,8 +98,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should initialize and register OpenAI provider',
       () => {
-        if (!manager) return; // Guard for when test is skipped
-
         // Initially no providers
         expect(manager.listProviders()).toStrictEqual([]);
         expect(manager.hasActiveProvider()).toBe(false);
@@ -126,8 +118,6 @@ describe('Multi-Provider Integration Tests', () => {
     );
 
     it.skipIf(skipTests)('should switch between providers and Gemini', () => {
-      if (!manager) return; // Guard for when test is skipped
-
       // Register OpenAI
       const openaiProvider = createOpenAIProvider();
       manager.registerProvider(openaiProvider);
@@ -147,8 +137,6 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it.skipIf(skipTests)('should handle errors for invalid provider', () => {
-      if (!manager) return; // Guard for when test is skipped
-
       // Try to set non-existent provider
       expect(() => manager.setActiveProvider('invalid-provider')).toThrow(
         'Provider not found',
@@ -160,8 +148,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should list available models from OpenAI',
       async () => {
-        if (!manager) return; // Guard for when test is skipped
-
         const openaiProvider = createOpenAIProvider();
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
@@ -184,6 +170,7 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should switch between models within provider',
       async () => {
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (!apiKey || skipTests) return; // Guard for when test is skipped
         resetSettingsService();
         const runtime = initializeTestProviderRuntime({
@@ -205,7 +192,7 @@ describe('Multi-Provider Integration Tests', () => {
         });
 
         const openaiProvider = new OpenAIProvider(apiKey, baseURL);
-        openaiProvider.setRuntimeSettingsService?.(runtime.settingsService);
+        openaiProvider.setRuntimeSettingsService(runtime.settingsService);
         openaiProvider.setConfig?.(runtime.config);
 
         const localSettings = runtime.settingsService;
@@ -248,8 +235,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should generate chat completion with default model',
       async () => {
-        if (!manager || skipTests) return; // Guard for when test is skipped
-
         const openaiProvider = createOpenAIProvider();
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
@@ -278,9 +263,10 @@ describe('Multi-Provider Integration Tests', () => {
         }
 
         const fullResponse = chunks.join('');
-        const providerName = baseURL?.includes('openrouter')
-          ? 'OpenRouter'
-          : 'OpenAI';
+        const providerName =
+          baseURL != null && baseURL.includes('openrouter') === true
+            ? 'OpenRouter'
+            : 'OpenAI';
         console.log(`\n[OK] ${providerName} response: "${fullResponse}"`);
 
         expect(fullResponse.toLowerCase()).toContain(
@@ -292,8 +278,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should generate chat completion via options signature',
       async () => {
-        if (!manager || skipTests) return;
-
         const openaiProvider = createOpenAIProvider();
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
@@ -316,6 +300,7 @@ describe('Multi-Provider Integration Tests', () => {
           'model',
           openaiProvider.getDefaultModel(),
         );
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (baseURL) {
           settingsService.set('base-url', baseURL);
           settingsService.setProviderSetting('openai', 'base-url', baseURL);
@@ -342,6 +327,7 @@ describe('Multi-Provider Integration Tests', () => {
     );
 
     it.skipIf(skipTests)('should handle streaming correctly', async () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!apiKey || skipTests) return; // Guard for when test is skipped
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.streaming.${Math.random()
@@ -362,7 +348,7 @@ describe('Multi-Provider Integration Tests', () => {
       });
 
       const openaiProvider = new OpenAIProvider(apiKey, baseURL);
-      openaiProvider.setRuntimeSettingsService?.(runtime.settingsService);
+      openaiProvider.setRuntimeSettingsService(runtime.settingsService);
       openaiProvider.setConfig?.(runtime.config);
 
       const messages = [
@@ -405,6 +391,7 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it.skipIf(skipTests)('should work with a specific model', async () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!apiKey || skipTests) return; // Guard for when test is skipped
 
       resetSettingsService();
@@ -427,7 +414,7 @@ describe('Multi-Provider Integration Tests', () => {
       });
 
       const openaiProvider = new OpenAIProvider(apiKey, baseURL);
-      openaiProvider.setRuntimeSettingsService?.(runtime.settingsService);
+      openaiProvider.setRuntimeSettingsService(runtime.settingsService);
       openaiProvider.setConfig?.(runtime.config);
 
       const localSettings = runtime.settingsService;
@@ -471,6 +458,7 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should handle tool calls',
       async () => {
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (!apiKey || skipTests) return; // Guard for when test is skipped
         const runtime = initializeTestProviderRuntime({
           runtimeId: `multi-provider.integration.tool-calls.${Math.random()
@@ -491,7 +479,7 @@ describe('Multi-Provider Integration Tests', () => {
         });
 
         const openaiProvider = new OpenAIProvider(apiKey, baseURL);
-        openaiProvider.setRuntimeSettingsService?.(runtime.settingsService);
+        openaiProvider.setRuntimeSettingsService(runtime.settingsService);
         openaiProvider.setConfig?.(runtime.config);
 
         const messages = [
@@ -584,6 +572,7 @@ describe('Multi-Provider Integration Tests', () => {
 
   describe('Error Handling', () => {
     it.skipIf(skipTests)('should handle invalid model gracefully', async () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!apiKey || skipTests) return; // Guard for when test is skipped
       resetSettingsService();
       const runtime = initializeTestProviderRuntime({
@@ -605,7 +594,7 @@ describe('Multi-Provider Integration Tests', () => {
       });
 
       const openaiProvider = new OpenAIProvider(apiKey, baseURL);
-      openaiProvider.setRuntimeSettingsService?.(runtime.settingsService);
+      openaiProvider.setRuntimeSettingsService(runtime.settingsService);
       openaiProvider.setConfig?.(runtime.config);
 
       const localSettings = runtime.settingsService;

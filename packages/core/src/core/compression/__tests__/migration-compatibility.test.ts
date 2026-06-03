@@ -79,8 +79,12 @@ describe('Migration: No Breaking Changes to Strategy Interface', () => {
 
 describe('Migration: parseCompressionStrategyName compatibility', () => {
   it('rejects invalid names with UnknownStrategyError', () => {
-    expect(() => parseCompressionStrategyName('invalid')).toThrow();
-    expect(() => parseCompressionStrategyName('')).toThrow();
+    expect(() => parseCompressionStrategyName('invalid')).toThrow(
+      /Unknown compression strategy/,
+    );
+    expect(() => parseCompressionStrategyName('')).toThrow(
+      /Unknown compression strategy/,
+    );
   });
 
   it('accepts all COMPRESSION_STRATEGIES entries', () => {

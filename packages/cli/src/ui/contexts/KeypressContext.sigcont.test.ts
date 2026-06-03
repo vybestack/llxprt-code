@@ -11,6 +11,20 @@ import {
   SHOW_CURSOR,
 } from '../utils/terminalSequences.js';
 
+/**
+ * Shared handler that re-asserts terminal modes and triggers UI redraw.
+ * Used by both SIGCONT and Ctrl+Alt+R handlers.
+ */
+const reassertTerminalModes = (): void => {
+  process.stdout.write(ENABLE_BRACKETED_PASTE);
+  process.stdout.write(ENABLE_FOCUS_TRACKING);
+  process.stdout.write(SHOW_CURSOR);
+  // Re-enable mouse if it was enabled
+  process.stdout.write('\x1b[?1000h\x1b[?1002h\x1b[?1006h');
+  // Trigger UI redraw
+  process.stdout.emit('resize');
+};
+
 describe('SIGCONT handler behavior', () => {
   let mockStdoutWrite: ReturnType<typeof vi.fn>;
   let mockStdoutEmit: ReturnType<typeof vi.fn>;
@@ -32,17 +46,7 @@ describe('SIGCONT handler behavior', () => {
     // The actual handler is in KeypressContext, but we test the contract here
 
     // Simulate what the SIGCONT handler should do
-    const handleSigcont = () => {
-      process.stdout.write(ENABLE_BRACKETED_PASTE);
-      process.stdout.write(ENABLE_FOCUS_TRACKING);
-      process.stdout.write(SHOW_CURSOR);
-      // Should also re-enable mouse events if they were enabled
-      process.stdout.write('\x1b[?1000h\x1b[?1002h\x1b[?1006h');
-      // Trigger UI redraw
-      process.stdout.emit('resize');
-    };
-
-    handleSigcont();
+    reassertTerminalModes();
 
     expect(mockStdoutWrite).toHaveBeenCalledWith(ENABLE_BRACKETED_PASTE);
     expect(mockStdoutWrite).toHaveBeenCalledWith(ENABLE_FOCUS_TRACKING);
@@ -141,17 +145,7 @@ describe('Ctrl+Alt+R terminal repair hotkey', () => {
 
   it('Ctrl+Alt+R should re-assert terminal modes and trigger resize', () => {
     // Simulate the Ctrl+Alt+R handler behavior
-    const handleCtrlAltR = () => {
-      process.stdout.write(ENABLE_BRACKETED_PASTE);
-      process.stdout.write(ENABLE_FOCUS_TRACKING);
-      process.stdout.write(SHOW_CURSOR);
-      // Re-enable mouse if it was enabled
-      process.stdout.write('\x1b[?1000h\x1b[?1002h\x1b[?1006h');
-      // Trigger UI redraw
-      process.stdout.emit('resize');
-    };
-
-    handleCtrlAltR();
+    reassertTerminalModes();
 
     expect(mockStdoutWrite).toHaveBeenCalledWith(ENABLE_BRACKETED_PASTE);
     expect(mockStdoutWrite).toHaveBeenCalledWith(ENABLE_FOCUS_TRACKING);

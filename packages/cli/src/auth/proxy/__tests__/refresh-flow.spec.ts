@@ -84,7 +84,7 @@ class InMemoryTokenStore implements TokenStore {
     options?: { waitMs?: number; staleMs?: number; bucket?: string },
   ): Promise<boolean> {
     const k = `${this.key(provider, options?.bucket)}:lock`;
-    if (this.locks.get(k)) {
+    if (this.locks.get(k) === true) {
       return false;
     }
     this.locks.set(k, true);
@@ -101,7 +101,7 @@ class InMemoryTokenStore implements TokenStore {
     options?: { waitMs?: number; staleMs?: number; bucket?: string },
   ): Promise<boolean> {
     const k = `${this.key(provider, options?.bucket)}:auth-lock`;
-    if (this.locks.get(k)) {
+    if (this.locks.get(k) === true) {
       return false;
     }
     this.locks.set(k, true);
@@ -254,12 +254,12 @@ describe('refresh_token handler', () => {
 
   afterEach(async () => {
     try {
-      client?.close();
+      client.close();
     } catch {
       // client may not be initialized
     }
     try {
-      await server?.stop();
+      await server.stop();
     } catch {
       // server may not be started
     }

@@ -246,7 +246,7 @@ export class CompressionExecutionError extends CompressionStrategyError {
     this.name = 'CompressionExecutionError';
     this.isTransient =
       typeof profileOrOptions === 'object'
-        ? (profileOrOptions?.isTransient ?? false)
+        ? (profileOrOptions.isTransient ?? false)
         : false;
   }
 }

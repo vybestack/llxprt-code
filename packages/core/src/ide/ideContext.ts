@@ -95,7 +95,8 @@ export const CloseDiffResponseSchema = z
         return z.NEVER;
       }
       return validationResult.data;
-    } catch (_) {
+    } catch {
+      // JSON parsing failed - add validation error
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'Invalid JSON in text content',

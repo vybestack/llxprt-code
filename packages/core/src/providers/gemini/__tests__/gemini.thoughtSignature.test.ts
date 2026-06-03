@@ -64,37 +64,37 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
     // Outside active loop - unchanged
     expect(
       (newContents[1]?.parts?.[0] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBeUndefined();
 
     // Inside active loop, first model turn
     // First function call gets a signature
     expect(
       (newContents[3]?.parts?.[0] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBe(SYNTHETIC_THOUGHT_SIGNATURE);
     // Second function call does NOT get a signature
     expect(
       (newContents[3]?.parts?.[1] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBeUndefined();
 
     // User functionResponse part - unchanged (this is not a model turn)
     expect(
       (newContents[4]?.parts?.[0] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBeUndefined();
 
     // Inside active loop, second model turn
     // First function call already has a signature, so it's preserved
     expect(
       (newContents[5]?.parts?.[0] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBe('existing-sig');
     // Second function call does NOT get a signature
     expect(
       (newContents[5]?.parts?.[1] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBeUndefined();
   });
 
@@ -113,7 +113,7 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
     expect(newContents).toStrictEqual(history);
     expect(
       (newContents[1]?.parts?.[0] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBeUndefined();
   });
 
@@ -145,7 +145,7 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
     const newContents = ensureActiveLoopHasThoughtSignatures(history);
     expect(
       (newContents[1]?.parts?.[0] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBe('real-signature-from-api');
   });
 
@@ -167,7 +167,7 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
     // Function call in active loop gets signature
     expect(
       (newContents[3]?.parts?.[0] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBe(SYNTHETIC_THOUGHT_SIGNATURE);
   });
 
@@ -193,13 +193,13 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
     // First functionCall gets signature
     expect(
       (newContents[1]?.parts?.[1] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBe(SYNTHETIC_THOUGHT_SIGNATURE);
 
     // Second functionCall does NOT get signature
     expect(
       (newContents[1]?.parts?.[2] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBeUndefined();
   });
 
@@ -251,13 +251,13 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
     // First tool call gets signature
     expect(
       (newContents[1]?.parts?.[0] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBe(SYNTHETIC_THOUGHT_SIGNATURE);
 
     // Second tool call gets signature
     expect(
       (newContents[3]?.parts?.[0] as Part & { thoughtSignature?: string })
-        ?.thoughtSignature,
+        .thoughtSignature,
     ).toBe(SYNTHETIC_THOUGHT_SIGNATURE);
 
     // Final text response - unchanged

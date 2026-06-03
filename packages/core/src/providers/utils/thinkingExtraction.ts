@@ -42,7 +42,7 @@ export function extractThinkTagsAsBlock(
   const thinkMatches = text.matchAll(/<think>([\s\S]*?)<\/think>/gi);
   for (const match of thinkMatches) {
     const content = match[1];
-    if (content?.trim()) {
+    if (content.trim()) {
       thinkingParts.push(content.trim());
     }
   }
@@ -50,7 +50,7 @@ export function extractThinkTagsAsBlock(
   const thinkingMatches = text.matchAll(/<thinking>([\s\S]*?)<\/thinking>/gi);
   for (const match of thinkingMatches) {
     const content = match[1];
-    if (content?.trim()) {
+    if (content.trim()) {
       thinkingParts.push(content.trim());
     }
   }
@@ -58,7 +58,7 @@ export function extractThinkTagsAsBlock(
   const analysisMatches = text.matchAll(/<analysis>([\s\S]*?)<\/analysis>/gi);
   for (const match of analysisMatches) {
     const content = match[1];
-    if (content?.trim()) {
+    if (content.trim()) {
       thinkingParts.push(content.trim());
     }
   }

@@ -75,6 +75,29 @@ import {
   createDataMessage,
 } from './task-support.js';
 
+type SchedulerConfig = Config & {
+  getOrCreateScheduler(
+    sessionId: string,
+    callbacks: {
+      outputUpdateHandler: (toolCallId: string, chunk: string) => void;
+      onAllToolCallsComplete: (
+        completedToolCalls: CompletedToolCall[],
+      ) => Promise<void>;
+      onToolCallsUpdate: (toolCalls: ToolCall[]) => void;
+      getPreferredEditor: () => typeof DEFAULT_GUI_EDITOR;
+      onEditorClose: () => void;
+    },
+    options?: Record<string, unknown>,
+    dependencies?: { messageBus?: MessageBus },
+  ): Promise<CoreToolScheduler>;
+};
+
+function getEventTraceId(event: ServerGeminiStreamEvent): string | undefined {
+  return 'traceId' in event && typeof event.traceId === 'string'
+    ? event.traceId
+    : undefined;
+}
+
 export class Task {
   id: string;
   contextId: string;
@@ -122,7 +145,7 @@ export class Task {
     const runtimeState = createAgentRuntimeState({
       runtimeId: `${this.contextId}-task-runtime`,
       provider: this.config.getProvider() ?? 'gemini',
-      // getModel() returns string (non-null), so no nullish coalescing needed
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty-string model should fall through to contentConfig/default (matches PR #1901 convention; Config.getModel() returns string)
       model: this.config.getModel() || contentConfig?.model || 'gemini-pro',
       proxyUrl: this.config.getProxy(),
       sessionId: this.config.getSessionId(),
@@ -153,7 +176,7 @@ export class Task {
   // state managed within the @gemini-cli/core module.
   async getMetadata(): Promise<TaskMetadata> {
     const toolRegistry = this.config.getToolRegistry();
-    const mcpServers = this.config.getMcpServers() || {};
+    const mcpServers = this.config.getMcpServers() ?? {};
     const serverStatuses = getAllMCPServerStatuses();
     const servers = Object.keys(mcpServers).map((serverName) => ({
       name: serverName,
@@ -176,8 +199,8 @@ export class Task {
       contextId: this.contextId,
       taskState: this.taskState,
       model:
-        this.modelInfo?.model ||
-        this.config.getContentGeneratorConfig()?.model ||
+        this.modelInfo?.model ??
+        this.config.getContentGeneratorConfig()?.model ??
         'unknown',
       mcpServers: servers,
       availableTools,
@@ -259,7 +282,7 @@ export class Task {
       traceId?: string;
     } = {
       coderAgent: coderAgentMessage,
-      model: this.modelInfo?.model || this.config.getModel(),
+      model: this.modelInfo?.model ?? this.config.getModel(),
       userTier: this.geminiClient.getUserTier(),
     };
 
@@ -278,6 +301,7 @@ export class Task {
       status: {
         state: stateToReport,
         message, // Shorthand property
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string timestamp is invalid, use current time
         timestamp: timestamp || new Date().toISOString(),
       },
       final,
@@ -372,95 +396,99 @@ export class Task {
       toolCalls.map((tc) => `${tc.request.callId} (${tc.status})`),
     );
 
-    // Update state and send continuous, non-final updates
-    toolCalls.forEach((tc) => {
-      const previousStatus = this.pendingToolCalls.get(tc.request.callId);
-      const hasChanged = previousStatus !== tc.status;
+    toolCalls.forEach((tc) => this.updateToolCallStatus(tc));
 
-      // Resolve tool call if it has reached a terminal state
-      if (['success', 'error', 'cancelled'].includes(tc.status)) {
-        this._resolveToolCall(tc.request.callId);
-      } else {
-        // This will update the map
-        this._registerToolCall(tc.request.callId, tc.status);
-      }
-
-      // When status is 'awaiting_approval', tc is narrowed to WaitingToolCall which always has confirmationDetails.
-      if (tc.status === 'awaiting_approval') {
-        this.pendingToolConfirmationDetails.set(
-          tc.request.callId,
-          tc.confirmationDetails,
-        );
-      }
-
-      // Only send an update if the status has actually changed.
-      if (hasChanged) {
-        const message = createToolStatusMessage(tc, this.id, this.contextId);
-        const coderAgentMessage: CoderAgentMessage =
-          tc.status === 'awaiting_approval'
-            ? { kind: CoderAgentEvent.ToolCallConfirmationEvent }
-            : { kind: CoderAgentEvent.ToolCallUpdateEvent };
-
-        const event = this._createStatusUpdateEvent(
-          this.taskState,
-          coderAgentMessage,
-          message,
-          false, // Always false for these continuous updates
-        );
-        this.eventBus?.publish(event);
-      }
-    });
-
-    if (
-      this.autoExecute ||
-      this.config.getApprovalMode() === ApprovalMode.YOLO
-    ) {
-      logger.info(
-        '[Task] ' +
-          (this.autoExecute ? '' : 'YOLO mode enabled. ') +
-          'Auto-approving all tool calls.',
-      );
-      toolCalls.forEach((tc: ToolCall) => {
-        if (
-          tc.status === 'awaiting_approval' &&
-          isInteractiveConfirmationDetails(tc.confirmationDetails)
-        ) {
-          void tc.confirmationDetails.onConfirm(
-            ToolConfirmationOutcome.ProceedOnce,
-          );
-          this.pendingToolConfirmationDetails.delete(tc.request.callId);
-        }
-      });
+    if (this.shouldAutoApproveToolCalls()) {
+      this.autoApproveToolCalls(toolCalls);
       return;
     }
 
+    this.publishInputRequiredIfStable();
+  }
+
+  private updateToolCallStatus(tc: ToolCall): void {
+    const previousStatus = this.pendingToolCalls.get(tc.request.callId);
+    const hasChanged = previousStatus !== tc.status;
+
+    if (['success', 'error', 'cancelled'].includes(tc.status)) {
+      this._resolveToolCall(tc.request.callId);
+    } else {
+      this._registerToolCall(tc.request.callId, tc.status);
+    }
+
+    if (tc.status === 'awaiting_approval') {
+      this.pendingToolConfirmationDetails.set(
+        tc.request.callId,
+        tc.confirmationDetails,
+      );
+    }
+
+    if (hasChanged) {
+      this.publishToolCallUpdate(tc);
+    }
+  }
+
+  private publishToolCallUpdate(tc: ToolCall): void {
+    const message = createToolStatusMessage(tc, this.id, this.contextId);
+    const coderAgentMessage: CoderAgentMessage =
+      tc.status === 'awaiting_approval'
+        ? { kind: CoderAgentEvent.ToolCallConfirmationEvent }
+        : { kind: CoderAgentEvent.ToolCallUpdateEvent };
+
+    const event = this._createStatusUpdateEvent(
+      this.taskState,
+      coderAgentMessage,
+      message,
+      false,
+    );
+    this.eventBus?.publish(event);
+  }
+
+  private shouldAutoApproveToolCalls(): boolean {
+    return (
+      this.autoExecute || this.config.getApprovalMode() === ApprovalMode.YOLO
+    );
+  }
+
+  private autoApproveToolCalls(toolCalls: ToolCall[]): void {
+    logger.info(
+      '[Task] ' +
+        (this.autoExecute ? '' : 'YOLO mode enabled. ') +
+        'Auto-approving all tool calls.',
+    );
+    toolCalls.forEach((tc: ToolCall) => {
+      if (
+        tc.status === 'awaiting_approval' &&
+        isInteractiveConfirmationDetails(tc.confirmationDetails)
+      ) {
+        void tc.confirmationDetails.onConfirm(
+          ToolConfirmationOutcome.ProceedOnce,
+        );
+        this.pendingToolConfirmationDetails.delete(tc.request.callId);
+      }
+    });
+  }
+
+  private publishInputRequiredIfStable(): void {
     const allPendingStatuses = Array.from(this.pendingToolCalls.values());
     const isAwaitingApproval = allPendingStatuses.some(
       (status) => status === 'awaiting_approval',
     );
-    const allPendingAreStable = allPendingStatuses.every(
-      (status) =>
-        status === 'awaiting_approval' ||
-        status === 'success' ||
-        status === 'error' ||
-        status === 'cancelled',
+    const allPendingAreStable = allPendingStatuses.every((status) =>
+      ['awaiting_approval', 'success', 'error', 'cancelled'].includes(status),
     );
 
-    // 1. Are any pending tool calls awaiting_approval
-    // 2. Are all pending tool calls in a stable state (i.e. not in validing or executing)
-    // 3. After an inline edit, the edited tool call will send awaiting_approval THEN scheduled. We wait for the next update in this case.
     if (
       isAwaitingApproval &&
       allPendingAreStable &&
       !this.skipFinalTrueAfterInlineEdit.value
     ) {
-      // We don't need to send another message, just a final status update.
       this.setTaskStateAndPublishUpdate(
         'input-required',
         { kind: CoderAgentEvent.StateChangeEvent },
         undefined,
         undefined,
-        /*final*/ true,
+        true,
       );
     }
   }
@@ -470,24 +498,7 @@ export class Task {
     if (!sessionId) {
       throw new Error('Scheduler sessionId is required');
     }
-    return (
-      this.config as Config & {
-        getOrCreateScheduler(
-          sessionId: string,
-          callbacks: {
-            outputUpdateHandler: (toolCallId: string, chunk: string) => void;
-            onAllToolCallsComplete: (
-              completedToolCalls: CompletedToolCall[],
-            ) => Promise<void>;
-            onToolCallsUpdate: (toolCalls: ToolCall[]) => void;
-            getPreferredEditor: () => typeof DEFAULT_GUI_EDITOR;
-            onEditorClose: () => void;
-          },
-          options?: Record<string, unknown>,
-          dependencies?: { messageBus?: MessageBus },
-        ): Promise<CoreToolScheduler>;
-      }
-    ).getOrCreateScheduler(
+    return (this.config as SchedulerConfig).getOrCreateScheduler(
       sessionId,
       {
         outputUpdateHandler: this._schedulerOutputUpdate.bind(this),
@@ -614,13 +625,17 @@ export class Task {
       return;
     }
 
+    const traceId = getEventTraceId(event);
+    this.handleStateChangingAgentEvent(event, traceId);
+  }
+
+  private handleStateChangingAgentEvent(
+    event: ServerGeminiStreamEvent,
+    traceId: string | undefined,
+  ): void {
     const stateChange: StateChange = {
       kind: CoderAgentEvent.StateChangeEvent,
     };
-    const traceId =
-      'traceId' in event && typeof event.traceId === 'string'
-        ? event.traceId
-        : undefined;
 
     switch (event.type) {
       case GeminiEventType.Content:
@@ -628,39 +643,15 @@ export class Task {
         this._sendTextContent(event.value, traceId);
         break;
       case GeminiEventType.ToolCallConfirmation:
-        // This is when LLM requests confirmation, not when user provides it.
-        logger.info(
-          '[Task] Received tool call confirmation request from LLM:',
-          event.value.request.callId,
-        );
-        this.pendingToolConfirmationDetails.set(
-          event.value.request.callId,
-          event.value.details,
-        );
-        // This will be handled by the scheduler and _schedulerToolCallsUpdate will set InputRequired if needed.
-        // No direct state change here, scheduler drives it.
+        this.handleToolCallConfirmationEvent(event);
         break;
       case GeminiEventType.UserCancelled:
-        handleUserCancelled(
-          {
-            taskState: this.taskState,
-            cancelPendingTools: this.cancelPendingTools.bind(this),
-            setTaskStateAndPublishUpdate:
-              this.setTaskStateAndPublishUpdate.bind(this),
-          },
-          stateChange,
-          traceId,
-        );
+        handleUserCancelled(this.createStreamContext(), stateChange, traceId);
         break;
       case GeminiEventType.StreamIdleTimeout:
         handleStreamIdleTimeout(
           event,
-          {
-            taskState: this.taskState,
-            cancelPendingTools: this.cancelPendingTools.bind(this),
-            setTaskStateAndPublishUpdate:
-              this.setTaskStateAndPublishUpdate.bind(this),
-          },
+          this.createStreamContext(),
           stateChange,
           traceId,
         );
@@ -674,39 +665,44 @@ export class Task {
         this.modelInfo = event.value;
         break;
       case GeminiEventType.InvalidStream:
-        handleInvalidStream(
-          {
-            taskState: this.taskState,
-            cancelPendingTools: this.cancelPendingTools.bind(this),
-            setTaskStateAndPublishUpdate:
-              this.setTaskStateAndPublishUpdate.bind(this),
-          },
-          stateChange,
-          traceId,
-        );
+        handleInvalidStream(this.createStreamContext(), stateChange, traceId);
         break;
       case GeminiEventType.Error:
         handleStreamError(
           event,
-          {
-            taskState: this.taskState,
-            cancelPendingTools: this.cancelPendingTools.bind(this),
-            setTaskStateAndPublishUpdate:
-              this.setTaskStateAndPublishUpdate.bind(this),
-          },
+          this.createStreamContext(),
           stateChange,
           traceId,
         );
         break;
-      default: {
-        // Exhaustiveness check: after early-return for informational events,
-        // all remaining cases are state-changing and should be handled above.
-        const _exhaustiveCheck: never = event;
-        throw new Error(
-          `Unknown event type: ${JSON.stringify(_exhaustiveCheck)}`,
-        );
-      }
+      default:
+        throw new Error(`Unknown event type: ${JSON.stringify(event)}`);
     }
+  }
+
+  private createStreamContext() {
+    return {
+      taskState: this.taskState,
+      cancelPendingTools: this.cancelPendingTools.bind(this),
+      setTaskStateAndPublishUpdate:
+        this.setTaskStateAndPublishUpdate.bind(this),
+    };
+  }
+
+  private handleToolCallConfirmationEvent(
+    event: Extract<
+      ServerGeminiStreamEvent,
+      { type: typeof GeminiEventType.ToolCallConfirmation }
+    >,
+  ): void {
+    logger.info(
+      '[Task] Received tool call confirmation request from LLM:',
+      event.value.request.callId,
+    );
+    this.pendingToolConfirmationDetails.set(
+      event.value.request.callId,
+      event.value.details,
+    );
   }
 
   getAndClearCompletedTools(): CompletedToolCall[] {

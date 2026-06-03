@@ -65,9 +65,10 @@ export async function handleList(showAll = false) {
   debugLogger.log('');
 
   for (const skill of skills) {
-    const status = skill.disabled
-      ? chalk.red('[Disabled]')
-      : chalk.green('[Enabled]');
+    const status =
+      skill.disabled === true
+        ? chalk.red('[Disabled]')
+        : chalk.green('[Enabled]');
 
     // Show source indicator for non-user/project skills
     let sourceLabel = '';

@@ -99,7 +99,7 @@ describe('CodexDeviceFlow - PKCE Verifier State Management', () => {
 
       await expect(
         deviceFlow.exchangeCodeForToken('invalid_code', redirectUri, state),
-      ).rejects.toThrow();
+      ).rejects.toThrow(Error);
     });
 
     it('should throw error if no verifier found for state', async () => {

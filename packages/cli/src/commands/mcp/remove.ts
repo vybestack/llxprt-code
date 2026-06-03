@@ -22,9 +22,9 @@ async function removeMcpServer(
   const settings = loadSettings();
 
   const existingSettings = settings.forScope(settingsScope).settings;
-  const mcpServers = existingSettings.mcpServers || {};
+  const mcpServers = existingSettings.mcpServers ?? {};
 
-  if (!mcpServers[name]) {
+  if (!Object.hasOwn(mcpServers, name)) {
     debugLogger.log(`Server "${name}" not found in ${scope} settings.`);
     return;
   }

@@ -147,7 +147,7 @@ describe('RestoreCommand', () => {
 
   it('should have ListCheckpointsCommand as a subcommand', () => {
     const command = new RestoreCommand();
-    expect(command.subCommands?.map((c) => c.name)).toContain('restore list');
+    expect(command.subCommands.map((c) => c.name)).toContain('restore list');
   });
 
   it('should return error when no args provided', async () => {

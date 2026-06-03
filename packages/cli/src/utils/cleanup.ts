@@ -13,7 +13,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 type FileOutputWithOptionalDisposeInstance = typeof FileOutput & {
-  disposeInstance?: () => Promise<void>;
+  disposeInstance?: unknown;
 };
 
 const cleanupFunctions: Array<(() => void) | (() => Promise<void>)> = [];
@@ -36,7 +36,7 @@ export async function runExitCleanup() {
   // Tear down any active PTYs first to release FDs/sockets promptly
   try {
     ShellExecutionService.destroyAllPtys();
-  } catch (_) {
+  } catch {
     // Ignore errors during cleanup.
   }
 
@@ -44,7 +44,7 @@ export async function runExitCleanup() {
   for (const fn of syncCleanupFunctions) {
     try {
       fn();
-    } catch (_) {
+    } catch {
       // Ignore errors during cleanup.
     }
   }
@@ -53,7 +53,7 @@ export async function runExitCleanup() {
   for (const fn of cleanupFunctions) {
     try {
       await fn();
-    } catch (_) {
+    } catch {
       // Ignore errors during cleanup.
     }
   }
@@ -63,13 +63,13 @@ export async function runExitCleanup() {
     const disposeInstance = (
       FileOutput as FileOutputWithOptionalDisposeInstance
     ).disposeInstance;
-    if (disposeInstance) {
+    if (typeof disposeInstance === 'function') {
       await disposeInstance.call(FileOutput);
     } else {
       const instance = FileOutput.getInstance();
       await instance.dispose();
     }
-  } catch (_) {
+  } catch {
     // Ignore errors during cleanup.
   }
 }

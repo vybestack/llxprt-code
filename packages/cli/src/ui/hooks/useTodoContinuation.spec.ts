@@ -300,6 +300,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       // Then: Should use YOLO-specific prompt
       expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         expect.stringMatching(/(continue|proceed).*without.*confirmation/i),
         { ephemeral: true },
       );
@@ -385,7 +386,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         ),
       );
 
-      // When: Todo pause is requested
+      // When: Task pause is requested
       const pauseResult = result.current.handleTodoPause(
         'User requested pause',
       );
@@ -464,7 +465,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
   describe('Edge Cases', () => {
     it('@requirement REQ-005.1 should handle multiple rapid completions', () => {
-      // Given: Continuation enabled with active todo
+      // Given: Continuation enabled with active task
       mockTodoContext.todos = [createTodo('1', 'Active task', 'in_progress')];
       mockConfig.getEphemeralSettings.mockReturnValue({
         'todo-continuation': true,
@@ -596,8 +597,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
   });
 
   describe('Configuration Integration', () => {
-    it('@requirement REQ-006.1 should respect default settings when todo-continuation is undefined', () => {
-      // Given: Settings don't specify todo-continuation
+    it('@requirement REQ-006.1 should respect default settings when task-continuation is undefined', () => {
+      // Given: Settings don't specify task-continuation
       mockTodoContext.todos = [createTodo('1', 'Active task', 'in_progress')];
       mockConfig.getEphemeralSettings.mockReturnValue({});
 

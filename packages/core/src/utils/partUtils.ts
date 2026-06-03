@@ -18,7 +18,15 @@ export function partToString(
   value: PartListUnion,
   options?: { verbose?: boolean },
 ): string {
-  if (!value) {
+  if (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    (value as unknown) === undefined ||
+    (value as unknown) === null ||
+    (value as unknown) === false ||
+    (value as unknown) === 0 ||
+    (typeof (value as unknown) === 'number' &&
+      Number.isNaN(value as unknown as number))
+  ) {
     return '';
   }
   if (typeof value === 'string') {
@@ -31,12 +39,12 @@ export function partToString(
   // Cast to Part, assuming it might contain project-specific fields
   const part = value as Part & {
     videoMetadata?: unknown;
-    thought?: string;
+    thought?: unknown;
     codeExecutionResult?: unknown;
     executableCode?: unknown;
   };
 
-  if (options?.verbose) {
+  if (options?.verbose === true) {
     if (part.videoMetadata !== undefined) {
       return `[Video Metadata]`;
     }

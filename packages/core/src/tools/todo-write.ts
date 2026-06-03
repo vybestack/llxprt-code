@@ -22,84 +22,85 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
   static readonly Name = 'todo_write';
   private reminderService = new TodoReminderService();
 
+  private static readonly SCHEMA = {
+    type: Type.OBJECT,
+    properties: {
+      todos: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            id: {
+              type: Type.STRING,
+              description: 'Unique identifier for the todo item',
+            },
+            content: {
+              type: Type.STRING,
+              description: 'Description of the todo item',
+              minLength: 1,
+            },
+            status: {
+              type: Type.STRING,
+              enum: ['pending', 'in_progress', 'completed'],
+              description: 'Current status of the todo item',
+            },
+            subtasks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: {
+                    type: Type.STRING,
+                    description: 'Unique identifier for the subtask',
+                  },
+                  content: {
+                    type: Type.STRING,
+                    description: 'Description of the subtask',
+                    minLength: 1,
+                  },
+                  toolCalls: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: {
+                          type: Type.STRING,
+                          description: 'Unique identifier for the tool call',
+                        },
+                        name: {
+                          type: Type.STRING,
+                          description: 'Name of the tool being called',
+                        },
+                        parameters: {
+                          type: Type.OBJECT,
+                          description: 'Parameters for the tool call',
+                        },
+                      },
+                      required: ['id', 'name', 'parameters'],
+                    },
+                    description: 'Tool calls associated with the subtask',
+                  },
+                },
+                required: ['id', 'content'],
+              },
+              description: 'Subtasks associated with this todo',
+            },
+          },
+          required: ['id', 'content', 'status'],
+        },
+        description: 'The updated todo list',
+      },
+    },
+    required: ['todos'],
+  } as const;
+
   constructor() {
     super(
       TodoWrite.Name,
       'TodoWrite',
       'Create and manage a structured task list for the current coding session. Updates the entire todo list.',
       Kind.Think,
-      {
-        type: Type.OBJECT,
-        properties: {
-          todos: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: {
-                  type: Type.STRING,
-                  description: 'Unique identifier for the todo item',
-                },
-                content: {
-                  type: Type.STRING,
-                  description: 'Description of the todo item',
-                  minLength: 1,
-                },
-                status: {
-                  type: Type.STRING,
-                  enum: ['pending', 'in_progress', 'completed'],
-                  description: 'Current status of the todo item',
-                },
-                subtasks: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      id: {
-                        type: Type.STRING,
-                        description: 'Unique identifier for the subtask',
-                      },
-                      content: {
-                        type: Type.STRING,
-                        description: 'Description of the subtask',
-                        minLength: 1,
-                      },
-                      toolCalls: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            id: {
-                              type: Type.STRING,
-                              description:
-                                'Unique identifier for the tool call',
-                            },
-                            name: {
-                              type: Type.STRING,
-                              description: 'Name of the tool being called',
-                            },
-                            parameters: {
-                              type: Type.OBJECT,
-                              description: 'Parameters for the tool call',
-                            },
-                          },
-                          required: ['id', 'name', 'parameters'],
-                        },
-                        description: 'Tool calls associated with the subtask',
-                      },
-                    },
-                    required: ['id', 'content'],
-                  },
-                  description: 'Subtasks associated with this todo',
-                },
-              },
-              required: ['id', 'content', 'status'],
-            },
-            description: 'The updated todo list',
-          },
-        },
-        required: ['todos'],
-      },
+      TodoWrite.SCHEMA,
       true, // isOutputMarkdown
       false, // canUpdateOutput
     );
@@ -107,6 +108,30 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
 
   override getDescription(params: TodoWriteParams): string {
     return `Update todo list with ${params.todos.length} items`;
+  }
+
+  // Emit an update event and track the active in-progress item.
+  private trackInteractiveUpdate(
+    todos: Todo[],
+    sessionId: string,
+    agentId: string | undefined,
+    rawTodos: Todo[],
+  ): void {
+    const scopedAgentId = agentId ?? DEFAULT_AGENT_ID;
+    const inProgressTodo = todos.find((todo) => todo.status === 'in_progress');
+    const contextTracker = TodoContextTracker.forAgent(
+      sessionId,
+      scopedAgentId,
+    );
+    contextTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
+
+    const event: TodoUpdateEvent = {
+      sessionId,
+      agentId: scopedAgentId,
+      todos: rawTodos,
+      timestamp: new Date(),
+    };
+    todoEvents.emitTodoUpdated(event);
   }
 
   async execute(
@@ -127,7 +152,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     const todos = result.data;
 
     // Get session and agent IDs from context
-    const sessionId = this.context?.sessionId || 'default';
+    const sessionId = this.context?.sessionId ?? 'default';
     const agentId = this.context?.agentId;
 
     const store = new TodoStore(sessionId, agentId);
@@ -150,28 +175,9 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
       reminder = this.reminderService.getReminderForStateChange(stateChange);
     }
 
-    // Determine if we're in interactive mode
-    const isInteractive = this.context?.interactiveMode || false;
-
-    // Set active todo ID if there's an in_progress todo
-    if (isInteractive) {
-      const scopedAgentId = agentId ?? DEFAULT_AGENT_ID;
-      const inProgressTodo = todos.find(
-        (todo) => todo.status === 'in_progress',
-      );
-      const contextTracker = TodoContextTracker.forAgent(
-        sessionId,
-        scopedAgentId,
-      );
-      contextTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
-
-      const event: TodoUpdateEvent = {
-        sessionId,
-        agentId: scopedAgentId,
-        todos: params.todos,
-        timestamp: new Date(),
-      };
-      todoEvents.emitTodoUpdated(event);
+    // Set active task ID and emit event if in interactive mode
+    if (this.context?.interactiveMode === true) {
+      this.trackInteractiveUpdate(todos, sessionId, agentId, params.todos);
     }
 
     const formattedOutput = formatTodoListForDisplay(todos);
@@ -197,16 +203,21 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
   private normalizeTodos(rawTodos: TodoWriteParams['todos']): Todo[] {
     const normalized = rawTodos.map((todo, index) => {
       const normalizedId =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
         todo?.id !== undefined &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
         todo?.id !== null &&
         `${todo.id}`.trim() !== ''
           ? String(todo.id)
           : String(index + 1);
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
       const normalizedSubtasks = Array.isArray(todo?.subtasks)
         ? todo.subtasks.map((subtask, subIndex) => {
             const subtaskId =
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
               subtask?.id !== undefined &&
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
               subtask?.id !== null &&
               `${subtask.id}`.trim() !== ''
                 ? String(subtask.id)
@@ -216,7 +227,8 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
               id: subtaskId,
             };
           })
-        : todo?.subtasks;
+        : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
+          todo?.subtasks;
 
       return {
         ...todo,

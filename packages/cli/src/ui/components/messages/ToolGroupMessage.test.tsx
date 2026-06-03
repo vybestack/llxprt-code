@@ -70,9 +70,9 @@ vi.mock('./ToolConfirmationMessage.js', () => ({
     confirmationDetails: ToolCallConfirmationDetails;
   }) {
     const displayText =
-      confirmationDetails?.type === 'info'
+      confirmationDetails.type === 'info'
         ? (confirmationDetails as { prompt: string }).prompt
-        : confirmationDetails?.title || 'confirm';
+        : confirmationDetails.title || 'confirm';
     return (
       <Text color={Colors.Foreground}>MockConfirmation: {displayText}</Text>
     );

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import path from 'path';
 import * as Diff from 'diff';
 import { makeRelative, shortenPath } from '../utils/paths.js';
@@ -166,42 +168,12 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
   }
 
   async execute(): Promise<ToolResult> {
-    const fileService = this.config.getFileSystemService();
+    const state = await this.readFileState();
+    if (!state.ok) return state.result;
 
-    let content: string;
-    let fileExists = true;
-    try {
-      content = await fileService.readTextFile(this.params.absolute_path);
-    } catch (error) {
-      if (isNodeError(error) && error.code === 'ENOENT') {
-        if (this.params.line_number !== 1) {
-          return {
-            llmContent: `Cannot insert at line ${this.params.line_number}: file does not exist. For new files, you can only insert at line_number: 1`,
-            returnDisplay: `Cannot insert at line ${this.params.line_number}: file does not exist`,
-            error: {
-              message: `File does not exist, can only insert at line 1`,
-              type: ToolErrorType.INVALID_TOOL_PARAMS,
-            },
-          };
-        }
-        content = '';
-        fileExists = false;
-      } else {
-        return {
-          llmContent: `Error reading file: ${error instanceof Error ? error.message : String(error)}`,
-          returnDisplay: `Error reading file: ${error instanceof Error ? error.message : String(error)}`,
-          error: {
-            message: error instanceof Error ? error.message : String(error),
-            type: ToolErrorType.FILE_NOT_FOUND,
-          },
-        };
-      }
-    }
-
-    const lines = content.split('\n');
-
+    const lines = state.content.split('\n');
     const totalLines = lines.length;
-    if (fileExists && this.params.line_number > totalLines + 1) {
+    if (state.fileExists && this.params.line_number > totalLines + 1) {
       return {
         llmContent: `Cannot insert at line ${this.params.line_number}: exceeds file length (${totalLines}). Use line_number <= ${totalLines + 1} to append.`,
         returnDisplay: `Cannot insert at line ${this.params.line_number}: exceeds file length (${totalLines})`,
@@ -213,13 +185,62 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
     }
 
     const insertIndex = this.params.line_number - 1;
-
     const newLines = this.params.content.split('\n');
-
     lines.splice(insertIndex, 0, ...newLines);
-
     const newContent = lines.join('\n');
 
+    return this.buildWriteResult(state.fileExists, newContent, newLines);
+  }
+
+  private async readFileState(): Promise<
+    | { ok: true; content: string; fileExists: boolean }
+    | { ok: false; result: ToolResult }
+  > {
+    const fileService = this.config.getFileSystemService();
+    let content: string;
+    let fileExists = true;
+    try {
+      content = await fileService.readTextFile(this.params.absolute_path);
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
+        if (this.params.line_number !== 1) {
+          return {
+            ok: false,
+            result: {
+              llmContent: `Cannot insert at line ${this.params.line_number}: file does not exist. For new files, you can only insert at line_number: 1`,
+              returnDisplay: `Cannot insert at line ${this.params.line_number}: file does not exist`,
+              error: {
+                message: `File does not exist, can only insert at line 1`,
+                type: ToolErrorType.INVALID_TOOL_PARAMS,
+              },
+            },
+          };
+        }
+        content = '';
+        fileExists = false;
+      } else {
+        return {
+          ok: false,
+          result: {
+            llmContent: `Error reading file: ${error instanceof Error ? error.message : String(error)}`,
+            returnDisplay: `Error reading file: ${error instanceof Error ? error.message : String(error)}`,
+            error: {
+              message: error instanceof Error ? error.message : String(error),
+              type: ToolErrorType.FILE_NOT_FOUND,
+            },
+          },
+        };
+      }
+    }
+    return { ok: true, content, fileExists };
+  }
+
+  private async buildWriteResult(
+    fileExists: boolean,
+    newContent: string,
+    newLines: string[],
+  ): Promise<ToolResult> {
+    const fileService = this.config.getFileSystemService();
     try {
       await fileService.writeTextFile(this.params.absolute_path, newContent);
 
@@ -250,7 +271,7 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
         if (diagBlock) {
           llmSuccessMessageParts.push(diagBlock);
         }
-      } catch (_error) {
+      } catch {
         // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
         // Silently continue - edit was already successful
       }

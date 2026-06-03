@@ -195,11 +195,12 @@ export class PromptService {
     if (!this.initialized) {
       await this.initialize();
     }
-
-    // Validate context
-    if (!context) {
+    const runtimeContext = context as unknown;
+    if (isFalsyLike(runtimeContext)) {
       throw new Error('Context is required');
     }
+
+    // Validate context
     if (!context.provider) {
       throw new Error('Provider is required');
     }
@@ -263,6 +264,7 @@ export class PromptService {
       const content = await this.loadAndProcess(
         file.path,
         context,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: toolName is optional string, empty string should use null
         file.toolName || null,
       );
       if (content) {
@@ -410,29 +412,25 @@ export class PromptService {
     }
 
     // Check tools
-    if (context.enabledTools) {
-      for (const tool of context.enabledTools) {
-        if (typeof tool !== 'string') {
-          errors.push('Invalid tool: must be string');
-          isValid = false;
-        }
+    for (const tool of context.enabledTools) {
+      if (typeof tool !== 'string') {
+        errors.push('Invalid tool: must be string');
+        isValid = false;
       }
     }
 
     // Check environment
-    if (context.environment) {
-      const booleanKeys = [
-        'isGitRepository',
-        'isSandboxed',
-        'hasIdeCompanion',
-      ] as const;
-      for (const key of booleanKeys) {
-        if (
-          key in context.environment &&
-          typeof context.environment[key] !== 'boolean'
-        ) {
-          warnings.push(`${key} should be boolean`);
-        }
+    const booleanKeys = [
+      'isGitRepository',
+      'isSandboxed',
+      'hasIdeCompanion',
+    ] as const;
+    for (const key of booleanKeys) {
+      if (
+        key in context.environment &&
+        typeof context.environment[key] !== 'boolean'
+      ) {
+        warnings.push(`${key} should be boolean`);
       }
     }
 
@@ -579,7 +577,7 @@ export class PromptService {
             files.push(fullPath);
           }
         }
-      } catch (_error) {
+      } catch {
         // Permission denied or invalid paths: Skip
         // Silent failure as per pseudocode
       }
@@ -604,4 +602,17 @@ export class PromptService {
 
     return Math.round(estimate);
   }
+}
+
+/**
+ * Helper function to check if a value is falsy-like.
+ * Used for validating runtime context before processing.
+ */
+function isFalsyLike(value: unknown): boolean {
+  // Check undefined/null first
+  if (value === undefined || value === null) return true;
+  // Check false, 0, or empty string
+  if (value === false || value === 0 || value === '') return true;
+  // Check NaN for numbers
+  return typeof value === 'number' && Number.isNaN(value);
 }

@@ -15,13 +15,11 @@ export interface LogEntry {
 }
 
 export class MockFileOutput {
-  private static instance: MockFileOutput;
+  private static instance: MockFileOutput | undefined;
   private entries: LogEntry[] = [];
 
   static getInstance(): MockFileOutput {
-    if (!MockFileOutput.instance) {
-      MockFileOutput.instance = new MockFileOutput();
-    }
+    MockFileOutput.instance ??= new MockFileOutput();
     return MockFileOutput.instance;
   }
 

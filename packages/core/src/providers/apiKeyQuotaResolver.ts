@@ -151,17 +151,8 @@ export async function fetchApiKeyQuota(
         return { provider: 'Chutes', lines: formatChutesUsage(usage) };
       }
 
-      case 'kimi': {
-        if (apiKey.startsWith('sk-kimi-')) {
-          const usage = await fetchKimiCodeUsage(apiKey, baseUrl);
-          if (!usage) return null;
-          return { provider: 'Kimi Code', lines: formatKimiCodeUsage(usage) };
-        }
-
-        const usage = await fetchKimiUsage(apiKey, baseUrl);
-        if (!usage) return null;
-        return { provider: 'Kimi', lines: formatKimiUsage(usage) };
-      }
+      case 'kimi':
+        return await fetchKimiQuota(apiKey, baseUrl);
 
       default:
         logger.debug(() => `Unknown API key provider: ${provider}`);
@@ -176,4 +167,23 @@ export async function fetchApiKeyQuota(
     );
     return null;
   }
+}
+
+/**
+ * Helper function to fetch Kimi quota information.
+ * Handles the distinction between Kimi Code and regular Kimi API keys.
+ */
+async function fetchKimiQuota(
+  apiKey: string,
+  baseUrl?: string,
+): Promise<ApiKeyQuotaResult | null> {
+  if (apiKey.startsWith('sk-kimi-')) {
+    const usage = await fetchKimiCodeUsage(apiKey, baseUrl);
+    if (!usage) return null;
+    return { provider: 'Kimi Code', lines: formatKimiCodeUsage(usage) };
+  }
+
+  const usage = await fetchKimiUsage(apiKey, baseUrl);
+  if (!usage) return null;
+  return { provider: 'Kimi', lines: formatKimiUsage(usage) };
 }

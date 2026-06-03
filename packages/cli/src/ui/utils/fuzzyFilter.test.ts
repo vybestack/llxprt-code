@@ -202,12 +202,15 @@ describe('fuzzyFilter', () => {
       };
     });
 
+    // Shared base completer for fuzzy filter tests - returns common completion items
+    const createTestCompleter = (): CompleterFn => async () => [
+      { value: 'production' },
+      { value: 'development' },
+      { value: 'staging' },
+    ];
+
     it('wraps completer function and applies fuzzy filtering', async () => {
-      const baseCompleter: CompleterFn = async () => [
-        { value: 'production' },
-        { value: 'development' },
-        { value: 'staging' },
-      ];
+      const baseCompleter = createTestCompleter();
 
       const wrappedCompleter = withFuzzyFilter(baseCompleter);
       const result = await wrappedCompleter(mockContext, 'dev', mockTokens);
@@ -218,11 +221,7 @@ describe('fuzzyFilter', () => {
     });
 
     it('returns all items when partial is empty', async () => {
-      const baseCompleter: CompleterFn = async () => [
-        { value: 'production' },
-        { value: 'development' },
-        { value: 'staging' },
-      ];
+      const baseCompleter = createTestCompleter();
 
       const wrappedCompleter = withFuzzyFilter(baseCompleter);
       const result = await wrappedCompleter(mockContext, '', mockTokens);

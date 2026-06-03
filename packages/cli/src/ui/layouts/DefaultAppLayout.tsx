@@ -4,39 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import React from 'react';
-import { Box, type DOMElement, Static, Text } from 'ink';
-import type { Config, MessageBus } from '@vybestack/llxprt-code-core';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
-import { StreamingState } from '../types.js';
+import { Box, type DOMElement, Static } from 'ink';
+import type { Config } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
 import { useUIState } from '../contexts/UIStateContext.js';
-import type { UIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
+import type { UIActions } from '../contexts/UIActionsContext.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
-import { Colors } from '../colors.js';
-import { getCliRuntimeContext } from '../../runtime/runtimeSettings.js';
-import { themeManager } from '../themes/theme-manager.js';
-
-// Components
-import { AppHeader } from '../components/AppHeader.js';
-import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
-import { Notifications } from '../components/Notifications.js';
-import { TodoPanel } from '../components/TodoPanel.js';
-import { Footer } from '../components/Footer.js';
-import { DialogManager } from '../components/DialogManager.js';
-import { BucketAuthConfirmation } from '../components/BucketAuthConfirmation.js';
-import { Composer } from '../components/Composer.js';
-import { LoadingIndicator } from '../components/LoadingIndicator.js';
-import { AutoAcceptIndicator } from '../components/AutoAcceptIndicator.js';
-import { ShellModeIndicator } from '../components/ShellModeIndicator.js';
-import { ContextSummaryDisplay } from '../components/ContextSummaryDisplay.js';
-import { DetailedMessagesDisplay } from '../components/DetailedMessagesDisplay.js';
 import { ScrollableList } from '../components/shared/ScrollableList.js';
 import { SCROLL_TO_ITEM_END } from '../components/shared/VirtualizedList.js';
+import {
+  type ScrollableMainContentItem,
+  renderScrollableMainContentItem,
+  keyExtractorScrollableMainContentItem,
+  estimateScrollableMainContentItemHeight,
+  hasActiveDialog,
+  useLayoutSettings,
+  useScrollableContent,
+  type MainControlsProps,
+  MainControls,
+  QuittingDisplay,
+} from './DefaultAppLayoutHelpers.js';
 
 interface DefaultAppLayoutProps {
   config: Config;
@@ -50,58 +44,50 @@ interface DefaultAppLayoutProps {
   updateInfo: UpdateObject | null;
 }
 
-type ScrollableMainContentItem = {
-  key: string;
-  estimatedHeight: number;
-  element: React.ReactElement;
-};
-
-function renderScrollableMainContentItem({
-  item,
-}: {
-  item: ScrollableMainContentItem;
-  index: number;
-}): React.ReactElement {
-  return item.element;
-}
-
-function keyExtractorScrollableMainContentItem(
-  item: ScrollableMainContentItem,
-): string {
-  return item.key;
-}
-
-function estimateScrollableMainContentItemHeight(_index: number): number {
-  return 100;
-}
-
-function hasActiveDialog(uiState: UIState): boolean {
-  return (
-    uiState.showWorkspaceMigrationDialog ||
-    uiState.shouldShowIdePrompt ||
-    uiState.showIdeRestartPrompt ||
-    uiState.isFolderTrustDialogOpen ||
-    uiState.isWelcomeDialogOpen ||
-    uiState.isPermissionsDialogOpen ||
-    Boolean(uiState.confirmationRequest) ||
-    uiState.isThemeDialogOpen ||
-    uiState.isSettingsDialogOpen ||
-    uiState.isAuthDialogOpen ||
-    uiState.isOAuthCodeDialogOpen ||
-    uiState.isEditorDialogOpen ||
-    uiState.isProviderDialogOpen ||
-    uiState.isLoadProfileDialogOpen ||
-    uiState.isCreateProfileDialogOpen ||
-    uiState.isProfileListDialogOpen ||
-    uiState.isProfileDetailDialogOpen ||
-    uiState.isProfileEditorDialogOpen ||
-    uiState.isToolsDialogOpen ||
-    uiState.isLoggingDialogOpen ||
-    uiState.isSubagentDialogOpen ||
-    uiState.isModelsDialogOpen ||
-    uiState.isSessionBrowserDialogOpen ||
-    uiState.showPrivacyNotice
+function useDerivedState(
+  uiState: ReturnType<typeof useUIState>,
+  config: Config,
+  settings: LoadedSettings,
+  availableTerminalHeight: number,
+  version: string,
+  nightly: boolean,
+) {
+  const layoutSettings = useLayoutSettings(
+    config,
+    settings,
+    availableTerminalHeight,
+    uiState.terminalHeight,
+    uiState.constrainHeight,
+    uiState.availableTerminalHeight,
+    uiState.isNarrow,
   );
+
+  const dialogsVisible = hasActiveDialog(uiState);
+
+  const { listItems, staticItems, pendingItems } = useScrollableContent(
+    config,
+    settings,
+    version,
+    nightly,
+    uiState.terminalWidth,
+    uiState.mainAreaWidth,
+    layoutSettings.staticAreaMaxItemHeight,
+    uiState.constrainHeight,
+    layoutSettings.effectiveAvailableHeight,
+    layoutSettings.showTodoPanelSetting,
+    uiState,
+    uiState.slashCommands,
+    uiState.activeShellPtyId,
+    uiState.embeddedShellFocused,
+  );
+
+  return {
+    layoutSettings,
+    dialogsVisible,
+    listItems,
+    staticItems,
+    pendingItems,
+  };
 }
 
 export const DefaultAppLayout = ({
@@ -120,605 +106,248 @@ export const DefaultAppLayout = ({
   const [, setSuggestionsVisible] = React.useState(false);
 
   const {
-    terminalWidth,
-    terminalHeight,
-    mainAreaWidth,
-    inputWidth,
-    history,
-    pendingHistoryItems,
-    streamingState,
-    quittingMessages,
-    constrainHeight,
-    showErrorDetails,
-    showToolDescriptions,
-    isTodoPanelCollapsed,
-    consoleMessages,
-    slashCommands,
-    staticKey,
-    isInputActive,
-    ctrlCPressedOnce,
-    ctrlDPressedOnce,
-    showEscapePrompt,
-    ideContextState,
-    llxprtMdFileCount,
-    coreMemoryFileCount,
-    elapsedTime,
-    currentLoadingPhrase,
-    showAutoAcceptIndicator,
-    shellModeActive,
-    thought,
-    branchName,
-    debugMessage,
-    errorCount,
-    historyTokenCount,
-    vimModeEnabled,
-    vimMode,
-    tokenMetrics,
-    currentModel,
-    contextLimit,
-    availableTerminalHeight: uiAvailableTerminalHeight,
-    activeShellPtyId,
-    embeddedShellFocused,
-  } = uiState;
-
-  // Use the UI state's availableTerminalHeight if constrainHeight is true
-  // Otherwise, fall back to the prop (which is the same calculation)
-  const effectiveAvailableHeight = constrainHeight
-    ? uiAvailableTerminalHeight
-    : availableTerminalHeight;
-
-  const showTodoPanelSetting = settings.merged.ui.showTodoPanel ?? true;
-  const hideContextSummary = settings.merged.ui.hideContextSummary ?? false;
-  const currentThemeName = themeManager.getActiveTheme().name;
-  const { isNarrow } = uiState;
-
-  const useAlternateBuffer =
-    settings.merged.ui.useAlternateBuffer === true && !config.getScreenReader();
-
-  const debugConsoleMaxHeight = Math.floor(Math.max(terminalHeight * 0.2, 5));
-  const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
-
-  // Check if any dialog is visible
-  const dialogsVisible = hasActiveDialog(uiState);
-
-  // Compute all useMemo values before any early returns (Rules of Hooks)
-  const headerElement = React.useMemo(
-    () => (
-      <AppHeader
-        config={config}
-        settings={settings}
-        version={version}
-        nightly={nightly}
-        terminalWidth={terminalWidth}
-      />
-    ),
-    [config, settings, version, nightly, terminalWidth],
+    layoutSettings,
+    dialogsVisible,
+    listItems,
+    staticItems,
+    pendingItems,
+  } = useDerivedState(
+    uiState,
+    config,
+    settings,
+    availableTerminalHeight,
+    version,
+    nightly,
   );
 
-  const pendingElement = React.useMemo(
-    () => (
-      <OverflowProvider>
-        <Box ref={uiState.pendingHistoryItemRef} flexDirection="column">
-          {pendingHistoryItems.map((item, i) => (
-            <HistoryItemDisplay
-              key={i}
-              availableTerminalHeight={
-                constrainHeight ? effectiveAvailableHeight : undefined
-              }
-              terminalWidth={mainAreaWidth}
-              item={{ ...item, id: 0 }}
-              isPending={true}
-              config={config}
-              isFocused={!uiState.isEditorDialogOpen}
-              slashCommands={slashCommands}
-              showTodoPanel={showTodoPanelSetting}
-              activeShellPtyId={activeShellPtyId}
-              embeddedShellFocused={embeddedShellFocused}
-            />
-          ))}
-          <ShowMoreLines constrainHeight={constrainHeight} />
-        </Box>
-      </OverflowProvider>
-    ),
-    [
-      uiState.pendingHistoryItemRef,
-      pendingHistoryItems,
-      constrainHeight,
-      effectiveAvailableHeight,
-      mainAreaWidth,
-      config,
-      uiState.isEditorDialogOpen,
-      slashCommands,
-      showTodoPanelSetting,
-      activeShellPtyId,
-      embeddedShellFocused,
-    ],
+  const mainControlsSharedProps = buildMainControlsProps(
+    uiState,
+    layoutSettings,
+    config,
+    settings,
+    startupWarnings,
+    updateInfo,
+    contextFileNames,
+    nightly,
+    uiActions,
+    setSuggestionsVisible,
   );
 
-  const listItems: ScrollableMainContentItem[] = React.useMemo(
-    () => [
-      {
-        key: 'header',
-        estimatedHeight: 100,
-        element: <Box flexDirection="column">{headerElement}</Box>,
-      },
-      ...history.map((h) => ({
-        key: `history-${h.id}`,
-        estimatedHeight: 100,
-        element: (
-          <HistoryItemDisplay
-            terminalWidth={mainAreaWidth}
-            availableTerminalHeight={staticAreaMaxItemHeight}
-            item={h}
-            isPending={false}
-            config={config}
-            slashCommands={slashCommands}
-            showTodoPanel={showTodoPanelSetting}
-            activeShellPtyId={activeShellPtyId}
-            embeddedShellFocused={embeddedShellFocused}
-          />
-        ),
-      })),
-      {
-        key: 'pending',
-        estimatedHeight: 100,
-        element: pendingElement,
-      },
-    ],
-    [
-      headerElement,
-      history,
-      mainAreaWidth,
-      staticAreaMaxItemHeight,
-      config,
-      slashCommands,
-      showTodoPanelSetting,
-      activeShellPtyId,
-      embeddedShellFocused,
-      pendingElement,
-    ],
-  );
-
-  const staticItems = React.useMemo(
-    () => [
-      <AppHeader
-        key="header"
-        config={config}
-        settings={settings}
-        version={version}
-        nightly={nightly}
-        terminalWidth={terminalWidth}
-      />,
-      ...history.map((h) => (
-        <HistoryItemDisplay
-          terminalWidth={mainAreaWidth}
-          availableTerminalHeight={staticAreaMaxItemHeight}
-          key={h.id}
-          item={h}
-          isPending={false}
-          config={config}
-          slashCommands={slashCommands}
-          showTodoPanel={showTodoPanelSetting}
-          activeShellPtyId={activeShellPtyId}
-          embeddedShellFocused={embeddedShellFocused}
-        />
-      )),
-    ],
-    [
-      config,
-      settings,
-      version,
-      nightly,
-      terminalWidth,
-      history,
-      mainAreaWidth,
-      staticAreaMaxItemHeight,
-      slashCommands,
-      showTodoPanelSetting,
-      activeShellPtyId,
-      embeddedShellFocused,
-    ],
-  );
-
-  const pendingItems = React.useMemo(
-    () =>
-      pendingHistoryItems.map((item, i) => (
-        <HistoryItemDisplay
-          key={i}
-          availableTerminalHeight={
-            constrainHeight ? effectiveAvailableHeight : undefined
-          }
-          terminalWidth={mainAreaWidth}
-          item={{ ...item, id: 0 }}
-          isPending={true}
-          config={config}
-          isFocused={!uiState.isEditorDialogOpen}
-          slashCommands={slashCommands}
-          showTodoPanel={showTodoPanelSetting}
-          activeShellPtyId={activeShellPtyId}
-          embeddedShellFocused={embeddedShellFocused}
-        />
-      )),
-    [
-      pendingHistoryItems,
-      constrainHeight,
-      effectiveAvailableHeight,
-      mainAreaWidth,
-      config,
-      uiState.isEditorDialogOpen,
-      slashCommands,
-      showTodoPanelSetting,
-      activeShellPtyId,
-      embeddedShellFocused,
-    ],
-  );
-
-  if (quittingMessages) {
+  if (uiState.quittingMessages) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
-        {quittingMessages.map((item) => (
-          <HistoryItemDisplay
-            key={item.id}
-            availableTerminalHeight={
-              constrainHeight ? effectiveAvailableHeight : undefined
-            }
-            terminalWidth={terminalWidth}
-            item={item}
-            isPending={false}
-            config={config}
-            slashCommands={slashCommands}
-            showTodoPanel={showTodoPanelSetting}
-          />
-        ))}
-      </Box>
+      <QuittingDisplay
+        constrainHeight={uiState.constrainHeight}
+        effectiveAvailableHeight={layoutSettings.effectiveAvailableHeight}
+        terminalWidth={uiState.terminalWidth}
+        quittingMessages={uiState.quittingMessages}
+        config={config}
+        slashCommands={uiState.slashCommands}
+        showTodoPanelSetting={layoutSettings.showTodoPanelSetting}
+      />
     );
   }
 
-  if (useAlternateBuffer) {
+  return renderLayout(
+    uiState,
+    layoutSettings,
+    dialogsVisible,
+    listItems,
+    staticItems,
+    pendingItems,
+    mainControlsRef,
+    mainControlsSharedProps,
+  );
+};
+
+function renderLayout(
+  uiState: ReturnType<typeof useUIState>,
+  layoutSettings: ReturnType<typeof useLayoutSettings>,
+  dialogsVisible: boolean,
+  listItems: ScrollableMainContentItem[],
+  staticItems: React.ReactElement[],
+  pendingItems: React.ReactElement[],
+  mainControlsRef: React.RefObject<DOMElement | null>,
+  mainControlsSharedProps: MainControlsProps,
+) {
+  if (layoutSettings.useAlternateBuffer) {
     return (
-      <StreamingContext.Provider value={streamingState}>
-        <Box
-          flexDirection="column"
-          width={terminalWidth}
-          height={terminalHeight}
-          flexShrink={0}
-          flexGrow={0}
-          overflow="hidden"
-          ref={uiState.rootUiRef}
-        >
-          <ScrollableList
-            hasFocus={!dialogsVisible}
-            data={listItems}
-            renderItem={renderScrollableMainContentItem}
-            keyExtractor={keyExtractorScrollableMainContentItem}
-            estimatedItemHeight={estimateScrollableMainContentItemHeight}
-            initialScrollIndex={SCROLL_TO_ITEM_END}
-            initialScrollOffsetInIndex={SCROLL_TO_ITEM_END}
-          />
-
-          <Box
-            flexDirection="column"
-            ref={mainControlsRef}
-            flexShrink={0}
-            flexGrow={0}
-          >
-            <Notifications
-              startupWarnings={startupWarnings}
-              updateInfo={updateInfo}
-              history={history}
-            />
-
-            {showTodoPanelSetting && (
-              <TodoPanel width={inputWidth} collapsed={isTodoPanelCollapsed} />
-            )}
-
-            <BucketAuthConfirmation
-              messageBus={
-                (
-                  getCliRuntimeContext() as {
-                    messageBus?: MessageBus;
-                  }
-                ).messageBus
-              }
-              isFocused={!dialogsVisible}
-            />
-
-            {dialogsVisible ? (
-              <DialogManager
-                config={config}
-                settings={settings}
-                addItem={uiActions.addItem}
-                terminalWidth={terminalWidth}
-              />
-            ) : (
-              <>
-                <LoadingIndicator
-                  thought={
-                    streamingState === StreamingState.WaitingForConfirmation ||
-                    config.getAccessibility()?.disableLoadingPhrases ||
-                    config.getScreenReader()
-                      ? undefined
-                      : thought
-                  }
-                  currentLoadingPhrase={
-                    config.getAccessibility()?.disableLoadingPhrases ||
-                    config.getScreenReader()
-                      ? undefined
-                      : currentLoadingPhrase
-                  }
-                  elapsedTime={elapsedTime}
-                />
-                <Box
-                  marginTop={1}
-                  display="flex"
-                  justifyContent={
-                    hideContextSummary ? 'flex-start' : 'space-between'
-                  }
-                  width="100%"
-                >
-                  <Box>
-                    {process.env.GEMINI_SYSTEM_MD && (
-                      <Text color={Colors.AccentRed}>
-                        |&#x2310;&#x25A0;_&#x25A0;|{' '}
-                      </Text>
-                    )}
-                    {ctrlCPressedOnce ? (
-                      <Text color={Colors.AccentYellow}>
-                        Press Ctrl+C again to exit.
-                      </Text>
-                    ) : ctrlDPressedOnce ? (
-                      <Text color={Colors.AccentYellow}>
-                        Press Ctrl+D again to exit.
-                      </Text>
-                    ) : showEscapePrompt ? (
-                      <Text color={Colors.Gray}>Press Esc again to clear.</Text>
-                    ) : !hideContextSummary ? (
-                      <ContextSummaryDisplay
-                        ideContext={ideContextState}
-                        llxprtMdFileCount={llxprtMdFileCount}
-                        coreMemoryFileCount={coreMemoryFileCount}
-                        contextFileNames={contextFileNames}
-                        mcpServers={config.getMcpServers()}
-                        blockedMcpServers={config.getBlockedMcpServers()}
-                        showToolDescriptions={showToolDescriptions}
-                      />
-                    ) : null}
-                  </Box>
-                  <Box
-                    paddingTop={isNarrow ? 1 : 0}
-                    marginLeft={hideContextSummary ? 1 : 2}
-                  >
-                    {showAutoAcceptIndicator !== ApprovalMode.DEFAULT &&
-                      !shellModeActive && (
-                        <AutoAcceptIndicator
-                          approvalMode={showAutoAcceptIndicator}
-                        />
-                      )}
-                    {shellModeActive && <ShellModeIndicator />}
-                  </Box>
-                </Box>
-                {showErrorDetails && (
-                  <OverflowProvider>
-                    <Box flexDirection="column">
-                      <DetailedMessagesDisplay
-                        messages={consoleMessages}
-                        maxHeight={
-                          constrainHeight ? debugConsoleMaxHeight : undefined
-                        }
-                        width={inputWidth}
-                      />
-                      <ShowMoreLines constrainHeight={constrainHeight} />
-                    </Box>
-                  </OverflowProvider>
-                )}
-                {isInputActive && (
-                  <Composer
-                    config={config}
-                    settings={settings}
-                    onSuggestionsVisibilityChange={setSuggestionsVisible}
-                  />
-                )}
-              </>
-            )}
-
-            {!settings.merged.ui.hideFooter && (
-              <Footer
-                model={currentModel}
-                targetDir={config.getTargetDir()}
-                debugMode={config.getDebugMode()}
-                branchName={branchName}
-                debugMessage={debugMessage}
-                errorCount={errorCount}
-                showErrorDetails={showErrorDetails}
-                showMemoryUsage={
-                  config.getDebugMode() ||
-                  settings.merged.ui.showMemoryUsage ||
-                  false
-                }
-                historyTokenCount={historyTokenCount}
-                nightly={nightly}
-                vimMode={vimModeEnabled ? vimMode : undefined}
-                contextLimit={contextLimit}
-                isTrustedFolder={config.isTrustedFolder()}
-                tokensPerMinute={tokenMetrics.tokensPerMinute}
-                throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
-                sessionTokenTotal={tokenMetrics.sessionTokenTotal}
-                hideCWD={settings.merged.hideCWD}
-                hideSandboxStatus={settings.merged.hideSandboxStatus}
-                hideModelInfo={settings.merged.hideModelInfo}
-                themeName={currentThemeName}
-              />
-            )}
-          </Box>
-        </Box>
+      <StreamingContext.Provider value={uiState.streamingState}>
+        <AlternateBufferLayout
+          terminalWidth={uiState.terminalWidth}
+          terminalHeight={uiState.terminalHeight}
+          rootUiRef={uiState.rootUiRef}
+          dialogsVisible={dialogsVisible}
+          listItems={listItems}
+          mainControlsRef={mainControlsRef}
+          mainControlsSharedProps={mainControlsSharedProps}
+        />
       </StreamingContext.Provider>
     );
   }
 
   return (
-    <StreamingContext.Provider value={streamingState}>
-      <Box flexDirection="column" width="90%" ref={uiState.rootUiRef}>
-        <Static key={staticKey} items={staticItems}>
-          {(item) => item}
-        </Static>
-        <OverflowProvider>
-          <Box ref={uiState.pendingHistoryItemRef} flexDirection="column">
-            {pendingItems}
-            <ShowMoreLines constrainHeight={constrainHeight} />
-          </Box>
-        </OverflowProvider>
-
-        <Box flexDirection="column" ref={mainControlsRef}>
-          <Notifications
-            startupWarnings={startupWarnings}
-            updateInfo={updateInfo}
-            history={history}
-          />
-
-          {showTodoPanelSetting && (
-            <TodoPanel width={inputWidth} collapsed={isTodoPanelCollapsed} />
-          )}
-
-          {/* OAuth bucket auth confirmation - manages its own state via message bus */}
-          <BucketAuthConfirmation
-            messageBus={
-              (
-                getCliRuntimeContext() as {
-                  messageBus?: MessageBus;
-                }
-              ).messageBus
-            }
-            isFocused={!dialogsVisible}
-          />
-
-          {dialogsVisible ? (
-            <DialogManager
-              config={config}
-              settings={settings}
-              addItem={uiActions.addItem}
-              terminalWidth={terminalWidth}
-            />
-          ) : (
-            <>
-              <LoadingIndicator
-                thought={
-                  streamingState === StreamingState.WaitingForConfirmation ||
-                  config.getAccessibility()?.disableLoadingPhrases ||
-                  config.getScreenReader()
-                    ? undefined
-                    : thought
-                }
-                currentLoadingPhrase={
-                  config.getAccessibility()?.disableLoadingPhrases ||
-                  config.getScreenReader()
-                    ? undefined
-                    : currentLoadingPhrase
-                }
-                elapsedTime={elapsedTime}
-              />
-              <Box
-                marginTop={1}
-                display="flex"
-                justifyContent={
-                  hideContextSummary ? 'flex-start' : 'space-between'
-                }
-                width="100%"
-              >
-                <Box>
-                  {process.env.GEMINI_SYSTEM_MD && (
-                    <Text color={Colors.AccentRed}>
-                      |&#x2310;&#x25A0;_&#x25A0;|{' '}
-                    </Text>
-                  )}
-                  {ctrlCPressedOnce ? (
-                    <Text color={Colors.AccentYellow}>
-                      Press Ctrl+C again to exit.
-                    </Text>
-                  ) : ctrlDPressedOnce ? (
-                    <Text color={Colors.AccentYellow}>
-                      Press Ctrl+D again to exit.
-                    </Text>
-                  ) : showEscapePrompt ? (
-                    <Text color={Colors.Gray}>Press Esc again to clear.</Text>
-                  ) : !hideContextSummary ? (
-                    <ContextSummaryDisplay
-                      ideContext={ideContextState}
-                      llxprtMdFileCount={llxprtMdFileCount}
-                      coreMemoryFileCount={coreMemoryFileCount}
-                      contextFileNames={contextFileNames}
-                      mcpServers={config.getMcpServers()}
-                      blockedMcpServers={config.getBlockedMcpServers()}
-                      showToolDescriptions={showToolDescriptions}
-                    />
-                  ) : null}
-                </Box>
-                <Box
-                  paddingTop={isNarrow ? 1 : 0}
-                  marginLeft={hideContextSummary ? 1 : 2}
-                >
-                  {showAutoAcceptIndicator !== ApprovalMode.DEFAULT &&
-                    !shellModeActive && (
-                      <AutoAcceptIndicator
-                        approvalMode={showAutoAcceptIndicator}
-                      />
-                    )}
-                  {shellModeActive && <ShellModeIndicator />}
-                </Box>
-              </Box>
-              {showErrorDetails && (
-                <OverflowProvider>
-                  <Box flexDirection="column">
-                    <DetailedMessagesDisplay
-                      messages={consoleMessages}
-                      maxHeight={
-                        constrainHeight ? debugConsoleMaxHeight : undefined
-                      }
-                      width={inputWidth}
-                    />
-                    <ShowMoreLines constrainHeight={constrainHeight} />
-                  </Box>
-                </OverflowProvider>
-              )}
-              {isInputActive && (
-                <Composer
-                  config={config}
-                  settings={settings}
-                  onSuggestionsVisibilityChange={setSuggestionsVisible}
-                />
-              )}
-            </>
-          )}
-
-          {!settings.merged.ui.hideFooter && (
-            <Footer
-              model={currentModel}
-              targetDir={config.getTargetDir()}
-              debugMode={config.getDebugMode()}
-              branchName={branchName}
-              debugMessage={debugMessage}
-              errorCount={errorCount}
-              showErrorDetails={showErrorDetails}
-              showMemoryUsage={
-                config.getDebugMode() ||
-                settings.merged.ui.showMemoryUsage ||
-                false
-              }
-              historyTokenCount={historyTokenCount}
-              nightly={nightly}
-              vimMode={vimModeEnabled ? vimMode : undefined}
-              contextLimit={contextLimit}
-              isTrustedFolder={config.isTrustedFolder()}
-              tokensPerMinute={tokenMetrics.tokensPerMinute}
-              throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
-              sessionTokenTotal={tokenMetrics.sessionTokenTotal}
-              hideCWD={settings.merged.hideCWD}
-              hideSandboxStatus={settings.merged.hideSandboxStatus}
-              hideModelInfo={settings.merged.hideModelInfo}
-              themeName={currentThemeName}
-            />
-          )}
-        </Box>
-      </Box>
+    <StreamingContext.Provider value={uiState.streamingState}>
+      <StandardBufferLayout
+        rootUiRef={uiState.rootUiRef}
+        staticKey={uiState.staticKey}
+        staticItems={staticItems}
+        pendingHistoryItemRef={uiState.pendingHistoryItemRef}
+        pendingItems={pendingItems}
+        constrainHeight={uiState.constrainHeight}
+        mainControlsRef={mainControlsRef}
+        mainControlsSharedProps={mainControlsSharedProps}
+      />
     </StreamingContext.Provider>
   );
-};
+}
+
+function buildMainControlsProps(
+  uiState: ReturnType<typeof useUIState>,
+  layoutSettings: ReturnType<typeof useLayoutSettings>,
+  config: Config,
+  settings: LoadedSettings,
+  startupWarnings: string[],
+  updateInfo: UpdateObject | null,
+  contextFileNames: string[],
+  nightly: boolean,
+  uiActions: UIActions,
+  onSuggestionsVisibilityChange: (visible: boolean) => void,
+): MainControlsProps {
+  return {
+    config,
+    settings,
+    startupWarnings,
+    updateInfo,
+    history: uiState.history,
+    inputWidth: uiState.inputWidth,
+    isTodoPanelCollapsed: uiState.isTodoPanelCollapsed,
+    showTodoPanelSetting: layoutSettings.showTodoPanelSetting,
+    dialogsVisible: hasActiveDialog(uiState),
+    hideContextSummary: layoutSettings.hideContextSummary,
+    hideFooter: layoutSettings.hideFooter,
+    showMemoryUsage: layoutSettings.showMemoryUsage,
+    currentThemeName: layoutSettings.currentThemeName,
+    nightly,
+    constrainHeight: uiState.constrainHeight,
+    debugConsoleMaxHeight: layoutSettings.debugConsoleMaxHeight,
+    effectiveAvailableHeight: layoutSettings.effectiveAvailableHeight,
+    disableLoadingPhrases: layoutSettings.disableLoadingPhrases,
+    streamingState: uiState.streamingState,
+    thought: uiState.thought,
+    currentLoadingPhrase: uiState.currentLoadingPhrase,
+    elapsedTime: uiState.elapsedTime,
+    isNarrow: layoutSettings.isNarrow,
+    ctrlCPressedOnce: uiState.ctrlCPressedOnce,
+    ctrlDPressedOnce: uiState.ctrlDPressedOnce,
+    showEscapePrompt: uiState.showEscapePrompt,
+    ideContextState: uiState.ideContextState,
+    llxprtMdFileCount: uiState.llxprtMdFileCount,
+    coreMemoryFileCount: uiState.coreMemoryFileCount,
+    contextFileNames,
+    showToolDescriptions: uiState.showToolDescriptions,
+    showAutoAcceptIndicator: uiState.showAutoAcceptIndicator,
+    shellModeActive: uiState.shellModeActive,
+    showErrorDetails: uiState.showErrorDetails,
+    consoleMessages: uiState.consoleMessages,
+    isInputActive: uiState.isInputActive,
+    vimModeEnabled: uiState.vimModeEnabled,
+    vimMode: uiState.vimMode,
+    currentModel: uiState.currentModel,
+    contextLimit: uiState.contextLimit,
+    branchName: uiState.branchName,
+    debugMessage: uiState.debugMessage,
+    errorCount: uiState.errorCount,
+    historyTokenCount: uiState.historyTokenCount,
+    tokenMetrics: uiState.tokenMetrics,
+    uiActions,
+    terminalWidth: uiState.terminalWidth,
+    onSuggestionsVisibilityChange,
+  };
+}
+
+function AlternateBufferLayout({
+  terminalWidth,
+  terminalHeight,
+  rootUiRef,
+  dialogsVisible,
+  listItems,
+  mainControlsRef,
+  mainControlsSharedProps,
+}: {
+  terminalWidth: number;
+  terminalHeight: number;
+  rootUiRef: React.RefObject<DOMElement | null>;
+  dialogsVisible: boolean;
+  listItems: ScrollableMainContentItem[];
+  mainControlsRef: React.RefObject<DOMElement | null>;
+  mainControlsSharedProps: MainControlsProps;
+}) {
+  return (
+    <Box
+      flexDirection="column"
+      width={terminalWidth}
+      height={terminalHeight}
+      flexShrink={0}
+      flexGrow={0}
+      overflow="hidden"
+      ref={rootUiRef}
+    >
+      <ScrollableList
+        hasFocus={!dialogsVisible}
+        data={listItems}
+        renderItem={renderScrollableMainContentItem}
+        keyExtractor={keyExtractorScrollableMainContentItem}
+        estimatedItemHeight={estimateScrollableMainContentItemHeight}
+        initialScrollIndex={SCROLL_TO_ITEM_END}
+        initialScrollOffsetInIndex={SCROLL_TO_ITEM_END}
+      />
+
+      <Box
+        flexDirection="column"
+        ref={mainControlsRef}
+        flexShrink={0}
+        flexGrow={0}
+      >
+        <MainControls {...mainControlsSharedProps} />
+      </Box>
+    </Box>
+  );
+}
+
+function StandardBufferLayout({
+  rootUiRef,
+  staticKey,
+  staticItems,
+  pendingHistoryItemRef,
+  pendingItems,
+  constrainHeight,
+  mainControlsRef,
+  mainControlsSharedProps,
+}: {
+  rootUiRef: React.RefObject<DOMElement | null>;
+  staticKey: number;
+  staticItems: React.ReactElement[];
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>;
+  pendingItems: React.ReactElement[];
+  constrainHeight: boolean;
+  mainControlsRef: React.RefObject<DOMElement | null>;
+  mainControlsSharedProps: MainControlsProps;
+}) {
+  return (
+    <Box flexDirection="column" width="90%" ref={rootUiRef}>
+      <Static key={staticKey} items={staticItems}>
+        {(item) => item}
+      </Static>
+      <OverflowProvider>
+        <Box ref={pendingHistoryItemRef} flexDirection="column">
+          {pendingItems}
+          <ShowMoreLines constrainHeight={constrainHeight} />
+        </Box>
+      </OverflowProvider>
+
+      <Box flexDirection="column" ref={mainControlsRef}>
+        <MainControls {...mainControlsSharedProps} />
+      </Box>
+    </Box>
+  );
+}

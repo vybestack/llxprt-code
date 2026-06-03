@@ -43,7 +43,7 @@ export function loadWelcomeConfig(): WelcomeConfig {
       cachedConfig = JSON.parse(content) as WelcomeConfig;
       return cachedConfig;
     }
-  } catch (_error) {
+  } catch {
     // If parsing fails, return default
   }
 

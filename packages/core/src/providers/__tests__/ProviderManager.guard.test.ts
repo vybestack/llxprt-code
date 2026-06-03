@@ -528,6 +528,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     const providerConfigRef = provider as unknown as {
       baseProviderConfig?: { baseURL?: string };
     };
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (providerConfigRef.baseProviderConfig) {
       providerConfigRef.baseProviderConfig.baseURL =
         'https://provider-config.example.com';
@@ -593,5 +594,240 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     expect(normalized.metadata?.explicitField).toBe('value');
     expect(normalized.metadata?._normalized).toBe(true);
     expect(normalized.metadata?._runtimeId).toBe('test-runtime');
+  });
+});
+
+describe('ProviderManager.normalizeRuntimeInputs empty/whitespace fallback semantics', () => {
+  it('treats empty-string resolved.model as absent, falls through to provider settings', () => {
+    const settingsService = new SettingsService();
+    const config = createRuntimeConfigStub(settingsService);
+    const manager = new ProviderManager({ settingsService, config });
+
+    settingsService.set('activeProvider', 'stub-provider');
+    settingsService.setProviderSetting(
+      'stub-provider',
+      'model',
+      'settings-model',
+    );
+    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    settingsService.setProviderSetting(
+      'stub-provider',
+      'base-url',
+      'https://api.test.com',
+    );
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: settingsService,
+        config,
+        runtime: {
+          runtimeId: 'test-empty-model',
+          settingsService,
+          config,
+        },
+        resolved: { model: '' },
+      },
+      'stub-provider',
+    );
+
+    expect(normalized.resolved?.model).toBe('settings-model');
+  });
+
+  it('treats whitespace-only resolved.model as absent, falls through to provider settings', () => {
+    const settingsService = new SettingsService();
+    const config = createRuntimeConfigStub(settingsService);
+    const manager = new ProviderManager({ settingsService, config });
+
+    settingsService.set('activeProvider', 'stub-provider');
+    settingsService.setProviderSetting(
+      'stub-provider',
+      'model',
+      'settings-model',
+    );
+    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    settingsService.setProviderSetting(
+      'stub-provider',
+      'base-url',
+      'https://api.test.com',
+    );
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: settingsService,
+        config,
+        runtime: {
+          runtimeId: 'test-ws-model',
+          settingsService,
+          config,
+        },
+        resolved: { model: '   ' },
+      },
+      'stub-provider',
+    );
+
+    expect(normalized.resolved?.model).toBe('settings-model');
+  });
+
+  it('treats empty-string resolved.baseURL as absent, falls through to config fallback', () => {
+    const settingsService = new SettingsService();
+    const config = createRuntimeConfigStub(settingsService, {
+      getEphemeralSetting: (key: string) =>
+        key === 'base-url' ? 'https://config-fallback.example.com' : undefined,
+    });
+    const manager = new ProviderManager({ settingsService, config });
+
+    settingsService.set('activeProvider', 'stub-provider');
+    settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
+    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: settingsService,
+        config,
+        runtime: {
+          runtimeId: 'test-empty-baseurl',
+          settingsService,
+          config,
+        },
+        resolved: { baseURL: '' },
+      },
+      'stub-provider',
+    );
+
+    expect(normalized.resolved?.baseURL).toBe(
+      'https://config-fallback.example.com',
+    );
+  });
+
+  it('treats whitespace-only resolved.baseURL as absent, falls through to config fallback', () => {
+    const settingsService = new SettingsService();
+    const config = createRuntimeConfigStub(settingsService, {
+      getEphemeralSetting: (key: string) =>
+        key === 'base-url' ? 'https://config-fallback.example.com' : undefined,
+    });
+    const manager = new ProviderManager({ settingsService, config });
+
+    settingsService.set('activeProvider', 'stub-provider');
+    settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
+    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: settingsService,
+        config,
+        runtime: {
+          runtimeId: 'test-ws-baseurl',
+          settingsService,
+          config,
+        },
+        resolved: { baseURL: '  \t  ' },
+      },
+      'stub-provider',
+    );
+
+    expect(normalized.resolved?.baseURL).toBe(
+      'https://config-fallback.example.com',
+    );
+  });
+
+  it('treats empty-string model as missing for validation, throws ProviderRuntimeNormalizationError', () => {
+    const settingsService = new SettingsService();
+    // Use a config with getModel returning empty string so no config-level fallback saves us
+    const config = createRuntimeConfigStub(settingsService, {
+      getModel: () => '',
+    });
+    const manager = new ProviderManager({ settingsService, config });
+
+    // Register a provider whose getDefaultModel returns empty string
+    class EmptyDefaultModelProvider extends BaseProvider {
+      constructor(cfg: Config, ss: SettingsService) {
+        super({ name: 'empty-model-provider' }, undefined, cfg, ss);
+      }
+      async getModels(): Promise<never[]> {
+        return [];
+      }
+      getDefaultModel(): string {
+        return '';
+      }
+      protected supportsOAuth(): boolean {
+        return true;
+      }
+      protected generateChatCompletionWithOptions(): AsyncIterableIterator<never> {
+        return (async function* () {})();
+      }
+    }
+    const provider = new EmptyDefaultModelProvider(config, settingsService);
+    manager.registerProvider(provider);
+
+    settingsService.set('activeProvider', 'empty-model-provider');
+    settingsService.setProviderSetting('empty-model-provider', 'model', '');
+    settingsService.setProviderSetting(
+      'empty-model-provider',
+      'apiKey',
+      'test-key',
+    );
+    settingsService.setProviderSetting(
+      'empty-model-provider',
+      'base-url',
+      'https://api.test.com',
+    );
+
+    expect(() =>
+      manager.normalizeRuntimeInputs(
+        {
+          contents: [prompt],
+          settings: settingsService,
+          config,
+          runtime: {
+            runtimeId: 'test-empty-model-validation',
+            settingsService,
+            config,
+          },
+        },
+        'empty-model-provider',
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        requirement: 'REQ-SP4-003',
+        name: 'ProviderRuntimeNormalizationError',
+      }),
+    );
+  });
+
+  it('treats empty-string baseURL as missing for validation, throws ProviderRuntimeNormalizationError', () => {
+    const settingsService = new SettingsService();
+    const config = createRuntimeConfigStub(settingsService);
+    const manager = new ProviderManager({ settingsService, config });
+
+    settingsService.set('activeProvider', 'stub-provider');
+    settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
+    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    // Intentionally set base-url to empty string
+    settingsService.setProviderSetting('stub-provider', 'base-url', '');
+
+    expect(() =>
+      manager.normalizeRuntimeInputs(
+        {
+          contents: [prompt],
+          settings: settingsService,
+          config,
+          runtime: {
+            runtimeId: 'test-empty-baseurl-validation',
+            settingsService,
+            config,
+          },
+        },
+        'stub-provider',
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        requirement: 'REQ-SP4-003',
+        name: 'ProviderRuntimeNormalizationError',
+      }),
+    );
   });
 });

@@ -37,15 +37,15 @@ describe('Config - Ephemeral Settings', () => {
     clearActiveProviderRuntimeContext();
   });
 
-  describe('todo-continuation setting', () => {
+  describe('task-continuation setting', () => {
     /**
      * @requirement REQ-004.2
      * @scenario Setting defaults to true when unset
-     * @given No todo-continuation setting configured
-     * @when getEphemeralSetting('todo-continuation') called
+     * @given No task-continuation setting configured
+     * @when getEphemeralSetting('task-continuation') called
      * @then Returns undefined (not true) - services handle the default logic
      */
-    it('should return undefined for unset todo-continuation setting', () => {
+    it('should return undefined for unset task-continuation setting', () => {
       // When no setting is configured
       const result = config.getEphemeralSetting('todo-continuation');
 
@@ -56,8 +56,8 @@ describe('Config - Ephemeral Settings', () => {
     /**
      * @requirement REQ-004.1
      * @scenario Explicit true value preserved
-     * @given todo-continuation set to true
-     * @when getEphemeralSetting('todo-continuation') called
+     * @given task-continuation set to true
+     * @when getEphemeralSetting('task-continuation') called
      * @then Returns true
      */
     it('should return true when explicitly set to true', () => {
@@ -74,8 +74,8 @@ describe('Config - Ephemeral Settings', () => {
     /**
      * @requirement REQ-004.1
      * @scenario Explicit false value preserved
-     * @given todo-continuation set to false
-     * @when getEphemeralSetting('todo-continuation') called
+     * @given task-continuation set to false
+     * @when getEphemeralSetting('task-continuation') called
      * @then Returns false
      */
     it('should return false when explicitly set to false', () => {
@@ -93,7 +93,7 @@ describe('Config - Ephemeral Settings', () => {
      * @requirement REQ-004.2
      * @scenario Service treats undefined as true
      * @given No setting configured
-     * @when todoContinuationService checks setting
+     * @when taskContinuationService checks setting
      * @then Continuation is enabled
      */
     it('should demonstrate service behavior with undefined setting', () => {

@@ -169,7 +169,7 @@ describe('E2E Tests', () => {
     // Status update: input-required (final)
     const finalEvent = events[3].result as TaskStatusUpdateEvent;
     expect(finalEvent.kind).toBe('status-update');
-    expect(finalEvent.status?.state).toBe('input-required');
+    expect(finalEvent.status.state).toBe('input-required');
     expect(finalEvent.final).toBe(true);
 
     assertUniqueFinalEventIsLast(events);
@@ -254,7 +254,7 @@ describe('E2E Tests', () => {
         },
       },
     ]);
-    expect(toolCallConfirmationEvent.status?.state).toBe('working');
+    expect(toolCallConfirmationEvent.status.state).toBe('working');
 
     assertUniqueFinalEventIsLast(events);
     expect(events.length).toBe(6);

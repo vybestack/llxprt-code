@@ -2,6 +2,11 @@
   "name": "@vybestack/llxprt-code-lsp",
   "version": "0.10.0",
   "description": "LLxprt Code LSP service",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
   "type": "module",
   "main": "dist/main.js",
   "types": "dist/main.d.ts",

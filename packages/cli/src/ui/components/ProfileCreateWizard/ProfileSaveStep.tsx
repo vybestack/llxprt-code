@@ -22,6 +22,289 @@ import {
 } from './utils.js';
 import type { WizardState } from './types.js';
 
+const useExistingProfiles = () => {
+  const [existingProfiles, setExistingProfiles] = useState<string[]>([]);
+
+  useEffect(() => {
+    const loadExistingProfiles = async () => {
+      try {
+        const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
+        const files = await fs.readdir(profilesDir);
+        const profileNames = files
+          .filter((f) => f.endsWith('.json'))
+          .map((f) => f.replace(/\.json$/, ''));
+        setExistingProfiles(profileNames);
+      } catch {
+        setExistingProfiles([]);
+      }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    loadExistingProfiles();
+  }, []);
+
+  return existingProfiles;
+};
+
+const ConflictDialog: React.FC<{
+  profileNameInput: string;
+  handleConflictResolution: (value: string) => void;
+}> = ({ profileNameInput, handleConflictResolution }) => (
+  <>
+    <Text color={Colors.AccentYellow}>Profile Name Conflict</Text>
+    <Text color={Colors.Foreground}> </Text>
+    <Text color={Colors.Foreground}>
+      A profile named &apos;{profileNameInput}&apos; already exists.
+    </Text>
+    <Text color={Colors.Gray}>
+      Choose a different name or overwrite the existing profile:
+    </Text>
+    <Text color={Colors.Foreground}> </Text>
+    <RadioButtonSelect
+      items={[
+        {
+          label: 'Choose different name',
+          value: 'rename',
+          key: 'rename',
+        },
+        {
+          label: 'Overwrite existing profile',
+          value: 'overwrite',
+          key: 'overwrite',
+        },
+        { label: 'Back', value: 'back', key: 'back' },
+        { label: 'Cancel', value: 'cancel', key: 'cancel' },
+      ]}
+      onSelect={handleConflictResolution}
+      isFocused={true}
+    />
+  </>
+);
+
+const ProfileNameInput: React.FC<{
+  profileNameInput: string;
+  saveError: string | null;
+  validationError: string | null;
+  suggestions: string[];
+  handleProfileNameChange: (value: string) => void;
+  handleProfileNameSubmit: (forceSave?: boolean) => void;
+}> = ({
+  profileNameInput,
+  saveError,
+  validationError,
+  suggestions,
+  handleProfileNameChange,
+  handleProfileNameSubmit,
+}) => (
+  <>
+    <Text color={Colors.Foreground}>Profile name:</Text>
+    <TextInput
+      value={profileNameInput}
+      onChange={handleProfileNameChange}
+      onSubmit={handleProfileNameSubmit}
+      isFocused={true}
+      placeholder="my-profile"
+    />
+    {saveError && <Text color={Colors.AccentRed}>✗ {saveError}</Text>}
+    {validationError && (
+      <Text color={Colors.AccentRed}>✗ {validationError}</Text>
+    )}
+    {!validationError && !saveError && profileNameInput && (
+      <Text color={Colors.AccentGreen}>✓ Name is available</Text>
+    )}
+    <Text color={Colors.Foreground}> </Text>
+    <Text color={Colors.Gray}>ℹ Suggested names:</Text>
+    {suggestions.map((suggestion) => (
+      <Text key={suggestion} color={Colors.Gray}>
+        • {suggestion}
+      </Text>
+    ))}
+    <Text color={Colors.Foreground}> </Text>
+    <Text color={Colors.Gray}>← → Move cursor Enter Continue Esc Back</Text>
+  </>
+);
+
+const validateProfileName = (
+  value: string,
+  existingProfiles: string[],
+): string | null => {
+  if (!value.trim()) {
+    return 'Profile name cannot be empty';
+  }
+  if (value.includes('/') || value.includes('\\')) {
+    return 'Profile name cannot contain path separators';
+  }
+  if (existingProfiles.includes(value)) {
+    return 'Profile name already exists';
+  }
+  return null;
+};
+
+const executeSave = async (
+  profileNameInput: string,
+  state: WizardState,
+  forceSave: boolean,
+  onContinue: () => void,
+  setFocusedComponent: (v: 'input' | 'saving' | 'conflict') => void,
+  setSaveError: (v: string | null) => void,
+  setValidationError: (v: string | null) => void,
+) => {
+  setFocusedComponent('saving');
+  setSaveError(null);
+
+  const profileJSON = buildProfileJSON(state);
+  const result = await saveProfile(profileNameInput, profileJSON, {
+    overwrite: forceSave,
+  });
+
+  if (result.success) {
+    onContinue();
+  } else if (result.alreadyExists ?? false) {
+    setValidationError('Profile name already exists');
+    setFocusedComponent('conflict');
+  } else {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string error fallback
+    setSaveError(result.error || 'Failed to save profile');
+    setFocusedComponent('input');
+  }
+};
+
+const useSaveEscapeHandler = (
+  focusedComponent: 'input' | 'saving' | 'conflict',
+  setFocusedComponent: (v: 'input' | 'saving' | 'conflict') => void,
+  onBack: () => void,
+) => {
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        if (focusedComponent === 'input') {
+          onBack();
+        } else if (focusedComponent === 'conflict') {
+          setFocusedComponent('input');
+        }
+      }
+    },
+    { isActive: true },
+  );
+};
+
+const useProfileNameHandler = (
+  existingProfiles: string[],
+  onUpdateProfileName: (name: string) => void,
+  setProfileNameInput: (v: string) => void,
+  setValidationError: (v: string | null) => void,
+) =>
+  useCallback(
+    (value: string) => {
+      setProfileNameInput(value);
+      const error = validateProfileName(value, existingProfiles);
+      setValidationError(error);
+      if (!error) {
+        onUpdateProfileName(value);
+      }
+    },
+    [
+      onUpdateProfileName,
+      existingProfiles,
+      setProfileNameInput,
+      setValidationError,
+    ],
+  );
+
+const useProfileNameSubmitHandler = (
+  profileNameInput: string,
+  validationError: string | null,
+  state: WizardState,
+  onContinue: () => void,
+  setFocusedComponent: (v: 'input' | 'saving' | 'conflict') => void,
+  setSaveError: (v: string | null) => void,
+  setValidationError: (v: string | null) => void,
+) =>
+  useCallback(
+    (forceSave: boolean = false) => {
+      void (async () => {
+        try {
+          if (!profileNameInput.trim()) {
+            setValidationError('Profile name cannot be empty');
+            return;
+          }
+          if (validationError && !forceSave) {
+            if (validationError === 'Profile name already exists') {
+              setFocusedComponent('conflict');
+              return;
+            }
+            return;
+          }
+
+          await executeSave(
+            profileNameInput,
+            state,
+            forceSave,
+            onContinue,
+            setFocusedComponent,
+            setSaveError,
+            setValidationError,
+          );
+        } catch (error) {
+          setSaveError(
+            error instanceof Error ? error.message : 'Failed to save profile',
+          );
+          setFocusedComponent('input');
+        }
+      })();
+    },
+    [
+      profileNameInput,
+      validationError,
+      state,
+      onContinue,
+      setFocusedComponent,
+      setSaveError,
+      setValidationError,
+    ],
+  );
+
+const FocusedContentView: React.FC<{
+  focusedComponent: 'input' | 'saving' | 'conflict';
+  profileNameInput: string;
+  saveError: string | null;
+  validationError: string | null;
+  suggestions: string[];
+  handleProfileNameChange: (value: string) => void;
+  handleProfileNameSubmit: (forceSave?: boolean) => void;
+  handleConflictResolution: (value: string) => void;
+}> = ({
+  focusedComponent,
+  profileNameInput,
+  saveError,
+  validationError,
+  suggestions,
+  handleProfileNameChange,
+  handleProfileNameSubmit,
+  handleConflictResolution,
+}) => (
+  <>
+    {focusedComponent === 'saving' && (
+      <Text color={Colors.Gray}>Saving profile...</Text>
+    )}
+    {focusedComponent === 'conflict' && (
+      <ConflictDialog
+        profileNameInput={profileNameInput}
+        handleConflictResolution={handleConflictResolution}
+      />
+    )}
+    {focusedComponent === 'input' && (
+      <ProfileNameInput
+        profileNameInput={profileNameInput}
+        saveError={saveError}
+        validationError={validationError}
+        suggestions={suggestions}
+        handleProfileNameChange={handleProfileNameChange}
+        handleProfileNameSubmit={handleProfileNameSubmit}
+      />
+    )}
+  </>
+);
+
 interface ProfileSaveStepProps {
   state: WizardState;
   onUpdateProfileName: (name: string) => void;
@@ -42,119 +325,33 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
   >('input');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [profileNameInput, setProfileNameInput] = useState(
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string profile name
     state.profileName || '',
   );
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [existingProfiles, setExistingProfiles] = useState<string[]>([]);
+  const existingProfiles = useExistingProfiles();
 
-  // Generate name suggestions on mount
   const [suggestions] = useState(() =>
     generateProfileNameSuggestions(state.config),
   );
 
-  // Handle Escape key to go back
-  useKeypress(
-    (key) => {
-      if (key.name === 'escape') {
-        if (focusedComponent === 'input') {
-          // Go back to previous step
-          onBack();
-        } else if (focusedComponent === 'conflict') {
-          // Go back to input from conflict dialog
-          setFocusedComponent('input');
-        }
-        // Don't allow escape during saving
-      }
-    },
-    { isActive: true },
+  useSaveEscapeHandler(focusedComponent, setFocusedComponent, onBack);
+
+  const handleProfileNameChange = useProfileNameHandler(
+    existingProfiles,
+    onUpdateProfileName,
+    setProfileNameInput,
+    setValidationError,
   );
 
-  // Load existing profiles on mount
-  useEffect(() => {
-    const loadExistingProfiles = async () => {
-      try {
-        const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
-        const files = await fs.readdir(profilesDir);
-        const profileNames = files
-          .filter((f) => f.endsWith('.json'))
-          .map((f) => f.replace(/\.json$/, ''));
-        setExistingProfiles(profileNames);
-      } catch {
-        // Directory might not exist yet
-        setExistingProfiles([]);
-      }
-    };
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    loadExistingProfiles();
-  }, []);
-
-  const handleProfileNameChange = useCallback(
-    (value: string) => {
-      setProfileNameInput(value);
-
-      if (!value.trim()) {
-        setValidationError('Profile name cannot be empty');
-        return;
-      }
-
-      // Basic validation (async validation happens on submit)
-      if (value.includes('/') || value.includes('\\')) {
-        setValidationError('Profile name cannot contain path separators');
-        return;
-      }
-
-      // Check for conflicts (best-effort early validation for UX)
-      // Note: Filesystem is the final source of truth via atomic save operation
-      if (existingProfiles.includes(value)) {
-        setValidationError('Profile name already exists');
-        return;
-      }
-
-      setValidationError(null);
-      onUpdateProfileName(value);
-    },
-    [onUpdateProfileName, existingProfiles],
-  );
-
-  const handleProfileNameSubmit = useCallback(
-    async (forceSave: boolean = false) => {
-      if (!profileNameInput.trim()) {
-        setValidationError('Profile name cannot be empty');
-        return;
-      }
-      if (validationError && !forceSave) {
-        // If the only error is "already exists", show conflict dialog
-        if (validationError === 'Profile name already exists') {
-          setFocusedComponent('conflict');
-          return;
-        }
-        return;
-      }
-
-      // Save immediately
-      setFocusedComponent('saving');
-      setSaveError(null);
-
-      const profileJSON = buildProfileJSON(state);
-      // Atomic save operation - filesystem is source of truth for conflicts
-      // Uses 'wx' flag by default to prevent overwrite unless forceSave=true
-      const result = await saveProfile(profileNameInput, profileJSON, {
-        overwrite: forceSave,
-      });
-
-      if (result.success) {
-        onContinue();
-      } else if (result.alreadyExists) {
-        // Filesystem reports file exists - show conflict dialog
-        // This catches stale existingProfiles or race conditions
-        setValidationError('Profile name already exists');
-        setFocusedComponent('conflict');
-      } else {
-        setSaveError(result.error || 'Failed to save profile');
-        setFocusedComponent('input');
-      }
-    },
-    [profileNameInput, validationError, state, onContinue],
+  const handleProfileNameSubmit = useProfileNameSubmitHandler(
+    profileNameInput,
+    validationError,
+    state,
+    onContinue,
+    setFocusedComponent,
+    setSaveError,
+    setValidationError,
   );
 
   const handleConflictResolution = useCallback(
@@ -162,9 +359,7 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
       if (value === 'rename') {
         setFocusedComponent('input');
       } else if (value === 'overwrite') {
-        // Clear validation error and force save
         setValidationError(null);
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
         handleProfileNameSubmit(true);
       } else if (value === 'back') {
         onBack();
@@ -186,73 +381,16 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
       <Text color={Colors.Foreground}>Name Your Profile:</Text>
       <Text color={Colors.Gray}>Enter a name for this profile</Text>
       <Text color={Colors.Foreground}> </Text>
-
-      {focusedComponent === 'input' && (
-        <>
-          <Text color={Colors.Foreground}>Profile name:</Text>
-          <TextInput
-            value={profileNameInput}
-            onChange={handleProfileNameChange}
-            onSubmit={handleProfileNameSubmit}
-            isFocused={true}
-            placeholder="my-profile"
-          />
-          {saveError && <Text color={Colors.AccentRed}>✗ {saveError}</Text>}
-          {validationError && (
-            <Text color={Colors.AccentRed}>✗ {validationError}</Text>
-          )}
-          {!validationError && !saveError && profileNameInput && (
-            <Text color={Colors.AccentGreen}>✓ Name is available</Text>
-          )}
-          <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Gray}>ℹ Suggested names:</Text>
-          {suggestions.map((suggestion) => (
-            <Text key={suggestion} color={Colors.Gray}>
-              • {suggestion}
-            </Text>
-          ))}
-          <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Gray}>
-            ← → Move cursor Enter Continue Esc Back
-          </Text>
-        </>
-      )}
-
-      {focusedComponent === 'saving' && (
-        <Text color={Colors.Gray}>Saving profile...</Text>
-      )}
-
-      {focusedComponent === 'conflict' && (
-        <>
-          <Text color={Colors.AccentYellow}>Profile Name Conflict</Text>
-          <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Foreground}>
-            A profile named &apos;{profileNameInput}&apos; already exists.
-          </Text>
-          <Text color={Colors.Gray}>
-            Choose a different name or overwrite the existing profile:
-          </Text>
-          <Text color={Colors.Foreground}> </Text>
-          <RadioButtonSelect
-            items={[
-              {
-                label: 'Choose different name',
-                value: 'rename',
-                key: 'rename',
-              },
-              {
-                label: 'Overwrite existing profile',
-                value: 'overwrite',
-                key: 'overwrite',
-              },
-              { label: 'Back', value: 'back', key: 'back' },
-              { label: 'Cancel', value: 'cancel', key: 'cancel' },
-            ]}
-            onSelect={handleConflictResolution}
-            isFocused={true}
-          />
-        </>
-      )}
+      <FocusedContentView
+        focusedComponent={focusedComponent}
+        profileNameInput={profileNameInput}
+        saveError={saveError}
+        validationError={validationError}
+        suggestions={suggestions}
+        handleProfileNameChange={handleProfileNameChange}
+        handleProfileNameSubmit={handleProfileNameSubmit}
+        handleConflictResolution={handleConflictResolution}
+      />
     </Box>
   );
 };

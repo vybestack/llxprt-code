@@ -19,7 +19,7 @@ export interface SecureKeyInputProps {
 }
 
 const isEioError = (err: unknown): boolean => {
-  if (!err || typeof err !== 'object') {
+  if (err == null || typeof err !== 'object') {
     return false;
   }
 
@@ -30,6 +30,32 @@ const isEioError = (err: unknown): boolean => {
     (typeof nodeError.message === 'string' && nodeError.message.includes('EIO'))
   );
 };
+
+const KeyInputInstructions: React.FC = () => (
+  <Box flexDirection="column">
+    <Text color={Colors.Gray}>Press Enter to submit</Text>
+    <Text color={Colors.Gray}>Press Ctrl+V to toggle visibility</Text>
+    <Text color={Colors.Gray}>Press Escape to cancel</Text>
+  </Box>
+);
+
+function updateKeyValue(
+  char: string,
+  key: { name?: string; ctrl?: boolean },
+  setKeyValue: React.Dispatch<React.SetStateAction<string>>,
+): boolean {
+  if (key.name === 'backspace') {
+    setKeyValue((prev) => prev.slice(0, -1));
+    return true;
+  }
+
+  if (char.length > 0 && char.length === 1 && key.ctrl !== true) {
+    setKeyValue((prev) => prev + char);
+    return true;
+  }
+
+  return false;
+}
 
 /**
  * Component for secure API key input with masking
@@ -44,7 +70,7 @@ export const SecureKeyInput: React.FC<SecureKeyInputProps> = ({
 
   const handleKeyPress = useCallback(
     (char: string, key: { name?: string; ctrl?: boolean }) => {
-      if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
+      if (key.name === 'escape' || (key.ctrl === true && key.name === 'c')) {
         onCancel();
         return;
       }
@@ -54,26 +80,16 @@ export const SecureKeyInput: React.FC<SecureKeyInputProps> = ({
         return;
       }
 
-      if (key.name === 'backspace') {
-        setKeyValue((prev) => prev.slice(0, -1));
-        return;
-      }
-
-      // Toggle visibility with Ctrl+V
-      if (key.ctrl && key.name === 'v') {
+      if (key.ctrl === true && key.name === 'v') {
         setShowKey((prev) => !prev);
         return;
       }
 
-      // Only accept printable characters
-      if (char && char.length === 1 && !key.ctrl) {
-        setKeyValue((prev) => prev + char);
-      }
+      updateKeyValue(char, key, setKeyValue);
     },
     [keyValue, onSubmit, onCancel],
   );
 
-  // Set up key press handler
   useEffect(() => {
     let rawModeEnabled = false;
     const handleInput = (chunk: Buffer, key: unknown) => {
@@ -82,9 +98,7 @@ export const SecureKeyInput: React.FC<SecureKeyInputProps> = ({
       handleKeyPress(char, keyInfo);
     };
 
-    // Issue #1020: Add error handler to prevent EIO crashes
     const handleError = (err: Error) => {
-      // Ignore transient I/O errors
       if (!isEioError(err)) {
         logger.error('Stdin error in SecureKeyInput:', err);
       }
@@ -129,11 +143,7 @@ export const SecureKeyInput: React.FC<SecureKeyInputProps> = ({
           <Text color={Colors.Gray}> ({keyValue.length} characters)</Text>
         )}
       </Box>
-      <Box flexDirection="column">
-        <Text color={Colors.Gray}>Press Enter to submit</Text>
-        <Text color={Colors.Gray}>Press Ctrl+V to toggle visibility</Text>
-        <Text color={Colors.Gray}>Press Escape to cancel</Text>
-      </Box>
+      <KeyInputInstructions />
     </Box>
   );
 };

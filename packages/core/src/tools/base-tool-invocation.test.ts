@@ -89,6 +89,7 @@ describe('BaseToolInvocation', () => {
     expect(capturedRequest?.serverName).toBe(serverName);
 
     // Simulate response to finish the promise cleanly
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (responseHandler && capturedRequest) {
       responseHandler({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
@@ -174,6 +175,7 @@ describe('BaseToolInvocation', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(capturedRequest).toBeDefined();
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (responseHandler && capturedRequest) {
       responseHandler({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,

@@ -180,6 +180,7 @@ function handleDisplayKeys(
     const newValue = !display.showToolDescriptions;
     display.setShowToolDescriptions(newValue);
     const mcpServers = mcp.getMcpServers();
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing to handle undefined/null server objects
     if (Object.keys(mcpServers || {}).length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       display.handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
@@ -218,7 +219,8 @@ function handleIdeAndShellKeys(
   if (
     keyMatchers[Command.SHOW_IDE_CONTEXT_DETAIL](key) &&
     ideContext.getIdeMode() &&
-    ideContext.ideContextState
+    ideContext.ideContextState !== undefined &&
+    ideContext.ideContextState !== null
   ) {
     // Show IDE status when in IDE mode and context is available.
     // Note: handleSlashCommand is called directly in the main handler for this
@@ -230,13 +232,17 @@ function handleIdeAndShellKeys(
     shell.getEnableInteractiveShell()
   ) {
     const lastPtyId = ShellExecutionService.getLastActivePtyId();
+    const hasActiveShellPty =
+      shell.activeShellPtyId !== null && shell.activeShellPtyId !== 0;
+    const hasLastPty = lastPtyId !== null && lastPtyId !== 0;
+    const hasActivePty = hasActiveShellPty || hasLastPty;
     debug.log(
       'Ctrl+F: activeShellPtyId=%s, lastActivePtyId=%s, will toggle=%s',
       shell.activeShellPtyId,
       lastPtyId,
-      !!(shell.activeShellPtyId || lastPtyId),
+      hasActivePty,
     );
-    if (shell.activeShellPtyId || lastPtyId) {
+    if (hasActivePty) {
       shell.setEmbeddedShellFocused((prev) => {
         debug.log('Ctrl+F: embeddedShellFocused %s -> %s', prev, !prev);
         return !prev;
@@ -280,7 +286,8 @@ export function useKeybindings(params: UseKeybindingsParams): void {
       if (
         keyMatchers[Command.SHOW_IDE_CONTEXT_DETAIL](key) &&
         ideContext.getIdeMode() &&
-        ideContext.ideContextState
+        ideContext.ideContextState !== undefined &&
+        ideContext.ideContextState !== null
       ) {
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
         display.handleSlashCommand('/ide status');

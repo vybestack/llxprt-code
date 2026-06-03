@@ -17,7 +17,7 @@ vi.mock('../contexts/MouseContext.js', () => ({
     opts: { isActive?: boolean },
   ) => {
     capturedMouseHandler = handler;
-    capturedIsActive = opts?.isActive ?? true;
+    capturedIsActive = opts.isActive ?? true;
   },
 }));
 

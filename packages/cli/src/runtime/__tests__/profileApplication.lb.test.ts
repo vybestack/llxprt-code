@@ -197,6 +197,7 @@ function wrapRegisterProviderToCaptureLB(): {
   return { getLBProvider: () => capturedLBProvider };
 }
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   configStub.model = undefined;
   configStub.ephemerals.clear();
@@ -247,6 +248,7 @@ beforeEach(() => {
   isCliRuntimeStatelessReadyMock.mockReturnValue(true);
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(() => {
   vi.clearAllMocks();
 });

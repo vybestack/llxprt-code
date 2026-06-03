@@ -157,6 +157,7 @@ describe('FileSearch', () => {
     });
 
     await fileSearch.initialize();
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const results = await fileSearch.search('**/*.js');
 
     expect(results).toStrictEqual(['src/main.js']);
@@ -303,6 +304,7 @@ describe('FileSearch', () => {
     });
 
     await fileSearch.initialize();
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const results = await fileSearch.search('**/*.js', { maxResults: 2 });
 
     expect(results).toStrictEqual(['src/file1.js', 'src/file2.js']); // Assuming alphabetical sort
@@ -534,6 +536,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
 
     const controller = new AbortController();
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const searchPromise = fileSearch.search('**/*.js', {
       signal: controller.signal,
     });
@@ -571,6 +574,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
 
     // Perform a broad search to prime the cache
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const broadResults = await fileSearch.search('src/**');
     expect(broadResults).toStrictEqual([
       'src/',
@@ -581,6 +585,7 @@ describe('FileSearch', () => {
     ]);
 
     // Perform a more specific search that should leverage the broad search's cached results
+    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const specificResults = await fileSearch.search('src/**/*.js');
     expect(specificResults).toStrictEqual(['src/foo.js', 'src/nested/baz.js']);
 

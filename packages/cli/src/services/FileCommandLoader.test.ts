@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import * as glob from 'glob';
 import * as path from 'node:path';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -85,7 +87,8 @@ describe('FileCommandLoader', () => {
     vi.mocked(glob.glob).mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {
-        const userArgsRaw = context?.invocation?.args || '';
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for args
+        const userArgsRaw = context.invocation?.args || '';
         const processedPrompt = prompt.replaceAll(
           SHORTHAND_ARGS_PLACEHOLDER,
           userArgsRaw,

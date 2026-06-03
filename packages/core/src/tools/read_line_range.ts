@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import path from 'path';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import {
@@ -20,6 +22,7 @@ import { type PartUnion } from '@google/genai';
 import {
   processSingleFileContent,
   getSpecificMimeType,
+  type ProcessedFileReadResult,
 } from '../utils/fileUtils.js';
 import type { Config } from '../config/config.js';
 import {
@@ -142,8 +145,120 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
     return [{ path: this.params.absolute_path, line: this.params.start_line }];
   }
 
+  private async fetchGitAnnotations(filePath: string): Promise<{
+    gitWarning: string | undefined;
+    markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined;
+    deletionAfterLines: Set<number> | undefined;
+  }> {
+    const gitResult = await getGitLineChanges(filePath);
+    return {
+      gitWarning: gitResult.warning,
+      markersByLine: gitResult.markersByLine,
+      deletionAfterLines: gitResult.deletionAfterLines,
+    };
+  }
+
+  private applyTextFormatting(
+    content: string,
+    startLine: number,
+    markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
+    deletionAfterLines: Set<number> | undefined,
+  ): string {
+    if (
+      this.params.showGitChanges === true &&
+      markersByLine &&
+      deletionAfterLines
+    ) {
+      return formatWithGitChanges(
+        content,
+        startLine,
+        markersByLine,
+        deletionAfterLines,
+        this.params.showLineNumbers === true,
+      );
+    }
+    if (this.params.showLineNumbers === true) {
+      return formatWithLineNumbers(content, startLine);
+    }
+    return content;
+  }
+
+  private prependGitHeader(
+    llmContent: string,
+    gitWarning: string | undefined,
+  ): string {
+    if (this.params.showGitChanges !== true) {
+      return llmContent;
+    }
+    const headerParts: string[] = [];
+    if (gitWarning) {
+      headerParts.push(`NOTE: Failed to read git change status: ${gitWarning}`);
+    }
+    headerParts.push(
+      'Git changes legend: ░ unchanged, N new, M modified, D deletion after line.',
+    );
+    return `${headerParts.join('\n')}\n\n${llmContent}`;
+  }
+
+  private buildTruncatedLlmContent(
+    result: ProcessedFileReadResult,
+    gitWarning: string | undefined,
+    markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
+    deletionAfterLines: Set<number> | undefined,
+  ): PartUnion {
+    const [start, end] = result.linesShown!;
+    const total = result.originalLineCount!;
+
+    const formattedContent = this.applyTextFormatting(
+      result.llmContent as string,
+      this.params.start_line,
+      markersByLine,
+      deletionAfterLines,
+    );
+
+    const gitLegend =
+      this.params.showGitChanges === true
+        ? `\nGit changes legend: ░ unchanged, N new, M modified, D deletion after line.\n`
+        : '';
+    const gitWarningText =
+      this.params.showGitChanges === true && gitWarning !== undefined
+        ? `\nNOTE: Failed to read git change status: ${gitWarning}\n`
+        : '';
+
+    return `\nIMPORTANT: The file content has been truncated.${gitWarningText}${gitLegend}\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_line_range' tool with adjusted 'start_line' and 'end_line' parameters.\n\n--- FILE CONTENT (truncated) ---\n${formattedContent}`;
+  }
+
+  private buildFullLlmContent(
+    result: ProcessedFileReadResult,
+    gitWarning: string | undefined,
+    markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
+    deletionAfterLines: Set<number> | undefined,
+  ): PartUnion {
+    const formatted = this.applyTextFormatting(
+      result.llmContent as string,
+      this.params.start_line,
+      markersByLine,
+      deletionAfterLines,
+    );
+    return this.prependGitHeader(formatted, gitWarning);
+  }
+
+  private recordReadMetric(llmContent: PartUnion, filePath: string): void {
+    const lines =
+      typeof llmContent === 'string'
+        ? llmContent.split('\n').length
+        : undefined;
+    const mimetype = getSpecificMimeType(filePath);
+    recordFileOperationMetric(
+      this.config,
+      FileOperation.READ,
+      lines,
+      mimetype,
+      path.extname(filePath),
+    );
+  }
+
   async execute(): Promise<ToolResult> {
-    // Convert 1-based line numbers to 0-based offset and limit
     const offset = this.params.start_line - 1;
     const limit = this.params.end_line - this.params.start_line + 1;
 
@@ -159,14 +274,9 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
       return {
         llmContent: result.llmContent,
         returnDisplay: result.returnDisplay || 'Error reading file',
-        error: {
-          message: result.error,
-          type: result.errorType,
-        },
+        error: { message: result.error, type: result.errorType },
       };
     }
-
-    let llmContent: PartUnion;
 
     let gitWarning: string | undefined;
     let markersByLine:
@@ -179,84 +289,31 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
       typeof result.llmContent === 'string';
 
     if (shouldAnnotateGit) {
-      const gitResult = await getGitLineChanges(this.params.absolute_path);
-      gitWarning = gitResult.warning;
-      markersByLine = gitResult.markersByLine;
-      deletionAfterLines = gitResult.deletionAfterLines;
+      ({ gitWarning, markersByLine, deletionAfterLines } =
+        await this.fetchGitAnnotations(this.params.absolute_path));
     }
+
+    let llmContent: PartUnion;
 
     if (typeof result.llmContent !== 'string') {
       llmContent = result.llmContent;
-    } else if (result.isTruncated) {
-      const [start, end] = result.linesShown!;
-      const total = result.originalLineCount!;
-
-      let formattedContent = result.llmContent;
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
-        formattedContent = formatWithGitChanges(
-          result.llmContent,
-          this.params.start_line,
-          markersByLine,
-          deletionAfterLines,
-          this.params.showLineNumbers === true,
-        );
-      } else if (this.params.showLineNumbers) {
-        formattedContent = formatWithLineNumbers(
-          result.llmContent,
-          this.params.start_line,
-        );
-      }
-
-      const gitLegend = this.params.showGitChanges
-        ? `\nGit changes legend: ░ unchanged, N new, M modified, D deletion after line.\n`
-        : '';
-      const gitWarningText =
-        this.params.showGitChanges && gitWarning
-          ? `\nNOTE: Failed to read git change status: ${gitWarning}\n`
-          : '';
-
-      llmContent = `\nIMPORTANT: The file content has been truncated.${gitWarningText}${gitLegend}\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_line_range' tool with adjusted 'start_line' and 'end_line' parameters.\n\n--- FILE CONTENT (truncated) ---\n${formattedContent}`;
+    } else if (result.isTruncated === true) {
+      llmContent = this.buildTruncatedLlmContent(
+        result,
+        gitWarning,
+        markersByLine,
+        deletionAfterLines,
+      );
     } else {
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
-        llmContent = formatWithGitChanges(
-          result.llmContent,
-          this.params.start_line,
-          markersByLine,
-          deletionAfterLines,
-          this.params.showLineNumbers === true,
-        );
-      } else {
-        llmContent = this.params.showLineNumbers
-          ? formatWithLineNumbers(result.llmContent, this.params.start_line)
-          : result.llmContent;
-      }
-
-      if (this.params.showGitChanges) {
-        const headerParts: string[] = [];
-        if (gitWarning) {
-          headerParts.push(
-            `NOTE: Failed to read git change status: ${gitWarning}`,
-          );
-        }
-        headerParts.push(
-          'Git changes legend: ░ unchanged, N new, M modified, D deletion after line.',
-        );
-        llmContent = `${headerParts.join('\n')}\n\n${llmContent}`;
-      }
+      llmContent = this.buildFullLlmContent(
+        result,
+        gitWarning,
+        markersByLine,
+        deletionAfterLines,
+      );
     }
 
-    const lines =
-      typeof result.llmContent === 'string'
-        ? result.llmContent.split('\n').length
-        : undefined;
-    const mimetype = getSpecificMimeType(this.params.absolute_path);
-    recordFileOperationMetric(
-      this.config,
-      FileOperation.READ,
-      lines,
-      mimetype,
-      path.extname(this.params.absolute_path),
-    );
+    this.recordReadMetric(result.llmContent, this.params.absolute_path);
 
     return {
       llmContent,

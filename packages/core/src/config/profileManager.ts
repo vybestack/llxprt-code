@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import type { Profile, LoadBalancerProfile } from '../types/modelParams.js';
 import { isLoadBalancerProfile } from '../types/modelParams.js';
 import type { SettingsService } from '../settings/SettingsService.js';
@@ -26,6 +28,7 @@ export class ProfileManager {
    */
   constructor(profilesDir?: string) {
     this.profilesDir =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should use default path
       profilesDir || path.join(os.homedir(), '.llxprt', 'profiles');
   }
 
@@ -46,11 +49,13 @@ export class ProfileManager {
     name: string,
     profile: LoadBalancerProfile,
   ): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (profile.version !== 1) {
       throw new Error('unsupported profile version');
     }
 
-    if (!profile.profiles || profile.profiles.length === 0) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (profile.profiles == null || profile.profiles.length === 0) {
       throw new Error(
         `LoadBalancer profile '${name}' must reference at least one profile`,
       );
@@ -103,11 +108,13 @@ export class ProfileManager {
       const profile = JSON.parse(content) as Profile;
 
       if (isLoadBalancerProfile(profile)) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         if (profile.version !== 1) {
           throw new Error('unsupported profile version');
         }
 
-        if (!profile.profiles || profile.profiles.length === 0) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        if (profile.profiles == null || profile.profiles.length === 0) {
           throw new Error(
             `LoadBalancer profile '${profileName}' must reference at least one profile`,
           );
@@ -116,6 +123,7 @@ export class ProfileManager {
         const availableProfiles = await this.listProfiles();
 
         for (const referencedProfile of profile.profiles) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (!availableProfiles.includes(referencedProfile)) {
             throw new Error(
               `LoadBalancer profile '${profileName}' references non-existent profile '${referencedProfile}'`,
@@ -134,6 +142,7 @@ export class ProfileManager {
             referencedContent,
           ) as Profile;
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (isLoadBalancerProfile(referencedProfileData)) {
             throw new Error(
               `LoadBalancer profile '${profileName}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
@@ -144,16 +153,28 @@ export class ProfileManager {
         return profile;
       }
 
+      const profileRecord = profile as unknown as Record<string, unknown>;
+      const profileVersion = profileRecord.version;
+      const profileProvider = profileRecord.provider;
+      const profileModel = profileRecord.model;
+
       if (
-        !profile.version ||
-        !profile.provider ||
-        !profile.model ||
-        !profile.modelParams ||
-        !profile.ephemeralSettings
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        profileVersion == null ||
+        profileVersion === 0 ||
+        (typeof profileVersion === 'number' && Number.isNaN(profileVersion)) ||
+        profileVersion === false ||
+        typeof profileProvider !== 'string' ||
+        profileProvider === '' ||
+        typeof profileModel !== 'string' ||
+        profileModel === '' ||
+        profileRecord.modelParams == null ||
+        profileRecord.ephemeralSettings == null
       ) {
         throw new Error('missing required fields');
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (profile.version !== 1) {
         throw new Error('unsupported profile version');
       }
@@ -196,8 +217,8 @@ export class ProfileManager {
         .map((file) => file.slice(0, -5)); // Remove .json extension
 
       return profileNames;
-    } catch (_error) {
-      // If directory doesn't exist or other error, return empty array
+    } catch {
+      // Directory doesn't exist or error; return empty array.
       return [];
     }
   }
@@ -229,7 +250,8 @@ export class ProfileManager {
     try {
       await fs.access(filePath);
       return true;
-    } catch (_error) {
+    } catch {
+      // Profile doesn't exist.
       return false;
     }
   }
@@ -250,7 +272,8 @@ export class ProfileManager {
     settingsService: SettingsService,
   ): Promise<void> {
     // Use SettingsService to export current settings
-    if (!settingsService.exportForProfile) {
+
+    if (typeof settingsService.exportForProfile !== 'function') {
       throw new Error('SettingsService does not support profile export');
     }
     const settingsData = await settingsService.exportForProfile();
@@ -263,24 +286,34 @@ export class ProfileManager {
     const profile: Profile = {
       version: 1,
       provider: defaultProvider,
-      model: providerSettings?.model || 'default',
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      model: providerSettings?.model ?? 'default',
       modelParams: {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         temperature: providerSettings?.temperature,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         max_tokens: providerSettings?.maxTokens,
       },
       ephemeralSettings: {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         'base-url': providerSettings?.['base-url'],
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         'auth-key': providerSettings?.apiKey,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         'prompt-caching': providerSettings?.['prompt-caching'],
         'include-folder-structure':
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           providerSettings?.['include-folder-structure'],
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         'tool-format': providerSettings?.toolFormat,
       },
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const toolsAllowed = Array.isArray(settingsData.tools?.allowed)
       ? [...settingsData.tools.allowed]
       : [];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const toolsDisabled = Array.isArray(settingsData.tools?.disabled)
       ? [...settingsData.tools.disabled]
       : [];
@@ -290,7 +323,8 @@ export class ProfileManager {
     profile.ephemeralSettings['disabled-tools'] = toolsDisabled;
 
     // Update current profile name in SettingsService
-    if (settingsService.setCurrentProfileName) {
+
+    if (typeof settingsService.setCurrentProfileName === 'function') {
       settingsService.setCurrentProfileName(profileName);
     }
 
@@ -308,15 +342,12 @@ export class ProfileManager {
    * Apply profiles via the injected SettingsService rather than the singleton.
    * @pseudocode:cli-runtime.md lines 9-11
    */
-  async load(
-    profileName: string,
-    settingsService: SettingsService,
-  ): Promise<void> {
-    // Load profile from file
-    const profile = await this.loadProfile(profileName);
-
-    // Convert Profile format to SettingsService format
-    const settingsData = {
+  private convertProfileToSettingsData(profile: Profile): {
+    defaultProvider: string;
+    providers: Record<string, unknown>;
+    tools: { allowed: unknown[]; disabled: unknown[] };
+  } {
+    return {
       defaultProvider: profile.provider,
       providers: {
         [profile.provider]: {
@@ -338,81 +369,75 @@ export class ProfileManager {
           : [],
         disabled: Array.isArray(profile.ephemeralSettings['tools.disabled'])
           ? [...profile.ephemeralSettings['tools.disabled']]
-          : Array.isArray(profile.ephemeralSettings['disabled-tools'])
+          : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+            Array.isArray(profile.ephemeralSettings['disabled-tools'])
             ? [...profile.ephemeralSettings['disabled-tools']]
             : [],
       },
     };
+  }
 
-    // Update current profile name first
-    if (settingsService.setCurrentProfileName) {
-      settingsService.setCurrentProfileName(profileName);
-    }
+  private applyToolSettings(
+    settingsData: {
+      tools: { allowed: unknown[]; disabled: unknown[] };
+    },
+    settingsService: SettingsService,
+  ): void {
+    const allowedList = Array.isArray(settingsData.tools.allowed)
+      ? settingsData.tools.allowed
+      : [];
+    const disabledList = Array.isArray(settingsData.tools.disabled)
+      ? settingsData.tools.disabled
+      : [];
+    settingsService.set('tools.allowed', allowedList);
+    settingsService.set('tools.disabled', disabledList);
+    settingsService.set('disabled-tools', disabledList);
+  }
 
-    // Apply through SettingsService
-    if (!settingsService.importFromProfile) {
-      throw new Error('SettingsService does not support profile import');
-    }
-    await settingsService.importFromProfile(settingsData);
-
-    if (settingsData.tools) {
-      const allowedList = Array.isArray(settingsData.tools.allowed)
-        ? settingsData.tools.allowed
-        : [];
-      const disabledList = Array.isArray(settingsData.tools.disabled)
-        ? settingsData.tools.disabled
-        : [];
-      settingsService.set('tools.allowed', allowedList);
-      settingsService.set('tools.disabled', disabledList);
-      settingsService.set('disabled-tools', disabledList);
-    }
-
+  private applyReasoningSettings(
+    profile: Profile,
+    settingsService: SettingsService,
+  ): void {
     const reasoningSettings = profile.ephemeralSettings as unknown as Record<
       string,
       unknown
     >;
 
-    if (reasoningSettings['reasoning.enabled'] !== undefined) {
-      settingsService.set(
-        'reasoning.enabled',
-        reasoningSettings['reasoning.enabled'],
-      );
+    const reasoningKeys = [
+      'reasoning.enabled',
+      'reasoning.includeInContext',
+      'reasoning.includeInResponse',
+      'reasoning.format',
+      'reasoning.stripFromContext',
+      'reasoning.effort',
+      'reasoning.maxTokens',
+    ] as const;
+
+    for (const key of reasoningKeys) {
+      if (reasoningSettings[key] !== undefined) {
+        settingsService.set(key, reasoningSettings[key]);
+      }
     }
-    if (reasoningSettings['reasoning.includeInContext'] !== undefined) {
-      settingsService.set(
-        'reasoning.includeInContext',
-        reasoningSettings['reasoning.includeInContext'],
-      );
+  }
+
+  async load(
+    profileName: string,
+    settingsService: SettingsService,
+  ): Promise<void> {
+    const profile = await this.loadProfile(profileName);
+
+    const settingsData = this.convertProfileToSettingsData(profile);
+
+    if (typeof settingsService.setCurrentProfileName === 'function') {
+      settingsService.setCurrentProfileName(profileName);
     }
-    if (reasoningSettings['reasoning.includeInResponse'] !== undefined) {
-      settingsService.set(
-        'reasoning.includeInResponse',
-        reasoningSettings['reasoning.includeInResponse'],
-      );
+
+    if (typeof settingsService.importFromProfile !== 'function') {
+      throw new Error('SettingsService does not support profile import');
     }
-    if (reasoningSettings['reasoning.format'] !== undefined) {
-      settingsService.set(
-        'reasoning.format',
-        reasoningSettings['reasoning.format'],
-      );
-    }
-    if (reasoningSettings['reasoning.stripFromContext'] !== undefined) {
-      settingsService.set(
-        'reasoning.stripFromContext',
-        reasoningSettings['reasoning.stripFromContext'],
-      );
-    }
-    if (reasoningSettings['reasoning.effort'] !== undefined) {
-      settingsService.set(
-        'reasoning.effort',
-        reasoningSettings['reasoning.effort'],
-      );
-    }
-    if (reasoningSettings['reasoning.maxTokens'] !== undefined) {
-      settingsService.set(
-        'reasoning.maxTokens',
-        reasoningSettings['reasoning.maxTokens'],
-      );
-    }
+    await settingsService.importFromProfile(settingsData);
+
+    this.applyToolSettings(settingsData, settingsService);
+    this.applyReasoningSettings(profile, settingsService);
   }
 }

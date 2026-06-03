@@ -65,7 +65,7 @@ export const dumpcontextCommand: SlashCommand = {
   ): Promise<MessageActionReturn> => {
     try {
       const runtime = getRuntimeApi();
-      const mode = args?.trim().toLowerCase() || 'status';
+      const mode = args.trim().toLowerCase() || 'status';
 
       if (!isValidMode(mode)) {
         return {

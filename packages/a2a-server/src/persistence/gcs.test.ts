@@ -59,7 +59,7 @@ vi.mock('tar', async () => {
   const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
   return {
     c: vi.fn(({ file }) => {
-      if (file) {
+      if (file != null) {
         actualFs.writeFileSync(file, Buffer.from('dummy tar content'));
       }
       return Promise.resolve();
@@ -103,7 +103,7 @@ const mockGunzipSync = gunzipSync as Mock;
 const mockUuidv4 = uuidv4 as Mock;
 const mockSetTargetDir = configModule.setTargetDir as Mock;
 const mockGetPersistedState = getPersistedState as Mock;
-const TEST_METADATA_KEY = METADATA_KEY || '__persistedState';
+const TEST_METADATA_KEY = METADATA_KEY;
 
 type MockWriteStream = {
   emit: Mock<(event: string, ...args: unknown[]) => boolean>;
@@ -267,6 +267,7 @@ describe('GCSTaskStore', () => {
 
     it('should handle tar creation failure', async () => {
       mockFse.pathExists.mockImplementation(
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Vitest mock handler, async is acceptable
         async (path) =>
           !path.toString().includes('task-task1-workspace-test-uuid.tar.gz'),
       );

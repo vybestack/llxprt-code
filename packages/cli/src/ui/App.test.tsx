@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: behavioral coverage boundary retained while larger decomposition continues. */
+
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Text } from 'ink';
@@ -106,34 +108,65 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     .mockImplementation((optionsPassedToConstructor) => {
       const opts = { ...optionsPassedToConstructor }; // Clone
       // Basic mock structure, will be extended by the instance in tests
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- test fixture defaults intentionally use falsy coalescing */
       return {
-        apiKey: opts.apiKey || 'test-key',
-        model: opts.model || 'test-model-in-mock-factory',
+        apiKey:
+          opts.apiKey != null && opts.apiKey !== '' ? opts.apiKey : 'test-key',
+        model:
+          opts.model != null && opts.model !== ''
+            ? opts.model
+            : 'test-model-in-mock-factory',
         sandbox: opts.sandbox,
-        targetDir: opts.targetDir || '/test/dir',
-        debugMode: opts.debugMode || false,
+        targetDir:
+          opts.targetDir != null && opts.targetDir !== ''
+            ? opts.targetDir
+            : '/test/dir',
+        debugMode: opts.debugMode != null ? opts.debugMode : false,
         question: opts.question,
         coreTools: opts.coreTools,
         toolDiscoveryCommand: opts.toolDiscoveryCommand,
         toolCallCommand: opts.toolCallCommand,
         mcpServerCommand: opts.mcpServerCommand,
         mcpServers: opts.mcpServers,
-        userAgent: opts.userAgent || 'test-agent',
-        userMemory: opts.userMemory || '',
-        geminiMdFileCount: opts.geminiMdFileCount || 0,
-        coreMemoryFileCount: opts.coreMemoryFileCount || 0,
+        userAgent:
+          opts.userAgent != null && opts.userAgent !== ''
+            ? opts.userAgent
+            : 'test-agent',
+        userMemory:
+          opts.userMemory != null && opts.userMemory !== ''
+            ? opts.userMemory
+            : '',
+        geminiMdFileCount:
+          opts.geminiMdFileCount != null ? opts.geminiMdFileCount : 0,
+        coreMemoryFileCount:
+          opts.coreMemoryFileCount != null ? opts.coreMemoryFileCount : 0,
         approvalMode: opts.approvalMode ?? ApprovalMode.DEFAULT,
         vertexai: opts.vertexai,
         showMemoryUsage: opts.showMemoryUsage ?? false,
         accessibility: opts.accessibility ?? {},
-        embeddingModel: opts.embeddingModel || 'test-embedding-model',
+        embeddingModel:
+          opts.embeddingModel != null && opts.embeddingModel !== ''
+            ? opts.embeddingModel
+            : 'test-embedding-model',
 
-        getApiKey: vi.fn(() => opts.apiKey || 'test-key'),
-        getModel: vi.fn(() => opts.model || 'test-model-in-mock-factory'),
+        getApiKey: vi.fn(() =>
+          opts.apiKey != null && opts.apiKey !== '' ? opts.apiKey : 'test-key',
+        ),
+        getModel: vi.fn(() =>
+          opts.model != null && opts.model !== ''
+            ? opts.model
+            : 'test-model-in-mock-factory',
+        ),
         getSandbox: vi.fn(() => opts.sandbox),
-        getTargetDir: vi.fn(() => opts.targetDir || '/test/dir'),
+        getTargetDir: vi.fn(() =>
+          opts.targetDir != null && opts.targetDir !== ''
+            ? opts.targetDir
+            : '/test/dir',
+        ),
         getToolRegistry: vi.fn(() => ({}) as ToolRegistry), // Simple mock
-        getDebugMode: vi.fn(() => opts.debugMode || false),
+        getDebugMode: vi.fn(() =>
+          opts.debugMode != null ? opts.debugMode : false,
+        ),
         getQuestion: vi.fn(() => opts.question),
         getCoreTools: vi.fn(() => opts.coreTools),
         getToolDiscoveryCommand: vi.fn(() => opts.toolDiscoveryCommand),
@@ -143,12 +176,26 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getPromptRegistry: vi.fn(),
         getExtensions: vi.fn(() => []),
         getBlockedMcpServers: vi.fn(() => []),
-        getUserAgent: vi.fn(() => opts.userAgent || 'test-agent'),
-        getUserMemory: vi.fn(() => opts.userMemory || ''),
+        getUserAgent: vi.fn(() =>
+          opts.userAgent != null && opts.userAgent !== ''
+            ? opts.userAgent
+            : 'test-agent',
+        ),
+        getUserMemory: vi.fn(() =>
+          opts.userMemory != null && opts.userMemory !== ''
+            ? opts.userMemory
+            : '',
+        ),
         setUserMemory: vi.fn(),
-        getGeminiMdFileCount: vi.fn(() => opts.geminiMdFileCount || 0),
-        getLlxprtMdFileCount: vi.fn(() => opts.geminiMdFileCount || 0),
-        getCoreMemoryFileCount: vi.fn(() => opts.coreMemoryFileCount || 0),
+        getGeminiMdFileCount: vi.fn(() =>
+          opts.geminiMdFileCount != null ? opts.geminiMdFileCount : 0,
+        ),
+        getLlxprtMdFileCount: vi.fn(() =>
+          opts.geminiMdFileCount != null ? opts.geminiMdFileCount : 0,
+        ),
+        getCoreMemoryFileCount: vi.fn(() =>
+          opts.coreMemoryFileCount != null ? opts.coreMemoryFileCount : 0,
+        ),
         setGeminiMdFileCount: vi.fn(),
         getApprovalMode: vi.fn(() => opts.approvalMode ?? ApprovalMode.DEFAULT),
         setApprovalMode: vi.fn(),
@@ -161,6 +208,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
           getUserTier: vi.fn(),
         })),
         getCheckpointingEnabled: vi.fn(() => opts.checkpointing ?? true),
+        /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
         getAllGeminiMdFilenames: vi.fn(() => ['GEMINI.md']),
         getSessionId: vi.fn(() => 'test-session-id'),
         getUserTier: vi.fn().mockResolvedValue(undefined),
@@ -349,7 +397,7 @@ describe('App UI', () => {
   ): LoadedSettings => {
     const systemSettingsFile: SettingsFile = {
       path: '/system/settings.json',
-      settings: settings.system || {},
+      settings: settings.system ?? {},
     };
     const systemDefaultsFile: SettingsFile = {
       path: '/system/system-defaults.json',
@@ -357,11 +405,11 @@ describe('App UI', () => {
     };
     const userSettingsFile: SettingsFile = {
       path: '/user/settings.json',
-      settings: settings.user || {},
+      settings: settings.user ?? {},
     };
     const workspaceSettingsFile: SettingsFile = {
       path: '/workspace/.gemini/settings.json',
-      settings: settings.workspace || {},
+      settings: settings.workspace ?? {},
     };
     return new LoadedSettings(
       systemSettingsFile,
@@ -401,26 +449,19 @@ describe('App UI', () => {
     }) as unknown as MockServerConfig;
     mockVersion = '0.0.0-test';
 
-    // Ensure the getShowMemoryUsage mock function is specifically set up if not covered by constructor mock
-    if (!mockConfig.getShowMemoryUsage) {
-      mockConfig.getShowMemoryUsage = vi.fn(() => false);
-    }
+    // Set up mock for getShowMemoryUsage
     mockConfig.getShowMemoryUsage.mockReturnValue(false); // Default for most tests
 
     // Ensure a theme is set so the theme dialog does not appear.
     mockSettings = createMockSettings({ workspace: { theme: 'Default' } });
 
     // Ensure getWorkspaceContext is available if not added by the constructor
-    if (!mockConfig.getWorkspaceContext) {
-      mockConfig.getWorkspaceContext = vi.fn(() => ({
-        getDirectories: vi.fn(() => ['/test/dir']),
-      }));
-    }
+    mockConfig.getWorkspaceContext ??= vi.fn(() => ({
+      getDirectories: vi.fn(() => ['/test/dir']),
+    }));
 
     // Ensure getEphemeralSetting is available if not added by the constructor
-    if (!mockConfig.getEphemeralSetting) {
-      mockConfig.getEphemeralSetting = vi.fn(() => undefined);
-    }
+    mockConfig.getEphemeralSetting ??= vi.fn(() => undefined);
     vi.mocked(ideContext.getIdeContext).mockReturnValue(undefined);
   });
 
@@ -1582,8 +1623,10 @@ describe('App UI', () => {
       // The effect uses setTimeout(100ms) before sending
       await vi.advanceTimersByTimeAsync(100);
 
-      // Note: In the actual implementation, messages would be queued first
-      // This test verifies the auto-send mechanism works when state transitions
+      // No messages were queued, so the Responding→Idle transition must not
+      // trigger an auto-send. Any call here would mean we'd broken the guard
+      // and are resubmitting on every state flip.
+      expect(mockSubmitQueryFn).not.toHaveBeenCalled();
     });
 
     it('should display queued messages with dimmed color', () => {

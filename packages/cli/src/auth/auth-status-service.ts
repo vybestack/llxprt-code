@@ -431,10 +431,12 @@ export class AuthStatusService {
     runtimeContext: { runtimeId?: string } | undefined,
   ): void {
     const knownRuntimeIds = ['legacy-singleton', 'provider-manager-singleton'];
-    if (runtimeContext && typeof runtimeContext.runtimeId === 'string') {
-      if (!knownRuntimeIds.includes(runtimeContext.runtimeId)) {
-        knownRuntimeIds.push(runtimeContext.runtimeId);
-      }
+    if (
+      runtimeContext &&
+      typeof runtimeContext.runtimeId === 'string' &&
+      !knownRuntimeIds.includes(runtimeContext.runtimeId)
+    ) {
+      knownRuntimeIds.push(runtimeContext.runtimeId);
     }
 
     for (const runtimeId of knownRuntimeIds) {

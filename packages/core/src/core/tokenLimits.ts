@@ -4,17 +4,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 type Model = string;
 type TokenCount = number;
 
 export const DEFAULT_TOKEN_LIMIT = 1_048_576;
+
+function isOpenAi128kModel(modelWithoutPrefix: string): boolean {
+  if (modelWithoutPrefix.startsWith('o4-mini')) {
+    return true;
+  }
+  if (modelWithoutPrefix.startsWith('gpt-4o-mini')) {
+    return true;
+  }
+  if (modelWithoutPrefix.startsWith('gpt-4o-realtime')) {
+    return true;
+  }
+  if (modelWithoutPrefix.startsWith('gpt-4o')) {
+    return true;
+  }
+  if (modelWithoutPrefix.startsWith('gpt-4-turbo')) {
+    return true;
+  }
+  return false;
+}
 
 export function tokenLimit(
   model: Model,
   userContextLimit?: number,
 ): TokenCount {
   // If user has set a context limit, use it
-  if (userContextLimit && userContextLimit > 0) {
+  if (userContextLimit !== undefined && userContextLimit > 0) {
     return userContextLimit;
   }
 
@@ -40,13 +61,7 @@ export function tokenLimit(
   ) {
     return 200_000;
   }
-  if (
-    modelWithoutPrefix.startsWith('o4-mini') ||
-    modelWithoutPrefix.startsWith('gpt-4o-mini') ||
-    modelWithoutPrefix.startsWith('gpt-4o-realtime') ||
-    modelWithoutPrefix.startsWith('gpt-4o') ||
-    modelWithoutPrefix.startsWith('gpt-4-turbo')
-  ) {
+  if (isOpenAi128kModel(modelWithoutPrefix)) {
     return 128_000;
   }
   if (modelWithoutPrefix.startsWith('gpt-3.5-turbo')) {

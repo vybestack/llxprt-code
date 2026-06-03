@@ -293,7 +293,7 @@ export abstract class ConfigBaseCore {
   }
 
   isContinueSession(): boolean {
-    return !!this.continueSession;
+    return Boolean(this.continueSession);
   }
   shouldLoadMemoryFromIncludeDirectories(): boolean {
     return this.loadMemoryFromIncludeDirectories;
@@ -398,7 +398,7 @@ export abstract class ConfigBaseCore {
     return this.approvalMode;
   }
   isJitContextEnabled(): boolean {
-    return !!this.jitContextEnabled;
+    return this.jitContextEnabled === true;
   }
   getContextManager(): ContextManager | undefined {
     return this.contextManager;
@@ -501,9 +501,7 @@ export abstract class ConfigBaseCore {
     return this.bugCommand;
   }
   getFileService(): FileDiscoveryService {
-    if (!this.fileDiscoveryService) {
-      this.fileDiscoveryService = new FileDiscoveryService(this.targetDir);
-    }
+    this.fileDiscoveryService ??= new FileDiscoveryService(this.targetDir);
     return this.fileDiscoveryService;
   }
   getUsageStatisticsEnabled(): boolean {
@@ -573,9 +571,11 @@ export abstract class ConfigBaseCore {
     this.ideMode = value;
   }
   setIdeClientDisconnected(): void {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Public IDE setter can be invoked before initialization or via partial runtime/test boundaries.
     void this.ideClient?.disconnect();
   }
   setIdeClientConnected(): void {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Public IDE setter can be invoked before initialization or via partial runtime/test boundaries.
     void this.ideClient?.connect();
   }
   getComplexityAnalyzerSettings(): ComplexityAnalyzerSettings {

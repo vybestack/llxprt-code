@@ -155,6 +155,7 @@ class MockExtendedConfig implements ExtendedConfig {
 
   private expandPath(path: string): string {
     if (path.startsWith('~/')) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for HOME
       return path.replace('~', process.env.HOME || '');
     }
     return path;
@@ -286,6 +287,7 @@ describe('Conversation Logging Configuration', () => {
       },
     });
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for HOME
     const expectedPath = (process.env.HOME || '') + '/logs/conversations';
     expect(config.getConversationLogPath()).toBe(expectedPath);
   });

@@ -102,7 +102,7 @@ describe('encodeFrame', () => {
     const bigString = 'x'.repeat(MAX_FRAME_SIZE + 1);
     const payload = { data: bigString };
 
-    expect(() => encodeFrame(payload)).toThrow();
+    expect(() => encodeFrame(payload)).toThrow(/exceeds maximum size/);
   });
 
   /**
@@ -229,7 +229,7 @@ describe('FrameDecoder', () => {
     const header = Buffer.alloc(4);
     header.writeUInt32BE(MAX_FRAME_SIZE + 1, 0);
 
-    expect(() => decoder.feed(header)).toThrow();
+    expect(() => decoder.feed(header)).toThrow(/exceeds maximum size/);
   });
 
   /**

@@ -148,9 +148,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     provider = result.provider;
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
-    if (!runtimeContext.config) {
-      runtimeContext.config = createRuntimeConfigStub(settingsService);
-    }
+    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
     runtimeContext.config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),
       ...settingsService.getProviderSettings(provider.name),

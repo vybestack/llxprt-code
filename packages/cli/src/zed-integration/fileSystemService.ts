@@ -19,7 +19,7 @@ export class AcpFileSystemService implements FileSystemService {
   ) {}
 
   async readTextFile(filePath: string): Promise<string> {
-    if (!this.capabilities.readTextFile) {
+    if (this.capabilities.readTextFile !== true) {
       return this.fallback.readTextFile(filePath);
     }
 
@@ -32,7 +32,7 @@ export class AcpFileSystemService implements FileSystemService {
   }
 
   async writeTextFile(filePath: string, content: string): Promise<void> {
-    if (!this.capabilities.writeTextFile) {
+    if (this.capabilities.writeTextFile !== true) {
       return this.fallback.writeTextFile(filePath, content);
     }
 
@@ -41,5 +41,6 @@ export class AcpFileSystemService implements FileSystemService {
       content,
       sessionId: this.sessionId,
     });
+    return undefined;
   }
 }

@@ -84,8 +84,8 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
       const lb = new LoadBalancingProvider(config, providerManager);
       const stats = lb.getStats();
 
-      expect(stats.currentTPM.backend1 || 0).toBe(0);
-      expect(stats.currentTPM.backend2 || 0).toBe(0);
+      expect(stats.currentTPM.backend1).toBe(0);
+      expect(stats.currentTPM.backend2).toBe(0);
     });
 
     it('should track tokens after successful request', async () => {

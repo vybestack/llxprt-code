@@ -98,8 +98,11 @@ describe('BaseSelectionList', () => {
       const output = lastFrame();
 
       // Use regex to assert the structure: Indicator + Whitespace + Number + Label
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/●\s+1\.\s+Item A/);
+      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       expect(output).toMatch(/\s+2\.\s+Item B/);
+      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       expect(output).toMatch(/\s+3\.\s+Item C/);
     });
 

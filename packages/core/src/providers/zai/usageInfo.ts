@@ -167,7 +167,11 @@ export async function fetchZaiUsage(
  * Format a reset time relative to now for display
  */
 function formatResetTime(nextResetTime: number | undefined): string {
-  if (!nextResetTime) {
+  if (
+    nextResetTime === undefined ||
+    nextResetTime === 0 ||
+    Number.isNaN(nextResetTime)
+  ) {
     return 'N/A';
   }
 
@@ -211,15 +215,24 @@ export function formatZaiUsage(usage: ZaiUsageInfo): string[] {
       );
 
       // Show tool breakdown if usage details are present
-      if (limit.usageDetails) {
-        for (const detail of limit.usageDetails) {
-          if (detail.usage > 0) {
-            lines.push(`    ${detail.modelCode}: ${detail.usage}`);
-          }
-        }
-      }
+      appendUsageDetails(lines, limit.usageDetails);
     }
   }
 
   return lines;
+}
+
+/**
+ * Helper function to append usage details to output lines.
+ */
+function appendUsageDetails(
+  lines: string[],
+  usageDetails: Array<{ modelCode: string; usage: number }> | undefined,
+): void {
+  if (!usageDetails) return;
+  for (const detail of usageDetails) {
+    if (detail.usage > 0) {
+      lines.push(`    ${detail.modelCode}: ${detail.usage}`);
+    }
+  }
 }

@@ -133,7 +133,7 @@ describe('MessageBus subscription (DELTA-HEVT-001)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
     bus.clear();
   });
 
@@ -246,7 +246,7 @@ describe('Correlated responses (DELTA-HEVT-002)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
     bus.clear();
   });
 
@@ -361,7 +361,7 @@ describe('Unsupported event name (DELTA-HEVT-003)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
     bus.clear();
   });
 
@@ -480,7 +480,7 @@ describe('Bus-absent fallback (DELTA-HBUS-002)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
   });
 
   /**
@@ -536,7 +536,7 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
     bus.clear();
   });
 
@@ -582,6 +582,7 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
     const responses = bus.getPublishedResponses();
     expect(responses).toHaveLength(1);
     const uuidRegex =
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     expect(responses[0].correlationId).toMatch(uuidRegex);
   });
@@ -649,7 +650,7 @@ describe('Model translation (DELTA-HPAY-003)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
   });
 
   /**

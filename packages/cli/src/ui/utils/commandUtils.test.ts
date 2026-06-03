@@ -286,6 +286,7 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const written = tty.write.mock.calls[0][0] as string;
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty array is valid fallback for match result
       const chunkStarts = (written.match(new RegExp(`${ESC}P`, 'g')) || [])
         .length;
       const chunkEnds = written.split(ST).length - 1;

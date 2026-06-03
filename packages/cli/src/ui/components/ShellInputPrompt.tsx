@@ -26,22 +26,27 @@ export const ShellInputPrompt: React.FC<ShellInputPromptProps> = ({
       }
       const targetPtyId =
         activeShellPtyId ?? ShellExecutionService.getLastActivePtyId();
-      if (!targetPtyId) {
+      if (
+        targetPtyId == null ||
+        targetPtyId === 0 ||
+        Number.isNaN(targetPtyId)
+      ) {
         return;
       }
+      const ptyId = targetPtyId;
       if (key.ctrl && key.shift && key.name === 'up') {
-        ShellExecutionService.scrollPty(targetPtyId, -1);
+        ShellExecutionService.scrollPty(ptyId, -1);
         return;
       }
 
       if (key.ctrl && key.shift && key.name === 'down') {
-        ShellExecutionService.scrollPty(targetPtyId, 1);
+        ShellExecutionService.scrollPty(ptyId, 1);
         return;
       }
 
       const ansiSequence = keyToAnsi(key);
       if (ansiSequence) {
-        ShellExecutionService.writeToPty(targetPtyId, ansiSequence);
+        ShellExecutionService.writeToPty(ptyId, ansiSequence);
       }
     },
     [focus, activeShellPtyId],

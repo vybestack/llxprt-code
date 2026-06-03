@@ -328,7 +328,7 @@ export function calculateVisualCursorFromLayout(
   const [logicalRow, logicalCol] = logicalCursor;
 
   const segmentsForLogicalLine = logicalToVisualMap[logicalRow];
-  if (!segmentsForLogicalLine || segmentsForLogicalLine.length === 0) {
+  if (segmentsForLogicalLine.length === 0) {
     return [0, 0];
   }
 

@@ -7,18 +7,10 @@
 import {
   type Config,
   ProviderManager,
-  OpenAIProvider,
-  OpenAIResponsesProvider,
-  OpenAIVercelProvider,
-  AnthropicProvider,
-  GeminiProvider,
   FakeProvider,
-  sanitizeForByteString,
-  needsSanitization,
   type SettingsService,
   getSettingsService,
   DebugLogger,
-  debugLogger,
   type MessageBus,
 } from '@vybestack/llxprt-code-core';
 
@@ -43,23 +35,12 @@ import {
   type ProviderAliasEntry,
 } from './providerAliases.js';
 
-/**
- * Sanitizes API keys to remove problematic characters that cause ByteString errors.
- * This handles cases where API key files have encoding issues or contain
- * Unicode replacement characters (U+FFFD).
- */
-function sanitizeApiKey(key: string): string {
-  const sanitized = sanitizeForByteString(key);
+import {
+  sanitizeApiKey,
+  registerAliasProviders,
+} from './aliasProviderFactory.js';
 
-  if (needsSanitization(key)) {
-    debugLogger.warn(
-      '[ProviderManager] API key contained non-ASCII or control characters that were removed. ' +
-        'Please check your API key file encoding (should be UTF-8 without BOM).',
-    );
-  }
-
-  return sanitized;
-}
+export { bindOpenAIAliasIdentity } from './aliasProviderFactory.js';
 
 let fileSystemInstance: IFileSystem | null = null;
 let singletonManager: ProviderManager | null = null;
@@ -104,9 +85,7 @@ export function setFileSystem(fs: IFileSystem): void {
  * Get the file system implementation to use.
  */
 function getFileSystem(): IFileSystem {
-  if (!fileSystemInstance) {
-    fileSystemInstance = new NodeFileSystem();
-  }
+  fileSystemInstance ??= new NodeFileSystem();
   return fileSystemInstance;
 }
 
@@ -124,7 +103,7 @@ function resolveLoadedSettings(
       const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
       userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
     }
-  } catch (_error) {
+  } catch {
     // Failed to load user settings, ignore and fall back to defaults.
   }
 
@@ -182,6 +161,61 @@ function coerceAuthOnly(value: unknown): boolean | undefined {
   return undefined;
 }
 
+function resolveOpenaiResponsesEnabled(
+  ephemeralValue: unknown,
+  authOnlyEnabled: boolean,
+  settingsValue: unknown,
+): boolean | undefined {
+  if (ephemeralValue !== undefined) {
+    return Boolean(ephemeralValue);
+  }
+
+  if (authOnlyEnabled) {
+    return true;
+  }
+
+  return typeof settingsValue === 'boolean' ? settingsValue : undefined;
+}
+
+function resolveOpenaiApiKey(
+  ephemeralAuthKey: unknown,
+  openaiProviderApiKey: string | undefined,
+  authOnlyEnabled: boolean,
+): string | undefined {
+  if (typeof ephemeralAuthKey === 'string' && ephemeralAuthKey.trim() !== '') {
+    return sanitizeApiKey(ephemeralAuthKey);
+  }
+
+  if (
+    typeof openaiProviderApiKey === 'string' &&
+    openaiProviderApiKey.trim() !== ''
+  ) {
+    return sanitizeApiKey(openaiProviderApiKey);
+  }
+
+  const envApiKey = process.env.OPENAI_API_KEY;
+  if (typeof envApiKey === 'string' && envApiKey !== '' && !authOnlyEnabled) {
+    return sanitizeApiKey(envApiKey);
+  }
+
+  return undefined;
+}
+
+function resolveOpenaiBaseUrl(
+  ephemeralBaseUrl: unknown,
+  providerBaseUrl: string | undefined,
+): string | undefined {
+  if (typeof ephemeralBaseUrl === 'string') {
+    return ephemeralBaseUrl;
+  }
+
+  if (typeof providerBaseUrl === 'string') {
+    return providerBaseUrl;
+  }
+
+  return process.env.OPENAI_BASE_URL;
+}
+
 function resolveAuthOnlyFlag(
   config?: Config,
   loadedSettings?: LoadedSettings,
@@ -207,24 +241,143 @@ function resolveAuthOnlyFlag(
     }
   }
 
-  if (typeof getSettingsService === 'function') {
-    try {
-      const settingsService = getSettingsService();
-      if (settingsService && typeof settingsService.get === 'function') {
-        const serviceValue = settingsService.get('authOnly');
-        if (serviceValue !== undefined) {
-          const coerced = coerceAuthOnly(serviceValue);
-          if (typeof coerced === 'boolean') {
-            return coerced;
-          }
-        }
-      }
-    } catch (_error) {
-      // Ignore SettingsService lookup failures and fall back to default
-    }
+  const settingsServiceAuthOnly = tryGetSettingsServiceAuthOnly();
+  if (settingsServiceAuthOnly !== undefined) {
+    return settingsServiceAuthOnly;
   }
 
   return false;
+}
+
+/**
+ * Attempts to get authOnly from SettingsService, returning undefined on failure.
+ */
+function tryGetSettingsServiceAuthOnly(): boolean | undefined {
+  if (typeof getSettingsService !== 'function') {
+    return undefined;
+  }
+  try {
+    const settingsService = getSettingsService();
+    const serviceValue = settingsService.get('authOnly');
+    if (serviceValue === undefined) {
+      return undefined;
+    }
+    const coerced = coerceAuthOnly(serviceValue);
+    return typeof coerced === 'boolean' ? coerced : undefined;
+  } catch {
+    // Ignore SettingsService lookup failures and fall back to default
+    return undefined;
+  }
+}
+
+/** Registers OAuth providers for authentication support. */
+function registerOAuthProviders(
+  oauthManager: OAuthManager,
+  tokenStore: ReturnType<typeof createTokenStore>,
+  addItem: ProviderManagerFactoryOptions['addItem'],
+): void {
+  void ensureOAuthProviderRegistered(
+    'gemini',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
+  void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
+  void ensureOAuthProviderRegistered(
+    'anthropic',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
+  void ensureOAuthProviderRegistered(
+    'codex',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
+}
+
+/** Resolves OpenAI-specific settings from merged settings and ephemeral overrides. */
+function resolveOpenaiSettings(
+  config: Config | undefined,
+  loadedSettings: LoadedSettings | undefined,
+  authOnlyEnabled: boolean,
+  allowBrowserEnvironment: boolean,
+): {
+  openaiApiKey: string | undefined;
+  openaiBaseUrl: string | undefined;
+  openaiProviderConfig: IProviderConfig;
+} {
+  const settingsData =
+    loadedSettings?.merged ?? ({} as Partial<MergedSettings>);
+  const ephemeralSettings = config?.getEphemeralSettings() ?? {};
+  const effectiveOpenaiResponsesEnabled = resolveOpenaiResponsesEnabled(
+    ephemeralSettings.openaiResponsesEnabled,
+    authOnlyEnabled,
+    settingsData.openaiResponsesEnabled,
+  );
+
+  const ephemeralAuthKey = ephemeralSettings['auth-key'];
+  const settingsProviders = settingsData as Record<string, unknown>;
+  const openaiProviderSettings = settingsProviders.providers as
+    | Record<string, unknown>
+    | undefined;
+  const openaiSettings = openaiProviderSettings?.openai as
+    | Record<string, unknown>
+    | undefined;
+  const openaiProviderApiKey =
+    (openaiSettings?.apiKey as string | undefined) ??
+    (openaiSettings?.['auth-key'] as string | undefined);
+
+  const openaiApiKey = resolveOpenaiApiKey(
+    ephemeralAuthKey,
+    openaiProviderApiKey,
+    authOnlyEnabled,
+  );
+
+  const ephemeralBaseUrl = ephemeralSettings['base-url'];
+  const providerBaseUrl = openaiSettings?.['base-url'] as string | undefined;
+  const openaiBaseUrl = resolveOpenaiBaseUrl(ephemeralBaseUrl, providerBaseUrl);
+
+  const openaiProviderConfig: IProviderConfig = {
+    enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
+    textToolCallModels: settingsData.textToolCallModels,
+    providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
+    openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
+    allowBrowserEnvironment,
+    getEphemeralSettings: config
+      ? () => config.getEphemeralSettings()
+      : undefined,
+  };
+
+  return { openaiApiKey, openaiBaseUrl, openaiProviderConfig };
+}
+
+/** Registers all alias-based providers and OAuth providers on the manager. */
+function registerAllProviders(
+  manager: ProviderManager,
+  aliasEntries: ProviderAliasEntry[],
+  openaiApiKey: string | undefined,
+  openaiBaseUrl: string | undefined,
+  openaiProviderConfig: IProviderConfig,
+  oauthManager: OAuthManager,
+  tokenStore: ReturnType<typeof createTokenStore>,
+  config: Config | undefined,
+  authOnlyEnabled: boolean,
+  addItem: ProviderManagerFactoryOptions['addItem'],
+): void {
+  registerAliasProviders(
+    manager,
+    aliasEntries,
+    openaiApiKey,
+    openaiBaseUrl,
+    openaiProviderConfig,
+    oauthManager,
+    config,
+    authOnlyEnabled,
+  );
+
+  registerOAuthProviders(oauthManager, tokenStore, addItem);
 }
 
 export function createProviderManager(
@@ -246,15 +399,8 @@ export function createProviderManager(
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
    */
-  const runtimeOAuthMessageBus = options.runtimeMessageBus;
-  /**
-   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
-   * @requirement REQ-D01-002
-   * @requirement REQ-D01-003
-   * @pseudocode lines 122-133
-   */
   const oauthRuntimeDeps: OAuthManagerRuntimeMessageBusDeps = {
-    messageBus: runtimeOAuthMessageBus,
+    messageBus: options.runtimeMessageBus,
     config: options.config,
   };
   const oauthManager = new OAuthManager(
@@ -285,130 +431,35 @@ export function createProviderManager(
   }
 
   logger.debug('createProviderManager config check', {
-    hasConfig: !!config,
-    configType: config?.constructor?.name,
+    hasConfig: config !== undefined,
+    configType: config?.constructor.name,
   });
 
   if (config) {
     manager.setConfig(config);
     config.setProviderManager(manager);
-    logger.debug(
-      'OAuthManager runtime dependencies configured from composition root',
-    );
-  } else {
-    logger.debug('No config provided; runtime MessageBus was not injected');
   }
 
   const authOnlyEnabled = resolveAuthOnlyFlag(config, loadedSettings);
+  const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
+    resolveOpenaiSettings(
+      config,
+      loadedSettings,
+      authOnlyEnabled,
+      allowBrowserEnvironment,
+    );
 
-  const settingsData =
-    loadedSettings?.merged ?? ({} as Partial<MergedSettings>);
-  const ephemeralSettings = config?.getEphemeralSettings?.() ?? {};
-  const effectiveOpenaiResponsesEnabled: boolean | undefined =
-    ephemeralSettings.openaiResponsesEnabled !== undefined
-      ? Boolean(ephemeralSettings.openaiResponsesEnabled)
-      : authOnlyEnabled
-        ? true
-        : typeof settingsData.openaiResponsesEnabled === 'boolean'
-          ? settingsData.openaiResponsesEnabled
-          : undefined;
-
-  // Check for CLI-provided API key first (highest priority)
-  // NOTE: Bootstrap args (--key, --keyfile) should be applied to ephemeral settings
-  // by calling applyCliArgumentOverrides() BEFORE creating the provider manager.
-  // We check ephemeralSettings['auth-key'] which should already contain the resolved value.
-  const ephemeralAuthKey = ephemeralSettings['auth-key'];
-
-  // Also check provider-specific settings if no ephemeral auth-key
-  const settingsProviders = settingsData as Record<string, unknown>;
-  const openaiProviderSettings = settingsProviders.providers as
-    | Record<string, unknown>
-    | undefined;
-  const openaiSettings = openaiProviderSettings?.openai as
-    | Record<string, unknown>
-    | undefined;
-  const openaiProviderApiKey =
-    (openaiSettings?.apiKey as string | undefined) ||
-    (openaiSettings?.['auth-key'] as string | undefined);
-
-  let openaiApiKey: string | undefined;
-
-  if (
-    ephemeralAuthKey &&
-    typeof ephemeralAuthKey === 'string' &&
-    ephemeralAuthKey.trim() !== ''
-  ) {
-    openaiApiKey = sanitizeApiKey(ephemeralAuthKey);
-  } else if (
-    openaiProviderApiKey &&
-    typeof openaiProviderApiKey === 'string' &&
-    openaiProviderApiKey.trim() !== ''
-  ) {
-    openaiApiKey = sanitizeApiKey(openaiProviderApiKey);
-  } else if (process.env.OPENAI_API_KEY && !authOnlyEnabled) {
-    openaiApiKey = sanitizeApiKey(process.env.OPENAI_API_KEY);
-  }
-
-  // Check for CLI-provided baseUrl in ephemerals or provider settings
-  // NOTE: Bootstrap args (--baseurl) should be applied to ephemeral settings
-  // by calling applyCliArgumentOverrides() BEFORE creating the provider manager.
-  const ephemeralBaseUrl = ephemeralSettings['base-url'];
-  const providerBaseUrl = openaiSettings?.['base-url'] as string | undefined;
-  const openaiBaseUrl =
-    ephemeralBaseUrl && typeof ephemeralBaseUrl === 'string'
-      ? ephemeralBaseUrl
-      : providerBaseUrl && typeof providerBaseUrl === 'string'
-        ? providerBaseUrl
-        : process.env.OPENAI_BASE_URL;
-
-  // Debug logging removed - was using debugLogger.log which violates project guidelines
-  // Use DebugLogger if detailed logging is needed here
-
-  const openaiProviderConfig: IProviderConfig = {
-    enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
-    textToolCallModels: settingsData.textToolCallModels,
-    providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
-    openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
-    allowBrowserEnvironment,
-    getEphemeralSettings: config
-      ? () => config.getEphemeralSettings()
-      : undefined,
-  };
-
-  // All providers are now registered via alias configs
   const aliasEntries = loadProviderAliasEntries();
-  registerAliasProviders(
+  registerAllProviders(
     manager,
     aliasEntries,
     openaiApiKey,
     openaiBaseUrl,
     openaiProviderConfig,
     oauthManager,
+    tokenStore,
     config,
     authOnlyEnabled,
-  );
-
-  // Register OAuth providers for authentication support
-  void ensureOAuthProviderRegistered(
-    'gemini',
-    oauthManager,
-    tokenStore,
-    addItem,
-  );
-
-  void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
-
-  void ensureOAuthProviderRegistered(
-    'anthropic',
-    oauthManager,
-    tokenStore,
-    addItem,
-  );
-
-  void ensureOAuthProviderRegistered(
-    'codex',
-    oauthManager,
-    tokenStore,
     addItem,
   );
 
@@ -502,433 +553,3 @@ export function refreshAliasProviders(): void {
 }
 
 export { getProviderManager as providerManager };
-
-function registerAliasProviders(
-  providerManagerInstance: ProviderManager,
-  aliasEntries: ProviderAliasEntry[],
-  openaiApiKey: string | undefined,
-  openaiBaseUrl: string | undefined,
-  openaiProviderConfig: IProviderConfig,
-  oauthManager: OAuthManager,
-  config?: Config,
-  authOnlyEnabled?: boolean,
-): void {
-  for (const entry of aliasEntries) {
-    switch (entry.config.baseProvider.toLowerCase()) {
-      case 'openai': {
-        const provider = createOpenAIAliasProvider(
-          entry,
-          openaiApiKey,
-          openaiBaseUrl,
-          openaiProviderConfig,
-          oauthManager,
-        );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider);
-        }
-        break;
-      }
-      case 'openai-responses': {
-        const provider = createOpenAIResponsesAliasProvider(
-          entry,
-          openaiApiKey,
-          openaiBaseUrl,
-          openaiProviderConfig,
-          oauthManager,
-        );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider);
-        }
-        break;
-      }
-      case 'openaivercel':
-      case 'openai-vercel': {
-        const provider = createOpenAIVercelAliasProvider(
-          entry,
-          openaiApiKey,
-          openaiBaseUrl,
-          openaiProviderConfig,
-          oauthManager,
-        );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider);
-        }
-        break;
-      }
-      case 'gemini': {
-        const provider = createGeminiAliasProvider(entry, oauthManager, config);
-        if (provider) {
-          providerManagerInstance.registerProvider(provider);
-        }
-        break;
-      }
-      case 'anthropic': {
-        const provider = createAnthropicAliasProvider(
-          entry,
-          oauthManager,
-          authOnlyEnabled,
-        );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider);
-        }
-        break;
-      }
-      default: {
-        debugLogger.warn(
-          `[ProviderManager] Unsupported base provider '${entry.config.baseProvider}' for alias '${entry.alias}', skipping.`,
-        );
-      }
-    }
-  }
-}
-
-type AliasAwareBaseProvider = {
-  authResolver?: {
-    updateConfig?: (config: { providerId?: string }) => void;
-  };
-  baseProviderConfig?: {
-    name?: string;
-  };
-};
-
-/**
- * Ensure alias providers use their own identifier when resolving authentication.
- * Without this, API keys saved via `/key` are stored under the alias name,
- * but the OpenAI provider would continue to look up credentials under `openai`.
- */
-export function bindOpenAIAliasIdentity(
-  provider: OpenAIProvider,
-  alias: string,
-): void {
-  bindProviderAliasIdentity(provider, alias);
-}
-
-function bindProviderAliasIdentity(provider: unknown, alias: string): void {
-  const aliasName = alias?.trim();
-  if (!aliasName) {
-    return;
-  }
-
-  Object.defineProperty(provider, 'name', {
-    value: aliasName,
-    writable: false,
-    enumerable: true,
-    configurable: true,
-  });
-
-  const aliasAwareProvider = provider as AliasAwareBaseProvider;
-  if (aliasAwareProvider.baseProviderConfig) {
-    aliasAwareProvider.baseProviderConfig.name = aliasName;
-  }
-
-  aliasAwareProvider.authResolver?.updateConfig?.({
-    providerId: aliasName,
-  });
-}
-
-function createOpenAIAliasProvider(
-  entry: ProviderAliasEntry,
-  openaiApiKey: string | undefined,
-  openaiBaseUrl: string | undefined,
-  openaiProviderConfig: IProviderConfig,
-  oauthManager: OAuthManager,
-): OpenAIProvider | null {
-  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
-  if (!resolvedBaseUrl) {
-    debugLogger.warn(
-      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
-    );
-    return null;
-  }
-
-  const aliasProviderConfig: IProviderConfig = {
-    ...openaiProviderConfig,
-    baseUrl: resolvedBaseUrl,
-  };
-
-  if (entry.config.providerConfig) {
-    Object.assign(aliasProviderConfig, entry.config.providerConfig);
-  }
-
-  if (entry.config.defaultModel) {
-    aliasProviderConfig.defaultModel = entry.config.defaultModel;
-  }
-
-  let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
-    const envValue = process.env[entry.config.apiKeyEnv];
-    if (envValue && envValue.trim() !== '') {
-      aliasApiKey = sanitizeApiKey(envValue);
-    }
-  }
-  if (!aliasApiKey && openaiApiKey) {
-    aliasApiKey = openaiApiKey;
-  }
-
-  const provider = new OpenAIProvider(
-    aliasApiKey || undefined,
-    resolvedBaseUrl,
-    aliasProviderConfig,
-    oauthManager,
-  );
-
-  if (
-    entry.config.defaultModel &&
-    typeof provider.getDefaultModel === 'function'
-  ) {
-    const configuredDefaultModel = entry.config.defaultModel;
-    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
-    provider.getDefaultModel = () =>
-      configuredDefaultModel || originalGetDefaultModel();
-  }
-
-  // Override getModels() to return static models if configured
-  // This avoids API calls for providers that don't have a /models endpoint
-  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
-    const staticModels = entry.config.staticModels.map((m) => ({
-      id: m.id,
-      name: m.name,
-      provider: entry.alias,
-      supportedToolFormats: ['openai'] as string[],
-    }));
-    provider.getModels = async () => staticModels;
-  }
-
-  bindOpenAIAliasIdentity(provider, entry.alias);
-
-  return provider;
-}
-
-function createOpenAIResponsesAliasProvider(
-  entry: ProviderAliasEntry,
-  openaiApiKey: string | undefined,
-  openaiBaseUrl: string | undefined,
-  openaiProviderConfig: IProviderConfig,
-  oauthManager: OAuthManager,
-): OpenAIResponsesProvider | null {
-  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
-  if (!resolvedBaseUrl) {
-    debugLogger.warn(
-      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
-    );
-    return null;
-  }
-
-  const aliasProviderConfig: IProviderConfig = {
-    ...openaiProviderConfig,
-    baseUrl: resolvedBaseUrl,
-  };
-
-  if (entry.config.providerConfig) {
-    Object.assign(aliasProviderConfig, entry.config.providerConfig);
-  }
-
-  if (entry.config.defaultModel) {
-    aliasProviderConfig.defaultModel = entry.config.defaultModel;
-  }
-
-  let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
-    const envValue = process.env[entry.config.apiKeyEnv];
-    if (envValue && envValue.trim() !== '') {
-      aliasApiKey = sanitizeApiKey(envValue);
-    }
-  }
-  if (!aliasApiKey && openaiApiKey) {
-    aliasApiKey = openaiApiKey;
-  }
-
-  const provider = new OpenAIResponsesProvider(
-    aliasApiKey || undefined,
-    resolvedBaseUrl,
-    aliasProviderConfig,
-    oauthManager,
-  );
-
-  // Override the provider name to match the alias
-  Object.defineProperty(provider, 'name', {
-    value: entry.alias,
-    writable: false,
-    enumerable: true,
-    configurable: true,
-  });
-
-  if (
-    entry.config.defaultModel &&
-    typeof provider.getDefaultModel === 'function'
-  ) {
-    const configuredDefaultModel = entry.config.defaultModel;
-    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
-    provider.getDefaultModel = () =>
-      configuredDefaultModel || originalGetDefaultModel();
-  }
-
-  // Override getModels() to return static models if configured
-  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
-    const staticModels = entry.config.staticModels.map((m) => ({
-      id: m.id,
-      name: m.name,
-      provider: entry.alias,
-      supportedToolFormats: ['openai'] as string[],
-    }));
-    provider.getModels = async () => staticModels;
-  }
-
-  return provider;
-}
-
-function createOpenAIVercelAliasProvider(
-  entry: ProviderAliasEntry,
-  openaiApiKey: string | undefined,
-  openaiBaseUrl: string | undefined,
-  openaiProviderConfig: IProviderConfig,
-  oauthManager: OAuthManager,
-): OpenAIVercelProvider | null {
-  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
-  if (!resolvedBaseUrl) {
-    debugLogger.warn(
-      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
-    );
-    return null;
-  }
-
-  const aliasProviderConfig: IProviderConfig = {
-    ...openaiProviderConfig,
-    baseUrl: resolvedBaseUrl,
-  };
-
-  if (entry.config.providerConfig) {
-    Object.assign(aliasProviderConfig, entry.config.providerConfig);
-  }
-
-  if (entry.config.defaultModel) {
-    aliasProviderConfig.defaultModel = entry.config.defaultModel;
-  }
-
-  let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
-    const envValue = process.env[entry.config.apiKeyEnv];
-    if (envValue && envValue.trim() !== '') {
-      aliasApiKey = sanitizeApiKey(envValue);
-    }
-  }
-  if (!aliasApiKey && openaiApiKey) {
-    aliasApiKey = openaiApiKey;
-  }
-
-  const provider = new OpenAIVercelProvider(
-    aliasApiKey || undefined,
-    resolvedBaseUrl,
-    aliasProviderConfig,
-    oauthManager,
-  );
-
-  if (
-    entry.config.defaultModel &&
-    typeof provider.getDefaultModel === 'function'
-  ) {
-    const configuredDefaultModel = entry.config.defaultModel;
-    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
-    provider.getDefaultModel = () =>
-      configuredDefaultModel || originalGetDefaultModel();
-  }
-
-  // Override getModels() to return static models if configured
-  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
-    const staticModels = entry.config.staticModels.map((m) => ({
-      id: m.id,
-      name: m.name,
-      provider: entry.alias,
-      supportedToolFormats: ['openai'] as string[],
-    }));
-    provider.getModels = async () => staticModels;
-  }
-
-  bindProviderAliasIdentity(provider, entry.alias);
-
-  return provider;
-}
-
-function createGeminiAliasProvider(
-  entry: ProviderAliasEntry,
-  oauthManager: OAuthManager,
-  config?: Config,
-): GeminiProvider | null {
-  let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
-    const envValue = process.env[entry.config.apiKeyEnv];
-    if (envValue && envValue.trim() !== '') {
-      aliasApiKey = sanitizeApiKey(envValue);
-    }
-  }
-
-  const resolvedBaseUrl = entry.config['base-url'];
-
-  const provider = new GeminiProvider(
-    aliasApiKey || undefined,
-    resolvedBaseUrl,
-    config,
-    oauthManager,
-  );
-
-  if (config && typeof provider.setConfig === 'function') {
-    provider.setConfig(config);
-  }
-
-  if (
-    entry.config.defaultModel &&
-    typeof provider.getDefaultModel === 'function'
-  ) {
-    const configuredDefaultModel = entry.config.defaultModel;
-    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
-    provider.getDefaultModel = () =>
-      configuredDefaultModel || originalGetDefaultModel();
-  }
-
-  bindProviderAliasIdentity(provider, entry.alias);
-
-  return provider;
-}
-
-function createAnthropicAliasProvider(
-  entry: ProviderAliasEntry,
-  oauthManager: OAuthManager,
-  authOnlyEnabled?: boolean,
-): AnthropicProvider | null {
-  let aliasApiKey: string | undefined;
-  // Only use environment variable API key if authOnly is not enabled
-  if (!authOnlyEnabled && entry.config.apiKeyEnv) {
-    const envValue = process.env[entry.config.apiKeyEnv];
-    if (envValue && envValue.trim() !== '') {
-      aliasApiKey = sanitizeApiKey(envValue);
-    }
-  }
-
-  const resolvedBaseUrl = entry.config['base-url'];
-
-  const providerConfig: IProviderConfig = {};
-  if (entry.config.providerConfig) {
-    Object.assign(providerConfig, entry.config.providerConfig);
-  }
-
-  const provider = new AnthropicProvider(
-    aliasApiKey || undefined,
-    resolvedBaseUrl,
-    providerConfig,
-    oauthManager,
-  );
-
-  if (
-    entry.config.defaultModel &&
-    typeof provider.getDefaultModel === 'function'
-  ) {
-    const configuredDefaultModel = entry.config.defaultModel;
-    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
-    provider.getDefaultModel = () =>
-      configuredDefaultModel || originalGetDefaultModel();
-  }
-
-  bindProviderAliasIdentity(provider, entry.alias);
-
-  return provider;
-}

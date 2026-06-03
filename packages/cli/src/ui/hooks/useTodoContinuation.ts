@@ -41,10 +41,168 @@ export interface TodoContinuationHook {
   clearPause: () => void;
 }
 
+function evaluateConditions(
+  hadToolCalls: boolean,
+  todoPaused: boolean,
+  config: Config,
+  todos: Todo[],
+  isActive: boolean,
+): ContinuationConditions {
+  const ephemeralSettings = config.getEphemeralSettings();
+  const isEnabled = ephemeralSettings['todo-continuation'] === true;
+  const hasActiveTodos = todos.some(
+    (todo) => todo.status === 'pending' || todo.status === 'in_progress',
+  );
+  const hadBlockingToolCalls = hadToolCalls && (todoPaused || !hasActiveTodos);
+
+  return {
+    streamCompleted: true,
+    noToolCallsMade: !hadBlockingToolCalls,
+    hasActiveTodos,
+    continuationEnabled: isEnabled,
+    notAlreadyContinuing: !isActive,
+    todoPaused,
+  };
+}
+
+function shouldTrigger(
+  conditions: ContinuationConditions,
+  isResponding: boolean,
+): boolean {
+  if (isResponding) {
+    return false;
+  }
+
+  const baseConditionsMet =
+    conditions.streamCompleted &&
+    conditions.noToolCallsMade &&
+    conditions.hasActiveTodos;
+  const continuationReady =
+    conditions.continuationEnabled && conditions.notAlreadyContinuing;
+  return baseConditionsMet && continuationReady && !conditions.todoPaused;
+}
+
+function findMostRelevantTodo(todos: Todo[]): Todo | null {
+  const inProgressTodos = todos.filter((todo) => todo.status === 'in_progress');
+
+  if (inProgressTodos.length > 0) {
+    return inProgressTodos[0];
+  }
+
+  const pendingTodos = todos.filter((todo) => todo.status === 'pending');
+
+  if (pendingTodos.length > 0) {
+    return pendingTodos[0];
+  }
+
+  return null;
+}
+
+function generatePrompt(todo: Todo, config: Config): string {
+  const isYoloMode = config.getApprovalMode() === ApprovalMode.YOLO;
+
+  if (isYoloMode) {
+    return `Continue to proceed with the active task without waiting for confirmation: "${todo.content}"`;
+  }
+
+  return `Please continue working on the following task: "${todo.content}"`;
+}
+
+function sendContinuationPrompt(
+  geminiClient: GeminiClient,
+  taskDescription: string,
+  continuationPrompt: string,
+  onDebugMessage: (message: string) => void,
+  setContinuationState: React.Dispatch<React.SetStateAction<ContinuationState>>,
+  continuationInProgressRef: React.MutableRefObject<boolean>,
+): void {
+  if (continuationInProgressRef.current) {
+    return;
+  }
+
+  continuationInProgressRef.current = true;
+
+  setContinuationState((prev) => ({
+    isActive: true,
+    taskDescription,
+    attemptCount: prev.attemptCount + 1,
+    lastPromptTime: new Date(),
+  }));
+
+  (
+    geminiClient.sendMessageStream as unknown as (
+      message: string,
+      options?: { ephemeral: boolean },
+    ) => Promise<void>
+  )(continuationPrompt, { ephemeral: true })
+    .catch((error: unknown) => {
+      onDebugMessage(
+        `[TodoContinuation] Error sending continuation prompt: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      setContinuationState((prev) => ({
+        isActive: false,
+        attemptCount: prev.attemptCount,
+        lastPromptTime: prev.lastPromptTime,
+        taskDescription: prev.taskDescription,
+      }));
+    })
+    .finally(() => {
+      continuationInProgressRef.current = false;
+    });
+}
+
+function processContinuation(
+  hadToolCalls: boolean,
+  todoContext: { todos: Todo[]; paused: boolean },
+  config: Config,
+  isResponding: boolean,
+  continuationState: ContinuationState,
+  continuationInProgressRef: React.MutableRefObject<boolean>,
+  geminiClient: GeminiClient,
+  onDebugMessage: (message: string) => void,
+  setContinuationState: React.Dispatch<React.SetStateAction<ContinuationState>>,
+): void {
+  if (hadToolCalls) {
+    setContinuationState((prev) => ({ ...prev, isActive: false }));
+  }
+
+  const conditions = evaluateConditions(
+    hadToolCalls,
+    todoContext.paused,
+    config,
+    todoContext.todos,
+    continuationState.isActive,
+  );
+
+  if (!shouldTrigger(conditions, isResponding)) {
+    return;
+  }
+
+  const activeTodo = findMostRelevantTodo(todoContext.todos);
+
+  if (!activeTodo?.content || activeTodo.content.trim() === '') {
+    return;
+  }
+
+  if (continuationState.isActive || continuationInProgressRef.current) {
+    return;
+  }
+
+  const continuationPrompt = generatePrompt(activeTodo, config);
+  sendContinuationPrompt(
+    geminiClient,
+    activeTodo.content,
+    continuationPrompt,
+    onDebugMessage,
+    setContinuationState,
+    continuationInProgressRef,
+  );
+}
+
 /**
- * React hook for todo continuation - monitors stream completion and triggers continuation
- * prompts when active todos exist but no tool calls were made.
- * [REQ-001] Todo Continuation Detection, [REQ-002] Continuation Prompting
+ * React hook for task continuation - monitors stream completion and triggers continuation
+ * prompts when active tasks exist but no tool calls were made.
+ * [REQ-001] Task Continuation Detection, [REQ-002] Continuation Prompting
  */
 export const useTodoContinuation = (
   geminiClient: GeminiClient,
@@ -53,196 +211,40 @@ export const useTodoContinuation = (
   onDebugMessage: (message: string) => void,
 ): TodoContinuationHook => {
   const [continuationState, setContinuationState] = useState<ContinuationState>(
-    {
-      isActive: false,
-      attemptCount: 0,
-    },
+    { isActive: false, attemptCount: 0 },
   );
 
-  // Track if a continuation is currently in progress to prevent rapid firing
   const continuationInProgressRef = useRef<boolean>(false);
-
   const todoContext = useTodoContext();
   const abortControllerRef = useRef<AbortController | undefined>(undefined);
   const continuationTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
-  // Private helper methods
-  const _evaluateContinuationConditions = useCallback(
-    (hadToolCalls: boolean, todoPaused: boolean): ContinuationConditions => {
-      const ephemeralSettings = config.getEphemeralSettings();
-      const isEnabled = ephemeralSettings['todo-continuation'] === true;
-      const hasActiveTodos = todoContext.todos.some(
-        (todo) => todo.status === 'pending' || todo.status === 'in_progress',
-      );
-      const hadBlockingToolCalls =
-        hadToolCalls && (todoPaused || !hasActiveTodos);
-
-      return {
-        streamCompleted: true,
-        noToolCallsMade: !hadBlockingToolCalls,
-        hasActiveTodos,
-        continuationEnabled: isEnabled,
-        notAlreadyContinuing: !continuationState.isActive,
-        todoPaused,
-      };
-    },
-    [config, todoContext.todos, continuationState.isActive],
-  );
-
-  const _shouldTriggerContinuation = useCallback(
-    (conditions: ContinuationConditions): boolean => {
-      // Don't trigger if AI is currently responding
-      if (isResponding) {
-        return false;
-      }
-
-      return (
-        conditions.streamCompleted &&
-        conditions.noToolCallsMade &&
-        conditions.hasActiveTodos &&
-        conditions.continuationEnabled &&
-        conditions.notAlreadyContinuing &&
-        !conditions.todoPaused
-      );
-    },
-    [isResponding],
-  );
-
-  const _findMostRelevantActiveTodo = useCallback(
-    (todos: Todo[]): Todo | null => {
-      // Priority order: in_progress > pending
-      const inProgressTodos = todos.filter(
-        (todo) => todo.status === 'in_progress',
-      );
-
-      if (inProgressTodos.length > 0) {
-        return inProgressTodos[0];
-      }
-
-      const pendingTodos = todos.filter((todo) => todo.status === 'pending');
-
-      if (pendingTodos.length > 0) {
-        return pendingTodos[0];
-      }
-
-      return null;
-    },
-    [],
-  );
-
-  const _generateContinuationPrompt = useCallback(
-    (todo: Todo): string => {
-      const isYoloMode = config.getApprovalMode() === ApprovalMode.YOLO;
-
-      if (isYoloMode) {
-        return `Continue to proceed with the active task without waiting for confirmation: "${todo.content}"`;
-      }
-
-      return `Please continue working on the following task: "${todo.content}"`;
-    },
-    [config],
-  );
-
-  const _triggerContinuation = useCallback(
-    (activeTodo: Todo): void => {
-      // Prevent multiple rapid continuations
-      if (continuationInProgressRef.current) {
-        return;
-      }
-
-      // Mark continuation as in progress
-      continuationInProgressRef.current = true;
-
-      // Update state to indicate continuation is active
-      setContinuationState((prev) => ({
-        isActive: true,
-        taskDescription: activeTodo.content,
-        attemptCount: prev.attemptCount + 1,
-        lastPromptTime: new Date(),
-      }));
-
-      // Generate continuation prompt
-      const continuationPrompt = _generateContinuationPrompt(activeTodo);
-
-      // Send out-of-band prompt (ephemeral, not stored in history)
-      // Fire and forget - don't await this
-      (
-        geminiClient.sendMessageStream as unknown as (
-          message: string,
-          options?: { ephemeral: boolean },
-        ) => Promise<void>
-      )(continuationPrompt, { ephemeral: true })
-        .catch((error: unknown) => {
-          onDebugMessage(
-            `[TodoContinuation] Error sending continuation prompt: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          // Reset state on error
-          setContinuationState((prev) => ({
-            isActive: false,
-            attemptCount: prev.attemptCount,
-            lastPromptTime: prev.lastPromptTime,
-            taskDescription: prev.taskDescription,
-          }));
-        })
-        .finally(() => {
-          // Always reset the in-progress flag
-          continuationInProgressRef.current = false;
-        });
-    },
-    [geminiClient, _generateContinuationPrompt, onDebugMessage],
-  );
-
-  // Public interface methods
   const handleStreamCompleted = useCallback(
     (hadToolCalls: boolean): void => {
-      if (hadToolCalls) {
-        setContinuationState((prev) => ({
-          ...prev,
-          isActive: false,
-        }));
-      }
-
-      // Use paused state from context (persisted across sessions)
-      const todoPaused = todoContext.paused;
-
-      const conditions = _evaluateContinuationConditions(
+      processContinuation(
         hadToolCalls,
-        todoPaused,
+        todoContext,
+        config,
+        isResponding,
+        continuationState,
+        continuationInProgressRef,
+        geminiClient,
+        onDebugMessage,
+        setContinuationState,
       );
-
-      if (!_shouldTriggerContinuation(conditions)) {
-        return;
-      }
-
-      // Find the most relevant active todo
-      const activeTodo = _findMostRelevantActiveTodo(todoContext.todos);
-
-      if (!activeTodo?.content || activeTodo.content.trim() === '') {
-        return;
-      }
-
-      // Prevent multiple rapid continuations
-      if (continuationState.isActive || continuationInProgressRef.current) {
-        return;
-      }
-
-      // Start continuation process
-      _triggerContinuation(activeTodo);
     },
     [
-      _evaluateContinuationConditions,
-      _shouldTriggerContinuation,
-      _findMostRelevantActiveTodo,
-      _triggerContinuation,
-      todoContext.todos,
-      todoContext.paused,
-      continuationState.isActive,
+      config,
+      todoContext,
+      continuationState,
+      isResponding,
+      geminiClient,
+      onDebugMessage,
     ],
   );
 
   const handleTodoPause = useCallback(
     (reason: string): { type: 'pause'; reason: string; message: string } => {
-      // Persist paused state via context (survives --continue)
       todoContext.setPaused(true);
       return {
         type: 'pause' as const,
@@ -254,7 +256,6 @@ export const useTodoContinuation = (
   );
 
   const clearPause = useCallback(() => {
-    // Clear paused state via context (persisted)
     todoContext.setPaused(false);
   }, [todoContext]);
 

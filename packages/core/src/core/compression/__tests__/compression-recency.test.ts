@@ -84,12 +84,10 @@ function makeGeminiChat(
       },
     },
     provider: createProviderAdapterFromManager(
-      runtimeSetup.config.getProviderManager?.(),
+      runtimeSetup.config.getProviderManager(),
     ),
     telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
-    tools: createToolRegistryViewFromRegistry(
-      runtimeSetup.config.getToolRegistry?.(),
-    ),
+    tools: createToolRegistryViewFromRegistry(),
     providerRuntime: providerRuntimeSnapshot,
   });
 

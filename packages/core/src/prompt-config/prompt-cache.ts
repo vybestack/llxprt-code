@@ -69,31 +69,41 @@ export class PromptCache {
    */
   generateKey(context: PromptContext | null | undefined): string {
     // Validate context
-    if (!context) {
+    if (context == null) {
       return '';
     }
 
     // Extract key components with defaults
     const provider = context.provider || 'unknown';
     const model = context.model || 'unknown';
-    const tools = [...(context.enabledTools || [])].sort();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
+    const tools = [...(context.enabledTools ?? [])].sort();
     const envFlags: string[] = [];
 
     // Build environment flags
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
     if (context.environment?.isGitRepository) {
       envFlags.push('git');
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
     if (context.environment?.isSandboxed) {
       envFlags.push('sandbox');
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
     if (context.environment?.hasIdeCompanion) {
       envFlags.push('ide');
     }
 
     // Include interaction mode in cache key
-    const interactionMode =
-      context.environment?.interactionMode || 'interactive';
-    envFlags.push(interactionMode);
+    const interactionMode = (
+      context.environment as { interactionMode?: string } | undefined
+    )?.interactionMode;
+
+    envFlags.push(
+      interactionMode === undefined || interactionMode === ''
+        ? 'interactive'
+        : interactionMode,
+    );
 
     // Include subagent delegation flag in cache key
     if (context.includeSubagentDelegation === true) {
@@ -130,6 +140,7 @@ export class PromptCache {
     const key = this.generateKey(context);
 
     // Validate inputs
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
     if (!key || prompt === null || prompt === undefined) {
       return;
     }
@@ -354,7 +365,8 @@ export class PromptCache {
     let successCount = 0;
 
     for (const context of contexts) {
-      if (!context) continue;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
+      if (context == null) continue;
 
       const key = this.generateKey(context);
       if (key && !this.has(context)) {

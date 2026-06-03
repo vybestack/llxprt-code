@@ -163,14 +163,14 @@ export function getRecommendedModel(
     }
 
     // Filter out deprecated
-    candidates = candidates.filter((m) => m.metadata?.status !== 'deprecated');
+    candidates = candidates.filter((m) => m.metadata.status !== 'deprecated');
 
     // Apply capability filters
-    if (options?.requireToolCalling) {
+    if (options?.requireToolCalling === true) {
       candidates = candidates.filter((m) => m.capabilities.toolCalling);
     }
 
-    if (options?.requireReasoning) {
+    if (options?.requireReasoning === true) {
       candidates = candidates.filter((m) => m.capabilities.reasoning);
     }
 
@@ -179,7 +179,7 @@ export function getRecommendedModel(
     }
 
     // Sort by preference
-    if (options?.preferCheaper) {
+    if (options?.preferCheaper === true) {
       candidates.sort((a, b) => {
         const priceA = a.pricing?.input ?? Infinity;
         const priceB = b.pricing?.input ?? Infinity;
@@ -188,8 +188,8 @@ export function getRecommendedModel(
     } else {
       // Default: prefer larger context window (usually better models)
       candidates.sort((a, b) => {
-        const ctxA = a.limits.contextWindow ?? 0;
-        const ctxB = b.limits.contextWindow ?? 0;
+        const ctxA = a.limits.contextWindow;
+        const ctxB = b.limits.contextWindow;
         return ctxB - ctxA;
       });
     }

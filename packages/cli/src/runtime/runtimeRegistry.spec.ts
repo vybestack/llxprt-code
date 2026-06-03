@@ -137,7 +137,9 @@ describe('runtimeRegistry', () => {
 
   describe('missing entry error', () => {
     it('should throw for nonexistent entry', () => {
-      expect(() => requireRuntimeEntry('nonexistent-runtime')).toThrow();
+      expect(() => requireRuntimeEntry('nonexistent-runtime')).toThrow(
+        /runtime registration/,
+      );
     });
 
     it('should include runtime registration in error message', () => {
@@ -145,8 +147,10 @@ describe('runtimeRegistry', () => {
         requireRuntimeEntry('nonexistent-runtime-2');
         expect.fail('Should have thrown');
       } catch (error) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toBeInstanceOf(Error);
         const message = (error as Error).message;
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(message).toContain('runtime registration');
       }
     });
@@ -156,8 +160,10 @@ describe('runtimeRegistry', () => {
         requireRuntimeEntry('nonexistent-runtime-3');
         expect.fail('Should have thrown');
       } catch (error) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toBeInstanceOf(Error);
         const message = (error as Error).message;
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(message).toContain('setCliRuntimeContext');
       }
     });
@@ -178,7 +184,9 @@ describe('runtimeRegistry', () => {
       upsertRuntimeEntry(runtimeId, {});
       disposeCliRuntime(runtimeId);
 
-      expect(() => requireRuntimeEntry(runtimeId)).toThrow();
+      expect(() => requireRuntimeEntry(runtimeId)).toThrow(
+        /runtime registration/,
+      );
     });
 
     it('should clear active context if runtimeId matches', () => {

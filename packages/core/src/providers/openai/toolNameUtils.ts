@@ -36,7 +36,8 @@ export function enhanceToolNameExtraction(
   isComplete: boolean,
 ): { name: string; isFallback: boolean } {
   // If we already have a valid name, keep it
-  if (currentName && currentName.trim()) {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
+  if (currentName?.trim()) {
     return { name: currentName.trim(), isFallback: false };
   }
 
@@ -77,6 +78,7 @@ export function validateToolName(
   toolName: string,
   availableToolNames: string[] = [],
 ): { isValid: boolean; correctedName?: string; reason?: string } {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
   if (!toolName?.trim()) {
     return {
       isValid: false,
@@ -169,10 +171,10 @@ export function processFinalToolName(
   });
 
   // Use a more descriptive fallback that includes debugging information
-  const fallbackName =
-    toolName && toolName.trim()
-      ? `tool_name_not_found_${toolName.replace(/[^a-zA-Z0-9]/g, '_')}`
-      : 'missing_tool_name';
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
+  const fallbackName = toolName?.trim()
+    ? `tool_name_not_found_${toolName.replace(/[^a-zA-Z0-9]/g, '_')}`
+    : 'missing_tool_name';
 
   return fallbackName;
 }
@@ -194,57 +196,72 @@ export function safeExtractToolName(
   isComplete: boolean;
   warnings: string[];
 } {
-  const warnings: string[] = [];
-  let hasName = false;
-  let isComplete = false;
+  const { name, hasName } = extractToolNameFromDelta(delta);
+  const validation = hasName
+    ? validateExtractedToolName(name, availableToolNames)
+    : { name, warnings: [] };
 
-  // Extract name from various delta structures
-  let extractedName = '';
+  return {
+    name: validation.name,
+    hasName,
+    isComplete: isToolCallComplete(delta, currentIndex),
+    warnings: validation.warnings,
+  };
+}
 
-  // Standard OpenAI format
+function extractToolNameFromDelta(delta: Record<string, unknown>): {
+  name: string;
+  hasName: boolean;
+} {
   if (
-    delta?.function &&
+    delta.function !== undefined &&
+    delta.function !== null &&
     typeof delta.function === 'object' &&
     'name' in delta.function
   ) {
-    extractedName = String(delta.function.name);
-    hasName = true;
+    return { name: String(delta.function.name), hasName: true };
   }
 
-  // Alternative format (some providers use different structures)
-  if (!extractedName && 'name' in delta) {
-    extractedName = String(delta.name);
-    hasName = true;
+  if ('name' in delta) {
+    return { name: String(delta.name), hasName: true };
   }
 
-  // Check if this is a completion signal
-  if (
+  return { name: '', hasName: false };
+}
+
+function isToolCallComplete(
+  delta: Record<string, unknown>,
+  currentIndex: number,
+): boolean {
+  return (
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
     delta?.finish_reason === 'tool_calls' ||
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
     (currentIndex >= 0 && delta?.index !== undefined)
-  ) {
-    isComplete = true;
+  );
+}
+
+function validateExtractedToolName(
+  extractedName: string,
+  availableToolNames: string[],
+): { name: string; warnings: string[] } {
+  const validation = validateToolName(extractedName, availableToolNames);
+
+  if (!validation.isValid) {
+    return {
+      name: processFinalToolName(extractedName, availableToolNames),
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string reason should fall through to default
+      warnings: [validation.reason || 'Unknown validation error'],
+    };
   }
 
-  // Validate the extracted name
-  if (hasName) {
-    const validation = validateToolName(extractedName, availableToolNames);
-
-    if (!validation.isValid) {
-      warnings.push(validation.reason || 'Unknown validation error');
-      extractedName = processFinalToolName(extractedName, availableToolNames);
-    } else if (
-      validation.correctedName &&
-      validation.correctedName !== extractedName
-    ) {
-      warnings.push(validation.reason || 'Name was corrected');
-      extractedName = validation.correctedName;
-    }
+  if (validation.correctedName && validation.correctedName !== extractedName) {
+    return {
+      name: validation.correctedName,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string reason should fall through to default
+      warnings: [validation.reason || 'Name was corrected'],
+    };
   }
 
-  return {
-    name: extractedName,
-    hasName,
-    isComplete,
-    warnings,
-  };
+  return { name: extractedName, warnings: [] };
 }

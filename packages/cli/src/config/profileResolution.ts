@@ -64,6 +64,13 @@ function normaliseProfileName(
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function getOptionalEphemeralSettings(
+  profile: Profile,
+): Profile['ephemeralSettings'] | undefined {
+  return (profile as { ephemeralSettings?: Profile['ephemeralSettings'] })
+    .ephemeralSettings;
+}
+
 /**
  * Extracts profile values from a loaded Profile object, respecting --provider override.
  */
@@ -79,19 +86,20 @@ export function prepareProfileForApplication(
     argv.provider !== undefined ? undefined : profile.provider;
   const profileModel = argv.provider !== undefined ? undefined : profile.model;
   const profileModelParams = profile.modelParams;
+  const ephemeralSettings = getOptionalEphemeralSettings(profile);
   const profileBaseUrl =
-    typeof profile.ephemeralSettings?.['base-url'] === 'string'
-      ? profile.ephemeralSettings['base-url']
+    typeof ephemeralSettings?.['base-url'] === 'string'
+      ? ephemeralSettings['base-url']
       : undefined;
 
-  const loadSummary = `Loaded ${profileSource === 'inline' ? 'inline profile from --profile' : `profile ${profileSource}`}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`;
+  const loadSummary = `Loaded ${profileSource === 'inline' ? 'inline profile from --profile' : `profile ${profileSource}`}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!ephemeralSettings}`;
   logger.debug(() => loadSummary);
 
   let profileMergedSettings = baseSettings;
-  if (argv.provider === undefined && profile.ephemeralSettings) {
+  if (argv.provider === undefined && ephemeralSettings) {
     profileMergedSettings = {
       ...baseSettings,
-      ...profile.ephemeralSettings,
+      ...ephemeralSettings,
     } as Settings;
     logger.debug(
       () =>
@@ -130,13 +138,7 @@ export function resolveProfileToLoad(
   const profileToLoad =
     normaliseProfileName(bootstrapArgs.profileName) ??
     normaliseProfileName(process.env.LLXPRT_PROFILE) ??
-    (cliProvider === undefined
-      ? normaliseProfileName(
-          typeof settings.defaultProfile === 'string'
-            ? settings.defaultProfile
-            : undefined,
-        )
-      : undefined);
+    resolveDefaultProfile(cliProvider, settings);
 
   const profileExplicitlySpecified =
     bootstrapArgs.profileName != null &&
@@ -190,7 +192,7 @@ async function applyFileProfile(
     );
 
     const tempDebugMode =
-      argv.debug ||
+      argv.debug === true ||
       [process.env.DEBUG, process.env.DEBUG_MODE].some(
         (v) => v === 'true' || v === '1',
       ) ||
@@ -315,4 +317,21 @@ export async function loadAndPrepareProfile(input: {
     profileWarnings,
     profileToLoad,
   };
+}
+
+/**
+ * Resolves the default profile based on CLI provider and settings.
+ */
+function resolveDefaultProfile(
+  cliProvider: string | undefined,
+  settings: Settings,
+): string | undefined {
+  if (cliProvider !== undefined) {
+    return undefined;
+  }
+  return normaliseProfileName(
+    typeof settings.defaultProfile === 'string'
+      ? settings.defaultProfile
+      : undefined,
+  );
 }

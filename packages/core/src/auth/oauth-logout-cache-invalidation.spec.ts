@@ -83,7 +83,7 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
     expect(firstAuth).toBe(tokenAccountA);
 
     // Simulate logout - invalidate the cache
-    resolver.invalidateCache?.();
+    resolver.invalidateCache();
 
     // Login with different account - token B
     vi.mocked(mockOAuthManager.getToken).mockResolvedValue(tokenAccountB);
@@ -117,6 +117,7 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
     expect(cachedResult).toBe(staleToken);
 
     // Invalidate the cache (simulating logout)
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (typeof resolver.invalidateCache === 'function') {
       resolver.invalidateCache();
     }

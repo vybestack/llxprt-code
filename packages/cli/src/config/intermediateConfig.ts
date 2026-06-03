@@ -37,6 +37,23 @@ export interface IntermediateConfig {
   readonly question: string;
 }
 
+function resolveScreenReaderSetting(
+  argv: CliArgs,
+  profileMergedSettings: Settings,
+): boolean {
+  return (
+    argv.screenReader ??
+    profileMergedSettings.accessibility?.screenReader ??
+    false
+  );
+}
+
+function resolveOutputFormat(argv: CliArgs): OutputFormat {
+  return argv.outputFormat === OutputFormat.JSON
+    ? OutputFormat.JSON
+    : OutputFormat.TEXT;
+}
+
 export async function resolveIntermediateConfig(
   argv: CliArgs,
   settings: Settings,
@@ -44,48 +61,28 @@ export async function resolveIntermediateConfig(
   context: ContextResolutionResult,
   approvalMode: ApprovalMode,
 ): Promise<IntermediateConfig> {
-  const screenReader =
-    argv.screenReader !== undefined
-      ? argv.screenReader
-      : (profileMergedSettings.accessibility?.screenReader ?? false);
+  const screenReader = resolveScreenReaderSetting(argv, profileMergedSettings);
 
-  const allowedTools =
-    argv.allowedTools ||
-    profileMergedSettings.tools?.allowed ||
-    profileMergedSettings.allowedTools ||
-    settings.tools?.allowed ||
-    settings.allowedTools ||
-    [];
+  const allowedTools = resolveAllowedTools(
+    argv,
+    profileMergedSettings,
+    settings,
+  );
+
   const allowedToolsSet = buildNormalizedToolSet(allowedTools);
-
-  let profileSettingsWithTools = profileMergedSettings;
-  if (allowedTools.length > 0) {
-    profileSettingsWithTools = {
-      ...profileMergedSettings,
-      tools: { ...profileMergedSettings.tools, allowed: allowedTools },
-    };
-  }
+  const profileSettingsWithTools = applyAllowedToolsToSettings(
+    profileMergedSettings,
+    allowedTools,
+  );
 
   const policyEngineConfig = await createPolicyEngineConfig(
     profileSettingsWithTools,
     approvalMode,
   );
 
-  const outputFormat =
-    argv.outputFormat === OutputFormat.JSON
-      ? OutputFormat.JSON
-      : OutputFormat.TEXT;
+  const outputFormat = resolveOutputFormat(argv);
 
-  let useRipgrepSetting = profileMergedSettings.useRipgrep;
-  if (useRipgrepSetting === undefined) {
-    const ripgrepAvailable = await isRipgrepAvailable();
-    useRipgrepSetting = ripgrepAvailable;
-    logger.debug(() =>
-      ripgrepAvailable
-        ? 'Ripgrep detected, auto-enabling for faster searches'
-        : 'Ripgrep not detected, using default grep implementation',
-    );
-  }
+  const useRipgrepSetting = await resolveRipgrepSetting(profileMergedSettings);
 
   const mcpEnabled = profileMergedSettings.admin?.mcp?.enabled ?? true;
   const extensionsEnabled =
@@ -102,8 +99,10 @@ export async function resolveIntermediateConfig(
     allowedToolsSet,
   );
 
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall back to next source, empty array should join to empty string */
   const question =
     argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
   return {
     screenReader,
@@ -119,4 +118,53 @@ export async function resolveIntermediateConfig(
     excludeTools,
     question,
   };
+}
+
+/**
+ * Resolves allowed tools from CLI args, profile settings, and global settings.
+ * Priority: CLI > profile.tools.allowed > profile.allowedTools > settings.tools.allowed > settings.allowedTools
+ * Intentionally uses falsy coalescing to preserve the existing precedence chain.
+ */
+function applyAllowedToolsToSettings(
+  profileMergedSettings: Settings,
+  allowedTools: string[],
+): Settings {
+  if (allowedTools.length === 0) {
+    return profileMergedSettings;
+  }
+  return {
+    ...profileMergedSettings,
+    tools: { ...profileMergedSettings.tools, allowed: allowedTools },
+  };
+}
+
+async function resolveRipgrepSetting(
+  profileMergedSettings: Settings,
+): Promise<boolean | undefined> {
+  const configured = profileMergedSettings.useRipgrep;
+  if (configured !== undefined) {
+    return configured;
+  }
+  const ripgrepAvailable = await isRipgrepAvailable();
+  logger.debug(() =>
+    ripgrepAvailable
+      ? 'Ripgrep detected, auto-enabling for faster searches'
+      : 'Ripgrep not detected, using default grep implementation',
+  );
+  return ripgrepAvailable;
+}
+
+function resolveAllowedTools(
+  argv: CliArgs,
+  profileMergedSettings: Settings,
+  settings: Settings,
+): string[] {
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing preserves existing precedence for legacy settings */
+  const profileTools =
+    profileMergedSettings.tools?.allowed || profileMergedSettings.allowedTools;
+
+  const globalTools = settings.tools?.allowed || settings.allowedTools;
+  const tools = argv.allowedTools || profileTools || globalTools;
+  return [...(tools ?? [])];
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 }

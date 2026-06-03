@@ -124,6 +124,7 @@ export function createRuntimeConfigStub(
     setUsageStatisticsEnabled: noop,
     getDebugMode: () => false,
     setDebugMode: noop,
+    isInteractive: () => false,
     getSessionId: () => 'test-session',
     setSessionId: noop,
     getFlashFallbackMode: () => 'off',

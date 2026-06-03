@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import {
   OAuth2Client,
   type Credentials,
@@ -57,12 +59,202 @@ const SIGN_IN_FAILURE_URL =
  * as well as a promise that will resolve when the credentials have
  * been refreshed (or which throws error when refreshing credentials failed).
  */
+
+async function handleAuthCodeExchange(
+  client: OAuth2Client,
+  code: string,
+  redirectUri: string,
+  res: http.ServerResponse,
+  resolve: () => void,
+  reject: (error: Error) => void,
+): Promise<void> {
+  try {
+    const success = await authWithCode(client, code, undefined, redirectUri);
+
+    if (!success) {
+      throw new FatalAuthenticationError(
+        'Failed to exchange authorization code for tokens.',
+      );
+    }
+
+    res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_SUCCESS_URL });
+    res.end();
+    resolve();
+  } catch (error) {
+    res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
+    res.end();
+    reject(
+      error instanceof FatalAuthenticationError
+        ? error
+        : new FatalAuthenticationError(
+            `Failed to exchange authorization code for tokens: ${getErrorMessage(error)}`,
+          ),
+    );
+  }
+}
+
 export interface OauthWebLogin {
   authUrl: string;
   loginCompletePromise: Promise<void>;
 }
 
 let oauthClientPromise: Promise<OAuth2Client> | null = null;
+
+async function initWithGcaEnv(client: OAuth2Client): Promise<OAuth2Client> {
+  client.setCredentials({
+    access_token: process.env.GOOGLE_CLOUD_ACCESS_TOKEN,
+  });
+  await fetchAndCacheUserInfo(client);
+  return client;
+}
+
+async function initWithCachedCredentials(
+  client: OAuth2Client,
+): Promise<boolean> {
+  if (!(await loadCachedCredentials(client))) {
+    return false;
+  }
+  if (!userAccountManager.getCachedGoogleAccount()) {
+    try {
+      await fetchAndCacheUserInfo(client);
+    } catch (error) {
+      // Non-fatal, continue with existing auth.
+      debugLogger.warn('Failed to fetch user info:', getErrorMessage(error));
+    }
+  }
+  return true;
+}
+
+async function initWithCloudShellAdc(): Promise<OAuth2Client> {
+  try {
+    debugLogger.log("Attempting to authenticate via Cloud Shell VM's ADC.");
+    const computeClient = new Compute({
+      // We can leave this empty, since the metadata server will provide
+      // the service account email.
+    });
+    await computeClient.getAccessToken();
+    debugLogger.log('Authentication successful.');
+
+    // Do not cache creds in this case; note that Compute client will handle its own refresh
+    return computeClient;
+  } catch (e) {
+    throw new Error(
+      `Could not authenticate using Cloud Shell credentials. Please select a different authentication method or ensure you are in a properly configured environment. Error: ${getErrorMessage(
+        e,
+      )}`,
+    );
+  }
+}
+
+async function authWithSuppressedBrowser(client: OAuth2Client): Promise<void> {
+  let success = false;
+  const maxRetries = 2;
+  for (let i = 0; !success && i < maxRetries; i++) {
+    // Pass the addItem callback to authWithUserCode if browser launch is suppressed
+    success = await authWithUserCode(
+      client,
+      (global as Record<string, unknown>).__oauth_add_item as
+        | ((itemData: OAuthUrlItem, baseTimestamp: number) => number)
+        | undefined,
+    );
+    if (!success) {
+      debugLogger.error(
+        '\nFailed to authenticate with user code.',
+        i === maxRetries - 1 ? '' : 'Retrying...\n',
+      );
+    }
+  }
+  if (!success) {
+    throw new FatalAuthenticationError(
+      'Failed to authenticate with user code.',
+    );
+  }
+}
+
+async function authWithBrowserFlow(
+  client: OAuth2Client,
+  config: Config,
+): Promise<void> {
+  const webLogin = await authWithWeb(client);
+
+  // Always show the OAuth URL in the TUI first, before attempting browser
+  const addItem = (global as Record<string, unknown>).__oauth_add_item as
+    | ((itemData: OAuthUrlItem, baseTimestamp: number) => number)
+    | undefined;
+
+  if (addItem) {
+    addItem(
+      {
+        type: 'oauth_url',
+        text: `Please visit the following URL to authorize with Google Gemini:\n${webLogin.authUrl}`,
+        url: webLogin.authUrl,
+      },
+      Date.now(),
+    );
+  }
+
+  debugLogger.log(
+    `\n\nCode Assist login required.\n` +
+      `Attempting to open authentication page in your browser.\n` +
+      `Otherwise navigate to:\n\n${webLogin.authUrl}\n\n`,
+  );
+
+  try {
+    // Attempt to open the authentication URL in the default browser.
+    // We do not use the `wait` option here because the main script's execution
+    // is already paused by `loginCompletePromise`, which awaits the server callback.
+    const childProcess = await open(webLogin.authUrl);
+
+    // IMPORTANT: Attach an error handler to the returned child process.
+    // Without this, if `open` fails to spawn a process (e.g., `xdg-open` is not found
+    // in a minimal Docker container), it will emit an unhandled 'error' event,
+    // causing the entire Node.js process to crash.
+    childProcess.on('error', (error) => {
+      debugLogger.error(
+        'Failed to open browser automatically. Please try running again with NO_BROWSER=true set.',
+      );
+      debugLogger.error('Browser error details:', getErrorMessage(error));
+    });
+  } catch (_err) {
+    debugLogger.error(
+      'An unexpected error occurred while trying to open the browser:',
+      getErrorMessage(_err),
+      '\nThis might be due to browser compatibility issues or system configuration.',
+      '\nPlease try running again with NO_BROWSER=true set for manual authentication.',
+    );
+    throw new FatalAuthenticationError(
+      `Failed to open browser: ${getErrorMessage(_err)}`,
+    );
+  }
+
+  if (typeof config.isInteractive === 'function' && config.isInteractive()) {
+    debugLogger.log('Waiting for authentication...');
+  }
+
+  // Add timeout to prevent infinite waiting when browser tab gets stuck
+  const authTimeout = 5 * 60 * 1000; // 5 minutes timeout
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(
+        new FatalAuthenticationError(
+          'Authentication timed out after 5 minutes. The browser tab may have gotten stuck in a loading state. ' +
+            'Please try again or use NO_BROWSER=true for manual authentication.',
+        ),
+      );
+    }, authTimeout);
+  });
+
+  await Promise.race([webLogin.loginCompletePromise, timeoutPromise]);
+
+  // Reset global state variables after successful authentication
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P13
+   * @requirement REQ-004.2
+   * @pseudocode lines 17-18, 25-26
+   */
+  (global as Record<string, unknown>).__oauth_needs_code = false;
+  (global as Record<string, unknown>).__oauth_provider = undefined;
+}
 
 async function initOauthClient(config: Config): Promise<OAuth2Client> {
   const client = new OAuth2Client({
@@ -77,11 +269,7 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
     process.env.GOOGLE_GENAI_USE_GCA &&
     process.env.GOOGLE_CLOUD_ACCESS_TOKEN
   ) {
-    client.setCredentials({
-      access_token: process.env.GOOGLE_CLOUD_ACCESS_TOKEN,
-    });
-    await fetchAndCacheUserInfo(client);
-    return client;
+    return initWithGcaEnv(client);
   }
 
   client.on('tokens', (tokens: Credentials) => {
@@ -92,18 +280,7 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
   });
 
   // If there are cached creds on disk, they always take precedence
-  if (await loadCachedCredentials(client)) {
-    // Found valid cached credentials.
-    // Check if we need to retrieve Google Account ID or Email
-    if (!userAccountManager.getCachedGoogleAccount()) {
-      try {
-        await fetchAndCacheUserInfo(client);
-      } catch (error) {
-        // Non-fatal, continue with existing auth.
-        debugLogger.warn('Failed to fetch user info:', getErrorMessage(error));
-      }
-    }
-    // Loaded cached credentials
+  if (await initWithCachedCredentials(client)) {
     return client;
   }
 
@@ -111,129 +288,13 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
   // provided via its metadata server to authenticate non-interactively using
   // the identity of the user logged into Cloud Shell.
   if (process.env.CLOUD_SHELL === 'true') {
-    try {
-      debugLogger.log("Attempting to authenticate via Cloud Shell VM's ADC.");
-      const computeClient = new Compute({
-        // We can leave this empty, since the metadata server will provide
-        // the service account email.
-      });
-      await computeClient.getAccessToken();
-      debugLogger.log('Authentication successful.');
-
-      // Do not cache creds in this case; note that Compute client will handle its own refresh
-      return computeClient;
-    } catch (e) {
-      throw new Error(
-        `Could not authenticate using Cloud Shell credentials. Please select a different authentication method or ensure you are in a properly configured environment. Error: ${getErrorMessage(
-          e,
-        )}`,
-      );
-    }
+    return initWithCloudShellAdc();
   }
 
   if (config.isBrowserLaunchSuppressed()) {
-    let success = false;
-    const maxRetries = 2;
-    for (let i = 0; !success && i < maxRetries; i++) {
-      // Pass the addItem callback to authWithUserCode if browser launch is suppressed
-      success = await authWithUserCode(
-        client,
-        (global as Record<string, unknown>).__oauth_add_item as
-          | ((itemData: OAuthUrlItem, baseTimestamp: number) => number)
-          | undefined,
-      );
-      if (!success) {
-        debugLogger.error(
-          '\nFailed to authenticate with user code.',
-          i === maxRetries - 1 ? '' : 'Retrying...\n',
-        );
-      }
-    }
-    if (!success) {
-      throw new FatalAuthenticationError(
-        'Failed to authenticate with user code.',
-      );
-    }
+    await authWithSuppressedBrowser(client);
   } else {
-    const webLogin = await authWithWeb(client);
-
-    // Always show the OAuth URL in the TUI first, before attempting browser
-    const addItem = (global as Record<string, unknown>).__oauth_add_item as
-      | ((itemData: OAuthUrlItem, baseTimestamp: number) => number)
-      | undefined;
-
-    if (addItem) {
-      addItem(
-        {
-          type: 'oauth_url',
-          text: `Please visit the following URL to authorize with Google Gemini:\n${webLogin.authUrl}`,
-          url: webLogin.authUrl,
-        },
-        Date.now(),
-      );
-    }
-
-    debugLogger.log(
-      `\n\nCode Assist login required.\n` +
-        `Attempting to open authentication page in your browser.\n` +
-        `Otherwise navigate to:\n\n${webLogin.authUrl}\n\n`,
-    );
-
-    try {
-      // Attempt to open the authentication URL in the default browser.
-      // We do not use the `wait` option here because the main script's execution
-      // is already paused by `loginCompletePromise`, which awaits the server callback.
-      const childProcess = await open(webLogin.authUrl);
-
-      // IMPORTANT: Attach an error handler to the returned child process.
-      // Without this, if `open` fails to spawn a process (e.g., `xdg-open` is not found
-      // in a minimal Docker container), it will emit an unhandled 'error' event,
-      // causing the entire Node.js process to crash.
-      childProcess.on('error', (error) => {
-        debugLogger.error(
-          'Failed to open browser automatically. Please try running again with NO_BROWSER=true set.',
-        );
-        debugLogger.error('Browser error details:', getErrorMessage(error));
-      });
-    } catch (_err) {
-      debugLogger.error(
-        'An unexpected error occurred while trying to open the browser:',
-        getErrorMessage(_err),
-        '\nThis might be due to browser compatibility issues or system configuration.',
-        '\nPlease try running again with NO_BROWSER=true set for manual authentication.',
-      );
-      throw new FatalAuthenticationError(
-        `Failed to open browser: ${getErrorMessage(_err)}`,
-      );
-    }
-
-    if (typeof config.isInteractive === 'function' && config.isInteractive()) {
-      debugLogger.log('Waiting for authentication...');
-    }
-
-    // Add timeout to prevent infinite waiting when browser tab gets stuck
-    const authTimeout = 5 * 60 * 1000; // 5 minutes timeout
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(
-          new FatalAuthenticationError(
-            'Authentication timed out after 5 minutes. The browser tab may have gotten stuck in a loading state. ' +
-              'Please try again or use NO_BROWSER=true for manual authentication.',
-          ),
-        );
-      }, authTimeout);
-    });
-
-    await Promise.race([webLogin.loginCompletePromise, timeoutPromise]);
-
-    // Reset global state variables after successful authentication
-    /**
-     * @plan PLAN-20250822-GEMINIFALLBACK.P13
-     * @requirement REQ-004.2
-     * @pseudocode lines 17-18, 25-26
-     */
-    (global as Record<string, unknown>).__oauth_needs_code = false;
-    (global as Record<string, unknown>).__oauth_provider = undefined;
+    await authWithBrowserFlow(client, config);
   }
 
   return client;
@@ -245,9 +306,7 @@ export async function performLogin(config: Config): Promise<boolean> {
 }
 
 export async function getOauthClient(config: Config): Promise<OAuth2Client> {
-  if (!oauthClientPromise) {
-    oauthClientPromise = initOauthClient(config);
-  }
+  oauthClientPromise ??= initOauthClient(config);
   return oauthClientPromise;
 }
 
@@ -255,6 +314,61 @@ interface OAuthUrlItem {
   type: 'oauth_url';
   text: string;
   url: string;
+}
+
+async function getAuthCodeFromUiHook(
+  waitForAuthCode: () => Promise<string>,
+): Promise<string> {
+  const globalObj = global as Record<string, unknown>;
+  const previousProvider = globalObj.__oauth_provider;
+  globalObj.__oauth_provider = 'gemini';
+  globalObj.__oauth_needs_code = true;
+
+  const timeoutMs = 5 * 60 * 1000; // 5 minutes
+  try {
+    return await Promise.race([
+      waitForAuthCode(),
+      new Promise<string>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new FatalAuthenticationError(
+                'Authentication timed out after 5 minutes. Please try again.',
+              ),
+            ),
+          timeoutMs,
+        ),
+      ),
+    ]);
+  } finally {
+    globalObj.__oauth_needs_code = false;
+    if (previousProvider !== undefined) {
+      globalObj.__oauth_provider = previousProvider;
+    } else {
+      delete globalObj.__oauth_provider;
+    }
+  }
+}
+
+async function getAuthCodeFromReadline(): Promise<string> {
+  // Safety guard: never use readline if a TUI may be active (Issue #1370)
+  // When stdout is a TTY, an Ink TUI is likely rendering — readline would corrupt it.
+  if (process.stdout.isTTY || process.stderr.isTTY) {
+    throw new FatalAuthenticationError(
+      'OAuth code input is required but no UI dialog is available. ' +
+        'Please use an API key with /keyfile or ensure the TUI is properly initialized.',
+    );
+  }
+  return new Promise<string>((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    rl.question('Enter the authorization code: ', (authCode) => {
+      rl.close();
+      resolve(authCode.trim());
+    });
+  });
 }
 
 async function authWithUserCode(
@@ -328,35 +442,7 @@ ${authUrl}`,
   const uiHookAvailable = typeof waitForAuthCode === 'function';
 
   if (uiHookAvailable) {
-    const globalObj = global as Record<string, unknown>;
-    const previousProvider = globalObj.__oauth_provider;
-    globalObj.__oauth_provider = 'gemini';
-    globalObj.__oauth_needs_code = true;
-
-    const timeoutMs = 5 * 60 * 1000; // 5 minutes
-    try {
-      code = await Promise.race([
-        waitForAuthCode(),
-        new Promise<string>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new FatalAuthenticationError(
-                  'Authentication timed out after 5 minutes. Please try again.',
-                ),
-              ),
-            timeoutMs,
-          ),
-        ),
-      ]);
-    } finally {
-      globalObj.__oauth_needs_code = false;
-      if (previousProvider !== undefined) {
-        globalObj.__oauth_provider = previousProvider;
-      } else {
-        delete globalObj.__oauth_provider;
-      }
-    }
+    code = await getAuthCodeFromUiHook(waitForAuthCode);
 
     // Issue #878: If the UI hook was available but returned empty/falsy code,
     // throw an error instead of falling back to readline (which would corrupt the terminal)
@@ -369,24 +455,7 @@ ${authUrl}`,
 
   // Only fall back to readline if NO UI hook was available (non-interactive mode)
   if (!code && !uiHookAvailable) {
-    // Safety guard: never use readline if a TUI may be active (Issue #1370)
-    // When stdout is a TTY, an Ink TUI is likely rendering — readline would corrupt it.
-    if (process.stdout.isTTY || process.stderr.isTTY) {
-      throw new FatalAuthenticationError(
-        'OAuth code input is required but no UI dialog is available. ' +
-          'Please use an API key with /keyfile or ensure the TUI is properly initialized.',
-      );
-    }
-    code = await new Promise<string>((resolve) => {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-      rl.question('Enter the authorization code: ', (authCode) => {
-        rl.close();
-        resolve(authCode.trim());
-      });
-    });
+    code = await getAuthCodeFromReadline();
   }
 
   if (!code) {
@@ -397,9 +466,87 @@ ${authUrl}`,
   return authWithCode(client, code, codeVerifier, redirectUri);
 }
 
+async function handleOAuthCallbackRequest(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  client: OAuth2Client,
+  redirectUri: string,
+  state: string,
+  resolve: () => void,
+  reject: (error: Error) => void,
+): Promise<void> {
+  try {
+    if (req.url!.indexOf('/oauth2callback') === -1) {
+      res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
+      res.end();
+      reject(
+        new FatalAuthenticationError(
+          'OAuth callback not received. Unexpected request: ' + req.url,
+        ),
+      );
+      return;
+    }
+    // acquire the code from the querystring, and close the web server.
+    const qs = new url.URL(req.url!, 'http://localhost:3000').searchParams;
+    if (qs.get('error')) {
+      res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
+      res.end();
+
+      const errorCode = qs.get('error');
+      const errorDescription =
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: URLSearchParams.get returns string | null, string fallback for error message
+        qs.get('error_description') || 'No additional details provided';
+      reject(
+        new FatalAuthenticationError(
+          `Google OAuth error: ${errorCode}. ${errorDescription}`,
+        ),
+      );
+      return;
+    }
+    if (qs.get('state') !== state) {
+      res.end('State mismatch. Possible CSRF attack');
+
+      reject(
+        new FatalAuthenticationError(
+          'OAuth state mismatch. Possible CSRF attack or browser session issue.',
+        ),
+      );
+      return;
+    }
+    if (qs.get('code')) {
+      await handleAuthCodeExchange(
+        client,
+        qs.get('code')!,
+        redirectUri,
+        res,
+        resolve,
+        reject,
+      );
+    } else {
+      reject(
+        new FatalAuthenticationError(
+          'No authorization code received from Google OAuth. Please try authenticating again.',
+        ),
+      );
+    }
+  } catch (e) {
+    // Provide more specific error message for unexpected errors during OAuth flow
+    if (e instanceof FatalAuthenticationError) {
+      reject(e);
+    } else {
+      reject(
+        new FatalAuthenticationError(
+          `Unexpected error during OAuth authentication: ${getErrorMessage(e)}`,
+        ),
+      );
+    }
+  }
+}
+
 async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
   const port = await getAvailablePort();
   // The hostname used for the HTTP server binding (e.g., '0.0.0.0' in Docker).
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var may be empty string
   const host = process.env.OAUTH_CALLBACK_HOST || 'localhost';
   // The `redirectUri` sent to Google's authorization server MUST use a loopback IP literal
   // (i.e., 'localhost' or '127.0.0.1'). This is a strict security policy for credentials of
@@ -415,89 +562,16 @@ async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
   });
 
   const loginCompletePromise = new Promise<void>((resolve, reject) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        if (req.url!.indexOf('/oauth2callback') === -1) {
-          res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
-          res.end();
-          reject(
-            new FatalAuthenticationError(
-              'OAuth callback not received. Unexpected request: ' + req.url,
-            ),
-          );
-        }
-        // acquire the code from the querystring, and close the web server.
-        const qs = new url.URL(req.url!, 'http://localhost:3000').searchParams;
-        if (qs.get('error')) {
-          res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
-          res.end();
-
-          const errorCode = qs.get('error');
-          const errorDescription =
-            qs.get('error_description') || 'No additional details provided';
-          reject(
-            new FatalAuthenticationError(
-              `Google OAuth error: ${errorCode}. ${errorDescription}`,
-            ),
-          );
-        } else if (qs.get('state') !== state) {
-          res.end('State mismatch. Possible CSRF attack');
-
-          reject(
-            new FatalAuthenticationError(
-              'OAuth state mismatch. Possible CSRF attack or browser session issue.',
-            ),
-          );
-        } else if (qs.get('code')) {
-          try {
-            const success = await authWithCode(
-              client,
-              qs.get('code')!,
-              undefined,
-              redirectUri,
-            );
-
-            if (!success) {
-              throw new FatalAuthenticationError(
-                'Failed to exchange authorization code for tokens.',
-              );
-            }
-
-            res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_SUCCESS_URL });
-            res.end();
-            resolve();
-          } catch (error) {
-            res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
-            res.end();
-            reject(
-              error instanceof FatalAuthenticationError
-                ? error
-                : new FatalAuthenticationError(
-                    `Failed to exchange authorization code for tokens: ${getErrorMessage(error)}`,
-                  ),
-            );
-          }
-        } else {
-          reject(
-            new FatalAuthenticationError(
-              'No authorization code received from Google OAuth. Please try authenticating again.',
-            ),
-          );
-        }
-      } catch (e) {
-        // Provide more specific error message for unexpected errors during OAuth flow
-        if (e instanceof FatalAuthenticationError) {
-          reject(e);
-        } else {
-          reject(
-            new FatalAuthenticationError(
-              `Unexpected error during OAuth authentication: ${getErrorMessage(e)}`,
-            ),
-          );
-        }
-      } finally {
-        server.close();
-      }
+    const server = http.createServer((req, res) => {
+      void handleOAuthCallbackRequest(
+        req,
+        res,
+        client,
+        redirectUri,
+        state,
+        resolve,
+        reject,
+      ).finally(() => server.close());
     });
 
     server.listen(port, host, () => {
@@ -527,16 +601,22 @@ export function getAvailablePort(): Promise<number> {
       if (portStr) {
         port = parseInt(portStr, 10);
         if (isNaN(port) || port <= 0 || port > 65535) {
-          return reject(
+          reject(
             new Error(`Invalid value for OAUTH_CALLBACK_PORT: ${portStr}`),
           );
+          return;
         }
-        return resolve(port);
+        resolve(port);
+        return;
       }
       const server = net.createServer();
       server.listen(0, () => {
         const address = server.address();
-        if (address && typeof address === 'object' && 'port' in address) {
+        if (
+          address !== null &&
+          typeof address === 'object' &&
+          'port' in address
+        ) {
           resolve(address.port);
         } else {
           reject(new Error('Failed to get available port'));
@@ -546,6 +626,7 @@ export function getAvailablePort(): Promise<number> {
       server.on('error', reject);
     } catch (e) {
       reject(e);
+      return;
     }
   });
 }

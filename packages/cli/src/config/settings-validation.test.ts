@@ -121,12 +121,10 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
-      if (result.error) {
-        expect(result.error.issues[0]?.path).toStrictEqual([
-          'enableAutoUpdate',
-        ]);
-        expect(result.error.issues[0]?.code).toBe('invalid_type');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      expect(result.error.issues[0]?.path).toStrictEqual(['enableAutoUpdate']);
+      expect(result.error.issues[0]?.code).toBe('invalid_type');
     });
 
     it('should reject number instead of string', () => {
@@ -134,12 +132,10 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
-      if (result.error) {
-        expect(result.error.issues[0]?.path).toStrictEqual([
-          'mcpServerCommand',
-        ]);
-        expect(result.error.issues[0]?.code).toBe('invalid_type');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      expect(result.error.issues[0]?.path).toStrictEqual(['mcpServerCommand']);
+      expect(result.error.issues[0]?.code).toBe('invalid_type');
     });
 
     it('should reject boolean instead of number', () => {
@@ -156,10 +152,10 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
-        expect(result.error.issues[0]?.path).toContain('args');
-        expect(result.error.issues[0]?.path).toContain(1);
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      expect(result.error.issues[0]?.path).toContain('args');
+      expect(result.error.issues[0]?.path).toContain(1);
     });
 
     it('should reject object in string array', () => {
@@ -176,18 +172,18 @@ describe('settings-validation', () => {
       const invalidSettings = { ui: 'invalid' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
-        expect(result.error.issues[0]?.path).toStrictEqual(['ui']);
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      expect(result.error.issues[0]?.path).toStrictEqual(['ui']);
     });
 
     it('should reject invalid nested property type', () => {
       const invalidSettings = { ui: { theme: 123 } };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
-        expect(result.error.issues[0]?.path).toStrictEqual(['ui', 'theme']);
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      expect(result.error.issues[0]?.path).toStrictEqual(['ui', 'theme']);
     });
 
     it('should reject invalid deeply nested type', () => {
@@ -196,13 +192,13 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
-        expect(result.error.issues[0]?.path).toStrictEqual([
-          'ui',
-          'footer',
-          'hideCWD',
-        ]);
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      expect(result.error.issues[0]?.path).toStrictEqual([
+        'ui',
+        'footer',
+        'hideCWD',
+      ]);
     });
 
     it('should reject invalid mcpServers structure', () => {
@@ -216,13 +212,11 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
-        const issue = result.error.issues.find((i) =>
-          i.path.includes('command'),
-        );
-        expect(issue).toBeDefined();
-        expect(issue?.code).toBe('invalid_type');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const issue = result.error.issues.find((i) => i.path.includes('command'));
+      expect(issue).toBeDefined();
+      expect(issue?.code).toBe('invalid_type');
     });
 
     it('should reject array instead of object', () => {
@@ -252,9 +246,9 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
-        expect(result.error.issues.length).toBeGreaterThan(1);
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      expect(result.error.issues.length).toBeGreaterThan(1);
     });
 
     it('should validate mcpServers with type field for all transport types', () => {
@@ -325,12 +319,12 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
-        const issue = result.error.issues.find(
-          (i) => i.code === 'invalid_type' && i.message.includes('Required'),
-        );
-        expect(issue).toBeDefined();
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const issue = result.error.issues.find(
+        (i) => i.code === 'invalid_type' && i.message.includes('Required'),
+      );
+      expect(issue).toBeDefined();
     });
 
     it('should provide detailed error for complex nested validation failure', () => {
@@ -345,10 +339,10 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
-        const issue = result.error.issues.find((i) => i.path.includes('env'));
-        expect(issue).toBeDefined();
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const issue = result.error.issues.find((i) => i.path.includes('env'));
+      expect(issue).toBeDefined();
     });
   });
 
@@ -505,20 +499,20 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
-        const formatted = formatValidationError(
-          result.error,
-          '/path/to/settings.json',
-        );
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const formatted = formatValidationError(
+        result.error,
+        '/path/to/settings.json',
+      );
 
-        expect(formatted).toContain('/path/to/settings.json');
-        expect(formatted).toContain('enableAutoUpdate');
-        expect(formatted).toContain('Expected:');
-        expect(formatted).toContain('but received:');
-        expect(formatted).toContain(
-          'Please fix the configuration and try again.',
-        );
-      }
+      expect(formatted).toContain('/path/to/settings.json');
+      expect(formatted).toContain('enableAutoUpdate');
+      expect(formatted).toContain('Expected:');
+      expect(formatted).toContain('but received:');
+      expect(formatted).toContain(
+        'Please fix the configuration and try again.',
+      );
     });
 
     it('should format nested property path correctly', () => {
@@ -526,10 +520,10 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
-        const formatted = formatValidationError(result.error, 'settings.json');
-        expect(formatted).toContain('ui.theme');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const formatted = formatValidationError(result.error, 'settings.json');
+      expect(formatted).toContain('ui.theme');
     });
 
     it('should format array index path correctly', () => {
@@ -541,11 +535,11 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
-        const formatted = formatValidationError(result.error, 'settings.json');
-        expect(formatted).toContain('args');
-        expect(formatted).toContain('[1]');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const formatted = formatValidationError(result.error, 'settings.json');
+      expect(formatted).toContain('args');
+      expect(formatted).toContain('[1]');
     });
 
     it('should format deeply nested object path correctly', () => {
@@ -557,11 +551,11 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
-        const formatted = formatValidationError(result.error, 'settings.json');
-        expect(formatted).toContain('mcpServers');
-        expect(formatted).toContain('command');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const formatted = formatValidationError(result.error, 'settings.json');
+      expect(formatted).toContain('mcpServers');
+      expect(formatted).toContain('command');
     });
 
     it('should include expected vs received for invalid_type errors', () => {
@@ -569,11 +563,11 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
-        const formatted = formatValidationError(result.error, 'settings.json');
-        expect(formatted).toContain('Expected: boolean');
-        expect(formatted).toContain('but received: string');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const formatted = formatValidationError(result.error, 'settings.json');
+      expect(formatted).toContain('Expected: boolean');
+      expect(formatted).toContain('but received: string');
     });
 
     it('should list all validation errors when multiple exist', () => {
@@ -584,11 +578,11 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
-        const formatted = formatValidationError(result.error, 'settings.json');
-        expect(formatted).toContain('enableAutoUpdate');
-        expect(formatted).toContain('ptyScrollbackLimit');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const formatted = formatValidationError(result.error, 'settings.json');
+      expect(formatted).toContain('enableAutoUpdate');
+      expect(formatted).toContain('ptyScrollbackLimit');
     });
 
     it('should limit displayed errors to 5', () => {
@@ -600,15 +594,15 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
-        const formatted = formatValidationError(result.error, 'settings.json');
-        expect(formatted).toContain('args');
-        expect(formatted).toContain('[0]');
-        expect(formatted).toContain('[4]');
-        expect(formatted).not.toContain('[5]');
-        expect(formatted).not.toContain('[6]');
-        expect(formatted).toContain('...and 2 more errors.');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const formatted = formatValidationError(result.error, 'settings.json');
+      expect(formatted).toContain('args');
+      expect(formatted).toContain('[0]');
+      expect(formatted).toContain('[4]');
+      expect(formatted).not.toContain('[5]');
+      expect(formatted).not.toContain('[6]');
+      expect(formatted).toContain('...and 2 more errors.');
     });
 
     it('should include documentation link', () => {
@@ -616,11 +610,11 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
-        const formatted = formatValidationError(result.error, 'settings.json');
-        expect(formatted).toContain('https://');
-        expect(formatted).toContain('configuration');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const formatted = formatValidationError(result.error, 'settings.json');
+      expect(formatted).toContain('https://');
+      expect(formatted).toContain('configuration');
     });
 
     it('should handle root-level error path', () => {
@@ -629,10 +623,10 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
-        const formatted = formatValidationError(result.error, 'settings.json');
-        expect(formatted).toContain('Error in: ui');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const formatted = formatValidationError(result.error, 'settings.json');
+      expect(formatted).toContain('Error in: ui');
     });
 
     it('should use proper formatting for settings file path', () => {
@@ -640,13 +634,13 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
-        const formatted = formatValidationError(
-          result.error,
-          '~/.llxprt/settings.json',
-        );
-        expect(formatted).toContain('~/.llxprt/settings.json');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      const formatted = formatValidationError(
+        result.error,
+        '~/.llxprt/settings.json',
+      );
+      expect(formatted).toContain('~/.llxprt/settings.json');
     });
   });
 

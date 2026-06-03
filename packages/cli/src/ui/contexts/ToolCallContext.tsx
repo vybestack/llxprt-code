@@ -9,7 +9,7 @@ import type { TodoToolCall } from '@vybestack/llxprt-code-core';
 
 export interface ToolCallContextType {
   /**
-   * Get executing tool calls for a specific todo
+   * Get executing tool calls for a specific task
    */
   getExecutingToolCalls: (todoId: string) => TodoToolCall[];
 

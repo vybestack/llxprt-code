@@ -140,7 +140,8 @@ export class WorkspaceContext {
         }
       }
       return false;
-    } catch (_error) {
+    } catch {
+      // Path resolution failed; not within workspace.
       return false;
     }
   }
@@ -193,7 +194,8 @@ export class WorkspaceContext {
   private isFileSymlink(filePath: string): boolean {
     try {
       return !fs.readlinkSync(filePath).endsWith('/');
-    } catch (_error) {
+    } catch {
+      // Not a symlink or unreadable.
       return false;
     }
   }

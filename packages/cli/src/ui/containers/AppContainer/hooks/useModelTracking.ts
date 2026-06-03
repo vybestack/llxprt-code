@@ -5,7 +5,23 @@
  */
 
 import { useEffect, useState } from 'react';
-import { getSettingsService, type Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+
+interface RuntimeSettingsServiceBoundary {
+  getDiagnosticsData?: () => Promise<{ model?: string | null } | null>;
+  on?: (eventName: 'settings-changed', listener: () => void) => void;
+  off?: (eventName: 'settings-changed', listener: () => void) => void;
+}
+
+interface RuntimeConfigBoundary {
+  getSettingsService?: () => RuntimeSettingsServiceBoundary | null | undefined;
+}
+
+function getRuntimeSettingsService(
+  config: Config,
+): RuntimeSettingsServiceBoundary | null {
+  return (config as RuntimeConfigBoundary).getSettingsService?.() ?? null;
+}
 
 /**
  * @hook useModelTracking
@@ -37,20 +53,24 @@ export function useModelTracking({
     let disposed = false;
     let requestSeq = 0;
 
+    const isCurrentRequest = (seq: number) => !disposed && seq === requestSeq;
+
     const updateModel = async () => {
-      const seq = ++requestSeq;
-      const settingsService = getSettingsService();
+      requestSeq += 1;
+      const seq = requestSeq;
+      const settingsService = getRuntimeSettingsService(config);
 
       // Try to get from SettingsService first (same as diagnostics does)
-      if (settingsService && settingsService.getDiagnosticsData) {
+      if (settingsService?.getDiagnosticsData) {
         try {
           const diagnosticsData = await settingsService.getDiagnosticsData();
-          if (!disposed && seq === requestSeq) {
-            if (diagnosticsData && diagnosticsData.model) {
-              setCurrentModel(diagnosticsData.model);
-              return;
-            }
-          } else {
+          if (!isCurrentRequest(seq)) {
+            return;
+          }
+
+          const model = diagnosticsData?.model;
+          if (model !== undefined && model !== null && model !== '') {
+            setCurrentModel(model);
             return;
           }
         } catch {
@@ -59,22 +79,25 @@ export function useModelTracking({
       }
 
       // Otherwise use config (which is what diagnostics falls back to)
-      if (!disposed && seq === requestSeq) {
+      if (isCurrentRequest(seq)) {
         setCurrentModel(config.getModel());
       }
     };
 
+    const handleSettingsChanged = () => {
+      void updateModel();
+    };
+
     // Update immediately
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    updateModel();
+    void updateModel();
 
     // Also listen for any changes if SettingsService is available
-    const settingsService = getSettingsService();
-    if (settingsService) {
-      settingsService.on('settings-changed', updateModel);
+    const settingsService = getRuntimeSettingsService(config);
+    if (settingsService?.on && settingsService.off) {
+      settingsService.on('settings-changed', handleSettingsChanged);
       return () => {
         disposed = true;
-        settingsService.off('settings-changed', updateModel);
+        settingsService.off?.('settings-changed', handleSettingsChanged);
       };
     }
 

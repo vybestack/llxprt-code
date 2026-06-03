@@ -32,7 +32,7 @@ describe('semantic tokens system', () => {
   describe('integration with built-in themes', () => {
     it('should resolve semantic colors for all built-in themes', () => {
       const themes = themeManager.getAvailableThemes();
-      const builtInThemes = themes.filter((t) => !t.isCustom);
+      const builtInThemes = themes.filter((t) => t.isCustom !== true);
 
       for (const themeDisplay of builtInThemes) {
         themeManager.setActiveTheme(themeDisplay.name);

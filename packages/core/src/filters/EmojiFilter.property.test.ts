@@ -175,7 +175,7 @@ describe('EmojiFilter Property-Based Tests', () => {
 
             // If emojis detected, should provide feedback
             expect(
-              !result.emojiDetected ||
+              result.emojiDetected !== true ||
                 (result.systemFeedback !== undefined &&
                   result.systemFeedback.includes('avoid using emojis')),
             ).toBe(true);

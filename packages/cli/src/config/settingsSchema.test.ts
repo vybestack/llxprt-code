@@ -97,29 +97,29 @@ describe('SettingsSchema', () => {
 
     it('should have accessibility nested properties', () => {
       expect(
-        SETTINGS_SCHEMA.accessibility.properties?.enableLoadingPhrases,
+        SETTINGS_SCHEMA.accessibility.properties.enableLoadingPhrases,
       ).toBeDefined();
       expect(
-        SETTINGS_SCHEMA.accessibility.properties?.enableLoadingPhrases.type,
+        SETTINGS_SCHEMA.accessibility.properties.enableLoadingPhrases.type,
       ).toBe('boolean');
     });
 
     it('should have checkpointing nested properties', () => {
-      expect(SETTINGS_SCHEMA.checkpointing.properties?.enabled).toBeDefined();
-      expect(SETTINGS_SCHEMA.checkpointing.properties?.enabled.type).toBe(
+      expect(SETTINGS_SCHEMA.checkpointing.properties.enabled).toBeDefined();
+      expect(SETTINGS_SCHEMA.checkpointing.properties.enabled.type).toBe(
         'boolean',
       );
     });
 
     it('should have fileFiltering nested properties', () => {
       expect(
-        SETTINGS_SCHEMA.fileFiltering.properties?.respectGitIgnore,
+        SETTINGS_SCHEMA.fileFiltering.properties.respectGitIgnore,
       ).toBeDefined();
       expect(
-        SETTINGS_SCHEMA.fileFiltering.properties?.respectLlxprtIgnore,
+        SETTINGS_SCHEMA.fileFiltering.properties.respectLlxprtIgnore,
       ).toBeDefined();
       expect(
-        SETTINGS_SCHEMA.fileFiltering.properties?.enableRecursiveFileSearch,
+        SETTINGS_SCHEMA.fileFiltering.properties.enableRecursiveFileSearch,
       ).toBeDefined();
     });
 
@@ -181,22 +181,22 @@ describe('SettingsSchema', () => {
 
     it('should have showInDialog property configured', () => {
       // Check that user-facing settings are marked for dialog display
-      expect(SETTINGS_SCHEMA.ui.properties?.showMemoryUsage.showInDialog).toBe(
+      expect(SETTINGS_SCHEMA.ui.properties.showMemoryUsage.showInDialog).toBe(
         true,
       );
-      expect(SETTINGS_SCHEMA.ui.properties?.vimMode.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.ui.properties?.ideMode.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.vimMode.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.ideMode.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.enableAutoUpdate.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.ui.properties?.hideWindowTitle.showInDialog).toBe(
+      expect(SETTINGS_SCHEMA.ui.properties.hideWindowTitle.showInDialog).toBe(
         true,
       );
-      expect(SETTINGS_SCHEMA.ui.properties?.hideTips.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.ui.properties?.hideBanner.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.hideTips.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.hideBanner.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.enableMouseEvents.showInDialog).toBe(
+        true,
+      );
       expect(
-        SETTINGS_SCHEMA.ui.properties?.enableMouseEvents.showInDialog,
-      ).toBe(true);
-      expect(
-        SETTINGS_SCHEMA.ui.properties?.usageStatisticsEnabled.showInDialog,
+        SETTINGS_SCHEMA.ui.properties.usageStatisticsEnabled.showInDialog,
       ).toBe(false);
 
       // Check that advanced settings are hidden from dialog
@@ -205,19 +205,18 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.telemetry.showInDialog).toBe(false);
 
       // Check that some settings are appropriately hidden
-      expect(SETTINGS_SCHEMA.ui.properties?.theme.showInDialog).toBe(false); // Changed to false
-      expect(SETTINGS_SCHEMA.ui.properties?.customThemes.showInDialog).toBe(
+      expect(SETTINGS_SCHEMA.ui.properties.theme.showInDialog).toBe(false); // Changed to false
+      expect(SETTINGS_SCHEMA.ui.properties.customThemes.showInDialog).toBe(
         false,
       ); // Managed via theme editor
       expect(SETTINGS_SCHEMA.checkpointing.showInDialog).toBe(false); // Experimental feature
       expect(SETTINGS_SCHEMA.accessibility.showInDialog).toBe(false); // Changed to false
       expect(SETTINGS_SCHEMA.fileFiltering.showInDialog).toBe(false); // Changed to false
-      expect(SETTINGS_SCHEMA.ui.properties?.preferredEditor.showInDialog).toBe(
+      expect(SETTINGS_SCHEMA.ui.properties.preferredEditor.showInDialog).toBe(
         false,
       ); // Changed to false
       expect(
-        SETTINGS_SCHEMA.ui.properties?.autoConfigureMaxOldSpaceSize
-          .showInDialog,
+        SETTINGS_SCHEMA.ui.properties.autoConfigureMaxOldSpaceSize.showInDialog,
       ).toBe(true);
     });
 
@@ -284,7 +283,8 @@ describe('SettingsSchema', () => {
       const visitDefinition = (definition: SettingDefinition) => {
         if (definition.ref) {
           referenced.add(definition.ref);
-          if (!SETTINGS_SCHEMA_DEFINITIONS[definition.ref]) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- verifying all refs are defined at runtime
+          if (SETTINGS_SCHEMA_DEFINITIONS[definition.ref] === undefined) {
             missing.push(definition.ref);
           }
         }
@@ -302,7 +302,8 @@ describe('SettingsSchema', () => {
       const visitCollection = (collection: SettingCollectionDefinition) => {
         if (collection.ref) {
           referenced.add(collection.ref);
-          if (!SETTINGS_SCHEMA_DEFINITIONS[collection.ref]) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- verifying all refs are defined at runtime
+          if (SETTINGS_SCHEMA_DEFINITIONS[collection.ref] === undefined) {
             missing.push(collection.ref);
           }
           return;

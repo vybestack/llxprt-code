@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import path from 'node:path';
 import process from 'node:process';
 import { makeRelative, shortenPath } from '../utils/paths.js';
@@ -21,6 +23,7 @@ import {
   processSingleFileContent,
   getSpecificMimeType,
   DEFAULT_MAX_LINES_TEXT_FILE,
+  type ProcessedFileReadResult,
 } from '../utils/fileUtils.js';
 import type { Config } from '../config/config.js';
 import {
@@ -140,7 +143,9 @@ class ReadFileToolInvocation extends BaseToolInvocation<
 
   private getFilePath(): string {
     // Use absolute_path if provided, otherwise fall back to file_path
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, absolute_path/file_path are optional strings with fallthrough intent */
     return this.params.absolute_path || this.params.file_path || '';
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
   }
 
   getDescription(): string {
@@ -153,6 +158,130 @@ class ReadFileToolInvocation extends BaseToolInvocation<
 
   override toolLocations(): ToolLocation[] {
     return [{ path: this.getFilePath(), line: this.params.offset }];
+  }
+
+  private async fetchGitAnnotations(filePath: string): Promise<{
+    gitWarning: string | undefined;
+    markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined;
+    deletionAfterLines: Set<number> | undefined;
+  }> {
+    const gitResult = await getGitLineChanges(filePath);
+    return {
+      gitWarning: gitResult.warning,
+      markersByLine: gitResult.markersByLine,
+      deletionAfterLines: gitResult.deletionAfterLines,
+    };
+  }
+
+  private applyTextFormatting(
+    content: string,
+    startLine: number,
+    markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
+    deletionAfterLines: Set<number> | undefined,
+  ): string {
+    if (
+      this.params.showGitChanges === true &&
+      markersByLine != null &&
+      deletionAfterLines != null
+    ) {
+      return formatWithGitChanges(
+        content,
+        startLine,
+        markersByLine,
+        deletionAfterLines,
+        this.params.showLineNumbers === true,
+      );
+    }
+    if (this.params.showLineNumbers === true) {
+      return formatWithLineNumbers(content, startLine);
+    }
+    return content;
+  }
+
+  private prependGitHeader(
+    llmContent: string,
+    gitWarning: string | undefined,
+  ): string {
+    if (this.params.showGitChanges !== true) {
+      return llmContent;
+    }
+    const headerParts: string[] = [];
+    if (gitWarning != null) {
+      headerParts.push(`NOTE: Failed to read git change status: ${gitWarning}`);
+    }
+    headerParts.push(
+      'Git changes legend: ░ unchanged, N new, M modified, D deletion after line.',
+    );
+    return `${headerParts.join('\n')}\n\n${llmContent}`;
+  }
+
+  private buildTruncatedLlmContent(
+    result: ProcessedFileReadResult,
+    gitWarning: string | undefined,
+    markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
+    deletionAfterLines: Set<number> | undefined,
+  ): PartUnion {
+    const [start, end] = result.linesShown!;
+    const total = result.originalLineCount!;
+    const nextOffset =
+      this.params.offset != null ? this.params.offset + end - start + 1 : end;
+    const startLine =
+      this.params.offset != null ? this.params.offset + 1 : start;
+
+    const formattedContent = this.applyTextFormatting(
+      result.llmContent as string,
+      startLine,
+      markersByLine,
+      deletionAfterLines,
+    );
+
+    const gitLegend =
+      this.params.showGitChanges === true
+        ? `\nGit changes legend: ░ unchanged, N new, M modified, D deletion after line.\n`
+        : '';
+    const gitWarningText =
+      this.params.showGitChanges === true && gitWarning != null
+        ? `\nNOTE: Failed to read git change status: ${gitWarning}\n`
+        : '';
+
+    return `
+IMPORTANT: The file content has been truncated.${gitWarningText}${gitLegend}
+Status: Showing lines ${start}-${end} of ${total} total lines.
+Action: To read more of the file, you can use the 'offset' and 'limit' parameters in a subsequent 'read_file' call. For example, to read the next section of the file, use offset: ${nextOffset}.
+
+--- FILE CONTENT (truncated) ---
+${formattedContent}`;
+  }
+
+  private buildFullLlmContent(
+    result: ProcessedFileReadResult,
+    gitWarning: string | undefined,
+    markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
+    deletionAfterLines: Set<number> | undefined,
+  ): PartUnion {
+    const startLine = this.params.offset != null ? this.params.offset + 1 : 1;
+    const formatted = this.applyTextFormatting(
+      result.llmContent as string,
+      startLine,
+      markersByLine,
+      deletionAfterLines,
+    );
+    return this.prependGitHeader(formatted, gitWarning);
+  }
+
+  private recordReadMetric(llmContent: PartUnion, filePath: string): void {
+    const lines =
+      typeof llmContent === 'string'
+        ? llmContent.split('\n').length
+        : undefined;
+    const mimetype = getSpecificMimeType(filePath);
+    recordFileOperationMetric(
+      this.config,
+      FileOperation.READ,
+      lines,
+      mimetype,
+      path.extname(filePath),
+    );
   }
 
   async execute(): Promise<ToolResult> {
@@ -174,14 +303,9 @@ class ReadFileToolInvocation extends BaseToolInvocation<
       return {
         llmContent: result.llmContent,
         returnDisplay: result.returnDisplay || 'Error reading file',
-        error: {
-          message: result.error,
-          type: result.errorType,
-        },
+        error: { message: result.error, type: result.errorType },
       };
     }
-
-    let llmContent: PartUnion;
 
     let gitWarning: string | undefined;
     let markersByLine:
@@ -194,98 +318,31 @@ class ReadFileToolInvocation extends BaseToolInvocation<
       typeof result.llmContent === 'string';
 
     if (shouldAnnotateGit) {
-      const gitResult = await getGitLineChanges(this.getFilePath());
-      gitWarning = gitResult.warning;
-      markersByLine = gitResult.markersByLine;
-      deletionAfterLines = gitResult.deletionAfterLines;
+      ({ gitWarning, markersByLine, deletionAfterLines } =
+        await this.fetchGitAnnotations(this.getFilePath()));
     }
+
+    let llmContent: PartUnion;
 
     if (typeof result.llmContent !== 'string') {
       llmContent = result.llmContent;
-    } else if (result.isTruncated) {
-      const [start, end] = result.linesShown!;
-      const total = result.originalLineCount!;
-      const nextOffset = this.params.offset
-        ? this.params.offset + end - start + 1
-        : end;
-
-      const startLine = this.params.offset ? this.params.offset + 1 : start;
-
-      let formattedContent = result.llmContent;
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
-        formattedContent = formatWithGitChanges(
-          result.llmContent,
-          startLine,
-          markersByLine,
-          deletionAfterLines,
-          this.params.showLineNumbers === true,
-        );
-      } else if (this.params.showLineNumbers) {
-        formattedContent = formatWithLineNumbers(result.llmContent, startLine);
-      }
-
-      const gitLegend = this.params.showGitChanges
-        ? `
-Git changes legend: ░ unchanged, N new, M modified, D deletion after line.
-`
-        : '';
-      const gitWarningText =
-        this.params.showGitChanges && gitWarning
-          ? `
-NOTE: Failed to read git change status: ${gitWarning}
-`
-          : '';
-
-      llmContent = `
-IMPORTANT: The file content has been truncated.${gitWarningText}${gitLegend}
-Status: Showing lines ${start}-${end} of ${total} total lines.
-Action: To read more of the file, you can use the 'offset' and 'limit' parameters in a subsequent 'read_file' call. For example, to read the next section of the file, use offset: ${nextOffset}.
-
---- FILE CONTENT (truncated) ---
-${formattedContent}`;
+    } else if (result.isTruncated === true) {
+      llmContent = this.buildTruncatedLlmContent(
+        result,
+        gitWarning,
+        markersByLine,
+        deletionAfterLines,
+      );
     } else {
-      const startLine = this.params.offset ? this.params.offset + 1 : 1;
-
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
-        llmContent = formatWithGitChanges(
-          result.llmContent,
-          startLine,
-          markersByLine,
-          deletionAfterLines,
-          this.params.showLineNumbers === true,
-        );
-      } else {
-        llmContent = this.params.showLineNumbers
-          ? formatWithLineNumbers(result.llmContent, startLine)
-          : result.llmContent;
-      }
-
-      if (this.params.showGitChanges) {
-        const headerParts: string[] = [];
-        if (gitWarning) {
-          headerParts.push(
-            `NOTE: Failed to read git change status: ${gitWarning}`,
-          );
-        }
-        headerParts.push(
-          'Git changes legend: ░ unchanged, N new, M modified, D deletion after line.',
-        );
-        llmContent = `${headerParts.join('\n')}\n\n${llmContent}`;
-      }
+      llmContent = this.buildFullLlmContent(
+        result,
+        gitWarning,
+        markersByLine,
+        deletionAfterLines,
+      );
     }
 
-    const lines =
-      typeof result.llmContent === 'string'
-        ? result.llmContent.split('\n').length
-        : undefined;
-    const mimetype = getSpecificMimeType(this.getFilePath());
-    recordFileOperationMetric(
-      this.config,
-      FileOperation.READ,
-      lines,
-      mimetype,
-      path.extname(this.getFilePath()),
-    );
+    this.recordReadMetric(result.llmContent, this.getFilePath());
 
     return {
       llmContent,
@@ -363,7 +420,9 @@ If git status cannot be read, the tool will still return file content and includ
     params: ReadFileToolParams,
   ): string | null {
     // Accept either absolute_path or file_path
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, absolute_path/file_path are optional strings with fallthrough intent */
     const filePath = params.absolute_path || params.file_path || '';
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
     if (filePath.trim() === '') {
       return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";

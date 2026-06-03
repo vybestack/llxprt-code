@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import type { ModelsDevModel, LlxprtDefaultProfile } from './schema.js';
 
 /**
@@ -15,23 +17,21 @@ export function generateDefaultProfile(
   const profile: LlxprtDefaultProfile = {};
 
   // Reasoning models
-  if (model.reasoning) {
+  if (model.reasoning === true) {
     profile.thinkingEnabled = true;
     profile.thinkingBudget = 10000; // Conservative default
 
     // Lower temperature for reasoning models
-    if (model.temperature) {
+    if (model.temperature === true) {
       profile.temperature = 0.7;
     }
-  } else {
+  } else if (model.temperature === true) {
     // Non-reasoning models
-    if (model.temperature) {
-      profile.temperature = 1.0;
-    }
+    profile.temperature = 1.0;
   }
 
   // Top-p recommendations
-  if (model.temperature) {
+  if (model.temperature === true) {
     profile.topP = 0.95; // Standard default
   }
 

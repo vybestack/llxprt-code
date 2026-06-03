@@ -98,6 +98,7 @@ function collectErrorDetails(error: unknown): {
   const stack: unknown[] = [error];
   const visited = new Set<unknown>();
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   while (stack.length > 0) {
     const current = stack.pop();
     if (current === null || current === undefined) {
@@ -139,7 +140,7 @@ function collectErrorDetails(error: unknown): {
       errorObject.error,
     ];
     for (const nested of possibleNestedErrors) {
-      if (nested && nested !== current) {
+      if (nested !== undefined && nested !== null && nested !== current) {
         stack.push(nested);
       }
     }
@@ -156,10 +157,10 @@ export function createStreamInterruptionError(
   const error = new Error(message);
   error.name = 'StreamInterruptionError';
   (error as { code?: string }).code = STREAM_INTERRUPTED_ERROR_CODE;
-  if (details) {
+  if (details != null) {
     (error as { details?: Record<string, unknown> }).details = details;
   }
-  if (cause && !(error as { cause?: unknown }).cause) {
+  if (cause != null && (error as { cause?: unknown }).cause == null) {
     (error as { cause?: unknown }).cause = cause;
   }
   return error;
@@ -175,6 +176,7 @@ export function getErrorCode(error: unknown): string | undefined {
     }
 
     if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       'error' in error &&
       typeof (error as { error?: unknown }).error === 'object' &&
       (error as { error?: unknown }).error !== null &&
@@ -260,7 +262,7 @@ export function isRetryableError(
   }
 
   // PRIORITY 3: Generic "fetch failed" messages only retry when explicitly enabled
-  if (retryFetchErrors) {
+  if (retryFetchErrors === true) {
     const { messages } = collectErrorDetails(error);
     if (messages.some((msg) => msg.toLowerCase().includes('fetch failed'))) {
       return true;
@@ -271,6 +273,7 @@ export function isRetryableError(
   if (error instanceof ApiError) {
     if (error.status === 400) return false;
     return (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       error.status === 401 ||
       error.status === 403 ||
       error.status === 429 ||
@@ -282,6 +285,7 @@ export function isRetryableError(
   const status = getErrorStatus(error);
   if (status !== undefined) {
     return (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       status === 401 ||
       status === 403 ||
       status === 429 ||
@@ -299,11 +303,448 @@ export function isRetryableError(
  * @returns A promise that resolves with the result of the function if successful.
  * @throws The last error encountered if all attempts fail.
  */
+/** State tracked across retry loop iterations. */
+interface RetryLoopState {
+  attempt: number;
+  currentDelay: number;
+  consecutive429s: number;
+  consecutiveAuthErrors: number;
+}
+
+/** Classifies an error into categories used by retry logic. */
+function classifyError(error: unknown) {
+  const errorStatus = getErrorStatus(error);
+  const isOverload = isOverloadError(error);
+  const is429 = errorStatus === 429 || isOverload;
+  const is402 = errorStatus === 402;
+  const isAuthError = errorStatus === 401 || errorStatus === 403;
+  const is500 =
+    errorStatus !== undefined && errorStatus >= 500 && errorStatus < 600;
+  return { errorStatus, isOverload, is429, is402, isAuthError, is500 };
+}
+
+/**
+ * Handle content-based retry decision (when shouldRetryOnContent returns true).
+ * Returns true if the caller should `continue` the loop.
+ */
+async function handleContentRetry<T>(
+  result: T,
+  shouldRetryOnContent:
+    | ((content: GenerateContentResponse) => boolean)
+    | undefined,
+  state: RetryLoopState,
+  maxDelayMs: number,
+  initialDelayMs: number,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  if (shouldRetryOnContent?.(result as GenerateContentResponse) !== true) {
+    return false;
+  }
+  const jitter = state.currentDelay * 0.3 * (Math.random() * 2 - 1);
+  const delayWithJitter = Math.max(0, state.currentDelay + jitter);
+  await delay(delayWithJitter, signal);
+  state.currentDelay = Math.min(maxDelayMs, state.currentDelay * 2);
+  return true;
+}
+
+/**
+ * Updates consecutive error counters and returns refresh-retry flag.
+ */
+function updateErrorCounters(
+  is429: boolean,
+  isAuthError: boolean,
+  canAttemptFailover: boolean,
+  failoverThreshold: number,
+  state: RetryLoopState,
+  logger: DebugLogger,
+): { shouldAttemptRefreshRetry: boolean } {
+  if (is429) {
+    state.consecutive429s++;
+    logger.debug(
+      () =>
+        `429 error detected, consecutive count: ${state.consecutive429s}/${failoverThreshold}`,
+    );
+  } else {
+    state.consecutive429s = 0;
+  }
+
+  if (isAuthError) {
+    state.consecutiveAuthErrors++;
+  } else {
+    state.consecutiveAuthErrors = 0;
+  }
+
+  const shouldAttemptRefreshRetry =
+    isAuthError && canAttemptFailover && state.consecutiveAuthErrors === 1;
+
+  return { shouldAttemptRefreshRetry };
+}
+
+/**
+ * Invoke onAuthError callback if applicable (first auth error in sequence, another attempt remains).
+ */
+async function invokeAuthErrorCallback(
+  isAuthError: boolean,
+  consecutiveAuthErrors: number,
+  options: Partial<RetryOptions> | undefined,
+  attempt: number,
+  maxAttempts: number,
+  errorStatus: number | undefined,
+  logger: DebugLogger,
+): Promise<void> {
+  if (
+    !isAuthError ||
+    consecutiveAuthErrors !== 1 ||
+    !options?.onAuthError ||
+    attempt >= maxAttempts
+  ) {
+    return;
+  }
+  try {
+    logger.debug(
+      () =>
+        `Calling onAuthError callback for status ${errorStatus} before retry`,
+    );
+    await options.onAuthError({ errorStatus: errorStatus ?? 401 });
+  } catch (handlerError) {
+    logger.debug(
+      () =>
+        `onAuthError callback failed, continuing with retry: ${handlerError}`,
+    );
+  }
+}
+
+/**
+ * Attempt bucket failover if conditions are met.
+ * Returns 'continue' (reset state, decrement attempt, loop),
+ * 'throw' (no more buckets), or 'proceed' (continue with normal retry).
+ */
+async function attemptFailover(
+  error: unknown,
+  is429: boolean,
+  is402: boolean,
+  isAuthError: boolean,
+  errorStatus: number | undefined,
+  options: Partial<RetryOptions> | undefined,
+  state: RetryLoopState,
+  initialDelayMs: number,
+  failoverThreshold: number,
+  logger: DebugLogger,
+): Promise<'continue' | 'throw' | 'proceed'> {
+  const canAttemptFailover = Boolean(options?.onPersistent429);
+  const thresholdReached = is429 && state.consecutive429s >= failoverThreshold;
+  const authFailoverReached = isAuthError && state.consecutiveAuthErrors > 1;
+  const shouldAttemptFailover =
+    canAttemptFailover && (thresholdReached || is402 || authFailoverReached);
+
+  logger.debug(
+    () =>
+      `[issue1029] Failover decision: errorStatus=${errorStatus}, is429=${is429}, is402=${is402}, isAuthError=${isAuthError}, ` +
+      `consecutive429s=${state.consecutive429s}, consecutiveAuthErrors=${state.consecutiveAuthErrors}, ` +
+      `canAttemptFailover=${canAttemptFailover}, shouldAttemptFailover=${shouldAttemptFailover}`,
+  );
+
+  if (!shouldAttemptFailover || !options?.onPersistent429) {
+    if (is429 && !canAttemptFailover) {
+      logger.debug(
+        () =>
+          `[issue1029] Got 429 error but canAttemptFailover=false (no onPersistent429 callback). ` +
+          `This means bucket failover is not wired for this request.`,
+      );
+    }
+    return 'proceed';
+  }
+
+  const failoverReason = is429
+    ? `${state.consecutive429s} consecutive 429 errors`
+    : `status ${errorStatus}`;
+  logger.debug(() => `Attempting bucket failover after ${failoverReason}`);
+  const failoverResult = await options.onPersistent429(error);
+
+  logger.debug(
+    () =>
+      `[issue1029] onPersistent429 callback returned: ${failoverResult ?? 'null (no handler)'}`,
+  );
+
+  if (failoverResult === true || typeof failoverResult === 'string') {
+    logger.debug(() => `Bucket failover successful, resetting retry state`);
+    state.consecutive429s = 0;
+    state.consecutiveAuthErrors = 0;
+    state.currentDelay = initialDelayMs;
+    state.attempt--;
+    return 'continue';
+  }
+  if (failoverResult === false) {
+    logger.debug(
+      () => `No more buckets available for failover, stopping retry`,
+    );
+    return 'throw';
+  }
+  logger.debug(
+    () =>
+      `[issue1029] Failover returned null - no failover handler configured, continuing with normal retry`,
+  );
+  return 'proceed';
+}
+
+/**
+ * Check whether we should stop retrying (max attempts) and throw if so.
+ * Returns true if the caller should continue with delay logic.
+ */
+function checkMaxAttemptsAndThrow(
+  error: unknown,
+  classifiedError: unknown,
+  is500: boolean,
+  isRetryableQuotaError: boolean,
+  attempt: number,
+  maxAttempts: number,
+  shouldAttemptRefreshRetry: boolean,
+  logger: DebugLogger,
+): 'throw' | 'decrement-and-continue' | 'continue' {
+  if (
+    (isRetryableQuotaError || is500) &&
+    attempt >= maxAttempts &&
+    !shouldAttemptRefreshRetry
+  ) {
+    const errorMessage =
+      classifiedError instanceof Error ? classifiedError.message : '';
+    logger.warn(
+      () =>
+        `Attempt ${attempt} failed${errorMessage ? `: ${errorMessage}` : ''}. Max attempts reached`,
+    );
+    return 'throw';
+  }
+
+  if (attempt >= maxAttempts && !shouldAttemptRefreshRetry) {
+    return 'throw';
+  }
+
+  if (attempt >= maxAttempts && shouldAttemptRefreshRetry) {
+    return 'decrement-and-continue';
+  }
+
+  return 'continue';
+}
+
+/**
+ * Handle RetryableQuotaError with explicit retryDelayMs.
+ * Returns true if the error was handled (caller should `continue`).
+ */
+async function handleQuotaErrorRetry(
+  classifiedError: unknown,
+  options: Partial<RetryOptions> | undefined,
+  state: RetryLoopState,
+  initialDelayMs: number,
+  signal: AbortSignal | undefined,
+  logger: DebugLogger,
+): Promise<boolean> {
+  if (
+    !(classifiedError instanceof RetryableQuotaError) ||
+    classifiedError.retryDelayMs === undefined
+  ) {
+    return false;
+  }
+  logger.warn(
+    () =>
+      `Attempt ${state.attempt} failed: ${classifiedError.message}. Retrying after ${classifiedError.retryDelayMs}ms...`,
+  );
+  await delay(classifiedError.retryDelayMs, signal);
+  if (options?.trackThrottleWaitTime) {
+    options.trackThrottleWaitTime(classifiedError.retryDelayMs);
+  }
+  state.currentDelay = initialDelayMs;
+  return true;
+}
+
+/** Track throttle wait time if the callback is configured. */
+function trackThrottle(
+  options: Partial<RetryOptions> | undefined,
+  waitTimeMs: number,
+  source: string,
+  logger: DebugLogger,
+): void {
+  if (options?.trackThrottleWaitTime) {
+    logger.debug(
+      () => `Tracking throttle wait time from ${source}: ${waitTimeMs}ms`,
+    );
+    options.trackThrottleWaitTime(waitTimeMs);
+  }
+}
+
+/**
+ * Apply the appropriate delay strategy (Retry-After header or exponential backoff).
+ */
+async function applyDelay(
+  error: unknown,
+  errorStatus: number | undefined,
+  attempt: number,
+  state: RetryLoopState,
+  maxDelayMs: number,
+  initialDelayMs: number,
+  options: Partial<RetryOptions> | undefined,
+  signal: AbortSignal | undefined,
+  logger: DebugLogger,
+): Promise<void> {
+  const { delayDurationMs, errorStatus: delayErrorStatus } =
+    getDelayDurationAndStatus(error);
+
+  if (delayDurationMs > 0) {
+    logger.debug(
+      () =>
+        `Attempt ${attempt} failed with status ${delayErrorStatus ?? 'unknown'}. Retrying after explicit delay of ${delayDurationMs}ms... Error: ${error}`,
+    );
+    await delay(delayDurationMs, signal);
+    trackThrottle(options, delayDurationMs, 'Retry-After header', logger);
+    state.currentDelay = initialDelayMs;
+  } else {
+    logRetryAttempt(attempt, error, errorStatus);
+    const jitter = state.currentDelay * 0.3 * (Math.random() * 2 - 1);
+    const delayWithJitter = Math.max(0, state.currentDelay + jitter);
+    await delay(delayWithJitter, signal);
+    trackThrottle(options, delayWithJitter, 'exponential backoff', logger);
+    state.currentDelay = Math.min(maxDelayMs, state.currentDelay * 2);
+  }
+}
+
+interface RetryContext {
+  maxAttempts: number;
+  initialDelayMs: number;
+  maxDelayMs: number;
+  shouldRetryOnError: (error: Error, retryFetchErrors?: boolean) => boolean;
+  retryFetchErrors: boolean | undefined;
+  signal: AbortSignal | undefined;
+  options: Partial<RetryOptions> | undefined;
+  logger: DebugLogger;
+  failoverThreshold: number;
+}
+
+async function runRetryGuards(
+  error: unknown,
+  state: RetryLoopState,
+  context: RetryContext,
+  classified: ReturnType<typeof classifyError>,
+  shouldAttemptRefreshRetry: boolean,
+): Promise<void> {
+  await invokeAuthErrorCallback(
+    classified.isAuthError,
+    state.consecutiveAuthErrors,
+    context.options,
+    state.attempt,
+    context.maxAttempts,
+    classified.errorStatus,
+    context.logger,
+  );
+
+  const failoverAction = await attemptFailover(
+    error,
+    classified.is429,
+    classified.is402,
+    classified.isAuthError,
+    classified.errorStatus,
+    context.options,
+    state,
+    context.initialDelayMs,
+    context.failoverThreshold,
+    context.logger,
+  );
+  if (failoverAction === 'continue') {
+    return;
+  }
+  if (failoverAction === 'throw') {
+    throw error;
+  }
+
+  const shouldRetry = context.shouldRetryOnError(
+    error as Error,
+    context.retryFetchErrors,
+  );
+  if (shouldRetry !== true && !shouldAttemptRefreshRetry) {
+    throw error;
+  }
+
+  const maxAction = checkMaxAttemptsAndThrow(
+    error,
+    error,
+    classified.is500,
+    error instanceof RetryableQuotaError,
+    state.attempt,
+    context.maxAttempts,
+    shouldAttemptRefreshRetry,
+    context.logger,
+  );
+  if (maxAction === 'throw') {
+    throw error;
+  }
+  if (maxAction === 'decrement-and-continue') {
+    state.attempt--;
+  }
+}
+
+async function handleRetryFailure(
+  error: unknown,
+  state: RetryLoopState,
+  context: RetryContext,
+): Promise<void> {
+  if (error instanceof Error && error.name === 'AbortError') {
+    throw error;
+  }
+
+  const classified = classifyError(error);
+  const { shouldAttemptRefreshRetry } = updateErrorCounters(
+    classified.is429,
+    classified.isAuthError,
+    context.options?.onPersistent429 !== undefined,
+    context.failoverThreshold,
+    state,
+    context.logger,
+  );
+
+  if (shouldAttemptRefreshRetry) {
+    context.logger.debug(
+      () =>
+        `401/403 error detected, retrying once to allow refresh before bucket failover`,
+    );
+  }
+
+  await runRetryGuards(
+    error,
+    state,
+    context,
+    classified,
+    shouldAttemptRefreshRetry,
+  );
+
+  if (
+    await handleQuotaErrorRetry(
+      error,
+      context.options,
+      state,
+      context.initialDelayMs,
+      context.signal,
+      context.logger,
+    )
+  ) {
+    return;
+  }
+
+  await applyDelay(
+    error,
+    classified.errorStatus,
+    state.attempt,
+    state,
+    context.maxDelayMs,
+    context.initialDelayMs,
+    context.options,
+    context.signal,
+    context.logger,
+  );
+}
+
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options?: Partial<RetryOptions>,
 ): Promise<T> {
-  if (options?.signal?.aborted) {
+  if (options?.signal?.aborted === true) {
     throw createAbortError();
   }
 
@@ -311,9 +752,11 @@ export async function retryWithBackoff<T>(
     throw new Error('maxAttempts must be a positive number.');
   }
 
-  const cleanOptions = options
-    ? Object.fromEntries(Object.entries(options).filter(([_, v]) => v != null))
-    : {};
+  const cleanOptions = Object.fromEntries(
+    Object.entries((options ?? {}) as Record<string, unknown>).filter(
+      ([, value]) => value !== undefined,
+    ),
+  ) as Partial<RetryOptions>;
 
   const {
     maxAttempts,
@@ -329,251 +772,52 @@ export async function retryWithBackoff<T>(
   };
 
   const logger = new DebugLogger('llxprt:retry');
-  let attempt = 0;
-  let currentDelay = initialDelayMs;
-  let consecutive429s = 0;
-  let consecutiveAuthErrors = 0;
-  const failoverThreshold = 1; // Attempt bucket failover after this many consecutive 429s
+  const context: RetryContext = {
+    maxAttempts,
+    initialDelayMs,
+    maxDelayMs,
+    shouldRetryOnError,
+    retryFetchErrors,
+    signal,
+    options,
+    logger,
+    failoverThreshold: 1,
+  };
+  const state: RetryLoopState = {
+    attempt: 0,
+    currentDelay: initialDelayMs,
+    consecutive429s: 0,
+    consecutiveAuthErrors: 0,
+  };
 
-  while (attempt < maxAttempts) {
-    if (signal?.aborted) {
+  while (state.attempt < maxAttempts) {
+    if (signal?.aborted === true) {
       throw createAbortError();
     }
-    attempt++;
+    state.attempt++;
     try {
       const result = await fn();
+      state.consecutive429s = 0;
+      state.consecutiveAuthErrors = 0;
 
-      // Reset error counters on success
-      consecutive429s = 0;
-      consecutiveAuthErrors = 0;
-
-      if (shouldRetryOnContent?.(result as GenerateContentResponse)) {
-        const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
-        const delayWithJitter = Math.max(0, currentDelay + jitter);
-        await delay(delayWithJitter, signal);
-        currentDelay = Math.min(maxDelayMs, currentDelay * 2);
+      if (
+        await handleContentRetry(
+          result,
+          shouldRetryOnContent,
+          state,
+          maxDelayMs,
+          initialDelayMs,
+          signal,
+        )
+      ) {
         continue;
       }
 
       return result;
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
-      }
-
-      const errorStatus = getErrorStatus(error);
-      const isOverload = isOverloadError(error);
-      const is429 = errorStatus === 429 || isOverload;
-      const is402 = errorStatus === 402;
-      const isAuthError = errorStatus === 401 || errorStatus === 403;
-
-      // Track consecutive 429 errors for bucket failover
-      if (is429) {
-        consecutive429s++;
-        logger.debug(
-          () =>
-            `429 error detected, consecutive count: ${consecutive429s}/${failoverThreshold}`,
-        );
-      } else {
-        consecutive429s = 0;
-      }
-
-      if (isAuthError) {
-        consecutiveAuthErrors++;
-      } else {
-        consecutiveAuthErrors = 0;
-      }
-
-      // Retry once to allow OAuth refresh or onPersistent429 to refresh before failover.
-      // This retry relies on either automatic OAuth refresh during the next request
-      // or refresh logic inside onPersistent429 before failover executes.
-      const shouldAttemptRefreshRetry =
-        isAuthError && options?.onPersistent429 && consecutiveAuthErrors === 1;
-
-      if (shouldAttemptRefreshRetry) {
-        logger.debug(
-          () =>
-            `401/403 error detected, retrying once to allow refresh before bucket failover`,
-        );
-      }
-
-      // Before retrying on auth error, invoke the onAuthError callback to allow
-      // cache invalidation and force-refresh. Only fires when a retry will
-      // actually occur (first auth error in sequence and another attempt remains).
-      if (
-        isAuthError &&
-        consecutiveAuthErrors === 1 &&
-        options?.onAuthError &&
-        attempt < maxAttempts
-      ) {
-        try {
-          logger.debug(
-            () =>
-              `Calling onAuthError callback for status ${errorStatus} before retry`,
-          );
-          await options.onAuthError({ errorStatus: errorStatus ?? 401 });
-        } catch (handlerError) {
-          // Log but don't fail - the retry should still proceed
-          logger.debug(
-            () =>
-              `onAuthError callback failed, continuing with retry: ${handlerError}`,
-          );
-        }
-      }
-
-      const canAttemptFailover = Boolean(options?.onPersistent429);
-      const shouldAttemptFailover =
-        canAttemptFailover &&
-        ((is429 && consecutive429s >= failoverThreshold) ||
-          is402 ||
-          (isAuthError && consecutiveAuthErrors > 1));
-
-      // @fix issue1029 - Enhanced debug logging for failover decision
-      logger.debug(
-        () =>
-          `[issue1029] Failover decision: errorStatus=${errorStatus}, is429=${is429}, is402=${is402}, isAuthError=${isAuthError}, ` +
-          `consecutive429s=${consecutive429s}, consecutiveAuthErrors=${consecutiveAuthErrors}, ` +
-          `canAttemptFailover=${canAttemptFailover}, shouldAttemptFailover=${shouldAttemptFailover}`,
-      );
-
-      // Attempt bucket failover after threshold consecutive 429 errors
-      // @plan PLAN-20251213issue490 Bucket failover integration
-      if (shouldAttemptFailover && options?.onPersistent429) {
-        const failoverReason = is429
-          ? `${consecutive429s} consecutive 429 errors`
-          : `status ${errorStatus}`;
-        logger.debug(
-          () => `Attempting bucket failover after ${failoverReason}`,
-        );
-        const failoverResult = await options.onPersistent429(error);
-
-        logger.debug(
-          () =>
-            `[issue1029] onPersistent429 callback returned: ${failoverResult === null ? 'null (no handler)' : failoverResult}`,
-        );
-
-        if (failoverResult === true || typeof failoverResult === 'string') {
-          // Bucket switch succeeded - reset counters and retry immediately
-          logger.debug(
-            () => `Bucket failover successful, resetting retry state`,
-          );
-          consecutive429s = 0;
-          consecutiveAuthErrors = 0;
-          currentDelay = initialDelayMs;
-          // Don't increment attempt counter - this is a fresh start with new bucket
-          attempt--;
-          continue;
-        } else if (failoverResult === false) {
-          // No more buckets available - stop retrying
-          logger.debug(
-            () => `No more buckets available for failover, stopping retry`,
-          );
-          throw error;
-        }
-        // failoverResult === null means continue with normal retry (no failover handler configured)
-        logger.debug(
-          () =>
-            `[issue1029] Failover returned null - no failover handler configured, continuing with normal retry`,
-        );
-      } else if (is429 && !canAttemptFailover) {
-        // @fix issue1029 - Log when we hit 429 but can't attempt failover
-        logger.debug(
-          () =>
-            `[issue1029] Got 429 error but canAttemptFailover=false (no onPersistent429 callback). ` +
-            `This means bucket failover is not wired for this request.`,
-        );
-      }
-
-      const shouldRetry = shouldRetryOnError(error as Error, retryFetchErrors);
-
-      if (!shouldRetry && !shouldAttemptRefreshRetry) {
-        throw error;
-      }
-
-      // Classify error for special handling
-      const classifiedError = error;
-      const is500 =
-        errorStatus !== undefined && errorStatus >= 500 && errorStatus < 600;
-
-      // Handle RetryableQuotaError and 500 errors with max attempts check
-      if (classifiedError instanceof RetryableQuotaError || is500) {
-        if (attempt >= maxAttempts && !shouldAttemptRefreshRetry) {
-          const errorMessage =
-            classifiedError instanceof Error ? classifiedError.message : '';
-          logger.warn(
-            () =>
-              `Attempt ${attempt} failed${errorMessage ? `: ${errorMessage}` : ''}. Max attempts reached`,
-          );
-          throw is500 ? error : classifiedError;
-        }
-      }
-
-      if (attempt >= maxAttempts && !shouldAttemptRefreshRetry) {
-        throw error;
-      }
-
-      if (attempt >= maxAttempts && shouldAttemptRefreshRetry) {
-        attempt--;
-      }
-
-      // Handle RetryableQuotaError with explicit retryDelayMs
-      if (
-        classifiedError instanceof RetryableQuotaError &&
-        classifiedError.retryDelayMs !== undefined
-      ) {
-        logger.warn(
-          () =>
-            `Attempt ${attempt} failed: ${classifiedError.message}. Retrying after ${classifiedError.retryDelayMs}ms...`,
-        );
-        await delay(classifiedError.retryDelayMs, signal);
-        if (options?.trackThrottleWaitTime) {
-          options.trackThrottleWaitTime(classifiedError.retryDelayMs);
-        }
-        currentDelay = initialDelayMs;
-        continue;
-      }
-
-      const { delayDurationMs, errorStatus: delayErrorStatus } =
-        getDelayDurationAndStatus(error);
-
-      if (delayDurationMs > 0) {
-        // Respect Retry-After header if present and parsed
-        logger.debug(
-          () =>
-            `Attempt ${attempt} failed with status ${delayErrorStatus ?? 'unknown'}. Retrying after explicit delay of ${delayDurationMs}ms... Error: ${error}`,
-        );
-        await delay(delayDurationMs, signal);
-        // Track throttling wait time when explicitly delaying
-        if (options?.trackThrottleWaitTime) {
-          logger.debug(
-            () =>
-              `Tracking throttle wait time from Retry-After header: ${delayDurationMs}ms`,
-          );
-          options.trackThrottleWaitTime(delayDurationMs);
-        }
-        // Reset currentDelay for next potential non-429 error, or if Retry-After is not present next time
-        currentDelay = initialDelayMs;
-      } else {
-        // Fall back to exponential backoff with jitter
-        logRetryAttempt(attempt, error, errorStatus);
-        // Add jitter: +/- 30% of currentDelay
-        const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
-        const delayWithJitter = Math.max(0, currentDelay + jitter);
-        await delay(delayWithJitter, signal);
-        // Track throttling wait time for exponential backoff
-        if (options?.trackThrottleWaitTime) {
-          logger.debug(
-            () =>
-              `Tracking throttle wait time from exponential backoff: ${delayWithJitter}ms`,
-          );
-          options.trackThrottleWaitTime(delayWithJitter);
-        }
-        currentDelay = Math.min(maxDelayMs, currentDelay * 2);
-      }
+      await handleRetryFailure(error, state, context);
     }
   }
-  // This line should theoretically be unreachable due to the throw in the catch block.
-  // Added for type safety and to satisfy the compiler that a promise is always returned.
   throw new Error('Retry attempts exhausted');
 }
 
@@ -586,12 +830,12 @@ export async function retryWithBackoff<T>(
  * @returns True if the error is an overloaded_error or rate_limit_error, false otherwise.
  */
 export function isOverloadError(error: unknown): boolean {
-  if (error && typeof error === 'object') {
+  if (error !== null && error !== undefined && typeof error === 'object') {
     const errorObj = error as {
       error?: { type?: string; message?: string };
       type?: string;
     };
-    const errorType = errorObj.error?.type || errorObj.type;
+    const errorType = errorObj.error?.type ?? errorObj.type;
     return errorType === 'overloaded_error' || errorType === 'rate_limit_error';
   }
   return false;
@@ -630,38 +874,41 @@ export function getErrorStatus(error: unknown): number | undefined {
  * @returns The delay in milliseconds, or 0 if not found or invalid.
  */
 function getRetryAfterDelayMs(error: unknown): number {
-  if (typeof error === 'object' && error !== null) {
-    // Check for error.response.headers (common in axios errors)
+  // Check for error.response.headers (common in axios errors)
+  if (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    typeof (error as { response?: unknown }).response === 'object' &&
+    (error as { response?: unknown }).response !== null
+  ) {
+    const response = (error as { response: { headers?: unknown } }).response;
     if (
-      'response' in error &&
-      typeof (error as { response?: unknown }).response === 'object' &&
-      (error as { response?: unknown }).response !== null
+      'headers' in response &&
+      typeof response.headers === 'object' &&
+      response.headers !== null
     ) {
-      const response = (error as { response: { headers?: unknown } }).response;
-      if (
-        'headers' in response &&
-        typeof response.headers === 'object' &&
-        response.headers !== null
-      ) {
-        const headers = response.headers as {
-          'retry-after'?: unknown;
-          get?: (name: string) => string | null;
-        };
-        // Support both plain object and Fetch Headers API
-        const retryAfterHeader =
-          typeof headers.get === 'function'
-            ? headers.get('retry-after')
-            : headers['retry-after'];
-        if (typeof retryAfterHeader === 'string') {
-          const retryAfterSeconds = parseInt(retryAfterHeader, 10);
-          if (!isNaN(retryAfterSeconds)) {
-            return retryAfterSeconds * 1000;
-          }
-          // It might be an HTTP date
-          const retryAfterDate = new Date(retryAfterHeader);
-          if (!isNaN(retryAfterDate.getTime())) {
-            return Math.max(0, retryAfterDate.getTime() - Date.now());
-          }
+      const headers = response.headers as {
+        'retry-after'?: unknown;
+        get?: (name: string) => string | null;
+      };
+      // Support both plain object and Fetch Headers API
+      const retryAfterHeader =
+        typeof headers.get === 'function'
+          ? headers.get('retry-after')
+          : headers['retry-after'];
+      if (typeof retryAfterHeader === 'string') {
+        const retryAfterSeconds = parseInt(retryAfterHeader, 10);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (!isNaN(retryAfterSeconds)) {
+          return retryAfterSeconds * 1000;
+        }
+        // It might be an HTTP date
+        const retryAfterDate = new Date(retryAfterHeader);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (!isNaN(retryAfterDate.getTime())) {
+          return Math.max(0, retryAfterDate.getTime() - Date.now());
         }
       }
     }
@@ -701,13 +948,18 @@ function logRetryAttempt(
 ): void {
   const logger = new DebugLogger('llxprt:retry');
   let message = `Attempt ${attempt} failed. Retrying with backoff...`;
-  if (errorStatus) {
+  if (errorStatus !== undefined && errorStatus !== 0) {
     message = `Attempt ${attempt} failed with status ${errorStatus}. Retrying with backoff...`;
   }
 
   if (errorStatus === 429) {
     logger.debug(() => `${message} Error: ${error}`);
-  } else if (errorStatus && errorStatus >= 500 && errorStatus < 600) {
+  } else if (
+    errorStatus !== undefined &&
+    errorStatus !== 0 &&
+    errorStatus >= 500 &&
+    errorStatus < 600
+  ) {
     logger.error(() => `${message} Error: ${error}`);
   } else if (error instanceof Error) {
     // Fallback for errors that might not have a status but have a message

@@ -239,7 +239,7 @@ describe('AuthFlowOrchestrator', () => {
       const orchestrator = createOrchestrator(tokenStore, registry);
       await expect(
         orchestrator.authenticate('anthropic', 'default'),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/browser auth failed/);
 
       // Refresh lock must be released even though refresh threw
       expect(tokenStore.releaseRefreshLock).toHaveBeenCalledWith(

@@ -128,7 +128,7 @@ describe('chatCommand', () => {
         return { mtime: date2 } as Stats;
       });
 
-      await listCommand?.action?.(mockContext, '');
+      await listCommand.action?.(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith({
         type: 'chat_list',
@@ -157,7 +157,7 @@ describe('chatCommand', () => {
     });
 
     it('should return an error if tag is missing', async () => {
-      const result = await saveCommand?.action?.(mockContext, '  ');
+      const result = await saveCommand.action?.(mockContext, '  ');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
@@ -167,7 +167,7 @@ describe('chatCommand', () => {
 
     it('should inform if conversation history is empty or only contains system context', async () => {
       mockGetHistory.mockReturnValue([]);
-      let result = await saveCommand?.action?.(mockContext, tag);
+      let result = await saveCommand.action?.(mockContext, tag);
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
@@ -177,7 +177,7 @@ describe('chatCommand', () => {
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: 'context for our chat' }] },
       ]);
-      result = await saveCommand?.action?.(mockContext, tag);
+      result = await saveCommand.action?.(mockContext, tag);
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
@@ -189,7 +189,7 @@ describe('chatCommand', () => {
         { role: 'user', parts: [{ text: 'Hello, how are you?' }] },
         { role: 'model', parts: [{ text: 'I am doing well!' }] },
       ]);
-      result = await saveCommand?.action?.(mockContext, tag);
+      result = await saveCommand.action?.(mockContext, tag);
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
@@ -205,7 +205,7 @@ describe('chatCommand', () => {
         args: tag,
       };
 
-      const result = await saveCommand?.action?.(mockContext, tag);
+      const result = await saveCommand.action?.(mockContext, tag);
 
       expect(mockCheckpointExists).toHaveBeenCalledWith(tag);
       expect(mockSaveCheckpoint).not.toHaveBeenCalled();
@@ -226,7 +226,7 @@ describe('chatCommand', () => {
       mockGetHistory.mockReturnValue(history);
       mockContext.overwriteConfirmed = true;
 
-      const result = await saveCommand?.action?.(mockContext, tag);
+      const result = await saveCommand.action?.(mockContext, tag);
 
       expect(mockCheckpointExists).not.toHaveBeenCalled(); // Should skip existence check
       expect(mockSaveCheckpoint).toHaveBeenCalledWith(history, tag);
@@ -254,7 +254,7 @@ describe('chatCommand', () => {
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: 'system setup' }] },
       ]);
-      const result = await saveCommand?.action?.(mockContext, tag);
+      const result = await saveCommand.action?.(mockContext, tag);
       expect(result).toMatchObject({
         type: 'message',
         messageType: 'info',
@@ -271,7 +271,7 @@ describe('chatCommand', () => {
       mockContext.services.logger.checkpointExists = vi
         .fn()
         .mockResolvedValue(false);
-      const result = await saveCommand?.action?.(mockContext, tag);
+      const result = await saveCommand.action?.(mockContext, tag);
       expect(result).toMatchObject({
         type: 'message',
         messageType: 'info',
@@ -283,7 +283,7 @@ describe('chatCommand', () => {
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: 'system setup' }] },
       ]);
-      const result = await clearCommand?.action?.(mockContext, '');
+      const result = await clearCommand.action?.(mockContext, '');
       expect(result).toMatchObject({
         type: 'message',
         messageType: 'info',
@@ -309,7 +309,7 @@ describe('chatCommand', () => {
         { role: 'user', parts: [{ text: 'hello' }] },
         { role: 'model', parts: [{ text: 'hi' }] },
       ]);
-      await clearCommand?.action?.(mockContext, '');
+      await clearCommand.action?.(mockContext, '');
       expect(mockClearHistory).toHaveBeenCalled();
       expect(mockClear).toHaveBeenCalled();
     });
@@ -325,7 +325,7 @@ describe('chatCommand', () => {
     });
 
     it('should return an error if tag is missing', async () => {
-      const result = await resumeCommand?.action?.(mockContext, '');
+      const result = await resumeCommand.action?.(mockContext, '');
 
       expect(result).toStrictEqual({
         type: 'message',
@@ -337,7 +337,7 @@ describe('chatCommand', () => {
     it('should inform if checkpoint is not found', async () => {
       mockLoadCheckpoint.mockResolvedValue({ history: [] });
 
-      const result = await resumeCommand?.action?.(mockContext, badTag);
+      const result = await resumeCommand.action?.(mockContext, badTag);
 
       expect(result).toStrictEqual({
         type: 'message',
@@ -353,7 +353,7 @@ describe('chatCommand', () => {
       ];
       mockLoadCheckpoint.mockResolvedValue({ history: conversation });
 
-      const result = await resumeCommand?.action?.(mockContext, goodTag);
+      const result = await resumeCommand.action?.(mockContext, goodTag);
 
       // Now returns LoadHistoryActionReturn to properly sync UI and client history
       expect(result).toStrictEqual({
@@ -428,7 +428,7 @@ describe('chatCommand', () => {
     });
 
     it('should return an error if tag is missing', async () => {
-      const result = await deleteCommand?.action?.(mockContext, '  ');
+      const result = await deleteCommand.action?.(mockContext, '  ');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
@@ -442,7 +442,7 @@ describe('chatCommand', () => {
         name: 'delete',
         args: tag,
       };
-      const result = await deleteCommand?.action?.(mockContext, tag);
+      const result = await deleteCommand.action?.(mockContext, tag);
       expect(result).toMatchObject({
         type: 'confirm_action',
         originalInvocation: { raw: `/chat delete ${tag}` },
@@ -456,7 +456,7 @@ describe('chatCommand', () => {
       const mockCheckpointExists = vi.fn().mockResolvedValue(true);
       mockContext.services.logger.checkpointExists = mockCheckpointExists;
 
-      const result = await deleteCommand?.action?.(mockContext, tag);
+      const result = await deleteCommand.action?.(mockContext, tag);
 
       expect(mockDeleteCheckpoint).toHaveBeenCalledWith(tag);
       expect(result).toStrictEqual({
@@ -515,7 +515,7 @@ describe('chatCommand', () => {
       ];
       mockGetHistory.mockReturnValue(mockHistory);
 
-      const result = await debugCommand?.action?.(mockContext, '');
+      const result = await debugCommand.action?.(mockContext, '');
 
       expect(result).toMatchObject({
         type: 'message',
@@ -547,7 +547,7 @@ describe('chatCommand', () => {
         },
       });
 
-      const result = await debugCommand?.action?.(mockContextNoChat, '');
+      const result = await debugCommand.action?.(mockContextNoChat, '');
 
       expect(result).toMatchObject({
         type: 'message',
@@ -569,7 +569,7 @@ describe('chatCommand', () => {
         },
       });
 
-      const result = await debugCommand?.action?.(mockContextNoConfig, '');
+      const result = await debugCommand.action?.(mockContextNoConfig, '');
 
       expect(result).toMatchObject({
         type: 'message',

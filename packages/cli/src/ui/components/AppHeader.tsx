@@ -36,7 +36,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   return (
     <Box flexDirection="column">
-      {!(settings.merged.ui.hideBanner || config.getScreenReader()) && (
+      {!(
+        settings.merged.ui.hideBanner === true || config.getScreenReader()
+      ) && (
         <Header
           terminalWidth={terminalWidth}
           version={version}
@@ -46,7 +48,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       {bannerText && (
         <Text color={SemanticColors.text.primary}>{bannerText}</Text>
       )}
-      {!(settings.merged.ui.hideTips || config.getScreenReader()) && (
+      {!(settings.merged.ui.hideTips === true || config.getScreenReader()) && (
         <Tips config={config} />
       )}
     </Box>

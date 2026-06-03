@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * @plan PLAN-20260211-HIGHDENSITY.P10
  * @requirement REQ-HD-005.1, REQ-HD-005.2, REQ-HD-005.3, REQ-HD-005.4, REQ-HD-005.5,
@@ -38,6 +40,26 @@ let callIdCounter = 0;
 
 function nextCallId(): string {
   return `call-${++callIdCounter}`;
+}
+
+function countUnprunedAtIndex(
+  index: number,
+  prunedIndices: Set<number>,
+  result: ReturnType<HighDensityStrategy['optimize']>,
+): number {
+  if (!prunedIndices.has(index)) {
+    return 1;
+  }
+  if (!result.replacements.has(index)) {
+    return 0;
+  }
+  // Check if replacement still has non-pruned result
+  const replacement = result.replacements.get(index)!;
+  const responseBlocks = replacement.blocks.filter(
+    (b): b is ToolResponseBlock => b.type === 'tool_response',
+  );
+  const hasUnpruned = responseBlocks.some((b) => b.result !== PRUNED_POINTER);
+  return hasUnpruned ? 1 : 0;
 }
 
 function resetCallIds(): void {
@@ -691,9 +713,7 @@ describe('deduplicateFileInclusions @plan PLAN-20260211-HIGHDENSITY.P10', () => 
     const textBlocks = replaced.blocks.filter((b) => b.type === 'text');
     // The file content should be removed from the earlier inclusion
     for (const tb of textBlocks) {
-      if (tb.type === 'text') {
-        expect(tb.text).not.toContain('version1');
-      }
+      expect(tb.text).not.toContain('version1');
     }
     // Index 5 (latest inclusion) should NOT be in replacements
     expect(result.replacements.has(5)).toBe(false);
@@ -727,7 +747,7 @@ describe('deduplicateFileInclusions @plan PLAN-20260211-HIGHDENSITY.P10', () => 
     const replaced = result.replacements.get(0)!;
     const textContent = replaced.blocks
       .filter((b) => b.type === 'text')
-      .map((b) => (b.type === 'text' ? b.text : ''))
+      .map((b) => b.text)
       .join('');
     expect(textContent).toContain('Fix this:');
   });
@@ -831,6 +851,7 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
       for (const tb of toolBlocks) {
         if (tb.result === PRUNED_POINTER) {
           // Verify it's one of the old entries (indices 1, 3 = first two tool responses)
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(idx).toBeLessThanOrEqual(3);
         }
       }
@@ -947,6 +968,7 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
         expect(rb.toolName).toBe('read_file');
         if (rb.result === PRUNED_POINTER) {
           // Structure is preserved — only result changed
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(rb.isComplete).toBe(true);
         }
       }
@@ -1511,23 +1533,14 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
           ]);
           let unprunedToolResponses = 0;
           for (let i = 0; i < history.length; i++) {
-            if (history[i].speaker === 'tool') {
-              if (!prunedIndices.has(i)) {
-                unprunedToolResponses++;
-              } else if (result.replacements.has(i)) {
-                // Check if replacement still has non-pruned result
-                const replacement = result.replacements.get(i)!;
-                const responseBlocks = replacement.blocks.filter(
-                  (b): b is ToolResponseBlock => b.type === 'tool_response',
-                );
-                const hasUnpruned = responseBlocks.some(
-                  (b) => b.result !== PRUNED_POINTER,
-                );
-                if (hasUnpruned) {
-                  unprunedToolResponses++;
-                }
-              }
+            if (history[i].speaker !== 'tool') {
+              continue;
             }
+            unprunedToolResponses += countUnprunedAtIndex(
+              i,
+              prunedIndices,
+              result,
+            );
           }
           const expectedPreserved = Math.min(retention, totalResults);
           expect(unprunedToolResponses).toBeGreaterThanOrEqual(
@@ -1572,6 +1585,7 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
           expect(replacement.speaker).toBe(original.speaker);
           // Metadata should be preserved
           if (original.metadata?.timestamp !== undefined) {
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(replacement.metadata?.timestamp).toBe(
               original.metadata.timestamp,
             );
@@ -1725,6 +1739,7 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
 
         // Earlier inclusions should be deduplicated
         if (dupCount > 1) {
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(result.metadata.fileDeduplicationsPruned).toBe(dupCount - 1);
         }
       }),

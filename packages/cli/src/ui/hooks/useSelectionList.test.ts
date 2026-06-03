@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
@@ -36,7 +38,7 @@ describe('useSelectionList', () => {
     activeKeypressHandler = null;
     vi.mocked(useKeypress).mockImplementation(
       (handler: KeypressHandler, options?: UseKeypressMockOptions) => {
-        if (options?.isActive) {
+        if (options?.isActive === true) {
           activeKeypressHandler = handler;
         } else {
           activeKeypressHandler = null;
@@ -312,19 +314,19 @@ describe('useSelectionList', () => {
       );
 
       // Simulate rapid inputs with separate act blocks to allow effects to run
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!activeKeypressHandler) throw new Error('Handler not active');
 
       const handler = activeKeypressHandler;
 
       const press = (name: string) => {
-        const key: Key = {
+        handler({
           name,
           sequence: name,
           ctrl: false,
           meta: false,
           shift: false,
-        };
-        handler(key);
+        });
       };
 
       // 1. Press Down. Should move 0 (A) -> 2 (C).

@@ -330,8 +330,8 @@ vi.mock('../../config/config.js', () => ({
   }),
 }));
 
-vi.mock('../../../config/settings.js', () => {
-  const actual = vi.importActual('../../../config/settings.js');
+vi.mock('../../../config/settings.js', async () => {
+  const actual = await vi.importActual('../../../config/settings.js');
   return {
     ...actual,
     SettingScope: { User: 'user', Workspace: 'workspace', System: 'system' },

@@ -148,7 +148,7 @@ export class QwenOAuthProvider implements OAuthProvider {
         const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
 
         const authUrl =
-          deviceCodeResponse.verification_uri_complete ||
+          deviceCodeResponse.verification_uri_complete ??
           `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
 
         await this.displayQwenAuthUrl(authUrl);
@@ -245,7 +245,9 @@ export class QwenOAuthProvider implements OAuthProvider {
       const { getEphemeralSetting } = await import(
         '../runtime/runtimeSettings.js'
       );
-      noBrowser = (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+      noBrowser =
+        (getEphemeralSetting('auth.noBrowser') as boolean | null | undefined) ??
+        false;
     } catch {
       // Runtime not initialized (e.g., tests) — use default
     }
@@ -287,7 +289,7 @@ export class QwenOAuthProvider implements OAuthProvider {
       async () => {
         // Line 59: RETURN AWAIT this.tokenStore.getToken('qwen')
         // Read-only - OAuthManager owns all refresh operations
-        const token = (await this.tokenStore?.getToken('qwen')) || null;
+        const token = (await this.tokenStore?.getToken('qwen')) ?? null;
         return token;
       },
       null, // Return null on error

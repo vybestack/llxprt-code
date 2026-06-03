@@ -9,16 +9,23 @@ import {
   type Config,
   type CodeAssistServer,
   UserTierId,
-  // TODO: Re-enable when getCodeAssistServer is exported from core
+  // Follow-up (#1569): Re-enable when getCodeAssistServer is exported from core
   // getCodeAssistServer,
 } from '@vybestack/llxprt-code-core';
 
-// TODO: Remove when getCodeAssistServer is exported from core
+// Follow-up (#1569): Remove when getCodeAssistServer is exported from core
 function getCodeAssistServer(config: Config): CodeAssistServer | undefined {
-  const contentGenerator = config.getGeminiClient().getContentGenerator();
+  const contentGenerator: unknown = config
+    .getGeminiClient()
+    .getContentGenerator();
 
   // Check if it's a CodeAssistServer
-  if (contentGenerator && 'projectId' in contentGenerator) {
+  if (
+    contentGenerator !== undefined &&
+    contentGenerator !== null &&
+    typeof contentGenerator === 'object' &&
+    'projectId' in contentGenerator
+  ) {
     return contentGenerator as CodeAssistServer;
   }
 
@@ -117,7 +124,7 @@ async function getRemoteDataCollectionOptIn(
     const resp = await server.getCodeAssistGlobalUserSetting();
     return resp.freeTierDataCollectionOptin;
   } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'response' in error) {
+    if (error != null && typeof error === 'object' && 'response' in error) {
       const gaxiosError = error as {
         response?: {
           status?: unknown;

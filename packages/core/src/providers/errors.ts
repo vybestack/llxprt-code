@@ -324,15 +324,16 @@ export class AllBucketsExhaustedError extends Error {
     lastError: Error,
     bucketFailureReasons?: Record<string, BucketFailureReason>,
   ) {
-    const reasons = bucketFailureReasons ? { ...bucketFailureReasons } : {};
-
+    const storedReasons: Record<string, BucketFailureReason> =
+      bucketFailureReasons ? { ...bucketFailureReasons } : {};
+    const reasons: Partial<Record<string, BucketFailureReason>> = storedReasons;
     // Build enhanced message with per-bucket reasons only when provided
     let bucketDetails = '';
     if (bucketFailureReasons) {
       bucketDetails = attemptedBuckets
         .map((b) => {
           const reason = reasons[b];
-          return reason ? `  - ${b}: ${reason}` : `  - ${b}: unknown`;
+          return `  - ${b}: ${reason ?? 'unknown'}`;
         })
         .join('\n');
     }
@@ -349,7 +350,7 @@ export class AllBucketsExhaustedError extends Error {
     this.name = 'AllBucketsExhaustedError';
     this.attemptedBuckets = [...attemptedBuckets];
     this.lastError = lastError;
-    this.bucketFailureReasons = reasons;
+    this.bucketFailureReasons = storedReasons;
     this.status = (lastError as { status?: number }).status;
   }
 
@@ -366,7 +367,7 @@ export class AllBucketsExhaustedError extends Error {
         error?: { message?: string; type?: string };
         type?: string;
       };
-      if (parsed?.error?.message) return parsed.error.message;
+      if (parsed.error?.message) return parsed.error.message;
     } catch {
       // Not valid JSON — use as-is
     }

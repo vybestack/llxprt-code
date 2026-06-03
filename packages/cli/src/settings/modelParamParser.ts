@@ -9,6 +9,8 @@
  * Attempts numeric, boolean, and JSON decoding before falling back to raw string.
  */
 export function parseModelParamValue(value: string): unknown {
+  // Static regex for numeric validation - no dynamic parts
+  // eslint-disable-next-line sonarjs/regular-expr
   if (/^-?\d+(\.\d+)?$/.test(value)) {
     const num = Number(value);
     if (!Number.isNaN(num)) {

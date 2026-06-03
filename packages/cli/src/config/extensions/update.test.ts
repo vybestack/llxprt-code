@@ -252,7 +252,7 @@ describe('update tests', () => {
           ExtensionUpdateState.UPDATE_AVAILABLE,
           dispatch,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(Error);
 
       expect(dispatch).toHaveBeenCalledWith({
         type: 'SET_STATE',

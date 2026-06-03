@@ -165,7 +165,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     // Wait for all tools to start executing
     await vi.waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
-      return calls?.filter((c) => c.status === 'executing').length === 3;
+      return calls.filter((c) => c.status === 'executing').length === 3;
     });
 
     // Complete tools 1 and 2 first (they're fast)
@@ -265,7 +265,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     // Wait for tool to start executing
     await vi.waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
-      return calls?.some((c) => c.status === 'executing');
+      return calls.some((c) => c.status === 'executing');
     });
 
     // Cancel and abort
@@ -368,7 +368,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     // Wait for all tools to start
     await vi.waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
-      return calls?.filter((c) => c.status === 'executing').length === 3;
+      return calls.filter((c) => c.status === 'executing').length === 3;
     });
 
     // Wait for fast tools (1 and 2) to complete and buffer their results

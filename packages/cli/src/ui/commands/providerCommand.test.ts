@@ -114,6 +114,7 @@ describe('providerCommand /provider save', () => {
       },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!providerCommand.action) {
       throw new Error('providerCommand must have an action');
     }
@@ -167,6 +168,7 @@ describe('providerCommand /provider switch', () => {
 
     const context = createMockCommandContext();
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!providerCommand.action) {
       throw new Error('providerCommand must have an action');
     }
@@ -202,6 +204,7 @@ describe('providerCommand /provider switch', () => {
 
     const context = createMockCommandContext();
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!providerCommand.action) {
       throw new Error('providerCommand must have an action');
     }

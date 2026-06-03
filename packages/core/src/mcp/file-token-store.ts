@@ -33,6 +33,7 @@ const safeOsUsername = (): string => {
   try {
     return os.userInfo().username;
   } catch (error) {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: environment variables may be empty string which should fall through
     const fallback = process.env.USER || process.env.USERNAME || 'unknown-user';
     debugLogger.warn('Failed to resolve username, using fallback value', error);
     return fallback;
@@ -56,6 +57,7 @@ export class FileTokenStore extends BaseTokenStore {
     } = {},
   ) {
     super();
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string path should fall through to default
     this.tokenFilePath = tokenFilePath || Storage.getMcpOAuthTokensPath();
     this.serviceName = options.serviceName ?? 'llxprt-cli-mcp-oauth';
     this.encryptionKey =
@@ -107,6 +109,7 @@ export class FileTokenStore extends BaseTokenStore {
    */
   private decrypt(payload: string): string {
     const trimmed = payload.trim();
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     const encryptedPattern = /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i;
 
     if (!encryptedPattern.test(trimmed)) {
@@ -188,7 +191,8 @@ export class FileTokenStore extends BaseTokenStore {
           tokenMap.set(credential.serverName, credential);
         } else {
           debugLogger.warn(
-            `Skipping invalid credential entry for server: ${(credential as { serverName?: string })?.serverName || 'unknown'}`,
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string serverName should fall through to 'unknown'
+            `Skipping invalid credential entry for server: ${(credential as { serverName?: string }).serverName || 'unknown'}`,
           );
         }
       }
@@ -250,7 +254,7 @@ export class FileTokenStore extends BaseTokenStore {
     this.validateServerName(serverName);
 
     const tokens = await this.loadTokens();
-    const credential = tokens.get(serverName) || null;
+    const credential = tokens.get(serverName) ?? null;
 
     // Return credential if found
 
@@ -315,27 +319,35 @@ export class FileTokenStore extends BaseTokenStore {
   private isValidCredentials(
     credentials: unknown,
   ): credentials is MCPOAuthCredentials {
-    if (!credentials || typeof credentials !== 'object') {
+    if (
+      credentials === null ||
+      credentials === undefined ||
+      typeof credentials !== 'object'
+    ) {
       return false;
     }
 
     const cred = credentials as Record<string, unknown>;
 
     // Check required fields
-    if (!cred.serverName || typeof cred.serverName !== 'string') {
+    if (typeof cred.serverName !== 'string' || cred.serverName === '') {
       return false;
     }
 
-    if (!cred.token || typeof cred.token !== 'object') {
+    if (
+      cred.token === null ||
+      cred.token === undefined ||
+      typeof cred.token !== 'object'
+    ) {
       return false;
     }
 
     const token = cred.token as Record<string, unknown>;
-    if (!token.accessToken || typeof token.accessToken !== 'string') {
+    if (typeof token.accessToken !== 'string' || token.accessToken === '') {
       return false;
     }
 
-    if (!token.tokenType || typeof token.tokenType !== 'string') {
+    if (typeof token.tokenType !== 'string' || token.tokenType === '') {
       return false;
     }
 

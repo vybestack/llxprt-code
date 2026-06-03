@@ -14,6 +14,15 @@ import { GeminiRespondingSpinner } from './GeminiRespondingSpinner.js';
 import { formatDuration } from '../utils/formatters.js';
 import { INTERACTIVE_SHELL_WAITING_PHRASE } from '../hooks/usePhraseCycler.js';
 
+/**
+ * Format timer text for display.
+ */
+function formatTimerText(elapsedTime: number): string {
+  return elapsedTime < 60
+    ? `${elapsedTime}s`
+    : formatDuration(elapsedTime * 1000);
+}
+
 interface LoadingIndicatorProps {
   currentLoadingPhrase?: string;
   elapsedTime: number;
@@ -40,16 +49,13 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
     isShellFocusHint;
   const primaryText = isActionRequired
     ? currentLoadingPhrase
-    : thought?.subject || currentLoadingPhrase;
+    : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty subject should fall back to loading phrase
+      thought?.subject || currentLoadingPhrase;
 
   const timerText =
     streamingState === StreamingState.WaitingForConfirmation
       ? ''
-      : ` (esc to cancel, ${
-          elapsedTime < 60
-            ? `${elapsedTime}s`
-            : formatDuration(elapsedTime * 1000)
-        })`;
+      : ` (esc to cancel, ${formatTimerText(elapsedTime)})`;
 
   const lineText = primaryText
     ? `${primaryText}${timerText}`
@@ -78,11 +84,12 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
             </Text>
           )}
         </Box>
-        {rightContent && (
+        {/* eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve React conditional rendering semantics for ReactNode values. */}
+        {rightContent ? (
           <Box marginLeft={1} flexShrink={0}>
             {rightContent}
           </Box>
-        )}
+        ) : null}
       </Box>
     </Box>
   );

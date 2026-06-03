@@ -141,7 +141,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       const { getEphemeralSetting } = await import(
         '../runtime/runtimeSettings.js'
       );
-      noBrowser = (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+      noBrowser = getEphemeralSetting('auth.noBrowser') === true;
     } catch {
       // Runtime not initialized (e.g., tests) — use default
     }
@@ -169,7 +169,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     });
 
     const port = parseInt(
-      localCallback.redirectUri.match(/:(\d+)\//)?.[1] || '0',
+      localCallback.redirectUri.match(/:(\d+)\//)?.[1] ?? '0',
       10,
     );
     this.logger.debug(
@@ -281,7 +281,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     );
     this.logger.debug(
       () =>
-        `[FLOW] Token received: access_token=${token.access_token.substring(0, 10)}..., account_id=${token.account_id?.substring(0, 8) ?? 'MISSING'}..., expiry=${token.expiry}`,
+        `[FLOW] Token received: access_token=${token.access_token.substring(0, 10)}..., account_id=${token.account_id.substring(0, 8)}..., expiry=${token.expiry}`,
     );
 
     this.logger.debug(() => '[FLOW] completeAuth() completed successfully');
@@ -519,7 +519,8 @@ export class CodexOAuthProvider implements OAuthProvider {
       }
 
       return merged;
-    } catch (_error) {
+    } catch {
+      // Token refresh failed — caller will fall back to re-auth
       this.logger.debug(() => `Token refresh failed`);
       return null;
     }

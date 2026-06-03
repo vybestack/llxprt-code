@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * @plan PLAN-20260211-SESSIONRECORDING.P25
  * @requirement REQ-INT-FULL-001, REQ-INT-FULL-002, REQ-INT-FULL-003, REQ-INT-FULL-004, REQ-INT-FULL-005
@@ -505,7 +507,7 @@ describe('integration: full session recording lifecycle', () => {
     expect(deleteResult.ok).toBe(true);
 
     // File should be gone
-    await expect(fs.access(filePath)).rejects.toThrow();
+    await expect(fs.access(filePath)).rejects.toThrow(/ENOENT/);
   });
 
   // =========================================================================
@@ -541,11 +543,12 @@ describe('integration: full session recording lifecycle', () => {
     // We test the logic directly — the Config class constructor has too many
     // dependencies to instantiate in an integration test. Instead we test the
     // same logic pattern that Config.getContinueSessionRef implements.
-    const continueSession: boolean | string = 'abc123';
+    const continueSession = 'abc123' as boolean | string;
     const ref =
       typeof continueSession === 'string'
         ? continueSession
-        : continueSession
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          continueSession
           ? CONTINUE_LATEST
           : null;
     expect(ref).toBe('abc123');
@@ -557,11 +560,12 @@ describe('integration: full session recording lifecycle', () => {
   // @requirement REQ-INT-FULL-005
   // =========================================================================
   it('15: bare --continue (true) → getContinueSessionRef returns CONTINUE_LATEST', async () => {
-    const continueSession: boolean | string = true;
+    const continueSession = true as boolean | string;
     const ref =
       typeof continueSession === 'string'
         ? continueSession
-        : continueSession
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          continueSession
           ? CONTINUE_LATEST
           : null;
     expect(ref).toBe(CONTINUE_LATEST);
@@ -937,7 +941,7 @@ describe('integration: full session recording lifecycle', () => {
 
         const result = await deleteSession(sessionId, localChats, PROJECT_HASH);
         expect(result.ok).toBe(true);
-        await expect(fs.access(filePath)).rejects.toThrow();
+        await expect(fs.access(filePath)).rejects.toThrow(/ENOENT/);
       } finally {
         await fs.rm(localTemp, { recursive: true, force: true });
       }

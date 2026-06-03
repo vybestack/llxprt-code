@@ -32,7 +32,7 @@ describe('buffer-operations', () => {
     viewportWidth: 80,
     viewportHeight: 24,
     visualLayout: {
-      visualLines: lines.length ? [lines[0]] : [''],
+      visualLines: lines.length > 0 ? [lines[0]] : [''],
       logicalToVisualMap: [[[0, 0]]],
       visualToLogicalMap: [[0, 0]],
       transformedToLogicalMaps: [[]],

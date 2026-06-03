@@ -212,7 +212,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
     // We need to reset all loggers which disposes FileOutput.
     try {
       await DebugLogger.resetForTesting();
-    } catch (_e) {
+    } catch {
       // Ignore if not available
     }
 

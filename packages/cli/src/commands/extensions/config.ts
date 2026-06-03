@@ -142,49 +142,66 @@ async function configureAllSettings(
   return allSuccess;
 }
 
-/**
- * Handler for 'extensions config' command.
- */
-async function handleConfig(args: ConfigArgs): Promise<void> {
-  const scope =
-    args.scope === 'workspace'
-      ? ExtensionSettingScope.WORKSPACE
-      : ExtensionSettingScope.USER;
+async function configureNamedSetting(
+  name: string,
+  setting: string,
+  scope: ExtensionSettingScope,
+) {
+  const { extension, extensionConfig } = await getExtensionAndConfig(name);
 
-  // Case 1: config <name> <setting> - configure specific setting
-  if (args.name && args.setting) {
-    const { extension, extensionConfig } = await getExtensionAndConfig(
-      args.name,
-    );
+  if (!extension || !extensionConfig) {
+    return;
+  }
 
-    if (!extension || !extensionConfig) {
-      return;
+  await configureSetting(extensionConfig.name, extension.path, setting, scope);
+}
+
+async function configureNamedExtension(
+  name: string,
+  scope: ExtensionSettingScope,
+) {
+  const { extension, extensionConfig } = await getExtensionAndConfig(name);
+
+  if (!extension || !extensionConfig) {
+    return;
+  }
+
+  await configureAllSettings(extensionConfig.name, extension.path, scope);
+}
+
+async function configureInstalledExtension(
+  extension: { name: string; path: string },
+  scope: ExtensionSettingScope,
+): Promise<boolean> {
+  try {
+    const extensionConfig = await loadExtensionConfig({
+      extensionDir: extension.path,
+      workspaceDir: process.cwd(),
+    });
+
+    if (!extensionConfig) {
+      console.error(
+        `Failed to load configuration for extension "${extension.name}". Skipping.`,
+      );
+      return false;
     }
 
-    await configureSetting(
+    console.log(`\nConfiguring extension "${extensionConfig.name}"...`);
+    return await configureAllSettings(
       extensionConfig.name,
       extension.path,
-      args.setting,
       scope,
     );
-    return;
-  }
-
-  // Case 2: config <name> - configure all settings for one extension
-  if (args.name) {
-    const { extension, extensionConfig } = await getExtensionAndConfig(
-      args.name,
+  } catch (error) {
+    console.error(
+      `Error configuring extension "${extension.name}":`,
+      error instanceof Error ? error.message : String(error),
     );
-
-    if (!extension || !extensionConfig) {
-      return;
-    }
-
-    await configureAllSettings(extensionConfig.name, extension.path, scope);
-    return;
+    return false;
   }
+}
 
-  // Case 3: config - configure all installed extensions
+async function configureInstalledExtensions(scope: ExtensionSettingScope) {
   const installedExtensions = loadUserExtensions();
 
   if (installedExtensions.length === 0) {
@@ -199,48 +216,46 @@ async function handleConfig(args: ConfigArgs): Promise<void> {
   let overallSuccess = true;
 
   for (const extension of installedExtensions) {
-    try {
-      const extensionConfig = await loadExtensionConfig({
-        extensionDir: extension.path,
-        workspaceDir: process.cwd(),
-      });
-
-      if (!extensionConfig) {
-        console.error(
-          `Failed to load configuration for extension "${extension.name}". Skipping.`,
-        );
-        overallSuccess = false;
-        continue;
-      }
-
-      console.log(`\nConfiguring extension "${extensionConfig.name}"...`);
-
-      const success = await configureAllSettings(
-        extensionConfig.name,
-        extension.path,
-        scope,
-      );
-
-      if (!success) {
-        overallSuccess = false;
-      }
-    } catch (error) {
-      console.error(
-        `Error configuring extension "${extension.name}":`,
-        error instanceof Error ? error.message : String(error),
-      );
+    const success = await configureInstalledExtension(extension, scope);
+    if (!success) {
       overallSuccess = false;
     }
   }
 
-  if (!overallSuccess) {
-    console.error(
-      '\nConfiguration completed with errors. Some extensions may not be fully configured.',
-    );
-    process.exitCode = 1;
-  } else {
+  if (overallSuccess) {
     console.log('\nAll extensions configured successfully.');
+    return;
   }
+
+  console.error(
+    '\nConfiguration completed with errors. Some extensions may not be fully configured.',
+  );
+  process.exitCode = 1;
+}
+
+/**
+ * Handler for 'extensions config' command.
+ */
+async function handleConfig(args: ConfigArgs): Promise<void> {
+  const scope =
+    args.scope === 'workspace'
+      ? ExtensionSettingScope.WORKSPACE
+      : ExtensionSettingScope.USER;
+
+  // Case 1: config <name> <setting> - configure specific setting
+  if (args.name && args.setting) {
+    await configureNamedSetting(args.name, args.setting, scope);
+    return;
+  }
+
+  // Case 2: config <name> - configure all settings for one extension
+  if (args.name) {
+    await configureNamedExtension(args.name, scope);
+    return;
+  }
+
+  // Case 3: config - configure all installed extensions
+  await configureInstalledExtensions(scope);
 }
 
 export const configCommand: CommandModule = {

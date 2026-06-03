@@ -56,24 +56,13 @@ export class ASTReadFileToolInvocation
     _setPidCallback?: (pid: number) => void,
   ): Promise<ToolResult> {
     try {
-      // Read file content
       const content = await this.config
         .getFileSystemService()
         .readTextFile(this.params.file_path);
 
-      // Process line range
-      const lines = content.split('\n');
-      const totalLineCount = countLines(lines);
-      const startLine = Math.min(
-        this.params.offset ? Math.max(1, this.params.offset) - 1 : 0,
-        totalLineCount,
-      );
-      const endLine = this.params.limit
-        ? Math.min(totalLineCount, startLine + this.params.limit)
-        : totalLineCount;
-      const selectedContent = lines.slice(startLine, endLine).join('\n');
+      const { selectedContent, startLine, endLine, totalLineCount } =
+        this.computeLineRange(content);
 
-      // Collect enhanced context (same as ASTEdit)
       const workspaceRoot = this.config.getTargetDir();
       const enhancedContext =
         await this.contextCollector.collectEnhancedContext(
@@ -82,50 +71,13 @@ export class ASTReadFileToolInvocation
           workspaceRoot,
         );
 
-      const readLlmContent = [
-        `LLXPRT READ: ${this.params.file_path}`,
-        `- Language: ${enhancedContext.language}`,
-        `- Lines ${Math.min(startLine + 1, totalLineCount)}-${endLine} of ${totalLineCount}`,
-        `- Declarations: ${enhancedContext.declarations.length}`,
-        '',
-        'CONTEXT ANALYSIS:',
-        ...enhancedContext.declarations.map(
-          (decl) =>
-            `- ${decl.type}: ${decl.name}${decl.signature ? decl.signature : ''} (line ${decl.line})`,
-        ),
-        '',
-        'RELEVANT SNIPPETS:',
-        ...enhancedContext.relevantSnippets
-          .slice(0, ASTConfig.MAX_DISPLAY_RESULTS)
-          .map(
-            (snippet) =>
-              `- Line ${snippet.line}: ${snippet.text.substring(0, 60)}...`,
-          ),
-        enhancedContext.connectedFiles &&
-        enhancedContext.connectedFiles.length > 0
-          ? [
-              '',
-              'WORKING SET CONTEXT:',
-              ...enhancedContext.connectedFiles
-                .map((file) => {
-                  const relPath = makeRelative(file.filePath, workspaceRoot);
-                  if (file.declarations.length === 0)
-                    return `- ${relPath} (No declarations)`;
-                  return [
-                    `- ${relPath}:`,
-                    ...file.declarations.map(
-                      (d) =>
-                        `  - ${d.type}: ${d.name}${d.signature ? d.signature : ''}`,
-                    ),
-                  ];
-                })
-                .flat(),
-            ]
-          : [],
-      ]
-        .flat()
-        .filter(Boolean)
-        .join('\n');
+      const readLlmContent = this.buildReadLlmContent(
+        enhancedContext,
+        workspaceRoot,
+        startLine,
+        endLine,
+        totalLineCount,
+      );
 
       return {
         llmContent: readLlmContent,
@@ -140,39 +92,131 @@ export class ASTReadFileToolInvocation
         },
       };
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-
-      let errorType = ToolErrorType.READ_CONTENT_FAILURE;
-      if (isNodeError(error)) {
-        switch (error.code) {
-          case 'ENOENT':
-            errorType = ToolErrorType.FILE_NOT_FOUND;
-            break;
-          case 'EACCES':
-            errorType = ToolErrorType.PERMISSION_DENIED;
-            break;
-          case 'EISDIR':
-            errorType = ToolErrorType.TARGET_IS_DIRECTORY;
-            break;
-          case 'EMFILE':
-          case 'ENFILE':
-            errorType = ToolErrorType.READ_CONTENT_FAILURE;
-            break;
-          default:
-            errorType = ToolErrorType.READ_CONTENT_FAILURE;
-        }
-      } else {
-        errorType = ToolErrorType.UNKNOWN;
-      }
-
-      return {
-        llmContent: `Error reading file: ${errorMsg}`,
-        returnDisplay: `Error reading file: ${errorMsg}`,
-        error: {
-          message: errorMsg,
-          type: errorType,
-        },
-      };
+      return this.handleReadError(error);
     }
+  }
+
+  private computeLineRange(content: string): {
+    selectedContent: string;
+    startLine: number;
+    endLine: number;
+    totalLineCount: number;
+  } {
+    const lines = content.split('\n');
+    const totalLineCount = countLines(lines);
+    const startLine = Math.min(
+      typeof this.params.offset === 'number' && this.params.offset > 0
+        ? Math.max(1, this.params.offset) - 1
+        : 0,
+      totalLineCount,
+    );
+    const endLine =
+      typeof this.params.limit === 'number' && this.params.limit > 0
+        ? Math.min(totalLineCount, startLine + this.params.limit)
+        : totalLineCount;
+    const selectedContent = lines.slice(startLine, endLine).join('\n');
+    return { selectedContent, startLine, endLine, totalLineCount };
+  }
+
+  private buildReadLlmContent(
+    enhancedContext: Awaited<
+      ReturnType<ASTContextCollector['collectEnhancedContext']>
+    >,
+    workspaceRoot: string,
+    startLine: number,
+    endLine: number,
+    totalLineCount: number,
+  ): string {
+    return [
+      `LLXPRT READ: ${this.params.file_path}`,
+      `- Language: ${enhancedContext.language}`,
+      `- Lines ${Math.min(startLine + 1, totalLineCount)}-${endLine} of ${totalLineCount}`,
+      `- Declarations: ${enhancedContext.declarations.length}`,
+      '',
+      'CONTEXT ANALYSIS:',
+      ...enhancedContext.declarations.map(
+        (decl) =>
+          `- ${decl.type}: ${decl.name}${decl.signature ?? ''} (line ${decl.line})`,
+      ),
+      '',
+      'RELEVANT SNIPPETS:',
+      ...enhancedContext.relevantSnippets
+        .slice(0, ASTConfig.MAX_DISPLAY_RESULTS)
+        .map(
+          (snippet) =>
+            `- Line ${snippet.line}: ${snippet.text.substring(0, 60)}...`,
+        ),
+      this.formatConnectedFilesContext(enhancedContext, workspaceRoot),
+    ]
+      .flat()
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  private formatConnectedFilesContext(
+    enhancedContext: Awaited<
+      ReturnType<ASTContextCollector['collectEnhancedContext']>
+    >,
+    workspaceRoot: string,
+  ): string[] {
+    if (
+      !enhancedContext.connectedFiles ||
+      enhancedContext.connectedFiles.length === 0
+    ) {
+      return [];
+    }
+    return [
+      '',
+      'WORKING SET CONTEXT:',
+      ...enhancedContext.connectedFiles
+        .map((file) => {
+          const relPath = makeRelative(file.filePath, workspaceRoot);
+          if (file.declarations.length === 0)
+            return `- ${relPath} (No declarations)`;
+          return [
+            `- ${relPath}:`,
+            ...file.declarations.map(
+              (d) => `  - ${d.type}: ${d.name}${d.signature ?? ''}`,
+            ),
+          ];
+        })
+        .flat(),
+    ];
+  }
+
+  private handleReadError(error: unknown): ToolResult {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+
+    let errorType = ToolErrorType.READ_CONTENT_FAILURE;
+    if (isNodeError(error)) {
+      switch (error.code) {
+        case 'ENOENT':
+          errorType = ToolErrorType.FILE_NOT_FOUND;
+          break;
+        case 'EACCES':
+          errorType = ToolErrorType.PERMISSION_DENIED;
+          break;
+        case 'EISDIR':
+          errorType = ToolErrorType.TARGET_IS_DIRECTORY;
+          break;
+        case 'EMFILE':
+        case 'ENFILE':
+          errorType = ToolErrorType.READ_CONTENT_FAILURE;
+          break;
+        default:
+          errorType = ToolErrorType.READ_CONTENT_FAILURE;
+      }
+    } else {
+      errorType = ToolErrorType.UNKNOWN;
+    }
+
+    return {
+      llmContent: `Error reading file: ${errorMsg}`,
+      returnDisplay: `Error reading file: ${errorMsg}`,
+      error: {
+        message: errorMsg,
+        type: errorType,
+      },
+    };
   }
 }

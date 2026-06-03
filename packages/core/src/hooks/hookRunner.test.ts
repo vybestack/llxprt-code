@@ -341,6 +341,7 @@ describe('HookRunner', () => {
           expect.stringMatching(/bash|powershell/),
           expect.arrayContaining([
             // Command must contain escaped version of malicious path
+            // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
             expect.stringMatching(/ls ['"].*echo.*pwned.*/),
           ]),
           expect.objectContaining({
@@ -503,13 +504,11 @@ describe('HookRunner', () => {
       let hookCallCount = 0;
       mockSpawn.mockStdoutOn.mockImplementation(
         (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            if (hookCallCount === 0) {
-              setTimeout(
-                () => callback(Buffer.from(JSON.stringify(mockOutput1))),
-                10,
-              );
-            }
+          if (event === 'data' && hookCallCount === 0) {
+            setTimeout(
+              () => callback(Buffer.from(JSON.stringify(mockOutput1))),
+              10,
+            );
           }
         },
       );
@@ -567,13 +566,11 @@ describe('HookRunner', () => {
       let hookCallCount = 0;
       mockSpawn.mockStdoutOn.mockImplementation(
         (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            if (hookCallCount === 0) {
-              setTimeout(
-                () => callback(Buffer.from(JSON.stringify(mockOutput1))),
-                10,
-              );
-            }
+          if (event === 'data' && hookCallCount === 0) {
+            setTimeout(
+              () => callback(Buffer.from(JSON.stringify(mockOutput1))),
+              10,
+            );
           }
         },
       );

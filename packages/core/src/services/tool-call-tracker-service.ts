@@ -8,7 +8,7 @@ import { TodoContextTracker } from '../services/todo-context-tracker.js';
 import { type TodoToolCall } from '../tools/todo-schemas.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
-// Map of session ID -> agent ID -> todo ID -> tool calls
+// Map of session ID -> agent ID -> task ID -> tool calls
 // This keeps track of both executing and completed tool calls in memory (not persisted)
 interface TodoToolCalls {
   executing: Map<string, TodoToolCall>;
@@ -24,7 +24,7 @@ const toolCallsInMemory = new Map<string, SessionToolCallMap>();
 const updateCallbacks = new Map<string, Map<string, Set<() => void>>>();
 
 /**
- * Service to track tool calls and associate them with active todos
+ * Service to track tool calls and associate them with active tasks
  */
 export class ToolCallTrackerService {
   /**
@@ -36,7 +36,7 @@ export class ToolCallTrackerService {
     parameters: Record<string, unknown>,
     agentId?: string,
   ): string | null {
-    // Don't track todo tools themselves
+    // Don't track task tools themselves
     if (toolName === 'todo_write' || toolName === 'todo_read') {
       return null;
     }
@@ -50,7 +50,7 @@ export class ToolCallTrackerService {
     );
     const activeTodoId = contextTracker.getActiveTodoId();
 
-    // If there's no active todo, don't track the tool call
+    // If there's no active task, don't track the tool call
     if (!activeTodoId) {
       return null;
     }
@@ -77,7 +77,7 @@ export class ToolCallTrackerService {
 
     const agentCalls = sessionCalls.get(scopedAgentId)!;
 
-    // Ensure we have a map for this todo
+    // Ensure we have a map for this task
     if (!agentCalls.has(activeTodoId)) {
       agentCalls.set(activeTodoId, {
         executing: new Map(),
@@ -174,7 +174,7 @@ export class ToolCallTrackerService {
   }
 
   /**
-   * Gets all tool calls (executing and completed) for a specific todo
+   * Gets all tool calls (executing and completed) for a specific task
    */
   static getAllToolCalls(
     sessionId: string,

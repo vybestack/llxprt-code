@@ -51,19 +51,21 @@ export const ProviderSelectStep: React.FC<ProviderSelectStepProps> = ({
   );
 
   // Use available providers from runtime if provided, otherwise fall back to static list
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty array should fall back to static list
   const providers = availableProviders || PROVIDER_OPTIONS.map((p) => p.value);
 
   // Build items list with labels from PROVIDER_OPTIONS where available
   const providerItems = providers.map((providerValue) => {
     const option = PROVIDER_OPTIONS.find((p) => p.value === providerValue);
     return {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string label should fall back to provider value
       label: option?.label || providerValue,
       value: providerValue,
       key: providerValue,
     };
   });
 
-  const selectedProvider = state.config.provider || undefined;
+  const selectedProvider = state.config.provider ?? undefined;
   const initialIndex = selectedProvider
     ? providerItems.findIndex((p) => p.value === selectedProvider)
     : undefined;

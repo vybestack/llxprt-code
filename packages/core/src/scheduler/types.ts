@@ -97,13 +97,13 @@ export type WaitingToolCall = {
    * Supports both legacy (with callbacks) and new (serializable) details.
    * New code should treat this as SerializableConfirmationDetails.
    *
-   * TODO: Remove ToolCallConfirmationDetails and collapse to just
+   * Follow-up (#1569): Remove ToolCallConfirmationDetails and collapse to just
    * SerializableConfirmationDetails after migration.
    */
   confirmationDetails:
     | ToolCallConfirmationDetails
     | SerializableConfirmationDetails;
-  // TODO: Make required after migration.
+  // Follow-up (#1569): Make required after migration.
   correlationId?: string;
   startTime?: number;
   outcome?: ToolConfirmationOutcome;

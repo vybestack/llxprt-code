@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 import { SettingScope } from '../config/settings.js';
 import type { SkillActionResult } from './skillSettings.js';
 import {
@@ -34,6 +36,7 @@ export function renderSkillActionFeedback(
 
   if (status === 'error') {
     return (
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall back to generic message
       error ||
       `An error occurred while attempting to ${action} skill "${skillName}".`
     );
@@ -75,6 +78,67 @@ export function renderSkillActionFeedback(
 }
 
 /**
+ * Resolves the source path for a skill, cloning or extracting as needed.
+ * Returns the resolved local path and the temp directory to clean up (if any).
+ */
+async function resolveSkillSource(
+  source: string,
+  onLog: (msg: string) => void,
+): Promise<{ sourcePath: string; tempDirToClean: string | undefined }> {
+  const isGitUrl =
+    source.startsWith('git@') ||
+    source.startsWith('http://') ||
+    source.startsWith('https://');
+
+  const isSkillFile = source.toLowerCase().endsWith('.skill');
+
+  if (isGitUrl) {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-skill-'));
+    onLog(`Cloning skill from ${source}...`);
+    await cloneFromGit({ source, type: 'git' }, tempDir);
+    return { sourcePath: tempDir, tempDirToClean: tempDir };
+  }
+
+  if (isSkillFile) {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-skill-'));
+    onLog(`Extracting skill from ${source}...`);
+    // eslint-disable-next-line sonarjs/no-unsafe-unzip -- Skill archives are extracted into a fresh temp directory and validated before copy.
+    await extract(path.resolve(source), { dir: tempDir });
+    return { sourcePath: tempDir, tempDirToClean: tempDir };
+  }
+
+  return { sourcePath: source, tempDirToClean: undefined };
+}
+
+/**
+ * Copies resolved skills into the target directory, overwriting if needed.
+ */
+async function copySkillsToTarget(
+  skills: SkillDefinition[],
+  targetDir: string,
+  onLog: (msg: string) => void,
+): Promise<Array<{ name: string; location: string }>> {
+  const installedSkills: Array<{ name: string; location: string }> = [];
+
+  for (const skill of skills) {
+    const skillName = skill.name;
+    const skillDir = path.dirname(skill.location);
+    const destPath = path.join(targetDir, skillName);
+
+    const exists = await fs.stat(destPath).catch(() => null);
+    if (exists) {
+      onLog(`Skill "${skillName}" already exists. Overwriting...`);
+      await fs.rm(destPath, { recursive: true, force: true });
+    }
+
+    await fs.cp(skillDir, destPath, { recursive: true });
+    installedSkills.push({ name: skillName, location: destPath });
+  }
+
+  return installedSkills;
+}
+
+/**
  * Central logic for installing a skill from a remote URL or local path.
  */
 export async function installSkill(
@@ -87,50 +151,17 @@ export async function installSkill(
     targetDir: string,
   ) => Promise<boolean>,
 ): Promise<Array<{ name: string; location: string }>> {
-  let sourcePath = source;
-  let tempDirToClean: string | undefined = undefined;
+  const { sourcePath: rawSourcePath, tempDirToClean } =
+    await resolveSkillSource(source, onLog);
 
   try {
-    const isGitUrl =
-      source.startsWith('git@') ||
-      source.startsWith('http://') ||
-      source.startsWith('https://');
-
-    const isSkillFile = source.toLowerCase().endsWith('.skill');
-
-    if (isGitUrl) {
-      tempDirToClean = await fs.mkdtemp(
-        path.join(os.tmpdir(), 'llxprt-skill-'),
-      );
-      sourcePath = tempDirToClean;
-
-      onLog(`Cloning skill from ${source}...`);
-      // Reuse existing robust git cloning utility from extension manager.
-      await cloneFromGit(
-        {
-          source,
-          type: 'git',
-        },
-        tempDirToClean,
-      );
-    } else if (isSkillFile) {
-      tempDirToClean = await fs.mkdtemp(
-        path.join(os.tmpdir(), 'llxprt-skill-'),
-      );
-      sourcePath = tempDirToClean;
-
-      onLog(`Extracting skill from ${source}...`);
-      await extract(path.resolve(source), { dir: tempDirToClean });
-    }
-
-    // If a subpath is provided, resolve it against the cloned/local root.
+    let sourcePath = rawSourcePath;
     if (subpath) {
       sourcePath = path.join(sourcePath, subpath);
     }
 
     sourcePath = path.resolve(sourcePath);
 
-    // Security check to prevent directory traversal out of temp dir when cloning
     if (tempDirToClean) {
       const tempRoot = path.resolve(tempDirToClean);
       const relative = path.relative(tempRoot, sourcePath);
@@ -143,8 +174,9 @@ export async function installSkill(
     const skills = await loadSkillsFromDir(sourcePath);
 
     if (skills.length === 0) {
+      const subpathMessage = subpath ? ` at path "${subpath}"` : '';
       throw new Error(
-        `No valid skills found in ${source}${subpath ? ` at path "${subpath}"` : ''}. Ensure a SKILL.md file exists with valid frontmatter.`,
+        `No valid skills found in ${source}${subpathMessage}. Ensure a SKILL.md file exists with valid frontmatter.`,
       );
     }
 
@@ -160,25 +192,7 @@ export async function installSkill(
     }
 
     await fs.mkdir(targetDir, { recursive: true });
-
-    const installedSkills: Array<{ name: string; location: string }> = [];
-
-    for (const skill of skills) {
-      const skillName = skill.name;
-      const skillDir = path.dirname(skill.location);
-      const destPath = path.join(targetDir, skillName);
-
-      const exists = await fs.stat(destPath).catch(() => null);
-      if (exists) {
-        onLog(`Skill "${skillName}" already exists. Overwriting...`);
-        await fs.rm(destPath, { recursive: true, force: true });
-      }
-
-      await fs.cp(skillDir, destPath, { recursive: true });
-      installedSkills.push({ name: skillName, location: destPath });
-    }
-
-    return installedSkills;
+    return await copySkillsToTarget(skills, targetDir, onLog);
   } finally {
     if (tempDirToClean) {
       await fs.rm(tempDirToClean, { recursive: true, force: true });

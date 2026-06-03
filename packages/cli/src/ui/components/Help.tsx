@@ -10,19 +10,12 @@ import { Colors } from '../colors.js';
 import type { SlashCommand } from '../commands/types.js';
 import { KEYBOARD_SHORTCUTS_URL } from '../constants.js';
 
-interface Help {
+interface HelpProps {
   commands: readonly SlashCommand[];
 }
 
-export const Help: React.FC<Help> = ({ commands }) => (
-  <Box
-    flexDirection="column"
-    marginBottom={1}
-    borderColor={Colors.Gray}
-    borderStyle="round"
-    padding={1}
-  >
-    {/* Basics */}
+const BasicsSection: React.FC = () => (
+  <>
     <Text bold color={Colors.Foreground}>
       Basics:
     </Text>
@@ -58,10 +51,15 @@ export const Help: React.FC<Help> = ({ commands }) => (
       </Text>
       ).
     </Text>
+  </>
+);
 
-    <Box height={1} />
+interface CommandsSectionProps {
+  commands: readonly SlashCommand[];
+}
 
-    {/* Commands */}
+const CommandsSection: React.FC<CommandsSectionProps> = ({ commands }) => (
+  <>
     <Text bold color={Colors.Foreground}>
       Commands:
     </Text>
@@ -94,10 +92,11 @@ export const Help: React.FC<Help> = ({ commands }) => (
       </Text>
       - shell command
     </Text>
+  </>
+);
 
-    <Box height={1} />
-
-    {/* Shortcuts */}
+const KeyboardShortcutsPart1: React.FC = () => (
+  <>
     <Text bold color={Colors.Foreground}>
       Keyboard Shortcuts:
     </Text>
@@ -139,6 +138,11 @@ export const Help: React.FC<Help> = ({ commands }) => (
       </Text>{' '}
       - Open input in external editor
     </Text>
+  </>
+);
+
+const KeyboardShortcutsPart2: React.FC = () => (
+  <>
     <Text color={Colors.Foreground}>
       <Text bold color={Colors.AccentPurple}>
         Ctrl+Y
@@ -176,5 +180,28 @@ export const Help: React.FC<Help> = ({ commands }) => (
         {KEYBOARD_SHORTCUTS_URL}
       </Text>
     </Text>
+  </>
+);
+
+const KeyboardShortcutsSection: React.FC = () => (
+  <>
+    <KeyboardShortcutsPart1 />
+    <KeyboardShortcutsPart2 />
+  </>
+);
+
+export const Help: React.FC<HelpProps> = ({ commands }) => (
+  <Box
+    flexDirection="column"
+    marginBottom={1}
+    borderColor={Colors.Gray}
+    borderStyle="round"
+    padding={1}
+  >
+    <BasicsSection />
+    <Box height={1} />
+    <CommandsSection commands={commands} />
+    <Box height={1} />
+    <KeyboardShortcutsSection />
   </Box>
 );

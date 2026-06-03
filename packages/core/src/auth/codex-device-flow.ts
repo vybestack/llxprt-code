@@ -133,6 +133,31 @@ export class CodexDeviceFlow {
         `[FLOW] Found PKCE verifier for state, length=${codeVerifier.length}`,
     );
 
+    const tokenResponse = await this.performTokenExchange(
+      authCode,
+      redirectUri,
+      codeVerifier,
+    );
+    const codexToken = this.buildCodexToken(tokenResponse);
+
+    this.codeVerifiers.delete(state);
+    this.logger.debug(
+      () =>
+        `[FLOW] Cleaned up PKCE verifier, remaining: ${this.codeVerifiers.size}`,
+    );
+
+    return codexToken;
+  }
+
+  /**
+   * POST to the token endpoint and return a validated CodexTokenResponse.
+   * @throws Error if the HTTP request fails or the response is not OK
+   */
+  private async performTokenExchange(
+    authCode: string,
+    redirectUri: string,
+    codeVerifier: string,
+  ): Promise<z.infer<typeof CodexTokenResponseSchema>> {
     this.logger.debug(
       () =>
         `[FLOW] Making token exchange request to ${CODEX_CONFIG.tokenEndpoint}`,
@@ -169,13 +194,21 @@ export class CodexDeviceFlow {
         `[FLOW] Token response received, keys: ${Object.keys(data as object).join(', ')}`,
     );
 
-    // Validate with Zod schema - NO TYPE ASSERTIONS
     const tokenResponse = CodexTokenResponseSchema.parse(data);
     this.logger.debug(
       () =>
         `[FLOW] Token response validated: has_id_token=${!!tokenResponse.id_token}, has_refresh_token=${!!tokenResponse.refresh_token}, expires_in=${tokenResponse.expires_in}`,
     );
+    return tokenResponse;
+  }
 
+  /**
+   * Validate token response, extract account_id, and build a CodexOAuthToken.
+   * @throws Error if id_token is missing or account_id cannot be extracted
+   */
+  private buildCodexToken(
+    tokenResponse: z.infer<typeof CodexTokenResponseSchema>,
+  ): CodexOAuthToken {
     // Extract account_id from id_token JWT
     this.logger.debug(() => '[FLOW] Extracting account_id from id_token...');
     const accountId = tokenResponse.id_token
@@ -187,7 +220,14 @@ export class CodexDeviceFlow {
 
     // Build validated Codex token - use Unix timestamp in SECONDS (not milliseconds)
     const now = Math.floor(Date.now() / 1000);
-    const expiresIn = tokenResponse.expires_in || 3600; // Default 1 hour
+    // expires_in 0 is invalid, treat nullish/NaN/0 as default 1 hour
+    const rawExpiresIn = tokenResponse.expires_in;
+    const expiresIn =
+      typeof rawExpiresIn === 'number' &&
+      !Number.isNaN(rawExpiresIn) &&
+      rawExpiresIn !== 0
+        ? rawExpiresIn
+        : 3600;
     const expiry = now + expiresIn;
 
     this.logger.debug(
@@ -207,12 +247,6 @@ export class CodexDeviceFlow {
     this.logger.debug(
       () =>
         `[FLOW] Token exchange successful! account_id=${accountId.substring(0, 8)}..., token_type=${codexToken.token_type}`,
-    );
-
-    this.codeVerifiers.delete(state);
-    this.logger.debug(
-      () =>
-        `[FLOW] Cleaned up PKCE verifier, remaining: ${this.codeVerifiers.size}`,
     );
 
     return codexToken;
@@ -256,7 +290,14 @@ export class CodexDeviceFlow {
 
     // Use Unix timestamp in SECONDS
     const now = Math.floor(Date.now() / 1000);
-    const expiresIn = tokenResponse.expires_in || 3600;
+    // expires_in 0 is invalid, treat nullish/NaN/0 as default 1 hour
+    const rawExpiresIn = tokenResponse.expires_in;
+    const expiresIn =
+      typeof rawExpiresIn === 'number' &&
+      !Number.isNaN(rawExpiresIn) &&
+      rawExpiresIn !== 0
+        ? rawExpiresIn
+        : 3600;
     const expiry = now + expiresIn;
 
     return CodexOAuthTokenSchema.parse({
@@ -291,10 +332,12 @@ export class CodexDeviceFlow {
     const validated = JwtPayloadSchema.parse(parsedPayload);
 
     // Extract account_id from OpenAI-specific claim or root
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string account_id from JWT claims should fall through to next option */
     const accountId =
       validated['https://api.openai.com/auth']?.chatgpt_account_id ||
       validated['https://api.openai.com/auth']?.account_id ||
       validated.account_id;
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
     if (!accountId) {
       throw new Error('No account_id found in id_token JWT claims');
@@ -407,6 +450,7 @@ export class CodexDeviceFlow {
     const startTime = Date.now();
     const intervalMs = intervalSeconds * 1000;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Device-flow polling intentionally loops until timeout, authorization, or terminal error.
     while (true) {
       if (Date.now() - startTime >= maxWaitMs) {
         throw new Error('Device authorization timed out after 15 minutes');
@@ -560,18 +604,22 @@ export class CodexDeviceFlow {
 
     // Build and return the CodexOAuthToken
     const now = Date.now();
-    const expiresIn = tokenResponse.expires_in ?? 3600; // Default to 1 hour if not provided
-    const tokenType = (tokenResponse.token_type ?? 'Bearer') as
-      | 'Bearer'
-      | 'bearer';
-    const token: CodexOAuthToken = {
+    // expires_in 0 is invalid, treat nullish/NaN/0 as default 1 hour
+    const rawExpiresIn = tokenResponse.expires_in;
+    const expiresIn =
+      typeof rawExpiresIn === 'number' &&
+      !Number.isNaN(rawExpiresIn) &&
+      rawExpiresIn !== 0
+        ? rawExpiresIn
+        : 3600;
+    const token: CodexOAuthToken = CodexOAuthTokenSchema.parse({
       access_token: tokenResponse.access_token,
       refresh_token: tokenResponse.refresh_token,
       id_token: tokenResponse.id_token,
-      token_type: tokenType,
+      token_type: tokenResponse.token_type,
       expiry: Math.floor(now / 1000) + expiresIn,
       account_id: accountId,
-    };
+    });
 
     this.logger.debug(
       () => '[DEVICE] Device authorization completed successfully',

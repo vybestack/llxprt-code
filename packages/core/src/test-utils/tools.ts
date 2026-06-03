@@ -34,6 +34,33 @@ function createTestMessageBus(): MessageBus {
   );
 }
 
+/**
+ * Shared execute implementation for mock tool invocations.
+ * Used by both MockToolInvocation and MockModifiableToolInvocation.
+ */
+async function executeMockTool(
+  tool: { name: string; executeFn: ToolSpy },
+  params: Record<string, unknown>,
+  abortSignal: AbortSignal,
+  updateOutput?: (output: string) => void,
+): Promise<ToolResult> {
+  const result = await tool.executeFn(params, abortSignal, updateOutput);
+  if (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    result !== null &&
+    result !== undefined &&
+    typeof result === 'object' &&
+    'llmContent' in result &&
+    'returnDisplay' in result
+  ) {
+    return result as ToolResult;
+  }
+  return {
+    llmContent: `Tool ${tool.name} executed successfully.`,
+    returnDisplay: `Tool ${tool.name} executed successfully.`,
+  };
+}
+
 class MockToolInvocation extends BaseToolInvocation<
   { [key: string]: unknown },
   ToolResult
@@ -50,23 +77,7 @@ class MockToolInvocation extends BaseToolInvocation<
     abortSignal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
-    const result = await this.tool.executeFn(
-      this.params,
-      abortSignal,
-      updateOutput,
-    );
-    if (
-      result &&
-      typeof result === 'object' &&
-      'llmContent' in result &&
-      'returnDisplay' in result
-    ) {
-      return result as ToolResult;
-    }
-    return {
-      llmContent: `Tool ${this.tool.name} executed successfully.`,
-      returnDisplay: `Tool ${this.tool.name} executed successfully.`,
-    };
+    return executeMockTool(this.tool, this.params, abortSignal, updateOutput);
   }
 
   override async shouldConfirmExecute(
@@ -143,23 +154,7 @@ export class MockModifiableToolInvocation extends BaseToolInvocation<
     abortSignal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
-    const result = await this.tool.executeFn(
-      this.params,
-      abortSignal,
-      updateOutput,
-    );
-    if (
-      result &&
-      typeof result === 'object' &&
-      'llmContent' in result &&
-      'returnDisplay' in result
-    ) {
-      return result as ToolResult;
-    }
-    return {
-      llmContent: `Tool ${this.tool.name} executed successfully.`,
-      returnDisplay: `Tool ${this.tool.name} executed successfully.`,
-    };
+    return executeMockTool(this.tool, this.params, abortSignal, updateOutput);
   }
 
   override async shouldConfirmExecute(

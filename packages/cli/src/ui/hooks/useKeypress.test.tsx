@@ -194,6 +194,7 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
         stdin.write('do');
       });
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (useKitty) {
         vi.advanceTimersByTime(60); // wait for kitty timeout
       }

@@ -11,6 +11,8 @@ import {
   type Config,
   type GeminiCLIExtension,
   type SettingsService,
+  type SandboxConfig,
+  type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
 
 import { type Settings } from './settings.js';
@@ -39,7 +41,34 @@ import { buildConfig } from './configBuilder.js';
 import { finalizeConfig } from './postConfigRuntime.js';
 import { resolveIntermediateConfig } from './intermediateConfig.js';
 
+type ConfigBuildPieces = {
+  context: ContextResolutionResult;
+  memoryContent: string;
+  fileCount: number;
+  filePaths: string[];
+  mcpServers: Record<string, MCPServerConfig>;
+  blockedMcpServers: ReadonlyArray<{ name: string; extensionName: string }>;
+  approvalMode: ApprovalMode;
+  providerModel: ReturnType<typeof resolveProviderAndModel>;
+  sandboxConfig: SandboxConfig | undefined;
+  profileSettingsWithTools: Settings;
+  excludeTools: readonly string[];
+  policyEngineConfig: PolicyEngineConfig;
+  question: string;
+  screenReader: boolean;
+  useRipgrepSetting: boolean | undefined;
+  mcpEnabled: boolean;
+  extensionsEnabled: boolean;
+  adminSkillsEnabled: boolean;
+  outputFormat: Parameters<typeof buildConfig>[0]['outputFormat'];
+  allowedTools: readonly string[];
+};
+
 import type { ContextResolutionResult } from './interactiveContext.js';
+import type {
+  ApprovalMode,
+  PolicyEngineConfig,
+} from '@vybestack/llxprt-code-core';
 
 // ─── Orchestrator ────────────────────────────────────────────────────────────
 
@@ -112,6 +141,97 @@ function resolveApprovalAndProvider(
   return { approvalMode, providerModel };
 }
 
+async function resolveConfigBuildPieces(
+  argv: CliArgs,
+  settings: Settings,
+  profileMergedSettings: Settings,
+  profileResult: ProfileLoadResult,
+  runtimeState: BootstrapRuntimeState,
+  cwd: string,
+  extensions: GeminiCLIExtension[],
+  extensionEnablementManager: ExtensionEnablementManager,
+): Promise<ConfigBuildPieces> {
+  const context = resolveContextAndEnvironment({
+    argv,
+    profileMergedSettings,
+    originalSettings: settings,
+    cwd,
+    extensions,
+    extensionEnablementManager,
+  });
+  const { memoryContent, fileCount, filePaths } = await resolveMemoryContent(
+    cwd,
+    context,
+    profileMergedSettings,
+  );
+  const { mcpServers, blockedMcpServers } = resolveMcpServers(
+    profileMergedSettings,
+    context,
+    argv.allowedMcpServerNames,
+  );
+  const { approvalMode, providerModel } = resolveApprovalAndProvider(
+    argv,
+    profileMergedSettings,
+    context,
+    profileResult,
+    runtimeState,
+  );
+  const intermediate = await resolveIntermediateConfig(
+    argv,
+    settings,
+    profileMergedSettings,
+    context,
+    approvalMode,
+  );
+  const sandboxConfig = await loadSandboxConfig(profileMergedSettings, argv);
+
+  return {
+    context,
+    memoryContent,
+    fileCount,
+    filePaths,
+    mcpServers,
+    blockedMcpServers,
+    approvalMode,
+    providerModel,
+    sandboxConfig,
+    ...intermediate,
+  };
+}
+
+function buildLoadedConfig(
+  sessionId: string,
+  cwd: string,
+  argv: CliArgs,
+  pieces: ConfigBuildPieces,
+): Config {
+  return buildConfig({
+    sessionId,
+    cwd,
+    argv,
+    profileSettingsWithTools: pieces.profileSettingsWithTools,
+    context: pieces.context,
+    approvalMode: pieces.approvalMode,
+    providerModel: pieces.providerModel,
+    sandboxConfig: pieces.sandboxConfig,
+    mcpServers: pieces.mcpServers,
+    blockedMcpServers: pieces.blockedMcpServers,
+    excludeTools: pieces.excludeTools,
+    memoryContent: pieces.memoryContent,
+    fileCount: pieces.fileCount,
+    filePaths: pieces.filePaths,
+    policyEngineConfig: pieces.policyEngineConfig,
+    question: pieces.question,
+    screenReader: pieces.screenReader,
+    useRipgrepSetting: pieces.useRipgrepSetting,
+    mcpEnabled: pieces.mcpEnabled,
+    extensionsEnabled: pieces.extensionsEnabled,
+    adminSkillsEnabled: pieces.adminSkillsEnabled,
+    outputFormat: pieces.outputFormat,
+    allowedTools: pieces.allowedTools,
+  });
+}
+
 /**
  * @plan PLAN-20251020-STATELESSPROVIDER3.P06
  * @requirement REQ-SP3-001
@@ -133,78 +253,29 @@ export async function loadCliConfig(
     await bootstrapAndLoadProfile(settings, argv, runtimeOverrides);
   const profileMergedSettings = profileResult.profileMergedSettings;
 
-  const context = resolveContextAndEnvironment({
-    argv,
-    profileMergedSettings,
-    originalSettings: settings,
-    cwd,
-    extensions,
-    extensionEnablementManager,
-  });
-  const { memoryContent, fileCount, filePaths } = await resolveMemoryContent(
-    cwd,
-    context,
-    profileMergedSettings,
-  );
-  const { mcpServers, blockedMcpServers } = resolveMcpServers(
-    profileMergedSettings,
-    context,
-    argv.allowedMcpServerNames,
-  );
-
-  const { approvalMode, providerModel } = resolveApprovalAndProvider(
-    argv,
-    profileMergedSettings,
-    context,
-    profileResult,
-    runtimeState,
-  );
-  const intermediate = await resolveIntermediateConfig(
+  const pieces = await resolveConfigBuildPieces(
     argv,
     settings,
     profileMergedSettings,
-    context,
-    approvalMode,
-  );
-  const sandboxConfig = await loadSandboxConfig(profileMergedSettings, argv);
-
-  const config = buildConfig({
-    sessionId,
+    profileResult,
+    runtimeState,
     cwd,
-    argv,
-    profileSettingsWithTools: intermediate.profileSettingsWithTools,
-    context,
-    approvalMode,
-    providerModel,
-    sandboxConfig,
-    mcpServers,
-    blockedMcpServers,
-    excludeTools: intermediate.excludeTools,
-    memoryContent,
-    fileCount,
-    filePaths,
-    policyEngineConfig: intermediate.policyEngineConfig,
-    question: intermediate.question,
-    screenReader: intermediate.screenReader,
-    useRipgrepSetting: intermediate.useRipgrepSetting,
-    mcpEnabled: intermediate.mcpEnabled,
-    extensionsEnabled: intermediate.extensionsEnabled,
-    adminSkillsEnabled: intermediate.adminSkillsEnabled,
-    outputFormat: intermediate.outputFormat,
-    allowedTools: intermediate.allowedTools,
-  });
+    extensions,
+    extensionEnablementManager,
+  );
+  const config = buildLoadedConfig(sessionId, cwd, argv, pieces);
 
   return finalizeConfig({
     config,
     runtimeState,
     bootstrapArgs,
     argv,
-    profileSettingsWithTools: intermediate.profileSettingsWithTools,
+    profileSettingsWithTools: pieces.profileSettingsWithTools,
     profileLoadResult: profileResult,
-    providerModelResult: providerModel,
+    providerModelResult: pieces.providerModel,
     defaultDisabledTools: profileMergedSettings.defaultDisabledTools ?? [],
     runtimeOverrides,
-    approvalMode,
-    interactive: context.interactive,
+    approvalMode: pieces.approvalMode,
+    interactive: pieces.context.interactive,
   });
 }

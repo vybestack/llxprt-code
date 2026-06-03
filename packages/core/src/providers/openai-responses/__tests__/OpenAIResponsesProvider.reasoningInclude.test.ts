@@ -464,8 +464,8 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
         ),
       );
       const lastThinkingBlock = thinkingBlocks[thinkingBlocks.length - 1];
-      expect(lastThinkingBlock?.thought).toContain('First part of thinking');
-      expect(lastThinkingBlock?.thought).toContain('Second part');
+      expect(lastThinkingBlock.thought).toContain('First part of thinking');
+      expect(lastThinkingBlock.thought).toContain('Second part');
     });
   });
 

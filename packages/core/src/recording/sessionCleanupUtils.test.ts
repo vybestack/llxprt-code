@@ -58,7 +58,7 @@ function writeSessionFile(
   sessionId: string,
   startTime?: string,
 ): string {
-  const ts = startTime || new Date().toISOString();
+  const ts = startTime ?? new Date().toISOString();
   const fileName = `session-${ts.replace(/[:.]/g, '-')}-${sessionId.slice(0, 8)}.jsonl`;
   const filePath = path.join(dir, fileName);
   const event = JSON.stringify({

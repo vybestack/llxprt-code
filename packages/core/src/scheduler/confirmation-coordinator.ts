@@ -260,12 +260,16 @@ export class ConfirmationCoordinator {
     // PolicyDecision.ASK — check shouldConfirmExecute
     const confirmationDetails = await invocation.shouldConfirmExecute(signal);
 
-    if (!confirmationDetails) {
+    if (
+      confirmationDetails === false ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Scheduler plugin boundary can return malformed nullish values at runtime.
+      confirmationDetails == null
+    ) {
       this.approveInternal(reqInfo.callId);
       return;
     }
 
-    const allowedTools = this.config.getAllowedTools() || [];
+    const allowedTools = this.config.getAllowedTools() ?? [];
     if (
       this.config.getApprovalMode() === ApprovalMode.YOLO ||
       doesToolInvocationMatch(toolCall.tool, invocation, allowedTools)
@@ -278,7 +282,7 @@ export class ConfirmationCoordinator {
       toolCall,
       signal,
       confirmationDetails,
-      evaluation.context ?? getPolicyContextFromInvocation(invocation, reqInfo),
+      evaluation.context,
     );
   }
 
@@ -445,7 +449,8 @@ export class ConfirmationCoordinator {
     return (
       response.outcome ??
       (response.confirmed !== undefined
-        ? response.confirmed
+        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          response.confirmed
           ? ToolConfirmationOutcome.ProceedOnce
           : ToolConfirmationOutcome.Cancel
         : ToolConfirmationOutcome.Cancel)
@@ -682,7 +687,11 @@ export class ConfirmationCoordinator {
         const stillNeedsConfirmation =
           await pendingTool.invocation.shouldConfirmExecute(signal);
 
-        if (!stillNeedsConfirmation) {
+        if (
+          stillNeedsConfirmation === false ||
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Scheduler plugin boundary can return malformed nullish values at runtime.
+          stillNeedsConfirmation == null
+        ) {
           this.statusMutator.setOutcome(
             pendingTool.request.callId,
             ToolConfirmationOutcome.ProceedAlways,

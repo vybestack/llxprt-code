@@ -30,11 +30,17 @@ interface UseSlashCommandActionsParams {
   openModelsDialog: (data?: ModelsDialogData) => void;
   openPermissionsDialog: () => void;
   openProviderDialog: () => void;
-  openLoadProfileDialog: () => void;
+  openLoadProfileDialog: () => void | Promise<void>;
   openCreateProfileDialog: () => void;
-  openProfileListDialog: () => void;
-  viewProfileDetail: (profileName: string, openedDirectly?: boolean) => void;
-  openProfileEditor: (profileName: string, openedDirectly?: boolean) => void;
+  openProfileListDialog: () => void | Promise<void>;
+  viewProfileDetail: (
+    profileName: string,
+    openedDirectly?: boolean,
+  ) => void | Promise<void>;
+  openProfileEditor: (
+    profileName: string,
+    openedDirectly?: boolean,
+  ) => void | Promise<void>;
   quitHandler: QuitHandler;
   setDebugMessage: (message: string) => void;
   toggleCorgiMode: () => void;

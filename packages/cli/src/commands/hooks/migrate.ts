@@ -20,64 +20,51 @@ interface MigrateOptions {
   confirm?: boolean;
 }
 
-async function migrateHooks(options: MigrateOptions): Promise<void> {
-  const { dryRun = false, confirm = false } = options;
+type ProjectSettings = { hooks?: { [K in HookEventName]?: HookDefinition[] } };
 
-  const settings = loadSettings();
-  const userHooks = settings.merged.hooks;
-
-  if (!userHooks || Object.keys(userHooks).length === 0) {
-    debugLogger.log('No hooks found in user settings. Nothing to migrate.');
-    return;
-  }
-
-  // Find the workspace root by looking for .llxprt directory
+function findProjectRoot(): string | null {
   let currentDir = process.cwd();
-  let projectRoot: string | null = null;
 
   // Walk up directory tree to find .llxprt
   while (currentDir !== path.dirname(currentDir)) {
     const llxprtDir = path.join(currentDir, '.llxprt');
     if (fs.existsSync(llxprtDir) && fs.statSync(llxprtDir).isDirectory()) {
-      projectRoot = currentDir;
-      break;
+      return currentDir;
     }
     currentDir = path.dirname(currentDir);
   }
+  return null;
+}
 
-  if (!projectRoot) {
-    debugLogger.error(
-      'Error: Could not find .llxprt directory in current path.',
-    );
-    debugLogger.error(
-      'Please run this command from within a project directory.',
-    );
+function requireProjectRoot(): string {
+  const projectRoot = findProjectRoot();
+  if (projectRoot) return projectRoot;
+
+  debugLogger.error('Error: Could not find .llxprt directory in current path.');
+  debugLogger.error('Please run this command from within a project directory.');
+  process.exit(1);
+}
+
+function loadProjectSettings(projectSettingsPath: string): ProjectSettings {
+  if (!fs.existsSync(projectSettingsPath)) {
+    return {};
+  }
+
+  try {
+    const content = fs.readFileSync(projectSettingsPath, 'utf-8');
+    return JSON.parse(content);
+  } catch (error) {
+    debugLogger.error(`Error reading ${projectSettingsPath}:`, error);
     process.exit(1);
   }
+}
 
-  const projectSettingsPath = path.join(
-    projectRoot,
-    '.llxprt',
-    'settings.json',
-  );
-
-  // Load or initialize project settings
-  let projectSettings: { hooks?: { [K in HookEventName]?: HookDefinition[] } } =
-    {};
-
-  if (fs.existsSync(projectSettingsPath)) {
-    try {
-      const content = fs.readFileSync(projectSettingsPath, 'utf-8');
-      projectSettings = JSON.parse(content);
-    } catch (error) {
-      debugLogger.error(`Error reading ${projectSettingsPath}:`, error);
-      process.exit(1);
-    }
-  }
-
-  // Merge hooks, deduplicating by checking command/plugin equality
+function mergeHookDefinitions(
+  userHooks: NonNullable<ReturnType<typeof loadSettings>['merged']['hooks']>,
+  projectHooks: ProjectSettings['hooks'],
+) {
   const mergedHooks: { [K in HookEventName]?: HookDefinition[] } = {
-    ...projectSettings.hooks,
+    ...projectHooks,
   };
 
   let changesMade = false;
@@ -87,14 +74,12 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
     if (eventName === 'disabled' || !Array.isArray(definitions)) continue;
 
     const typedEventName = eventName as HookEventName;
-
     if (!mergedHooks[typedEventName]) {
       mergedHooks[typedEventName] = [];
       changesMade = true;
     }
 
     for (const definition of definitions as unknown as HookDefinition[]) {
-      // Check if this definition already exists in project hooks
       const exists = mergedHooks[typedEventName].some(
         (existing) => JSON.stringify(existing) === JSON.stringify(definition),
       );
@@ -106,33 +91,34 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
     }
   }
 
-  if (!changesMade) {
-    debugLogger.log(
-      'All hooks from user settings already exist in project settings.',
-    );
-    return;
-  }
+  return { mergedHooks, changesMade };
+}
 
-  if (dryRun) {
-    debugLogger.log('DRY RUN - Changes that would be made:');
-    debugLogger.log('\nProject settings path:', projectSettingsPath);
-    debugLogger.log('\nMerged hooks configuration:');
-    debugLogger.log(JSON.stringify({ hooks: mergedHooks }, null, 2));
-    return;
-  }
+function previewMigration(
+  projectSettingsPath: string,
+  mergedHooks: ProjectSettings['hooks'],
+) {
+  debugLogger.log('Migration preview:');
+  debugLogger.log('\nProject settings path:', projectSettingsPath);
+  debugLogger.log('\nMerged hooks configuration:');
+  debugLogger.log(JSON.stringify({ hooks: mergedHooks }, null, 2));
+  debugLogger.log('\nRe-run with --confirm to apply these changes.');
+}
 
-  if (!confirm) {
-    debugLogger.log('Migration preview:');
-    debugLogger.log('\nProject settings path:', projectSettingsPath);
-    debugLogger.log('\nMerged hooks configuration:');
-    debugLogger.log(JSON.stringify({ hooks: mergedHooks }, null, 2));
-    debugLogger.log('\nRe-run with --confirm to apply these changes.');
-    return;
-  }
+function previewDryRun(
+  projectSettingsPath: string,
+  mergedHooks: ProjectSettings['hooks'],
+) {
+  debugLogger.log('DRY RUN - Changes that would be made:');
+  debugLogger.log('\nProject settings path:', projectSettingsPath);
+  debugLogger.log('\nMerged hooks configuration:');
+  debugLogger.log(JSON.stringify({ hooks: mergedHooks }, null, 2));
+}
 
-  // Apply changes
-  projectSettings.hooks = mergedHooks;
-
+function writeProjectSettings(
+  projectSettings: ProjectSettings,
+  projectSettingsPath: string,
+) {
   // Ensure .llxprt directory exists
   const llxprtDir = path.dirname(projectSettingsPath);
   if (!fs.existsSync(llxprtDir)) {
@@ -151,6 +137,50 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
     debugLogger.error(`Error writing ${projectSettingsPath}:`, error);
     process.exit(1);
   }
+}
+
+async function migrateHooks(options: MigrateOptions): Promise<void> {
+  const { dryRun = false, confirm = false } = options;
+
+  const settings = loadSettings();
+  const userHooks = settings.merged.hooks;
+
+  if (!userHooks || Object.keys(userHooks).length === 0) {
+    debugLogger.log('No hooks found in user settings. Nothing to migrate.');
+    return;
+  }
+
+  const projectRoot = requireProjectRoot();
+  const projectSettingsPath = path.join(
+    projectRoot,
+    '.llxprt',
+    'settings.json',
+  );
+  const projectSettings = loadProjectSettings(projectSettingsPath);
+  const { mergedHooks, changesMade } = mergeHookDefinitions(
+    userHooks,
+    projectSettings.hooks,
+  );
+
+  if (!changesMade) {
+    debugLogger.log(
+      'All hooks from user settings already exist in project settings.',
+    );
+    return;
+  }
+
+  if (dryRun) {
+    previewDryRun(projectSettingsPath, mergedHooks);
+    return;
+  }
+
+  if (!confirm) {
+    previewMigration(projectSettingsPath, mergedHooks);
+    return;
+  }
+
+  projectSettings.hooks = mergedHooks;
+  writeProjectSettings(projectSettings, projectSettingsPath);
 }
 
 export const migrateCommand: CommandModule<object, MigrateOptions> = {

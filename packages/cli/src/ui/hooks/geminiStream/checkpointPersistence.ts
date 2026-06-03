@@ -82,9 +82,7 @@ export async function createToolCheckpoint(
     );
   }
 
-  if (!commitHash) {
-    commitHash = (await gitService.getCurrentCommitHash()) ?? undefined;
-  }
+  commitHash ??= await gitService.getCurrentCommitHash();
 
   if (!commitHash) {
     onDebugMessage(
@@ -129,6 +127,13 @@ export async function createToolCheckpoint(
  * Saves restorable tool calls as checkpoint JSON files.
  * Extracted from useCheckpointPersistence to keep the hook under 80 lines.
  */
+function isRestorableToolCall(toolCall: TrackedToolCall): boolean {
+  return (
+    toolCall.request.name === 'replace' ||
+    toolCall.request.name === 'write_file'
+  );
+}
+
 async function saveRestorableToolCalls(
   toolCalls: TrackedToolCall[],
   config: Config,
@@ -144,9 +149,9 @@ async function saveRestorableToolCalls(
 
   const restorableToolCalls = toolCalls.filter(
     (tc) =>
-      (tc.request.name === 'replace' || tc.request.name === 'write_file') &&
+      isRestorableToolCall(tc) &&
       tc.status === 'awaiting_approval' &&
-      !checkpointedCallIds?.has(tc.request.callId),
+      !(checkpointedCallIds?.has(tc.request.callId) ?? false),
   );
   if (restorableToolCalls.length === 0) return;
 
@@ -173,7 +178,7 @@ async function saveRestorableToolCalls(
     if (!gitService) {
       const filePath = toolCall.request.args['file_path'] as string;
       onDebugMessage(
-        `Checkpointing is enabled but Git service is not available. Failed to create snapshot for ${filePath ?? toolCall.request.name}. Ensure Git is installed and working properly.`,
+        `Checkpointing is enabled but Git service is not available. Failed to create snapshot for ${filePath}. Ensure Git is installed and working properly.`,
       );
       continue;
     }

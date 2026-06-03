@@ -16,8 +16,10 @@ vi.mock('../config/config.js', () => ({
   Config: vi.fn().mockImplementation((params) => ({
     getSessionId: vi
       .fn()
-      .mockReturnValue(params.sessionId || 'default-session'),
-    getAgentId: vi.fn().mockReturnValue(params.agentId || DEFAULT_AGENT_ID),
+
+      .mockReturnValue(params.sessionId ?? 'default-session'),
+
+    getAgentId: vi.fn().mockReturnValue(params.agentId ?? DEFAULT_AGENT_ID),
   })),
 }));
 
@@ -35,7 +37,7 @@ describe('ToolRenderSuppressionHook', () => {
   });
 
   it('should suppress rendering when there is an active todo', () => {
-    // Set up the context tracker with an active todo
+    // Set up the context tracker with an active task
     const contextTracker = TodoContextTracker.forAgent(
       sessionId,
       DEFAULT_AGENT_ID,
@@ -59,8 +61,8 @@ describe('ToolRenderSuppressionHook', () => {
     expect(shouldSuppress).toBe(true);
   });
 
-  it('should not suppress rendering when there is no active todo', () => {
-    // Ensure there is no active todo
+  it('should not suppress rendering when there is no active task', () => {
+    // Ensure there is no active task
     const contextTracker = TodoContextTracker.forAgent(
       sessionId,
       DEFAULT_AGENT_ID,

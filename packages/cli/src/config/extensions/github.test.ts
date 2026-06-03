@@ -542,6 +542,7 @@ describe('git extension helpers', () => {
         on: (event: string, cb: (...args: unknown[]) => void) => void;
         close: (cb: () => void) => void;
       }) => {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mock helper: event may not be registered
         setImmediate(() => events['finish']?.());
         return dest;
       },
@@ -680,6 +681,7 @@ describe('git extension helpers', () => {
             ),
           pipe: vi.fn().mockImplementation((dest: unknown) => {
             // Simulate error after piping starts
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mock helper: event may not be registered
             setImmediate(() => events['error']?.(new Error('Stream error')));
             return dest;
           }),

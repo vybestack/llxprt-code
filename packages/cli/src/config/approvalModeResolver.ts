@@ -52,12 +52,12 @@ export function resolveApprovalMode(input: ApprovalModeInput): ApprovalMode {
         );
     }
   } else {
-    approvalMode = cliYolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
+    approvalMode = cliYolo === true ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
   }
 
-  if (disableYoloMode || secureModeEnabled) {
+  if (disableYoloMode === true || secureModeEnabled === true) {
     if (approvalMode === ApprovalMode.YOLO) {
-      if (secureModeEnabled) {
+      if (secureModeEnabled === true) {
         logger.error('YOLO mode is disabled by "secureModeEnabled" setting.');
       } else {
         logger.error('YOLO mode is disabled by the "disableYoloMode" setting.');

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import process from 'node:process';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
@@ -159,7 +161,11 @@ export class Config extends ConfigBase {
     if (subagentMgr) {
       subagentMgr.clearExtensionSubagents();
       for (const extension of this.getExtensions()) {
-        if (extension.isActive && extension.subagents?.length) {
+        if (
+          extension.isActive &&
+          extension.subagents !== undefined &&
+          extension.subagents.length > 0
+        ) {
           subagentMgr.registerExtensionSubagents(
             extension.name,
             extension.subagents,
@@ -171,6 +177,7 @@ export class Config extends ConfigBase {
     // Register settings-defined subagents (after extension subagents, before GeminiClient creation)
     if (subagentMgr) {
       const allSettings = this.settingsService.getAllGlobalSettings();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const subagentsSettings = allSettings?.['subagents'] as
         | Record<string, unknown>
         | undefined;
@@ -196,33 +203,54 @@ export class Config extends ConfigBase {
     void this._modelSwitchedDuringSession;
   }
 
-  initializeContentGeneratorConfig: () => Promise<void> = async () => {
-    const logger = new DebugLogger(
-      'llxprt:config:initializeContentGeneratorConfig',
-    );
+  private static stripThoughtSignatures(history: Content[]): Content[] {
+    return history.map((content) => {
+      const newContent = { ...content };
+      if (newContent.parts) {
+        newContent.parts = newContent.parts.map((part) => {
+          if (
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+            part !== null &&
+            typeof part === 'object' &&
+            'thoughtSignature' in part
+          ) {
+            const newPart = { ...part };
+            delete (newPart as { thoughtSignature?: string }).thoughtSignature;
+            return newPart;
+          }
+          return part;
+        });
+      }
+      return newContent;
+    });
+  }
 
-    // Save the current conversation history AND HistoryService before creating a new client
+  private async extractExistingState(logger: DebugLogger): Promise<{
+    history: Content[];
+    historyService: HistoryService | null;
+  }> {
     const previousGeminiClient = this.geminiClient;
-    let existingHistory: Content[] = [];
-    let existingHistoryService: HistoryService | null = null;
-
-    if (previousGeminiClient && previousGeminiClient.isInitialized()) {
-      existingHistory = await previousGeminiClient.getHistory();
-      existingHistoryService = previousGeminiClient.getHistoryService();
-      logger.debug('Retrieved existing state', {
-        historyLength: existingHistory.length,
-        hasHistoryService: !!existingHistoryService,
-      });
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (!previousGeminiClient?.isInitialized()) {
+      return { history: [], historyService: null };
     }
+    const existingHistory = await previousGeminiClient.getHistory();
+    const existingHistoryService = previousGeminiClient.getHistoryService();
+    logger.debug('Retrieved existing state', {
+      historyLength: existingHistory.length,
+      hasHistoryService: !!existingHistoryService,
+    });
+    return {
+      history: existingHistory,
+      historyService: existingHistoryService,
+    };
+  }
 
-    // Create new content generator config
+  private buildNewContentGeneratorConfig() {
     const newContentGeneratorConfig = createContentGeneratorConfig(this);
-
-    // Add provider manager to the config if available (llxprt multi-provider support)
     if (this.providerManager) {
       newContentGeneratorConfig.providerManager = this.providerManager;
     }
-
     const updatedRuntimeState = createAgentRuntimeStateFromConfig(this, {
       runtimeId: this.runtimeState.runtimeId,
       overrides: {
@@ -231,69 +259,69 @@ export class Config extends ConfigBase {
       },
     });
     this.runtimeState = updatedRuntimeState;
+    return newContentGeneratorConfig;
+  }
 
-    // Create new client in local variable first
-    const newGeminiClient = new GeminiClient(this, this.runtimeState);
-
-    // CRITICAL: Store both the history AND the HistoryService instance
-    // This preserves both the API conversation context and the UI's conversation display
+  private transferHistoryToNewClient(
+    logger: DebugLogger,
+    newGeminiClient: GeminiClient,
+    existingHistory: Content[],
+    existingHistoryService: HistoryService | null,
+    newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
+  ): void {
     if (existingHistoryService) {
       logger.debug('Storing existing HistoryService for reuse', {
         historyLength: existingHistory.length,
       });
       newGeminiClient.storeHistoryServiceForReuse(existingHistoryService);
     }
-
-    if (existingHistory.length > 0) {
-      // Vertex and Genai have incompatible encryption and sending history with
-      // throughtSignature from Genai to Vertex will fail, we need to strip them
-      const fromGenaiToVertex =
-        this.contentGeneratorConfig?.vertexai === false &&
-        newContentGeneratorConfig.vertexai === true;
-
-      logger.debug('Storing history for later use', {
-        historyLength: existingHistory.length,
-        fromGenaiToVertex,
-        willStripThoughts: fromGenaiToVertex,
-      });
-
-      // Use storeHistoryForLaterUse to ensure history is preserved through initialization
-      const historyToStore = fromGenaiToVertex
-        ? existingHistory.map((content) => {
-            const newContent = { ...content };
-            if (newContent.parts) {
-              newContent.parts = newContent.parts.map((part) => {
-                if (
-                  part &&
-                  typeof part === 'object' &&
-                  'thoughtSignature' in part
-                ) {
-                  const newPart = { ...part };
-                  delete (newPart as { thoughtSignature?: string })
-                    .thoughtSignature;
-                  return newPart;
-                }
-                return part;
-              });
-            }
-            return newContent;
-          })
-        : existingHistory;
-
-      newGeminiClient.storeHistoryForLaterUse(historyToStore);
-      logger.debug('History stored in new client', {
-        storedHistoryLength: historyToStore.length,
-      });
+    if (existingHistory.length === 0) {
+      return;
     }
+    const fromGenaiToVertex =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      this.contentGeneratorConfig?.vertexai === false &&
+      newContentGeneratorConfig.vertexai === true;
+    logger.debug('Storing history for later use', {
+      historyLength: existingHistory.length,
+      fromGenaiToVertex,
+      willStripThoughts: fromGenaiToVertex,
+    });
+    const historyToStore = fromGenaiToVertex
+      ? Config.stripThoughtSignatures(existingHistory)
+      : existingHistory;
+    newGeminiClient.storeHistoryForLaterUse(historyToStore);
+    logger.debug('History stored in new client', {
+      storedHistoryLength: historyToStore.length,
+    });
+  }
 
-    // Now initialize with the new config
+  initializeContentGeneratorConfig: () => Promise<void> = async () => {
+    const logger = new DebugLogger(
+      'llxprt:config:initializeContentGeneratorConfig',
+    );
+    const previousGeminiClient = this.geminiClient;
+    const { history: existingHistory, historyService: existingHistoryService } =
+      await this.extractExistingState(logger);
+
+    const newContentGeneratorConfig = this.buildNewContentGeneratorConfig();
+    const newGeminiClient = new GeminiClient(this, this.runtimeState);
+
+    this.transferHistoryToNewClient(
+      logger,
+      newGeminiClient,
+      existingHistory,
+      existingHistoryService,
+      newContentGeneratorConfig,
+    );
+
     await newGeminiClient.initialize(newContentGeneratorConfig);
     logger.debug('New client initialized');
 
-    // Only assign to instance properties after successful initialization
     this.contentGeneratorConfig = newContentGeneratorConfig;
     if (
-      previousGeminiClient &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      previousGeminiClient != null &&
       typeof previousGeminiClient.dispose === 'function'
     ) {
       try {
@@ -309,7 +337,6 @@ export class Config extends ConfigBase {
     }
     this.geminiClient = newGeminiClient;
 
-    // Verify history was preserved
     const newHistory = await this.geminiClient.getHistory();
     const newHistoryService = this.geminiClient.getHistoryService();
     logger.debug('State verification after refreshAuth', {
@@ -318,39 +345,49 @@ export class Config extends ConfigBase {
       historyPreserved: newHistory.length > 0,
       historyServicePreserved: existingHistoryService === newHistoryService,
     });
-
-    // Reset the session flag since we're explicitly changing auth and using default model
     this.inFallbackMode = false;
   };
 
   getModel(): string {
     // Delegate to SettingsService as source of truth
     const settingsService = this.getSettingsService();
-    if (settingsService) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (settingsService !== undefined) {
       const activeProvider = settingsService.get('activeProvider') as string;
-      if (activeProvider) {
+      // Preserve old truthiness semantics: call getProviderSettings when
+      // activeProvider is truthy/non-empty. Do not add method-existence guard.
+      if (typeof activeProvider === 'string' && activeProvider.length > 0) {
         const providerSettings =
           settingsService.getProviderSettings(activeProvider);
-        if (providerSettings.model) {
-          return providerSettings.model as string;
+        // Restore old truthiness semantics: falsy model should not be returned.
+        // Only return truthy string models.
+        if (
+          typeof providerSettings.model === 'string' &&
+          providerSettings.model.length > 0
+        ) {
+          return providerSettings.model;
         }
       }
     }
     // Fallback to legacy
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     return this.contentGeneratorConfig?.model || this.model;
   }
 
   setModel(newModel: string): void {
     // Update SettingsService as source of truth
     const settingsService = this.getSettingsService();
-    if (settingsService) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (settingsService !== undefined) {
       const activeProvider = settingsService.get('activeProvider') as string;
-      if (activeProvider) {
+      if (typeof activeProvider === 'string' && activeProvider.length > 0) {
         settingsService.setProviderSetting(activeProvider, 'model', newModel);
       }
     }
     // Keep legacy updates for backward compatibility
-    if (this.contentGeneratorConfig) {
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (this.contentGeneratorConfig != null) {
       this.contentGeneratorConfig.model = newModel;
     }
     // Also update the base model so it persists across refreshAuth
@@ -378,6 +415,7 @@ export class Config extends ConfigBase {
    */
   async refreshMcpContext(): Promise<void> {
     await this.refreshMemory();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (this.geminiClient?.isInitialized()) {
       await this.geminiClient.setTools();
       await this.geminiClient.updateSystemInstruction();
@@ -411,6 +449,7 @@ export class Config extends ConfigBase {
       if (!extension.isActive) {
         continue;
       }
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: array default for optional extension property
       for (const tool of extension.excludeTools || []) {
         excludeToolsSet.add(tool);
       }
@@ -516,6 +555,7 @@ export class Config extends ConfigBase {
 
   private expandPath(filePath: string): string {
     if (filePath.startsWith('~/')) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: HOME env var may be empty string
       return filePath.replace('~', process.env.HOME || '');
     }
     return filePath;
@@ -635,6 +675,7 @@ export class Config extends ConfigBase {
       // Initialize lazily using the 'task-max-async' setting (default 5)
       const settingsService = this.getSettingsService();
       const maxAsyncTasks =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         (settingsService.get('task-max-async') as number) ?? 5;
       this.asyncTaskManager = new AsyncTaskManager(maxAsyncTasks);
     }
@@ -757,6 +798,7 @@ export class Config extends ConfigBase {
     }
     return _getOrCreateScheduler(this, sessionId, callbacks, options, {
       messageBus: schedulerMessageBus,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       toolRegistry: dependencies?.toolRegistry ?? this.getToolRegistry(),
     });
   }
@@ -793,14 +835,13 @@ export class Config extends ConfigBase {
     }
 
     // @requirement:HOOK-001 - Lazy creation on first access
-    if (!this.hookSystem) {
-      this.hookSystem = new HookSystem(this);
-    }
+    this.hookSystem ??= new HookSystem(this);
 
     return this.hookSystem;
   }
 
   async dispose(): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     this.geminiClient?.dispose();
     if (this.mcpClientManager) {
       await this.mcpClientManager.stop();

@@ -38,6 +38,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'list');
 
@@ -65,6 +66,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'list');
 
@@ -87,6 +89,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'disable "File Reader"');
 
@@ -111,6 +114,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'disable code-editor');
 
@@ -132,6 +136,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable code-editor');
 
@@ -153,6 +158,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'disable missing');
 
@@ -176,6 +182,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable code-editor');
 
@@ -202,6 +209,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable code-editor');
 
@@ -226,6 +234,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable file-reader');
 

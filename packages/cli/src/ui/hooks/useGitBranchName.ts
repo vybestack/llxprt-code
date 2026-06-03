@@ -16,6 +16,7 @@ export function useGitBranchName(cwd: string): string | undefined {
   const fetchBranchName = useCallback(
     () =>
       exec(
+        // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
         'git rev-parse --abbrev-ref HEAD',
         { cwd },
         (error, stdout, _stderr) => {
@@ -28,6 +29,7 @@ export function useGitBranchName(cwd: string): string | undefined {
             setBranchName(branch);
           } else {
             exec(
+              // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
               'git rev-parse --short HEAD',
               { cwd },
               (error, stdout, _stderr) => {
@@ -63,7 +65,7 @@ export function useGitBranchName(cwd: string): string | undefined {
             fetchBranchName();
           }
         });
-      } catch (_watchError) {
+      } catch {
         // Silently ignore watcher errors (e.g. permissions or file not existing),
         // similar to how exec errors are handled.
         // The branch name will simply not update automatically.

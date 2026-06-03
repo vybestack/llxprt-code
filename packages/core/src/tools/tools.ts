@@ -140,18 +140,18 @@ export abstract class BaseToolInvocation<
     outcome: ToolConfirmationOutcome,
   ): Promise<void> {
     if (
-      outcome === ToolConfirmationOutcome.ProceedAlways ||
-      outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave
+      (outcome === ToolConfirmationOutcome.ProceedAlways ||
+        outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave) &&
+      this.messageBus &&
+      this._toolName
     ) {
-      if (this.messageBus && this._toolName) {
-        const options = this.getPolicyUpdateOptions(outcome);
-        this.messageBus.publish({
-          type: MessageBusType.UPDATE_POLICY,
-          toolName: this._toolName,
-          persist: outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave,
-          ...options,
-        });
-      }
+      const options = this.getPolicyUpdateOptions(outcome);
+      this.messageBus.publish({
+        type: MessageBusType.UPDATE_POLICY,
+        toolName: this._toolName,
+        persist: outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave,
+        ...options,
+      });
     }
   }
 
@@ -212,12 +212,13 @@ export abstract class BaseToolInvocation<
 
         cleanup();
 
-        if (response.requiresUserConfirmation) {
+        if (response.requiresUserConfirmation === true) {
           resolve('ASK_USER');
           return;
         }
 
         const confirmed =
+          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           response.confirmed ??
           (response.outcome !== undefined
             ? response.outcome !== ToolConfirmationOutcome.Cancel &&
@@ -398,7 +399,11 @@ export abstract class DeclarativeTool<
   get schema(): FunctionDeclaration {
     // Strip requireOne from the schema before sending to the model
     // The requireOne property is used internally for validation but not sent to the model
-    if (this.parameterSchema && typeof this.parameterSchema === 'object') {
+    if (
+      this.parameterSchema !== null &&
+      this.parameterSchema !== undefined &&
+      typeof this.parameterSchema === 'object'
+    ) {
       const schemaClone = {
         ...(this.parameterSchema as Record<string, unknown>),
       };
@@ -566,6 +571,7 @@ export type AnyDeclarativeTool = DeclarativeTool<object, ToolResult>;
  */
 export function isTool(obj: unknown): obj is AnyDeclarativeTool {
   return (
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     typeof obj === 'object' &&
     obj !== null &&
     'name' in obj &&
@@ -675,16 +681,11 @@ export function hasCycleInSchema(schema: object): boolean {
 
     // Crawl all the properties of node
     for (const key in node) {
-      if (Object.prototype.hasOwnProperty.call(node, key)) {
-        if (
-          traverse(
-            (node as Record<string, unknown>)[key],
-            visitedRefs,
-            pathRefs,
-          )
-        ) {
-          return true;
-        }
+      if (
+        Object.prototype.hasOwnProperty.call(node, key) &&
+        traverse((node as Record<string, unknown>)[key], visitedRefs, pathRefs)
+      ) {
+        return true;
       }
     }
 

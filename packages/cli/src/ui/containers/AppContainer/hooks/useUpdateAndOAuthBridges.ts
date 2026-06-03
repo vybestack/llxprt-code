@@ -48,7 +48,7 @@ export function useUpdateAndOAuthBridges({
 
     const oauthManager = getCliOAuthManager();
     const providersMap =
-      oauthManager &&
+      oauthManager != null &&
       typeof oauthManager === 'object' &&
       'providers' in oauthManager
         ? (oauthManager as CliOAuthManagerWithProviders).providers

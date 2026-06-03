@@ -49,7 +49,7 @@ export const createMockCommandContext = (
         loadCheckpoint: vi.fn().mockResolvedValue([]),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any, // Cast because Logger is a class.
-      // TODO: Add profileManager and subagentManager when CommandContext interface is updated
+      // Follow-up (#1569): Add profileManager and subagentManager when CommandContext interface is updated.
       // @plan:PLAN-20250117-SUBAGENTCONFIG.P07
     },
     ui: {

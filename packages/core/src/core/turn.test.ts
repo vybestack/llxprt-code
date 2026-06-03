@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type {
   ServerGeminiToolCallRequestEvent,
@@ -45,9 +47,9 @@ vi.mock('../utils/generateContentResponseUtilities', () => ({
   getResponseText: (resp: GenerateContentResponse) =>
     // Filter out thought parts - same as real implementation
     resp.candidates?.[0]?.content?.parts
-      ?.filter((part) => !(part as { thought?: boolean }).thought)
+      ?.filter((part) => (part as { thought?: boolean }).thought !== true)
       .map((part) => part.text)
-      .join('') || undefined,
+      .join('') ?? undefined,
   getFunctionCalls: (resp: GenerateContentResponse) => resp.functionCalls ?? [],
 }));
 
@@ -188,6 +190,7 @@ describe('Turn', () => {
         }),
       );
       expect(event2.value.callId).toStrictEqual(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         expect.stringMatching(/^tool2-\d{13}-\w{10,}$/),
       );
       expect(turn.pendingToolCalls[1]).toStrictEqual(event2.value);
@@ -304,10 +307,7 @@ describe('Turn', () => {
           [Symbol.asyncIterator]: () => ({
             next: () => generator.next(),
             return: returnSpy,
-            throw: (e: unknown) => {
-              if (generator.throw) return generator.throw(e);
-              throw e;
-            },
+            throw: (e: unknown) => generator.throw(e),
           }),
         };
 

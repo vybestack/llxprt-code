@@ -25,15 +25,21 @@ export function useExtensionAutoUpdate({
   );
 
   useEffect(() => {
-    if (!autoUpdateSettings?.enabled) {
-      return;
+    if (autoUpdateSettings?.enabled !== true) {
+      return undefined;
     }
 
     const updater = new ExtensionAutoUpdater({
       settings: autoUpdateSettings,
       notify: (message, level) => {
-        const type: ConsoleMessageItem['type'] =
-          level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'info';
+        let type: ConsoleMessageItem['type'];
+        if (level === 'error') {
+          type = 'error';
+        } else if (level === 'warn') {
+          type = 'warn';
+        } else {
+          type = 'info';
+        }
         onConsoleMessage({
           type,
           content: message,

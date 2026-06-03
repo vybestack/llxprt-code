@@ -36,6 +36,8 @@
  * recordHistory's thoughtBlocks logic, but we need to verify the full flow.
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiChat } from './geminiChat.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -483,7 +485,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     // Check the second call's contents - it should have the AI message with thinking + tool_call
     expect(calls.length).toBe(2);
-    const secondCallContents = calls[1].contents ?? [];
+    const secondCallContents = calls[1].contents;
 
     // Find the AI message with tool calls in the history sent to provider
     const aiWithToolCall = secondCallContents.find(
@@ -666,7 +668,9 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     // Find the model message with tool calls
     const modelMessage = geminiContents.find(
-      (c) => c.role === 'model' && c.parts?.some((p) => 'functionCall' in p),
+      (c) =>
+        c.role === 'model' &&
+        (c.parts?.some((p) => 'functionCall' in p) ?? false),
     );
 
     expect(modelMessage).toBeDefined();
@@ -678,7 +682,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     expect(thinkingPart).toBeDefined();
     expect(
-      (thinkingPart as { thoughtSignature?: string })?.thoughtSignature,
+      (thinkingPart as { thoughtSignature?: string }).thoughtSignature,
     ).toBe('sig-test-123');
 
     // Also verify order: thinking must come BEFORE tool calls
@@ -708,7 +712,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       options: GenerateChatOptions,
     ) {
       callCount++;
-      capturedContents.push([...(options.contents ?? [])]);
+      capturedContents.push([...options.contents]);
 
       if (callCount === 1) {
         // First turn: yield thinking then tool call (separately, like Anthropic does)
@@ -894,6 +898,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     ];
 
     // The isThoughtPart check from geminiChat.ts:
+
     const isThoughtPart = (
       part: unknown,
     ): part is {
@@ -902,12 +907,10 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       thoughtSignature?: string;
       llxprtSourceField?: string;
     } =>
-      Boolean(
-        part &&
-          typeof part === 'object' &&
-          'thought' in part &&
-          (part as { thought: unknown }).thought === true,
-      );
+      part != null &&
+      typeof part === 'object' &&
+      'thought' in part &&
+      (part as { thought: unknown }).thought === true;
 
     // Extract thought parts like recordHistory does
     const thoughtParts = consolidatedParts.filter(isThoughtPart);
@@ -1153,13 +1156,12 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     // 3. Attach thoughtBlocks to first output content
 
     // The isThoughtPart check:
+    // eslint-disable-next-line sonarjs/no-identical-functions -- Intentionally duplicated for test isolation; each test needs its own standalone predicate.
     const isThoughtPart = (part: unknown): boolean =>
-      Boolean(
-        part &&
-          typeof part === 'object' &&
-          'thought' in part &&
-          (part as { thought: unknown }).thought === true,
-      );
+      part != null &&
+      typeof part === 'object' &&
+      'thought' in part &&
+      (part as { thought: unknown }).thought === true;
 
     const thoughtParts = simulatedParts.filter(isThoughtPart);
 
@@ -1224,7 +1226,9 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     // Find the model message
     const modelMessage = geminiContents.find(
-      (c) => c.role === 'model' && c.parts?.some((p) => 'functionCall' in p),
+      (c) =>
+        c.role === 'model' &&
+        (c.parts?.some((p) => 'functionCall' in p) ?? false),
     );
 
     expect(modelMessage).toBeDefined();
@@ -1236,7 +1240,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     expect(thoughtPart).toBeDefined();
     expect(
-      (thoughtPart as { thoughtSignature?: string })?.thoughtSignature,
+      (thoughtPart as { thoughtSignature?: string }).thoughtSignature,
     ).toBe('sig-abc-123');
 
     // Now convert back to IContent (what happens when we call toIContents)

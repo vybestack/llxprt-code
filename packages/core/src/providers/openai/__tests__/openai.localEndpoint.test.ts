@@ -128,6 +128,7 @@ function buildCallOptions(
   });
 }
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   FakeOpenAIClass.reset();
   // Clear environment variables that could interfere with auth tests
@@ -143,6 +144,7 @@ beforeEach(() => {
   );
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(() => {
   clearActiveProviderRuntimeContext();
   vi.unstubAllEnvs();

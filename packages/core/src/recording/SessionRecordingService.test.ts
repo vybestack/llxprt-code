@@ -100,7 +100,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
   });
 
   afterEach(async () => {
-    await service?.dispose();
+    await service.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 

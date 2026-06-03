@@ -406,17 +406,29 @@ export class ProactiveRenewalManager {
     }
 
     for (const target of targets) {
-      if (!this.isOAuthEnabled(target.providerName)) {
-        continue;
-      }
-
       const bucket = this.normalizeBucket(target.bucket);
-      const token = await this.tokenStore.getToken(target.providerName, bucket);
-      if (!token) {
-        continue;
+      const token = await this.maybeGetTokenForRenewal(
+        target.providerName,
+        bucket,
+      );
+      if (token) {
+        this.scheduleProactiveRenewal(target.providerName, bucket, token);
       }
-      this.scheduleProactiveRenewal(target.providerName, bucket, token);
     }
+  }
+
+  /**
+   * Gets token for proactive renewal if OAuth is enabled and token exists.
+   */
+  private async maybeGetTokenForRenewal(
+    providerName: string,
+    bucket: string,
+  ): Promise<OAuthToken | null> {
+    if (!this.isOAuthEnabled(providerName)) {
+      return null;
+    }
+    const token = await this.tokenStore.getToken(providerName, bucket);
+    return token ?? null;
   }
 
   /**

@@ -51,11 +51,9 @@ function getOpenUrlsCommands(readmeUrl: string): string[] {
   const urlsToOpen = [readmeUrl];
 
   const repoInfo = getGitHubRepoInfo();
-  if (repoInfo) {
-    urlsToOpen.push(
-      `https://github.com/${repoInfo.owner}/${repoInfo.repo}/settings/secrets/actions`,
-    );
-  }
+  urlsToOpen.push(
+    `https://github.com/${repoInfo.owner}/${repoInfo.repo}/settings/secrets/actions`,
+  );
 
   // Create and join the individual commands
   const commands = urlsToOpen.map((url) => `${openCmd} "${url}"`);
@@ -73,7 +71,7 @@ export async function updateGitignore(gitRepoRoot: string): Promise<void> {
     let fileExists = true;
     try {
       existingContent = await fs.promises.readFile(gitignorePath, 'utf8');
-    } catch (_error) {
+    } catch {
       // File doesn't exist
       fileExists = false;
     }
@@ -165,8 +163,10 @@ async function downloadFiles({
 async function createDirectory(dirPath: string): Promise<void> {
   try {
     await fs.promises.mkdir(dirPath, { recursive: true });
-  } catch (_error) {
-    debugLogger.debug(`Failed to create ${dirPath} directory:`, _error);
+  } catch (error) {
+    debugLogger.debug(
+      () => `Failed to create ${dirPath} directory: ${String(error)}`,
+    );
     throw new Error(
       `Unable to create ${dirPath} directory. Do you have file permissions in the current directory?`,
     );
@@ -219,15 +219,16 @@ export const setupGithubCommand: SlashCommand = {
     let gitRepoRoot: string;
     try {
       gitRepoRoot = getGitRepoRoot();
-    } catch (_error) {
-      debugLogger.debug(`Failed to get git repo root:`, _error);
+    } catch (error) {
+      debugLogger.debug(() => `Failed to get git repo root: ${String(error)}`);
       throw new Error(
         'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
       );
     }
 
     // Get the latest release tag from GitHub
-    const proxy = context?.services?.config?.getProxy();
+    const proxy =
+      'services' in context ? context.services.config?.getProxy() : undefined;
     const releaseTag = await getLatestGitHubRelease(proxy);
     const readmeUrl = `https://github.com/acoliver/run-llxprt-code/blob/${releaseTag}/README.md#quick-start`;
 

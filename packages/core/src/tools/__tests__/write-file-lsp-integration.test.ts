@@ -64,7 +64,7 @@ class MockLspServiceClient {
       return [];
     }
     // Return diagnostics for this file if present
-    return this.diagnosticsByFile.get(_filePath) || [];
+    return this.diagnosticsByFile.get(_filePath) ?? [];
   }
 
   async getAllDiagnostics(): Promise<Record<string, Diagnostic[]>> {

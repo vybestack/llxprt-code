@@ -48,7 +48,7 @@ export function useAutoAcceptIndicator({
             : ApprovalMode.AUTO_EDIT;
       }
 
-      if (nextApprovalMode) {
+      if (nextApprovalMode !== undefined) {
         try {
           config.setApprovalMode(nextApprovalMode);
           // Update local state immediately for responsiveness

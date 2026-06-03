@@ -118,7 +118,7 @@ export function createAnthropicApiCall(
 
     const promise = apiCall();
     // The promise has a withResponse() method we can call
-    if (promise && typeof promise === 'object' && 'withResponse' in promise) {
+    if (typeof promise === 'object' && 'withResponse' in promise) {
       return (
         promise as {
           withResponse: () => Promise<{
@@ -210,13 +210,11 @@ export async function executeAnthropicApiCall(
       // Extract and process rate limit headers
       rateLimitInfo = extractRateLimitHeaders(responseHeaders, rateLimitLogger);
 
-      if (rateLimitInfo) {
-        const info = rateLimitInfo;
-        rateLimitLogger.debug(() => formatRateLimitSummary(info));
+      const info = rateLimitInfo;
+      rateLimitLogger.debug(() => formatRateLimitSummary(info));
 
-        // Check and warn if approaching limits
-        checkRateLimits(info, rateLimitLogger);
-      }
+      // Check and warn if approaching limits
+      checkRateLimits(info, rateLimitLogger);
     }
   } catch (error) {
     // Dump error if enabled

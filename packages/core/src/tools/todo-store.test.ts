@@ -93,6 +93,7 @@ describe('TodoStore', () => {
 
     it('should create todos directory if not exists', async () => {
       const todosDir = path.join(tempDir, '.llxprt', 'todos');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (fs.existsSync(todosDir)) {
         fs.rmSync(todosDir, { recursive: true });
       }

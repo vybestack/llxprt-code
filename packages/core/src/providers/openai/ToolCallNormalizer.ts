@@ -102,6 +102,7 @@ export class ToolCallNormalizer {
     // Strip Kimi-K2 style prefixes where model concatenates "functions" or "call_functions"
     // with the actual tool name (e.g., "functionslist_directory" -> "list_directory")
     // Pattern: (call_)?functions<actual_tool_name><optional_number>
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     const kimiPrefixMatch = /^(?:call_)?functions([a-z_]+[a-z])(\d*)$/i.exec(
       normalized,
     );
@@ -142,12 +143,12 @@ export class ToolCallNormalizer {
   /**
    * Validate normalization result
    */
-  validateNormalized(call: NormalizedToolCall): boolean {
-    if (!call.name || typeof call.name !== 'string') {
+  validateNormalized(call: { name?: unknown; args?: unknown }): boolean {
+    if (typeof call.name !== 'string' || call.name === '') {
       return false;
     }
 
-    if (!call.args || typeof call.args !== 'object') {
+    if (call.args === null || typeof call.args !== 'object') {
       return false;
     }
 

@@ -665,6 +665,7 @@ describe('SessionDiscovery extensions', () => {
             );
 
             if (result !== null) {
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(result.length).toBeLessThanOrEqual(120);
             }
           },
@@ -745,6 +746,7 @@ describe('SessionDiscovery extensions', () => {
 
             // Result should either be the original (if short enough) or truncated
             if (result !== null) {
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(typeof result).toBe('string');
             }
           },

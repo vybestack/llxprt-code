@@ -222,6 +222,7 @@ describe('CheckAsyncTasksTool', () => {
 
       // Simulate 15 seconds passing
       const task = manager.getTask('task-seconds');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (task) {
         task.launchedAt = launchedAt - 15000;
         task.completedAt = launchedAt;
@@ -248,6 +249,7 @@ describe('CheckAsyncTasksTool', () => {
 
       // Simulate 2 minutes 30 seconds
       const task = manager.getTask('task-minutes');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (task) {
         task.launchedAt = launchedAt - 150000; // 2m 30s
         task.completedAt = launchedAt;
@@ -274,6 +276,7 @@ describe('CheckAsyncTasksTool', () => {
 
       // Simulate 1 hour 15 minutes
       const task = manager.getTask('task-hours');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (task) {
         task.launchedAt = launchedAt - 4500000; // 1h 15m
         task.completedAt = launchedAt;

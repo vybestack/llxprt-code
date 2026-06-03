@@ -29,12 +29,14 @@ export function useStaticHistoryRefresh(
     const currentFirstId = history.length > 0 ? history[0].id : null;
     const previousState = previousStateRef.current;
 
-    const historyShrank =
-      history.length < previousState.length ||
-      (previousState.firstId !== null && currentFirstId === null) ||
-      (previousState.firstId !== null &&
-        currentFirstId !== null &&
-        currentFirstId > previousState.firstId);
+    const lengthDecreased = history.length < previousState.length;
+    const firstIdCleared =
+      previousState.firstId !== null && currentFirstId === null;
+    const firstIdIncreased =
+      previousState.firstId !== null &&
+      currentFirstId !== null &&
+      currentFirstId > previousState.firstId;
+    const historyShrank = lengthDecreased || firstIdCleared || firstIdIncreased;
 
     if (historyShrank) {
       refreshStatic();

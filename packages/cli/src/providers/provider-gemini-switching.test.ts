@@ -63,6 +63,7 @@ describe('Provider-Gemini Switching', () => {
   it('uses Gemini when no provider is active', async () => {
     const manager = createManager();
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (manager.hasActiveProvider()) {
       manager.clearActiveProvider();
     }

@@ -35,15 +35,22 @@ export function useInitialPromptSubmit({
       return;
     }
 
-    if (
+    const isDialogOpen =
       blockedByDialogs.isAuthDialogOpen ||
       blockedByDialogs.isThemeDialogOpen ||
-      blockedByDialogs.isEditorDialogOpen ||
+      blockedByDialogs.isEditorDialogOpen;
+    const isConfigDialogOpen =
       blockedByDialogs.isProviderDialogOpen ||
       blockedByDialogs.isToolsDialogOpen ||
-      blockedByDialogs.isCreateProfileDialogOpen ||
+      blockedByDialogs.isCreateProfileDialogOpen;
+    const isSpecialDialogOpen =
       blockedByDialogs.showPrivacyNotice ||
-      blockedByDialogs.isWelcomeDialogOpen ||
+      blockedByDialogs.isWelcomeDialogOpen;
+
+    if (
+      isDialogOpen ||
+      isConfigDialogOpen ||
+      isSpecialDialogOpen ||
       !geminiClientPresent
     ) {
       return;

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * Behavioral tests for SecureStore.
  *
@@ -512,13 +514,15 @@ describe('SecureStore — CRUD Operations', () => {
       fallbackDir: tempDir,
     });
 
+    let err: unknown;
     try {
       await store.has('locked-key');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('LOCKED');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('LOCKED');
   });
 });
 
@@ -600,14 +604,16 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const badEnvelope = JSON.stringify({ v: 99, crypto: {}, data: 'abc' });
     await fs.writeFile(path.join(tempDir, 'bad-version.enc'), badEnvelope);
 
+    let err: unknown;
     try {
       await store.get('bad-version');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
-      expect((err as SecureStoreError).remediation).toContain('upgrade');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
+    expect((err as SecureStoreError).remediation).toContain('upgrade');
   });
 
   /**
@@ -646,10 +652,12 @@ describe('SecureStore — Encrypted File Fallback', () => {
 
     const stat = await fs.stat(nestedDir);
     // On macOS/Linux, check permissions (skip on Windows)
-    if (process.platform !== 'win32') {
-      const perms = stat.mode & 0o777;
-      expect(perms).toBe(0o700);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (process.platform === 'win32') {
+      return;
     }
+    const perms = stat.mode & 0o777;
+    expect(perms).toBe(0o700);
   });
 
   /**
@@ -667,10 +675,11 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const filePath = path.join(tempDir, 'perm-key.enc');
     const stat = await fs.stat(filePath);
 
-    if (process.platform !== 'win32') {
-      const perms = stat.mode & 0o777;
-      expect(perms).toBe(0o600);
-    }
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (process.platform === 'win32')
+      throw new Error('unreachable: narrowing failed');
+    const perms = stat.mode & 0o777;
+    expect(perms).toBe(0o600);
   });
 });
 
@@ -703,13 +712,15 @@ describe('SecureStore — No Backward Compatibility', () => {
     const legacyContent = 'aabbccdd:eeff0011:2233445566778899';
     await fs.writeFile(path.join(tempDir, 'legacy-key.enc'), legacyContent);
 
+    let err: unknown;
     try {
       await store.get('legacy-key');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
   });
 
   /**
@@ -726,17 +737,18 @@ describe('SecureStore — No Backward Compatibility', () => {
     // Write plaintext (simulates old plaintext storage)
     await fs.writeFile(path.join(tempDir, 'plain-key.enc'), 'plain-secret');
 
+    let err: unknown;
     try {
       await store.get('plain-key');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
-      // Remediation should suggest re-saving, not migration
-      expect((err as SecureStoreError).remediation.toLowerCase()).toContain(
-        're-save',
-      );
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
+    expect((err as SecureStoreError).remediation.toLowerCase()).toContain(
+      're-save',
+    );
   });
 });
 
@@ -764,14 +776,16 @@ describe('SecureStore — Error Taxonomy', () => {
       fallbackPolicy: 'deny',
     });
 
+    let err: unknown;
     try {
       await store.set('denied-key', 'denied-value');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('UNAVAILABLE');
-      expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('UNAVAILABLE');
+    expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
   });
 
   /**
@@ -791,13 +805,15 @@ describe('SecureStore — Error Taxonomy', () => {
       JSON.stringify({ v: 1, crypto: { alg: 'rot13' }, data: 'not-real' }),
     );
 
+    let err: unknown;
     try {
       await store.get('bad-data');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
   });
 
   /**
@@ -924,21 +940,25 @@ describe('SecureStore — Key Validation', () => {
       fallbackPolicy: 'allow',
     });
 
+    let err1: unknown;
     try {
       await store.set('path/traversal', 'evil');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err1 = __caught;
     }
+    expect(err1).toBeDefined();
+    expect(err1).toBeInstanceOf(SecureStoreError);
+    expect((err1 as SecureStoreError).code).toBe('CORRUPT');
 
+    let err2: unknown;
     try {
       await store.set('path\\traversal', 'evil');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err2 = __caught;
     }
+    expect(err2).toBeDefined();
+    expect(err2).toBeInstanceOf(SecureStoreError);
+    expect((err2 as SecureStoreError).code).toBe('CORRUPT');
   });
 
   /**
@@ -952,13 +972,15 @@ describe('SecureStore — Key Validation', () => {
       fallbackPolicy: 'allow',
     });
 
+    let err: unknown;
     try {
       await store.set('null\0byte', 'evil');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
   });
 
   /**
@@ -972,21 +994,25 @@ describe('SecureStore — Key Validation', () => {
       fallbackPolicy: 'allow',
     });
 
+    let err1: unknown;
     try {
       await store.set('.', 'evil');
-      expect.unreachable('should have thrown for "."');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err1 = __caught;
     }
+    expect(err1).toBeDefined();
+    expect(err1).toBeInstanceOf(SecureStoreError);
+    expect((err1 as SecureStoreError).code).toBe('CORRUPT');
 
+    let err2: unknown;
     try {
       await store.set('..', 'evil');
-      expect.unreachable('should have thrown for ".."');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err2 = __caught;
     }
+    expect(err2).toBeDefined();
+    expect(err2).toBeInstanceOf(SecureStoreError);
+    expect((err2 as SecureStoreError).code).toBe('CORRUPT');
   });
 
   /**
@@ -1337,14 +1363,16 @@ describe('SecureStore — Fallback Policy', () => {
       fallbackPolicy: 'deny',
     });
 
+    let err: unknown;
     try {
       await store.set('denied', 'value');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('UNAVAILABLE');
-      expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('UNAVAILABLE');
+    expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
   });
 
   /**
@@ -1449,21 +1477,29 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
     expect(fallbackDir).not.toContain(path.join('.llxprt', 'secure-store'));
 
     // Should use platform-standard paths
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (process.platform === 'darwin') {
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir).toContain('Library/Application Support');
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir).toContain('llxprt-code');
     } else if (process.platform === 'win32') {
       // Windows: should be under LOCALAPPDATA or AppData
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir.toLowerCase()).toMatch(/appdata|localappdata/i);
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir).toContain('llxprt-code');
     } else {
       // Linux: XDG_DATA_HOME or ~/.local/share
       const xdgDataHome = process.env.XDG_DATA_HOME;
       if (xdgDataHome) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(fallbackDir).toContain(xdgDataHome);
       } else {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(fallbackDir).toContain('.local/share');
       }
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir).toContain('llxprt-code');
     }
 

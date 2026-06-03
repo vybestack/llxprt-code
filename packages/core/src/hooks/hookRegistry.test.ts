@@ -610,10 +610,7 @@ describe('HookRegistry', () => {
 
       // Should have emitted exactly one invalid-event warning for InvalidEvent
       const invalidEventWarnings = emitSpy.mock.calls.filter(
-        ([event, payload]) =>
-          event === CoreEvent.Output &&
-          typeof payload === 'object' &&
-          payload !== null &&
+        ([, payload]) =>
           'chunk' in payload &&
           typeof (payload as { chunk: string }).chunk === 'string' &&
           (payload as { chunk: string }).chunk.includes('InvalidEvent'),

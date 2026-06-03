@@ -10,6 +10,7 @@ import type {
   CommandContext,
   MessageActionReturn,
   OpenDialogActionReturn,
+  LoggingDialogData,
 } from './types.js';
 import { CommandKind } from './types.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -35,7 +36,7 @@ interface LogEntryBase {
 interface RequestLogEntry extends LogEntryBase {
   type: 'request';
   messages?: Array<{
-    content: string;
+    content?: string;
   }>;
 }
 
@@ -46,17 +47,114 @@ interface ResponseLogEntry extends LogEntryBase {
 
 type LogEntry = RequestLogEntry | ResponseLogEntry;
 
+type LogEntryRecord = Record<string, unknown>;
+
+function isRecord(obj: unknown): obj is LogEntryRecord {
+  return typeof obj === 'object' && obj !== null;
+}
+
 function isLogEntry(obj: unknown): obj is LogEntry {
+  if (!isRecord(obj)) {
+    return false;
+  }
+
+  const { timestamp, type, provider } = obj;
   return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    'timestamp' in obj &&
-    'type' in obj &&
-    'provider' in obj &&
-    typeof (obj as LogEntry).timestamp === 'string' &&
-    typeof (obj as LogEntry).type === 'string' &&
-    typeof (obj as LogEntry).provider === 'string'
+    typeof timestamp === 'string' &&
+    (type === 'request' || type === 'response') &&
+    typeof provider === 'string'
   );
+}
+
+function isLoggingDialogData(
+  dialogData: OpenDialogActionReturn['dialogData'],
+): dialogData is LoggingDialogData {
+  return isRecord(dialogData) && Array.isArray(dialogData.entries);
+}
+
+function normalizeCommandArgs(args: unknown): string {
+  return typeof args === 'string' ? args : '';
+}
+
+function splitArgs(args: unknown): string[] {
+  const trimmed = normalizeCommandArgs(args).trim();
+  return trimmed.length === 0 ? [] : trimmed.split(/\s+/);
+}
+
+function formatContentSnippet(content: string): string {
+  const snippet = content.substring(0, 100);
+  return content.length > 100 ? `${snippet}...` : snippet;
+}
+
+function formatLogEntry(entry: LogEntry, index: number): string {
+  const timestamp = new Date(entry.timestamp).toLocaleTimeString();
+  const typeIcon = entry.type === 'request' ? '→' : '←';
+  let content = '';
+
+  if (entry.type === 'request') {
+    const messages = entry.messages;
+    const lastMessage = messages?.[messages.length - 1];
+    const messageContent = lastMessage?.content;
+    if (messageContent !== undefined && messageContent !== '') {
+      content = formatContentSnippet(messageContent);
+    }
+  } else if (entry.response !== undefined && entry.response !== '') {
+    content = formatContentSnippet(entry.response);
+  }
+
+  return `[${index + 1}] ${timestamp} ${typeIcon} ${entry.provider}: ${content}`;
+}
+
+function tryParseJsonLine(line: string): unknown | undefined {
+  try {
+    return JSON.parse(line) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function appendParsedLogLines(entries: unknown[], lines: string[]): void {
+  for (const line of lines) {
+    const parsed = tryParseJsonLine(line);
+    if (parsed !== undefined) {
+      entries.push(parsed);
+    }
+  }
+}
+
+function parseRedactionUpdate(arg: string): [string, boolean] | undefined {
+  const [key, value] = arg.replace('--', '').split('=');
+  const boolValue = value === 'true';
+
+  switch (key) {
+    case 'api-keys':
+    case 'credentials':
+      return ['redactSensitiveData', boolValue];
+    case 'file-paths':
+      return ['redactFilePaths', boolValue];
+    case 'urls':
+      return ['redactUrls', boolValue];
+    case 'emails':
+      return ['redactEmails', boolValue];
+    case 'personal-info':
+      return ['redactPersonalInfo', boolValue];
+    default:
+      return undefined;
+  }
+}
+
+function parseRedactionUpdates(args: string[]): Record<string, boolean> {
+  const updates: Record<string, boolean> = {};
+
+  for (const arg of args) {
+    const update = parseRedactionUpdate(arg);
+    if (update !== undefined) {
+      const [key, value] = update;
+      updates[key] = value;
+    }
+  }
+
+  return updates;
 }
 
 export async function handleLoggingCommand(
@@ -111,9 +209,8 @@ async function handleEnableLogging(
   context: LoggingCommandContext,
 ): Promise<CommandResult> {
   // Enable conversation logging through settings
-  const currentTelemetry = context.settings.merged.telemetry || {};
   context.settings.setValue(SettingScope.User, 'telemetry', {
-    ...currentTelemetry,
+    ...context.settings.merged.telemetry,
     logConversations: true,
   });
 
@@ -133,9 +230,8 @@ async function handleEnableLogging(
 async function handleDisableLogging(
   context: LoggingCommandContext,
 ): Promise<CommandResult> {
-  const currentTelemetry = context.settings.merged.telemetry || {};
   context.settings.setValue(SettingScope.User, 'telemetry', {
-    ...currentTelemetry,
+    ...context.settings.merged.telemetry,
     logConversations: false,
   });
 
@@ -203,14 +299,7 @@ async function handleShowLogs(
       const startIndex = Math.max(0, lines.length - remainingLines);
       const fileLines = lines.slice(startIndex);
 
-      for (const line of fileLines) {
-        try {
-          const parsed = JSON.parse(line);
-          allEntries.push(parsed);
-        } catch {
-          // Skip invalid JSON lines
-        }
-      }
+      appendParsedLogLines(allEntries, fileLines);
 
       remainingLines -= fileLines.length;
     }
@@ -267,36 +356,7 @@ async function handleRedactionSettings(
   }
 
   // Parse redaction setting changes
-  const updates: Record<string, boolean> = {};
-
-  for (const arg of args) {
-    const [key, value] = arg.replace('--', '').split('=');
-    const boolValue = value === 'true';
-
-    switch (key) {
-      case 'api-keys':
-        updates.redactSensitiveData = boolValue; // Maps to existing setting
-        break;
-      case 'credentials':
-        updates.redactSensitiveData = boolValue; // Maps to existing setting
-        break;
-      case 'file-paths':
-        updates.redactFilePaths = boolValue;
-        break;
-      case 'urls':
-        updates.redactUrls = boolValue;
-        break;
-      case 'emails':
-        updates.redactEmails = boolValue;
-        break;
-      case 'personal-info':
-        updates.redactPersonalInfo = boolValue;
-        break;
-      default:
-        // Unknown key, ignore
-        break;
-    }
-  }
+  const updates = parseRedactionUpdates(args);
 
   if (Object.keys(updates).length === 0) {
     return {
@@ -308,9 +368,8 @@ async function handleRedactionSettings(
   }
 
   // Update telemetry settings
-  const currentTelemetry = context.settings.merged.telemetry || {};
   context.settings.setValue(SettingScope.User, 'telemetry', {
-    ...currentTelemetry,
+    ...context.settings.merged.telemetry,
     ...updates,
   });
 
@@ -372,7 +431,7 @@ const enableCommand: SlashCommand = {
       );
       return;
     }
-    const argsArray = args ? args.split(/\s+/) : [];
+    const argsArray = splitArgs(args);
     const result = await handleEnableLogging(argsArray, {
       config: context.services.config,
       settings: context.services.settings,
@@ -435,7 +494,7 @@ const redactionCommand: SlashCommand = {
       );
       return;
     }
-    const argsArray = args ? args.split(/\s+/) : [];
+    const argsArray = splitArgs(args);
     const result = await handleRedactionSettings(argsArray, {
       config: context.services.config,
       settings: context.services.settings,
@@ -467,7 +526,7 @@ const showCommand: SlashCommand = {
       );
       return;
     }
-    const argsArray = args ? args.split(/\s+/) : [];
+    const argsArray = splitArgs(args);
     const result = await handleShowLogs(argsArray, {
       config: context.services.config,
       settings: context.services.settings,
@@ -480,52 +539,36 @@ const showCommand: SlashCommand = {
         },
         Date.now(),
       );
-    } else if (result.type === 'dialog') {
-      // Format the log entries as text for now until dialog system is implemented
-      const entries =
-        (result.dialogData as { entries?: unknown[] })?.entries || [];
-      if (entries.length === 0) {
-        context.ui.addItem(
-          {
-            type: 'info',
-            text: 'No log entries found',
-          },
-          Date.now(),
-        );
-      } else {
-        // Format entries for display
-        const formattedEntries = entries
-          .filter(isLogEntry)
-          .map((entry: LogEntry, index: number) => {
-            const timestamp = new Date(entry.timestamp).toLocaleTimeString();
-            const typeIcon = entry.type === 'request' ? '→' : '←';
-            let content = '';
-
-            if (entry.type === 'request' && entry.messages) {
-              const lastMessage = entry.messages[entry.messages.length - 1];
-              if (lastMessage && lastMessage.content) {
-                content = lastMessage.content.substring(0, 100);
-                if (lastMessage.content.length > 100) content += '...';
-              }
-            } else if (entry.type === 'response' && entry.response) {
-              content = entry.response.substring(0, 100);
-              if (entry.response.length > 100) content += '...';
-            }
-
-            return `[${index + 1}] ${timestamp} ${typeIcon} ${entry.provider}: ${content}`;
-          })
-          .join('\n');
-
-        context.ui.addItem(
-          {
-            type: 'info',
-            text: `Conversation Logs (${entries.length} entries):\n${'─'.repeat(60)}\n${formattedEntries}\n${'─'.repeat(60)}`,
-          },
-          Date.now(),
-        );
-      }
       return;
     }
+
+    // Format the log entries as text for now until dialog system is implemented
+    const entries = isLoggingDialogData(result.dialogData)
+      ? result.dialogData.entries
+      : [];
+    if (entries.length === 0) {
+      context.ui.addItem(
+        {
+          type: 'info',
+          text: 'No log entries found',
+        },
+        Date.now(),
+      );
+      return;
+    }
+
+    const formattedEntries = entries
+      .filter(isLogEntry)
+      .map(formatLogEntry)
+      .join('\n');
+
+    context.ui.addItem(
+      {
+        type: 'info',
+        text: `Conversation Logs (${entries.length} entries):\n${'─'.repeat(60)}\n${formattedEntries}\n${'─'.repeat(60)}`,
+      },
+      Date.now(),
+    );
   },
 };
 
@@ -543,8 +586,9 @@ export const loggingCommand: SlashCommand = {
   ],
   action: async (context: CommandContext, args: string) => {
     // Default action shows status when no subcommand provided
-    if (!args || args.trim() === '') {
-      return statusCommand.action!(context, '');
+    if (normalizeCommandArgs(args).trim() === '') {
+      await statusCommand.action?.(context, '');
+      return;
     }
     // If args provided but no subcommand matched, show help
     context.ui.addItem(

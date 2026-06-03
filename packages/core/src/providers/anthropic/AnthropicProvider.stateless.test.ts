@@ -57,7 +57,7 @@ vi.mock('@anthropic-ai/sdk', () => {
           FakeAnthropic.requests.push({ request });
           const req = request as { stream?: boolean };
 
-          if (req.stream) {
+          if (req.stream === true) {
             // Return async iterable for streaming
             return {
               async *[Symbol.asyncIterator]() {
@@ -155,6 +155,7 @@ class TestAnthropicProvider extends AnthropicProvider {
 }
 
 class TestAnthropicProviderOAuth extends AnthropicProvider {
+  // eslint-disable-next-line sonarjs/no-identical-functions -- Constructor intentionally matches TestAnthropicProvider for test consistency; getAuthToken/getAuthTokenForPrompt implementations differ.
   constructor() {
     super(undefined, 'https://api.anthropic.com', {
       getEphemeralSettings: () => ({ streaming: 'disabled' }),
@@ -188,6 +189,7 @@ function buildCallOptions(
   });
 }
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   FakeAnthropicClass.reset();
   // Set up default runtime context for tests
@@ -199,6 +201,7 @@ beforeEach(() => {
   );
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(() => {
   clearActiveProviderRuntimeContext();
 });

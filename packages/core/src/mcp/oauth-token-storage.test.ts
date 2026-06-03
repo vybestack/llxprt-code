@@ -30,7 +30,7 @@ class MockTokenStorage implements TokenStorage {
     }
     this.tokens.set(credentials.serverName, {
       ...credentials,
-      updatedAt: credentials.updatedAt ?? Date.now(),
+      updatedAt: credentials.updatedAt,
     });
   }
 

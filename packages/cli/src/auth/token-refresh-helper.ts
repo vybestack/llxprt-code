@@ -118,7 +118,7 @@ export async function executeTokenRefresh(
     const provider = providerRegistry.getProvider(providerName);
     if (!provider) return null;
 
-    const refreshedToken = await provider.refreshToken(recheckToken || token);
+    const refreshedToken = await provider.refreshToken(recheckToken ?? token);
     if (!refreshedToken) {
       logger.debug(
         () => `[FLOW] Token refresh returned null for ${providerName}`,
@@ -127,7 +127,7 @@ export async function executeTokenRefresh(
     }
 
     const mergedToken = mergeRefreshedToken(
-      (recheckToken || token) as OAuthTokenWithExtras,
+      (recheckToken ?? token) as OAuthTokenWithExtras,
       refreshedToken as OAuthTokenWithExtras,
     );
     logger.debug(

@@ -66,11 +66,12 @@ class MockOAuthProvider implements OAuthProvider {
       return null;
     }
 
-    if (this._refreshBehavior === 'fail-then-succeed') {
+    if (
+      this._refreshBehavior === 'fail-then-succeed' &&
+      this._refreshCallCount <= 1
+    ) {
       // First call fails, subsequent calls succeed
-      if (this._refreshCallCount <= 1) {
-        return null;
-      }
+      return null;
     }
 
     return {
@@ -117,7 +118,7 @@ class MockTokenStore implements TokenStore {
     bucket?: string,
   ): Promise<OAuthToken | null> {
     const key = bucket ? `${provider}:${bucket}` : provider;
-    return this.tokens.get(key) || null;
+    return this.tokens.get(key) ?? null;
   }
 
   async removeToken(provider: string, bucket?: string): Promise<void> {

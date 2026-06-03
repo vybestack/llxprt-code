@@ -56,6 +56,7 @@ describe('textUtils', () => {
         expect(escapeAnsiCtrlCodes('')).toBe('');
       });
 
+      // eslint-disable-next-line vitest/max-nested-describe -- intentional: semantic grouping requires this nesting depth
       describe('toolConfirmationDetails case study', () => {
         it('should sanitize command and rootCommand for exec type', () => {
           const details: ToolCallConfirmationDetails = {

@@ -205,9 +205,10 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
       const contextAwareTool = new ContextAwareMockTool('branching-tool');
       contextAwareTool.executeFn.mockImplementation(() => {
-        executionMode = contextAwareTool.context?.interactiveMode
-          ? 'interactive'
-          : 'non-interactive';
+        executionMode =
+          contextAwareTool.context?.interactiveMode === true
+            ? 'interactive'
+            : 'non-interactive';
         return Promise.resolve({
           llmContent: 'Branched execution',
           returnDisplay: 'Branched execution',
@@ -256,9 +257,10 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
       const contextAwareTool = new ContextAwareMockTool('branching-tool');
       contextAwareTool.executeFn.mockImplementation(() => {
-        executionMode = contextAwareTool.context?.interactiveMode
-          ? 'interactive'
-          : 'non-interactive';
+        executionMode =
+          contextAwareTool.context?.interactiveMode === true
+            ? 'interactive'
+            : 'non-interactive';
         return Promise.resolve({
           llmContent: 'Branched execution',
           returnDisplay: 'Branched execution',

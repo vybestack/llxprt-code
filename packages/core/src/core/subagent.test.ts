@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import type { Mock } from 'vitest';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createAbortError } from '../utils/delay.js';
@@ -159,7 +161,7 @@ const createMockStream = (
   // This mock now returns a Promise that resolves to the async generator,
   // matching the new signature for sendMessageStream.
   return vi.fn().mockImplementation(async () => {
-    const response = functionCallsList[index] || 'stop';
+    const response = functionCallsList[index] ?? 'stop';
     index++;
 
     return (async function* () {
@@ -451,7 +453,7 @@ describe('subagent.ts', () => {
       callIndex = 0,
     ): GenerateContentConfig & { systemInstruction?: string | Content } => {
       const callArgs = vi.mocked(GeminiChat).mock.calls[callIndex];
-      const generationConfig = callArgs?.[2];
+      const generationConfig = callArgs[2];
       // Ensure it's defined before proceeding
       expect(generationConfig).toBeDefined();
       if (!generationConfig) throw new Error('generationConfig is undefined');
@@ -862,9 +864,7 @@ describe('subagent.ts', () => {
         await scope.runNonInteractive(new ContextState());
 
         const [toolExecutorConfig] = vi.mocked(executeToolCall).mock.calls[0];
-        const ephemerals =
-          toolExecutorConfig.getEphemeralSettings?.() ??
-          ({} as Record<string, unknown>);
+        const ephemerals = toolExecutorConfig.getEphemeralSettings();
         expect(ephemerals['tools.allowed']).toStrictEqual(['read_file']);
       });
 
@@ -2097,24 +2097,28 @@ describe('subagent.ts', () => {
             }
             signal.addEventListener('abort', abort, { once: true });
           });
-
         const schedulerFactory = vi.fn(() => ({
           schedule: vi.fn().mockImplementation(abortAwareHang),
-          awaitCompletedCalls: vi.fn().mockImplementation(
-            (signal?: AbortSignal) =>
-              new Promise<never>((_resolve, reject) => {
-                const abort = () => {
-                  const err = new Error('Aborted');
-                  err.name = 'AbortError';
-                  reject(err);
-                };
-                if (signal?.aborted) {
-                  abort();
-                  return;
-                }
-                signal?.addEventListener('abort', abort, { once: true });
-              }),
-          ),
+          awaitCompletedCalls: vi
+            .fn()
+            .mockImplementation((signal?: AbortSignal) => {
+              if (signal?.aborted === true) {
+                const err = new Error('Aborted');
+                err.name = 'AbortError';
+                return Promise.reject(err);
+              }
+              return new Promise<never>((_resolve, reject) => {
+                signal?.addEventListener(
+                  'abort',
+                  () => {
+                    const err = new Error('Aborted');
+                    err.name = 'AbortError';
+                    reject(err);
+                  },
+                  { once: true },
+                );
+              });
+            }),
         }));
 
         const runtimeBundle = createStatelessRuntimeBundle({
@@ -2948,10 +2952,10 @@ describe('subagent.ts', () => {
 
       const runtimeContext: AgentRuntimeContext = {
         state: {
-          runtimeId: config.getSessionId() ?? 'runtime-123',
-          provider: config.getProvider() ?? 'gemini',
+          runtimeId: config.getSessionId(),
+          provider: config.getProvider(),
           model: config.getModel(),
-          sessionId: config.getSessionId() ?? 'runtime-session',
+          sessionId: config.getSessionId(),
           proxyUrl: undefined,
           modelParams: {},
         },
@@ -2971,7 +2975,7 @@ describe('subagent.ts', () => {
           getActiveProvider: vi.fn(
             () =>
               ({
-                name: config.getProvider() ?? 'gemini',
+                name: config.getProvider(),
                 generateChatCompletion: vi.fn(async function* () {}),
                 getDefaultModel: () => config.getModel(),
                 getServerTools: () => [],
@@ -2985,7 +2989,7 @@ describe('subagent.ts', () => {
           getToolMetadata: () => undefined,
         },
         providerRuntime: {
-          runtimeId: config.getSessionId() ?? 'runtime-123',
+          runtimeId: config.getSessionId(),
           metadata: {},
           settingsService: config.getSettingsService(),
           config,

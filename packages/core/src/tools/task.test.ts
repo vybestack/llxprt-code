@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '../config/config.js';
@@ -995,11 +997,10 @@ describe('TaskTool', () => {
 
       // The timeout should fire and the reject function we captured
       // simulates the subagent detecting the abort and rejecting
-      if (rejectPromise) {
-        const abortError = new Error('Aborted');
-        abortError.name = 'AbortError';
-        rejectPromise(abortError);
-      }
+      expect(rejectPromise).toBeDefined();
+      const abortError = new Error('Aborted');
+      abortError.name = 'AbortError';
+      rejectPromise?.(abortError);
 
       await expect(resultPromise).resolves.toMatchObject({
         error: { type: ToolErrorType.TIMEOUT },
