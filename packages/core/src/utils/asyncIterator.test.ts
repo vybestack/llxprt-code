@@ -192,7 +192,7 @@ describe('prependAsyncGenerator', () => {
 
     // Return early - should terminate the generator and trigger cleanup
 
-    await prepended.return?.();
+    await prepended.return();
 
     expect(cleanedUp).toBe(true);
 

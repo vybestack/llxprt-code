@@ -111,35 +111,28 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
   });
 
   describe('InitializationState Management', () => {
-    it('should track initialization state transitions', async () => {
-      const getState = () =>
-        (
-          provider as unknown as {
-            initGuard: { getState: () => string };
-          }
-        ).initGuard.getState();
+    const getInitGuardState = () =>
+      (
+        provider as unknown as {
+          initGuard: { getState: () => string };
+        }
+      ).initGuard.getState();
 
-      expect(getState()).toBe('not-started');
+    it('should track initialization state transitions', async () => {
+      expect(getInitGuardState()).toBe('not-started');
 
       const initPromise = (
         provider as unknown as { ensureInitialized: () => Promise<void> }
       )['ensureInitialized']();
 
-      expect(getState()).toBe('in-progress');
+      expect(getInitGuardState()).toBe('in-progress');
 
       await initPromise;
 
-      expect(getState()).toBe('completed');
+      expect(getInitGuardState()).toBe('completed');
     });
 
     it('should transition to failed state on initialization error', async () => {
-      const getState = () =>
-        (
-          provider as unknown as {
-            initGuard: { getState: () => string };
-          }
-        ).initGuard.getState();
-
       const initTokenSpy = vi
         .spyOn(
           provider as unknown as { initializeToken: () => Promise<void> },
@@ -153,7 +146,11 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
         ](),
       ).rejects.toThrow('Init failed');
 
-      expect(getState()).toBe('failed');
+      expect(
+        (
+          provider as unknown as { initGuard: { getState: () => string } }
+        ).initGuard.getState(),
+      ).toBe('failed');
 
       initTokenSpy.mockRestore();
     });

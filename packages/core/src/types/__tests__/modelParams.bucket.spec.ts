@@ -610,7 +610,8 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     // This will fail until AuthConfigSchema is implemented
     expect(AuthConfigSchema).toBeDefined();
 
-    if (!AuthConfigSchema || typeof AuthConfigSchema !== 'object') {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (AuthConfigSchema == null || typeof AuthConfigSchema !== 'object') {
       throw new Error('AuthConfigSchema not implemented');
     }
 
@@ -627,7 +628,8 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
   it('should validate oauth AuthConfig with multiple buckets using Zod', () => {
     expect(AuthConfigSchema).toBeDefined();
 
-    if (!AuthConfigSchema || typeof AuthConfigSchema !== 'object') {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (AuthConfigSchema == null || typeof AuthConfigSchema !== 'object') {
       throw new Error('AuthConfigSchema not implemented');
     }
 
@@ -644,7 +646,8 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
   it('should validate apikey AuthConfig without buckets using Zod', () => {
     expect(AuthConfigSchema).toBeDefined();
 
-    if (!AuthConfigSchema || typeof AuthConfigSchema !== 'object') {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (AuthConfigSchema == null || typeof AuthConfigSchema !== 'object') {
       throw new Error('AuthConfigSchema not implemented');
     }
 
@@ -660,7 +663,8 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
   it('should reject invalid auth type using Zod', () => {
     expect(AuthConfigSchema).toBeDefined();
 
-    if (!AuthConfigSchema || typeof AuthConfigSchema !== 'object') {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (AuthConfigSchema == null || typeof AuthConfigSchema !== 'object') {
       throw new Error('AuthConfigSchema not implemented');
     }
 
@@ -669,13 +673,14 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
       type: 'invalid',
     };
 
-    expect(() => schema.parse(invalidAuth)).toThrow();
+    expect(() => schema.parse(invalidAuth)).toThrow(Error);
   });
 
   it('should reject buckets with apikey type using Zod', () => {
     expect(AuthConfigSchema).toBeDefined();
 
-    if (!AuthConfigSchema || typeof AuthConfigSchema !== 'object') {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (AuthConfigSchema == null || typeof AuthConfigSchema !== 'object') {
       throw new Error('AuthConfigSchema not implemented');
     }
 
@@ -686,7 +691,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     };
 
     // Should either fail validation or strip the buckets field
-    expect(() => schema.parse(invalidAuth)).toThrow();
+    expect(() => schema.parse(invalidAuth)).toThrow(Error);
   });
 
   it('should have hasAuthConfig type guard function', () => {
@@ -698,6 +703,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
   it('should use hasAuthConfig to detect auth field presence', () => {
     expect(hasAuthConfig).toBeDefined();
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (typeof hasAuthConfig !== 'function') {
       throw new Error('hasAuthConfig not implemented');
     }
@@ -738,6 +744,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
   it('should use isOAuthProfile to detect OAuth profiles', () => {
     expect(isOAuthProfile).toBeDefined();
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (typeof isOAuthProfile !== 'function') {
       throw new Error('isOAuthProfile not implemented');
     }

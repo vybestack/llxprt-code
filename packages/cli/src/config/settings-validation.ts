@@ -12,97 +12,127 @@ import {
   SETTINGS_SCHEMA_DEFINITIONS,
 } from './settingsSchema.js';
 
+type JsonSchemaLike = Record<string, unknown>;
+
+function isJsonSchemaLike(value: unknown): value is JsonSchemaLike {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function unionJsonSchemas(schemas: z.ZodTypeAny[]): z.ZodTypeAny {
+  if (schemas.length === 0) return z.unknown();
+  if (schemas.length === 1) return schemas[0];
+  return z.union(schemas as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+}
+
+function buildTypeArraySchema(def: JsonSchemaLike): z.ZodTypeAny {
+  const members = (def.type as unknown[]).map((memberType) =>
+    buildZodSchemaFromJsonSchema({
+      ...def,
+      anyOf: undefined,
+      type: memberType,
+    }),
+  );
+  return unionJsonSchemas(members);
+}
+
+function buildAnyOfSchema(def: JsonSchemaLike): z.ZodTypeAny {
+  const members = (def.anyOf as unknown[]).map((schemaDef) =>
+    buildZodSchemaFromJsonSchema(schemaDef),
+  );
+  return unionJsonSchemas(members);
+}
+
+function buildStringJsonSchema(def: JsonSchemaLike): z.ZodTypeAny {
+  if (def.enum !== undefined && def.enum !== null) {
+    return z.enum(def.enum as [string, ...string[]]);
+  }
+  return z.string();
+}
+
+function buildBooleanJsonSchema(def: JsonSchemaLike): z.ZodTypeAny {
+  if ('const' in def) {
+    return z.literal(def.const as never);
+  }
+  return z.boolean();
+}
+
+function buildArrayJsonSchema(def: JsonSchemaLike): z.ZodTypeAny {
+  if (def.items !== undefined && def.items !== null) {
+    return z.array(buildZodSchemaFromJsonSchema(def.items));
+  }
+  return z.array(z.unknown());
+}
+
+function buildJsonObjectShape(
+  def: JsonSchemaLike,
+): Record<string, z.ZodTypeAny> {
+  const shape: Record<string, z.ZodTypeAny> = {};
+  const requiredArray = def.required;
+  const requiredKeys = Array.isArray(requiredArray) ? requiredArray : [];
+
+  if (!isJsonSchemaLike(def.properties)) {
+    return shape;
+  }
+
+  for (const [key, propDef] of Object.entries(def.properties)) {
+    const propSchema = buildZodSchemaFromJsonSchema(propDef);
+    shape[key] = requiredKeys.includes(key)
+      ? propSchema
+      : propSchema.optional();
+  }
+  return shape;
+}
+
+function buildObjectJsonSchema(def: JsonSchemaLike): z.ZodTypeAny {
+  const shape = buildJsonObjectShape(def);
+  const baseSchema = z.object(shape).passthrough();
+
+  if (def.additionalProperties === false) {
+    return baseSchema.strict();
+  }
+  if (isJsonSchemaLike(def.additionalProperties)) {
+    return baseSchema.catchall(
+      buildZodSchemaFromJsonSchema(def.additionalProperties),
+    );
+  }
+
+  return baseSchema;
+}
+
 /**
  * Builds a Zod schema from JSON-schema-like definitions used in
  * SETTINGS_SCHEMA_DEFINITIONS.
  *
  * Handles: type, anyOf, properties, additionalProperties, required, enum, items
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildZodSchemaFromJsonSchema(def: any): z.ZodTypeAny {
-  if (Array.isArray(def.type)) {
-    const members = def.type.map((memberType: string) =>
-      buildZodSchemaFromJsonSchema({
-        ...def,
-        anyOf: undefined,
-        type: memberType,
-      }),
-    );
-    if (members.length === 0) return z.unknown();
-    if (members.length === 1) return members[0];
-    const [first, second, ...rest] = members;
-    return z.union([first, second, ...rest]);
+function buildZodSchemaFromJsonSchema(def: unknown): z.ZodTypeAny {
+  if (!isJsonSchemaLike(def)) return z.unknown();
+  if (Array.isArray(def.type)) return buildTypeArraySchema(def);
+  if (Array.isArray(def.anyOf)) return buildAnyOfSchema(def);
+
+  switch (def.type) {
+    case 'string':
+      return buildStringJsonSchema(def);
+    case 'number':
+      return z.number();
+    case 'boolean':
+      return buildBooleanJsonSchema(def);
+    case 'array':
+      return buildArrayJsonSchema(def);
+    case 'object':
+      return buildObjectJsonSchema(def);
+    default:
+      return z.unknown();
   }
-
-  if (def.anyOf) {
-    return z.union(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      def.anyOf.map((d: any) => buildZodSchemaFromJsonSchema(d)),
-    );
-  }
-
-  if (def.type === 'string') {
-    if (def.enum) return z.enum(def.enum as [string, ...string[]]);
-    return z.string();
-  }
-  if (def.type === 'number') return z.number();
-  if (def.type === 'boolean') {
-    // Handle boolean const values (e.g., const: false)
-    if ('const' in def) {
-      return z.literal(def.const);
-    }
-    return z.boolean();
-  }
-
-  if (def.type === 'array') {
-    if (def.items) {
-      return z.array(buildZodSchemaFromJsonSchema(def.items));
-    }
-    return z.array(z.unknown());
-  }
-
-  if (def.type === 'object') {
-    let schema;
-    if (def.properties) {
-      const shape: Record<string, z.ZodTypeAny> = {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const [key, propDef] of Object.entries(def.properties) as any) {
-        let propSchema = buildZodSchemaFromJsonSchema(propDef);
-        if (
-          def.required &&
-          Array.isArray(def.required) &&
-          def.required.includes(key)
-        ) {
-          // keep it required
-        } else {
-          propSchema = propSchema.optional();
-        }
-        shape[key] = propSchema;
-      }
-      schema = z.object(shape).passthrough();
-    } else {
-      schema = z.object({}).passthrough();
-    }
-
-    if (def.additionalProperties === false) {
-      schema = schema.strict();
-    } else if (typeof def.additionalProperties === 'object') {
-      schema = schema.catchall(
-        buildZodSchemaFromJsonSchema(def.additionalProperties),
-      );
-    }
-
-    return schema;
-  }
-
-  return z.unknown();
 }
 
 /**
  * Builds a Zod enum schema from options array.
  */
 function buildEnumSchema(
-  options: ReadonlyArray<{ value: string | number | boolean; label: string }>,
+  options:
+    | ReadonlyArray<{ value: string | number | boolean; label: string }>
+    | undefined,
 ): z.ZodTypeAny {
   if (!options || options.length === 0) {
     throw new Error(
@@ -189,7 +219,7 @@ function buildZodSchemaFromDefinition(
       break;
 
     case 'enum': {
-      baseSchema = buildEnumSchema(definition.options!);
+      baseSchema = buildEnumSchema(definition.options);
       break;
     }
 
@@ -248,7 +278,7 @@ function buildZodSchemaFromCollection(
       return buildPrimitiveSchema(collection.type);
 
     case 'enum': {
-      return buildEnumSchema(collection.options!);
+      return buildEnumSchema(collection.options);
     }
 
     case 'array':
@@ -313,14 +343,15 @@ export function formatValidationError(
   const displayedIssues = error.issues.slice(0, MAX_ERRORS_TO_DISPLAY);
 
   for (const issue of displayedIssues) {
-    const path = issue.path.reduce(
+    const path = issue.path.reduce<string>(
       (acc, curr) =>
         typeof curr === 'number'
           ? `${acc}[${curr}]`
-          : `${acc ? acc + '.' : ''}${curr}`,
+          : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+            `${acc.length > 0 ? acc + '.' : ''}${curr}`,
       '',
     );
-    lines.push(`Error in: ${path || '(root)'}`);
+    lines.push(`Error in: ${path.length > 0 ? path : '(root)'}`);
     lines.push(`    ${issue.message}`);
 
     if (issue.code === 'invalid_type') {

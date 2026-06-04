@@ -69,7 +69,7 @@ export const DetailedMessagesDisplay: React.FC<
               <Text color={textColor}>{icon} </Text>
               <Text color={textColor} wrap="wrap">
                 {msg.content}
-                {msg.count && msg.count > 1 && (
+                {msg.count > 1 && (
                   <Text color={Colors.Gray}> (x{msg.count})</Text>
                 )}
               </Text>

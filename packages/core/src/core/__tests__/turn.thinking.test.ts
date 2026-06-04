@@ -26,7 +26,7 @@ function createMockResponse(parts: Part[]): GenerateContentResponse {
     ],
     get text() {
       const textParts = parts.filter(
-        (p) => 'text' in p && !('thought' in p && p.thought),
+        (p) => 'text' in p && !('thought' in p && p.thought === true),
       );
       return textParts.map((p) => (p as { text: string }).text).join('');
     },

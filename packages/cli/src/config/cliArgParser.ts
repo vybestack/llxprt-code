@@ -96,11 +96,11 @@ function registerCommands(yargsInstance: Argv, settings: Settings): Argv {
     yargsInstance.command(hooksCommand);
   }
 
-  if (settings?.extensionManagement ?? false) {
+  if (settings.extensionManagement ?? false) {
     yargsInstance.command(extensionsCommand);
   }
 
-  if (settings?.experimental?.skills ?? false) {
+  if (settings.experimental?.skills ?? false) {
     yargsInstance.command(skillsCommand);
   }
 
@@ -155,7 +155,9 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     sandboxProfileLoad: result['sandboxProfileLoad'] as string | undefined,
     debug: result['debug'] as boolean | undefined,
     prompt:
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to queryFromPromptWords
       (result['prompt'] as string | undefined) ||
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to undefined
       queryFromPromptWords ||
       undefined,
     promptInteractive: result['promptInteractive'] as string | undefined,
@@ -205,8 +207,8 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
 
 /** Checks for subcommand dispatch (mcp, hooks, extensions) and exits if handled. */
 function handleSubcommandExit(result: Record<string, unknown>): void {
-  const commands = result['_'] as unknown[];
-  if (!commands || commands.length === 0) {
+  const commands = result['_'];
+  if (!Array.isArray(commands) || commands.length === 0) {
     return;
   }
 
@@ -226,9 +228,7 @@ function handleSubcommandExit(result: Record<string, unknown>): void {
  * Parses process.argv and returns a typed CliArgs object.
  * Subcommand handlers (mcp, hooks, extensions, skills) call process.exit(0) when invoked.
  */
-export async function parseArguments(settings: Settings): Promise<CliArgs> {
-  const yargsInstance = buildRootYargs();
-
+function configureLaunchCommand(yargsInstance: Argv): void {
   yargsInstance.command(
     '$0 [promptWords...]',
     'Launch LLxprt CLI',
@@ -242,28 +242,60 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           type: 'string',
           array: true,
         })
-        .check((argv) => {
-          const pw = argv['promptWords'];
-          if (argv['prompt'] && Array.isArray(pw) && pw.length > 0) {
-            throw new Error(
-              'Cannot use both a positional prompt and the --prompt (-p) flag together',
-            );
-          }
-          if (argv['prompt'] && argv['promptInteractive']) {
-            throw new Error(
-              'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
-            );
-          }
-          if (argv['yolo'] && argv['approvalMode']) {
-            throw new Error(
-              'Cannot use both --yolo (-y) and --approval-mode together. Use --approval-mode=yolo instead.',
-            );
-          }
-          return true;
-        });
+        .check(validateLaunchArgs);
     },
   );
+}
 
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function validateLaunchArgs(argv: Record<string, unknown>): true {
+  const pw = argv['promptWords'];
+  if (hasNonEmptyString(argv['prompt']) && Array.isArray(pw) && pw.length > 0) {
+    throw new Error(
+      'Cannot use both a positional prompt and the --prompt (-p) flag together',
+    );
+  }
+  validatePromptModeArgs(argv);
+  if (argv['yolo'] === true && argv['approvalMode'] != null) {
+    throw new Error(
+      'Cannot use both --yolo (-y) and --approval-mode together. Use --approval-mode=yolo instead.',
+    );
+  }
+  return true;
+}
+
+function validatePromptModeArgs(argv: Record<string, unknown>): void {
+  if (
+    hasNonEmptyString(argv['prompt']) &&
+    hasNonEmptyString(argv['promptInteractive'])
+  ) {
+    throw new Error(
+      'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
+    );
+  }
+}
+
+function validateRootArgs(argv: Record<string, unknown>): true {
+  validatePromptModeArgs(argv);
+  if (
+    hasNonEmptyString(argv['profile']) &&
+    hasNonEmptyString(argv['profileLoad'])
+  ) {
+    throw new Error(
+      'Cannot use both --profile and --profile-load. Use one at a time.',
+    );
+  }
+  return true;
+}
+
+async function configureRootYargs(
+  yargsInstance: Argv,
+  settings: Settings,
+): Promise<void> {
+  configureLaunchCommand(yargsInstance);
   registerCommands(yargsInstance, settings);
   applyRootOptions(yargsInstance);
 
@@ -276,20 +308,16 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     .help()
     .alias('h', 'help')
     .strict()
-    .check((argv) => {
-      if (argv['prompt'] && argv['promptInteractive']) {
-        throw new Error(
-          'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
-        );
-      }
-      if (argv['profile'] && argv['profileLoad']) {
-        throw new Error(
-          'Cannot use both --profile and --profile-load. Use one at a time.',
-        );
-      }
-      return true;
-    });
+    .check(validateRootArgs);
+}
 
+/**
+ * Parses process.argv and returns a typed CliArgs object.
+ * Subcommand handlers (mcp, hooks, extensions, skills) call process.exit(0) when invoked.
+ */
+export async function parseArguments(settings: Settings): Promise<CliArgs> {
+  const yargsInstance = buildRootYargs();
+  await configureRootYargs(yargsInstance, settings);
   yargsInstance.wrap(yargsInstance.terminalWidth());
   const result = await yargsInstance.parseAsync();
 

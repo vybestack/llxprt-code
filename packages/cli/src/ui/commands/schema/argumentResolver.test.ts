@@ -28,6 +28,7 @@ const literal = (
 ): LiteralArgument => ({
   kind: 'literal',
   value,
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string description is valid fallback
   description: description || `Literal ${value}`,
   next,
 });
@@ -43,6 +44,7 @@ const value = (
   kind: 'value',
   name,
   description,
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty array is valid fallback for options
   options: (options || []).map((opt) =>
     typeof opt === 'string' ? { value: opt } : opt,
   ),

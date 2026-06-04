@@ -42,7 +42,7 @@ describe('profileCommand - failover policy parsing', () => {
     });
   });
 
-  const save = profileCommand.subCommands!.find((cmd) => cmd?.name === 'save')!;
+  const save = profileCommand.subCommands!.find((cmd) => cmd.name === 'save')!;
 
   describe('Policy parameter parsing', () => {
     it('should parse policy "failover" from command', async () => {
@@ -86,6 +86,7 @@ describe('profileCommand - failover policy parsing', () => {
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
       // Gets usage error since parts.length < 5
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(content).toMatch(/Usage.*roundrobin.*failover/i);
     });
 
@@ -147,6 +148,7 @@ describe('profileCommand - failover policy parsing', () => {
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
       // Gets usage error since parts.length < 5
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(content).toMatch(/Usage.*roundrobin.*failover/i);
     });
 

@@ -47,7 +47,7 @@ export function useMemoryRefreshAction({
       } else {
         const result = await loadHierarchicalLlxprtMemory(
           config.getWorkingDir(),
-          settings.merged.loadMemoryFromIncludeDirectories
+          settings.merged.loadMemoryFromIncludeDirectories === true
             ? config.getWorkspaceContext().getDirectories()
             : [],
           config.getDebugMode(),
@@ -55,6 +55,7 @@ export function useMemoryRefreshAction({
           settings.merged,
           config.getExtensions(),
           config.getFolderTrust(),
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string memoryImportFormat is invalid
           settings.merged.ui.memoryImportFormat || 'tree',
           config.getFileFilteringOptions(),
         );

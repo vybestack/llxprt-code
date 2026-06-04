@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 /**
  * @plan PLAN-20251027-STATELESS5.P05
  * @requirement REQ-STAT5-002.3
@@ -73,6 +75,7 @@ export function createAgentRuntimeStateFromConfig(
 
   const overrides = options.overrides ?? {};
   const provider =
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     overrides.provider ??
     (typeof config.getProvider === 'function'
       ? (config.getProvider() ?? undefined)
@@ -80,11 +83,10 @@ export function createAgentRuntimeStateFromConfig(
     'gemini';
 
   const model =
+    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     overrides.model ??
     contentConfig?.model ??
-    (typeof config.getModel === 'function'
-      ? (config.getModel() ?? undefined)
-      : undefined) ??
+    (typeof config.getModel === 'function' ? config.getModel() : undefined) ??
     DEFAULT_GEMINI_MODEL;
 
   const baseUrlCandidate =

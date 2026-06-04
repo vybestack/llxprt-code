@@ -62,7 +62,7 @@ export function loadExtensionSettingsFromManifest(
     // Extract settings array if present
     const settings = manifest.settings;
 
-    if (!settings) {
+    if (settings === undefined || settings === null) {
       return [];
     }
 
@@ -135,8 +135,8 @@ export async function maybePromptAndSaveSettings(
  */
 export async function getExtensionEnvironment(
   extensionDir: string,
-): Promise<Record<string, string>> {
-  const result: Record<string, string> = {};
+): Promise<Record<string, string | undefined>> {
+  const result: Record<string, string | undefined> = {};
 
   // Load settings definitions from manifest
   const settings = loadExtensionSettingsFromManifest(extensionDir);
@@ -283,7 +283,7 @@ export async function getEnvContents(
 
   let settingsValues: Record<string, string | undefined>;
 
-  if (scope) {
+  if (scope !== undefined) {
     // Load only the specified scope
     settingsValues = await getScopedEnvContents(
       extensionName,

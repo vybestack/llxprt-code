@@ -15,7 +15,7 @@ export class ClipboardService {
   static async copyToClipboard(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
-    } catch (_error) {
+    } catch {
       // Fallback for environments where navigator.clipboard is not available
       const textArea = document.createElement('textarea');
       textArea.value = text;
@@ -28,7 +28,7 @@ export class ClipboardService {
 
       try {
         document.execCommand('copy');
-      } catch (_err) {
+      } catch {
         throw new Error('Failed to copy text to clipboard');
       }
 

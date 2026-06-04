@@ -121,7 +121,7 @@ describe('GeminiClient - Runtime State Integration', () => {
       // When we initialize the client, it should use 'gemini' from runtime state
       // Verify that the client has stored the runtime state
       expect(client['runtimeState']).toBeDefined();
-      expect(client['runtimeState']?.provider).toBe('gemini');
+      expect(client['runtimeState'].provider).toBe('gemini');
     });
 
     it('should read model from runtime state not Config', async () => {
@@ -141,7 +141,7 @@ describe('GeminiClient - Runtime State Integration', () => {
 
       // Model selection should use runtime state value
       expect(client['runtimeState']).toBeDefined();
-      expect(client['runtimeState']?.model).toBe('gemini-2.0-flash');
+      expect(client['runtimeState'].model).toBe('gemini-2.0-flash');
     });
 
     it('should read provider from runtime state for explicit provider override', async () => {
@@ -160,7 +160,7 @@ describe('GeminiClient - Runtime State Integration', () => {
       const client = new GeminiClient(config, runtimeState);
 
       expect(client['runtimeState']).toBeDefined();
-      expect(client['runtimeState']?.provider).toBe('gemini');
+      expect(client['runtimeState'].provider).toBe('gemini');
     });
   });
 

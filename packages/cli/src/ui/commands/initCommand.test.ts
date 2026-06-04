@@ -90,9 +90,7 @@ describe('initCommand', () => {
   it('should return an error if config is not available', async () => {
     // Arrange: Create a context without config
     const noConfigContext = createMockCommandContext();
-    if (noConfigContext.services) {
-      noConfigContext.services.config = null;
-    }
+    noConfigContext.services.config = null;
 
     // Act: Run the command's action
     const result = await initCommand.action!(noConfigContext, '');

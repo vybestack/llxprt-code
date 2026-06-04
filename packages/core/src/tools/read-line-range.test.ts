@@ -23,6 +23,29 @@ describe('ReadLineRangeTool', () => {
   let tempRootDir: string;
   let tool: ReadLineRangeTool;
 
+  /**
+   * Shared helper for running git commands in test directories.
+   * Used by multiple git-related test cases.
+   */
+  const runGit = async (args: string[], cwd: string) => {
+    const { spawn } = await import('child_process');
+    return new Promise<void>((resolve, reject) => {
+      const child = spawn('git', args, {
+        cwd,
+        windowsHide: true,
+      });
+      let stderr = '';
+      child.stderr.on('data', (d) => {
+        stderr += d.toString('utf8');
+      });
+      child.on('error', (err) => reject(err));
+      child.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(stderr.trim() || `git exited with code ${code}`));
+      });
+    });
+  };
+
   beforeEach(async () => {
     tempRootDir = await fsp.mkdtemp(
       path.join(os.tmpdir(), 'read-line-range-tool-root-'),
@@ -144,28 +167,11 @@ describe('ReadLineRangeTool', () => {
       'utf-8',
     );
 
-    const runGit = async (args: string[]) => {
-      const { spawn } = await import('child_process');
-      return new Promise<void>((resolve, reject) => {
-        const child = spawn('git', args, { cwd: repoDir, windowsHide: true });
-        let stderr = '';
-        child.stderr.on('data', (d) => {
-          stderr += d.toString('utf8');
-        });
-        child.on('error', (err) => reject(err));
-        child.on('close', (code) => {
-          if (code === 0) resolve();
-          else
-            reject(new Error(stderr.trim() || `git exited with code ${code}`));
-        });
-      });
-    };
-
-    await runGit(['init']);
-    await runGit(['config', 'user.email', 'test@example.com']);
-    await runGit(['config', 'user.name', 'Test User']);
-    await runGit(['add', 'file.txt']);
-    await runGit(['commit', '-m', 'init']);
+    await runGit(['init'], repoDir);
+    await runGit(['config', 'user.email', 'test@example.com'], repoDir);
+    await runGit(['config', 'user.name', 'Test User'], repoDir);
+    await runGit(['add', 'file.txt'], repoDir);
+    await runGit(['commit', '-m', 'init'], repoDir);
 
     await fsp.appendFile(filePath, '\nnew');
 
@@ -194,28 +200,11 @@ describe('ReadLineRangeTool', () => {
     const filePath = path.join(repoDir, 'file.txt');
     await fsp.writeFile(filePath, ['one', 'two', 'three'].join('\n'), 'utf-8');
 
-    const runGit = async (args: string[]) => {
-      const { spawn } = await import('child_process');
-      return new Promise<void>((resolve, reject) => {
-        const child = spawn('git', args, { cwd: repoDir, windowsHide: true });
-        let stderr = '';
-        child.stderr.on('data', (d) => {
-          stderr += d.toString('utf8');
-        });
-        child.on('error', (err) => reject(err));
-        child.on('close', (code) => {
-          if (code === 0) resolve();
-          else
-            reject(new Error(stderr.trim() || `git exited with code ${code}`));
-        });
-      });
-    };
-
-    await runGit(['init']);
-    await runGit(['config', 'user.email', 'test@example.com']);
-    await runGit(['config', 'user.name', 'Test User']);
-    await runGit(['add', 'file.txt']);
-    await runGit(['commit', '-m', 'init']);
+    await runGit(['init'], repoDir);
+    await runGit(['config', 'user.email', 'test@example.com'], repoDir);
+    await runGit(['config', 'user.name', 'Test User'], repoDir);
+    await runGit(['add', 'file.txt'], repoDir);
+    await runGit(['commit', '-m', 'init'], repoDir);
 
     await fsp.writeFile(filePath, ['one', 'TWO', 'three'].join('\n'), 'utf-8');
 
@@ -244,28 +233,11 @@ describe('ReadLineRangeTool', () => {
     const filePath = path.join(repoDir, 'file.txt');
     await fsp.writeFile(filePath, ['one', 'two', 'three'].join('\n'), 'utf-8');
 
-    const runGit = async (args: string[]) => {
-      const { spawn } = await import('child_process');
-      return new Promise<void>((resolve, reject) => {
-        const child = spawn('git', args, { cwd: repoDir, windowsHide: true });
-        let stderr = '';
-        child.stderr.on('data', (d) => {
-          stderr += d.toString('utf8');
-        });
-        child.on('error', (err) => reject(err));
-        child.on('close', (code) => {
-          if (code === 0) resolve();
-          else
-            reject(new Error(stderr.trim() || `git exited with code ${code}`));
-        });
-      });
-    };
-
-    await runGit(['init']);
-    await runGit(['config', 'user.email', 'test@example.com']);
-    await runGit(['config', 'user.name', 'Test User']);
-    await runGit(['add', 'file.txt']);
-    await runGit(['commit', '-m', 'init']);
+    await runGit(['init'], repoDir);
+    await runGit(['config', 'user.email', 'test@example.com'], repoDir);
+    await runGit(['config', 'user.name', 'Test User'], repoDir);
+    await runGit(['add', 'file.txt'], repoDir);
+    await runGit(['commit', '-m', 'init'], repoDir);
 
     await fsp.writeFile(filePath, ['one', 'two'].join('\n'), 'utf-8');
 

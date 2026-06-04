@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,7 +26,6 @@ import { type ToolCallPipeline } from './ToolCallPipeline.js';
 import { type GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
 import { extractThinkTagsAsBlock } from '../utils/thinkingExtraction.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
-import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';
 import {
   normalizeToHistoryToolId,
@@ -42,6 +41,21 @@ import {
 } from './OpenAIResponseParser.js';
 import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 import { type ToolFormat } from '../../tools/IToolFormatter.js';
+import {
+  type StreamingState,
+  createStreamingState,
+  hasNaturalBreakPoint,
+  hasToolsButNoTextContent,
+  checkStreamingError,
+  parseChunkData,
+  buildUsageMetadata,
+  applyTerminalMetadata,
+  isCancellation,
+  logStreamCompletionSummary,
+  buildToolCallsForHistory,
+  emitFinishOnlyMetadata,
+  emitUsageOnlyMetadata,
+} from './OpenAIStreamProcessorState.js';
 
 export interface StreamProcessorDeps {
   toolCallPipeline: ToolCallPipeline;
@@ -50,56 +64,18 @@ export interface StreamProcessorDeps {
   getBaseURL: () => string | undefined;
 }
 
-interface StreamingState {
-  accumulatedText: string;
-  textBuffer: string;
-  accumulatedThinkingContent: string;
-  hasEmittedThinking: boolean;
-  accumulatedReasoningContent: string;
-  streamingUsage: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  } | null;
-  lastFinishReason: string | null | undefined;
-  hasEmittedTerminalMetadata: boolean;
-  cachedPipelineResult: Awaited<
-    ReturnType<typeof ToolCallPipeline.prototype.process>
-  > | null;
-  allChunks: OpenAI.Chat.Completions.ChatCompletionChunk[];
-}
-
-function createStreamingState(): StreamingState {
-  return {
-    accumulatedText: '',
-    textBuffer: '',
-    accumulatedThinkingContent: '',
-    hasEmittedThinking: false,
-    accumulatedReasoningContent: '',
-    streamingUsage: null,
-    lastFinishReason: null,
-    hasEmittedTerminalMetadata: false,
-    cachedPipelineResult: null,
-    allChunks: [],
-  };
-}
-
-async function* flushTextBuffer(
+/**
+ * Parse buffer text for tool calls and thinking, returning extracted data.
+ */
+function parseBufferText(
   buffer: string,
   state: StreamingState,
   deps: StreamProcessorDeps,
-): AsyncGenerator<IContent, void, unknown> {
+): { parsedToolCalls: ToolCallBlock[]; cleanedText: string } {
   const parsedToolCalls: ToolCallBlock[] = [];
-  const originalBufferLength = buffer.length;
   let workingText = buffer;
 
-  deps.logger.debug(() => `[stream:buffer] flushing buffered text`, {
-    bufferLength: originalBufferLength,
-    accumulatedThinkingLength: state.accumulatedThinkingContent.length,
-    hasEmittedThinking: state.hasEmittedThinking,
-  });
-
-  // Extract <think> tags
+  // Extract tags
   const tagBasedThinking = extractThinkTagsAsBlock(workingText);
   if (tagBasedThinking) {
     const cleanedThought = cleanThinkingContent(
@@ -153,7 +129,18 @@ async function* flushTextBuffer(
       () => `TextToolCallParser failed on buffered text: ${error}`,
     );
   }
+  return { parsedToolCalls, cleanedText };
+}
 
+/**
+ * Emit parsed content blocks (thinking, tool calls, text) from a buffer flush.
+ */
+async function* emitParsedBlocks(
+  parsedToolCalls: ToolCallBlock[],
+  cleanedText: string,
+  state: StreamingState,
+  deps: StreamProcessorDeps,
+): AsyncGenerator<IContent, void, unknown> {
   const shouldEmitThinking =
     !state.hasEmittedThinking &&
     state.accumulatedThinkingContent.length > 0 &&
@@ -198,22 +185,39 @@ async function* flushTextBuffer(
       ],
     } as IContent;
   }
+}
 
+async function* flushTextBuffer(
+  buffer: string,
+  state: StreamingState,
+  deps: StreamProcessorDeps,
+): AsyncGenerator<IContent, void, unknown> {
+  const originalBufferLength = buffer.length;
+
+  deps.logger.debug(() => `[stream:buffer] flushing buffered text`, {
+    bufferLength: originalBufferLength,
+    accumulatedThinkingLength: state.accumulatedThinkingContent.length,
+    hasEmittedThinking: state.hasEmittedThinking,
+  });
+
+  const { parsedToolCalls, cleanedText } = parseBufferText(buffer, state, deps);
+  yield* emitParsedBlocks(parsedToolCalls, cleanedText, state, deps);
+
+  const hadThinking =
+    state.accumulatedThinkingContent.length > 0 || state.hasEmittedThinking;
   if (
-    !shouldEmitThinking &&
+    !hadThinking &&
     parsedToolCalls.length === 0 &&
     cleanedText.length === 0
   ) {
     deps.logger.warn(() => `[stream:buffer] flush produced no emitted blocks`, {
       bufferLength: originalBufferLength,
-      hadThinkTags: Boolean(tagBasedThinking),
-      cleanedWorkingTextLength: workingText.length,
+      cleanedWorkingTextLength: buffer.length,
       accumulatedThinkingLength: state.accumulatedThinkingContent.length,
     });
   } else {
     deps.logger.debug(() => `[stream:buffer] flush emitted buffered content`, {
       bufferLength: originalBufferLength,
-      emittedThinking: shouldEmitThinking,
       toolCallCount: parsedToolCalls.length,
       textLength: cleanedText.length,
     });
@@ -221,18 +225,459 @@ async function* flushTextBuffer(
 }
 
 /**
- * Process streaming response from OpenAI API
+ * Process reasoning and tool-call fragments from a choice delta.
  */
-export async function* processStreamingResponse(
-  response: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
+function processReasoningDelta(
+  choice: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
+  state: StreamingState,
+  deps: StreamProcessorDeps,
+): void {
+  const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
+    parseStreamingReasoningDelta(choice.delta, deps.logger);
+  if (reasoningBlock) {
+    state.accumulatedReasoningContent += reasoningBlock.thought;
+  }
+  if (reasoningToolCalls.length > 0) {
+    const stats = deps.toolCallPipeline.getStats();
+    let baseIndex = stats.collector.totalCalls;
+    for (const toolCall of reasoningToolCalls) {
+      deps.toolCallPipeline.addFragment(baseIndex, {
+        id: `call_kimi_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        name: toolCall.name,
+        args: JSON.stringify(toolCall.parameters),
+      });
+      baseIndex++;
+    }
+  }
+}
+
+/**
+ * Handle text delta content: buffer or immediately emit.
+ */
+async function* handleTextDelta(
+  deltaContent: string,
+  state: StreamingState,
+  shouldBufferText: boolean,
+  detectedFormat: string,
+  model: string,
+  deps: StreamProcessorDeps,
+): AsyncGenerator<IContent, void, unknown> {
+  state.accumulatedText += deltaContent;
+
+  if (shouldBufferText) {
+    deps.logger.debug(
+      () => `[Streaming] Chunk content for ${detectedFormat} format:`,
+      {
+        deltaContent,
+        length: deltaContent.length,
+        hasNewline: deltaContent.includes('\n'),
+        escaped: JSON.stringify(deltaContent),
+        bufferSize: state.textBuffer.length,
+      },
+    );
+
+    state.textBuffer += deltaContent;
+
+    const kimiBeginCount = (
+      state.textBuffer.match(/<\|tool_calls_section_begin\|>/g) ?? []
+    ).length;
+    const kimiEndCount = (
+      state.textBuffer.match(/<\|tool_calls_section_end\|>/g) ?? []
+    ).length;
+    const hasOpenKimiSection = kimiBeginCount > kimiEndCount;
+
+    deps.logger.debug(
+      () => `[stream:kimi-buffer] updated buffered text state`,
+      {
+        model,
+        detectedFormat,
+        bufferLength: state.textBuffer.length,
+        kimiBeginCount,
+        kimiEndCount,
+        hasOpenKimiSection,
+      },
+    );
+
+    if (hasNaturalBreakPoint(state.textBuffer, hasOpenKimiSection)) {
+      deps.logger.debug(
+        () => `[stream:kimi-buffer] flushing buffered text at natural boundary`,
+        {
+          model,
+          detectedFormat,
+          bufferLength: state.textBuffer.length,
+          kimiBeginCount,
+          kimiEndCount,
+        },
+      );
+      yield* flushTextBuffer(state.textBuffer, state, deps);
+      state.textBuffer = '';
+    } else if (hasOpenKimiSection) {
+      deps.logger.debug(
+        () =>
+          `[stream:kimi-buffer] suppressing flush because tool-call section is still open`,
+        {
+          model,
+          detectedFormat,
+          bufferLength: state.textBuffer.length,
+          kimiBeginCount,
+          kimiEndCount,
+        },
+      );
+    }
+  } else {
+    // Emit immediately for non-buffered providers
+    yield {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'text',
+          text: deltaContent,
+        } as TextBlock,
+      ],
+    } as IContent;
+  }
+}
+
+/**
+ * Feed tool-call fragments from a choice delta into the pipeline.
+ */
+function processDeltaToolCalls(
+  choice: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
+  deps: StreamProcessorDeps,
+): void {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+  const deltaToolCalls = choice.delta?.tool_calls;
+  if (deltaToolCalls && deltaToolCalls.length > 0) {
+    for (const deltaToolCall of deltaToolCalls) {
+      const deltaToolCallIndex = deltaToolCall.index as number | undefined;
+      if (deltaToolCallIndex === undefined) continue;
+
+      deps.toolCallPipeline.addFragment(deltaToolCallIndex, {
+        id: deltaToolCall.id,
+        name: deltaToolCall.function?.name,
+        args: deltaToolCall.function?.arguments,
+      });
+    }
+  }
+
+  const choiceMessage = (
+    choice as {
+      message?: {
+        tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
+      };
+    }
+  ).message;
+  const messageToolCalls = choiceMessage?.tool_calls;
+  if (messageToolCalls && messageToolCalls.length > 0) {
+    messageToolCalls.forEach(
+      (
+        toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
+        index: number,
+      ) => {
+        if (toolCall.type !== 'function') {
+          return;
+        }
+
+        deps.toolCallPipeline.addFragment(index, {
+          id: toolCall.id,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+          name: toolCall.function?.name,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+          args: toolCall.function?.arguments,
+        });
+      },
+    );
+  }
+}
+
+/**
+ * Process a single streaming chunk and update state / yield content.
+ */
+async function* processStreamingChunk(
+  chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
+  state: StreamingState,
+  shouldBufferText: boolean,
   model: string,
   detectedFormat: string,
   abortSignal: AbortSignal | undefined,
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
-  messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[],
-  client: OpenAI,
-  mergedHeaders: Record<string, string> | undefined,
+  deps: StreamProcessorDeps,
+): AsyncGenerator<IContent, void, unknown> {
+  if (abortSignal?.aborted === true) {
+    return;
+  }
+  state.allChunks.push(chunk);
+
+  const chunkRecord = chunk as unknown as Record<string, unknown>;
+  const parsedData = parseChunkData(chunkRecord);
+  checkStreamingError(chunkRecord, parsedData);
+
+  // Extract usage information
+  if (chunk.usage) {
+    state.streamingUsage = chunk.usage;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+  const choice = chunk.choices?.[0];
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+  if (choice == null) return;
+
+  processReasoningDelta(choice, state, deps);
+
+  // Check for finish_reason
+  if (choice.finish_reason) {
+    state.lastFinishReason = choice.finish_reason;
+    deps.logger.debug(
+      () => `[Streaming] Stream finished with reason: ${choice.finish_reason}`,
+      {
+        model,
+        finishReason: choice.finish_reason,
+        hasAccumulatedText: state.accumulatedText.length > 0,
+        hasAccumulatedTools:
+          deps.toolCallPipeline.getStats().collector.totalCalls > 0,
+        hasBufferedText: state.textBuffer.length > 0,
+      },
+    );
+
+    if (choice.finish_reason === 'length') {
+      deps.logger.debug(
+        () => `Response truncated due to length limit for model ${model}`,
+      );
+    }
+  }
+
+  // Handle text content
+  const rawDeltaContent = coerceMessageContentToString(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    choice.delta?.content as unknown,
+  );
+  if (rawDeltaContent) {
+    const deltaContent = sanitizeProviderText(rawDeltaContent);
+    if (!deltaContent) {
+      return;
+    }
+    yield* handleTextDelta(
+      deltaContent,
+      state,
+      shouldBufferText,
+      detectedFormat,
+      model,
+      deps,
+    );
+  }
+
+  processDeltaToolCalls(choice, deps);
+}
+
+/**
+ * Handle errors from the streaming loop, including cancellation and Cerebras/Qwen bugs.
+ */
+function handleStreamError(
+  error: unknown,
+  abortSignal: AbortSignal | undefined,
+  model: string,
+  deps: StreamProcessorDeps,
+): never {
+  if (isCancellation(error, abortSignal)) {
+    deps.logger.debug(
+      () =>
+        `Pipeline streaming response cancelled by AbortSignal (error: ${error instanceof Error ? error.name : 'unknown'})`,
+    );
+    throw error;
+  }
+  // Special handling for Cerebras/Qwen errors
+  const errorMessage = String(error);
+  const baseURL = deps.getBaseURL();
+  if (
+    errorMessage.includes('Tool is not present in the tools list') &&
+    (model.toLowerCase().includes('qwen') ||
+      baseURL?.includes('cerebras') === true)
+  ) {
+    deps.logger.error(
+      'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+      {
+        error,
+        model,
+      },
+    );
+    const enhancedError = new Error(
+      `Cerebras/Qwen API bug: Tool not found in list during streaming. Known API issue.`,
+    );
+    (enhancedError as Error & { originalError?: unknown }).originalError =
+      error;
+    throw enhancedError;
+  }
+  deps.logger.error('Error processing streaming response:', error);
+  throw error;
+}
+
+/**
+ * Build pipeline tool-call blocks from the cached pipeline result.
+ */
+function buildPipelineToolCallBlocks(
+  state: StreamingState,
+  deps: StreamProcessorDeps,
+): ToolCallBlock[] {
+  const result = state.cachedPipelineResult;
+  if (!result) return [];
+  const blocks: ToolCallBlock[] = [];
+  if (result.normalized.length > 0 || result.failed.length > 0) {
+    for (const normalizedCall of result.normalized) {
+      const sanitizedArgs = sanitizeToolArgumentsString(
+        normalizedCall.originalArgs ?? normalizedCall.args,
+        deps.logger,
+      );
+
+      const processedParameters = processToolParameters(
+        sanitizedArgs,
+        normalizedCall.name,
+      );
+
+      blocks.push({
+        type: 'tool_call',
+        id: normalizeToHistoryToolId(
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string ID should use fallback
+          normalizedCall.id || `call_${normalizedCall.index}`,
+        ),
+        name: normalizedCall.name,
+        parameters: processedParameters,
+      });
+    }
+
+    for (const failed of result.failed) {
+      deps.logger.warn(
+        `Tool call validation failed for index ${failed.index}: ${failed.validationErrors.join(', ')}`,
+      );
+    }
+  }
+  return blocks;
+}
+
+/**
+ * Emit combined terminal content with reasoning blocks and pipeline tool calls.
+ */
+function* emitCombinedTerminalContent(
+  state: StreamingState,
+  model: string,
+  deps: StreamProcessorDeps,
+): Generator<IContent, void, unknown> {
+  const { cleanedText: cleanedReasoning, toolCalls: reasoningToolCalls } =
+    state.accumulatedReasoningContent.length > 0
+      ? extractKimiToolCallsFromText(
+          state.accumulatedReasoningContent,
+          deps.logger,
+        )
+      : { cleanedText: '', toolCalls: [] as ToolCallBlock[] };
+
+  const pipelineToolCallBlocks = buildPipelineToolCallBlocks(state, deps);
+
+  const combinedBlocks: Array<ThinkingBlock | ToolCallBlock> = [];
+
+  if (cleanedReasoning.length > 0) {
+    combinedBlocks.push({
+      type: 'thinking',
+      thought: cleanedReasoning,
+      sourceField: 'reasoning_content',
+      isHidden: false,
+    } as ThinkingBlock);
+  }
+
+  combinedBlocks.push(...reasoningToolCalls, ...pipelineToolCallBlocks);
+
+  if (combinedBlocks.length > 0) {
+    const combinedContent: IContent = {
+      speaker: 'ai',
+      blocks: combinedBlocks,
+    };
+
+    const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
+    deps.logger.debug(
+      () => `[stream:terminal] building combined terminal content`,
+      {
+        model,
+        combinedBlockCount: combinedBlocks.length,
+        cleanedReasoningLength: cleanedReasoning.length,
+        reasoningToolCallCount: reasoningToolCalls.length,
+        pipelineToolCallCount: pipelineToolCallBlocks.length,
+        rawFinishReason: state.lastFinishReason,
+        stopReason,
+        hasStreamingUsage: Boolean(state.streamingUsage),
+      },
+    );
+
+    if (state.streamingUsage !== null) {
+      combinedContent.metadata = buildUsageMetadata(
+        state.streamingUsage,
+        stopReason,
+      );
+    } else if (stopReason) {
+      combinedContent.metadata = { stopReason };
+    }
+
+    applyTerminalMetadata(combinedContent, state);
+
+    deps.logger.debug(
+      () => `[stream:terminal] emitting combined terminal content`,
+      {
+        model,
+        blockCount: combinedContent.blocks.length,
+        stopReason: combinedContent.metadata?.stopReason,
+        finishReason: combinedContent.metadata?.finishReason,
+        hasUsage: Boolean(combinedContent.metadata?.usage),
+        hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
+      },
+    );
+    yield combinedContent;
+  } else {
+    deps.logger.debug(
+      () => `[stream:terminal] skipped combined terminal content emission`,
+      {
+        model,
+        cleanedReasoningLength: cleanedReasoning.length,
+        reasoningToolCallCount: reasoningToolCalls.length,
+        pipelineToolCallCount: pipelineToolCallBlocks.length,
+        rawFinishReason: state.lastFinishReason,
+        hasStreamingUsage: Boolean(state.streamingUsage),
+      },
+    );
+  }
+}
+
+/**
+ * Emit terminal chunks (combined, usage-only, finish-only) after stream ends.
+ */
+function* emitTerminalChunks(
+  state: StreamingState,
+  model: string,
+  deps: StreamProcessorDeps,
+): Generator<IContent, void, unknown> {
+  yield* emitCombinedTerminalContent(state, model, deps);
+  yield* emitUsageOnlyMetadata(
+    state,
+    model,
+    deps.logger,
+    () => deps.toolCallPipeline.getStats().collector.totalCalls,
+  );
+  yield* emitFinishOnlyMetadata(
+    state,
+    model,
+    deps.logger,
+    () => deps.toolCallPipeline.getStats().collector.totalCalls,
+  );
+}
+
+/**
+ * Handle the case where tool calls arrived but no text — request continuation.
+ */
+async function* handleToolCallsWithoutText(
+  state: StreamingState,
+  model: string,
   baseURL: string | undefined,
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  client: OpenAI,
+  abortSignal: AbortSignal | undefined,
+  mergedHeaders: Record<string, string> | undefined,
+  detectedFormat: string,
   deps: StreamProcessorDeps,
   requestContinuation: (
     toolCalls: Array<{
@@ -240,7 +685,7 @@ export async function* processStreamingResponse(
       type: 'function';
       function: { name: string; arguments: string };
     }>,
-    messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[],
+    messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     requestBody: OpenAI.Chat.ChatCompletionCreateParams,
     client: OpenAI,
     abortSignal: AbortSignal | undefined,
@@ -250,285 +695,68 @@ export async function* processStreamingResponse(
     toolFormat: ToolFormat,
   ) => AsyncGenerator<IContent, void, unknown>,
 ): AsyncGenerator<IContent, void, unknown> {
-  const state = createStreamingState();
-  const shouldBufferText = detectedFormat === 'qwen';
+  const pipelineResult = state.cachedPipelineResult;
+  const hasCachedPipelineResult = pipelineResult != null;
+  const toolCallCount = hasCachedPipelineResult
+    ? pipelineResult.normalized.length + pipelineResult.failed.length
+    : 0;
 
-  // Initialize tool call pipeline
-  deps.toolCallPipeline.reset();
-
-  try {
-    // Process chunks inline as they arrive from the HTTP stream.
-    // CRITICAL: Do NOT collect all chunks first — that blocks the entire pipeline,
-    // prevents abort signal checks, and causes indefinite hangs. See #1846.
-    for await (const chunk of response) {
-      if (abortSignal?.aborted) {
-        break;
-      }
-      state.allChunks.push(chunk);
-
-      const chunkRecord = chunk as unknown as Record<string, unknown>;
-      let parsedData: Record<string, unknown> | undefined;
-      const rawData = chunkRecord?.data;
-      if (typeof rawData === 'string') {
-        try {
-          parsedData = JSON.parse(rawData) as Record<string, unknown>;
-        } catch {
-          parsedData = undefined;
-        }
-      } else if (rawData && typeof rawData === 'object') {
-        parsedData = rawData as Record<string, unknown>;
-      }
-
-      const streamingError =
-        chunkRecord?.error ??
-        parsedData?.error ??
-        (parsedData?.data as { error?: unknown } | undefined)?.error;
-      const streamingEvent = (chunkRecord?.event ?? parsedData?.event) as
-        | string
-        | undefined;
-      const streamingErrorMessage =
-        (streamingError as { message?: string } | undefined)?.message ??
-        (streamingError as { error?: string } | undefined)?.error ??
-        (parsedData as { message?: string } | undefined)?.message;
-      if (
-        streamingEvent === 'error' ||
-        (streamingError && typeof streamingError === 'object')
-      ) {
-        const errorMessage =
-          streamingErrorMessage ??
-          (typeof streamingError === 'string'
-            ? streamingError
-            : 'Streaming response reported an error.');
-        throw new Error(errorMessage);
-      }
-
-      // Extract usage information
-      if (chunk.usage) {
-        state.streamingUsage = chunk.usage;
-      }
-
-      const choice = chunk.choices?.[0];
-      if (!choice) continue;
-
-      // Parse reasoning_content
-      const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
-        parseStreamingReasoningDelta(choice.delta, deps.logger);
-      if (reasoningBlock) {
-        state.accumulatedReasoningContent += reasoningBlock.thought;
-      }
-      if (reasoningToolCalls.length > 0) {
-        const stats = deps.toolCallPipeline.getStats();
-        let baseIndex = stats.collector.totalCalls;
-
-        for (const toolCall of reasoningToolCalls) {
-          deps.toolCallPipeline.addFragment(baseIndex, {
-            id: `call_kimi_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-            name: toolCall.name,
-            args: JSON.stringify(toolCall.parameters),
-          });
-          baseIndex++;
-        }
-      }
-
-      // Check for finish_reason
-      if (choice.finish_reason) {
-        state.lastFinishReason = choice.finish_reason;
-        deps.logger.debug(
-          () =>
-            `[Streaming] Stream finished with reason: ${choice.finish_reason}`,
-          {
-            model,
-            finishReason: choice.finish_reason,
-            hasAccumulatedText: state.accumulatedText.length > 0,
-            hasAccumulatedTools:
-              deps.toolCallPipeline.getStats().collector.totalCalls > 0,
-            hasBufferedText: state.textBuffer.length > 0,
-          },
-        );
-
-        if (choice.finish_reason === 'length') {
-          deps.logger.debug(
-            () => `Response truncated due to length limit for model ${model}`,
-          );
-        }
-      }
-
-      // Handle text content
-      const rawDeltaContent = coerceMessageContentToString(
-        choice.delta?.content as unknown,
-      );
-      if (rawDeltaContent) {
-        const deltaContent = sanitizeProviderText(rawDeltaContent);
-        if (!deltaContent) {
-          continue;
-        }
-
-        state.accumulatedText += deltaContent;
-
-        if (shouldBufferText) {
-          deps.logger.debug(
-            () => `[Streaming] Chunk content for ${detectedFormat} format:`,
-            {
-              deltaContent,
-              length: deltaContent.length,
-              hasNewline: deltaContent.includes('\n'),
-              escaped: JSON.stringify(deltaContent),
-              bufferSize: state.textBuffer.length,
-            },
-          );
-
-          state.textBuffer += deltaContent;
-
-          const kimiBeginCount = (
-            state.textBuffer.match(/<\|tool_calls_section_begin\|>/g) || []
-          ).length;
-          const kimiEndCount = (
-            state.textBuffer.match(/<\|tool_calls_section_end\|>/g) || []
-          ).length;
-          const hasOpenKimiSection = kimiBeginCount > kimiEndCount;
-
-          deps.logger.debug(
-            () => `[stream:kimi-buffer] updated buffered text state`,
-            {
-              model,
-              detectedFormat,
-              bufferLength: state.textBuffer.length,
-              kimiBeginCount,
-              kimiEndCount,
-              hasOpenKimiSection,
-            },
-          );
-
-          // Emit buffered text at natural break points
-          if (
-            !hasOpenKimiSection &&
-            (state.textBuffer.includes('\n') ||
-              state.textBuffer.endsWith('. ') ||
-              state.textBuffer.endsWith('! ') ||
-              state.textBuffer.endsWith('? ') ||
-              state.textBuffer.length > 100)
-          ) {
-            deps.logger.debug(
-              () =>
-                `[stream:kimi-buffer] flushing buffered text at natural boundary`,
-              {
-                model,
-                detectedFormat,
-                bufferLength: state.textBuffer.length,
-                kimiBeginCount,
-                kimiEndCount,
-              },
-            );
-            yield* flushTextBuffer(state.textBuffer, state, deps);
-            state.textBuffer = '';
-          } else if (hasOpenKimiSection) {
-            deps.logger.debug(
-              () =>
-                `[stream:kimi-buffer] suppressing flush because tool-call section is still open`,
-              {
-                model,
-                detectedFormat,
-                bufferLength: state.textBuffer.length,
-                kimiBeginCount,
-                kimiEndCount,
-              },
-            );
-          }
-        } else {
-          // Emit immediately for non-buffered providers
-          yield {
-            speaker: 'ai',
-            blocks: [
-              {
-                type: 'text',
-                text: deltaContent,
-              } as TextBlock,
-            ],
-          } as IContent;
-        }
-      }
-
-      // Handle tool calls using pipeline
-      const deltaToolCalls = choice.delta?.tool_calls;
-      if (deltaToolCalls && deltaToolCalls.length > 0) {
-        for (const deltaToolCall of deltaToolCalls) {
-          if (deltaToolCall.index === undefined) continue;
-
-          deps.toolCallPipeline.addFragment(deltaToolCall.index, {
-            id: deltaToolCall.id,
-            name: deltaToolCall.function?.name,
-            args: deltaToolCall.function?.arguments,
-          });
-        }
-      }
-
-      const choiceMessage = (
-        choice as {
-          message?: {
-            tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
-          };
-        }
-      ).message;
-      const messageToolCalls = choiceMessage?.tool_calls;
-      if (messageToolCalls && messageToolCalls.length > 0) {
-        messageToolCalls.forEach(
-          (
-            toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
-            index: number,
-          ) => {
-            if (!toolCall || toolCall.type !== 'function') {
-              return;
-            }
-
-            deps.toolCallPipeline.addFragment(index, {
-              id: toolCall.id,
-              name: toolCall.function?.name,
-              args: toolCall.function?.arguments,
-            });
-          },
-        );
-      }
-    }
-  } catch (error) {
-    if (
-      abortSignal?.aborted ||
-      (error &&
-        typeof error === 'object' &&
-        'name' in error &&
-        error.name === 'AbortError')
-    ) {
-      deps.logger.debug(
-        () =>
-          `Pipeline streaming response cancelled by AbortSignal (error: ${error instanceof Error ? error.name : 'unknown'})`,
-      );
-      throw error;
-    } else {
-      // Special handling for Cerebras/Qwen errors
-      const errorMessage = String(error);
-      if (
-        errorMessage.includes('Tool is not present in the tools list') &&
-        (model.toLowerCase().includes('qwen') ||
-          deps.getBaseURL()?.includes('cerebras'))
-      ) {
-        deps.logger.error(
-          'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
-          {
-            error,
-            model,
-          },
-        );
-        const enhancedError = new Error(
-          `Cerebras/Qwen API bug: Tool not found in list during streaming. Known API issue.`,
-        );
-        (enhancedError as Error & { originalError?: unknown }).originalError =
-          error;
-        throw enhancedError;
-      }
-      deps.logger.error('Error processing streaming response:', error);
-      throw error;
-    }
+  if (!hasToolsButNoTextContent(state, toolCallCount)) {
+    logStreamCompletionSummary(
+      state,
+      toolCallCount,
+      model,
+      baseURL,
+      deps.getBaseURL,
+      deps.logger,
+    );
+    return;
   }
 
+  deps.logger.log(
+    () =>
+      `[OpenAIProvider] Model returned tool calls but no text (finish_reason=stop). Requesting continuation for model '${model}'.`,
+    {
+      model,
+      toolCallCount,
+      baseURL: baseURL ?? deps.getBaseURL(),
+    },
+  );
+
+  if (!hasCachedPipelineResult) {
+    throw new Error(
+      'Pipeline result not cached - this should not happen in pipeline mode',
+    );
+  }
+  const toolCallsForHistory = buildToolCallsForHistory(
+    pipelineResult,
+    normalizeToOpenAIToolId,
+  );
+
+  yield* requestContinuation(
+    toolCallsForHistory,
+    messagesWithSystem,
+    requestBody,
+    client,
+    abortSignal,
+    model,
+    deps.logger,
+    mergedHeaders,
+    detectedFormat as ToolFormat,
+  );
+}
+
+/**
+ * Finalize after stream: flush buffer, emit remaining thinking, process pipeline.
+ */
+async function* finalizeStreamingState(
+  state: StreamingState,
+  shouldBufferText: boolean,
+  model: string,
+  detectedFormat: string,
+  abortSignal: AbortSignal | undefined,
+  deps: StreamProcessorDeps,
+): AsyncGenerator<IContent, void, unknown> {
   // Final buffer flush
   if (state.textBuffer.length > 0) {
     deps.logger.debug(
@@ -587,334 +815,83 @@ export async function* processStreamingResponse(
     },
   );
 
-  {
-    const { cleanedText: cleanedReasoning, toolCalls: reasoningToolCalls } =
-      state.accumulatedReasoningContent.length > 0
-        ? extractKimiToolCallsFromText(
-            state.accumulatedReasoningContent,
-            deps.logger,
-          )
-        : { cleanedText: '', toolCalls: [] as ToolCallBlock[] };
+  yield* emitTerminalChunks(state, model, deps);
+}
 
-    const pipelineToolCallBlocks: ToolCallBlock[] = [];
-    if (
-      state.cachedPipelineResult.normalized.length > 0 ||
-      state.cachedPipelineResult.failed.length > 0
-    ) {
-      for (const normalizedCall of state.cachedPipelineResult.normalized) {
-        const sanitizedArgs = sanitizeToolArgumentsString(
-          normalizedCall.originalArgs ?? normalizedCall.args,
-          deps.logger,
-        );
+/**
+ * Process streaming response from OpenAI API
+ */
+export async function* processStreamingResponse(
+  response: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
+  model: string,
+  detectedFormat: string,
+  abortSignal: AbortSignal | undefined,
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  client: OpenAI,
+  mergedHeaders: Record<string, string> | undefined,
+  baseURL: string | undefined,
+  deps: StreamProcessorDeps,
+  requestContinuation: (
+    toolCalls: Array<{
+      id: string;
+      type: 'function';
+      function: { name: string; arguments: string };
+    }>,
+    messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+    client: OpenAI,
+    abortSignal: AbortSignal | undefined,
+    model: string,
+    logger: DebugLogger,
+    mergedHeaders: Record<string, string> | undefined,
+    toolFormat: ToolFormat,
+  ) => AsyncGenerator<IContent, void, unknown>,
+): AsyncGenerator<IContent, void, unknown> {
+  const state = createStreamingState();
+  const shouldBufferText = detectedFormat === 'qwen';
 
-        const processedParameters = processToolParameters(
-          sanitizedArgs,
-          normalizedCall.name,
-        );
+  deps.toolCallPipeline.reset();
 
-        pipelineToolCallBlocks.push({
-          type: 'tool_call',
-          id: normalizeToHistoryToolId(
-            normalizedCall.id || `call_${normalizedCall.index}`,
-          ),
-          name: normalizedCall.name,
-          parameters: processedParameters,
-        });
-      }
-
-      for (const failed of state.cachedPipelineResult.failed) {
-        deps.logger.warn(
-          `Tool call validation failed for index ${failed.index}: ${failed.validationErrors.join(', ')}`,
-        );
-      }
-    }
-
-    const combinedBlocks: Array<ThinkingBlock | ToolCallBlock> = [];
-
-    if (cleanedReasoning.length > 0) {
-      combinedBlocks.push({
-        type: 'thinking',
-        thought: cleanedReasoning,
-        sourceField: 'reasoning_content',
-        isHidden: false,
-      } as ThinkingBlock);
-    }
-
-    combinedBlocks.push(...reasoningToolCalls, ...pipelineToolCallBlocks);
-
-    if (combinedBlocks.length > 0) {
-      const combinedContent: IContent = {
-        speaker: 'ai',
-        blocks: combinedBlocks,
-      };
-
-      const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
-      deps.logger.debug(
-        () => `[stream:terminal] building combined terminal content`,
-        {
-          model,
-          combinedBlockCount: combinedBlocks.length,
-          cleanedReasoningLength: cleanedReasoning.length,
-          reasoningToolCallCount: reasoningToolCalls.length,
-          pipelineToolCallCount: pipelineToolCallBlocks.length,
-          rawFinishReason: state.lastFinishReason,
-          stopReason,
-          hasStreamingUsage: Boolean(state.streamingUsage),
-        },
-      );
-
-      if (state.streamingUsage) {
-        const cacheMetrics = extractCacheMetrics(state.streamingUsage);
-        combinedContent.metadata = {
-          usage: {
-            promptTokens: state.streamingUsage.prompt_tokens || 0,
-            completionTokens: state.streamingUsage.completion_tokens || 0,
-            totalTokens:
-              state.streamingUsage.total_tokens ||
-              (state.streamingUsage.prompt_tokens || 0) +
-                (state.streamingUsage.completion_tokens || 0),
-            cachedTokens: cacheMetrics.cachedTokens,
-            cacheCreationTokens: cacheMetrics.cacheCreationTokens,
-            cacheMissTokens: cacheMetrics.cacheMissTokens,
-          },
-          ...(stopReason && { stopReason }),
-        };
-      } else if (stopReason) {
-        combinedContent.metadata = { stopReason };
-      }
-
-      // Propagate terminal metadata so downstream turn handling and telemetry
-      // receive a finish signal (issue #1844).  stopReason stays normalized
-      // (via mapFinishReasonToStopReason above); finishReason preserves the
-      // raw provider value for diagnostics.
-      if (state.lastFinishReason) {
-        if (!combinedContent.metadata) {
-          combinedContent.metadata = {};
-        }
-        // stopReason was already set to the normalized value above; do NOT
-        // overwrite it with the raw provider string.
-        combinedContent.metadata.finishReason = state.lastFinishReason;
-        state.hasEmittedTerminalMetadata = true;
-      }
-
-      deps.logger.debug(
-        () => `[stream:terminal] emitting combined terminal content`,
-        {
-          model,
-          blockCount: combinedContent.blocks.length,
-          stopReason: combinedContent.metadata?.stopReason,
-          finishReason: combinedContent.metadata?.finishReason,
-          hasUsage: Boolean(combinedContent.metadata?.usage),
-          hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
-        },
-      );
-      yield combinedContent;
-    } else {
-      deps.logger.debug(
-        () => `[stream:terminal] skipped combined terminal content emission`,
-        {
-          model,
-          cleanedReasoningLength: cleanedReasoning.length,
-          reasoningToolCallCount: reasoningToolCalls.length,
-          pipelineToolCallCount: pipelineToolCallBlocks.length,
-          rawFinishReason: state.lastFinishReason,
-          hasStreamingUsage: Boolean(state.streamingUsage),
-        },
+  try {
+    // Process chunks inline as they arrive from the HTTP stream.
+    // CRITICAL: Do NOT collect all chunks first — that blocks the entire pipeline,
+    // prevents abort signal checks, and causes indefinite hangs. See #1846.
+    for await (const chunk of response) {
+      yield* processStreamingChunk(
+        chunk,
+        state,
+        shouldBufferText,
+        model,
+        detectedFormat,
+        abortSignal,
+        deps,
       );
     }
+  } catch (error) {
+    handleStreamError(error, abortSignal, model, deps);
   }
 
-  // Emit metadata-only response if needed
-  if (
-    state.streamingUsage &&
-    state.accumulatedReasoningContent.length === 0 &&
-    deps.toolCallPipeline.getStats().collector.totalCalls === 0
-  ) {
-    const cacheMetrics = extractCacheMetrics(state.streamingUsage);
-    const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
-    const metaOnlyContent: IContent = {
-      speaker: 'ai',
-      blocks: [],
-      metadata: {
-        usage: {
-          promptTokens: state.streamingUsage.prompt_tokens || 0,
-          completionTokens: state.streamingUsage.completion_tokens || 0,
-          totalTokens:
-            state.streamingUsage.total_tokens ||
-            (state.streamingUsage.prompt_tokens || 0) +
-              (state.streamingUsage.completion_tokens || 0),
-          cachedTokens: cacheMetrics.cachedTokens,
-          cacheCreationTokens: cacheMetrics.cacheCreationTokens,
-          cacheMissTokens: cacheMetrics.cacheMissTokens,
-        },
-        ...(stopReason && { stopReason }),
-      },
-    };
+  yield* finalizeStreamingState(
+    state,
+    shouldBufferText,
+    model,
+    detectedFormat,
+    abortSignal,
+    deps,
+  );
 
-    // Propagate terminal metadata on usage-only chunk (issue #1844).
-    // stopReason stays normalized; finishReason preserves raw value.
-    if (state.lastFinishReason && metaOnlyContent.metadata) {
-      metaOnlyContent.metadata.finishReason = state.lastFinishReason;
-      state.hasEmittedTerminalMetadata = true;
-    }
-
-    deps.logger.debug(
-      () => `[stream:terminal] emitting usage-only terminal metadata chunk`,
-      {
-        model,
-        stopReason: metaOnlyContent.metadata?.stopReason,
-        finishReason: metaOnlyContent.metadata?.finishReason,
-        hasUsage: Boolean(metaOnlyContent.metadata?.usage),
-        hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
-      },
-    );
-    yield metaOnlyContent;
-  } else if (state.streamingUsage) {
-    deps.logger.debug(
-      () => `[stream:terminal] skipped usage-only terminal metadata chunk`,
-      {
-        model,
-        reasoningLength: state.accumulatedReasoningContent.length,
-        collectorStats: deps.toolCallPipeline.getStats().collector,
-        hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
-      },
-    );
-  }
-
-  // Emit a terminal metadata chunk even when there is no usage, so
-  // downstream turn handling always receives a finish signal (issue #1844).
-  if (
-    state.lastFinishReason &&
-    !state.streamingUsage &&
-    !state.hasEmittedTerminalMetadata &&
-    deps.toolCallPipeline.getStats().collector.totalCalls === 0
-  ) {
-    state.hasEmittedTerminalMetadata = true;
-    const normalizedStopReason = mapFinishReasonToStopReason(
-      state.lastFinishReason,
-    );
-    deps.logger.debug(
-      () => `[stream:terminal] emitting metadata-only terminal chunk`,
-      {
-        model,
-        stopReason: normalizedStopReason,
-        finishReason: state.lastFinishReason,
-      },
-    );
-    yield {
-      speaker: 'ai',
-      blocks: [],
-      metadata: {
-        stopReason: normalizedStopReason,
-        finishReason: state.lastFinishReason,
-      },
-    } as IContent;
-  } else if (state.lastFinishReason && !state.streamingUsage) {
-    deps.logger.debug(
-      () => `[stream:terminal] skipped metadata-only terminal chunk`,
-      {
-        model,
-        finishReason: state.lastFinishReason,
-        hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
-        collectorStats: deps.toolCallPipeline.getStats().collector,
-      },
-    );
-  }
-
-  // Handle empty streaming responses after tool calls
-  const toolCallCount =
-    (state.cachedPipelineResult?.normalized.length ?? 0) +
-    (state.cachedPipelineResult?.failed.length ?? 0);
-  const hasToolsButNoText =
-    state.lastFinishReason === 'stop' &&
-    toolCallCount > 0 &&
-    state.accumulatedText.length === 0 &&
-    state.textBuffer.length === 0 &&
-    state.accumulatedReasoningContent.length === 0 &&
-    state.accumulatedThinkingContent.length === 0;
-
-  if (hasToolsButNoText) {
-    deps.logger.log(
-      () =>
-        `[OpenAIProvider] Model returned tool calls but no text (finish_reason=stop). Requesting continuation for model '${model}'.`,
-      {
-        model,
-        toolCallCount,
-        baseURL: baseURL ?? deps.getBaseURL(),
-      },
-    );
-
-    if (!state.cachedPipelineResult) {
-      throw new Error(
-        'Pipeline result not cached - this should not happen in pipeline mode',
-      );
-    }
-    const toolCallsForHistory = state.cachedPipelineResult.normalized.map(
-      (normalizedCall, index) => ({
-        id:
-          normalizedCall.id && normalizedCall.id.trim().length > 0
-            ? normalizeToOpenAIToolId(normalizedCall.id)
-            : `call_${index}`,
-        type: 'function' as const,
-        function: {
-          name: normalizedCall.name,
-          arguments: JSON.stringify(normalizedCall.args),
-        },
-      }),
-    );
-
-    yield* requestContinuation(
-      toolCallsForHistory,
-      messagesWithSystem,
-      requestBody,
-      client,
-      abortSignal,
-      model,
-      deps.logger,
-      mergedHeaders,
-      detectedFormat as ToolFormat,
-    );
-  }
-
-  // Warn about empty streaming responses
-  if (
-    state.accumulatedText.length === 0 &&
-    toolCallCount === 0 &&
-    state.textBuffer.length === 0 &&
-    state.accumulatedReasoningContent.length === 0 &&
-    state.accumulatedThinkingContent.length === 0
-  ) {
-    const isKimi = model.toLowerCase().includes('kimi');
-    const isSynthetic =
-      (baseURL ?? deps.getBaseURL())?.includes('synthetic') ?? false;
-    const troubleshooting = isKimi
-      ? isSynthetic
-        ? ' To fix: use streaming: "disabled" in your profile settings. Synthetic API streaming does not work reliably with tool calls.'
-        : ' This provider may not support streaming with tool calls.'
-      : ' Consider using streaming: "disabled" in your profile settings.';
-
-    deps.logger.warn(
-      () =>
-        `[OpenAIProvider] Empty streaming response for model '${model}' (received ${state.allChunks.length} chunks with no content).${troubleshooting}`,
-      {
-        model,
-        baseURL: baseURL ?? deps.getBaseURL(),
-        isKimiModel: isKimi,
-        isSyntheticAPI: isSynthetic,
-        totalChunksReceived: state.allChunks.length,
-      },
-    );
-  } else {
-    deps.logger.debug(
-      () => `[Streaming pipeline] Stream completed with accumulated content`,
-      {
-        textLength: state.accumulatedText.length,
-        toolCallCount,
-        textBufferLength: state.textBuffer.length,
-        reasoningLength: state.accumulatedReasoningContent.length,
-        thinkingLength: state.accumulatedThinkingContent.length,
-        totalChunksReceived: state.allChunks.length,
-      },
-    );
-  }
+  yield* handleToolCallsWithoutText(
+    state,
+    model,
+    baseURL,
+    requestBody,
+    messagesWithSystem,
+    client,
+    abortSignal,
+    mergedHeaders,
+    detectedFormat,
+    deps,
+    requestContinuation,
+  );
 }

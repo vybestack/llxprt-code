@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 export type EnvironmentSanitizationConfig = {
   allowedEnvironmentVariables: string[];
   blockedEnvironmentVariables: string[];
@@ -21,10 +23,10 @@ export function sanitizeEnvironment(
   const results: NodeJS.ProcessEnv = {};
 
   const allowedSet = new Set(
-    (config.allowedEnvironmentVariables || []).map((k) => k.toUpperCase()),
+    config.allowedEnvironmentVariables.map((k) => k.toUpperCase()),
   );
   const blockedSet = new Set(
-    (config.blockedEnvironmentVariables || []).map((k) => k.toUpperCase()),
+    config.blockedEnvironmentVariables.map((k) => k.toUpperCase()),
   );
 
   // Enable strict sanitization in GitHub actions.
@@ -121,6 +123,7 @@ export const NEVER_ALLOWED_VALUE_PATTERNS = [
   /-----BEGIN (RSA|OPENSSH|EC|PGP) PRIVATE KEY-----/i,
   /-----BEGIN CERTIFICATE-----/i,
   // Credentials in URL (quantifiers bounded to prevent polynomial backtracking)
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   /(https?|ftp|smtp):\/\/[^:]{1,2048}:[^@]{1,2048}@/i,
   // GitHub tokens (classic, fine-grained, OAuth, etc.)
   /(ghp|gho|ghu|ghs|ghr|github_pat)_[a-zA-Z0-9_]{36,255}/i,
@@ -129,6 +132,7 @@ export const NEVER_ALLOWED_VALUE_PATTERNS = [
   // Amazon AWS Access Key ID
   /AKIA[A-Z0-9]{16}/i,
   // Generic OAuth/JWT tokens (quantifiers bounded to prevent polynomial backtracking)
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   /eyJ[a-zA-Z0-9_-]{0,8192}\.[a-zA-Z0-9_-]{0,8192}\.[a-zA-Z0-9_-]{0,8192}/i,
   // Stripe API keys
   /(s|r)k_(live|test)_[0-9a-zA-Z]{24}/i,
@@ -147,10 +151,10 @@ function shouldRedactEnvironmentVariable(
   value = value?.toUpperCase();
 
   // User overrides take precedence.
-  if (allowedSet?.has(key)) {
+  if (allowedSet?.has(key) === true) {
     return false;
   }
-  if (blockedSet?.has(key)) {
+  if (blockedSet?.has(key) === true) {
     return true;
   }
 

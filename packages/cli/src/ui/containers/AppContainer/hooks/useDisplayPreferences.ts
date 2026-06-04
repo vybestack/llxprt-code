@@ -39,7 +39,7 @@ export interface UseDisplayPreferencesResult {
   renderMarkdown: boolean;
   setRenderMarkdown: (render: boolean) => void;
 
-  // Todo panel collapse state
+  // Task-list panel collapse state
   isTodoPanelCollapsed: boolean;
   setIsTodoPanelCollapsed: (collapsed: boolean) => void;
 
@@ -94,7 +94,7 @@ export function useDisplayPreferences(): UseDisplayPreferencesResult {
     renderMarkdown,
     setRenderMarkdown,
 
-    // Todo panel collapse state
+    // Task-list panel collapse state
     isTodoPanelCollapsed,
     setIsTodoPanelCollapsed,
 

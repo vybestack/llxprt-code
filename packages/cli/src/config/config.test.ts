@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -167,13 +169,13 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     getCliOAuthManager: vi.fn(() => runtimeSettingsState.oauthManager ?? null),
     getActiveProviderStatus: vi.fn(() => ({
       name:
-        runtimeSettingsState.providerManager?.getActiveProviderName?.() ??
-        runtimeSettingsState.context?.config?.getProvider?.() ??
+        runtimeSettingsState.providerManager?.getActiveProviderName() ??
+        runtimeSettingsState.context?.config?.getProvider() ??
         null,
     })),
     listProviders: vi.fn(() => getProviderManager().listProviders()),
-    getActiveProviderName: vi.fn(
-      () => getProviderManager().getActiveProviderName?.() ?? null,
+    getActiveProviderName: vi.fn(() =>
+      getProviderManager().getActiveProviderName(),
     ),
     setActiveModel: vi.fn(async () => ({
       changed: false,
@@ -181,8 +183,8 @@ vi.mock('../runtime/runtimeSettings.js', () => {
       nextModel: null,
       infoMessages: [],
     })),
-    listAvailableModels: vi.fn(
-      async () => (await getProviderManager().getAvailableModels?.()) ?? [],
+    listAvailableModels: vi.fn(async () =>
+      getProviderManager().getAvailableModels(),
     ),
     getActiveModelName: vi.fn(() => null),
     getActiveModelParams: vi.fn(() => ({})),
@@ -228,8 +230,9 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
     loadServerHierarchicalMemory: vi.fn(
       (cwd, dirs, debug, fileService, extensionPaths, _maxDirs) =>
         Promise.resolve({
+          // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions, @typescript-eslint/prefer-nullish-coalescing -- Preserve original truthy fallback for mocked extension paths.
           memoryContent: extensionPaths?.join(',') || '',
-          fileCount: extensionPaths?.length || 0,
+          fileCount: extensionPaths?.length ?? 0,
           filePaths: [],
         }),
     ),
@@ -246,6 +249,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   runtimeSettingsState.context = null;
   runtimeSettingsState.providerManager = null;
@@ -1758,7 +1762,7 @@ describe('parseArguments with positional prompt', () => {
   });
 });
 
-// TODO: These tests need provider runtime setup (activateIsolatedRuntimeContext)
+// Note: These tests need provider runtime setup (activateIsolatedRuntimeContext)
 describe('defaultDisabledTools', () => {
   const originalIsTTY = process.stdin.isTTY;
 
@@ -1816,7 +1820,8 @@ describe('defaultDisabledTools', () => {
       argv,
     );
     const currentDisabled =
-      (config.getEphemeralSetting('tools.disabled') as string[]) || [];
+      (config.getEphemeralSetting('tools.disabled') as string[] | undefined) ??
+      [];
     expect(currentDisabled).toStrictEqual(
       expect.arrayContaining(['read_file', 'google_web_fetch']),
     );
@@ -1869,6 +1874,7 @@ describe('defaultDisabledTools', () => {
     const disabled = config.getEphemeralSetting('tools.disabled');
     // Should be either undefined, null, or empty array
     expect(
+      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy assertion for default disabled tool settings.
       !disabled || (Array.isArray(disabled) && disabled.length === 0),
     ).toBe(true);
   });
@@ -1892,6 +1898,7 @@ describe('defaultDisabledTools', () => {
     const disabled = config.getEphemeralSetting('tools.disabled');
     // Should be either undefined, null, or empty array
     expect(
+      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy assertion for default disabled tool settings.
       !disabled || (Array.isArray(disabled) && disabled.length === 0),
     ).toBe(true);
   });

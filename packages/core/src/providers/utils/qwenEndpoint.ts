@@ -30,15 +30,21 @@ export function isQwenBaseURL(baseURL: string | undefined): boolean {
 
   try {
     const hostname = new URL(normalized).hostname.toLowerCase();
-    return (
-      hostname === 'dashscope.aliyuncs.com' ||
-      hostname.endsWith('.dashscope.aliyuncs.com') ||
-      hostname === 'portal.qwen.ai' ||
-      hostname.endsWith('.qwen.ai') ||
-      hostname === 'api.qwen.com' ||
-      hostname.endsWith('.qwen.com')
-    );
+    return isQwenHostname(hostname);
   } catch {
     return false;
   }
+}
+
+/**
+ * Check if a hostname belongs to Qwen/DashScope.
+ */
+function isQwenHostname(hostname: string): boolean {
+  if (hostname === 'dashscope.aliyuncs.com') return true;
+  if (hostname.endsWith('.dashscope.aliyuncs.com')) return true;
+  if (hostname === 'portal.qwen.ai') return true;
+  if (hostname.endsWith('.qwen.ai')) return true;
+  if (hostname === 'api.qwen.com') return true;
+  if (hostname.endsWith('.qwen.com')) return true;
+  return false;
 }

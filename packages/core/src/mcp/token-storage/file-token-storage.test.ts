@@ -169,6 +169,7 @@ describe('FileTokenStorage', () => {
       expect(mockFs.writeFile).toHaveBeenCalled();
 
       const writeCall = mockFs.writeFile.mock.calls[0];
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(writeCall[1]).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
       expect(writeCall[2]).toStrictEqual({ mode: 0o600 });
     });
@@ -328,6 +329,7 @@ describe('FileTokenStorage', () => {
 
       expect(decrypted).toBe(original);
       expect(encrypted).not.toBe(original);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(encrypted).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
     });
 

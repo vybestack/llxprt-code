@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Mock, MockInstance } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -79,7 +81,10 @@ const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const actualSchedulerModule = (await importOriginal()) as any;
   return {
-    ...(actualSchedulerModule || {}),
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty object is valid fallback for module
+    ...(actualSchedulerModule !== null && actualSchedulerModule !== undefined
+      ? actualSchedulerModule
+      : {}),
     useReactToolScheduler: vi.fn(),
   };
 });
@@ -249,7 +254,7 @@ describe('useGeminiStream', () => {
     initialToolCalls: TrackedToolCall[] = [],
     geminiClient?: any,
   ) => {
-    const client = geminiClient || mockConfig.getGeminiClient();
+    const client = geminiClient ?? mockConfig.getGeminiClient();
 
     const initialProps = {
       client,
@@ -1036,7 +1041,7 @@ describe('useGeminiStream', () => {
     beforeEach(() => {
       // Capture the callback passed to useKeypress
       mockUseKeypress.mockImplementation((callback, options) => {
-        if (options.isActive) {
+        if (options.isActive === true) {
           keypressCallback = callback;
         } else {
           keypressCallback = () => {};
@@ -1736,6 +1741,9 @@ describe('useGeminiStream', () => {
     });
 
     it('should skip tool calls without confirmationDetails', async () => {
+      const debuggerSpy = vi
+        .spyOn(debugLogger, 'warn')
+        .mockImplementation(() => {});
       const awaitingApprovalToolCalls: TrackedToolCall[] = [
         {
           request: {
@@ -1766,6 +1774,14 @@ describe('useGeminiStream', () => {
       await act(async () => {
         await result.current.handleApprovalModeChange(ApprovalMode.YOLO);
       });
+
+      // The skip path must be silent: no auto-approve failure logged.
+      expect(debuggerSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Failed to auto-approve tool call'),
+        expect.anything(),
+      );
+
+      debuggerSpy.mockRestore();
     });
 
     it('should skip tool calls without onConfirm method in confirmationDetails', async () => {
@@ -1802,12 +1818,25 @@ describe('useGeminiStream', () => {
         } as TrackedWaitingToolCall,
       ];
 
+      const debuggerSpy = vi
+        .spyOn(debugLogger, 'warn')
+        .mockImplementation(() => {});
+
       const { result } = renderTestHook(awaitingApprovalToolCalls);
 
       // Should not throw an error
       await act(async () => {
         await result.current.handleApprovalModeChange(ApprovalMode.YOLO);
       });
+
+      // The skip path (confirmationDetails present but without onConfirm) must
+      // be silent: no auto-approve failure logged.
+      expect(debuggerSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Failed to auto-approve tool call'),
+        expect.anything(),
+      );
+
+      debuggerSpy.mockRestore();
     });
 
     it('should only process tool calls with awaiting_approval status', async () => {

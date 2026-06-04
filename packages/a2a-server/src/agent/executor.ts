@@ -106,7 +106,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     sdkTask: SDKTask,
     eventBus?: ExecutionEventBus,
   ): Promise<TaskWrapper> {
-    const metadata = sdkTask.metadata || {};
+    const metadata = sdkTask.metadata ?? {};
     const persistedState = getPersistedState(metadata);
 
     if (!persistedState) {
@@ -144,7 +144,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     agentSettingsInput?: AgentSettings,
     eventBus?: ExecutionEventBus,
   ): Promise<TaskWrapper> {
-    const agentSettings = agentSettingsInput || ({} as AgentSettings);
+    const agentSettings = agentSettingsInput ?? ({} as AgentSettings);
     const config = await this.getConfig(agentSettings, taskId);
     const runtimeTask = await Task.create(
       taskId,
@@ -598,11 +598,11 @@ export class CoderAgentExecutor implements AgentExecutor {
     const userMessage = requestContext.userMessage;
     const sdkTask = requestContext.task;
 
-    const taskId = sdkTask?.id || userMessage.taskId || uuidv4();
+    const taskId = sdkTask?.id ?? userMessage.taskId ?? uuidv4();
     const contextId: string =
-      userMessage.contextId ||
-      sdkTask?.contextId ||
-      (sdkTask?.metadata?.['_contextId'] as string | undefined) ||
+      userMessage.contextId ??
+      sdkTask?.contextId ??
+      (sdkTask?.metadata?.['_contextId'] as string | undefined) ??
       uuidv4();
 
     logger.info(

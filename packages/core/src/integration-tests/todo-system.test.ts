@@ -36,8 +36,8 @@ describe('Todo Integration Test', () => {
     );
   });
 
-  it('should track tool calls associated with active todo', async () => {
-    // Set up the context tracker with an active todo
+  it('should track tool calls associated with active task', async () => {
+    // Set up the context tracker with an active task
     const contextTracker = TodoContextTracker.forAgent(
       sessionId,
       DEFAULT_AGENT_ID,
@@ -55,7 +55,7 @@ describe('Todo Integration Test', () => {
     // Verify we got a tool call ID
     expect(toolCallId).toBeTruthy();
 
-    // Get all tool calls for the todo
+    // Get all tool calls for the task
     const allCalls = ToolCallTrackerService.getAllToolCalls(
       sessionId,
       todoId,

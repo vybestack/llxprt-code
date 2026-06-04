@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useCompletion } from './useCompletion.js';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
-import { logicalPosToOffset } from '../components/shared/text-buffer.js';
+import { logicalPosToOffset } from '../components/shared/buffer-operations.js';
 import {
   extractPathToken,
   getPathSuggestions,
@@ -28,37 +28,14 @@ export interface UseShellPathCompletionReturn {
   resetCompletionState: () => void;
 }
 
-export function useShellPathCompletion(
+function usePathToken(
   buffer: TextBuffer,
-  cwd: string,
   shellModeActive: boolean,
   reverseSearchActive: boolean,
-): UseShellPathCompletionReturn {
-  const {
-    suggestions,
-    activeSuggestionIndex,
-    visibleStartIndex,
-    showSuggestions,
-    isLoadingSuggestions,
+) {
+  const [cursorRow, cursorCol] = buffer.cursor;
 
-    setSuggestions,
-    setShowSuggestions,
-    setActiveSuggestionIndex,
-    setVisibleStartIndex,
-    setIsLoadingSuggestions,
-
-    resetCompletionState,
-    navigateUp,
-    navigateDown,
-  } = useCompletion();
-
-  const generationRef = useRef(0);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const cursorRow = buffer.cursor[0];
-  const cursorCol = buffer.cursor[1];
-
-  const pathToken = useMemo(() => {
+  return useMemo(() => {
     if (!shellModeActive || reverseSearchActive) {
       return null;
     }
@@ -75,14 +52,20 @@ export function useShellPathCompletion(
     cursorRow,
     cursorCol,
   ]);
+}
 
-  useEffect(() => {
-    if (!shellModeActive || reverseSearchActive) {
-      resetCompletionState();
-      return;
-    }
-  }, [shellModeActive, reverseSearchActive, resetCompletionState]);
-
+function usePathSuggestionFetcher(
+  cwd: string,
+  pathToken: ReturnType<typeof usePathToken>,
+  generationRef: React.MutableRefObject<number>,
+  debounceTimerRef: React.MutableRefObject<NodeJS.Timeout | null>,
+  resetCompletionState: () => void,
+  setSuggestions: (s: Suggestion[]) => void,
+  setActiveSuggestionIndex: (i: number) => void,
+  setVisibleStartIndex: (i: number) => void,
+  setShowSuggestions: (b: boolean) => void,
+  setIsLoadingSuggestions: (b: boolean) => void,
+) {
   useEffect(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -91,10 +74,11 @@ export function useShellPathCompletion(
 
     if (!pathToken) {
       resetCompletionState();
-      return;
+      return undefined;
     }
 
-    const generation = ++generationRef.current;
+    generationRef.current += 1;
+    const generation = generationRef.current;
 
     debounceTimerRef.current = setTimeout(() => {
       setIsLoadingSuggestions(true);
@@ -125,6 +109,7 @@ export function useShellPathCompletion(
         debounceTimerRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable and mutation-based
   }, [
     pathToken,
     cwd,
@@ -135,6 +120,59 @@ export function useShellPathCompletion(
     setShowSuggestions,
     setIsLoadingSuggestions,
   ]);
+}
+
+export function useShellPathCompletion(
+  buffer: TextBuffer,
+  cwd: string,
+  shellModeActive: boolean,
+  reverseSearchActive: boolean,
+): UseShellPathCompletionReturn {
+  const {
+    suggestions,
+    activeSuggestionIndex,
+    visibleStartIndex,
+    showSuggestions,
+    isLoadingSuggestions,
+
+    setSuggestions,
+    setShowSuggestions,
+    setActiveSuggestionIndex,
+    setVisibleStartIndex,
+    setIsLoadingSuggestions,
+
+    resetCompletionState,
+    navigateUp,
+    navigateDown,
+  } = useCompletion();
+
+  const generationRef = useRef(0);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const pathToken = usePathToken(buffer, shellModeActive, reverseSearchActive);
+
+  useEffect(() => {
+    if (!shellModeActive || reverseSearchActive) {
+      resetCompletionState();
+      return undefined;
+    }
+    return undefined;
+  }, [shellModeActive, reverseSearchActive, resetCompletionState]);
+
+  usePathSuggestionFetcher(
+    cwd,
+    pathToken,
+    generationRef,
+    debounceTimerRef,
+    resetCompletionState,
+    setSuggestions,
+    setActiveSuggestionIndex,
+    setVisibleStartIndex,
+    setShowSuggestions,
+    setIsLoadingSuggestions,
+  );
+
+  const cursorRow = buffer.cursor[0];
 
   const handleAutocomplete = useCallback(
     (index: number) => {

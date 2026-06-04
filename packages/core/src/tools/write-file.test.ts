@@ -174,7 +174,7 @@ describe('WriteFileTool', () => {
       await expect(async () => {
         const invocation = tool.build(params);
         await invocation.shouldConfirmExecute(abortSignal);
-      }).rejects.toThrow();
+      }).rejects.toThrow(Error);
     });
 
     it('should return false if params are invalid (outside root)', async () => {
@@ -184,7 +184,7 @@ describe('WriteFileTool', () => {
       await expect(async () => {
         const invocation = tool.build(params);
         await invocation.shouldConfirmExecute(abortSignal);
-      }).rejects.toThrow();
+      }).rejects.toThrow(Error);
     });
 
     it('should return false if getCorrectedFileContent returns an error', async () => {
@@ -225,6 +225,7 @@ describe('WriteFileTool', () => {
         /--- confirm_new_file.txt\tCurrent/,
       );
       expect(confirmation.fileDiff).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /\+\+\+ confirm_new_file.txt\tProposed/,
       );
     });
@@ -249,6 +250,7 @@ describe('WriteFileTool', () => {
         }),
       );
       expect(confirmation.fileDiff).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         originalContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
     });
@@ -305,13 +307,7 @@ describe('WriteFileTool', () => {
       const invocation = tool.build(params);
 
       const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
-      if (
-        typeof confirmDetails === 'object' &&
-        'onConfirm' in confirmDetails &&
-        confirmDetails.onConfirm
-      ) {
-        await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
-      }
+      await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
 
       const result = await invocation.execute(abortSignal);
 
@@ -324,8 +320,10 @@ describe('WriteFileTool', () => {
       const display = result.returnDisplay as FileDiff;
       expect(display.fileName).toBe('execute_new_file.txt');
       expect(display.fileDiff).toMatch(/--- execute_new_file.txt\tOriginal/);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(display.fileDiff).toMatch(/\+\+\+ execute_new_file.txt\tWritten/);
       expect(display.fileDiff).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         proposedContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
     });
@@ -340,13 +338,7 @@ describe('WriteFileTool', () => {
       const invocation = tool.build(params);
 
       const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
-      if (
-        typeof confirmDetails === 'object' &&
-        'onConfirm' in confirmDetails &&
-        confirmDetails.onConfirm
-      ) {
-        await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
-      }
+      await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
 
       const result = await invocation.execute(abortSignal);
 
@@ -356,9 +348,11 @@ describe('WriteFileTool', () => {
       const display = result.returnDisplay as FileDiff;
       expect(display.fileName).toBe('execute_existing_file.txt');
       expect(display.fileDiff).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         initialContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
       expect(display.fileDiff).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         proposedContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
     });
@@ -373,13 +367,7 @@ describe('WriteFileTool', () => {
       const invocation = tool.build(params);
 
       const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
-      if (
-        typeof confirmDetails === 'object' &&
-        'onConfirm' in confirmDetails &&
-        confirmDetails.onConfirm
-      ) {
-        await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
-      }
+      await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
 
       await invocation.execute(abortSignal);
 
@@ -395,13 +383,7 @@ describe('WriteFileTool', () => {
       const params = { file_path: filePath, content };
       const invocation = tool.build(params);
       const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
-      if (
-        typeof confirmDetails === 'object' &&
-        'onConfirm' in confirmDetails &&
-        confirmDetails.onConfirm
-      ) {
-        await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
-      }
+      await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
 
       const result = await invocation.execute(abortSignal);
 
@@ -420,13 +402,7 @@ describe('WriteFileTool', () => {
       const invocation = tool.build(params);
       // Simulate confirmation if your logic requires it before execute, or remove if not needed for this path
       const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
-      if (
-        typeof confirmDetails === 'object' &&
-        'onConfirm' in confirmDetails &&
-        confirmDetails.onConfirm
-      ) {
-        await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
-      }
+      await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
 
       await invocation.execute(abortSignal);
 

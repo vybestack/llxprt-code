@@ -165,12 +165,12 @@ describe('CredentialProxyServer', () => {
 
   afterEach(async () => {
     try {
-      client?.close();
+      client.close();
     } catch {
       // client may not be initialized
     }
     try {
-      await server?.stop();
+      await server.stop();
     } catch {
       // server may not be started
     }
@@ -261,7 +261,7 @@ describe('CredentialProxyServer', () => {
     server = createServer();
     await server.start();
 
-    await expect(server.start()).rejects.toThrow();
+    await expect(server.start()).rejects.toThrow(/already started/);
   });
 
   // ─── Handshake ─────────────────────────────────────────────────────────────

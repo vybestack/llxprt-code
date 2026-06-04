@@ -26,7 +26,7 @@ export const useCreateProfileDialog = ({
     try {
       const providerList = runtime.listProviders();
       setProviders(providerList);
-    } catch (_e) {
+    } catch {
       // Silently fail - wizard will fall back to static list
       setProviders([]);
     }

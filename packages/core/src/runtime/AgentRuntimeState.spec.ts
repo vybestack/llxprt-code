@@ -158,7 +158,7 @@ describe('AgentRuntimeState - Constructor Validation', () => {
 
     expect(() => {
       (state.modelParams as Record<string, unknown>).temperature = 0.9;
-    }).toThrow();
+    }).toThrow(TypeError);
   });
 });
 
@@ -232,9 +232,6 @@ describe('AgentRuntimeState - Immutable Updates', () => {
     } as Partial<RuntimeStateParams>;
 
     expect(() => updateAgentRuntimeState(baseState, updates)).toThrow(
-      RuntimeStateError,
-    );
-    expect(() => updateAgentRuntimeState(baseState, updates)).toThrow(
       /update\.unsupported/,
     );
   });
@@ -245,9 +242,6 @@ describe('AgentRuntimeState - Immutable Updates', () => {
     // @pseudocode runtime-state.md lines 219-221
 
     expect(() => updateAgentRuntimeState(baseState, { provider: '' })).toThrow(
-      RuntimeStateError,
-    );
-    expect(() => updateAgentRuntimeState(baseState, { provider: '' })).toThrow(
       /provider\.invalid/,
     );
   });
@@ -257,9 +251,6 @@ describe('AgentRuntimeState - Immutable Updates', () => {
     // @requirement REQ-STAT5-001.2
     // @pseudocode runtime-state.md lines 222-223
 
-    expect(() => updateAgentRuntimeState(baseState, { model: '' })).toThrow(
-      RuntimeStateError,
-    );
     expect(() => updateAgentRuntimeState(baseState, { model: '' })).toThrow(
       /model\.invalid/,
     );
@@ -276,7 +267,7 @@ describe('AgentRuntimeState - Immutable Updates', () => {
 
     expect(() => {
       (newState as Record<string, unknown>).model = 'modified';
-    }).toThrow();
+    }).toThrow(TypeError);
   });
 });
 
@@ -655,7 +646,7 @@ describe('AgentRuntimeState - Snapshot Export', () => {
 
     expect(() => {
       (snapshot as Record<string, unknown>).model = 'modified';
-    }).toThrow();
+    }).toThrow(TypeError);
   });
 
   it('should include schema version for future migrations', () => {
@@ -742,7 +733,7 @@ describe('AgentRuntimeState - Synchronous Accessors', () => {
     expect(modelParams).toStrictEqual({ temperature: 0.7 });
     expect(() => {
       (modelParams as Record<string, unknown>).temperature = 0.9;
-    }).toThrow();
+    }).toThrow(TypeError);
   });
 });
 

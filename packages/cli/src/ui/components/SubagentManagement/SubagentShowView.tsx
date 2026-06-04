@@ -7,11 +7,9 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Box, Text } from 'ink';
-import {
-  type Direction,
-  logicalPosToOffset,
-  useTextBuffer,
-} from '../shared/text-buffer.js';
+import { useTextBuffer } from '../shared/text-buffer.js';
+import type { Direction } from '../shared/buffer-types.js';
+import { logicalPosToOffset } from '../shared/buffer-operations.js';
 import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
@@ -24,37 +22,10 @@ interface SubagentShowViewProps {
   isFocused?: boolean;
 }
 
-export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
-  subagent,
-  onEdit,
-  onBack,
-  isFocused = true,
-}) => {
-  const { rows: terminalRows, columns: terminalColumns } = useTerminalSize();
+function usePromptScroller(promptBuffer: ReturnType<typeof useTextBuffer>) {
+  const { moveToOffset, move } = promptBuffer;
 
-  // Keep this conservative so the whole view fits with dialog chrome.
-  const NON_PROMPT_HEIGHT = 14;
-  const promptViewportHeight = Math.max(
-    4,
-    Math.min(12, terminalRows - NON_PROMPT_HEIGHT),
-  );
-  const promptViewportWidth = Math.max(20, terminalColumns - 24);
-  const pageJump = Math.max(3, Math.floor(promptViewportHeight * 0.75));
-
-  const promptBuffer = useTextBuffer({
-    initialText: subagent.systemPrompt,
-    viewport: { width: promptViewportWidth, height: promptViewportHeight },
-    isValidPath: () => false,
-  });
-
-  const { setText, moveToOffset, move } = promptBuffer;
-
-  useEffect(() => {
-    setText(subagent.systemPrompt);
-    moveToOffset(0);
-  }, [setText, moveToOffset, subagent.name, subagent.systemPrompt]);
-
-  const movePrompt = useCallback(
+  return useCallback(
     (dir: Direction, amount: number) => {
       const lineCount = Math.max(1, Math.floor(amount));
 
@@ -77,7 +48,7 @@ export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
           : Math.max(0, currentVisualRow - lineCount);
 
       const targetVisualMap = promptBuffer.visualToLogicalMap[targetVisualRow];
-      if (!targetVisualMap) {
+      if (Object.is(targetVisualMap, undefined)) {
         return;
       }
 
@@ -106,6 +77,62 @@ export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
       promptBuffer.visualToLogicalMap,
     ],
   );
+}
+
+function PromptViewport({
+  promptBuffer,
+  promptViewportHeight,
+}: {
+  promptBuffer: ReturnType<typeof useTextBuffer>;
+  promptViewportHeight: number;
+}) {
+  const visibleLines = promptBuffer.viewportVisualLines;
+  const totalVisualLines = promptBuffer.allVisualLines.length;
+  const startLine = totalVisualLines > 0 ? promptBuffer.visualScrollRow + 1 : 0;
+  const endLine =
+    totalVisualLines > 0
+      ? Math.min(startLine + visibleLines.length - 1, totalVisualLines)
+      : 0;
+
+  return (
+    <Box flexDirection="column">
+      <Box marginTop={1}>
+        <Text color={Colors.Gray}>
+          System Prompt (lines {startLine}-{endLine} of {totalVisualLines})
+        </Text>
+      </Box>
+
+      <Box
+        flexDirection="column"
+        borderStyle="single"
+        borderColor={Colors.Gray}
+        paddingX={1}
+        height={promptViewportHeight + 2}
+        overflow="hidden"
+      >
+        {visibleLines.length > 0 ? (
+          visibleLines.map((line, idx) => (
+            <Text key={idx} color={Colors.Foreground} wrap="truncate-end">
+              {line || ' '}
+            </Text>
+          ))
+        ) : (
+          <Text color={Colors.Foreground}> </Text>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+function useShowViewKeyHandler(
+  promptBuffer: ReturnType<typeof useTextBuffer>,
+  pageJump: number,
+  onEdit: () => void,
+  onBack: () => void,
+  isFocused: boolean,
+) {
+  const { moveToOffset } = promptBuffer;
+  const movePrompt = usePromptScroller(promptBuffer);
 
   useKeypress(
     (key) => {
@@ -153,14 +180,38 @@ export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
     },
     { isActive: isFocused },
   );
+}
 
-  const visibleLines = promptBuffer.viewportVisualLines;
-  const totalVisualLines = promptBuffer.allVisualLines.length;
-  const startLine = totalVisualLines > 0 ? promptBuffer.visualScrollRow + 1 : 0;
-  const endLine =
-    totalVisualLines > 0
-      ? Math.min(startLine + visibleLines.length - 1, totalVisualLines)
-      : 0;
+export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
+  subagent,
+  onEdit,
+  onBack,
+  isFocused = true,
+}) => {
+  const { rows: terminalRows, columns: terminalColumns } = useTerminalSize();
+
+  const NON_PROMPT_HEIGHT = 14;
+  const promptViewportHeight = Math.max(
+    4,
+    Math.min(12, terminalRows - NON_PROMPT_HEIGHT),
+  );
+  const promptViewportWidth = Math.max(20, terminalColumns - 24);
+  const pageJump = Math.max(3, Math.floor(promptViewportHeight * 0.75));
+
+  const promptBuffer = useTextBuffer({
+    initialText: subagent.systemPrompt,
+    viewport: { width: promptViewportWidth, height: promptViewportHeight },
+    isValidPath: () => false,
+  });
+
+  const { setText, moveToOffset } = promptBuffer;
+
+  useEffect(() => {
+    setText(subagent.systemPrompt);
+    moveToOffset(0);
+  }, [setText, moveToOffset, subagent.name, subagent.systemPrompt]);
+
+  useShowViewKeyHandler(promptBuffer, pageJump, onEdit, onBack, isFocused);
 
   const profileDetails = useMemo(() => {
     const parts = [subagent.profile];
@@ -177,30 +228,10 @@ export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
       </Text>
       <Text color={Colors.Gray}>Profile: {profileDetails}</Text>
 
-      <Box marginTop={1}>
-        <Text color={Colors.Gray}>
-          System Prompt (lines {startLine}-{endLine} of {totalVisualLines})
-        </Text>
-      </Box>
-
-      <Box
-        flexDirection="column"
-        borderStyle="single"
-        borderColor={Colors.Gray}
-        paddingX={1}
-        height={promptViewportHeight + 2}
-        overflow="hidden"
-      >
-        {visibleLines.length > 0 ? (
-          visibleLines.map((line, idx) => (
-            <Text key={idx} color={Colors.Foreground} wrap="truncate-end">
-              {line || ' '}
-            </Text>
-          ))
-        ) : (
-          <Text color={Colors.Foreground}> </Text>
-        )}
-      </Box>
+      <PromptViewport
+        promptBuffer={promptBuffer}
+        promptViewportHeight={promptViewportHeight}
+      />
 
       <Box marginTop={1}>
         <Text color={Colors.Gray}>

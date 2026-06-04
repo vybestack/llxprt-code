@@ -18,18 +18,33 @@ import { describe, it, expect } from 'vitest';
  * full component rendering.
  */
 describe('AppContainer - Cancel/Restore Prompt Race Condition (b1258dd5)', () => {
+  // Shared cancelHandler implementation for testing race condition scenarios
+  const createCancelHandler =
+    (
+      getHistory: () => string[],
+      getRestoredPrompt: () => string | null,
+      setRestoredPrompt: (prompt: string | null) => void,
+    ) =>
+    (shouldRestore: boolean) => {
+      if (shouldRestore) {
+        const history = getHistory();
+        setRestoredPrompt(history[history.length - 1] ?? null);
+      }
+    };
+
   it('demonstrates the race condition without the fix', () => {
     // Simulate the state WITHOUT the fix (immediate restoration)
     let inputHistory = ['old prompt'];
     let restoredPrompt: string | null = null;
 
     // Simulate cancelHandler that restores immediately
-    const cancelHandler = (shouldRestore: boolean) => {
-      if (shouldRestore) {
-        // BUG: This reads the OLD state because inputHistory hasn't updated yet
-        restoredPrompt = inputHistory[inputHistory.length - 1];
-      }
-    };
+    const cancelHandler = createCancelHandler(
+      () => inputHistory,
+      () => restoredPrompt,
+      (p) => {
+        restoredPrompt = p;
+      },
+    );
 
     // Simulate onCancelSubmit calling cancelHandler immediately
     const onCancelSubmit = (shouldRestore: boolean) => {
@@ -57,11 +72,13 @@ describe('AppContainer - Cancel/Restore Prompt Race Condition (b1258dd5)', () =>
     let pendingRestorePrompt = false;
 
     // Simulate cancelHandler
-    const cancelHandler = (shouldRestore: boolean) => {
-      if (shouldRestore) {
-        restoredPrompt = inputHistory[inputHistory.length - 1];
-      }
-    };
+    const cancelHandler = createCancelHandler(
+      () => inputHistory,
+      () => restoredPrompt,
+      (p) => {
+        restoredPrompt = p;
+      },
+    );
 
     // Simulate onCancelSubmit with FIX: defer restoration
     const onCancelSubmit = (shouldRestore: boolean) => {

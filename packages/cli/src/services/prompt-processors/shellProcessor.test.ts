@@ -265,7 +265,7 @@ describe('ShellProcessor', () => {
     const processor = new ShellProcessor('test-command');
     const prompt = 'First: !{echo "hello"}, Second: !{rm -rf /}';
 
-    mockCheckCommandPermissions.mockImplementation((cmd) => {
+    mockCheckCommandPermissions.mockImplementation((cmd: string) => {
       if (cmd.includes('rm')) {
         return { allAllowed: false, disallowedCommands: [cmd] };
       }
@@ -284,7 +284,7 @@ describe('ShellProcessor', () => {
     const processor = new ShellProcessor('test-command');
     const prompt = 'Allowed: !{ls -l}, Disallowed: !{rm -rf /}';
 
-    mockCheckCommandPermissions.mockImplementation((cmd) => ({
+    mockCheckCommandPermissions.mockImplementation((cmd: string) => ({
       allAllowed: !cmd.includes('rm'),
       disallowedCommands: cmd.includes('rm') ? [cmd] : [],
     }));

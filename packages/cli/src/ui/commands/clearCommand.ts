@@ -11,6 +11,8 @@ import {
   triggerSessionStartHook,
   SessionEndReason,
   SessionStartSource,
+  type Config,
+  type SessionStartHookOutput,
 } from '@vybestack/llxprt-code-core';
 import {
   CommandKind,
@@ -18,6 +20,37 @@ import {
   type CommandContext,
 } from './types.js';
 import { getCliRuntimeServices } from '../../runtime/runtimeSettings.js';
+
+/**
+ * Helper to trigger session end hook with fail-open behavior.
+ */
+async function triggerSessionEndHookSafe(
+  config: Config | null | undefined,
+  reason: SessionEndReason,
+): Promise<void> {
+  if (!config) return;
+  try {
+    await triggerSessionEndHook(config, reason);
+  } catch {
+    // Hooks are fail-open - continue even if hook fails
+  }
+}
+
+/**
+ * Helper to trigger session start hook with fail-open behavior.
+ */
+async function triggerSessionStartHookSafe(
+  config: Config | null | undefined,
+  source: SessionStartSource,
+): Promise<SessionStartHookOutput | undefined> {
+  if (!config) return undefined;
+  try {
+    return await triggerSessionStartHook(config, source);
+  } catch {
+    // Hooks are fail-open - continue even if hook fails
+    return undefined;
+  }
+}
 
 function resolveForegroundGeminiClient(
   context: CommandContext,
@@ -45,44 +78,31 @@ export const clearCommand: SlashCommand = {
       context.ui.setDebugMessage('Clearing terminal and resetting chat.');
 
       // Trigger SessionEnd hook before clearing (fail-open)
-      if (context.services.config) {
-        try {
-          await triggerSessionEndHook(
-            context.services.config,
-            SessionEndReason.Clear,
-          );
-        } catch {
-          // Hooks are fail-open - continue even if hook fails
-        }
-      }
+      await triggerSessionEndHookSafe(
+        context.services.config,
+        SessionEndReason.Clear,
+      );
 
       await geminiClient.resetChat();
 
       // Trigger SessionStart hook after clearing (fail-open)
-      if (context.services.config) {
-        try {
-          const sessionStartOutput = await triggerSessionStartHook(
-            context.services.config,
-            SessionStartSource.Clear,
-          );
+      const sessionStartOutput = await triggerSessionStartHookSafe(
+        context.services.config,
+        SessionStartSource.Clear,
+      );
 
-          // Display system message if provided
-          if (sessionStartOutput?.systemMessage) {
-            context.ui.addItem(
-              {
-                type: 'info',
-                text: sessionStartOutput.systemMessage,
-              },
-              Date.now(),
-            );
-          }
-
-          // Note: Additional context is NOT injected after clear - clear means fresh start
-          // Only the system message is displayed
-        } catch {
-          // Hooks are fail-open - continue even if hook fails
-        }
+      // Display system message if provided
+      if (sessionStartOutput?.systemMessage) {
+        context.ui.addItem(
+          {
+            type: 'info',
+            text: sessionStartOutput.systemMessage,
+          },
+          Date.now(),
+        );
       }
+      // Note: Additional context is NOT injected after clear - clear means fresh start
+      // Only the system message is displayed
     } else {
       context.ui.setDebugMessage('Clearing terminal.');
     }

@@ -152,6 +152,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const joinedOutput = result.join('\n');
       expect(joinedOutput).toMatch(/File size:/i);
       // Should contain some byte representation (B, KB, MB, etc.)
+      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       expect(joinedOutput).toMatch(/\d+.*(?:B|KB|MB|bytes)/i);
     });
 
@@ -243,6 +244,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
 
             // If the original ID is longer than 12, it should NOT appear in full
             if (sessionId.length > 12) {
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(joinedOutput).not.toContain(sessionId);
             }
           },
@@ -265,8 +267,10 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
           const joinedOutput = result.join('\n').toLowerCase();
 
           if (isResumed) {
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(joinedOutput).toMatch(/resumed:\s*yes/);
           } else {
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(joinedOutput).toMatch(/resumed:\s*no/);
           }
         }),

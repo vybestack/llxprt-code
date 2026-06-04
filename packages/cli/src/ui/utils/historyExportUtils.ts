@@ -57,24 +57,60 @@ export function sanitizeTranscript(text: string): string {
     /AWS_SECRET_ACCESS_KEY=\S+/g,
     'AWS_SECRET_ACCESS_KEY=[REDACTED]',
   );
+  // Static regex for AWS key redaction - no dynamic parts
+
   sanitized = sanitized.replace(
     /AWS_ACCESS_KEY_ID=\S+/g,
     'AWS_ACCESS_KEY_ID=[REDACTED]',
   );
 
   // Redact Bearer tokens
+  // Static regex for Bearer token redaction - no dynamic parts
   sanitized = sanitized.replace(
+    /* eslint-disable-next-line sonarjs/regular-expr */
     /Bearer\s+[a-zA-Z0-9_.-]+/gi,
     'Bearer [REDACTED]',
   );
 
   // Redact generic API keys in common formats
+  // Static regex for API key redaction - no dynamic parts
   sanitized = sanitized.replace(
+    /* eslint-disable-next-line sonarjs/regular-expr */
     /api[_-]?key["\s:=]+[a-zA-Z0-9_.-]{20,}/gi,
     'api_key=[REDACTED]',
   );
 
   return sanitized;
+}
+
+/**
+ * Formats a single part of a history item to markdown.
+ */
+function formatPartToMarkdown(
+  part: NonNullable<Content['parts']>[number],
+): string {
+  if (part.text) {
+    return `${part.text}\n\n`;
+  }
+  if (part.functionCall) {
+    let result = `**Function Call:** \`${part.functionCall.name}\`\n\n`;
+    if (part.functionCall.args) {
+      result += '```json\n';
+      result += JSON.stringify(part.functionCall.args, null, 2);
+      result += '\n```\n\n';
+    }
+    return result;
+  }
+  if (part.functionResponse) {
+    let result = `**Function Response:** \`${part.functionResponse.name}\`\n\n`;
+    if (part.functionResponse.response) {
+      result += '```json\n';
+      result += JSON.stringify(part.functionResponse.response, null, 2);
+      result += '\n```\n\n';
+    }
+    return result;
+  }
+  return '';
 }
 
 /**
@@ -92,27 +128,7 @@ function formatHistoryAsMarkdown(history: Content[]): string {
 
     if (item.parts) {
       for (const part of item.parts) {
-        if (part.text) {
-          transcript += `${part.text}\n\n`;
-        } else if (part.functionCall) {
-          transcript += `**Function Call:** \`${part.functionCall.name}\`\n\n`;
-          if (part.functionCall.args) {
-            transcript += '```json\n';
-            transcript += JSON.stringify(part.functionCall.args, null, 2);
-            transcript += '\n```\n\n';
-          }
-        } else if (part.functionResponse) {
-          transcript += `**Function Response:** \`${part.functionResponse.name}\`\n\n`;
-          if (part.functionResponse.response) {
-            transcript += '```json\n';
-            transcript += JSON.stringify(
-              part.functionResponse.response,
-              null,
-              2,
-            );
-            transcript += '\n```\n\n';
-          }
-        }
+        transcript += formatPartToMarkdown(part);
       }
     }
 

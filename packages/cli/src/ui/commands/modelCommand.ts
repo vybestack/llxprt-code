@@ -63,14 +63,13 @@ function parseArgs(args: string): ModelCommandArgs {
  * Check if any filter flags are set
  */
 function hasAnyFlags(args: ModelCommandArgs): boolean {
-  return !!(
-    args.provider ||
-    args.tools ||
-    args.vision ||
-    args.reasoning ||
-    args.audio ||
-    args.all
-  );
+  const hasProvider = !!args.provider;
+  const hasCapabilityFlags =
+    args.tools === true ||
+    args.vision === true ||
+    args.reasoning === true ||
+    args.audio === true;
+  return hasProvider || hasCapabilityFlags || args.all === true;
 }
 
 /**

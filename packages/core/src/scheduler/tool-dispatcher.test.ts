@@ -169,12 +169,11 @@ describe('ToolDispatcher', () => {
       expect(results).toHaveLength(1);
       const result = results[0];
       expect(result.status).toBe('error');
-      if (result.status === 'error') {
-        expect(result.response.errorType).toBe(
-          ToolErrorType.TOOL_NOT_REGISTERED,
-        );
-        expect(result.response.responseParts).toBeDefined();
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (result.status !== 'error')
+        throw new Error('unreachable: narrowing failed');
+      expect(result.response.errorType).toBe(ToolErrorType.TOOL_NOT_REGISTERED);
+      expect(result.response.responseParts).toBeDefined();
     });
 
     it('includes levenshtein suggestion in error message when tool name is close', () => {
@@ -191,10 +190,11 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
-      if (results[0].status === 'error') {
-        const responseStr = JSON.stringify(results[0].response.responseParts);
-        expect(responseStr).toContain('list_files');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (results[0].status !== 'error')
+        throw new Error('unreachable: narrowing failed');
+      const responseStr = JSON.stringify(results[0].response.responseParts);
+      expect(responseStr).toContain('list_files');
     });
 
     it('returns ErroredToolCall with TOOL_DISABLED when tool is blocked by governance', () => {
@@ -213,9 +213,10 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
-      if (results[0].status === 'error') {
-        expect(results[0].response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (results[0].status !== 'error')
+        throw new Error('unreachable: narrowing failed');
+      expect(results[0].response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
     });
 
     it('returns ErroredToolCall with INVALID_TOOL_PARAMS when buildInvocation throws', () => {
@@ -231,11 +232,12 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
-      if (results[0].status === 'error') {
-        expect(results[0].response.errorType).toBe(
-          ToolErrorType.INVALID_TOOL_PARAMS,
-        );
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (results[0].status !== 'error')
+        throw new Error('unreachable: narrowing failed');
+      expect(results[0].response.errorType).toBe(
+        ToolErrorType.INVALID_TOOL_PARAMS,
+      );
     });
 
     it('sets context on ContextAwareTool during resolveAndValidate', () => {
@@ -268,11 +270,12 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('validating');
-      if (results[0].status === 'validating') {
-        expect(results[0].tool).toBe(tool);
-        expect(results[0].invocation).toBeDefined();
-        expect(results[0].request.name).toBe('my_tool');
-      }
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (results[0].status !== 'validating')
+        throw new Error('unreachable: narrowing failed');
+      expect(results[0].tool).toBe(tool);
+      expect(results[0].invocation).toBeDefined();
+      expect(results[0].request.name).toBe('my_tool');
     });
 
     it('handles multiple requests mixing success and error', () => {

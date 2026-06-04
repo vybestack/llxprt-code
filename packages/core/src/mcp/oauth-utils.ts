@@ -52,6 +52,25 @@ export interface OAuthProtectedResourceMetadata {
 
 export const FIVE_MIN_BUFFER_MS = 5 * 60 * 1000;
 
+async function tryAuthServerDiscovery(
+  authServerUrl: string,
+): Promise<MCPOAuthConfig | null> {
+  const authServerMetadata =
+    await OAuthUtils.discoverAuthorizationServerMetadata(authServerUrl);
+
+  if (authServerMetadata) {
+    const config = OAuthUtils.metadataToOAuthConfig(authServerMetadata);
+    if (authServerMetadata.registration_endpoint) {
+      debugLogger.log(
+        'Dynamic client registration is supported at:',
+        authServerMetadata.registration_endpoint,
+      );
+    }
+    return config;
+  }
+  return null;
+}
+
 /**
  * Utility class for common OAuth operations.
  */
@@ -151,7 +170,7 @@ export class OAuthUtils {
     return {
       authorizationUrl: metadata.authorization_endpoint,
       tokenUrl: metadata.token_endpoint,
-      scopes: metadata.scopes_supported || [],
+      scopes: metadata.scopes_supported ?? [],
       registrationUrl: metadata.registration_endpoint,
     };
   }
@@ -267,20 +286,14 @@ export class OAuthUtils {
         }
       }
 
-      if (resourceMetadata?.authorization_servers?.length) {
+      if (
+        resourceMetadata?.authorization_servers &&
+        resourceMetadata.authorization_servers.length > 0
+      ) {
         // Use the first authorization server
         const authServerUrl = resourceMetadata.authorization_servers[0];
-        const authServerMetadata =
-          await this.discoverAuthorizationServerMetadata(authServerUrl);
-
-        if (authServerMetadata) {
-          const config = this.metadataToOAuthConfig(authServerMetadata);
-          if (authServerMetadata.registration_endpoint) {
-            debugLogger.log(
-              'Dynamic client registration is supported at:',
-              authServerMetadata.registration_endpoint,
-            );
-          }
+        const config = await tryAuthServerDiscovery(authServerUrl);
+        if (config) {
           return config;
         }
       }
@@ -358,7 +371,10 @@ export class OAuthUtils {
       }
     }
 
-    if (!resourceMetadata?.authorization_servers?.length) {
+    if (
+      !resourceMetadata?.authorization_servers ||
+      resourceMetadata.authorization_servers.length === 0
+    ) {
       return null;
     }
 
@@ -416,7 +432,11 @@ export class OAuthUtils {
         Buffer.from(idToken.split('.')[1], 'base64').toString(),
       );
 
-      if (payload && typeof payload.exp === 'number') {
+      if (
+        typeof payload === 'object' &&
+        payload !== null &&
+        typeof payload.exp === 'number'
+      ) {
         return payload.exp * 1000; // Convert seconds to milliseconds
       }
     } catch (e) {

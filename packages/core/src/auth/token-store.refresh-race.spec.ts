@@ -199,14 +199,14 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
 
     const results = await Promise.all(clients);
     const refreshedResults = results.filter(
-      (r) => 'refreshed' in r && r.refreshed,
+      (r) => 'refreshed' in r && r.refreshed === true,
     );
 
     expect(refreshedResults.length).toBe(1);
     expect(refreshCallCount).toBe(1);
 
     const allHaveToken = results.every(
-      (r) => 'token' in r && r.token?.access_token,
+      (r): boolean => 'token' in r && r.token?.access_token != null,
     );
     expect(allHaveToken).toBe(true);
   });

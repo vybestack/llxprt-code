@@ -27,10 +27,9 @@ describe('`/set` schema contract for useSlashCompletion @plan:PLAN-20251013-AUTO
   });
 
   it('declares literal subcommand nodes for unset/modelparam/emojifilter (RED)', () => {
-    const literalValues =
-      setCommand.schema
-        ?.filter((node) => node.kind === 'literal')
-        ?.map((node) => node.value) ?? [];
+    const literalValues = setCommand
+      .schema!.filter((node) => node.kind === 'literal')
+      .map((node) => node.value);
 
     expect(literalValues).toStrictEqual(
       expect.arrayContaining(['unset', 'modelparam', 'emojifilter']),
@@ -38,11 +37,11 @@ describe('`/set` schema contract for useSlashCompletion @plan:PLAN-20251013-AUTO
   });
 
   it('provides nested hints for `/set modelparam` flow (RED)', () => {
-    const modelParamNode = setCommand.schema
-      ?.filter((node) => node.kind === 'literal')
-      ?.find((node) => node.value === 'modelparam');
+    const modelParamNode = setCommand
+      .schema!.filter((node) => node.kind === 'literal')
+      .find((node) => node.value === 'modelparam');
 
-    const valueNode = modelParamNode?.next?.find(
+    const valueNode = modelParamNode!.next?.find(
       (child) => child.kind === 'value',
     );
 

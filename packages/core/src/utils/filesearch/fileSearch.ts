@@ -56,7 +56,7 @@ export async function filter(
     // Yield control to the event loop periodically to prevent blocking.
     if (i % 1000 === 0) {
       await new Promise((resolve) => setImmediate(resolve));
-      if (signal?.aborted) {
+      if (signal?.aborted === true) {
         throw new AbortError();
       }
     }
@@ -75,6 +75,7 @@ export async function filter(
 
     // This is 40% faster than localeCompare and the only thing we would really
     // gain from localeCompare is case-sensitive sort
+    // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     return a < b ? -1 : a > b ? 1 : 0;
   });
 
@@ -129,7 +130,8 @@ class RecursiveFileSearch implements FileSearch {
 
     pattern = unescapePath(pattern) || '*';
 
-    let filteredCandidates;
+    let filteredCandidates: string[] = [];
+
     const { files: candidates, isExactMatch } =
       await this.resultCache.get(pattern);
 
@@ -137,32 +139,41 @@ class RecursiveFileSearch implements FileSearch {
       // Use the cached result.
       filteredCandidates = candidates;
     } else {
-      let shouldCache = true;
-      if (pattern.includes('*') || !this.fzf) {
-        filteredCandidates = await filter(candidates, pattern, options.signal);
-      } else {
-        filteredCandidates = await this.fzf
-          .find(pattern)
-          .then((results: Array<FzfResultItem<string>>) =>
-            results.map((entry: FzfResultItem<string>) => entry.item),
-          )
-          .catch(() => {
-            shouldCache = false;
-            return [];
-          });
-      }
+      const shouldCacheCandidates = await (async () => {
+        if (pattern.includes('*') || this.fzf === undefined) {
+          filteredCandidates = await filter(
+            candidates,
+            pattern,
+            options.signal,
+          );
+          return true;
+        }
 
-      if (shouldCache) {
+        try {
+          const results = await this.fzf.find(pattern);
+          filteredCandidates = results.map(
+            (entry: FzfResultItem<string>) => entry.item,
+          );
+          return true;
+        } catch {
+          // FZF search failed - return empty results
+          filteredCandidates = [];
+          return false;
+        }
+      })();
+
+      if (shouldCacheCandidates) {
         this.resultCache.set(pattern, filteredCandidates);
       }
     }
 
     const fileFilter = this.ignore.getFileFilter();
     const results: string[] = [];
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const [i, candidate] of filteredCandidates.entries()) {
       if (i % 1000 === 0) {
         await new Promise((resolve) => setImmediate(resolve));
-        if (options.signal?.aborted) {
+        if (options.signal?.aborted === true) {
           throw new AbortError();
         }
       }
@@ -225,6 +236,7 @@ class DirectoryFileSearch implements FileSearch {
 
     const fileFilter = this.ignore.getFileFilter();
     const finalResults: string[] = [];
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const candidate of filteredResults) {
       if (finalResults.length >= (options.maxResults ?? Infinity)) {
         break;

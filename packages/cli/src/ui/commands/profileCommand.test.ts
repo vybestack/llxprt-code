@@ -42,7 +42,7 @@ describe('profileCommand', () => {
 
   describe('save subcommand', () => {
     const save = profileCommand.subCommands!.find(
-      (cmd) => cmd?.name === 'save',
+      (cmd) => cmd.name === 'save',
     )!;
 
     it('saves model profile with provided name', async () => {
@@ -72,7 +72,7 @@ describe('profileCommand', () => {
 
   describe('load subcommand', () => {
     const load = profileCommand.subCommands!.find(
-      (cmd) => cmd?.name === 'load',
+      (cmd) => cmd.name === 'load',
     )!;
 
     it('loads profile and surfaces info messages', async () => {
@@ -125,7 +125,7 @@ describe('profileCommand', () => {
 
   describe('delete subcommand', () => {
     const del = profileCommand.subCommands!.find(
-      (cmd) => cmd?.name === 'delete',
+      (cmd) => cmd.name === 'delete',
     )!;
 
     it('deletes named profile', async () => {
@@ -136,7 +136,7 @@ describe('profileCommand', () => {
 
   describe('set-default subcommand', () => {
     const setDefault = profileCommand.subCommands!.find(
-      (cmd) => cmd?.name === 'set-default',
+      (cmd) => cmd.name === 'set-default',
     )!;
 
     it('persists default profile name', async () => {
@@ -152,7 +152,7 @@ describe('profileCommand', () => {
 
   describe('list subcommand', () => {
     const list = profileCommand.subCommands!.find(
-      (cmd) => cmd?.name === 'list',
+      (cmd) => cmd.name === 'list',
     )!;
 
     it('opens the profile list dialog', async () => {
@@ -164,7 +164,7 @@ describe('profileCommand', () => {
 
   describe('save subcommand - load balancer', () => {
     const save = profileCommand.subCommands!.find(
-      (cmd) => cmd?.name === 'save',
+      (cmd) => cmd.name === 'save',
     )!;
 
     beforeEach(() => {
@@ -216,6 +216,7 @@ describe('profileCommand', () => {
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
       // Gets usage error since parts.length < 5
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(content).toMatch(/Usage.*roundrobin.*failover/i);
     });
 

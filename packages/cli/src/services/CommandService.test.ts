@@ -161,7 +161,7 @@ describe('CommandService', () => {
     expect(() => {
       // @ts-expect-error - Testing immutability is intentional here.
       commands.push(mockCommandB);
-    }).toThrow();
+    }).toThrow(TypeError);
 
     // Verify the original array was not mutated.
     expect(service.getCommands()).toHaveLength(1);

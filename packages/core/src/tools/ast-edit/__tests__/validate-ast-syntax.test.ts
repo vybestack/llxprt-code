@@ -9,6 +9,7 @@ import { validateASTSyntax } from '../edit-calculator.js';
 
 const JS_PATH = '/test/file.js';
 const TS_PATH = '/test/file.ts';
+// eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
 const SYNTAX_ERROR_PATTERN = /Syntax error at line \d+, column \d+/;
 
 describe('validateASTSyntax', () => {

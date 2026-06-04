@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import { type PartListUnion, type Content } from '@google/genai';
 
 export function isThinkingSupported(model: string) {
@@ -33,10 +35,12 @@ export function findCompressSplitPoint(
   let cumulativeCharCount = 0;
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
-    const hasFunctionResponse = content.parts?.some(
-      (part) => !!part.functionResponse,
-    );
-    const hasFunctionCall = content.parts?.some((part) => !!part.functionCall);
+
+    const hasFunctionResponse =
+      content.parts?.some((part) => Boolean(part.functionResponse)) === true;
+
+    const hasFunctionCall =
+      content.parts?.some((part) => Boolean(part.functionCall)) === true;
     if (content.role === 'user' && !hasFunctionResponse) {
       if (cumulativeCharCount >= targetCharCount) {
         return i;
@@ -56,11 +60,15 @@ export function findCompressSplitPoint(
   }
 
   const lastContent = contents[contents.length - 1];
+  const hasNoFunctionCall = (content: Content | undefined): boolean => {
+    const parts = content?.parts;
+
+    return parts?.some((part) => Boolean(part.functionCall)) !== true;
+  };
+
   if (lastSplitPoint > 0) {
-    if (
-      lastContent?.role === 'model' &&
-      !lastContent?.parts?.some((part) => part.functionCall)
-    ) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
+    if (lastContent?.role === 'model' && hasNoFunctionCall(lastContent)) {
       return contents.length;
     }
 
@@ -75,10 +83,8 @@ export function findCompressSplitPoint(
     return lastToolCallSplitPoint;
   }
 
-  if (
-    lastContent?.role === 'model' &&
-    !lastContent?.parts?.some((part) => part.functionCall)
-  ) {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
+  if (lastContent?.role === 'model' && hasNoFunctionCall(lastContent)) {
     return contents.length;
   }
 
@@ -91,7 +97,9 @@ export function extractPromptText(request: PartListUnion): string {
     return request
       .map((part) => {
         if (typeof part === 'string') return part;
-        if (part && typeof part === 'object' && 'text' in part) {
+        // Preserve defensive runtime check: part could be null at runtime despite types.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
+        if (part !== null && typeof part === 'object' && 'text' in part) {
           return (part as { text: string }).text;
         }
         return '';
@@ -99,7 +107,9 @@ export function extractPromptText(request: PartListUnion): string {
       .filter(Boolean)
       .join(' ');
   }
-  if (request && typeof request === 'object' && 'text' in request) {
+  // Not an array, check for single object with text
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
+  if (request !== null && typeof request === 'object' && 'text' in request) {
     return (request as { text: string }).text;
   }
   return '';
@@ -113,6 +123,7 @@ export function estimateTextOnlyLength(request: PartListUnion): number {
   if (!Array.isArray(request)) {
     if (
       typeof request === 'object' &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
       request !== null &&
       'text' in request &&
       request.text
@@ -128,6 +139,7 @@ export function estimateTextOnlyLength(request: PartListUnion): number {
       textLength += part.length;
     } else if (
       typeof part === 'object' &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
       part !== null &&
       'text' in part &&
       part.text

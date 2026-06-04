@@ -802,8 +802,8 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(secondRun.agentId).toBe('planner-2');
     expect(firstRun.agentId).not.toBe(secondRun.agentId);
 
-    await firstRun.dispose?.();
-    await secondRun.dispose?.();
+    await firstRun.dispose();
+    await secondRun.dispose();
 
     expect(firstBundle.history.clear).toHaveBeenCalled();
     expect(secondBundle.history.clear).toHaveBeenCalled();
@@ -841,7 +841,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       runConfig,
     });
 
-    await run.dispose?.();
+    await run.dispose();
 
     expect(disposeSpy).toHaveBeenCalledTimes(1);
     expect(clearSpy).not.toHaveBeenCalled();

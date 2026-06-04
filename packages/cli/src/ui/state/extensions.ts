@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import type { ExtensionUpdateInfo } from '../../config/extension.js';
 import { checkExhaustive } from '../../utils/checks.js';
 
@@ -110,7 +112,7 @@ export function extensionUpdatesReducer(
         ...state,
         // If there is a pre-existing scheduled update, we merge them.
         scheduledUpdate: {
-          all: state.scheduledUpdate?.all || action.payload.all,
+          all: state.scheduledUpdate?.all === true || action.payload.all,
           names: [
             ...(state.scheduledUpdate?.names ?? []),
             ...(action.payload.names ?? []),

@@ -535,7 +535,7 @@ describe('AppContainer.keybindings', () => {
 
       // When useAlternateBuffer is true, copy mode keybinding (Ctrl+S) should be available
       // The keybinding is defined and the settings enable alternate buffer
-      expect(mockSettings.merged.ui?.useAlternateBuffer).toBe(true);
+      expect(mockSettings.merged.ui.useAlternateBuffer).toBe(true);
 
       unmount();
     });

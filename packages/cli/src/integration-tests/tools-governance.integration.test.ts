@@ -71,7 +71,7 @@ describe('tools governance integration', () => {
     expect(setSpy).toHaveBeenCalledWith('tools.allowed', []);
     expect(settings.get('tools.disabled')).toStrictEqual(['code-editor']);
     const exported = await settings.exportForProfile();
-    expect(exported.tools?.disabled).toStrictEqual(['code-editor']);
+    expect(exported.tools.disabled).toStrictEqual(['code-editor']);
 
     const mockToolRegistry = {
       getAllTools: () => [
@@ -105,6 +105,7 @@ describe('tools governance integration', () => {
       ui: { addItem: uiAddItem },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) {
       throw new Error('toolsCommand action not defined');
     }

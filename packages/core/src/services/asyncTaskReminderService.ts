@@ -85,8 +85,8 @@ export class AsyncTaskReminderService {
       parts.push(`${running.length} async task(s) still running.`);
     }
 
-    // Format MUST match TodoReminderService exactly
-    // See: packages/core/src/services/todo-reminder-service.ts line 98-100
+    // Format MUST match the synchronous reminder service exactly
+    // See the synchronous reminder service formatting.
     const text = `---\nSystem Note: Async Task Status\n\n${parts.join('\n\n')}\n---`;
     return { text, notifiedTaskIds };
   }
@@ -103,7 +103,7 @@ export class AsyncTaskReminderService {
       const payload: Record<string, unknown> = {
         agent_id: task.id,
         terminate_reason: task.output.terminate_reason,
-        emitted_vars: task.output.emitted_vars ?? {},
+        emitted_vars: task.output.emitted_vars,
       };
 
       if (task.output.final_message !== undefined) {

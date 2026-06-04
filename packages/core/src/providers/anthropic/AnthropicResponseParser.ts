@@ -50,8 +50,8 @@ function parseContentBlocks(
 
       const toolSchema = findToolSchema(tools, unprefixName, isOAuth);
       if (
-        toolSchema &&
-        processedParameters &&
+        toolSchema != null &&
+        processedParameters != null &&
         typeof processedParameters === 'object' &&
         typeof toolSchema === 'object'
       ) {
@@ -174,9 +174,7 @@ export function parseAnthropicResponse(
   // Propagate stop_reason so downstream turn handling and telemetry
   // receive a terminal signal (issue #1844).
   if (message.stop_reason) {
-    if (!result.metadata) {
-      result.metadata = {};
-    }
+    result.metadata ??= {};
     result.metadata.stopReason = message.stop_reason;
   }
 

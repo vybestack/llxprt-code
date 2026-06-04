@@ -19,110 +19,93 @@ import {
 } from '../core/turn.js';
 import { MockTool } from '../test-utils/tools.js';
 
+function buildMockConfig(): Config {
+  return {
+    getTelemetryEnabled: () => true,
+    getUsageStatisticsEnabled: () => true,
+    getSessionId: () => 'test-session',
+    getModel: () => 'test-model',
+    getEmbeddingModel: () => 'test-embedding',
+    getDebugMode: () => false,
+  } as unknown as Config;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildCircularObject(): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const circularObject: any = {
+    sockets: {},
+    agent: null,
+  };
+  circularObject.agent = circularObject;
+  circularObject.sockets['test-host'] = [
+    { _httpMessage: { agent: circularObject } },
+  ];
+  return circularObject;
+}
+
+function buildMockRequest(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any,
+): ToolCallRequestInfo {
+  return {
+    callId: 'test-call-id',
+    name: 'ReadFile',
+    args,
+    isClientInitiated: false,
+    prompt_id: 'test-prompt-id',
+    agentId: 'agent-circular',
+  };
+}
+
+function buildMockResponse(): ToolCallResponseInfo {
+  return {
+    callId: 'test-call-id',
+    responseParts: [{ text: 'test result' }],
+    resultDisplay: undefined,
+    error: undefined,
+    errorType: undefined,
+    agentId: 'agent-circular',
+  };
+}
+
+function buildMockCompletedToolCall(
+  request: ToolCallRequestInfo,
+): CompletedToolCall {
+  const tool = new MockTool('mock-tool');
+  return {
+    status: 'success',
+    request,
+    response: buildMockResponse(),
+    tool,
+    invocation: tool.build({}),
+    durationMs: 100,
+  };
+}
+
 describe('Circular Reference Handling', () => {
   it('should handle circular references in tool function arguments', () => {
-    // Create a mock config
-    const mockConfig = {
-      getTelemetryEnabled: () => true,
-      getUsageStatisticsEnabled: () => true,
-      getSessionId: () => 'test-session',
-      getModel: () => 'test-model',
-      getEmbeddingModel: () => 'test-embedding',
-      getDebugMode: () => false,
-    } as unknown as Config;
+    const mockConfig = buildMockConfig();
+    const circularObject = buildCircularObject();
 
-    // Create an object with circular references (similar to HttpsProxyAgent)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const circularObject: any = {
-      sockets: {},
-      agent: null,
-    };
-    circularObject.agent = circularObject; // Create circular reference
-    circularObject.sockets['test-host'] = [
-      { _httpMessage: { agent: circularObject } },
-    ];
-
-    // Create a mock CompletedToolCall with circular references in function_args
-    const mockRequest: ToolCallRequestInfo = {
-      callId: 'test-call-id',
-      name: 'ReadFile',
-      args: circularObject, // This would cause the original error
-      isClientInitiated: false,
-      prompt_id: 'test-prompt-id',
-      agentId: 'agent-circular',
-    };
-
-    const mockResponse: ToolCallResponseInfo = {
-      callId: 'test-call-id',
-      responseParts: [{ text: 'test result' }],
-      resultDisplay: undefined,
-      error: undefined, // undefined means success
-      errorType: undefined,
-      agentId: 'agent-circular',
-    };
-
-    const tool = new MockTool('mock-tool');
-    const mockCompletedToolCall: CompletedToolCall = {
-      status: 'success',
-      request: mockRequest,
-      response: mockResponse,
-      tool,
-      invocation: tool.build({}),
-      durationMs: 100,
-    };
-
-    // Create a tool call event with circular references in function_args
+    const mockRequest = buildMockRequest(circularObject);
+    const mockCompletedToolCall = buildMockCompletedToolCall(mockRequest);
     const event = new ToolCallEvent(mockCompletedToolCall);
 
-    // This should not throw an error
     expect(() => {
       logToolCall(mockConfig, event);
     }).not.toThrow();
   });
 
   it('should handle normal objects without circular references', () => {
-    const mockConfig = {
-      getTelemetryEnabled: () => true,
-      getUsageStatisticsEnabled: () => true,
-      getSessionId: () => 'test-session',
-      getModel: () => 'test-model',
-      getEmbeddingModel: () => 'test-embedding',
-      getDebugMode: () => false,
-    } as unknown as Config;
-
+    const mockConfig = buildMockConfig();
     const normalObject = {
       filePath: '/test/path',
       options: { encoding: 'utf8' },
     };
 
-    const mockRequest: ToolCallRequestInfo = {
-      callId: 'test-call-id',
-      name: 'ReadFile',
-      args: normalObject,
-      isClientInitiated: false,
-      prompt_id: 'test-prompt-id',
-      agentId: 'agent-circular',
-    };
-
-    const mockResponse: ToolCallResponseInfo = {
-      callId: 'test-call-id',
-      responseParts: [{ text: 'test result' }],
-      resultDisplay: undefined,
-      error: undefined, // undefined means success
-      errorType: undefined,
-      agentId: 'agent-circular',
-    };
-
-    const tool = new MockTool('mock-tool');
-    const mockCompletedToolCall: CompletedToolCall = {
-      status: 'success',
-      request: mockRequest,
-      response: mockResponse,
-      tool,
-      invocation: tool.build({}),
-      durationMs: 100,
-    };
-
+    const mockRequest = buildMockRequest(normalObject);
+    const mockCompletedToolCall = buildMockCompletedToolCall(mockRequest);
     const event = new ToolCallEvent(mockCompletedToolCall);
 
     expect(() => {

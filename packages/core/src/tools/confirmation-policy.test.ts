@@ -127,7 +127,8 @@ describe('Tool Confirmation Policy Updates', () => {
         const params = getParams();
 
         // For file-based tools, ensure the file exists if needed
-        if (params.file_path) {
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+        if (params.file_path != null && params.file_path !== '') {
           const fullPath = path.isAbsolute(params.file_path)
             ? params.file_path
             : path.join(rootDir, params.file_path);
@@ -146,30 +147,38 @@ describe('Tool Confirmation Policy Updates', () => {
         );
         expect(confirmation).not.toBe(false);
 
-        if (confirmation) {
-          await confirmation.onConfirm(outcome);
+        const runtimeConfirmation = confirmation as unknown;
+        const confirmationIsMissingOrFalse =
+          runtimeConfirmation == null || runtimeConfirmation === false;
+        expect(confirmationIsMissingOrFalse).toBe(false);
+        await confirmation.onConfirm(outcome);
 
-          if (shouldPublish) {
-            expect(mockMessageBus.publish).toHaveBeenCalledWith(
-              expect.objectContaining({
-                type: MessageBusType.UPDATE_POLICY,
-                persist,
-              }),
-            );
-          } else {
-            // Should not publish UPDATE_POLICY message for ProceedAlways
-            const publishCalls = (mockMessageBus.publish as any).mock.calls;
-            const hasUpdatePolicy = publishCalls.some(
-              (call: any) => call[0].type === MessageBusType.UPDATE_POLICY,
-            );
-            expect(hasUpdatePolicy).toBe(false);
-          }
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+        if (shouldPublish === true) {
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+          expect(mockMessageBus.publish).toHaveBeenCalledWith(
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+            expect.objectContaining({
+              type: MessageBusType.UPDATE_POLICY,
+              persist,
+            }),
+          );
+        } else {
+          // Should not publish UPDATE_POLICY message for ProceedAlways
+          const publishCalls = (mockMessageBus.publish as any).mock.calls;
+          const hasUpdatePolicy = publishCalls.some(
+            (call: any[]) => call[0]?.type === MessageBusType.UPDATE_POLICY,
+          );
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+          expect(hasUpdatePolicy).toBe(false);
+        }
 
-          if (expectedApprovalMode !== undefined) {
-            expect(mockConfig.setApprovalMode).toHaveBeenCalledWith(
-              expectedApprovalMode,
-            );
-          }
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+        if (expectedApprovalMode !== undefined) {
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+          expect(mockConfig.setApprovalMode).toHaveBeenCalledWith(
+            expectedApprovalMode,
+          );
         }
       },
     );

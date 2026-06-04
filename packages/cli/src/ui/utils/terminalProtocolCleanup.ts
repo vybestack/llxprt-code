@@ -34,7 +34,7 @@ export function restoreTerminalProtocolsSync(): void {
   try {
     terminalCapabilityManager.disableKittyProtocolOnExit();
     fs.writeSync(process.stdout.fd, TERMINAL_PROTOCOL_RESTORE_SEQUENCES);
-  } catch (_err) {
-    // Ignore failures during shutdown; terminal may already be closed.
+  } catch {
+    // Terminal may already be closed - ignore shutdown failures
   }
 }

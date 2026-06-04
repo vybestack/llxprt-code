@@ -11,6 +11,7 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 
 describe('editorCommand', () => {
   it('should return a dialog action to open the editor dialog', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!editorCommand.action) {
       throw new Error('The editor command must have an action.');
     }

@@ -227,7 +227,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       for (const provider of invalidProviders) {
         await expect(
           tokenStore.saveToken(provider, validQwenToken),
-        ).rejects.toThrow();
+        ).rejects.toThrow(/Invalid.*name/);
       }
     });
   });
@@ -404,7 +404,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       for (const bucketName of invalidBucketNames) {
         await expect(
           tokenStore.saveToken('anthropic', workToken, bucketName),
-        ).rejects.toThrow();
+        ).rejects.toThrow(/Invalid.*name/);
       }
     });
 

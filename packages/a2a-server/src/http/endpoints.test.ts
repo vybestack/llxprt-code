@@ -35,7 +35,7 @@ vi.mock('../config/config.js', () => ({
   loadEnvironment: vi.fn(),
   setTargetDir: vi
     .fn()
-    .mockImplementation((settings) => settings?.workspacePath || process.cwd()),
+    .mockImplementation((settings) => settings?.workspacePath ?? process.cwd()),
 }));
 
 // Mock Task.create to avoid its complex setup
@@ -112,14 +112,15 @@ describe('Agent Server Endpoints', () => {
   });
 
   afterAll(async () => {
-    if (server) {
-      await new Promise<void>((resolve, reject) => {
-        server.close((err) => {
-          if (err) return reject(err);
-          resolve();
-        });
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
       });
-    }
+    });
 
     // On Windows, give the server a moment to fully close before cleanup
     const closeDelay = process.platform === 'win32' ? 100 : 0;

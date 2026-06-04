@@ -55,7 +55,7 @@ function createTestProvider(config: {
     name: config.name ?? 'test-provider',
     async *generateChatCompletion(_options: GenerateChatOptions) {
       const response = config.responses[callCount++];
-      if (!response || response === 'success') {
+      if (response === 'success') {
         yield successContent;
         return;
       }

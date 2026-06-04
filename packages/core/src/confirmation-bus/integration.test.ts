@@ -649,7 +649,7 @@ priority = 10
       const content = 'this is not valid TOML [[[';
       await writeFile(path, content);
 
-      await expect(loadPolicyFromToml(path)).rejects.toThrow();
+      await expect(loadPolicyFromToml(path)).rejects.toThrow(Error);
     });
 
     it('should validate priority bands', async () => {

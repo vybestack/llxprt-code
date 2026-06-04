@@ -82,12 +82,12 @@ describe('ProxyTokenStore', () => {
 
   afterEach(async () => {
     try {
-      store?.getClient().close();
+      store.getClient().close();
     } catch {
       // client may not be initialized or already closed
     }
     await new Promise<void>((resolve) => {
-      if (server?.listening) {
+      if (server.listening) {
         server.close(() => resolve());
       } else {
         resolve();

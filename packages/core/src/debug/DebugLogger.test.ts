@@ -287,6 +287,7 @@ describe('DebugLogger', () => {
     expect(writeSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         timestamp: expect.stringMatching(
+          // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
         ),
       }),

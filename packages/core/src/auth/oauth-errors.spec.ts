@@ -373,7 +373,7 @@ describe('RetryHandler', () => {
 
     await expect(
       retryHandler.executeWithRetry(operation, 'test-provider'),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/Authentication required/);
     expect(operation).toHaveBeenCalledTimes(1);
   });
 
@@ -571,7 +571,7 @@ describe('GracefulErrorHandler', () => {
         'testMethod',
       );
 
-      await expect(wrappedMethod()).rejects.toThrow();
+      await expect(wrappedMethod()).rejects.toThrow(/Authentication required/);
 
       expect(consoleSpy).toHaveBeenCalledWith(
         'You need to sign in to Test-provider to continue.',

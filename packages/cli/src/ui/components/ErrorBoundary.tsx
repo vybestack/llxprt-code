@@ -188,6 +188,7 @@ export function withErrorBoundary<P extends object>(
     </ErrorBoundary>
   );
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty displayName should fall back to name
   WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`;
 
   return WrappedComponent;

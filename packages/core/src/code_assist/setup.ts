@@ -38,12 +38,15 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
 
   logger.debug(
     () =>
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env var should fall through to 'undefined' display
       `setupUser: starting setup, GOOGLE_CLOUD_PROJECT=${process.env.GOOGLE_CLOUD_PROJECT || 'undefined'}`,
   );
   const projectId =
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env vars should fall through to undefined */
     process.env['GOOGLE_CLOUD_PROJECT'] ||
     process.env['GOOGLE_CLOUD_PROJECT_ID'] ||
     undefined;
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
   // PRIVACY FIX: sessionId parameter removed from CodeAssistServer constructor
   const caServer = new CodeAssistServer(client, projectId, {}, undefined);
   const coreClientMetadata: ClientMetadata = {
@@ -67,63 +70,93 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
       `setupUser: loadCodeAssist completed, currentTier=${!!loadRes.currentTier}, cloudaicompanionProject=${loadRes.cloudaicompanionProject}`,
   );
 
-  if (loadRes.currentTier) {
-    logger.debug(
-      () => `setupUser: user has current tier: ${loadRes.currentTier!.id}`,
-    );
-    if (!loadRes.cloudaicompanionProject) {
-      if (projectId) {
-        logger.debug(
-          () => `setupUser: returning with project ID from env: ${projectId}`,
-        );
-        return {
-          projectId,
-          userTier: loadRes.currentTier.id,
-        };
-      }
-      logger.debug(
-        () =>
-          `setupUser: throwing ProjectIdRequiredError - no project ID available`,
-      );
-      throw new ProjectIdRequiredError();
-    }
-    logger.debug(
-      () =>
-        `setupUser: returning with project ID from response: ${loadRes.cloudaicompanionProject}`,
-    );
-    return {
-      projectId: loadRes.cloudaicompanionProject,
-      userTier: loadRes.currentTier.id,
-    };
+  const existing = resolveExistingTierResult(loadRes, projectId, logger);
+  if (existing) {
+    return existing;
   }
 
   const tier = getOnboardTier(loadRes);
-  if (tier.userDefinedCloudaicompanionProject && !projectId) {
+  if (tier.userDefinedCloudaicompanionProject === true && !projectId) {
     throw new ProjectIdRequiredError();
   }
 
-  let onboardReq: OnboardUserRequest;
+  const onboardReq = buildOnboardUserRequest(
+    tier,
+    projectId,
+    coreClientMetadata,
+  );
+  return finishOnboarding(caServer, onboardReq, tier, projectId);
+}
+
+function resolveExistingTierResult(
+  loadRes: LoadCodeAssistResponse,
+  projectId: string | undefined,
+  logger: DebugLogger,
+): UserData | undefined {
+  if (!loadRes.currentTier) {
+    return undefined;
+  }
+  logger.debug(
+    () => `setupUser: user has current tier: ${loadRes.currentTier!.id}`,
+  );
+  if (!loadRes.cloudaicompanionProject) {
+    if (projectId) {
+      logger.debug(
+        () => `setupUser: returning with project ID from env: ${projectId}`,
+      );
+      return {
+        projectId,
+        userTier: loadRes.currentTier.id,
+      };
+    }
+    logger.debug(
+      () =>
+        `setupUser: throwing ProjectIdRequiredError - no project ID available`,
+    );
+    throw new ProjectIdRequiredError();
+  }
+  logger.debug(
+    () =>
+      `setupUser: returning with project ID from response: ${loadRes.cloudaicompanionProject}`,
+  );
+  return {
+    projectId: loadRes.cloudaicompanionProject,
+    userTier: loadRes.currentTier.id,
+  };
+}
+
+function buildOnboardUserRequest(
+  tier: GeminiUserTier,
+  projectId: string | undefined,
+  coreClientMetadata: ClientMetadata,
+): OnboardUserRequest {
   if (tier.id === UserTierId.FREE) {
     // The free tier uses a managed google cloud project. Setting a project in the `onboardUser` request causes a `Precondition Failed` error.
-    onboardReq = {
+    return {
       tierId: tier.id,
       cloudaicompanionProject: undefined,
       metadata: coreClientMetadata,
     };
-  } else {
-    onboardReq = {
-      tierId: tier.id,
-      cloudaicompanionProject: projectId,
-      metadata: {
-        ...coreClientMetadata,
-        duetProject: projectId,
-      },
-    };
   }
+  return {
+    tierId: tier.id,
+    cloudaicompanionProject: projectId,
+    metadata: {
+      ...coreClientMetadata,
+      duetProject: projectId,
+    },
+  };
+}
 
+async function finishOnboarding(
+  caServer: CodeAssistServer,
+  onboardReq: OnboardUserRequest,
+  tier: GeminiUserTier,
+  projectId: string | undefined,
+): Promise<UserData> {
   // Poll onboardUser until long running operation is complete.
   let lroRes = await caServer.onboardUser(onboardReq);
-  while (!lroRes.done) {
+  while (lroRes.done !== true) {
     await new Promise((f) => setTimeout(f, 5000));
     lroRes = await caServer.onboardUser(onboardReq);
   }
@@ -145,8 +178,9 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
 }
 
 function getOnboardTier(res: LoadCodeAssistResponse): GeminiUserTier {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined allowedTiers should default to empty array
   for (const tier of res.allowedTiers || []) {
-    if (tier.isDefault) {
+    if (tier.isDefault === true) {
       return tier;
     }
   }

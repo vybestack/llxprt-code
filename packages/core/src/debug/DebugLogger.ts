@@ -124,7 +124,8 @@ export class DebugLogger {
       // Line 32
       try {
         message = messageOrFn(); // Line 34
-      } catch (_error) {
+      } catch {
+        // Log function threw; use fallback message.
         message = '[Error evaluating log function]'; // Line 36
       }
     } else {
@@ -172,7 +173,8 @@ export class DebugLogger {
     if (typeof messageOrFn === 'function') {
       try {
         message = messageOrFn();
-      } catch (_error) {
+      } catch {
+        // Log function threw; use fallback message.
         message = '[Error evaluating log function]';
       }
     } else {
@@ -220,7 +222,8 @@ export class DebugLogger {
     if (typeof messageOrFn === 'function') {
       try {
         message = messageOrFn();
-      } catch (_error) {
+      } catch {
+        // Log function threw; use fallback message.
         message = '[Error evaluating log function]';
       }
     } else {
@@ -290,6 +293,7 @@ export class DebugLogger {
       // - Escape special regex chars except *
       // - Replace * with .* for regex wildcard matching
       const regexPattern = pattern
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape special chars
         .replace(/\*/g, '.*'); // Convert * to regex wildcard
 

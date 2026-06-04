@@ -48,8 +48,8 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
     });
     settingsService = runtime.settingsService;
     provider = new OpenAIProvider('test-key', 'https://api.deepseek.com/v1');
-    provider.setRuntimeSettingsService?.(settingsService);
-    provider.setConfig?.(runtime.config);
+    provider.setRuntimeSettingsService(settingsService);
+    provider.setConfig(runtime.config);
     settingsService.set('model', 'deepseek-reasoner');
     settingsService.setProviderSetting(
       provider.name,

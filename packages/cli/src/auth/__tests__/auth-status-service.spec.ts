@@ -414,6 +414,7 @@ describe('AuthStatusService.logout', () => {
     await service.logout('qwen');
 
     expect(flushMockRef.current).toBeDefined();
+    // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
     flushMockRef.current && expect(flushMockRef.current).toHaveBeenCalled();
   });
 });
@@ -475,6 +476,7 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
 
     // flush must still execute despite all failures
     expect(flushMockRef.current).toBeDefined();
+    // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
     flushMockRef.current && expect(flushMockRef.current).toHaveBeenCalled();
   });
 
@@ -683,9 +685,9 @@ describe('AuthStatusService.getAuthStatusWithBuckets', () => {
 
     expect(statuses).toHaveLength(1);
     const defaultStatus = statuses[0];
-    expect(defaultStatus?.authenticated).toBe(false);
+    expect(defaultStatus.authenticated).toBe(false);
     // expiry field is still present even when token is expired
-    expect(defaultStatus?.expiry).toBe(expiredToken.expiry);
+    expect(defaultStatus.expiry).toBe(expiredToken.expiry);
   });
 });
 
@@ -707,6 +709,7 @@ describe('AuthStatusService.logout session-bucket clear', () => {
     (
       bucketManager.getSessionBucket as ReturnType<typeof vi.fn>
     ).mockImplementation((_provider: string, meta?: unknown) =>
+      // eslint-disable-next-line sonarjs/no-all-duplicated-branches -- Intentional: both branches return same bucket to test the "matching bucket" code path
       meta !== undefined ? 'target-bucket' : 'target-bucket',
     );
 

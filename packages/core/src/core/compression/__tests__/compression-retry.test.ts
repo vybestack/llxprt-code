@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * @plan PLAN-20260218-COMPRESSION-RETRY.P01
  * @requirement REQ-CR-001, REQ-CR-002, REQ-CR-003, REQ-CR-004, REQ-CR-005
@@ -391,12 +393,10 @@ function makeGeminiChat(
       },
     },
     provider: createProviderAdapterFromManager(
-      runtimeSetup.config.getProviderManager?.(),
+      runtimeSetup.config.getProviderManager(),
     ),
     telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
-    tools: createToolRegistryViewFromRegistry(
-      runtimeSetup.config.getToolRegistry?.(),
-    ),
+    tools: createToolRegistryViewFromRegistry(),
     providerRuntime: providerRuntimeSnapshot,
   });
 
@@ -816,12 +816,10 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
         },
       },
       provider: createProviderAdapterFromManager(
-        runtimeSetup.config.getProviderManager?.(),
+        runtimeSetup.config.getProviderManager(),
       ),
       telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
-      tools: createToolRegistryViewFromRegistry(
-        runtimeSetup.config.getToolRegistry?.(),
-      ),
+      tools: createToolRegistryViewFromRegistry(),
       providerRuntime: providerRuntimeSnapshot,
     });
 
@@ -1054,7 +1052,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
 
     await expect(
       chat['enforceContextWindow'](50_000, 'test-prompt'),
-    ).rejects.toThrow();
+    ).rejects.toThrow(Error);
 
     expect(fallbackApplied).toBe(true);
     expect(

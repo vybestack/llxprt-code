@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 /**
  * @plan:PLAN-20260320-ISSUE1575.P03
  * Settings resolver module - extracted from runtimeSettings.ts

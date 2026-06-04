@@ -72,7 +72,7 @@ describe('relaunchAppInChildProcess', () => {
     mockChildProcess.emit('close', 0);
     await promise;
 
-    const spawnEnv = mockedChildProcess.spawn.mock.calls[0][2]?.env as Record<
+    const spawnEnv = mockedChildProcess.spawn.mock.calls[0][2].env as Record<
       string,
       string
     >;
@@ -117,7 +117,7 @@ describe('relaunchAppInChildProcess', () => {
     await promise;
 
     const spawnOptions = mockedChildProcess.spawn.mock.calls[0][2];
-    expect(spawnOptions?.stdio).toBe('inherit');
+    expect(spawnOptions.stdio).toBe('inherit');
   });
 
   it('should preserve existing environment variables', async () => {
@@ -129,7 +129,7 @@ describe('relaunchAppInChildProcess', () => {
     mockChildProcess.emit('close', 0);
     await promise;
 
-    const spawnEnv = mockedChildProcess.spawn.mock.calls[0][2]?.env as Record<
+    const spawnEnv = mockedChildProcess.spawn.mock.calls[0][2].env as Record<
       string,
       string
     >;

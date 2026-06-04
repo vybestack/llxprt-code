@@ -122,9 +122,7 @@ let _defaultInstance: ToolKeyStorage | null = null;
  * Avoids constructing a new instance on every tool invocation.
  */
 export function getToolKeyStorage(): ToolKeyStorage {
-  if (_defaultInstance === null) {
-    _defaultInstance = new ToolKeyStorage();
-  }
+  _defaultInstance ??= new ToolKeyStorage();
   return _defaultInstance;
 }
 

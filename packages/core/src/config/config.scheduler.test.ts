@@ -21,6 +21,7 @@ import { clearAllSchedulers } from './schedulerSingleton.js';
 // Use dynamic import to avoid circular dependencies with Config
 let CoreToolScheduler: unknown;
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeAll(async () => {
   const schedulerModule = await import('../core/coreToolScheduler.js');
   CoreToolScheduler = schedulerModule.CoreToolScheduler;

@@ -86,24 +86,32 @@ export function estimateMessagesTokens(messages: IContent[]): number {
 
     // Add content from blocks
     for (const block of message.blocks) {
-      if (block.type === 'text') {
-        const textBlock = block;
-        totalChars += textBlock.text.length;
-      } else if (block.type === 'tool_call') {
-        // Add tool call overhead
-        totalChars += JSON.stringify(block).length;
-      } else if (block.type === 'tool_response') {
-        // Add tool response overhead
-        const toolResponseBlock = block;
-        if (typeof toolResponseBlock.result === 'string') {
-          totalChars += toolResponseBlock.result.length;
-        } else {
-          totalChars += JSON.stringify(toolResponseBlock.result).length;
-        }
-      }
+      totalChars += estimateBlockTokens(block);
     }
   }
 
   // Rough approximation: 4 characters per token
   return Math.ceil(totalChars / 4);
+}
+
+/**
+ * Estimate tokens for a single block.
+ */
+function estimateBlockTokens(block: IContent['blocks'][number]): number {
+  if (block.type === 'text') {
+    return (block as { text: string }).text.length;
+  }
+  if (block.type === 'tool_call') {
+    // Add tool call overhead
+    return JSON.stringify(block).length;
+  }
+  if (block.type === 'tool_response') {
+    // Add tool response overhead
+    const toolResponseBlock = block as { result: unknown };
+    if (typeof toolResponseBlock.result === 'string') {
+      return toolResponseBlock.result.length;
+    }
+    return JSON.stringify(toolResponseBlock.result).length;
+  }
+  return 0;
 }

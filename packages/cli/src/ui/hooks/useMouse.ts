@@ -25,7 +25,7 @@ export function useMouse(
 
   useEffect(() => {
     if (!isActive) {
-      return;
+      return undefined;
     }
 
     subscribe(onMouseEvent);

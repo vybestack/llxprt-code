@@ -65,7 +65,7 @@ export function useStaticRefreshManager({
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
-      return;
+      return undefined;
     }
 
     const handler = setTimeout(() => {

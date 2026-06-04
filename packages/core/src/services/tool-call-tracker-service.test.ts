@@ -57,7 +57,7 @@ describe('ToolCallTrackerService', () => {
     // Verify we got a tool call ID
     expect(toolCallId).toBeTruthy();
 
-    // Get all tool calls for the todo (should have 1 executing)
+    // Get all tool calls for the task (should have 1 executing)
     let allCalls = ToolCallTrackerService.getAllToolCalls(
       sessionId,
       todoId,
@@ -87,8 +87,8 @@ describe('ToolCallTrackerService', () => {
     });
   });
 
-  it('should not track a tool call when there is no active todo', () => {
-    // Clear the active todo
+  it('should not track a tool call when there is no active task', () => {
+    // Clear the active task
     const contextTracker = TodoContextTracker.forAgent(
       sessionId,
       DEFAULT_AGENT_ID,
@@ -121,7 +121,7 @@ describe('ToolCallTrackerService', () => {
     // Verify we got a tool call ID
     expect(toolCallId).toBeTruthy();
 
-    // Get executing tool calls for the todo
+    // Get executing tool calls for the task
     const executingCalls = ToolCallTrackerService.getAllToolCalls(
       sessionId,
       todoId,

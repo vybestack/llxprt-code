@@ -185,7 +185,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     expect(result1.done).toBe(false);
 
     const chunk = result1.value as GenerateContentResponse;
-    const text = chunk?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text;
     expect(text).toBe('first chunk');
 
     // Unstall the stream so the test can complete

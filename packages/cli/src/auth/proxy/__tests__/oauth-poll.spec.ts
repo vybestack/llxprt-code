@@ -200,12 +200,12 @@ class TestDeviceCodeFlow implements OAuthFlowInterface {
       return result.token;
     }
 
-    const err = new Error(result.error || 'authorization_pending') as Error & {
+    const err = new Error(result.error ?? 'authorization_pending') as Error & {
       code: string;
       newInterval?: number;
     };
-    err.code = result.error || 'authorization_pending';
-    if (result.newInterval) {
+    err.code = result.error ?? 'authorization_pending';
+    if (result.newInterval !== undefined && result.newInterval !== 0) {
       err.newInterval = result.newInterval;
     }
     throw err;
@@ -276,12 +276,12 @@ describe('oauth_poll handler', () => {
 
   afterEach(async () => {
     try {
-      client?.close();
+      client.close();
     } catch {
       // client may not be initialized
     }
     try {
-      await server?.stop();
+      await server.stop();
     } catch {
       // server may not be started
     }

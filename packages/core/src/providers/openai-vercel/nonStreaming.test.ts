@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 /**
  * @plan PLAN-20251127-OPENAIVERCEL.P09
  * @requirement REQ-OAV-007 - Chat Completion Generation

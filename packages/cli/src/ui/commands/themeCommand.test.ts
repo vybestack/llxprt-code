@@ -18,7 +18,8 @@ describe('themeCommand', () => {
 
   it('should return a dialog action to open the theme dialog', () => {
     // Ensure the command has an action to test.
-    if (!themeCommand.action) {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+    if (themeCommand.action === undefined) {
       throw new Error('The theme command must have an action.');
     }
 

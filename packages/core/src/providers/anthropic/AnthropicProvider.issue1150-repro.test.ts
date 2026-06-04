@@ -79,9 +79,7 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
 
-    if (!runtimeContext.config) {
-      runtimeContext.config = createRuntimeConfigStub(settingsService);
-    }
+    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
 
     runtimeContext.config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),

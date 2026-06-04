@@ -15,7 +15,7 @@ export class ProviderContentExtractor {
    * Extract text content from a streaming chunk based on provider format
    */
   extractContentFromChunk(chunk: unknown): string {
-    if (!chunk || typeof chunk !== 'object') {
+    if (chunk == null || typeof chunk !== 'object') {
       return '';
     }
 
@@ -53,7 +53,7 @@ export class ProviderContentExtractor {
    * Extract tool calls from a streaming chunk based on provider format
    */
   extractToolCallsFromChunk(chunk: unknown): ToolCall[] {
-    if (!chunk || typeof chunk !== 'object') {
+    if (chunk == null || typeof chunk !== 'object') {
       return [];
     }
 
@@ -80,59 +80,82 @@ export class ProviderContentExtractor {
     }
   }
 
+  /**
+   * Extracts a truthy text value, preserving old `(value as string) || ''` semantics.
+   * Non-string truthy values pass through (cast to string); false, 0, NaN, '', null, undefined fall through.
+   */
+  private extractTruthyText(value: unknown): string | undefined {
+    const isTruthy = Boolean(value);
+    if (!isTruthy) return undefined;
+    return value as string;
+  }
+
   private extractGeminiContent(chunk: Record<string, unknown>): string {
     const candidates = chunk.candidates as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const candidate = candidates?.[0];
-    if (!candidate) return '';
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (candidate == null) return '';
 
     // Handle text content
     const content = candidate.content as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const parts = content?.parts as Array<Record<string, unknown>>;
-    if (parts) {
-      const textParts = parts
-        .filter((part: Record<string, unknown>) => part.text)
-        .map((part: Record<string, unknown>) => part.text as string);
-      return textParts.join('');
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (parts == null) return '';
+
+    const textParts = parts
+      .map((part: Record<string, unknown>) => this.extractTruthyText(part.text))
+      .filter((text): text is string => text !== undefined);
+    return textParts.join('');
+  }
+
+  private extractOpenAIContent(chunk: Record<string, unknown>): string {
+    const choices = chunk.choices as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    const choice = choices?.[0];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (choice == null) return '';
+
+    // Handle streaming content
+    if (choice.delta != null) {
+      const delta = choice.delta as Record<string, unknown>;
+      const content = this.extractTruthyText(delta.content);
+      if (content !== undefined) {
+        return content;
+      }
+    }
+
+    // Handle complete content
+    if (choice.message != null) {
+      const message = choice.message as Record<string, unknown>;
+      const content = this.extractTruthyText(message.content);
+      if (content !== undefined) {
+        return content;
+      }
     }
 
     return '';
   }
 
-  private extractOpenAIContent(chunk: Record<string, unknown>): string {
-    const choices = chunk.choices as Array<Record<string, unknown>>;
-    const choice = choices?.[0];
-    if (!choice) return '';
-
-    // Handle streaming content
-    const delta = choice.delta as Record<string, unknown>;
-    if (delta?.content) {
-      return delta.content as string;
-    }
-
-    // Handle complete content
-    const message = choice.message as Record<string, unknown>;
-    if (message?.content) {
-      return message.content as string;
-    }
-
-    return '';
+  private extractDeltaText(chunk: Record<string, unknown>): string {
+    const delta = chunk.delta as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    return (delta?.text as string) || '';
   }
 
   private extractAnthropicContent(chunk: Record<string, unknown>): string {
     // Handle different Anthropic event types
     switch (chunk.type) {
-      case 'content_block_delta': {
-        const delta = chunk.delta as Record<string, unknown>;
-        return (delta?.text as string) || '';
-      }
+      case 'content_block_delta':
+        return this.extractDeltaText(chunk);
       case 'content_block_start': {
         const contentBlock = chunk.content_block as Record<string, unknown>;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         return (contentBlock?.text as string) || '';
       }
-      case 'message_delta': {
-        const delta = chunk.delta as Record<string, unknown>;
-        return (delta?.text as string) || '';
-      }
+      case 'message_delta':
+        return this.extractDeltaText(chunk);
       default:
         return '';
     }
@@ -140,67 +163,105 @@ export class ProviderContentExtractor {
 
   private extractGenericContent(chunk: Record<string, unknown>): string {
     // Try common content patterns
-    if (chunk.text) return chunk.text as string;
-    if (chunk.content) return chunk.content as string;
-    if (chunk.message) return chunk.message as string;
-    const delta = chunk.delta as Record<string, unknown>;
-    if (delta?.text) return delta.text as string;
+    const text = this.extractTruthyText(chunk.text);
+    if (text !== undefined) {
+      return text;
+    }
+    const content = this.extractTruthyText(chunk.content);
+    if (content !== undefined) {
+      return content;
+    }
+    const message = this.extractTruthyText(chunk.message);
+    if (message !== undefined) {
+      return message;
+    }
+    if (chunk.delta != null) {
+      const delta = chunk.delta as Record<string, unknown>;
+      const deltaText = this.extractTruthyText(delta.text);
+      if (deltaText !== undefined) {
+        return deltaText;
+      }
+    }
 
     return '';
   }
 
   private extractGeminiToolCalls(chunk: Record<string, unknown>): ToolCall[] {
     const candidates = chunk.candidates as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const candidate = candidates?.[0];
-    if (!candidate) return [];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (candidate == null) return [];
     const content = candidate.content as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const parts = content?.parts as Array<Record<string, unknown>>;
-    if (!parts) return [];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (parts == null) return [];
 
     return parts
-      .filter((part: Record<string, unknown>) => part.functionCall)
-      .map((part: Record<string, unknown>) => ({
-        provider: 'gemini',
-        name: (part.functionCall as Record<string, unknown>).name as string,
-        arguments: (part.functionCall as Record<string, unknown>).args,
-        id:
-          ((part.functionCall as Record<string, unknown>).id as string) ||
-          this.generateToolCallId(),
-      }));
+      .filter((part: Record<string, unknown>) => Boolean(part.functionCall))
+      .map((part: Record<string, unknown>) => {
+        const functionCall = part.functionCall as Record<string, unknown>;
+        const id = functionCall.id as string | null | undefined;
+        return {
+          provider: 'gemini',
+          name: functionCall.name as string,
+          arguments: functionCall.args,
+          id:
+            id !== undefined && id !== null && id !== ''
+              ? id
+              : this.generateToolCallId(),
+        };
+      });
   }
 
   private extractOpenAIToolCalls(chunk: Record<string, unknown>): ToolCall[] {
     const choices = chunk.choices as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const choice = choices?.[0];
-    if (!choice) return [];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (choice == null) return [];
 
     // Handle streaming tool calls
-    const delta = choice.delta as Record<string, unknown>;
-    const toolCalls = delta?.tool_calls as Array<Record<string, unknown>>;
-    if (toolCalls) {
-      return toolCalls.map((call: Record<string, unknown>) => ({
-        provider: 'openai',
-        name: (call.function as Record<string, unknown>)?.name as string,
-        arguments: (call.function as Record<string, unknown>)?.arguments,
-        id: call.id as string,
-      }));
+    if (choice.delta != null) {
+      const delta = choice.delta as Record<string, unknown>;
+      if (delta.tool_calls != null) {
+        const toolCalls = delta.tool_calls as Array<Record<string, unknown>>;
+        return toolCalls.map((call: Record<string, unknown>) => {
+          const func = call.function as
+            | Record<string, unknown>
+            | null
+            | undefined;
+          return {
+            provider: 'openai',
+            name: func?.name as string,
+            arguments: func?.arguments,
+            id: call.id as string,
+          };
+        });
+      }
     }
 
     // Handle complete tool calls
-    const message = choice.message as Record<string, unknown>;
-    const messageToolCalls = message?.tool_calls as Array<
-      Record<string, unknown>
-    >;
-    if (messageToolCalls) {
-      return messageToolCalls.map((call: Record<string, unknown>) => ({
-        provider: 'openai',
-        name: (call.function as Record<string, unknown>).name as string,
-        arguments: JSON.parse(
-          ((call.function as Record<string, unknown>).arguments as string) ||
-            '{}',
-        ),
-        id: call.id as string,
-      }));
+    if (choice.message != null) {
+      const message = choice.message as Record<string, unknown>;
+      if (message.tool_calls != null) {
+        const messageToolCalls = message.tool_calls as Array<
+          Record<string, unknown>
+        >;
+        return messageToolCalls.map((call: Record<string, unknown>) => {
+          const func = call.function as Record<string, unknown>;
+          const args = func.arguments as string | null | undefined;
+          const parsedArgs =
+            args !== undefined && args !== null && args !== '' ? args : '{}';
+          return {
+            provider: 'openai',
+            name: func.name as string,
+            arguments: JSON.parse(parsedArgs),
+            id: call.id as string,
+          };
+        });
+      }
     }
 
     return [];

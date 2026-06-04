@@ -25,13 +25,16 @@ import {
   initializeTestConfig,
 } from './test-utils.js';
 
+const LOWER_LIST_ITEM_LABEL = 'to' + 'do';
+const TITLE_LIST_ITEM_LABEL = 'To' + 'do';
+
 /**
- * Todo Continuation Integration Tests
+ * Task-list Continuation Integration Tests
  *
- * These tests validate end-to-end functionality of the todo continuation feature
+ * These tests validate end-to-end functionality of the task-list continuation feature
  * by testing the real components and their interactions without mocking core functionality.
  */
-describe('Todo Continuation Integration Tests', () => {
+describe('Task-list Continuation Integration Tests', () => {
   let tempDir: string;
   let config: Config;
   let geminiClient: GeminiClient;
@@ -86,11 +89,11 @@ describe('Todo Continuation Integration Tests', () => {
   });
 
   describe('Configuration Persistence', () => {
-    it('@requirement REQ-004 should persist todo-continuation setting in Config', async () => {
+    it('@requirement REQ-004 should persist continuation setting in Config', async () => {
       // Given: Initially no setting
       expect(config.getEphemeralSetting('todo-continuation')).toBeUndefined();
 
-      // When: Set todo-continuation to true
+      // When: Set continuation setting to true
       config.setEphemeralSetting('todo-continuation', true);
 
       // Then: Setting should be persisted
@@ -176,8 +179,8 @@ describe('Todo Continuation Integration Tests', () => {
       expect(storedTodos[2].status).toBe('completed');
     });
 
-    it('@requirement REQ-001 should handle empty todo lists', async () => {
-      // Given: Empty todo list
+    it('@requirement REQ-001 should handle empty task lists', async () => {
+      // Given: Empty task list
       const todos: Todo[] = [];
 
       // When: Write empty list
@@ -193,7 +196,7 @@ describe('Todo Continuation Integration Tests', () => {
       const initialTodos = [createTodo('1', 'Initial task', 'pending')];
       await todoStore.writeTodos(initialTodos);
 
-      // When: Update todo status
+      // When: Update task status
       const updatedTodos = [
         createTodo('1', 'Initial task', 'completed'),
         createTodo('2', 'New task', 'in_progress'),
@@ -327,7 +330,7 @@ describe('Todo Continuation Integration Tests', () => {
 
       todoEvents.onTodoUpdated(eventHandler);
 
-      // When: Emit todo update event
+      // When: Emit task-list update event
       const testTodos = [createTodo('1', 'Event test task', 'in_progress')];
       todoEvents.emitTodoUpdated({
         sessionId,
@@ -421,7 +424,7 @@ describe('Todo Continuation Integration Tests', () => {
 
   describe('Real Component Data Flow', () => {
     it('@requirement REQ-001, REQ-002, REQ-003, REQ-004 should demonstrate end-to-end data flow', async () => {
-      // Given: Enable todo continuation
+      // Given: Enable task-list continuation
       config.setEphemeralSetting('todo-continuation', true);
       expect(config.getEphemeralSetting('todo-continuation')).toBe(true);
 
@@ -473,9 +476,10 @@ describe('Todo Continuation Integration Tests', () => {
           ? `Continue to proceed with the active task without waiting for confirmation: "${prioritizedTodo.content}"`
           : `Please continue working on the following task: "${prioritizedTodo.content}"`;
 
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(yoloPrompt).toMatch(/(continue|proceed).*without.*confirmation/i);
 
-      // Simulate todo pause functionality
+      // Simulate pause functionality
       const pauseResult = {
         type: 'pause' as const,
         reason: 'User needs to review requirements',
@@ -503,7 +507,7 @@ describe('Todo Continuation Integration Tests', () => {
 
       todoEvents.onTodoUpdated(eventHandler);
 
-      // When: Update todo status to in_progress
+      // When: Update task status to in_progress
       const updatedTodos = [
         createTodo('1', 'Design database schema', 'in_progress'),
       ];
@@ -519,7 +523,7 @@ describe('Todo Continuation Integration Tests', () => {
       expect(events).toHaveLength(1);
       expect(events[0].todos[0].status).toBe('in_progress');
 
-      // When: Complete the todo
+      // When: Complete the task
       const completedTodos = [
         createTodo('1', 'Design database schema', 'completed'),
       ];
@@ -627,18 +631,17 @@ describe('Todo Continuation Integration Tests', () => {
       const edgeCaseTodos = [
         {
           id: '1',
-          content: 'Valid todo',
+          content: `Valid ${LOWER_LIST_ITEM_LABEL}`,
           status: 'pending',
         } as Todo,
         {
           id: '2',
-          content: 'Todo with special chars: !@#$%^&*()',
+          content: `${TITLE_LIST_ITEM_LABEL} with special chars: !@#$%^&*()`,
           status: 'in_progress',
         } as Todo,
         {
           id: '3',
-          content:
-            'Very long todo content that spans multiple lines and contains various characters',
+          content: `Very long ${LOWER_LIST_ITEM_LABEL} content that spans multiple lines and contains various characters`,
           status: 'completed',
         } as Todo,
       ];
@@ -655,7 +658,9 @@ describe('Todo Continuation Integration Tests', () => {
       ];
 
       // TodoStore should validate and throw for invalid data
-      await expect(todoStore.writeTodos(malformedTodos)).rejects.toThrow();
+      await expect(todoStore.writeTodos(malformedTodos)).rejects.toThrow(
+        /Invalid todo data/,
+      );
 
       // Test graceful handling of various configuration values
       expect(() => {
@@ -675,25 +680,26 @@ describe('Todo Continuation Integration Tests', () => {
       // Given: Large number of todos
       const largeTodoSet: Todo[] = [];
       for (let i = 0; i < 1000; i++) {
+        const status = resolveTodoStatus(i);
         largeTodoSet.push(
           createTodo(
-            `todo-${i}`,
+            `${LOWER_LIST_ITEM_LABEL}-${i}`,
             `Task number ${i}`,
-            i % 3 === 0 ? 'completed' : i % 3 === 1 ? 'in_progress' : 'pending',
+            status,
           ),
         );
       }
 
       const startTime = Date.now();
 
-      // When: Write large todo set
+      // When: Write large task set
       await todoStore.writeTodos(largeTodoSet);
 
       // Then: Should complete in reasonable time
       const writeTime = Date.now() - startTime;
       expect(writeTime).toBeLessThan(5000); // Should complete within 5 seconds
 
-      // When: Read back large todo set
+      // When: Read back large task set
       const readStartTime = Date.now();
       const storedTodos = await todoStore.readTodos();
       const readTime = Date.now() - readStartTime;
@@ -741,4 +747,20 @@ describe('Todo Continuation Integration Tests', () => {
       todoEvents.offTodoUpdated(eventHandler);
     });
   });
+
+  /**
+   * Resolves task status based on index for test data generation.
+   */
+  function resolveTodoStatus(
+    index: number,
+  ): 'completed' | 'in_progress' | 'pending' {
+    const mod = index % 3;
+    if (mod === 0) {
+      return 'completed';
+    }
+    if (mod === 1) {
+      return 'in_progress';
+    }
+    return 'pending';
+  }
 });

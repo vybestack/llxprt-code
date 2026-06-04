@@ -81,7 +81,7 @@ describe('SkillsList Component', () => {
   });
 
   it('should only render Available Skills section when all skills are enabled', () => {
-    const enabledOnly = mockSkills.filter((s) => !s.disabled);
+    const enabledOnly = mockSkills.filter((s) => s.disabled !== true);
     const { lastFrame, unmount } = render(
       <SkillsList skills={enabledOnly} showDescriptions={true} />,
     );
@@ -94,7 +94,7 @@ describe('SkillsList Component', () => {
   });
 
   it('should only render Disabled Skills section when all skills are disabled', () => {
-    const disabledOnly = mockSkills.filter((s) => s.disabled);
+    const disabledOnly = mockSkills.filter((s) => s.disabled === true);
     const { lastFrame, unmount } = render(
       <SkillsList skills={disabledOnly} showDescriptions={true} />,
     );

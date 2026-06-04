@@ -43,7 +43,7 @@ interface McpCodeRequest {
 
 interface McpCodeResponse {
   jsonrpc: string;
-  result: {
+  result?: {
     content: Array<{
       type: string;
       text: string;
@@ -174,11 +174,11 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
       const lines = responseText.split('\n');
       for (const line of lines) {
         if (line.startsWith('data: ')) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           try {
             const data: McpCodeResponse = JSON.parse(line.substring(6));
             if (
-              data.result &&
-              data.result.content &&
+              data.result?.content !== undefined &&
               data.result.content.length > 0
             ) {
               const content = ensureJsonSafe(data.result.content[0].text);
@@ -187,7 +187,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
                 returnDisplay: content,
               };
             }
-          } catch (_e) {
+          } catch {
             // Ignore parse errors for intermediate lines
           }
         }

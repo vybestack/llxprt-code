@@ -67,6 +67,81 @@ async function listAction(context: CommandContext) {
   context.ui.addItem(historyItem);
 }
 
+function reportMissingExtensions(
+  context: CommandContext,
+  names: string[] | null,
+): void {
+  if (names == null || names.length === 0) {
+    return;
+  }
+
+  const extensions = listExtensions(context.services.config!);
+  for (const name of names) {
+    const extension = extensions.find((extension) => extension.name === name);
+    if (!extension) {
+      context.ui.addItem(
+        {
+          type: MessageType.ERROR,
+          text: `Extension ${name} not found.`,
+        },
+        Date.now(),
+      );
+    }
+  }
+}
+
+function dispatchUpdateAndReport(
+  context: CommandContext,
+  all: boolean,
+  names: string[] | null,
+  historyItem: HistoryItemExtensionsList,
+  resolveUpdateComplete: (updateInfo: ExtensionUpdateInfo[]) => void,
+): void {
+  try {
+    context.ui.setPendingItem(historyItem);
+
+    context.ui.dispatchExtensionStateUpdate({
+      type: 'SCHEDULE_UPDATE',
+      payload: {
+        all,
+        names,
+        onComplete: (updateInfos: ExtensionUpdateInfo[]) => {
+          resolveUpdateComplete(updateInfos);
+        },
+      },
+    });
+    reportMissingExtensions(context, names);
+  } catch (error) {
+    resolveUpdateComplete([]);
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: getErrorMessage(error),
+      },
+      Date.now(),
+    );
+  }
+}
+
+function handleUpdateComplete(
+  context: CommandContext,
+  updateInfos: ExtensionUpdateInfo[],
+  historyItem: HistoryItemExtensionsList,
+): void {
+  if (updateInfos.length === 0) {
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: 'No extensions to update.',
+      },
+      Date.now(),
+    );
+  }
+
+  context.ui.addItem(historyItem);
+  context.ui.setPendingItem(null);
+}
+
 function updateAction(context: CommandContext, args: string): Promise<void> {
   const updateArgs = args.split(' ').filter((value) => value.length > 0);
   const all = updateArgs.length === 1 && updateArgs[0] === '--all';
@@ -102,62 +177,17 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
   };
 
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  updateComplete.then((updateInfos) => {
-    if (updateInfos.length === 0) {
-      context.ui.addItem(
-        {
-          type: MessageType.INFO,
-          text: 'No extensions to update.',
-        },
-        Date.now(),
-      );
-    }
+  updateComplete.then((updateInfos) =>
+    handleUpdateComplete(context, updateInfos, historyItem),
+  );
 
-    context.ui.addItem(historyItem);
-    context.ui.setPendingItem(null);
-  });
-
-  try {
-    context.ui.setPendingItem(historyItem);
-
-    context.ui.dispatchExtensionStateUpdate({
-      type: 'SCHEDULE_UPDATE',
-      payload: {
-        all,
-        names,
-        onComplete: (updateInfos) => {
-          resolveUpdateComplete(updateInfos);
-        },
-      },
-    });
-    if (names?.length) {
-      const extensions = listExtensions(context.services.config!);
-      for (const name of names) {
-        const extension = extensions.find(
-          (extension) => extension.name === name,
-        );
-        if (!extension) {
-          context.ui.addItem(
-            {
-              type: MessageType.ERROR,
-              text: `Extension ${name} not found.`,
-            },
-            Date.now(),
-          );
-          continue;
-        }
-      }
-    }
-  } catch (error) {
-    resolveUpdateComplete!([]);
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: getErrorMessage(error),
-      },
-      Date.now(),
-    );
-  }
+  dispatchUpdateAndReport(
+    context,
+    all,
+    names,
+    historyItem,
+    resolveUpdateComplete!,
+  );
   return updateComplete.then((_) => {});
 }
 
@@ -191,41 +221,15 @@ const updateExtensionsCommand: SlashCommand = {
   },
 };
 
-async function restartAction(
+function filterExtensionsToRestart(
+  extensionLoader: NonNullable<
+    ReturnType<
+      NonNullable<CommandContext['services']['config']>['getExtensionLoader']
+    >
+  >,
+  names: string[] | null,
   context: CommandContext,
-  args: string,
-): Promise<void> {
-  const extensionLoader = context.services.config?.getExtensionLoader();
-  if (!extensionLoader) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: "Extensions are not yet loaded, can't restart yet",
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  const extensions = extensionLoader.getExtensions();
-  if (showMessageIfNoExtensions(context, extensions)) {
-    return;
-  }
-
-  const restartArgs = args.split(' ').filter((value) => value.length > 0);
-  const all = restartArgs.length === 1 && restartArgs[0] === '--all';
-  const names = all ? null : restartArgs;
-  if (!all && names?.length === 0) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Usage: /extensions restart <extension-names>|--all',
-      },
-      Date.now(),
-    );
-    return Promise.resolve();
-  }
-
+): GeminiCLIExtension[] {
   let extensionsToRestart = extensionLoader
     .getExtensions()
     .filter((extension: GeminiCLIExtension) => extension.isActive);
@@ -251,18 +255,24 @@ async function restartAction(
       }
     }
   }
-  if (extensionsToRestart.length === 0) {
-    // We will have logged a different message above already.
-    return;
-  }
+  return extensionsToRestart;
+}
 
+async function performRestart(
+  extensionLoader: NonNullable<
+    ReturnType<
+      NonNullable<CommandContext['services']['config']>['getExtensionLoader']
+    >
+  >,
+  extensionsToRestart: GeminiCLIExtension[],
+  context: CommandContext,
+): Promise<void> {
   const s = extensionsToRestart.length > 1 ? 's' : '';
 
-  const restartingMessage = {
+  context.ui.addItem({
     type: MessageType.INFO,
     text: `Restarting ${extensionsToRestart.length} extension${s}...`,
-  };
-  context.ui.addItem(restartingMessage);
+  });
 
   const results = await Promise.allSettled(
     extensionsToRestart.map(async (extension: GeminiCLIExtension) => {
@@ -304,6 +314,53 @@ async function restartAction(
       Date.now(),
     );
   }
+}
+
+async function restartAction(
+  context: CommandContext,
+  args: string,
+): Promise<void> {
+  const extensionLoader = context.services.config?.getExtensionLoader();
+  if (!extensionLoader) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: "Extensions are not yet loaded, can't restart yet",
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  const extensions = extensionLoader.getExtensions();
+  if (showMessageIfNoExtensions(context, extensions)) {
+    return;
+  }
+
+  const restartArgs = args.split(' ').filter((value) => value.length > 0);
+  const all = restartArgs.length === 1 && restartArgs[0] === '--all';
+  const names = all ? null : restartArgs;
+  if (!all && names?.length === 0) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Usage: /extensions restart <extension-names>|--all',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  const extensionsToRestart = filterExtensionsToRestart(
+    extensionLoader,
+    names,
+    context,
+  );
+  if (extensionsToRestart.length === 0) {
+    return;
+  }
+
+  await performRestart(extensionLoader, extensionsToRestart, context);
 }
 
 async function completeExtensions(

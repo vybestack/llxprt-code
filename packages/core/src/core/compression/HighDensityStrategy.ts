@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 /**
  * @plan PLAN-20260211-HIGHDENSITY.P09
  * @plan PLAN-20260211-HIGHDENSITY.P11
@@ -142,6 +144,365 @@ function findAllInclusions(text: string): Array<{
  */
 function isEmptyTextBlock(block: ContentBlock): boolean {
   return block.type === 'text' && (!block.text || block.text.trim() === '');
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Build latest write map — latest write index per file path.
+ * @pseudocode high-density-optimize.md lines 60-90
+ */
+function buildLatestWriteMap(
+  history: readonly IContent[],
+  config: DensityConfig,
+): Map<string, number> {
+  const latestWrite = new Map<string, number>();
+
+  for (let index = history.length - 1; index >= 0; index--) {
+    const entry = history[index];
+    if (entry.speaker !== 'ai') {
+      continue;
+    }
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for (const block of entry.blocks) {
+      if (block.type !== 'tool_call') {
+        continue;
+      }
+      if (!(WRITE_TOOLS as readonly string[]).includes(block.name)) {
+        continue;
+      }
+
+      const filePath = extractFilePath(block.parameters);
+      if (filePath === undefined) {
+        continue;
+      }
+
+      const resolved = resolvePath(filePath, config.workspaceRoot);
+      if (!latestWrite.has(resolved)) {
+        latestWrite.set(resolved, index);
+      }
+    }
+  }
+
+  return latestWrite;
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Identify stale read tool calls by comparing against the latest write map.
+ * @pseudocode high-density-optimize.md lines 100-160
+ */
+function identifyStaleReadCalls(
+  history: readonly IContent[],
+  config: DensityConfig,
+  latestWrite: Map<string, number>,
+  strategy: HighDensityStrategy,
+): {
+  staleCallIds: Set<string>;
+  aiEntryStaleBlocks: Map<number, Set<string>>;
+  aiEntryTotalToolCalls: Map<number, number>;
+} {
+  const staleCallIds = new Set<string>();
+  const aiEntryStaleBlocks = new Map<number, Set<string>>();
+  const aiEntryTotalToolCalls = new Map<number, number>();
+
+  for (let index = 0; index < history.length; index++) {
+    const entry = history[index];
+    if (entry.speaker !== 'ai') {
+      continue;
+    }
+
+    const toolCallBlocks = entry.blocks.filter(
+      (b): b is ToolCallBlock => b.type === 'tool_call',
+    );
+    aiEntryTotalToolCalls.set(index, toolCallBlocks.length);
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for (const block of toolCallBlocks) {
+      if (!(READ_TOOLS as readonly string[]).includes(block.name)) {
+        continue;
+      }
+
+      if (block.name === 'read_many_files') {
+        const canPrune = strategy.canPruneReadManyFiles(
+          block.parameters,
+          config.workspaceRoot,
+          latestWrite,
+          index,
+        );
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (!canPrune) {
+          continue;
+        }
+      } else {
+        const filePath = extractFilePath(block.parameters);
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (filePath === undefined) {
+          continue;
+        }
+
+        const resolved = resolvePath(filePath, config.workspaceRoot);
+        const writeIndex = latestWrite.get(resolved);
+
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (writeIndex === undefined || writeIndex <= index) {
+          continue;
+        }
+      }
+
+      // This read is stale
+      staleCallIds.add(block.id);
+      if (!aiEntryStaleBlocks.has(index)) {
+        aiEntryStaleBlocks.set(index, new Set());
+      }
+      aiEntryStaleBlocks.get(index)!.add(block.id);
+    }
+  }
+
+  return { staleCallIds, aiEntryStaleBlocks, aiEntryTotalToolCalls };
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Process AI entries with stale tool calls — remove or replace.
+ * @pseudocode high-density-optimize.md lines 162-180
+ */
+function applyStaleAiEntries(
+  history: readonly IContent[],
+  staleCallIds: Set<string>,
+  aiEntryStaleBlocks: Map<number, Set<string>>,
+  aiEntryTotalToolCalls: Map<number, number>,
+  removals: Set<number>,
+  replacements: Map<number, IContent>,
+): void {
+  for (const [aiIndex, staleCalls] of aiEntryStaleBlocks) {
+    const totalCalls = aiEntryTotalToolCalls.get(aiIndex) ?? 0;
+
+    const filteredBlocks = history[aiIndex].blocks.filter(
+      (b) => b.type !== 'tool_call' || !staleCalls.has(b.id),
+    );
+
+    if (
+      staleCalls.size === totalCalls &&
+      (filteredBlocks.length === 0 ||
+        filteredBlocks.every((b) => isEmptyTextBlock(b)))
+    ) {
+      removals.add(aiIndex);
+    } else {
+      replacements.set(aiIndex, {
+        ...history[aiIndex],
+        blocks: filteredBlocks,
+      });
+    }
+  }
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Process tool entries — remove tool_response blocks for stale callIds.
+ * Returns the number of pruned responses.
+ * @pseudocode high-density-optimize.md lines 185-209
+ */
+function applyStaleToolEntries(
+  history: readonly IContent[],
+  staleCallIds: Set<string>,
+  removals: Set<number>,
+  replacements: Map<number, IContent>,
+): number {
+  let prunedCount = 0;
+
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  for (let index = 0; index < history.length; index++) {
+    const entry = history[index];
+    if (entry.speaker !== 'tool') {
+      continue;
+    }
+    if (removals.has(index)) {
+      continue;
+    }
+
+    const responseBlocks = entry.blocks.filter(
+      (b): b is ToolResponseBlock => b.type === 'tool_response',
+    );
+    const staleResponses = responseBlocks.filter((b) =>
+      staleCallIds.has(b.callId),
+    );
+
+    if (staleResponses.length === 0) {
+      continue;
+    }
+
+    if (
+      staleResponses.length === responseBlocks.length &&
+      entry.blocks.every((b) => b.type === 'tool_response')
+    ) {
+      removals.add(index);
+      prunedCount = prunedCount + staleResponses.length;
+    } else {
+      const filteredBlocks = entry.blocks.filter(
+        (b) => b.type !== 'tool_response' || !staleCallIds.has(b.callId),
+      );
+      if (filteredBlocks.length === 0) {
+        removals.add(index);
+      } else {
+        replacements.set(index, {
+          ...entry,
+          blocks: filteredBlocks,
+        });
+      }
+      prunedCount = prunedCount + staleResponses.length;
+    }
+  }
+
+  return prunedCount;
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Inclusion location tracked per human-message text block.
+ */
+type InclusionEntry = {
+  messageIndex: number;
+  blockIndex: number;
+  startOffset: number;
+  endOffset: number;
+};
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * @requirement REQ-HD-006.1
+ * Scan human messages for file inclusions, grouped by resolved file path.
+ * @pseudocode high-density-optimize.md lines 280-310
+ */
+function scanFileInclusions(
+  history: readonly IContent[],
+  config: DensityConfig,
+  existingRemovals: Set<number>,
+): Map<string, InclusionEntry[]> {
+  const inclusions = new Map<string, InclusionEntry[]>();
+
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  for (let index = 0; index < history.length; index++) {
+    const entry = history[index];
+    if (entry.speaker !== 'human') {
+      continue;
+    }
+    if (existingRemovals.has(index)) {
+      continue;
+    }
+
+    for (let blockIndex = 0; blockIndex < entry.blocks.length; blockIndex++) {
+      const block = entry.blocks[blockIndex];
+      if (block.type !== 'text') {
+        continue;
+      }
+
+      const text = block.text;
+      const matches = findAllInclusions(text);
+
+      for (const match of matches) {
+        const resolvedFilePath = resolvePath(
+          match.filePath,
+          config.workspaceRoot,
+        );
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        if (!inclusions.has(resolvedFilePath)) {
+          inclusions.set(resolvedFilePath, []);
+        }
+        inclusions.get(resolvedFilePath)!.push({
+          messageIndex: index,
+          blockIndex,
+          startOffset: match.startOffset,
+          endOffset: match.endOffset,
+        });
+      }
+    }
+  }
+
+  return inclusions;
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * @requirement REQ-HD-006.2
+ * Collect all stale inclusions (all-but-latest per file), group by block key.
+ * @pseudocode high-density-optimize.md lines 312-330
+ */
+function collectStaleInclusions(
+  inclusions: Map<string, InclusionEntry[]>,
+): Map<string, InclusionEntry[]> {
+  const staleByBlock = new Map<string, InclusionEntry[]>();
+
+  for (const [, entries] of inclusions) {
+    if (entries.length <= 1) {
+      continue;
+    }
+
+    entries.sort((a, b) => {
+      const messageDiff = b.messageIndex - a.messageIndex;
+      return messageDiff !== 0 ? messageDiff : b.startOffset - a.startOffset;
+    });
+
+    // entries[0] is the latest — preserve. Strip entries[1..n]
+    for (let i = 1; i < entries.length; i++) {
+      const stale = entries[i];
+      const key = `${stale.messageIndex}:${stale.blockIndex}`;
+      if (!staleByBlock.has(key)) {
+        staleByBlock.set(key, []);
+      }
+      staleByBlock.get(key)!.push(stale);
+    }
+  }
+
+  return staleByBlock;
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * @requirement REQ-HD-006.3, REQ-HD-006.4, REQ-HD-006.5
+ * Apply all stale removals per block in descending offset order.
+ * Returns updated prunedCount.
+ * @pseudocode high-density-optimize.md lines 332-359
+ */
+function applyStaleInclusionRemovals(
+  staleByBlock: Map<string, InclusionEntry[]>,
+  history: readonly IContent[],
+  replacements: Map<number, IContent>,
+  prunedCount: number,
+): number {
+  let count = prunedCount;
+
+  for (const [, stales] of staleByBlock) {
+    stales.sort((a, b) => b.startOffset - a.startOffset);
+
+    const { messageIndex, blockIndex } = stales[0];
+    const originalEntry =
+      replacements.get(messageIndex) ?? history[messageIndex];
+    const originalBlock = originalEntry.blocks[blockIndex];
+    if (originalBlock.type !== 'text') {
+      continue;
+    }
+
+    let newText = originalBlock.text;
+    for (const stale of stales) {
+      newText =
+        newText.substring(0, stale.startOffset) +
+        newText.substring(stale.endOffset);
+      count = count + 1;
+    }
+
+    newText = newText.replace(/\n{3,}/g, '\n\n');
+
+    const newBlocks = [...originalEntry.blocks];
+    newBlocks[blockIndex] = { type: 'text' as const, text: newText };
+
+    replacements.set(messageIndex, {
+      ...originalEntry,
+      blocks: newBlocks,
+    });
+  }
+
+  return count;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,7 +654,7 @@ export class HighDensityStrategy implements CompressionStrategy {
       if (entry.speaker === 'human' || entry.speaker === 'ai') {
         // Preserve human and AI entries intact (REQ-HD-008.4)
         newHistory.push(entry);
-      } else if (entry.speaker === 'tool') {
+      } else {
         // Summarize tool response blocks (REQ-HD-008.3)
         const summarized = this.summarizeToolResponseBlocks(entry, history);
         newHistory.push(summarized);
@@ -425,6 +786,7 @@ export class HighDensityStrategy implements CompressionStrategy {
 
     // Extract key param — look for matching tool_call by callId
     let keyParam: string | undefined;
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const entry of fullHistory) {
       if (entry.speaker !== 'ai') continue;
       for (const b of entry.blocks) {
@@ -509,170 +871,25 @@ export class HighDensityStrategy implements CompressionStrategy {
     const replacements = new Map<number, IContent>();
     let prunedCount = 0;
 
-    // STEP 1: Build write map — latest write index per file path
-    const latestWrite = new Map<string, number>();
+    const latestWrite = buildLatestWriteMap(history, config);
+    const { staleCallIds, aiEntryStaleBlocks, aiEntryTotalToolCalls } =
+      identifyStaleReadCalls(history, config, latestWrite, this);
 
-    for (let index = history.length - 1; index >= 0; index--) {
-      const entry = history[index];
-      if (entry.speaker !== 'ai') {
-        continue;
-      }
+    applyStaleAiEntries(
+      history,
+      staleCallIds,
+      aiEntryStaleBlocks,
+      aiEntryTotalToolCalls,
+      removals,
+      replacements,
+    );
 
-      for (const block of entry.blocks) {
-        if (block.type !== 'tool_call') {
-          continue;
-        }
-        if (!(WRITE_TOOLS as readonly string[]).includes(block.name)) {
-          continue;
-        }
-
-        const filePath = extractFilePath(block.parameters);
-        if (filePath === undefined) {
-          continue;
-        }
-
-        const resolved = resolvePath(filePath, config.workspaceRoot);
-        if (!latestWrite.has(resolved)) {
-          latestWrite.set(resolved, index);
-        }
-      }
-    }
-
-    // STEP 2: Build tool call → history index mapping
-    const callMap = new Map<
-      string,
-      { aiIndex: number; toolCallBlock: ToolCallBlock }
-    >();
-
-    for (let index = 0; index < history.length; index++) {
-      const entry = history[index];
-      if (entry.speaker === 'ai') {
-        for (const block of entry.blocks) {
-          if (block.type === 'tool_call') {
-            callMap.set(block.id, { aiIndex: index, toolCallBlock: block });
-          }
-        }
-      }
-    }
-
-    // STEP 3: Identify stale read tool calls
-    const staleCallIds = new Set<string>();
-    const aiEntryStaleBlocks = new Map<number, Set<string>>();
-    const aiEntryTotalToolCalls = new Map<number, number>();
-
-    for (let index = 0; index < history.length; index++) {
-      const entry = history[index];
-      if (entry.speaker !== 'ai') {
-        continue;
-      }
-
-      const toolCallBlocks = entry.blocks.filter(
-        (b): b is ToolCallBlock => b.type === 'tool_call',
-      );
-      aiEntryTotalToolCalls.set(index, toolCallBlocks.length);
-
-      for (const block of toolCallBlocks) {
-        if (!(READ_TOOLS as readonly string[]).includes(block.name)) {
-          continue;
-        }
-
-        if (block.name === 'read_many_files') {
-          const canPrune = this.canPruneReadManyFiles(
-            block.parameters,
-            config.workspaceRoot,
-            latestWrite,
-            index,
-          );
-          if (!canPrune) {
-            continue;
-          }
-        } else {
-          const filePath = extractFilePath(block.parameters);
-          if (filePath === undefined) {
-            continue;
-          }
-
-          const resolved = resolvePath(filePath, config.workspaceRoot);
-          const writeIndex = latestWrite.get(resolved);
-
-          if (writeIndex === undefined || writeIndex <= index) {
-            continue;
-          }
-        }
-
-        // This read is stale
-        staleCallIds.add(block.id);
-        if (!aiEntryStaleBlocks.has(index)) {
-          aiEntryStaleBlocks.set(index, new Set());
-        }
-        aiEntryStaleBlocks.get(index)!.add(block.id);
-      }
-    }
-
-    // STEP 4a: Process AI entries with stale tool calls
-    for (const [aiIndex, staleCalls] of aiEntryStaleBlocks) {
-      const totalCalls = aiEntryTotalToolCalls.get(aiIndex) ?? 0;
-
-      const filteredBlocks = history[aiIndex].blocks.filter(
-        (b) => b.type !== 'tool_call' || !staleCalls.has(b.id),
-      );
-
-      if (
-        staleCalls.size === totalCalls &&
-        (filteredBlocks.length === 0 ||
-          filteredBlocks.every((b) => isEmptyTextBlock(b)))
-      ) {
-        removals.add(aiIndex);
-      } else {
-        replacements.set(aiIndex, {
-          ...history[aiIndex],
-          blocks: filteredBlocks,
-        });
-      }
-    }
-
-    // STEP 4b: Process tool entries — remove tool_response blocks for stale callIds
-    for (let index = 0; index < history.length; index++) {
-      const entry = history[index];
-      if (entry.speaker !== 'tool') {
-        continue;
-      }
-      if (removals.has(index)) {
-        continue;
-      }
-
-      const responseBlocks = entry.blocks.filter(
-        (b): b is ToolResponseBlock => b.type === 'tool_response',
-      );
-      const staleResponses = responseBlocks.filter((b) =>
-        staleCallIds.has(b.callId),
-      );
-
-      if (staleResponses.length === 0) {
-        continue;
-      }
-
-      if (
-        staleResponses.length === responseBlocks.length &&
-        entry.blocks.every((b) => b.type === 'tool_response')
-      ) {
-        removals.add(index);
-        prunedCount = prunedCount + staleResponses.length;
-      } else {
-        const filteredBlocks = entry.blocks.filter(
-          (b) => b.type !== 'tool_response' || !staleCallIds.has(b.callId),
-        );
-        if (filteredBlocks.length === 0) {
-          removals.add(index);
-        } else {
-          replacements.set(index, {
-            ...entry,
-            blocks: filteredBlocks,
-          });
-        }
-        prunedCount = prunedCount + staleResponses.length;
-      }
-    }
+    prunedCount = applyStaleToolEntries(
+      history,
+      staleCallIds,
+      removals,
+      replacements,
+    );
 
     return { removals, replacements, prunedCount };
   }
@@ -682,7 +899,7 @@ export class HighDensityStrategy implements CompressionStrategy {
    * @requirement REQ-HD-005.9
    * @pseudocode high-density-optimize.md lines 215-255
    */
-  private canPruneReadManyFiles(
+  canPruneReadManyFiles(
     params: unknown,
     workspaceRoot: string,
     latestWrite: Map<string, number>,
@@ -702,6 +919,7 @@ export class HighDensityStrategy implements CompressionStrategy {
     let allConcreteHaveWrite = true;
     let hasAnyConcrete = false;
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const filePath of paths) {
       if (typeof filePath !== 'string') {
         continue;
@@ -743,114 +961,14 @@ export class HighDensityStrategy implements CompressionStrategy {
     const replacements = new Map<number, IContent>();
     let prunedCount = 0;
 
-    // STEP 1: Scan human messages for @ file inclusions
-    const inclusions = new Map<
-      string,
-      Array<{
-        messageIndex: number;
-        blockIndex: number;
-        startOffset: number;
-        endOffset: number;
-      }>
-    >();
-
-    for (let index = 0; index < history.length; index++) {
-      const entry = history[index];
-      if (entry.speaker !== 'human') {
-        continue;
-      }
-      if (existingRemovals.has(index)) {
-        continue;
-      }
-
-      for (let blockIndex = 0; blockIndex < entry.blocks.length; blockIndex++) {
-        const block = entry.blocks[blockIndex];
-        if (block.type !== 'text') {
-          continue;
-        }
-
-        const text = block.text;
-        const matches = findAllInclusions(text);
-
-        for (const match of matches) {
-          const resolvedFilePath = resolvePath(
-            match.filePath,
-            config.workspaceRoot,
-          );
-          if (!inclusions.has(resolvedFilePath)) {
-            inclusions.set(resolvedFilePath, []);
-          }
-          inclusions.get(resolvedFilePath)!.push({
-            messageIndex: index,
-            blockIndex,
-            startOffset: match.startOffset,
-            endOffset: match.endOffset,
-          });
-        }
-      }
-    }
-
-    // STEP 2: Collect all stale inclusions (all-but-latest per file), group by block
-    const staleByBlock = new Map<
-      string,
-      Array<{
-        messageIndex: number;
-        blockIndex: number;
-        startOffset: number;
-        endOffset: number;
-      }>
-    >();
-    for (const [, entries] of inclusions) {
-      if (entries.length <= 1) {
-        continue;
-      }
-
-      entries.sort(
-        (a, b) =>
-          b.messageIndex - a.messageIndex || b.startOffset - a.startOffset,
-      );
-
-      // entries[0] is the latest — preserve. Strip entries[1..n]
-      for (let i = 1; i < entries.length; i++) {
-        const stale = entries[i];
-        const key = `${stale.messageIndex}:${stale.blockIndex}`;
-        if (!staleByBlock.has(key)) {
-          staleByBlock.set(key, []);
-        }
-        staleByBlock.get(key)!.push(stale);
-      }
-    }
-
-    // Apply all stale removals per block in descending offset order
-    for (const [, stales] of staleByBlock) {
-      stales.sort((a, b) => b.startOffset - a.startOffset);
-
-      const { messageIndex, blockIndex } = stales[0];
-      const originalEntry =
-        replacements.get(messageIndex) ?? history[messageIndex];
-      const originalBlock = originalEntry.blocks[blockIndex];
-      if (originalBlock.type !== 'text') {
-        continue;
-      }
-
-      let newText = originalBlock.text;
-      for (const stale of stales) {
-        newText =
-          newText.substring(0, stale.startOffset) +
-          newText.substring(stale.endOffset);
-        prunedCount = prunedCount + 1;
-      }
-
-      newText = newText.replace(/\n{3,}/g, '\n\n');
-
-      const newBlocks = [...originalEntry.blocks];
-      newBlocks[blockIndex] = { type: 'text' as const, text: newText };
-
-      replacements.set(messageIndex, {
-        ...originalEntry,
-        blocks: newBlocks,
-      });
-    }
+    const inclusions = scanFileInclusions(history, config, existingRemovals);
+    const staleByBlock = collectStaleInclusions(inclusions);
+    prunedCount = applyStaleInclusionRemovals(
+      staleByBlock,
+      history,
+      replacements,
+      prunedCount,
+    );
 
     return { replacements, prunedCount };
   }
@@ -874,6 +992,7 @@ export class HighDensityStrategy implements CompressionStrategy {
     const toolCounts = new Map<string, number>();
     const entriesToPrune: Array<{ index: number; blockIndex: number }> = [];
 
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let index = history.length - 1; index >= 0; index--) {
       const entry = history[index];
       if (entry.speaker !== 'tool') {
@@ -883,6 +1002,7 @@ export class HighDensityStrategy implements CompressionStrategy {
         continue;
       }
 
+      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (
         let blockIndex = entry.blocks.length - 1;
         blockIndex >= 0;

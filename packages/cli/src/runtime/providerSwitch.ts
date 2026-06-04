@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config, IProvider } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import {
@@ -70,6 +70,8 @@ interface ProviderSwitchContext {
       typeof getCliRuntimeServices
     >['providerManager']['getActiveProvider']
   >;
+  providerForBaseUrl: IProvider | undefined;
+
   baseProvider: {
     hasNonOAuthAuthentication?: () => Promise<boolean>;
   };
@@ -102,32 +104,113 @@ function normalizeSetting(value: unknown): string | undefined {
   return trimmed;
 }
 
+function getWrappedProvider(provider: unknown): unknown {
+  if (typeof provider !== 'object' || provider === null) {
+    return undefined;
+  }
+  if (!('wrappedProvider' in provider)) {
+    return undefined;
+  }
+  return (provider as { wrappedProvider?: unknown }).wrappedProvider;
+}
+
 function unwrapProvider(provider: unknown): {
   hasNonOAuthAuthentication?: () => Promise<boolean>;
 } {
   const visited = new Set<unknown>();
-  let current = provider as {
-    wrappedProvider?: unknown;
-  };
+  let current: unknown = provider;
+  let wrappedProvider = getWrappedProvider(current);
 
-  while (
-    current &&
-    typeof current === 'object' &&
-    'wrappedProvider' in current &&
-    current.wrappedProvider
-  ) {
+  while (wrappedProvider !== undefined && wrappedProvider !== null) {
     if (visited.has(current)) {
-      break;
+      return current as {
+        hasNonOAuthAuthentication?: () => Promise<boolean>;
+      };
     }
+
     visited.add(current);
-    current = current.wrappedProvider as {
-      wrappedProvider?: unknown;
-    };
+    current = wrappedProvider;
+    wrappedProvider = getWrappedProvider(current);
   }
 
   return current as {
     hasNonOAuthAuthentication?: () => Promise<boolean>;
   };
+}
+
+function getProviderForBaseUrl(context: ProviderSwitchContext): IProvider {
+  const providerManager =
+    context.providerManager as typeof context.providerManager & {
+      getProviderByName?: (name: string) => IProvider | undefined;
+    };
+  return (
+    providerManager.getProviderByName(context.name) ?? context.activeProvider
+  );
+}
+
+function isScalarAliasEphemeralValue(
+  value: unknown,
+): value is string | number | boolean {
+  return (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  );
+}
+
+function applyAliasEphemeralSetting(
+  context: ProviderSwitchContext,
+  protectedAliasEphemeralKeys: ReadonlySet<string>,
+  rawKey: string,
+  rawValue: unknown,
+): void {
+  const key = rawKey.trim();
+  if (key === '') {
+    return;
+  }
+
+  const normalizedKey = key.toLowerCase();
+  if (protectedAliasEphemeralKeys.has(normalizedKey)) {
+    logger.warn(
+      () =>
+        `[cli-runtime] Skipping protected alias ephemeral setting '${key}' for provider '${context.name}'.`,
+    );
+    return;
+  }
+
+  if (context.config.getEphemeralSetting(key) !== undefined) {
+    return;
+  }
+
+  if (!isScalarAliasEphemeralValue(rawValue)) {
+    logger.warn(
+      () =>
+        `[cli-runtime] Skipping non-scalar alias ephemeral setting '${key}' for provider '${context.name}'.`,
+    );
+    return;
+  }
+
+  if (typeof rawValue === 'number' && !Number.isFinite(rawValue)) {
+    logger.warn(
+      () =>
+        `[cli-runtime] Skipping non-finite alias ephemeral setting '${key}' for provider '${context.name}'.`,
+    );
+    return;
+  }
+
+  context.config.setEphemeralSetting(key, rawValue);
+}
+
+function resetBucketFailoverHandler(config: Config): void {
+  const candidate = config as Config & {
+    setBucketFailoverHandler?: (handler: undefined) => void;
+  };
+
+  if (typeof candidate.setBucketFailoverHandler !== 'function') {
+    return;
+  }
+
+  candidate.setBucketFailoverHandler(undefined);
 }
 
 function getAliasConfig(providerName: string): ProviderAliasConfig | undefined {
@@ -145,8 +228,10 @@ function clearPreviousProviderSettings(context: ProviderSwitchContext): void {
   if (!currentProvider) {
     return;
   }
-  const previousSettings =
-    getProviderSettingsSnapshot(settingsService, currentProvider) || {};
+  const previousSettings = getProviderSettingsSnapshot(
+    settingsService,
+    currentProvider,
+  );
   for (const key of Object.keys(previousSettings)) {
     settingsService.setProviderSetting(currentProvider, key, undefined);
   }
@@ -221,6 +306,8 @@ async function switchSettingsProvider(
   );
 
   context.activeProvider = activeProvider;
+  context.providerForBaseUrl = getProviderForBaseUrl(context);
+
   context.baseProvider = unwrapProvider(activeProvider);
 }
 
@@ -229,8 +316,10 @@ function getProviderSettingsAndStoredValues(context: ProviderSwitchContext): {
   storedModelSetting: string | undefined;
   storedBaseUrlSetting: string | undefined;
 } {
-  const providerSettingsBefore =
-    getProviderSettingsSnapshot(context.settingsService, context.name) ?? {};
+  const providerSettingsBefore = getProviderSettingsSnapshot(
+    context.settingsService,
+    context.name,
+  );
   return {
     providerSettingsBefore,
     storedModelSetting: normalizeSetting(providerSettingsBefore.model),
@@ -271,10 +360,7 @@ function resolveProviderBaseUrlFromProvider(
   if (context.name === 'qwen') {
     return 'https://portal.qwen.ai/v1';
   }
-  return extractProviderBaseUrl(
-    context.providerManager.getProviderByName(context.name) ??
-      context.activeProvider,
-  );
+  return extractProviderBaseUrl(context.providerForBaseUrl);
 }
 
 function applyProviderBaseUrlSettings(
@@ -315,7 +401,7 @@ function resolveModelToApply(
   const aliasDefaultModel = normalizeSetting(context.aliasConfig?.defaultModel);
   const defaultModel =
     aliasDefaultModel ??
-    normalizeSetting(context.activeProvider.getDefaultModel?.());
+    normalizeSetting(context.activeProvider.getDefaultModel());
   const maybeStoredModel =
     context.currentProvider === context.name &&
     storedModelSetting &&
@@ -513,49 +599,14 @@ function applyAliasEphemeralSettings(context: ProviderSwitchContext): void {
     'apikeyfile',
   ]);
 
-  for (const [rawKey, rawValue] of Object.entries(aliasEphemeralSettings)) {
-    const key = rawKey.trim();
-    if (!key) {
-      continue;
-    }
-
-    const normalizedKey = key.toLowerCase();
-    if (protectedAliasEphemeralKeys.has(normalizedKey)) {
-      logger.warn(
-        () =>
-          `[cli-runtime] Skipping protected alias ephemeral setting '${key}' for provider '${context.name}'.`,
-      );
-      continue;
-    }
-
-    if (context.config.getEphemeralSetting(key) !== undefined) {
-      continue;
-    }
-
-    const isNullish = rawValue === null || rawValue === undefined;
-    const isScalar =
-      typeof rawValue === 'string' ||
-      typeof rawValue === 'number' ||
-      typeof rawValue === 'boolean';
-
-    if (Array.isArray(rawValue) || isNullish || !isScalar) {
-      logger.warn(
-        () =>
-          `[cli-runtime] Skipping non-scalar alias ephemeral setting '${key}' for provider '${context.name}'.`,
-      );
-      continue;
-    }
-
-    if (typeof rawValue === 'number' && !Number.isFinite(rawValue)) {
-      logger.warn(
-        () =>
-          `[cli-runtime] Skipping non-finite alias ephemeral setting '${key}' for provider '${context.name}'.`,
-      );
-      continue;
-    }
-
-    context.config.setEphemeralSetting(key, rawValue);
-  }
+  Object.entries(aliasEphemeralSettings).forEach(([rawKey, rawValue]) => {
+    applyAliasEphemeralSetting(
+      context,
+      protectedAliasEphemeralKeys,
+      rawKey,
+      rawValue,
+    );
+  });
 }
 
 function applyModelDefaults(context: ProviderSwitchContext): void {
@@ -663,6 +714,8 @@ function createProviderSwitchContext(
       settingsService,
       providerManager,
       activeProvider: providerManager.getActiveProvider(),
+      providerForBaseUrl: undefined,
+
       baseProvider: {},
       aliasConfig: undefined,
       modelToApply: '',
@@ -694,6 +747,8 @@ function createProviderSwitchContext(
     config,
     settingsService,
     providerManager,
+    providerForBaseUrl: undefined,
+
     activeProvider: providerManager.getActiveProvider(),
     baseProvider: {},
     aliasConfig: getAliasConfig(name),
@@ -737,7 +792,7 @@ export async function switchActiveProvider(
     };
   }
 
-  context.config.setBucketFailoverHandler?.(undefined);
+  resetBucketFailoverHandler(context.config);
   logger.debug(
     () =>
       `[cli-runtime] Switching provider from ${context.currentProvider ?? 'none'} to ${context.name}`,

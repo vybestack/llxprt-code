@@ -159,7 +159,7 @@ export class DiffManager {
       }
       return modifiedContent;
     }
-    return;
+    return undefined;
   }
 
   /**
@@ -218,12 +218,10 @@ export class DiffManager {
     if (editor) {
       isVisible = this.diffDocuments.has(editor.document.uri.toString());
       if (!isVisible) {
-        for (const document of this.diffDocuments.values()) {
-          if (document.originalFilePath === editor.document.uri.fsPath) {
-            isVisible = true;
-            break;
-          }
-        }
+        isVisible = Array.from(this.diffDocuments.values()).some(
+          (document) =>
+            document.originalFilePath === editor.document.uri.fsPath,
+        );
       }
     }
     await vscode.commands.executeCommand(
@@ -257,7 +255,7 @@ export class DiffManager {
           modified?: vscode.Uri;
           original?: vscode.Uri;
         };
-        if (input && input.modified?.toString() === rightDocUri.toString()) {
+        if (input.modified?.toString() === rightDocUri.toString()) {
           await vscode.window.tabGroups.close(tab);
           return;
         }

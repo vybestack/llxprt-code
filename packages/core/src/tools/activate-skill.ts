@@ -58,11 +58,9 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
   private async getOrFetchFolderStructure(
     skillLocation: string,
   ): Promise<string> {
-    if (this.cachedFolderStructure === undefined) {
-      this.cachedFolderStructure = await getFolderStructure(
-        path.dirname(skillLocation),
-      );
-    }
+    this.cachedFolderStructure ??= await getFolderStructure(
+      path.dirname(skillLocation),
+    );
     return this.cachedFolderStructure;
   }
 

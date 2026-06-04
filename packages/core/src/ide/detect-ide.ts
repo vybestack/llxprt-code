@@ -24,6 +24,7 @@ export interface IdeInfo {
 }
 
 export function isCloudShell(): boolean {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env vars may be empty string, both cases indicate not in cloud shell
   return !!(process.env['EDITOR_IN_CLOUD_SHELL'] || process.env['CLOUD_SHELL']);
 }
 

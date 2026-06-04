@@ -22,9 +22,9 @@ describe('TodoSchemas', () => {
     });
 
     it('should reject invalid status values', () => {
-      expect(() => TodoStatus.parse('invalid')).toThrow();
-      expect(() => TodoStatus.parse('')).toThrow();
-      expect(() => TodoStatus.parse(null)).toThrow();
+      expect(() => TodoStatus.parse('invalid')).toThrow(/Expected/);
+      expect(() => TodoStatus.parse('')).toThrow(/Expected/);
+      expect(() => TodoStatus.parse(null)).toThrow(/Expected/);
     });
   });
 
@@ -44,7 +44,9 @@ describe('TodoSchemas', () => {
         content: '',
         status: 'pending',
       };
-      expect(() => TodoSchema.parse(invalidTodo)).toThrow();
+      expect(() => TodoSchema.parse(invalidTodo)).toThrow(
+        /String must contain at least 1 character/,
+      );
     });
 
     it('should reject todo with missing fields', () => {
@@ -52,19 +54,19 @@ describe('TodoSchemas', () => {
         content: 'Test task',
         status: 'pending',
       };
-      expect(() => TodoSchema.parse(missingId)).toThrow();
+      expect(() => TodoSchema.parse(missingId)).toThrow(/Required/i);
 
       const missingContent = {
         id: 'test-1',
         status: 'pending',
       };
-      expect(() => TodoSchema.parse(missingContent)).toThrow();
+      expect(() => TodoSchema.parse(missingContent)).toThrow(/Required/i);
 
       const missingStatus = {
         id: 'test-1',
         content: 'Test task',
       };
-      expect(() => TodoSchema.parse(missingStatus)).toThrow();
+      expect(() => TodoSchema.parse(missingStatus)).toThrow(/Required/i);
     });
 
     it('should accept numeric IDs and coerce them to strings', () => {
@@ -130,14 +132,18 @@ describe('TodoSchemas', () => {
           status: 'pending',
         },
       ];
-      expect(() => TodoArraySchema.parse(invalidTodos)).toThrow();
+      expect(() => TodoArraySchema.parse(invalidTodos)).toThrow(
+        /String must contain at least 1 character/,
+      );
     });
 
     it('should reject non-array values', () => {
-      expect(() => TodoArraySchema.parse('not an array')).toThrow();
-      expect(() => TodoArraySchema.parse({})).toThrow();
-      expect(() => TodoArraySchema.parse(null)).toThrow();
-      expect(() => TodoArraySchema.parse(undefined)).toThrow();
+      expect(() => TodoArraySchema.parse('not an array')).toThrow(
+        /invalid_type/,
+      );
+      expect(() => TodoArraySchema.parse({})).toThrow(/invalid_type/);
+      expect(() => TodoArraySchema.parse(null)).toThrow(/invalid_type/);
+      expect(() => TodoArraySchema.parse(undefined)).toThrow(/invalid_type/);
     });
   });
 
@@ -172,19 +178,21 @@ describe('TodoSchemas', () => {
         name: 'runShellCommand',
         parameters: {},
       };
-      expect(() => TodoToolCallSchema.parse(missingId)).toThrow();
+      expect(() => TodoToolCallSchema.parse(missingId)).toThrow(/Required/i);
 
       const missingName = {
         id: 'tool-1',
         parameters: {},
       };
-      expect(() => TodoToolCallSchema.parse(missingName)).toThrow();
+      expect(() => TodoToolCallSchema.parse(missingName)).toThrow(/Required/i);
 
       const missingParams = {
         id: 'tool-1',
         name: 'runShellCommand',
       };
-      expect(() => TodoToolCallSchema.parse(missingParams)).toThrow();
+      expect(() => TodoToolCallSchema.parse(missingParams)).toThrow(
+        /Required/i,
+      );
     });
   });
 
@@ -222,19 +230,21 @@ describe('TodoSchemas', () => {
         id: 'subtask-1',
         content: '',
       };
-      expect(() => SubtaskSchema.parse(invalidSubtask)).toThrow();
+      expect(() => SubtaskSchema.parse(invalidSubtask)).toThrow(
+        /String must contain at least 1 character/,
+      );
     });
 
     it('should reject subtask with missing fields', () => {
       const missingId = {
         content: 'Implement feature',
       };
-      expect(() => SubtaskSchema.parse(missingId)).toThrow();
+      expect(() => SubtaskSchema.parse(missingId)).toThrow(/Required/i);
 
       const missingContent = {
         id: 'subtask-1',
       };
-      expect(() => SubtaskSchema.parse(missingContent)).toThrow();
+      expect(() => SubtaskSchema.parse(missingContent)).toThrow(/Required/i);
     });
   });
 
@@ -285,7 +295,9 @@ describe('TodoSchemas', () => {
           },
         ],
       };
-      expect(() => TodoSchema.parse(todoWithInvalidSubtasks)).toThrow();
+      expect(() => TodoSchema.parse(todoWithInvalidSubtasks)).toThrow(
+        /String must contain at least 1 character/,
+      );
     });
   });
 
@@ -339,7 +351,9 @@ describe('TodoSchemas', () => {
           status: 'pending',
         },
       ];
-      expect(() => TodoArraySchema.parse(invalidTodos)).toThrow();
+      expect(() => TodoArraySchema.parse(invalidTodos)).toThrow(
+        /String must contain at least 1 character/,
+      );
     });
   });
 });

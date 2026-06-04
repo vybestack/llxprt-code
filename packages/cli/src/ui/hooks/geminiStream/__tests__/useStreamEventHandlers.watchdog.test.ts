@@ -234,10 +234,9 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     const pendingHistoryItemRef = {
       current: null as HistoryItemWithoutId | null,
     };
-    const flushedItems: HistoryItemWithoutId[] = [];
-    const flushPendingHistoryItem = vi.fn(() => {
+    const flushPendingHistoryItem = vi.fn((timestamp: number) => {
       if (pendingHistoryItemRef.current) {
-        flushedItems.push(pendingHistoryItemRef.current);
+        mockAddItem(pendingHistoryItemRef.current, timestamp);
       }
     });
     setPendingHistoryItem = vi.fn((value) => {
@@ -305,24 +304,20 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     );
 
     expect(flushPendingHistoryItem).toHaveBeenCalledTimes(1);
-    expect(flushedItems[0]).toMatchObject({
-      type: 'gemini',
-      text: 'Before clear',
-    });
-    expect(mockAddItem).toHaveBeenCalledWith(
+    expect(mockAddItem.mock.calls.map(([item]) => item)).toStrictEqual([
+      expect.objectContaining({
+        type: 'gemini',
+        text: 'Before clear',
+      }),
       expect.objectContaining({
         type: MessageType.INFO,
         text: 'Execution stopped by hook: Hook stopped execution',
       }),
-      789,
-    );
-    expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
         type: MessageType.INFO,
         text: 'Conversation context has been cleared.',
       }),
-      789,
-    );
+    ]);
     expect(pendingHistoryItemRef.current).toMatchObject({
       type: 'gemini',
       text: 'After clear',
@@ -336,10 +331,9 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     const pendingHistoryItemRef = {
       current: null as HistoryItemWithoutId | null,
     };
-    const flushedItems: HistoryItemWithoutId[] = [];
-    const flushPendingHistoryItem = vi.fn(() => {
+    const flushPendingHistoryItem = vi.fn((timestamp: number) => {
       if (pendingHistoryItemRef.current) {
-        flushedItems.push(pendingHistoryItemRef.current);
+        mockAddItem(pendingHistoryItemRef.current, timestamp);
       }
     });
     setPendingHistoryItem = vi.fn((value) => {
@@ -407,24 +401,20 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     );
 
     expect(flushPendingHistoryItem).toHaveBeenCalledTimes(1);
-    expect(flushedItems[0]).toMatchObject({
-      type: 'gemini',
-      text: 'Before block clear',
-    });
-    expect(mockAddItem).toHaveBeenCalledWith(
+    expect(mockAddItem.mock.calls.map(([item]) => item)).toStrictEqual([
+      expect.objectContaining({
+        type: 'gemini',
+        text: 'Before block clear',
+      }),
       expect.objectContaining({
         type: MessageType.INFO,
         text: 'Execution blocked by hook: Hook blocked execution',
       }),
-      790,
-    );
-    expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
         type: MessageType.INFO,
         text: 'Conversation context has been cleared.',
       }),
-      790,
-    );
+    ]);
     expect(pendingHistoryItemRef.current).toMatchObject({
       type: 'gemini',
       text: 'After block clear',

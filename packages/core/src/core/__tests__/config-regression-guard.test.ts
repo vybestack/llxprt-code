@@ -20,10 +20,12 @@ describe('Config Regression Guards', () => {
       // Allow: import type { Config } from '...'
       // Disallow: import { Config } from '...'
       const hasNonTypeConfigImport =
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /import\s+{[^}]*\bConfig\b[^}]*}\s+from\s+['"].*config.*['"]/.test(
           content,
         );
       const hasTypeOnlyConfigImport =
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /import\s+type\s+{[^}]*\bConfig\b[^}]*}\s+from\s+['"].*config.*['"]/.test(
           content,
         );
@@ -46,6 +48,7 @@ describe('Config Regression Guards', () => {
 
       // Remove comments and strings to avoid false positives
       const codeOnly = content
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         .replace(/\/\*[\s\S]*?\*\//g, '') // Remove block comments
         .replace(/\/\/.*/g, '') // Remove line comments
         .replace(/'[^']*'/g, '""') // Remove single-quoted strings
@@ -82,6 +85,7 @@ describe('Config Regression Guards', () => {
 
       // If Config is imported, ensure it's not used for runtime state
       const codeOnly = content
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         .replace(/\/\*[\s\S]*?\*\//g, '') // Remove block comments
         .replace(/\/\/.*/g, '') // Remove line comments
         .replace(/'[^']*'/g, '""') // Remove single-quoted strings

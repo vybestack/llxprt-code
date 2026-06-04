@@ -21,6 +21,7 @@ function testPath(...segments: string[]): string {
   for (let i = 1; i < segments.length; i++) {
     if (segments[i].startsWith('/') || segments[i].startsWith('\\')) {
       // If segment starts with a separator, remove the trailing separator from the result
+      // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       result = path.normalize(result.replace(/[\\/]+$/, '') + segments[i]);
     } else {
       // Otherwise join with the platform separator

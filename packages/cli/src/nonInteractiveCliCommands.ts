@@ -36,7 +36,7 @@ export const handleSlashCommand = async (
 ): Promise<PartListUnion | undefined> => {
   const trimmed = rawQuery.trim();
   if (!trimmed.startsWith('/')) {
-    return;
+    return undefined;
   }
 
   // Only custom commands are supported for now.
@@ -49,64 +49,62 @@ export const handleSlashCommand = async (
 
   const { commandToExecute, args } = parseSlashCommand(trimmed, commands);
 
-  if (commandToExecute) {
-    if (commandToExecute.action) {
-      // Not used by custom commands but may be in the future.
-      const sessionStats: SessionStatsState = {
-        sessionId: config?.getSessionId() || 'unknown',
-        sessionStartTime: new Date(),
-        metrics: uiTelemetryService.getMetrics(),
-        lastPromptTokenCount: 0,
-        historyTokenCount: 0,
-        promptCount: 1,
-      };
+  if (commandToExecute?.action) {
+    const sessionStats: SessionStatsState = {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string sessionId should fall back to 'unknown'
+      sessionId: config?.getSessionId() || 'unknown',
+      sessionStartTime: new Date(),
+      metrics: uiTelemetryService.getMetrics(),
+      lastPromptTokenCount: 0,
+      historyTokenCount: 0,
+      promptCount: 1,
+    };
 
-      const loggerStorage = config?.storage ?? new Storage(process.cwd());
-      const logger = new Logger(config?.getSessionId() || '', loggerStorage);
+    const loggerStorage = config?.storage ?? new Storage(process.cwd());
+    const logger = new Logger(config?.getSessionId() ?? '', loggerStorage);
 
-      const context: CommandContext = {
-        services: {
-          config,
-          settings,
-          git: undefined,
-          logger,
-        },
-        ui: createNonInteractiveUI(),
-        session: {
-          stats: sessionStats,
-          sessionShellAllowlist: new Set(),
-        },
-        invocation: {
-          raw: trimmed,
-          name: commandToExecute.name,
-          args,
-        },
-      };
+    const context: CommandContext = {
+      services: {
+        config,
+        settings,
+        git: undefined,
+        logger,
+      },
+      ui: createNonInteractiveUI(),
+      session: {
+        stats: sessionStats,
+        sessionShellAllowlist: new Set(),
+      },
+      invocation: {
+        raw: trimmed,
+        name: commandToExecute.name,
+        args,
+      },
+    };
 
-      const result = await commandToExecute.action(context, args);
+    const result = await commandToExecute.action(context, args);
 
-      if (result) {
-        switch (result.type) {
-          case 'submit_prompt':
-            return result.content;
-          case 'confirm_shell_commands':
-            // This result indicates a command attempted to confirm shell commands.
-            // However note that currently, ShellTool is excluded in non-interactive
-            // mode unless 'YOLO mode' is active, so confirmation actually won't
-            // occur because of YOLO mode.
-            // This ensures that if a command *does* request confirmation (e.g.
-            // in the future with more granular permissions), it's handled appropriately.
-            throw new FatalInputError(
-              'Exiting due to a confirmation prompt requested by the command.',
-            );
-          default:
-            throw new FatalInputError(
-              'Exiting due to command result that is not supported in non-interactive mode.',
-            );
-        }
+    if (result) {
+      switch (result.type) {
+        case 'submit_prompt':
+          return result.content;
+        case 'confirm_shell_commands':
+          // This result indicates a command attempted to confirm shell commands.
+          // However note that currently, ShellTool is excluded in non-interactive
+          // mode unless 'YOLO mode' is active, so confirmation actually won't
+          // occur because of YOLO mode.
+          // This ensures that if a command *does* request confirmation (e.g.
+          // in the future with more granular permissions), it's handled appropriately.
+          throw new FatalInputError(
+            'Exiting due to a confirmation prompt requested by the command.',
+          );
+        default:
+          throw new FatalInputError(
+            'Exiting due to command result that is not supported in non-interactive mode.',
+          );
       }
     }
   }
 
-  return;
+  return undefined;
 };

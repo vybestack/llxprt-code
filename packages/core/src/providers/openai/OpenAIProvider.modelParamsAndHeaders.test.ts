@@ -194,9 +194,9 @@ describe('OpenAIProvider model params and custom headers', () => {
     const call = mockChatCreate.mock.calls[0];
     expect(call).toBeDefined();
 
-    const options = call?.[1];
+    const options = call[1];
     expect(options).toBeDefined();
-    expect(options?.headers).toMatchObject({
+    expect(options.headers).toMatchObject({
       ...customHeaders,
       'X-Provider-Header': 'provider-value',
     });

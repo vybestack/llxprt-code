@@ -16,6 +16,16 @@ export interface FuzzyFilterOptions {
   enableFuzzy?: boolean;
 }
 
+type FuzzyFilteringSettingsBoundary = {
+  services: {
+    settings?: {
+      merged?: {
+        enableFuzzyFiltering?: boolean;
+      };
+    };
+  };
+};
+
 /**
  * Filters completions using either fuzzy matching or exact prefix matching.
  *
@@ -92,7 +102,10 @@ export function filterStrings(
  * Returns true by default if setting is not defined.
  */
 export function getFuzzyEnabled(ctx: CommandContext): boolean {
-  return ctx.services.settings?.merged?.enableFuzzyFiltering ?? true;
+  const settingsBoundary = ctx as FuzzyFilteringSettingsBoundary;
+  return (
+    settingsBoundary.services.settings?.merged?.enableFuzzyFiltering ?? true
+  );
 }
 
 /**
@@ -115,7 +128,9 @@ export function withFuzzyFilter(baseCompleter: CompleterFn): CompleterFn {
 
     // Get the fuzzy filtering setting from context
     // Default to true if setting is not defined
-    const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
+    const settingsBoundary = ctx as FuzzyFilteringSettingsBoundary;
+    const settingValue =
+      settingsBoundary.services.settings?.merged?.enableFuzzyFiltering;
     const enableFuzzy = settingValue ?? true;
 
     // Apply filtering

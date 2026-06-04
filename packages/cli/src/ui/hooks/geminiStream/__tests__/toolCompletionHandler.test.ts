@@ -558,6 +558,7 @@ describe('call-order invariants', () => {
     ]);
 
     // Simulate the handleCompletedTools logic:
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (externalTools.length > 0) {
       mockMarkToolsAsSubmitted(externalTools.map((t) => t.request.callId));
     }

@@ -19,14 +19,15 @@ export function useWorkspaceMigration(settings: LoadedSettings) {
   >([]);
 
   useEffect(() => {
-    if (!settings.merged.extensionManagement) {
+    if (settings.merged.extensionManagement !== true) {
       return;
     }
     const cwd = process.cwd();
     const extensions = getWorkspaceExtensions(cwd);
     if (
       extensions.length > 0 &&
-      !settings.merged.extensions.workspacesWithMigrationNudge?.includes(cwd)
+      settings.merged.extensions.workspacesWithMigrationNudge?.includes(cwd) !==
+        true
     ) {
       setWorkspaceExtensions(extensions);
       setShowWorkspaceMigrationDialog(true);
@@ -36,11 +37,11 @@ export function useWorkspaceMigration(settings: LoadedSettings) {
 
   const onWorkspaceMigrationDialogOpen = useCallback(() => {
     const userSettings = settings.forScope(SettingScope.User);
-    const extensionSettings = userSettings.settings.extensions || {
+    const extensionSettings = userSettings.settings.extensions ?? {
       disabled: [],
     };
     const workspacesWithMigrationNudge =
-      extensionSettings.workspacesWithMigrationNudge || [];
+      extensionSettings.workspacesWithMigrationNudge ?? [];
 
     const cwd = process.cwd();
     if (!workspacesWithMigrationNudge.includes(cwd)) {

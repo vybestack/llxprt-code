@@ -65,10 +65,21 @@ async function readSessionHeader(
       const { bytesRead } = await fd.read(buf, 0, 4096, 0);
       const firstLine = buf.toString('utf-8', 0, bytesRead).split('\n')[0];
       const parsed = JSON.parse(firstLine);
-      if (parsed.type === 'session_start' && parsed.payload?.sessionId) {
+      if (
+        parsed.type === 'session_start' &&
+        parsed.payload?.sessionId !== undefined &&
+        parsed.payload?.sessionId !== null &&
+        parsed.payload?.sessionId !== ''
+      ) {
         return {
           sessionId: parsed.payload.sessionId,
-          startTime: parsed.payload.startTime || parsed.ts,
+
+          startTime:
+            parsed.payload.startTime !== undefined &&
+            parsed.payload.startTime !== null &&
+            parsed.payload.startTime !== ''
+              ? parsed.payload.startTime
+              : parsed.ts,
         };
       }
       return null;

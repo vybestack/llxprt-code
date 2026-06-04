@@ -6,6 +6,8 @@
  * AST Edit Tool Invocation - Handles execution of edit operations
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import * as path from 'path';
 import * as Diff from 'diff';
 import type {
@@ -57,7 +59,7 @@ export class ASTEditToolInvocation
     abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
     // For preview mode, return false to let execute method handle it
-    if (!this.params.force) {
+    if (this.params.force !== true) {
       return false;
     }
 
@@ -128,7 +130,8 @@ export class ASTEditToolInvocation
       return `No file changes to ${shortenPath(relativePath)}`;
     }
 
-    const forceIndicator = this.params.force ? ' [EXECUTE] ' : ' [PREVIEW] ';
+    const forceIndicator =
+      this.params.force === true ? ' [EXECUTE] ' : ' [PREVIEW] ';
     return `${forceIndicator}${shortenPath(relativePath)}: ${oldStringSnippet} => ${newStringSnippet}`;
   }
 
@@ -140,7 +143,7 @@ export class ASTEditToolInvocation
     _setPidCallback?: (pid: number) => void,
   ): Promise<ToolResult> {
     // Step 1: Preview mode (force: false or unset)
-    if (!this.params.force) {
+    if (this.params.force !== true) {
       return this.executePreview(signal);
     }
 
@@ -150,44 +153,16 @@ export class ASTEditToolInvocation
 
   private async executePreview(_signal: AbortSignal): Promise<ToolResult> {
     try {
-      // Read file and collect context
       const rawCurrentContent = await this.readFileContent();
-      // Normalize line endings to LF to match apply behavior
       const currentContent = rawCurrentContent.replace(/\r\n/g, '\n');
-      // Get timestamp for freshness check
       const currentMtime = await this.getFileLastModified(
         this.params.file_path,
       );
 
-      // Detect if this is a new file — distinguish non-existent from empty existing files
-      let isNewFile = false;
-      if (this.params.old_string === '' && rawCurrentContent === '') {
-        const mtime = await this.getFileLastModified(this.params.file_path);
-        isNewFile = mtime === null;
-      }
+      const isNewFile = this.detectNewFile(rawCurrentContent, currentMtime);
 
-      // Freshness Check (must run first to prevent stale edits in concurrent scenarios)
-      if (
-        this.params.last_modified &&
-        currentMtime &&
-        currentMtime > this.params.last_modified
-      ) {
-        const errorMessage = `File ${this.params.file_path} mismatch. Expected mtime <= ${this.params.last_modified}, but found ${currentMtime}.`;
-        const displayMessage = `File has been modified since it was last read. Please read the file again to get the latest content.`;
-        const rawErrorMessage = JSON.stringify({
-          message: errorMessage,
-          current_mtime: currentMtime,
-          your_mtime: this.params.last_modified,
-        });
-        return {
-          llmContent: rawErrorMessage,
-          returnDisplay: `Error: ${displayMessage}`,
-          error: {
-            message: rawErrorMessage,
-            type: ToolErrorType.FILE_MODIFIED_CONFLICT,
-          },
-        };
-      }
+      const freshnessError = this.checkFreshness(currentMtime);
+      if (freshnessError) return freshnessError;
 
       const workspaceRoot = this.config.getTargetDir();
       const enhancedContext =
@@ -197,7 +172,6 @@ export class ASTEditToolInvocation
           workspaceRoot,
         );
 
-      // Generate preview (use normalized content and correct isNewFile flag)
       const newContent = applyReplacement(
         currentContent,
         this.params.old_string,
@@ -209,89 +183,29 @@ export class ASTEditToolInvocation
         newContent,
       );
 
-      // Rich preview information
       const fileName = path.basename(this.params.file_path);
       const fileDiff = Diff.createPatch(
         fileName,
-        currentContent ?? '',
+        currentContent,
         newContent,
         'Current',
         'Proposed',
         DEFAULT_CREATE_PATCH_OPTIONS,
       );
 
-      const editPreviewLlmContent = [
-        `LLXPRT EDIT PREVIEW: ${this.params.file_path}`,
-        `- Context: ${enhancedContext.language} file with ${enhancedContext.declarations.length} declarations`,
-        `- Functions: ${enhancedContext.languageContext.functions.length}`,
-        `- Classes: ${enhancedContext.languageContext.classes.length}`,
-        `- AST validation: ${astValidation.valid ? 'PASSED' : 'FAILED'}`,
-        `- Relevant snippets: ${enhancedContext.relevantSnippets.length} found`,
-        enhancedContext.repositoryContext
-          ? `- Repository: ${enhancedContext.repositoryContext.gitUrl}`
-          : '',
-        enhancedContext.relatedFiles
-          ? `- Related files: ${enhancedContext.relatedFiles.length}`
-          : '',
-        enhancedContext.connectedFiles &&
-        enhancedContext.connectedFiles.length > 0
-          ? [
-              '',
-              'WORKING SET CONTEXT:',
-              ...enhancedContext.connectedFiles
-                .map((file) => {
-                  const relPath = makeRelative(file.filePath, workspaceRoot);
-                  if (file.declarations.length === 0)
-                    return `- ${relPath} (No declarations)`;
-                  return [
-                    `- ${relPath}:`,
-                    ...file.declarations.map(
-                      (d) =>
-                        `  - ${d.type}: ${d.name}${d.signature ? d.signature : ''}`,
-                    ),
-                  ];
-                })
-                .flat(),
-            ]
-          : [],
-        astValidation && !astValidation.valid
-          ? `- AST errors: ${astValidation.errors.join(', ')}`
-          : '',
-        currentMtime ? `- Timestamp: ${currentMtime}` : '',
-        '',
-        'ENHANCED CONTEXT ANALYSIS:',
-        ...enhancedContext.declarations.map(
-          (decl) => `- ${decl.type}: ${decl.name} (line ${decl.line})`,
-        ),
-        enhancedContext.relatedSymbols &&
-        enhancedContext.relatedSymbols.length > 0
-          ? [
-              '',
-              'RELATED SYMBOLS:',
-              ...enhancedContext.relatedSymbols
-                .slice(0, ASTConfig.MAX_DISPLAY_RESULTS)
-                .map(
-                  (symbol) =>
-                    `- ${symbol.type}: ${symbol.filePath}:${symbol.line}`,
-                ),
-            ]
-          : [],
-        '',
-        'NEXT STEP: Call again with force: true to apply changes',
-      ]
-        .flat()
-        .filter(Boolean)
-        .join('\n');
+      const editPreviewLlmContent = this.buildPreviewLlmContent(
+        enhancedContext,
+        astValidation,
+        currentMtime,
+        workspaceRoot,
+      );
 
       const returnDisplay: FileDiff = {
         fileDiff,
         fileName,
         originalContent: currentContent,
         newContent,
-        metadata: {
-          astValidation,
-          currentMtime,
-        },
+        metadata: { astValidation, currentMtime },
       };
 
       return {
@@ -309,6 +223,132 @@ export class ASTEditToolInvocation
         },
       };
     }
+  }
+
+  private detectNewFile(
+    rawCurrentContent: string,
+    mtime: number | null,
+  ): boolean {
+    if (this.params.old_string === '' && rawCurrentContent === '') {
+      return mtime === null;
+    }
+    return false;
+  }
+
+  private checkFreshness(currentMtime: number | null): ToolResult | null {
+    if (
+      this.params.last_modified !== undefined &&
+      currentMtime !== null &&
+      currentMtime > this.params.last_modified
+    ) {
+      const errorMessage = `File ${this.params.file_path} mismatch. Expected mtime <= ${this.params.last_modified}, but found ${currentMtime}.`;
+      const displayMessage = `File has been modified since it was last read. Please read the file again to get the latest content.`;
+      const rawErrorMessage = JSON.stringify({
+        message: errorMessage,
+        current_mtime: currentMtime,
+        your_mtime: this.params.last_modified,
+      });
+      return {
+        llmContent: rawErrorMessage,
+        returnDisplay: `Error: ${displayMessage}`,
+        error: {
+          message: rawErrorMessage,
+          type: ToolErrorType.FILE_MODIFIED_CONFLICT,
+        },
+      };
+    }
+    return null;
+  }
+
+  private buildPreviewLlmContent(
+    enhancedContext: Awaited<
+      ReturnType<ASTContextCollector['collectEnhancedContext']>
+    >,
+    astValidation: { valid: boolean; errors: string[] },
+    currentMtime: number | null,
+    workspaceRoot: string,
+  ): string {
+    return [
+      `LLXPRT EDIT PREVIEW: ${this.params.file_path}`,
+      `- Context: ${enhancedContext.language} file with ${enhancedContext.declarations.length} declarations`,
+      `- Functions: ${enhancedContext.languageContext.functions.length}`,
+      `- Classes: ${enhancedContext.languageContext.classes.length}`,
+      `- AST validation: ${astValidation.valid ? 'PASSED' : 'FAILED'}`,
+      `- Relevant snippets: ${enhancedContext.relevantSnippets.length} found`,
+      enhancedContext.repositoryContext
+        ? `- Repository: ${enhancedContext.repositoryContext.gitUrl}`
+        : '',
+      enhancedContext.relatedFiles
+        ? `- Related files: ${enhancedContext.relatedFiles.length}`
+        : '',
+      this.formatConnectedFilesContext(enhancedContext, workspaceRoot),
+      !astValidation.valid
+        ? `- AST errors: ${astValidation.errors.join(', ')}`
+        : '',
+      currentMtime !== null ? `- Timestamp: ${currentMtime}` : '',
+      '',
+      'ENHANCED CONTEXT ANALYSIS:',
+      ...enhancedContext.declarations.map(
+        (decl) => `- ${decl.type}: ${decl.name} (line ${decl.line})`,
+      ),
+      this.formatRelatedSymbols(enhancedContext),
+      '',
+      'NEXT STEP: Call again with force: true to apply changes',
+    ]
+      .flat()
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  private formatConnectedFilesContext(
+    enhancedContext: Awaited<
+      ReturnType<ASTContextCollector['collectEnhancedContext']>
+    >,
+    workspaceRoot: string,
+  ): string[] {
+    if (
+      !enhancedContext.connectedFiles ||
+      enhancedContext.connectedFiles.length === 0
+    ) {
+      return [];
+    }
+    return [
+      '',
+      'WORKING SET CONTEXT:',
+      ...enhancedContext.connectedFiles
+        .map((file) => {
+          const relPath = makeRelative(file.filePath, workspaceRoot);
+          if (file.declarations.length === 0)
+            return `- ${relPath} (No declarations)`;
+          return [
+            `- ${relPath}:`,
+            ...file.declarations.map(
+              (d) => `  - ${d.type}: ${d.name}${d.signature ?? ''}`,
+            ),
+          ];
+        })
+        .flat(),
+    ];
+  }
+
+  private formatRelatedSymbols(
+    enhancedContext: Awaited<
+      ReturnType<ASTContextCollector['collectEnhancedContext']>
+    >,
+  ): string[] {
+    if (
+      !enhancedContext.relatedSymbols ||
+      enhancedContext.relatedSymbols.length === 0
+    ) {
+      return [];
+    }
+    return [
+      '',
+      'RELATED SYMBOLS:',
+      ...enhancedContext.relatedSymbols
+        .slice(0, ASTConfig.MAX_DISPLAY_RESULTS)
+        .map((symbol) => `- ${symbol.type}: ${symbol.filePath}:${symbol.line}`),
+    ];
   }
 
   private async executeApply(signal: AbortSignal): Promise<ToolResult> {
@@ -338,14 +378,16 @@ export class ASTEditToolInvocation
       };
     }
 
-    // Execute actual file write
+    return this.writeEditResult(editData);
+  }
+
+  private async writeEditResult(editData: CalculatedEdit): Promise<ToolResult> {
     try {
       await ensureParentDirectoriesExist(this.params.file_path);
       await this.config
         .getFileSystemService()
         .writeTextFile(this.params.file_path, editData.newContent);
 
-      // Return execution result
       const fileName = path.basename(this.params.file_path);
       const fileDiff = Diff.createPatch(
         fileName,
@@ -362,32 +404,16 @@ export class ASTEditToolInvocation
         originalContent: editData.currentContent,
         newContent: editData.newContent,
         applied: true,
-        metadata: {
-          astValidation: editData.astValidation,
-        },
+        metadata: { astValidation: editData.astValidation },
       };
 
       const llmSuccessMessageParts: string[] = [
         `Successfully applied edit to: ${this.params.file_path}`,
         `- Changes: ${editData.occurrences} replacement(s) applied`,
-        `- AST validation: ${editData.astValidation?.valid ? 'PASSED' : 'FAILED'}`,
+        `- AST validation: ${editData.astValidation?.valid === true ? 'PASSED' : 'FAILED'}`,
       ];
 
-      // @plan PLAN-20250212-LSP.P31
-      // @requirement REQ-DIAG-010
-      // Append LSP diagnostics after successful edit
-      try {
-        const diagBlock = await collectLspDiagnosticsBlock(
-          this.config,
-          this.params.file_path,
-        );
-        if (diagBlock) {
-          llmSuccessMessageParts.push(diagBlock);
-        }
-      } catch (_error) {
-        // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
-        // Silently continue - edit was already successful
-      }
+      await this.appendLspDiagnostics(llmSuccessMessageParts);
 
       return {
         llmContent: llmSuccessMessageParts.join('\n\n'),
@@ -403,6 +429,22 @@ export class ASTEditToolInvocation
           type: ToolErrorType.FILE_WRITE_FAILURE,
         },
       };
+    }
+  }
+
+  // @plan PLAN-20250212-LSP.P31
+  // @requirement REQ-DIAG-010
+  private async appendLspDiagnostics(llmParts: string[]): Promise<void> {
+    try {
+      const diagBlock = await collectLspDiagnosticsBlock(
+        this.config,
+        this.params.file_path,
+      );
+      if (diagBlock) {
+        llmParts.push(diagBlock);
+      }
+    } catch {
+      // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
     }
   }
 

@@ -26,6 +26,17 @@ import { debugLogger } from '@vybestack/llxprt-code-core';
 // Configure theming and parsing utilities.
 const lowlight = createLowlight(common);
 
+function getClassNames(node: Element): string[] {
+  const className = node.properties.className;
+  if (Array.isArray(className)) {
+    return className.filter(
+      (value): value is string => typeof value === 'string',
+    );
+  }
+
+  return typeof className === 'string' ? [className] : [];
+}
+
 function renderHastNode(
   node: Root | Element | HastText | RootContent,
   theme: Theme,
@@ -38,8 +49,7 @@ function renderHastNode(
 
   // Handle Element Nodes: Determine color and pass it down, don't wrap
   if (node.type === 'element') {
-    const nodeClasses: string[] =
-      (node.properties?.className as string[]) || [];
+    const nodeClasses = getClassNames(node);
     let elementColor: string | undefined = undefined;
 
     // Find color defined specifically for this element's class
@@ -53,11 +63,11 @@ function renderHastNode(
 
     // Determine the color to pass down: Use this element's specific color
     // if found; otherwise, continue passing down the already inherited color.
-    const colorToPassDown = elementColor || inheritedColor;
+    const colorToPassDown = elementColor ?? inheritedColor;
 
     // Recursively render children, passing the determined color down
     // Ensure child type matches expected HAST structure (ElementContent is common)
-    const children = node.children?.map(
+    const children = node.children.map(
       (child: ElementContent, index: number) => (
         <React.Fragment key={index}>
           {renderHastNode(child, theme, colorToPassDown)}
@@ -73,13 +83,13 @@ function renderHastNode(
   // Handle Root Node: Start recursion with initially inherited color
   if (node.type === 'root') {
     // Check if children array is empty - this happens when lowlight can't detect language – fall back to plain text
-    if (!node.children || node.children.length === 0) {
+    if (node.children.length === 0) {
       return null;
     }
 
     // Pass down the initial inheritedColor (likely undefined from the top call)
     // Ensure child type matches expected HAST structure (RootContent is common)
-    return node.children?.map((child: RootContent, index: number) => (
+    return node.children.map((child: RootContent, index: number) => (
       <React.Fragment key={index}>
         {renderHastNode(child, theme, inheritedColor)}
       </React.Fragment>
@@ -108,7 +118,7 @@ function highlightAndRenderLine(
     );
 
     return renderedNode !== null ? renderedNode : line;
-  } catch (_error) {
+  } catch {
     return line;
   }
 }
@@ -119,13 +129,42 @@ export function colorizeLine(
   theme?: Theme,
   overrideColor?: string,
 ): React.ReactNode {
-  const activeTheme = theme || themeManager.getActiveTheme();
+  const activeTheme = theme ?? themeManager.getActiveTheme();
   if (overrideColor) {
     // If there's an override color, we create a simple Text component
     // instead of going through syntax highlighting
     return <Text color={overrideColor}>{line}</Text>;
   }
   return highlightAndRenderLine(line, language, activeTheme);
+}
+
+function renderFallbackLines(
+  codeToHighlight: string,
+  availableHeight: number | undefined,
+  maxWidth: number | undefined,
+  activeTheme: Theme,
+  showLineNumbers: boolean,
+): React.ReactNode {
+  const lines = codeToHighlight.split('\n');
+  const padWidth = String(lines.length).length;
+  return (
+    <MaxSizedBox
+      maxHeight={availableHeight}
+      maxWidth={maxWidth}
+      overflowDirection="top"
+    >
+      {lines.map((line, index) => (
+        <Box key={index}>
+          {showLineNumbers && (
+            <Text color={activeTheme.defaultColor}>
+              {`${String(index + 1).padStart(padWidth, ' ')} `}
+            </Text>
+          )}
+          <Text color={activeTheme.colors.Gray}>{line}</Text>
+        </Box>
+      ))}
+    </MaxSizedBox>
+  );
 }
 
 /**
@@ -144,23 +183,19 @@ export function colorizeCode(
   maxWidth?: number,
   theme?: Theme,
   settings?: LoadedSettings,
-  hideLineNumbers?: boolean,
+  hideLineNumbers = false,
 ): React.ReactNode {
   const codeToHighlight = code.replace(/\n$/, '');
-  const activeTheme = theme || themeManager.getActiveTheme();
+  const activeTheme = theme ?? themeManager.getActiveTheme();
   const showLineNumbers = hideLineNumbers
     ? false
-    : (settings?.merged.ui?.showLineNumbers ?? true);
+    : (settings?.merged.ui.showLineNumbers ?? true);
 
   try {
-    // Render the HAST tree using the adapted theme
-    // Apply the theme's default foreground color to the top-level Text element
     let lines = codeToHighlight.split('\n');
-    const padWidth = String(lines.length).length; // Calculate padding width based on number of lines
-
+    const padWidth = String(lines.length).length;
     let hiddenLinesCount = 0;
 
-    // Optimization to avoid highlighting lines that cannot possibly be displayed.
     if (availableHeight !== undefined) {
       availableHeight = Math.max(availableHeight, MINIMUM_MAX_HEIGHT);
       if (lines.length > availableHeight) {
@@ -183,15 +218,11 @@ export function colorizeCode(
             language,
             activeTheme,
           );
-
           return (
             <Box key={index}>
               {showLineNumbers && (
                 <Text color={activeTheme.colors.Gray}>
-                  {`${String(index + 1 + hiddenLinesCount).padStart(
-                    padWidth,
-                    ' ',
-                  )} `}
+                  {`${String(index + 1 + hiddenLinesCount).padStart(padWidth, ' ')} `}
                 </Text>
               )}
               <Text color={activeTheme.defaultColor} wrap="wrap">
@@ -207,27 +238,12 @@ export function colorizeCode(
       `[colorizeCode] Error highlighting code for language "${language}":`,
       error,
     );
-    // Fall back to plain text with default color on error
-    // Also display line numbers in fallback
-    const lines = codeToHighlight.split('\n');
-    const padWidth = String(lines.length).length; // Calculate padding width based on number of lines
-    return (
-      <MaxSizedBox
-        maxHeight={availableHeight}
-        maxWidth={maxWidth}
-        overflowDirection="top"
-      >
-        {lines.map((line, index) => (
-          <Box key={index}>
-            {showLineNumbers && (
-              <Text color={activeTheme.defaultColor}>
-                {`${String(index + 1).padStart(padWidth, ' ')} `}
-              </Text>
-            )}
-            <Text color={activeTheme.colors.Gray}>{line}</Text>
-          </Box>
-        ))}
-      </MaxSizedBox>
+    return renderFallbackLines(
+      codeToHighlight,
+      availableHeight,
+      maxWidth,
+      activeTheme,
+      showLineNumbers,
     );
   }
 }

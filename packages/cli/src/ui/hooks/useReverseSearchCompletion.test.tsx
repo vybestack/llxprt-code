@@ -66,6 +66,7 @@ describe('useReverseSearchCompletion', () => {
         expect(result.current.showSuggestions).toBe(false);
       });
 
+      // eslint-disable-next-line vitest/max-nested-describe -- intentional: semantic grouping requires this nesting depth
       describe('Navigation', () => {
         it('should handle navigateUp with no suggestions', () => {
           const mockShellHistory = ['echo hello'];

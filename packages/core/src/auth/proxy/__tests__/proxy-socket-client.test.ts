@@ -62,21 +62,17 @@ function createAutoReplyServer(_socketPath: string): net.Server {
 
 describe('ProxySocketClient', () => {
   let socketPath: string;
-  let server: net.Server;
-  let client: ProxySocketClient;
+  let server: net.Server | undefined;
+  let client: ProxySocketClient | undefined;
 
   beforeEach(() => {
     socketPath = createTempSocketPath();
   });
 
   afterEach(async () => {
-    try {
-      client?.close();
-    } catch {
-      // client may not be initialized
-    }
+    client?.close();
     await new Promise<void>((resolve) => {
-      if (server?.listening) {
+      if (server?.listening === true) {
         server.close(() => resolve());
       } else {
         resolve();
@@ -195,6 +191,7 @@ describe('ProxySocketClient', () => {
     // Verify each ID looks like a UUID
     for (const id of receivedIds) {
       expect(id).toMatch(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
       );
     }
@@ -231,7 +228,7 @@ describe('ProxySocketClient', () => {
     // Advance past the request timeout
     vi.advanceTimersByTime(REQUEST_TIMEOUT_MS + 100);
 
-    await expect(requestPromise).rejects.toThrow();
+    await expect(requestPromise).rejects.toThrow(/timed out/);
 
     vi.useRealTimers();
   });
@@ -297,6 +294,35 @@ describe('ProxySocketClient', () => {
    * @scenario Multiple concurrent requests correlate responses by ID
    */
   it('correlates concurrent responses by request ID', async () => {
+    const handleServerFrame = (
+      msg: Record<string, unknown>,
+      socket: net.Socket,
+      pendingResponses: Array<{ id: string; op: string }>,
+    ): void => {
+      if (msg.op === 'handshake') {
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+        return;
+      }
+      pendingResponses.push({
+        id: msg.id as string,
+        op: msg.op as string,
+      });
+
+      // Respond in reverse order to test correlation
+      if (pendingResponses.length === 3) {
+        const reversed = pendingResponses.toReversed();
+        for (const pending of reversed) {
+          socket.write(
+            encodeFrame({
+              ok: true,
+              id: pending.id,
+              data: { echo: pending.op },
+            }),
+          );
+        }
+      }
+    };
+
     server = net.createServer((socket) => {
       const decoder = new FrameDecoder();
       const pendingResponses: Array<{ id: string; op: string }> = [];
@@ -304,28 +330,7 @@ describe('ProxySocketClient', () => {
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
         for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          } else {
-            pendingResponses.push({
-              id: msg.id as string,
-              op: msg.op as string,
-            });
-
-            // Respond in reverse order to test correlation
-            if (pendingResponses.length === 3) {
-              for (const pending of pendingResponses.reverse()) {
-                socket.write(
-                  encodeFrame({
-                    ok: true,
-                    id: pending.id,
-                    data: { echo: pending.op },
-                  }),
-                );
-              }
-            }
-          }
+          handleServerFrame(frame, socket, pendingResponses);
         }
       });
     });
@@ -418,7 +423,7 @@ describe('ProxySocketClient', () => {
     // Close the client — should reject pending requests
     client.close();
 
-    await expect(pendingRequest).rejects.toThrow();
+    await expect(pendingRequest).rejects.toThrow(Error);
   });
 
   /**

@@ -342,7 +342,9 @@ describe('TodoContinuationService', () => {
       const result = service.appendTodoSuffixToRequest(req);
       expect(Array.isArray(result)).toBe(true);
       const arr = result as Array<{ text?: string }>;
-      expect(arr.some((p) => p.text?.includes('TODO List'))).toBe(true);
+      expect(
+        arr.some((p): boolean => p.text?.includes('TODO List') === true),
+      ).toBe(true);
     });
 
     it('does not duplicate suffix if already present', () => {
@@ -352,8 +354,9 @@ describe('TodoContinuationService', () => {
       ];
       const result = service.appendTodoSuffixToRequest(req);
       const arr = result as Array<{ text?: string }>;
-      const suffixCount = arr.filter((p) =>
-        p.text?.includes('Use TODO List to organize this effort.'),
+      const suffixCount = arr.filter(
+        (p): boolean =>
+          p.text?.includes('Use TODO List to organize this effort.') === true,
       ).length;
       expect(suffixCount).toBe(1);
     });
@@ -364,7 +367,9 @@ describe('TodoContinuationService', () => {
       expect(Array.isArray(result)).toBe(true);
       const arr = result as Array<{ text?: string }>;
       expect(arr[0]).toStrictEqual({ text: 'plain string request' });
-      expect(arr.some((p) => p.text?.includes('TODO List'))).toBe(true);
+      expect(
+        arr.some((p): boolean => p.text?.includes('TODO List') === true),
+      ).toBe(true);
     });
 
     it('normalizes singular {text} object and appends suffix', () => {
@@ -373,7 +378,9 @@ describe('TodoContinuationService', () => {
       expect(Array.isArray(result)).toBe(true);
       const arr = result as Array<{ text?: string }>;
       expect(arr[0]).toStrictEqual({ text: 'do this task' });
-      expect(arr.some((p) => p.text?.includes('TODO List'))).toBe(true);
+      expect(
+        arr.some((p): boolean => p.text?.includes('TODO List') === true),
+      ).toBe(true);
     });
 
     it('does not mutate the original array', () => {

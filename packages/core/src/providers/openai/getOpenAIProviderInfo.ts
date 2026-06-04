@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
+
 /**
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
@@ -68,7 +70,7 @@ export function getOpenAIProviderInfo(
     const manager = providerManager ?? runtimeManager ?? null;
 
     const activeProviderName =
-      (manager?.hasActiveProvider?.()
+      (manager?.hasActiveProvider() === true
         ? manager.getActiveProviderName()
         : undefined) ??
       (typeof config?.getProvider === 'function'
@@ -81,9 +83,9 @@ export function getOpenAIProviderInfo(
 
     // Narrow to expected provider type using feature detection for ancillary data
     let openaiProvider: OpenAIProviderLike | null = null;
-    if (manager && manager.hasActiveProvider()) {
+    if (manager?.hasActiveProvider() === true) {
       const activeProvider = manager.getActiveProvider();
-      if (activeProvider?.name === 'openai') {
+      if (activeProvider.name === 'openai') {
         openaiProvider = activeProvider as unknown as OpenAIProviderLike;
       }
     }
@@ -104,19 +106,13 @@ export function getOpenAIProviderInfo(
     }
 
     const ephemeralModel = settingsService.get('model') as string | undefined;
-    const providerSettings =
-      settingsService.getProviderSettings('openai') ??
-      ({} as Record<string, unknown>);
+    const providerSettings = settingsService.getProviderSettings('openai');
     const providerModel = providerSettings.model as string | undefined;
     const configModel =
       typeof config?.getModel === 'function' ? config.getModel() : undefined;
 
     const normalizedModel =
-      (typeof ephemeralModel === 'string' && ephemeralModel.trim() !== ''
-        ? ephemeralModel.trim()
-        : undefined) ??
-      providerModel ??
-      configModel;
+      getValidString(ephemeralModel) ?? providerModel ?? configModel;
     result.currentModel = normalizedModel ?? null;
 
     const configuredMode =
@@ -145,6 +141,15 @@ export function getOpenAIProviderInfo(
   }
 
   return result;
+}
+
+/**
+ * Helper function to get a valid non-empty trimmed string, or undefined.
+ */
+function getValidString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed !== '' ? trimmed : undefined;
 }
 
 /**

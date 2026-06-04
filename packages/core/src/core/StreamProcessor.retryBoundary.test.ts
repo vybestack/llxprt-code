@@ -652,8 +652,7 @@ describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', 
     }
 
     // Verify failover was attempted
-    expect(
-      _failoverCalled || mockOnPersistent429.mock.calls.length > 0,
-    ).toBeTruthy();
+    expect(_failoverCalled).toBe(true);
+    expect(mockOnPersistent429).toHaveBeenCalled();
   });
 });

@@ -151,6 +151,58 @@ export function splitCommands(
   return splitCommandsRegex(command, { splitOnPipes });
 }
 
+type SplitState = {
+  commands: string[];
+  currentCommand: string;
+  inSingleQuotes: boolean;
+  inDoubleQuotes: boolean;
+};
+
+function handleDoubleOperator(
+  char: string,
+  nextChar: string,
+  state: SplitState,
+): boolean {
+  if (
+    (char === '&' && nextChar === '&') ||
+    (char === '|' && nextChar === '|')
+  ) {
+    state.commands.push(state.currentCommand.trim());
+    state.currentCommand = '';
+    return true;
+  }
+  return false;
+}
+
+function handleSingleOperator(
+  char: string,
+  nextChar: string,
+  state: SplitState,
+  splitOnPipes: boolean,
+): void {
+  if (char === ';') {
+    state.commands.push(state.currentCommand.trim());
+    state.currentCommand = '';
+  } else if (char === '&') {
+    const prevChar = state.currentCommand[state.currentCommand.length - 1];
+    if (prevChar === '>' || nextChar === '>') {
+      state.currentCommand += char;
+    } else {
+      state.commands.push(state.currentCommand.trim());
+      state.currentCommand = '';
+    }
+  } else if (char === '|') {
+    if (splitOnPipes) {
+      state.commands.push(state.currentCommand.trim());
+      state.currentCommand = '';
+    } else {
+      state.currentCommand += char;
+    }
+  } else {
+    state.currentCommand += char;
+  }
+}
+
 /**
  * Regex-based fallback for splitting shell commands.
  * Used when tree-sitter is not available.
@@ -160,10 +212,12 @@ function splitCommandsRegex(
   options?: SplitCommandsOptions,
 ): string[] {
   const splitOnPipes = options?.splitOnPipes ?? true;
-  const commands: string[] = [];
-  let currentCommand = '';
-  let inSingleQuotes = false;
-  let inDoubleQuotes = false;
+  const state: SplitState = {
+    commands: [],
+    currentCommand: '',
+    inSingleQuotes: false,
+    inDoubleQuotes: false,
+  };
   let i = 0;
 
   while (i < command.length) {
@@ -171,62 +225,34 @@ function splitCommandsRegex(
     const nextChar = command[i + 1];
 
     if (char === '\\' && i < command.length - 1) {
-      currentCommand += char + command[i + 1];
+      state.currentCommand += char + command[i + 1];
       i += 2;
       continue;
     }
 
-    if (char === "'" && !inDoubleQuotes) {
-      inSingleQuotes = !inSingleQuotes;
-    } else if (char === '"' && !inSingleQuotes) {
-      inDoubleQuotes = !inDoubleQuotes;
+    if (char === "'" && !state.inDoubleQuotes) {
+      state.inSingleQuotes = !state.inSingleQuotes;
+    } else if (char === '"' && !state.inSingleQuotes) {
+      state.inDoubleQuotes = !state.inDoubleQuotes;
     }
 
-    if (!inSingleQuotes && !inDoubleQuotes) {
-      if (
-        (char === '&' && nextChar === '&') ||
-        (char === '|' && nextChar === '|')
-      ) {
-        commands.push(currentCommand.trim());
-        currentCommand = '';
+    if (!state.inSingleQuotes && !state.inDoubleQuotes) {
+      if (handleDoubleOperator(char, nextChar, state)) {
         i++; // Skip the next character
-      } else if (char === ';') {
-        commands.push(currentCommand.trim());
-        currentCommand = '';
-      } else if (char === '&') {
-        // Check if this & is part of a redirection operator (e.g., >&1, 2>&1, &>file)
-        const prevChar = currentCommand[currentCommand.length - 1];
-        const isRedirection = prevChar === '>' || nextChar === '>';
-        if (isRedirection) {
-          currentCommand += char;
-        } else {
-          commands.push(currentCommand.trim());
-          currentCommand = '';
-        }
-      } else if (char === '|') {
-        // Single | is a pipe operator
-        if (splitOnPipes) {
-          // Split on pipes for security checks (need to validate each command)
-          commands.push(currentCommand.trim());
-          currentCommand = '';
-        } else {
-          // Keep pipeline intact for instrumentation (one marker per pipeline)
-          currentCommand += char;
-        }
       } else {
-        currentCommand += char;
+        handleSingleOperator(char, nextChar, state, splitOnPipes);
       }
     } else {
-      currentCommand += char;
+      state.currentCommand += char;
     }
     i++;
   }
 
-  if (currentCommand.trim()) {
-    commands.push(currentCommand.trim());
+  if (state.currentCommand.trim()) {
+    state.commands.push(state.currentCommand.trim());
   }
 
-  return commands.filter(Boolean); // Filter out any empty strings
+  return state.commands.filter(Boolean);
 }
 
 /**
@@ -246,6 +272,7 @@ export function getCommandRoot(command: string): string | undefined {
   // This regex is designed to find the first "word" of a command,
   // while respecting quotes. It looks for a sequence of non-whitespace
   // characters that are not inside quotes.
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const match = trimmedCommand.match(/^"([^"]+)"|^'([^']+)'|^(\S+)/);
   if (match) {
     // The first element in the match array is the full match.
@@ -285,6 +312,7 @@ export function getCommandRoots(command: string): string[] {
 
 export function stripShellWrapper(command: string): string {
   const pattern =
+    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /^\s*(?:(?:sh|bash|zsh)\s+-c|cmd\.exe\s+\/c|powershell(?:\.exe)?\s+(?:-NoProfile\s+)?-Command|pwsh(?:\.exe)?\s+(?:-NoProfile\s+)?-Command)\s+/i;
   const match = command.match(pattern);
   if (match) {
@@ -410,17 +438,215 @@ export function hasRedirection(command: string): boolean {
       inDoubleQuotes = !inDoubleQuotes;
     }
 
-    if (!inSingleQuotes && !inDoubleQuotes) {
-      // Redirection: >, >>, <, <<, <<<, 2>, &>, >&
-      if (char === '>' || char === '<') {
-        return true;
-      }
+    // Redirection: >, >>, <, <<, <<<, 2>, &>, >&
+    if (!inSingleQuotes && !inDoubleQuotes && (char === '>' || char === '<')) {
+      return true;
     }
 
     i++;
   }
 
   return false;
+}
+
+type PermissionCheckResult = {
+  allAllowed: boolean;
+  disallowedCommands: string[];
+  blockReason?: string;
+  isHardDenial?: boolean;
+};
+
+function resolveShellReplacementMode(
+  config: Config,
+): 'allowlist' | 'all' | 'none' {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission test doubles may omit ephemeral settings support.
+  const ephemeralValue = config.getEphemeralSetting?.('shell-replacement') as
+    | 'allowlist'
+    | 'all'
+    | 'none'
+    | boolean
+    | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission test doubles may omit static shell replacement support.
+  const configValue = config.getShellReplacement?.();
+  return normalizeShellReplacement(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission config may omit both ephemeral and static replacement settings.
+    ephemeralValue ?? configValue ?? 'allowlist',
+  );
+}
+
+function checkShellReplacementBlock(
+  command: string,
+  shellReplacementMode: 'allowlist' | 'all' | 'none',
+): PermissionCheckResult | null {
+  if (shellReplacementMode === 'none' && detectCommandSubstitution(command)) {
+    return {
+      allAllowed: false,
+      disallowedCommands: [command],
+      blockReason:
+        'Command substitution using $(), `` ` ``, <(), or >() is not allowed for security reasons',
+      isHardDenial: true,
+    };
+  }
+  return null;
+}
+
+function extractCommandsToValidate(
+  command: string,
+  shellReplacementMode: 'allowlist' | 'all' | 'none',
+): string[] | PermissionCheckResult {
+  const normalize = (cmd: string): string => cmd.trim().replace(/\s+/g, ' ');
+
+  if (shellReplacementMode === 'allowlist') {
+    const parseResult = parseCommandDetails(command);
+    if (
+      parseResult &&
+      parseResult.hasError !== true &&
+      parseResult.details.length > 0
+    ) {
+      return parseResult.details
+        .map((detail) => normalize(detail.text))
+        .filter(Boolean);
+    }
+    if (parseResult?.hasError === true) {
+      return {
+        allAllowed: false,
+        disallowedCommands: [command],
+        blockReason: 'Command rejected because it could not be parsed safely',
+        isHardDenial: true,
+      };
+    }
+    return splitCommands(command).map(normalize);
+  }
+  return splitCommands(command).map(normalize);
+}
+
+function checkBlocklist(
+  commandsToValidate: string[],
+  config: Config,
+): PermissionCheckResult | null {
+  const excludeTools = config.getExcludeTools() ?? [];
+  const isWildcardBlocked = SHELL_TOOL_NAMES.some((name) =>
+    excludeTools.includes(name),
+  );
+
+  if (isWildcardBlocked) {
+    return {
+      allAllowed: false,
+      disallowedCommands: commandsToValidate,
+      blockReason: 'Shell tool is globally disabled in configuration',
+      isHardDenial: true,
+    };
+  }
+
+  const invocation: AnyToolInvocation & { params: { command: string } } = {
+    params: { command: '' },
+  } as AnyToolInvocation & { params: { command: string } };
+
+  for (const cmd of commandsToValidate) {
+    invocation.params['command'] = cmd;
+    if (
+      doesToolInvocationMatch('run_shell_command', invocation, excludeTools)
+    ) {
+      return {
+        allAllowed: false,
+        disallowedCommands: [cmd],
+        blockReason: `Command '${cmd}' is blocked by configuration`,
+        isHardDenial: true,
+      };
+    }
+  }
+  return null;
+}
+
+function checkSessionAllowlistMode(
+  commandsToValidate: string[],
+  sessionAllowlist: Set<string>,
+  coreTools: string[],
+): PermissionCheckResult | null {
+  const invocation: AnyToolInvocation & { params: { command: string } } = {
+    params: { command: '' },
+  } as AnyToolInvocation & { params: { command: string } };
+
+  const normalizedSessionAllowlist = new Set(
+    [...sessionAllowlist].flatMap((cmd) =>
+      SHELL_TOOL_NAMES.map((name) => `${name}(${cmd})`),
+    ),
+  );
+
+  const disallowedCommands: string[] = [];
+
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  for (const cmd of commandsToValidate) {
+    invocation.params['command'] = cmd;
+    const isSessionAllowed = doesToolInvocationMatch(
+      'run_shell_command',
+      invocation,
+      [...normalizedSessionAllowlist],
+    );
+    if (isSessionAllowed) continue;
+
+    const isGloballyAllowed = doesToolInvocationMatch(
+      'run_shell_command',
+      invocation,
+      coreTools,
+    );
+    if (isGloballyAllowed) continue;
+
+    disallowedCommands.push(cmd);
+  }
+
+  if (disallowedCommands.length > 0) {
+    return {
+      allAllowed: false,
+      disallowedCommands,
+      blockReason: `Command(s) not on the global or session allowlist. Disallowed commands: ${disallowedCommands
+        .map((c) => JSON.stringify(c))
+        .join(', ')}`,
+      isHardDenial: false,
+    };
+  }
+  return null;
+}
+
+function checkDefaultAllowMode(
+  commandsToValidate: string[],
+  coreTools: string[],
+): PermissionCheckResult | null {
+  const hasSpecificAllowedCommands =
+    coreTools.filter((tool) =>
+      SHELL_TOOL_NAMES.some((name) => tool.startsWith(`${name}(`)),
+    ).length > 0;
+
+  if (!hasSpecificAllowedCommands) return null;
+
+  const invocation: AnyToolInvocation & { params: { command: string } } = {
+    params: { command: '' },
+  } as AnyToolInvocation & { params: { command: string } };
+
+  const disallowedCommands: string[] = [];
+  for (const cmd of commandsToValidate) {
+    invocation.params['command'] = cmd;
+    const isGloballyAllowed = doesToolInvocationMatch(
+      'run_shell_command',
+      invocation,
+      coreTools,
+    );
+    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    if (!isGloballyAllowed) {
+      disallowedCommands.push(cmd);
+    }
+  }
+  if (disallowedCommands.length > 0) {
+    return {
+      allAllowed: false,
+      disallowedCommands,
+      blockReason: `Command(s) not in the allowed commands list. Disallowed commands: ${disallowedCommands
+        .map((c) => JSON.stringify(c))
+        .join(', ')}`,
+      isHardDenial: false,
+    };
+  }
+  return null;
 }
 
 /**
@@ -451,26 +677,15 @@ export function checkCommandPermissions(
   command: string,
   config: Config,
   sessionAllowlist?: Set<string>,
-): {
-  allAllowed: boolean;
-  disallowedCommands: string[];
-  blockReason?: string;
-  isHardDenial?: boolean;
-} {
-  // Check shell replacement mode via ephemeral setting or config
-  const ephemeralValue = config.getEphemeralSetting?.('shell-replacement') as
-    | 'allowlist'
-    | 'all'
-    | 'none'
-    | boolean
-    | undefined;
-  const configValue = config.getShellReplacement?.();
-  const shellReplacementMode = normalizeShellReplacement(
-    ephemeralValue ?? configValue ?? 'allowlist',
-  );
+): PermissionCheckResult {
+  const shellReplacementMode = resolveShellReplacementMode(config);
 
   // Debug logging when VERBOSE is set
   if (process.env.VERBOSE === 'true') {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission test doubles may omit ephemeral settings support.
+    const ephemeralValue = config.getEphemeralSetting?.('shell-replacement');
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission test doubles may omit static shell replacement support.
+    const configValue = config.getShellReplacement?.();
     debugLogger.log('[SHELL-UTILS] Shell replacement check:', {
       ephemeralValue,
       configValue,
@@ -479,176 +694,42 @@ export function checkCommandPermissions(
     });
   }
 
-  // Handle shell replacement modes:
-  // - 'none': Block ALL command substitution (most restrictive)
-  // - 'allowlist': Allow substitution, validate inner commands against coreTools (default, matches upstream)
-  // - 'all': Allow all substitution unconditionally (least restrictive, legacy true behavior)
-  if (shellReplacementMode === 'none' && detectCommandSubstitution(command)) {
-    return {
-      allAllowed: false,
-      disallowedCommands: [command],
-      blockReason:
-        'Command substitution using $(), `` ` ``, <(), or >() is not allowed for security reasons',
-      isHardDenial: true,
-    };
-  }
-
-  const normalize = (cmd: string): string => cmd.trim().replace(/\s+/g, ' ');
-  let commandsToValidate: string[];
-
-  // Mode behavior for command extraction:
-  // - 'allowlist': validate ALL nested commands (tree-sitter deep walk when available)
-  // - 'all': allow substitution without deep validation (legacy behavior)
-  // - 'none': handled above
-  if (shellReplacementMode === 'allowlist') {
-    // Try to use tree-sitter for deep command extraction
-    const parseResult = parseCommandDetails(command);
-    if (
-      parseResult &&
-      !parseResult.hasError &&
-      parseResult.details.length > 0
-    ) {
-      // Use tree-sitter results - extracts ALL commands including nested ones
-      commandsToValidate = parseResult.details
-        .map((detail) => normalize(detail.text))
-        .filter(Boolean);
-    } else if (parseResult?.hasError) {
-      // Tree-sitter detected a syntax error - reject for safety
-      return {
-        allAllowed: false,
-        disallowedCommands: [command],
-        blockReason: 'Command rejected because it could not be parsed safely',
-        isHardDenial: true,
-      };
-    } else {
-      // Tree-sitter not available, fall back to splitCommands
-      // This is less secure but allows basic functionality
-      commandsToValidate = splitCommands(command).map(normalize);
-    }
-  } else {
-    // 'all' mode: do not attempt deep extraction/validation.
-    // Just use simple command splitting (legacy behavior)
-    commandsToValidate = splitCommands(command).map(normalize);
-  }
-  const invocation: AnyToolInvocation & { params: { command: string } } = {
-    params: { command: '' },
-  } as AnyToolInvocation & { params: { command: string } };
-
-  // 1. Blocklist Check (Highest Priority)
-  const excludeTools = config.getExcludeTools() || [];
-  const isWildcardBlocked = SHELL_TOOL_NAMES.some((name) =>
-    excludeTools.includes(name),
+  const replacementBlock = checkShellReplacementBlock(
+    command,
+    shellReplacementMode,
   );
+  if (replacementBlock) return replacementBlock;
 
-  if (isWildcardBlocked) {
-    return {
-      allAllowed: false,
-      disallowedCommands: commandsToValidate,
-      blockReason: 'Shell tool is globally disabled in configuration',
-      isHardDenial: true,
-    };
-  }
+  const commandsOrError = extractCommandsToValidate(
+    command,
+    shellReplacementMode,
+  );
+  if (!Array.isArray(commandsOrError)) return commandsOrError;
+  const commandsToValidate = commandsOrError;
 
-  for (const cmd of commandsToValidate) {
-    invocation.params['command'] = cmd;
-    if (
-      doesToolInvocationMatch('run_shell_command', invocation, excludeTools)
-    ) {
-      return {
-        allAllowed: false,
-        disallowedCommands: [cmd],
-        blockReason: `Command '${cmd}' is blocked by configuration`,
-        isHardDenial: true,
-      };
-    }
-  }
+  const blocklistResult = checkBlocklist(commandsToValidate, config);
+  if (blocklistResult) return blocklistResult;
 
-  const coreTools = config.getCoreTools() || [];
+  const coreTools = config.getCoreTools() ?? [];
   const isWildcardAllowed = SHELL_TOOL_NAMES.some((name) =>
     coreTools.includes(name),
   );
-
-  // If there's a global wildcard, all commands are allowed at this point
-  // because they have already passed the blocklist check.
   if (isWildcardAllowed) {
     return { allAllowed: true, disallowedCommands: [] };
   }
 
-  const disallowedCommands: string[] = [];
-
   if (sessionAllowlist) {
-    // "DEFAULT DENY" MODE: A session allowlist is provided.
-    // All commands must be in either the session or global allowlist.
-    const normalizedSessionAllowlist = new Set(
-      [...sessionAllowlist].flatMap((cmd) =>
-        SHELL_TOOL_NAMES.map((name) => `${name}(${cmd})`),
-      ),
+    const sessionResult = checkSessionAllowlistMode(
+      commandsToValidate,
+      sessionAllowlist,
+      coreTools,
     );
-
-    for (const cmd of commandsToValidate) {
-      invocation.params['command'] = cmd;
-      const isSessionAllowed = doesToolInvocationMatch(
-        'run_shell_command',
-        invocation,
-        [...normalizedSessionAllowlist],
-      );
-      if (isSessionAllowed) continue;
-
-      const isGloballyAllowed = doesToolInvocationMatch(
-        'run_shell_command',
-        invocation,
-        coreTools,
-      );
-      if (isGloballyAllowed) continue;
-
-      disallowedCommands.push(cmd);
-    }
-
-    if (disallowedCommands.length > 0) {
-      return {
-        allAllowed: false,
-        disallowedCommands,
-        blockReason: `Command(s) not on the global or session allowlist. Disallowed commands: ${disallowedCommands
-          .map((c) => JSON.stringify(c))
-          .join(', ')}`,
-        isHardDenial: false, // This is a soft denial; confirmation is possible.
-      };
-    }
+    if (sessionResult) return sessionResult;
   } else {
-    // "DEFAULT ALLOW" MODE: No session allowlist.
-    const hasSpecificAllowedCommands =
-      coreTools.filter((tool) =>
-        SHELL_TOOL_NAMES.some((name) => tool.startsWith(`${name}(`)),
-      ).length > 0;
-
-    if (hasSpecificAllowedCommands) {
-      for (const cmd of commandsToValidate) {
-        invocation.params['command'] = cmd;
-        const isGloballyAllowed = doesToolInvocationMatch(
-          'run_shell_command',
-          invocation,
-          coreTools,
-        );
-        if (!isGloballyAllowed) {
-          disallowedCommands.push(cmd);
-        }
-      }
-      if (disallowedCommands.length > 0) {
-        return {
-          allAllowed: false,
-          disallowedCommands,
-          blockReason: `Command(s) not in the allowed commands list. Disallowed commands: ${disallowedCommands
-            .map((c) => JSON.stringify(c))
-            .join(', ')}`,
-          isHardDenial: false, // This is a soft denial.
-        };
-      }
-    }
-    // If no specific global allowlist exists, and it passed the blocklist,
-    // the command is allowed by default.
+    const defaultResult = checkDefaultAllowMode(commandsToValidate, coreTools);
+    if (defaultResult) return defaultResult;
   }
 
-  // If all checks for the current mode pass, the command is allowed.
   return { allAllowed: true, disallowedCommands: [] };
 }
 

@@ -85,12 +85,18 @@ describe('ResultAggregator', () => {
   // ---------- bufferResult ---------------------------------------------------
 
   describe('bufferResult', () => {
-    it('stores a result keyed by callId', () => {
+    it('stores a result keyed by callId', async () => {
       const call = makeScheduledCall('c1');
       const result = makeSuccessResult();
       agg.bufferResult('c1', 'testTool', call, result, 0);
-      // Internal state is private; we verify indirectly via publishBufferedResults
-      // — the published callback should fire after beginBatch + publish
+
+      // Internal state is private; verify indirectly: begin a batch of size
+      // one and publish — the stored result must surface as a single
+      // setSuccess callback.
+      agg.beginBatch(1);
+      await agg.publishBufferedResults(makeAbortSignal());
+      expect(callbacks.setSuccess).toHaveBeenCalledTimes(1);
+      expect(callbacks.setError).not.toHaveBeenCalled();
     });
 
     it('stores multiple results with distinct executionIndex values', async () => {

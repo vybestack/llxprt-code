@@ -356,14 +356,16 @@ describe('SecureStore — ExtensionSettingsStorage Pattern', () => {
       fallbackPolicy: 'deny',
     });
 
+    let err: unknown;
     try {
       await store.set('SECRET', 'should-fail');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('UNAVAILABLE');
-      expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('UNAVAILABLE');
+    expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
   });
 });
 
@@ -474,14 +476,16 @@ describe('SecureStore — Legacy Format Detection', () => {
       'aabbccdd11223344:eeff001122334455aabbccdd11223344:66778899aabbccdd',
     );
 
+    let err: unknown;
     try {
       await store.get('old-key');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
-      expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
+    expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
   });
 
   /**
@@ -505,14 +509,16 @@ describe('SecureStore — Legacy Format Detection', () => {
     });
     await fs.writeFile(path.join(tempDir, 'future-key.enc'), futureEnvelope);
 
+    let err: unknown;
     try {
       await store.get('future-key');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
-      expect((err as SecureStoreError).remediation).toContain('upgrade');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
+    expect((err as SecureStoreError).remediation).toContain('upgrade');
   });
 
   /**
@@ -535,16 +541,18 @@ describe('SecureStore — Legacy Format Detection', () => {
       'sk-plaintext-api-key-12345',
     );
 
+    let err: unknown;
     try {
       await store.get('plaintext-key');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
-      expect((err as SecureStoreError).remediation.toLowerCase()).toContain(
-        're-save',
-      );
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
+    expect((err as SecureStoreError).remediation.toLowerCase()).toContain(
+      're-save',
+    );
   });
 
   /**
@@ -576,12 +584,14 @@ describe('SecureStore — Legacy Format Detection', () => {
 
     await fs.writeFile(filePath, JSON.stringify(envelope));
 
+    let err: unknown;
     try {
       await store.get('tamper-key');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
   });
 });

@@ -245,7 +245,7 @@ describe('consent', () => {
       try {
         await expect(
           requestHookConsent('test-extension', ['pre-commit']),
-        ).rejects.toThrow();
+        ).rejects.toThrow(/non-interactive/);
       } finally {
         Object.defineProperty(process.stdin, 'isTTY', {
           value: originalIsTTY,

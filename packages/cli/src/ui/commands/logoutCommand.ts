@@ -21,7 +21,7 @@ export const logoutCommand: SlashCommand = {
     context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
-    const provider = args?.trim();
+    const provider = args.trim();
 
     // If no provider specified, show error
     if (!provider) {

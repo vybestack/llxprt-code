@@ -164,14 +164,14 @@ describe('OnAuthErrorHandler config integration', () => {
     };
 
     // Initially should be undefined
-    const initialHandler = config.getOnAuthErrorHandler?.();
+    const initialHandler = config.getOnAuthErrorHandler();
     expect(initialHandler).toBeUndefined();
 
     // Set the handler
-    config.setOnAuthErrorHandler?.(mockHandler);
+    config.setOnAuthErrorHandler(mockHandler);
 
     // Get should return the same handler
-    const retrievedHandler = config.getOnAuthErrorHandler?.();
+    const retrievedHandler = config.getOnAuthErrorHandler();
     expect(retrievedHandler).toBe(mockHandler);
   });
 
@@ -185,12 +185,12 @@ describe('OnAuthErrorHandler config integration', () => {
     };
 
     // Set the handler
-    config.setOnAuthErrorHandler?.(mockHandler);
-    expect(config.getOnAuthErrorHandler?.()).toBe(mockHandler);
+    config.setOnAuthErrorHandler(mockHandler);
+    expect(config.getOnAuthErrorHandler()).toBe(mockHandler);
 
     // Clear the handler
-    config.setOnAuthErrorHandler?.(undefined);
-    expect(config.getOnAuthErrorHandler?.()).toBeUndefined();
+    config.setOnAuthErrorHandler(undefined);
+    expect(config.getOnAuthErrorHandler()).toBeUndefined();
   });
 
   /**
@@ -206,10 +206,10 @@ describe('OnAuthErrorHandler config integration', () => {
       handleAuthError: vi.fn().mockResolvedValue(undefined),
     };
 
-    config.setOnAuthErrorHandler?.(firstHandler);
-    expect(config.getOnAuthErrorHandler?.()).toBe(firstHandler);
+    config.setOnAuthErrorHandler(firstHandler);
+    expect(config.getOnAuthErrorHandler()).toBe(firstHandler);
 
-    config.setOnAuthErrorHandler?.(secondHandler);
-    expect(config.getOnAuthErrorHandler?.()).toBe(secondHandler);
+    config.setOnAuthErrorHandler(secondHandler);
+    expect(config.getOnAuthErrorHandler()).toBe(secondHandler);
   });
 });

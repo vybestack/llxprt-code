@@ -17,7 +17,10 @@ const keyExtractor = (item: { id: string }) => item.id;
 const recordedBoxProps: Array<{ scrollbarThumbColor?: string }> = [];
 
 const recordScrollbarThumb = (props: BoxProps) => {
-  if (props.scrollbarThumbColor) {
+  if (
+    props.scrollbarThumbColor !== undefined &&
+    props.scrollbarThumbColor !== ''
+  ) {
     recordedBoxProps.push({
       scrollbarThumbColor: props.scrollbarThumbColor,
     });

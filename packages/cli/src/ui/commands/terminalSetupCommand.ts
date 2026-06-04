@@ -25,7 +25,7 @@ export const terminalSetupCommand: SlashCommand = {
       const result = await terminalSetup();
 
       let content = result.message;
-      if (result.requiresRestart) {
+      if (result.requiresRestart ?? false) {
         content +=
           '\n\nPlease restart your terminal for the changes to take effect.';
       }

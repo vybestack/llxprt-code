@@ -335,6 +335,7 @@ describe('AgentExecutor', () => {
       const firstToolGroup = turn1Params.config?.tools?.[0];
       expect(firstToolGroup).toBeDefined();
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!firstToolGroup || !('functionDeclarations' in firstToolGroup)) {
         throw new Error(
           'Test expectation failed: Config does not contain functionDeclarations.',
@@ -427,6 +428,7 @@ describe('AgentExecutor', () => {
       const firstToolGroup = turn1Params.config?.tools?.[0];
 
       expect(firstToolGroup).toBeDefined();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!firstToolGroup || !('functionDeclarations' in firstToolGroup)) {
         throw new Error(
           'Test expectation failed: Config does not contain functionDeclarations.',

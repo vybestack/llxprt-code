@@ -124,7 +124,7 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
         );
 
         expect(response.ok).toBe(true);
-        expect((response.data as Record<string, unknown>)?.echo).toBe('probe');
+        expect((response.data as Record<string, unknown>).echo).toBe('probe');
 
         clientSocket.destroy();
       },
@@ -358,7 +358,9 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
       expect(fs.existsSync(resolvedTmpdir)).toBe(true);
 
       // On macOS, if rawTmpdir starts with /var, resolved should start with /private/var
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (isMacOS && rawTmpdir.startsWith('/var')) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(resolvedTmpdir.startsWith('/private/var')).toBe(true);
       }
     });

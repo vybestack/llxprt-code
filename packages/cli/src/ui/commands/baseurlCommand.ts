@@ -20,10 +20,10 @@ export const baseurlCommand: SlashCommand = {
     context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
-    const baseUrl = args?.trim();
+    const baseUrl = args.trim();
     const runtime = getRuntimeApi();
     try {
-      const result = await runtime.updateActiveProviderBaseUrl(baseUrl ?? null);
+      const result = await runtime.updateActiveProviderBaseUrl(baseUrl);
       return {
         type: 'message',
         messageType: 'info',

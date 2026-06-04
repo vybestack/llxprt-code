@@ -79,7 +79,7 @@ interface GeminiToolDeclaration {
 export function convertSchemaToOpenAIResponses(
   schema: unknown,
 ): OpenAIResponsesParameters {
-  if (!schema || typeof schema !== 'object') {
+  if (schema === null || schema === undefined || typeof schema !== 'object') {
     return {
       type: 'object',
       properties: {},
@@ -95,7 +95,11 @@ export function convertSchemaToOpenAIResponses(
   };
 
   // Convert properties recursively
-  if (input.properties && typeof input.properties === 'object') {
+  if (
+    input.properties !== null &&
+    input.properties !== undefined &&
+    typeof input.properties === 'object'
+  ) {
     result.properties = convertProperties(
       input.properties as Record<string, unknown>,
     );
@@ -121,7 +125,7 @@ function convertProperties(
   const result: Record<string, OpenAIResponsesPropertySchema> = {};
 
   for (const [key, value] of Object.entries(properties)) {
-    if (value && typeof value === 'object') {
+    if (typeof value === 'object' && value !== null) {
       result[key] = convertPropertySchema(value as Record<string, unknown>);
     }
   }
@@ -149,8 +153,11 @@ function convertPropertySchema(
     result.enum = prop.enum.map((v) => String(v));
   }
 
-  // Handle array items
-  if (prop.items) {
+  // Handle array items - preserve old `if (prop.items)` truthiness semantics.
+  // Falsy non-null items (false, 0, '') should not be treated as present.
+  // Only objects/arrays (valid schema types) are considered present.
+  // eslint-disable-next-line no-extra-boolean-cast -- Preserve old schema item truthiness semantics for malformed provider schemas.
+  if (Boolean(prop.items)) {
     if (Array.isArray(prop.items)) {
       // Tuple type - use first item as representative (skip empty tuples)
       if (prop.items.length > 0) {
@@ -166,7 +173,7 @@ function convertPropertySchema(
   }
 
   // Handle nested object properties
-  if (prop.properties && typeof prop.properties === 'object') {
+  if (prop.properties != null && typeof prop.properties === 'object') {
     result.properties = convertProperties(
       prop.properties as Record<string, unknown>,
     );
@@ -257,7 +264,8 @@ export function convertToolsToOpenAIResponses(
     }
 
     for (const decl of toolGroup.functionDeclarations) {
-      if (!decl.parametersJsonSchema) {
+      // eslint-disable-next-line no-extra-boolean-cast -- Preserve old schema truthiness semantics for malformed provider schemas.
+      if (!Boolean(decl.parametersJsonSchema)) {
         throw new Error(
           `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
             `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
@@ -270,7 +278,7 @@ export function convertToolsToOpenAIResponses(
       responsesTools.push({
         type: 'function',
         name: decl.name,
-        description: decl.description || null,
+        description: decl.description ?? null,
         parameters,
         strict: null,
       });
@@ -283,8 +291,9 @@ export function convertToolsToOpenAIResponses(
         `Converted ${responsesTools.length} tools to OpenAI Responses format`,
       {
         toolNames: responsesTools.map((t) => t.name),
-        firstToolHasRequired:
-          responsesTools[0]?.parameters.required !== undefined,
+        firstToolHasRequired: Array.isArray(
+          responsesTools[0].parameters.required,
+        ),
       },
     );
   }

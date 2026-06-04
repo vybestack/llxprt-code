@@ -110,6 +110,7 @@ export function findForwardValidSplitPoint(
           );
         });
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (!hasMatchingResponses) {
           return index - 1;
         }
@@ -130,6 +131,7 @@ export function findBackwardValidSplitPoint(
   history: IContent[],
   startIndex: number,
 ): number {
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = startIndex - 1; i >= 0; i--) {
     const current = history[i];
 
@@ -152,6 +154,7 @@ export function findBackwardValidSplitPoint(
           );
         });
 
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (allCallsHaveResponses) {
           return i + 1;
         }
@@ -167,8 +170,8 @@ export function findBackwardValidSplitPoint(
 
 /**
  * Build a context-aware continuation directive to replace the static
- * compression acknowledgment. When active todos exist the directive
- * references the first task and points the model at todo_read for
+ * compression acknowledgment. When active tasks exist the directive
+ * references the first task and points the model at the read tool for
  * full recovery; otherwise it emits a simple "continue" statement.
  */
 export function buildContinuationDirective(
@@ -311,15 +314,13 @@ export async function runVerificationPass(
     let verifiedText = '';
     let lastBlockWasNonText = false;
     for await (const chunk of stream) {
-      if (chunk.blocks) {
-        const result = aggregateTextFromBlocks(
-          chunk.blocks,
-          verifiedText,
-          lastBlockWasNonText,
-        );
-        verifiedText = result.text;
-        lastBlockWasNonText = result.lastBlockWasNonText;
-      }
+      const result = aggregateTextFromBlocks(
+        chunk.blocks,
+        verifiedText,
+        lastBlockWasNonText,
+      );
+      verifiedText = result.text;
+      lastBlockWasNonText = result.lastBlockWasNonText;
     }
 
     const trimmed = verifiedText.trim();
@@ -352,11 +353,13 @@ export async function runVerificationPass(
 export function mediaBlockToCompressionPlaceholder(media: MediaBlock): string {
   const category = classifyMediaBlock(media);
   // Prefer caption first (for accessibility/context), then filename, then mimeType, then 'unknown'
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to next identifier */
   const identifier =
     media.caption?.trim() ||
     media.filename?.trim() ||
     media.mimeType ||
     'unknown';
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
   // Capitalize PDF label for display, keep other categories as-is
   const label = category === 'pdf' ? 'PDF' : category;
   return `[Attached ${label}: ${identifier}]`;

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import type React from 'react';
 import {
   createContext,
@@ -37,18 +39,16 @@ function areModelMetricsEqual(a: ModelMetrics, b: ModelMetrics): boolean {
   ) {
     return false;
   }
-  if (
+  const inputTokensChanged =
     a.tokens.input !== b.tokens.input ||
     a.tokens.prompt !== b.tokens.prompt ||
-    a.tokens.candidates !== b.tokens.candidates ||
+    a.tokens.candidates !== b.tokens.candidates;
+  const outputTokensChanged =
     a.tokens.total !== b.tokens.total ||
     a.tokens.cached !== b.tokens.cached ||
     a.tokens.thoughts !== b.tokens.thoughts ||
-    a.tokens.tool !== b.tokens.tool
-  ) {
-    return false;
-  }
-  return true;
+    a.tokens.tool !== b.tokens.tool;
+  return !inputTokensChanged && !outputTokensChanged;
 }
 
 function areToolCallStatsEqual(a: ToolCallStats, b: ToolCallStats): boolean {
@@ -75,10 +75,96 @@ function areToolCallStatsEqual(a: ToolCallStats, b: ToolCallStats): boolean {
   return true;
 }
 
-function areMetricsEqual(a: SessionMetrics, b: SessionMetrics): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
+function areSessionTokenUsageMetricsEqual(
+  a: SessionMetrics['tokenTracking']['sessionTokenUsage'],
+  b: SessionMetrics['tokenTracking']['sessionTokenUsage'],
+): boolean {
+  if (a.input !== b.input) {
+    return false;
+  }
+  if (a.output !== b.output) {
+    return false;
+  }
+  if (a.cache !== b.cache) {
+    return false;
+  }
+  if (a.tool !== b.tool) {
+    return false;
+  }
+  if (a.thought !== b.thought) {
+    return false;
+  }
+  return a.total === b.total;
+}
 
+function areTokenTrackingMetricsEqual(
+  a: SessionMetrics['tokenTracking'],
+  b: SessionMetrics['tokenTracking'],
+): boolean {
+  if (a.tokensPerMinute !== b.tokensPerMinute) {
+    return false;
+  }
+  if (a.throttleWaitTimeMs !== b.throttleWaitTimeMs) {
+    return false;
+  }
+  if (a.timeToFirstToken !== b.timeToFirstToken) {
+    return false;
+  }
+  if (a.tokensPerSecond !== b.tokensPerSecond) {
+    return false;
+  }
+  return areSessionTokenUsageMetricsEqual(
+    a.sessionTokenUsage,
+    b.sessionTokenUsage,
+  );
+}
+
+function cloneSessionMetrics(metrics: SessionMetrics): SessionMetrics {
+  const models: SessionMetrics['models'] = {};
+  for (const key of Object.keys(metrics.models)) {
+    const model = metrics.models[key];
+    models[key] = {
+      api: { ...model.api },
+      tokens: { ...model.tokens },
+    };
+  }
+
+  const toolsByName: SessionMetrics['tools']['byName'] = {};
+  for (const key of Object.keys(metrics.tools.byName)) {
+    const tool = metrics.tools.byName[key];
+    toolsByName[key] = {
+      count: tool.count,
+      success: tool.success,
+      fail: tool.fail,
+      durationMs: tool.durationMs,
+      decisions: { ...tool.decisions },
+    };
+  }
+
+  return {
+    models,
+    tools: {
+      totalCalls: metrics.tools.totalCalls,
+      totalSuccess: metrics.tools.totalSuccess,
+      totalFail: metrics.tools.totalFail,
+      totalDurationMs: metrics.tools.totalDurationMs,
+      totalDecisions: { ...metrics.tools.totalDecisions },
+      byName: toolsByName,
+    },
+    files: { ...metrics.files },
+    tokenTracking: {
+      tokensPerMinute: metrics.tokenTracking.tokensPerMinute,
+      throttleWaitTimeMs: metrics.tokenTracking.throttleWaitTimeMs,
+      timeToFirstToken: metrics.tokenTracking.timeToFirstToken,
+      tokensPerSecond: metrics.tokenTracking.tokensPerSecond,
+      sessionTokenUsage: {
+        ...metrics.tokenTracking.sessionTokenUsage,
+      },
+    },
+  };
+}
+
+function areMetricsEqual(a: SessionMetrics, b: SessionMetrics): boolean {
   // Compare files
   if (
     a.files.totalLinesAdded !== b.files.totalLinesAdded ||
@@ -119,9 +205,11 @@ function areMetricsEqual(a: SessionMetrics, b: SessionMetrics): boolean {
   if (toolsByNameAKeys.length !== toolsByNameBKeys.length) return false;
 
   for (const key of toolsByNameAKeys) {
-    const toolA = toolsA.byName[key];
-    const toolB = toolsB.byName[key];
-    if (!toolB || !areToolCallStatsEqual(toolA, toolB)) {
+    if (!Object.prototype.hasOwnProperty.call(toolsB.byName, key)) {
+      return false;
+    }
+
+    if (!areToolCallStatsEqual(toolsA.byName[key], toolsB.byName[key])) {
       return false;
     }
   }
@@ -132,12 +220,16 @@ function areMetricsEqual(a: SessionMetrics, b: SessionMetrics): boolean {
   if (modelsAKeys.length !== modelsBKeys.length) return false;
 
   for (const key of modelsAKeys) {
-    if (!b.models[key] || !areModelMetricsEqual(a.models[key], b.models[key])) {
+    if (!Object.prototype.hasOwnProperty.call(b.models, key)) {
+      return false;
+    }
+
+    if (!areModelMetricsEqual(a.models[key], b.models[key])) {
       return false;
     }
   }
 
-  return true;
+  return areTokenTrackingMetricsEqual(a.tokenTracking, b.tokenTracking);
 }
 
 export type { SessionMetrics, ModelMetrics };
@@ -185,20 +277,38 @@ const SessionStatsContext = createContext<SessionStatsContextValue | undefined>(
   undefined,
 );
 
-// --- Provider Component ---
-
-export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [stats, setStats] = useState<SessionStatsState>({
+function createInitialSessionStats(): SessionStatsState {
+  return {
     sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     sessionStartTime: new Date(),
-    metrics: uiTelemetryService.getMetrics(),
+    metrics: cloneSessionMetrics(uiTelemetryService.getMetrics()),
     lastPromptTokenCount: 0,
     historyTokenCount: 0,
     promptCount: 0,
-  });
+  };
+}
 
+function applyTelemetryUpdate(
+  prevState: SessionStatsState,
+  metrics: SessionMetrics,
+  lastPromptTokenCount: number,
+): SessionStatsState {
+  if (
+    prevState.lastPromptTokenCount === lastPromptTokenCount &&
+    areMetricsEqual(prevState.metrics, metrics)
+  ) {
+    return prevState;
+  }
+  return {
+    ...prevState,
+    metrics: cloneSessionMetrics(metrics),
+    lastPromptTokenCount,
+  };
+}
+
+function useTelemetryStatsUpdates(
+  setStats: React.Dispatch<React.SetStateAction<SessionStatsState>>,
+) {
   useEffect(() => {
     const handleUpdate = ({
       metrics,
@@ -207,23 +317,12 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
       metrics: SessionMetrics;
       lastPromptTokenCount: number;
     }) => {
-      setStats((prevState) => {
-        if (
-          prevState.lastPromptTokenCount === lastPromptTokenCount &&
-          areMetricsEqual(prevState.metrics, metrics)
-        ) {
-          return prevState;
-        }
-        return {
-          ...prevState,
-          metrics,
-          lastPromptTokenCount,
-        };
-      });
+      setStats((prevState) =>
+        applyTelemetryUpdate(prevState, metrics, lastPromptTokenCount),
+      );
     };
 
     uiTelemetryService.on('update', handleUpdate);
-    // Set initial state
     handleUpdate({
       metrics: uiTelemetryService.getMetrics(),
       lastPromptTokenCount: uiTelemetryService.getLastPromptTokenCount(),
@@ -232,7 +331,18 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       uiTelemetryService.off('update', handleUpdate);
     };
-  }, []);
+  }, [setStats]);
+}
+
+// --- Provider Component ---
+
+export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [stats, setStats] = useState<SessionStatsState>(
+    createInitialSessionStats,
+  );
+  useTelemetryStatsUpdates(setStats);
 
   const startNewPrompt = useCallback(() => {
     setStats((prevState) => ({

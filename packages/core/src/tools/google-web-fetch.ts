@@ -44,9 +44,11 @@ export function parsePrompt(text: string): {
 
   const stripTrailingPunctuation = (input: string): string => {
     let endIndex = input.length;
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (endIndex > 0) {
       const lastChar = input[endIndex - 1];
       if (
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         lastChar === '.' ||
         lastChar === ',' ||
         lastChar === ';' ||
@@ -76,6 +78,7 @@ export function parsePrompt(text: string): {
         const url = new URL(cleaned);
 
         // Allowlist protocols
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (['http:', 'https:'].includes(url.protocol)) {
           validUrls.push(url.href);
         } else {
@@ -83,8 +86,8 @@ export function parsePrompt(text: string): {
             `Unsupported protocol in URL: "${cleaned}". Only http and https are supported.`,
           );
         }
-      } catch (_) {
-        // new URL() threw, so it's malformed according to WHATWG standard
+      } catch {
+        // Malformed URL according to WHATWG standard.
         errors.push(`Malformed URL detected: "${cleaned}".`);
       }
     }
@@ -113,6 +116,15 @@ interface GroundingSupportItem {
   segment?: GroundingSupportSegment;
   groundingChunkIndices?: number[];
 }
+
+type ServerToolsProvider = {
+  getServerTools: () => string[];
+  invokeServerTool: (
+    name: string,
+    params: { prompt: string },
+    options: { signal: AbortSignal },
+  ) => Promise<unknown>;
+};
 
 /**
  * Parameters for the WebFetch tool
@@ -156,8 +168,8 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
           .replace('github.com', 'raw.githubusercontent.com')
           .replace('/blob/', '/');
       }
-    } catch (_) {
-      // Ignore invalid URLs, they will be caught by fetchWithTimeout
+    } catch {
+      // Invalid URL; fetchWithTimeout will handle the error.
     }
 
     try {
@@ -172,6 +184,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
         );
       }
       const rawContent = await response.text();
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: get() returns string | null, empty string should fall through
       const contentType = response.headers.get('content-type') || '';
       let textContent: string;
 
@@ -252,8 +265,8 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
             .replace('github.com', 'raw.githubusercontent.com')
             .replace('/blob/', '/');
         }
-      } catch (_) {
-        // Ignore invalid URLs
+      } catch {
+        // Invalid URL; return as-is for error handling downstream.
       }
       return url;
     });
@@ -280,187 +293,246 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     const userPrompt = this.params.prompt;
     const { validUrls: urls } = parsePrompt(userPrompt);
     const url = urls[0];
-    const isPrivate = isPrivateIp(url);
 
-    if (isPrivate) {
-      const errorMessage =
-        'Private/local URLs cannot be processed with AI analysis. Processing content directly.';
-      const result = await this.executeFallback(signal);
-      // Add the private URL message to the result
-      return {
-        ...result,
-        llmContent: `${errorMessage}\n\nContent from ${url}:\n\n${result.llmContent}`,
-      };
-    }
+    if (isPrivateIp(url)) return this.executePrivateUrlFallback(signal, url);
 
-    // Get provider manager
-    const providerManager =
-      this.config.getContentGeneratorConfig()?.providerManager;
-    if (!providerManager) {
-      return {
-        llmContent:
-          'Web fetch requires a provider. Please use --provider gemini with authentication.',
-        returnDisplay: 'Web fetch requires a provider.',
-        error: {
-          message: 'No provider manager available',
-          type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
-        },
-      };
-    }
-
-    // Get server tools provider (should be Gemini)
-    const serverToolsProvider = providerManager.getServerToolsProvider();
-    if (!serverToolsProvider) {
-      return {
-        llmContent:
-          'Web fetch requires Gemini provider to be configured. Please ensure Gemini is available with authentication.',
-        returnDisplay: 'Web fetch requires Gemini provider.',
-        error: {
-          message: 'No server tools provider available',
-          type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
-        },
-      };
-    }
-
-    // Check if provider supports web_fetch
-    const supportedTools = serverToolsProvider.getServerTools();
-    if (!supportedTools.includes(GOOGLE_WEB_FETCH_TOOL)) {
-      return {
-        llmContent:
-          'Web fetch is not available. The server tools provider does not support web fetch.',
-        returnDisplay: 'Web fetch not available.',
-        error: {
-          message: 'Server tools provider does not support web_fetch',
-          type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
-        },
-      };
+    const serverToolsProvider = this.getServerToolsProvider();
+    if (serverToolsProvider instanceof Error) {
+      return this.createProviderErrorResult(serverToolsProvider.message);
     }
 
     try {
-      // Keep our multi-provider approach
-      const response = await serverToolsProvider.invokeServerTool(
-        'web_fetch',
-        { prompt: userPrompt },
-        { signal },
+      const response = await this.invokeWebFetch(
+        serverToolsProvider,
+        userPrompt,
+        signal,
       );
-
-      logger.log(
-        `Full response for prompt "${userPrompt.substring(0, 50)}...":`,
-        JSON.stringify(response, null, 2),
-      );
-
-      let responseText =
-        getResponseText(response as GenerateContentResponse) || '';
-      const typedResponse = response as GenerateContentResponse;
-      const urlContextMeta = typedResponse.candidates?.[0]?.urlContextMetadata;
-      const groundingMetadata =
-        typedResponse.candidates?.[0]?.groundingMetadata;
-      const sources = groundingMetadata?.groundingChunks as
-        | GroundingChunkItem[]
-        | undefined;
-      const groundingSupports = groundingMetadata?.groundingSupports as
-        | GroundingSupportItem[]
-        | undefined;
-
-      // Error Handling
-      let processingError = false;
-
-      if (
-        urlContextMeta?.urlMetadata &&
-        urlContextMeta.urlMetadata.length > 0
-      ) {
-        const allStatuses = urlContextMeta.urlMetadata.map(
-          (m: UrlMetadata) => m.urlRetrievalStatus,
-        );
-        if (allStatuses.every((s) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
-          processingError = true;
-        }
-      } else if (!responseText.trim() && !sources?.length) {
-        // No URL metadata and no content/sources
-        processingError = true;
-      }
-
-      if (
-        !processingError &&
-        !responseText.trim() &&
-        (!sources || sources.length === 0)
-      ) {
-        // Successfully retrieved some URL (or no specific error from urlContextMeta), but no usable text or grounding data.
-        processingError = true;
-      }
-
-      if (processingError) {
-        // If it's not a private IP, don't fallback - just return no content found
-        if (!isPrivate) {
-          return {
-            llmContent: 'No content found or URL retrieval failed.',
-            returnDisplay: 'No content found.',
-          };
-        }
-        return await this.executeFallback(signal);
-      }
-
-      const sourceListFormatted: string[] = [];
-      if (sources && sources.length > 0) {
-        sources.forEach((source: GroundingChunkItem, index: number) => {
-          const title = source.web?.title || 'Untitled';
-          const uri = source.web?.uri || 'Unknown URI'; // Fallback if URI is missing
-          sourceListFormatted.push(`[${index + 1}] ${title} (${uri})`);
-        });
-
-        if (groundingSupports && groundingSupports.length > 0) {
-          const insertions: Array<{ index: number; marker: string }> = [];
-          groundingSupports.forEach((support: GroundingSupportItem) => {
-            if (support.segment && support.groundingChunkIndices) {
-              const citationMarker = support.groundingChunkIndices
-                .map((chunkIndex: number) => `[${chunkIndex + 1}]`)
-                .join('');
-              insertions.push({
-                index: support.segment.endIndex,
-                marker: citationMarker,
-              });
-            }
-          });
-
-          insertions.sort((a, b) => b.index - a.index);
-          const responseChars = responseText.split('');
-          insertions.forEach((insertion) => {
-            responseChars.splice(insertion.index, 0, insertion.marker);
-          });
-          responseText = responseChars.join('');
-        }
-
-        if (sourceListFormatted.length > 0) {
-          responseText += `
-
-Sources:
-${sourceListFormatted.join('\n')}`;
-        }
-      }
-
-      const llmContent = responseText;
-
-      logger.log(
-        `Formatted tool response for prompt "${userPrompt}:\n\n":`,
-        llmContent,
-      );
-
-      return {
-        llmContent,
-        returnDisplay: responseText,
-      };
+      return await this.formatServerResponse(response, userPrompt, signal, url);
     } catch (error: unknown) {
-      const errorMessage = `Error during web fetch: ${getErrorMessage(error)}`;
-      logger.error(errorMessage, error);
+      return this.createProcessingErrorResult(error);
+    }
+  }
+
+  private async executePrivateUrlFallback(
+    signal: AbortSignal,
+    url: string,
+  ): Promise<ToolResult> {
+    const errorMessage =
+      'Private/local URLs cannot be processed with AI analysis. Processing content directly.';
+    const result = await this.executeFallback(signal);
+    return {
+      ...result,
+      llmContent: `${errorMessage}\n\nContent from ${url}:\n\n${result.llmContent}`,
+    };
+  }
+
+  private getServerToolsProvider(): ServerToolsProvider | Error {
+    const providerManager =
+      this.config.getContentGeneratorConfig()?.providerManager;
+    if (!providerManager) return new Error('provider');
+
+    const serverToolsProvider = providerManager.getServerToolsProvider();
+    if (!serverToolsProvider) return new Error('gemini');
+
+    const supportedTools = serverToolsProvider.getServerTools();
+    if (!supportedTools.includes(GOOGLE_WEB_FETCH_TOOL)) {
+      return new Error('unsupported');
+    }
+
+    return serverToolsProvider;
+  }
+
+  private createProviderErrorResult(message: string): ToolResult {
+    if (message === 'provider') return this.createMissingProviderResult();
+    if (message === 'gemini') return this.createMissingGeminiResult();
+    return this.createUnsupportedServerToolResult();
+  }
+
+  private createMissingProviderResult(): ToolResult {
+    return {
+      llmContent:
+        'Web fetch requires a provider. Please use --provider gemini with authentication.',
+      returnDisplay: 'Web fetch requires a provider.',
+      error: {
+        message: 'No provider manager available',
+        type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
+      },
+    };
+  }
+
+  private createMissingGeminiResult(): ToolResult {
+    return {
+      llmContent:
+        'Web fetch requires Gemini provider to be configured. Please ensure Gemini is available with authentication.',
+      returnDisplay: 'Web fetch requires Gemini provider.',
+      error: {
+        message: 'No server tools provider available',
+        type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
+      },
+    };
+  }
+
+  private createUnsupportedServerToolResult(): ToolResult {
+    return {
+      llmContent:
+        'Web fetch is not available. The server tools provider does not support web fetch.',
+      returnDisplay: 'Web fetch not available.',
+      error: {
+        message: 'Server tools provider does not support web_fetch',
+        type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
+      },
+    };
+  }
+
+  private async invokeWebFetch(
+    serverToolsProvider: ServerToolsProvider,
+    userPrompt: string,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    const response = await serverToolsProvider.invokeServerTool(
+      'web_fetch',
+      { prompt: userPrompt },
+      { signal },
+    );
+    logger.log(
+      `Full response for prompt "${userPrompt.substring(0, 50)}...":`,
+      JSON.stringify(response, null, 2),
+    );
+    return response;
+  }
+
+  private async formatServerResponse(
+    response: unknown,
+    userPrompt: string,
+    signal: AbortSignal,
+    url: string,
+  ): Promise<ToolResult> {
+    const typedResponse = response as GenerateContentResponse;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getResponseText returns string | null | undefined, empty string should fall through
+    let responseText = getResponseText(typedResponse) || '';
+    const groundingMetadata = typedResponse.candidates?.[0]?.groundingMetadata;
+    const sources = groundingMetadata?.groundingChunks as
+      | GroundingChunkItem[]
+      | undefined;
+    const groundingSupports = groundingMetadata?.groundingSupports as
+      | GroundingSupportItem[]
+      | undefined;
+
+    if (this.hasProcessingError(typedResponse, responseText, sources)) {
+      if (isPrivateIp(url)) return this.executeFallback(signal);
       return {
-        llmContent: `Error: ${errorMessage}`,
-        returnDisplay: `Error: ${errorMessage}`,
-        error: {
-          message: errorMessage,
-          type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
-        },
+        llmContent: 'No content found or URL retrieval failed.',
+        returnDisplay: 'No content found.',
       };
     }
+
+    responseText = this.addSourcesToResponse(
+      responseText,
+      sources,
+      groundingSupports,
+    );
+    logger.log(
+      `Formatted tool response for prompt "${userPrompt}:\n\n":`,
+      responseText,
+    );
+
+    return {
+      llmContent: responseText,
+      returnDisplay: responseText,
+    };
+  }
+
+  private hasProcessingError(
+    response: GenerateContentResponse,
+    responseText: string,
+    sources?: GroundingChunkItem[],
+  ): boolean {
+    const urlMetadata =
+      response.candidates?.[0]?.urlContextMetadata?.urlMetadata;
+    if (urlMetadata !== undefined && urlMetadata.length > 0) {
+      return urlMetadata.every(
+        (metadata: UrlMetadata) =>
+          // eslint-disable-next-line sonarjs/different-types-comparison -- Generated Gemini enum typing is narrower than runtime URL retrieval statuses; preserve the original success-status comparison.
+          metadata.urlRetrievalStatus !== 'URL_RETRIEVAL_STATUS_SUCCESS',
+      );
+    }
+
+    if (responseText.trim()) return false;
+    return sources === undefined || sources.length === 0;
+  }
+
+  private addSourcesToResponse(
+    responseText: string,
+    sources?: GroundingChunkItem[],
+    groundingSupports?: GroundingSupportItem[],
+  ): string {
+    if (sources === undefined || sources.length === 0) return responseText;
+
+    let updatedText = this.insertCitationMarkers(
+      responseText,
+      groundingSupports,
+    );
+    const sourceListFormatted = this.formatSources(sources);
+    if (sourceListFormatted.length > 0) {
+      updatedText += `\n\nSources:\n${sourceListFormatted.join('\n')}`;
+    }
+    return updatedText;
+  }
+
+  private formatSources(sources: GroundingChunkItem[]): string[] {
+    return sources.map((source: GroundingChunkItem, index: number) => {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: title is optional string, empty string should fall through
+      const title = source.web?.title || 'Untitled';
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: uri is optional string, empty string should fall through
+      const uri = source.web?.uri || 'Unknown URI';
+      return `[${index + 1}] ${title} (${uri})`;
+    });
+  }
+
+  private insertCitationMarkers(
+    responseText: string,
+    groundingSupports?: GroundingSupportItem[],
+  ): string {
+    if (groundingSupports === undefined || groundingSupports.length === 0) {
+      return responseText;
+    }
+
+    const insertions = this.getCitationInsertions(groundingSupports);
+    const responseChars = responseText.split('');
+    for (const insertion of insertions) {
+      responseChars.splice(insertion.index, 0, insertion.marker);
+    }
+    return responseChars.join('');
+  }
+
+  private getCitationInsertions(
+    groundingSupports: GroundingSupportItem[],
+  ): Array<{ index: number; marker: string }> {
+    const insertions: Array<{ index: number; marker: string }> = [];
+    for (const support of groundingSupports) {
+      if (!support.segment || !support.groundingChunkIndices) continue;
+      const citationMarker = support.groundingChunkIndices
+        .map((chunkIndex: number) => `[${chunkIndex + 1}]`)
+        .join('');
+      insertions.push({
+        index: support.segment.endIndex,
+        marker: citationMarker,
+      });
+    }
+    return insertions.sort((a, b) => b.index - a.index);
+  }
+
+  private createProcessingErrorResult(error: unknown): ToolResult {
+    const errorMessage = `Error during web fetch: ${getErrorMessage(error)}`;
+    logger.error(errorMessage, error);
+    return {
+      llmContent: `Error: ${errorMessage}`,
+      returnDisplay: `Error: ${errorMessage}`,
+      error: {
+        message: errorMessage,
+        type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
+      },
+    };
   }
 }
 

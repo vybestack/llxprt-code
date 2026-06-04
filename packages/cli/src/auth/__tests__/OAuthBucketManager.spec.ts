@@ -32,7 +32,7 @@ class MockTokenStore implements TokenStore {
     bucket?: string,
   ): Promise<OAuthToken | null> {
     const key = this.getKey(provider, bucket);
-    return this.tokens.get(key) || null;
+    return this.tokens.get(key) ?? null;
   }
 
   async removeToken(provider: string, bucket?: string): Promise<void> {
@@ -81,6 +81,7 @@ class MockTokenStore implements TokenStore {
   }
 
   private getKey(provider: string, bucket?: string): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string bucket should use 'default'
     return `${provider}:${bucket || 'default'}`;
   }
 
@@ -500,7 +501,7 @@ describe('OAuthBucketManager', () => {
     it('should throw error for non-existent default bucket', async () => {
       await expect(
         bucketManager.validateBucketExists('anthropic', 'default'),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/not found/);
     });
 
     /**
@@ -513,7 +514,7 @@ describe('OAuthBucketManager', () => {
     it('should validate bucket before switching', async () => {
       await expect(
         bucketManager.validateBucketExists('anthropic', 'nonexistent'),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/not found/);
     });
 
     /**

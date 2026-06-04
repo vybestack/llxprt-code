@@ -171,7 +171,7 @@ class MockProviderManager implements ProviderManager {
 
   getActiveProvider(): IProvider | null {
     return this.activeProvider
-      ? this.providers.get(this.activeProvider) || null
+      ? (this.providers.get(this.activeProvider) ?? null)
       : null;
   }
 

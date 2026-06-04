@@ -294,7 +294,7 @@ function buildUIStateParamsExtra(r: HookResults) {
     pendingHistoryItemRef: l.pendingHistoryItemRef,
     slashCommands: i.slashCommands,
     commandContext: i.commandContext,
-    shouldShowIdePrompt: !!b.shouldShowIdePrompt,
+    shouldShowIdePrompt: b.shouldShowIdePrompt === true,
     currentIDE: b.currentIDE,
     isRestarting: d.isRestarting,
     isTrustedFolder: b.config.isTrustedFolder(),

@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 /**
  * OAuth Error Handling System
  *
@@ -124,12 +126,14 @@ export class OAuthError extends Error {
     this.category = this.categorizeError(type);
     this.isRetryable = this.determineRetryability(type);
     this.userMessage =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string userMessage should fall back to generated
       options.userMessage || this.generateUserMessage(type, provider);
     this.actionRequired =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string actionRequired should fall back to generated
       options.actionRequired || this.generateActionRequired(type, provider);
-    this.retryAfterMs = options.retryAfterMs || null;
-    this.technicalDetails = options.technicalDetails || {};
-    this.originalError = options.originalError || null;
+    this.retryAfterMs = options.retryAfterMs ?? null;
+    this.technicalDetails = options.technicalDetails ?? {};
+    this.originalError = options.originalError ?? null;
   }
 
   /**
@@ -457,7 +461,7 @@ export class OAuthErrorFactory {
       provider,
       context ? `${context}: ${message}` : message,
       {
-        originalError: originalError || undefined,
+        originalError: originalError ?? undefined,
         technicalDetails: { context, originalErrorType: typeof error },
       },
     );
@@ -504,7 +508,7 @@ export class RetryHandler {
 
         // Calculate delay with exponential backoff and jitter
         let delay =
-          oauthError.retryAfterMs ||
+          oauthError.retryAfterMs ??
           Math.min(
             this.config.baseDelayMs *
               Math.pow(this.config.backoffMultiplier, attempt - 1),
@@ -524,7 +528,7 @@ export class RetryHandler {
 
     // All retries exhausted
     throw (
-      lastError ||
+      lastError ??
       OAuthErrorFactory.fromUnknown(
         provider,
         new Error('Max retries exceeded'),

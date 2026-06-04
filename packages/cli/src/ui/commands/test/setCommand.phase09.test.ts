@@ -60,9 +60,7 @@ if (!commandSchema) {
 // @ts-expect-error - Utility function for future use
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function setFuzzyFiltering(ctx: CommandContext, enabled: boolean): void {
-  if (ctx.services.settings?.merged) {
-    ctx.services.settings.merged.enableFuzzyFiltering = enabled;
-  }
+  ctx.services.settings.merged.enableFuzzyFiltering = enabled;
 }
 
 describe('setCommand schema integration', () => {

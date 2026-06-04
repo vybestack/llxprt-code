@@ -23,7 +23,7 @@ import type { ConfigSource } from './hookRegistry.js';
  * Used for deduplication and trust tracking
  */
 export function getHookKey(hook: HookConfig): string {
-  const name = hook.name || '';
+  const name = hook.name ?? '';
   const command = hook.command || '';
   return `${name}:${command}`;
 }
@@ -173,6 +173,7 @@ export class DefaultHookOutput implements HookOutput {
    * Prioritizes stopReason over reason per upstream 05049b5a
    */
   getEffectiveReason(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, strings have fallthrough intent
     return this.stopReason || this.reason || 'No reason provided';
   }
 
@@ -244,13 +245,13 @@ export class BeforeToolHookOutput extends DefaultHookOutput {
    */
   override getEffectiveReason(): string {
     // Check for compatibility fields first
-    if (this.hookSpecificOutput) {
-      if ('permissionDecisionReason' in this.hookSpecificOutput) {
-        const compatReason =
-          this.hookSpecificOutput['permissionDecisionReason'];
-        if (typeof compatReason === 'string') {
-          return compatReason;
-        }
+    if (
+      this.hookSpecificOutput &&
+      'permissionDecisionReason' in this.hookSpecificOutput
+    ) {
+      const compatReason = this.hookSpecificOutput['permissionDecisionReason'];
+      if (typeof compatReason === 'string') {
+        return compatReason;
       }
     }
 
@@ -283,7 +284,8 @@ export class BeforeToolHookOutput extends DefaultHookOutput {
     if (this.hookSpecificOutput && 'tool_input' in this.hookSpecificOutput) {
       const modifiedInput = this.hookSpecificOutput['tool_input'];
       if (
-        modifiedInput &&
+        modifiedInput !== null &&
+        modifiedInput !== undefined &&
         typeof modifiedInput === 'object' &&
         !Array.isArray(modifiedInput)
       ) {
@@ -306,7 +308,8 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
       const hookResponse = this.hookSpecificOutput[
         'llm_response'
       ] as LLMResponse;
-      if (hookResponse) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
+      if (hookResponse != null) {
         // Convert hook format to SDK format
         return defaultHookTranslator.fromHookLLMResponse(hookResponse);
       }
@@ -324,7 +327,8 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
       const hookRequest = this.hookSpecificOutput[
         'llm_request'
       ] as Partial<LLMRequest>;
-      if (hookRequest) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
+      if (hookRequest !== null && hookRequest !== undefined) {
         // Convert hook format to SDK format
         const sdkRequest = defaultHookTranslator.fromHookLLMRequest(
           hookRequest as LLMRequest,
@@ -361,13 +365,14 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
       const hookToolConfig = this.hookSpecificOutput[
         'toolConfig'
       ] as HookToolConfig;
-      if (hookToolConfig) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
+      if (hookToolConfig != null) {
         // Convert hook format to SDK format
         const sdkToolConfig =
           defaultHookTranslator.fromHookToolConfig(hookToolConfig);
         return {
           ...target,
-          tools: target.tools || [],
+          tools: target.tools ?? [],
           toolConfig: {
             ...sdkToolConfig,
             // Also expose allowedFunctionNames directly for easier access
@@ -392,6 +397,7 @@ export class AfterModelHookOutput extends DefaultHookOutput {
       const hookResponse = this.hookSpecificOutput[
         'llm_response'
       ] as Partial<LLMResponse>;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
       if (hookResponse?.candidates?.[0]?.content) {
         // Convert hook format to SDK format
         return defaultHookTranslator.fromHookLLMResponse(

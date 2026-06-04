@@ -32,21 +32,19 @@ class MockOAuthProvider implements OAuthProvider {
     private _initialToken?: OAuthToken,
   ) {
     this.name = name;
-    this.token = this._initialToken || null;
+    this.token = this._initialToken ?? null;
   }
 
   async initiateAuth(): Promise<OAuthToken> {
     this.authInitiated = true;
     // Simulate successful auth flow
-    if (!this.token) {
-      this.token = {
-        access_token: `access_${this.name}_${Date.now()}`,
-        refresh_token: `refresh_${this.name}_${Date.now()}`,
-        expiry: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now (Unix timestamp)
-        token_type: 'Bearer',
-        scope: 'read write',
-      };
-    }
+    this.token ??= {
+      access_token: `access_${this.name}_${Date.now()}`,
+      refresh_token: `refresh_${this.name}_${Date.now()}`,
+      expiry: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now (Unix timestamp)
+      token_type: 'Bearer',
+      scope: 'read write',
+    };
     return this.token;
   }
 
@@ -57,7 +55,7 @@ class MockOAuthProvider implements OAuthProvider {
   async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
     this.token = currentToken;
     const nowInSeconds = Math.floor(Date.now() / 1000);
-    if (this.token && this.token.expiry < nowInSeconds + 300) {
+    if (this.token.expiry < nowInSeconds + 300) {
       // Refresh if expires in less than 5 minutes (Unix timestamp)
       this.token = {
         ...this.token,
@@ -100,7 +98,7 @@ class MockTokenStore implements TokenStore {
   }
 
   async getToken(provider: string): Promise<OAuthToken | null> {
-    return this.tokens.get(provider) || null;
+    return this.tokens.get(provider) ?? null;
   }
 
   async removeToken(provider: string): Promise<void> {

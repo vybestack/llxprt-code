@@ -86,7 +86,7 @@ function createTestRuntimeContext(
   };
 
   const providerRuntime = createProviderRuntimeContext({
-    settingsService: config?.getSettingsService?.() ?? new SettingsService(),
+    settingsService: config?.getSettingsService() ?? new SettingsService(),
     config,
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'geminiChat.runtimeState.test' },
@@ -95,7 +95,7 @@ function createTestRuntimeContext(
   return createAgentRuntimeContext({
     state: runtimeState,
     settings,
-    provider: createProviderAdapterFromManager(config?.getProviderManager?.()),
+    provider: createProviderAdapterFromManager(config?.getProviderManager()),
     telemetry: config
       ? createTelemetryAdapterFromConfig(config)
       : {
@@ -103,7 +103,7 @@ function createTestRuntimeContext(
           logApiResponse: () => {},
           logApiError: () => {},
         },
-    tools: createToolRegistryViewFromRegistry(config?.getToolRegistry?.()),
+    tools: createToolRegistryViewFromRegistry(config?.getToolRegistry()),
     history: historyService,
     providerRuntime: { ...providerRuntime },
   });
@@ -240,7 +240,7 @@ describe('GeminiChat - Runtime State Integration', () => {
 
       // When sending a message, should use 'gemini' from runtime state
       expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState']?.provider).toBe('gemini');
+      expect(chat['runtimeState'].provider).toBe('gemini');
     });
 
     it('should use model from runtime state not Config', async () => {
@@ -270,7 +270,7 @@ describe('GeminiChat - Runtime State Integration', () => {
 
       // Should use model from runtime state
       expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState']?.model).toBe('gemini-2.0-flash');
+      expect(chat['runtimeState'].model).toBe('gemini-2.0-flash');
     });
 
     it('should use runtime state over Config defaults', async () => {
@@ -299,7 +299,7 @@ describe('GeminiChat - Runtime State Integration', () => {
 
       // Should use values from runtime state
       expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState']?.model).toBe('runtime-model');
+      expect(chat['runtimeState'].model).toBe('runtime-model');
     });
 
     it('should use baseUrl from runtime state not Config', async () => {
@@ -329,7 +329,7 @@ describe('GeminiChat - Runtime State Integration', () => {
 
       // Should use baseUrl from runtime state
       expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState']?.baseUrl).toBe(
+      expect(chat['runtimeState'].baseUrl).toBe(
         'https://runtime.api.example.com',
       );
     });
@@ -454,8 +454,8 @@ describe('GeminiChat - Runtime State Integration', () => {
 
       // Should use runtime state from provided AgentRuntimeContext, not Config
       expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState']?.provider).toBe('gemini');
-      expect(chat['runtimeState']?.model).toBe('gemini-2.0-flash');
+      expect(chat['runtimeState'].provider).toBe('gemini');
+      expect(chat['runtimeState'].model).toBe('gemini-2.0-flash');
     });
   });
 

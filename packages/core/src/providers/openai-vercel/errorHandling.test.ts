@@ -719,15 +719,11 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       });
 
       const iterator = provider.generateChatCompletion(options);
-      const result = { stream: iterator };
-
-      if (!result.stream) {
-        throw new Error('Expected streaming result');
-      }
+      const stream = iterator;
 
       const chunks: string[] = [];
       await expect(async () => {
-        for await (const chunk of result.stream) {
+        for await (const chunk of stream) {
           chunks.push(chunk);
         }
       }).rejects.toThrow(ProviderError);

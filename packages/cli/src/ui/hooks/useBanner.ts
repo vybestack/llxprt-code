@@ -19,7 +19,7 @@ export function useBanner(bannerData: BannerData) {
   const { defaultText, warningText } = bannerData;
 
   const [bannerCounts] = useState(
-    () => persistentState.get('defaultBannerShownCount') || {},
+    () => persistentState.get('defaultBannerShownCount') ?? {},
   );
 
   const hashedText = crypto
@@ -27,7 +27,7 @@ export function useBanner(bannerData: BannerData) {
     .update(defaultText)
     .digest('hex');
 
-  const currentBannerCount = bannerCounts[hashedText] || 0;
+  const currentBannerCount = bannerCounts[hashedText] ?? 0;
 
   const showDefaultBanner =
     warningText === '' && currentBannerCount < DEFAULT_MAX_BANNER_SHOWN_COUNT;
@@ -38,18 +38,20 @@ export function useBanner(bannerData: BannerData) {
   const lastIncrementedKey = useRef<string | null>(null);
 
   useEffect(() => {
-    if (showDefaultBanner && defaultText) {
-      if (lastIncrementedKey.current !== defaultText) {
-        lastIncrementedKey.current = defaultText;
+    if (
+      showDefaultBanner &&
+      defaultText &&
+      lastIncrementedKey.current !== defaultText
+    ) {
+      lastIncrementedKey.current = defaultText;
 
-        const allCounts = persistentState.get('defaultBannerShownCount') || {};
-        const current = allCounts[hashedText] || 0;
+      const allCounts = persistentState.get('defaultBannerShownCount') ?? {};
+      const current = allCounts[hashedText] ?? 0;
 
-        persistentState.set('defaultBannerShownCount', {
-          ...allCounts,
-          [hashedText]: current + 1,
-        });
-      }
+      persistentState.set('defaultBannerShownCount', {
+        ...allCounts,
+        [hashedText]: current + 1,
+      });
     }
   }, [showDefaultBanner, defaultText, hashedText]);
 

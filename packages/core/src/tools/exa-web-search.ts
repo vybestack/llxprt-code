@@ -8,6 +8,8 @@
  * Licensed under the MIT License.
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import {
   BaseDeclarativeTool,
   Kind,
@@ -47,7 +49,7 @@ interface McpSearchRequest {
 
 interface McpSearchResponse {
   jsonrpc: string;
-  result: {
+  result?: {
     content: Array<{
       type: string;
       text: string;
@@ -164,8 +166,15 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
         name: 'web_search_exa',
         arguments: {
           query: this.params.query,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional enum property
           type: this.params.type || 'auto',
-          numResults: this.params.numResults || API_CONFIG.DEFAULT_NUM_RESULTS,
+          numResults:
+            this.params.numResults !== undefined &&
+            this.params.numResults !== 0 &&
+            !Number.isNaN(this.params.numResults)
+              ? this.params.numResults
+              : API_CONFIG.DEFAULT_NUM_RESULTS,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional enum property
           livecrawl: this.params.livecrawl || 'fallback',
           contextMaxCharacters: this.params.contextMaxCharacters ?? 10000,
         },
@@ -198,11 +207,11 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
       const lines = responseText.split('\n');
       for (const line of lines) {
         if (line.startsWith('data: ')) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           try {
             const data: McpSearchResponse = JSON.parse(line.substring(6));
             if (
-              data.result &&
-              data.result.content &&
+              data.result?.content !== undefined &&
               data.result.content.length > 0
             ) {
               const content = ensureJsonSafe(data.result.content[0].text);
@@ -211,7 +220,7 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
                 returnDisplay: content,
               };
             }
-          } catch (_e) {
+          } catch {
             // Ignore parse errors
           }
         }

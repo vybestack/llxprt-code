@@ -45,7 +45,7 @@ describe('RepositoryContextProvider', () => {
 
     it('should return RepositoryContext with fields', async () => {
       vi.mocked(spawnSync).mockImplementation((cmd, args) => {
-        const argsStr = args?.join(' ') || '';
+        const argsStr = args?.join(' ') ?? '';
         if (argsStr.includes('remote get-url')) {
           return {
             status: 0,
@@ -99,7 +99,7 @@ describe('RepositoryContextProvider', () => {
   describe('getWorkingSetFiles', () => {
     it('should return absolute paths from getWorkingSetFiles', async () => {
       vi.mocked(spawnSync).mockImplementation((cmd, args) => {
-        const argsStr = args?.join(' ') || '';
+        const argsStr = args?.join(' ') ?? '';
         if (argsStr.includes('diff --name-only -z')) {
           return {
             status: 0,

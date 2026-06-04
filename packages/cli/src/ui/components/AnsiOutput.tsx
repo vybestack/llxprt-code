@@ -27,7 +27,7 @@ export const AnsiOutputText: React.FC<AnsiOutputProps> = ({
   width,
 }) => {
   const linesToShow =
-    availableTerminalHeight && availableTerminalHeight > 0
+    availableTerminalHeight != null && availableTerminalHeight > 0
       ? availableTerminalHeight
       : DEFAULT_HEIGHT;
 

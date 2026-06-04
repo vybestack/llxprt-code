@@ -111,11 +111,12 @@ async function handleSave(
       }
 
       // Interactive: prompt confirmation via confirm_action (R13.2)
-      if (!context.overwriteConfirmed) {
+      if (context.overwriteConfirmed !== true) {
         return {
           type: 'confirm_action',
           prompt: `Key '${name}' already exists. Overwrite?`,
           originalInvocation: {
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string raw command fallback
             raw: context.invocation?.raw || `/key save ${name} ***`,
           },
         };
@@ -367,11 +368,12 @@ async function handleDelete(
     }
 
     // Prompt for confirmation (R17.1)
-    if (!context.overwriteConfirmed) {
+    if (context.overwriteConfirmed !== true) {
       return {
         type: 'confirm_action',
         prompt: `Delete key '${name}'?`,
         originalInvocation: {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string raw command fallback
           raw: context.invocation?.raw || `/key delete ${name}`,
         },
       };
@@ -487,7 +489,7 @@ export const keyCommand: SlashCommand = {
     // @plan PLAN-20260211-SECURESTORE.P15
     // @pseudocode lines 2-30
     // @requirement R12.6 — trim whitespace
-    const trimmedArgs = args?.trim() ?? '';
+    const trimmedArgs = args.trim();
 
     // @requirement R12.4 — no args: show status (legacy behavior)
     if (trimmedArgs.length === 0) {

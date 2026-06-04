@@ -30,6 +30,29 @@ describe('ReadFileTool', () => {
   let tool: ReadFileTool;
   const abortSignal = new AbortController().signal;
 
+  /**
+   * Shared helper for running git commands in test directories.
+   * Used by multiple git-related test cases.
+   */
+  const runGit = async (args: string[], cwd: string) => {
+    const { spawn } = await import('child_process');
+    return new Promise<void>((resolve, reject) => {
+      const child = spawn('git', args, {
+        cwd,
+        windowsHide: true,
+      });
+      let stderr = '';
+      child.stderr.on('data', (d) => {
+        stderr += d.toString('utf8');
+      });
+      child.on('error', (err) => reject(err));
+      child.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(stderr.trim() || `git exited with code ${code}`));
+      });
+    });
+  };
+
   beforeEach(async () => {
     // Create a unique temporary root directory for each test run
     tempRootDir = await fsp.mkdtemp(
@@ -373,35 +396,13 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
 
         const filePath = path.join(repoDir, 'file.txt');
 
-        const runGit = async (args: string[]) => {
-          const { spawn } = await import('child_process');
-          return new Promise<void>((resolve, reject) => {
-            const child = spawn('git', args, {
-              cwd: repoDir,
-              windowsHide: true,
-            });
-            let stderr = '';
-            child.stderr.on('data', (d) => {
-              stderr += d.toString('utf8');
-            });
-            child.on('error', (err) => reject(err));
-            child.on('close', (code) => {
-              if (code === 0) resolve();
-              else
-                reject(
-                  new Error(stderr.trim() || `git exited with code ${code}`),
-                );
-            });
-          });
-        };
-
-        await runGit(['init']);
-        await runGit(['config', 'user.email', 'test@example.com']);
-        await runGit(['config', 'user.name', 'Test User']);
+        await runGit(['init'], repoDir);
+        await runGit(['config', 'user.email', 'test@example.com'], repoDir);
+        await runGit(['config', 'user.name', 'Test User'], repoDir);
 
         await fsp.writeFile(filePath, ['new'].join('\n'), 'utf-8');
-        await runGit(['add', 'file.txt']);
-        await runGit(['commit', '-m', 'init']);
+        await runGit(['add', 'file.txt'], repoDir);
+        await runGit(['commit', '-m', 'init'], repoDir);
 
         await fsp.appendFile(filePath, '\nnew');
 
@@ -428,33 +429,11 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
         const filePath = path.join(repoDir, 'file.txt');
         await fsp.writeFile(filePath, ['one', 'two'].join('\n'), 'utf-8');
 
-        const runGit = async (args: string[]) => {
-          const { spawn } = await import('child_process');
-          return new Promise<void>((resolve, reject) => {
-            const child = spawn('git', args, {
-              cwd: repoDir,
-              windowsHide: true,
-            });
-            let stderr = '';
-            child.stderr.on('data', (d) => {
-              stderr += d.toString('utf8');
-            });
-            child.on('error', (err) => reject(err));
-            child.on('close', (code) => {
-              if (code === 0) resolve();
-              else
-                reject(
-                  new Error(stderr.trim() || `git exited with code ${code}`),
-                );
-            });
-          });
-        };
-
-        await runGit(['init']);
-        await runGit(['config', 'user.email', 'test@example.com']);
-        await runGit(['config', 'user.name', 'Test User']);
-        await runGit(['add', 'file.txt']);
-        await runGit(['commit', '-m', 'init']);
+        await runGit(['init'], repoDir);
+        await runGit(['config', 'user.email', 'test@example.com'], repoDir);
+        await runGit(['config', 'user.name', 'Test User'], repoDir);
+        await runGit(['add', 'file.txt'], repoDir);
+        await runGit(['commit', '-m', 'init'], repoDir);
 
         await fsp.writeFile(filePath, ['one', 'TWO'].join('\n'), 'utf-8');
 
@@ -485,33 +464,11 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
           'utf-8',
         );
 
-        const runGit = async (args: string[]) => {
-          const { spawn } = await import('child_process');
-          return new Promise<void>((resolve, reject) => {
-            const child = spawn('git', args, {
-              cwd: repoDir,
-              windowsHide: true,
-            });
-            let stderr = '';
-            child.stderr.on('data', (d) => {
-              stderr += d.toString('utf8');
-            });
-            child.on('error', (err) => reject(err));
-            child.on('close', (code) => {
-              if (code === 0) resolve();
-              else
-                reject(
-                  new Error(stderr.trim() || `git exited with code ${code}`),
-                );
-            });
-          });
-        };
-
-        await runGit(['init']);
-        await runGit(['config', 'user.email', 'test@example.com']);
-        await runGit(['config', 'user.name', 'Test User']);
-        await runGit(['add', 'file.txt']);
-        await runGit(['commit', '-m', 'init']);
+        await runGit(['init'], repoDir);
+        await runGit(['config', 'user.email', 'test@example.com'], repoDir);
+        await runGit(['config', 'user.name', 'Test User'], repoDir);
+        await runGit(['add', 'file.txt'], repoDir);
+        await runGit(['commit', '-m', 'init'], repoDir);
 
         await fsp.writeFile(filePath, ['one', 'two'].join('\n'), 'utf-8');
 
@@ -532,6 +489,7 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
         );
       });
 
+      // eslint-disable-next-line vitest/max-nested-describe -- intentional: semantic grouping requires this nesting depth
       describe('with .llxprtignore', () => {
         beforeEach(async () => {
           await fsp.writeFile(

@@ -8,7 +8,7 @@
  * @plan PLAN-20260211-HIGHDENSITY.P24
  * @requirement REQ-HD-011.5, REQ-HD-012.3
  *
- * Compression + Todo Integration Test
+ * Compression + Task Integration Test
  *
  * This test validates that compression correctly wires activeTodos into the
  * compression context, and that the continuation directive references the
@@ -85,7 +85,7 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
 
   describe('ActiveTodos Compression Context', () => {
     it('@requirement REQ-HD-011.5 should include active todos in compression context', async () => {
-      // Given: A todo list with multiple active tasks
+      // Given: A task list with multiple active items
       const todos = [
         createTodo('1', 'Analyze project structure', 'in_progress'),
         createTodo('2', 'Create temporary test files in ./tmp/', 'pending'),
@@ -135,7 +135,7 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
     });
 
     it('@requirement REQ-HD-012.3 should format active todos for compression injection', async () => {
-      // Given: Various todo states
+      // Given: Various task states
       const mixedTodos = [
         createTodo('1', 'First in-progress task', 'in_progress'),
         createTodo('2', 'Second in-progress task', 'in_progress'),
@@ -167,7 +167,7 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
     });
 
     it('@requirement REQ-HD-012.3 should handle empty todo list gracefully', async () => {
-      // Given: Empty todo list
+      // Given: Empty task list
       await todoStore.writeTodos([]);
 
       const storedTodos = await todoStore.readTodos();

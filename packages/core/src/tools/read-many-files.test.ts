@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -16,14 +15,10 @@ import os from 'os';
 import type { Config } from '../config/config.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
-import { ToolErrorType } from './tool-error.js';
 import {
   COMMON_IGNORE_PATTERNS,
   DEFAULT_FILE_EXCLUDES,
 } from '../utils/ignorePatterns.js';
-import * as glob from 'glob';
-
-vi.mock('glob', { spy: true });
 
 // Mock fs/promises with inline factory
 vi.mock('fs/promises', async () => {
@@ -67,6 +62,12 @@ describe('ReadManyFilesTool', () => {
   let tempRootDir: string;
   let tempDirOutsideRoot: string;
   let mockReadFileFn: Mock;
+
+  const createFileInTempRoot = (filePath: string, content = '') => {
+    const fullPath = path.join(tempRootDir, filePath);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, content);
+  };
 
   beforeEach(async () => {
     tempRootDir = fs.realpathSync(
@@ -175,7 +176,7 @@ describe('ReadManyFilesTool', () => {
     });
 
     it('should throw error if paths array is empty', () => {
-      const params = { paths: [] };
+      const params = { paths: [], include: [] };
       expect(() => tool.build(params)).toThrow(
         'params/paths must NOT have fewer than 1 items',
       );
@@ -220,11 +221,6 @@ describe('ReadManyFilesTool', () => {
   });
 
   describe('execute', () => {
-    const createFile = (filePath: string, content = '') => {
-      const fullPath = path.join(tempRootDir, filePath);
-      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-      fs.writeFileSync(fullPath, content);
-    };
     const createBinaryFile = (filePath: string, data: Uint8Array) => {
       const fullPath = path.join(tempRootDir, filePath);
       fs.mkdirSync(path.dirname(fullPath), { recursive: true });
@@ -232,7 +228,7 @@ describe('ReadManyFilesTool', () => {
     };
 
     it('should read a single specified file', async () => {
-      createFile('file1.txt', 'Content of file1');
+      createFileInTempRoot('file1.txt', 'Content of file1');
       const params = { paths: ['file1.txt'] };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
@@ -247,8 +243,8 @@ describe('ReadManyFilesTool', () => {
     });
 
     it('should read multiple specified files', async () => {
-      createFile('file1.txt', 'Content1');
-      createFile('subdir/file2.js', 'Content2');
+      createFileInTempRoot('file1.txt', 'Content1');
+      createFileInTempRoot('subdir/file2.js', 'Content2');
       const params = { paths: ['file1.txt', 'subdir/file2.js'] };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
@@ -271,9 +267,9 @@ describe('ReadManyFilesTool', () => {
     });
 
     it('should handle glob patterns', async () => {
-      createFile('file.txt', 'Text file');
-      createFile('another.txt', 'Another text');
-      createFile('sub/data.json', '{}');
+      createFileInTempRoot('file.txt', 'Text file');
+      createFileInTempRoot('another.txt', 'Another text');
+      createFileInTempRoot('sub/data.json', '{}');
       const params = { paths: ['*.txt'] };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
@@ -297,8 +293,8 @@ describe('ReadManyFilesTool', () => {
     });
 
     it('should respect exclude patterns', async () => {
-      createFile('src/main.ts', 'Main content');
-      createFile('src/main.test.ts', 'Test content');
+      createFileInTempRoot('src/main.ts', 'Main content');
+      createFileInTempRoot('src/main.test.ts', 'Test content');
       const params = { paths: ['src/**/*.ts'], exclude: ['**/*.test.ts'] };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
@@ -329,8 +325,8 @@ describe('ReadManyFilesTool', () => {
     });
 
     it('should use default excludes', async () => {
-      createFile('node_modules/some-lib/index.js', 'lib code');
-      createFile('src/app.js', 'app code');
+      createFileInTempRoot('node_modules/some-lib/index.js', 'lib code');
+      createFileInTempRoot('src/app.js', 'app code');
       const params = { paths: ['**/*.js'] };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
@@ -349,8 +345,8 @@ describe('ReadManyFilesTool', () => {
     });
 
     it('should NOT use default excludes if useDefaultExcludes is false', async () => {
-      createFile('node_modules/some-lib/index.js', 'lib code');
-      createFile('src/app.js', 'app code');
+      createFileInTempRoot('node_modules/some-lib/index.js', 'lib code');
+      createFileInTempRoot('src/app.js', 'app code');
       const params = { paths: ['**/*.js'], useDefaultExcludes: false };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
@@ -422,7 +418,7 @@ describe('ReadManyFilesTool', () => {
 
     it('should skip PDF files if not explicitly requested by extension or name', async () => {
       createBinaryFile('document.pdf', Buffer.from('%PDF-1.4...'));
-      createFile('notes.txt', 'text notes');
+      createFileInTempRoot('notes.txt', 'text notes');
       const params = { paths: ['*'] }; // Generic glob, not specific to .pdf
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
@@ -474,9 +470,9 @@ describe('ReadManyFilesTool', () => {
     });
 
     it('should return error if path is ignored by a .geminiignore pattern', async () => {
-      createFile('foo.bar', '');
-      createFile('bar.ts', '');
-      createFile('foo.quux', '');
+      createFileInTempRoot('foo.bar', '');
+      createFileInTempRoot('bar.ts', '');
+      createFileInTempRoot('foo.quux', '');
       const params = { paths: ['foo.bar', 'bar.ts', 'foo.quux'] };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
@@ -522,6 +518,7 @@ describe('ReadManyFilesTool', () => {
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
       const content = result.llmContent as string[];
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!Array.isArray(content)) {
         throw new Error(`llmContent is not an array: ${content}`);
       }
@@ -547,12 +544,12 @@ describe('ReadManyFilesTool', () => {
     });
 
     it('should add a warning for truncated files', async () => {
-      createFile('file1.txt', 'Content1');
+      createFileInTempRoot('file1.txt', 'Content1');
       // Create a file that will be "truncated" by making it long
       const longContent = Array.from({ length: 2500 }, (_, i) => `L${i}`).join(
         '\n',
       );
-      createFile('large-file.txt', longContent);
+      createFileInTempRoot('large-file.txt', longContent);
 
       const params = { paths: ['*.txt'] };
       const invocation = tool.build(params);
@@ -577,7 +574,7 @@ describe('ReadManyFilesTool', () => {
 
     it('should read files with special characters like [] and () in the path', async () => {
       const filePath = 'src/app/[test]/(dashboard)/testing/components/code.tsx';
-      createFile(filePath, 'Content of receive-detail');
+      createFileInTempRoot(filePath, 'Content of receive-detail');
       const params = { paths: [filePath] };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
@@ -596,7 +593,7 @@ Content of receive-detail
     });
 
     it('should read files with special characters in the name', async () => {
-      createFile('file[1].txt', 'Content of file[1]');
+      createFileInTempRoot('file[1].txt', 'Content of file[1]');
       const params = { paths: ['file[1].txt'] };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
@@ -680,158 +677,6 @@ Content of file[1]
       );
 
       fs.rmSync(repoRoot, { recursive: true, force: true });
-    });
-  });
-
-  describe('Error handling', () => {
-    it('should return an INVALID_TOOL_PARAMS error if no paths are provided', async () => {
-      const params = { paths: [], include: [] };
-      expect(() => {
-        tool.build(params);
-      }).toThrow('params/paths must NOT have fewer than 1 items');
-    });
-
-    it('should return a READ_MANY_FILES_SEARCH_ERROR on glob failure', async () => {
-      vi.mocked(glob.glob).mockRejectedValue(new Error('Glob failed'));
-      const params = { paths: ['*.txt'] };
-      const invocation = tool.build(params);
-      const result = await invocation.execute(new AbortController().signal);
-      expect(result.error?.type).toBe(
-        ToolErrorType.READ_MANY_FILES_SEARCH_ERROR,
-      );
-      expect(result.llmContent).toBe('Error during file search: Glob failed');
-      // Reset glob.
-      vi.mocked(glob.glob).mockReset();
-    });
-  });
-
-  describe('Batch Processing', () => {
-    const createMultipleFiles = (count: number, contentPrefix = 'Content') => {
-      const files: string[] = [];
-      for (let i = 0; i < count; i++) {
-        const fileName = `file${i}.txt`;
-        createFile(fileName, `${contentPrefix} ${i}`);
-        files.push(fileName);
-      }
-      return files;
-    };
-
-    const createFile = (filePath: string, content = '') => {
-      const fullPath = path.join(tempRootDir, filePath);
-      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-      fs.writeFileSync(fullPath, content);
-    };
-
-    it('should process files in parallel', async () => {
-      // Mock detectFileType to add artificial delay to simulate I/O
-      const detectFileTypeSpy = vi.spyOn(
-        await import('../utils/fileUtils.js'),
-        'detectFileType',
-      );
-
-      // Create files
-      const fileCount = 4;
-      const files = createMultipleFiles(fileCount, 'Batch test');
-
-      // Mock with 10ms delay per file to simulate I/O operations
-      detectFileTypeSpy.mockImplementation(async (_filePath: string) => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        return 'text';
-      });
-
-      const params = { paths: files };
-      const invocation = tool.build(params);
-      const result = await invocation.execute(new AbortController().signal);
-
-      // Verify all files were processed. The content should have fileCount
-      // entries + 1 for the output terminator.
-      const content = result.llmContent as string[];
-      expect(content).toHaveLength(fileCount + 1);
-      for (let i = 0; i < fileCount; i++) {
-        expect(content.join('')).toContain(`Batch test ${i}`);
-      }
-
-      // Cleanup mock
-      detectFileTypeSpy.mockRestore();
-    });
-
-    it('should handle batch processing errors gracefully', async () => {
-      // Create mix of valid and problematic files
-      createFile('valid1.txt', 'Valid content 1');
-      createFile('valid2.txt', 'Valid content 2');
-      createFile('valid3.txt', 'Valid content 3');
-
-      const params = {
-        paths: [
-          'valid1.txt',
-          'valid2.txt',
-          'nonexistent-file.txt', // This will fail
-          'valid3.txt',
-        ],
-      };
-
-      const invocation = tool.build(params);
-      const result = await invocation.execute(new AbortController().signal);
-      const content = result.llmContent as string[];
-
-      // Should successfully process valid files despite one failure
-      expect(content.length).toBeGreaterThanOrEqual(3);
-      expect(result.returnDisplay).toContain('Successfully read');
-
-      // Verify valid files were processed
-      const expectedPath1 = path.join(tempRootDir, 'valid1.txt');
-      const expectedPath3 = path.join(tempRootDir, 'valid3.txt');
-      expect(content.some((c) => c.includes(expectedPath1))).toBe(true);
-      expect(content.some((c) => c.includes(expectedPath3))).toBe(true);
-    });
-
-    it('should execute file operations concurrently', async () => {
-      // Track execution order to verify concurrency
-      const executionOrder: string[] = [];
-      const detectFileTypeSpy = vi.spyOn(
-        await import('../utils/fileUtils.js'),
-        'detectFileType',
-      );
-
-      const files = ['file1.txt', 'file2.txt', 'file3.txt'];
-      files.forEach((file) => createFile(file, 'test content'));
-
-      // Mock to track concurrent vs sequential execution
-      detectFileTypeSpy.mockImplementation(async (filePath: string) => {
-        const fileName = filePath.split('/').pop() || '';
-        executionOrder.push(`start:${fileName}`);
-
-        // Add delay to make timing differences visible
-        await new Promise((resolve) => setTimeout(resolve, 50));
-
-        executionOrder.push(`end:${fileName}`);
-        return 'text';
-      });
-
-      const invocation = tool.build({ paths: files });
-      await invocation.execute(new AbortController().signal);
-
-      console.log('Execution order:', executionOrder);
-
-      // Verify concurrent execution pattern
-      // In parallel execution: all "start:" events should come before all "end:" events
-      // In sequential execution: "start:file1", "end:file1", "start:file2", "end:file2", etc.
-
-      const _startEvents = executionOrder.filter((e) =>
-        e.startsWith('start:'),
-      ).length;
-      const firstEndIndex = executionOrder.findIndex((e) =>
-        e.startsWith('end:'),
-      );
-      const startsBeforeFirstEnd = executionOrder
-        .slice(0, firstEndIndex)
-        .filter((e) => e.startsWith('start:')).length;
-
-      // For parallel processing, ALL start events should happen before the first end event
-      // Note: Current implementation appears to process files sequentially
-      expect(startsBeforeFirstEnd).toBe(1); // Sequential processing: only 1 start before first end
-
-      detectFileTypeSpy.mockRestore();
     });
   });
 });

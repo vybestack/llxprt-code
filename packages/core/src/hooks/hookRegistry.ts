@@ -116,6 +116,7 @@ export class HookRegistry {
    * Get hook name for identification and display purposes (public for external use)
    */
   getHookName(entry: HookRegistryEntry | { config: HookConfig }): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string name/command should fall through to unknown-command
     return entry.config.name || entry.config.command || 'unknown-command';
   }
 
@@ -133,14 +134,17 @@ export class HookRegistry {
         if (key === 'disabled') continue;
 
         if (Array.isArray(eventDefinitions)) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           for (const definition of eventDefinitions) {
+            // External data boundary: projectHooks is parsed from user config files and may not match TypeScript types at runtime
             if (
-              definition &&
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+              definition != null &&
               typeof definition === 'object' &&
               'hooks' in definition
             ) {
               const hookDef = definition;
-              if (hookDef.hooks) {
+              if (Array.isArray(hookDef.hooks)) {
                 allProjectHooks.push(...hookDef.hooks);
               }
             }
@@ -159,6 +163,7 @@ export class HookRegistry {
     const untrusted = trustManager.getUntrustedHooks(allProjectHooks);
 
     if (untrusted.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string hook name/command should fall through
       const hookNames = untrusted.map((h) => h.name || h.command).join(', ');
       const warning = `WARNING: Project defines ${untrusted.length} untrusted hook(s): ${hookNames}. Review these hooks before trusting them.
 `;
@@ -190,7 +195,7 @@ export class HookRegistry {
     }
 
     // Get hooks from extensions (always allowed)
-    const extensions = this.config.getExtensions() || [];
+    const extensions = this.config.getExtensions();
     for (const extension of extensions) {
       if (extension.isActive && extension.hooks) {
         this.processHooksConfiguration(
@@ -208,6 +213,7 @@ export class HookRegistry {
     hooksConfig: { [K in HookEventName]?: HookDefinition[] },
     source: ConfigSource,
   ): void {
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const [eventName, definitions] of Object.entries(hooksConfig)) {
       // Warn about config keys that belong under hooksConfig, not hooks
       if (HOOKS_CONFIG_FIELDS.includes(eventName)) {
@@ -251,8 +257,11 @@ export class HookRegistry {
     eventName: HookEventName,
     source: ConfigSource,
   ): void {
+    const disabledHooks = this.config.getDisabledHooks();
+
     if (
-      !definition ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- External data boundary: definition is parsed from user config files and may not match TypeScript types at runtime.
+      definition == null ||
       typeof definition !== 'object' ||
       !Array.isArray(definition.hooks)
     ) {
@@ -263,11 +272,11 @@ export class HookRegistry {
       return;
     }
 
-    const disabledHooks = this.config.getDisabledHooks() || [];
-
     for (const hookConfig of definition.hooks) {
+      // External data boundary: hookConfig is parsed from user config files and may not match TypeScript types at runtime
       if (
-        hookConfig &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        hookConfig != null &&
         typeof hookConfig === 'object' &&
         this.validateHookConfig(hookConfig, eventName, source)
       ) {
@@ -305,6 +314,7 @@ export class HookRegistry {
     eventName: HookEventName,
     source: ConfigSource,
   ): boolean {
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unnecessary-condition -- Preserve original external hook payload validation, including legacy plugin type.
     if (!config.type || !['command', 'plugin'].includes(config.type)) {
       debugLogger.warn(
         `Invalid hook ${eventName} from ${source} type: ${config.type}`,
@@ -312,6 +322,8 @@ export class HookRegistry {
       return false;
     }
 
+    // Check command field for command-type hooks - must be a non-empty string.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve original falsy validation for external command hook payloads.
     if (config.type === 'command' && !config.command) {
       debugLogger.warn(
         `Command hook ${eventName} from ${source} missing command field`,

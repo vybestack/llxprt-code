@@ -26,13 +26,69 @@ interface SuggestionsDisplayProps {
 
 export const MAX_SUGGESTIONS_TO_SHOW = 8;
 
-/**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P08
- * @requirement:REQ-002
- * @requirement:REQ-003
- * Feature flag enabled for hint display integration
- */
-const SHOW_ARGUMENT_HINTS = true;
+interface SuggestionRowProps {
+  suggestion: Suggestion;
+  index: number;
+  startIndex: number;
+  activeIndex: number;
+  userInput: string;
+  isSlashCommandMode: boolean;
+  commandNameWidth: number;
+}
+
+function SuggestionRow({
+  suggestion,
+  index,
+  startIndex,
+  activeIndex,
+  userInput,
+  isSlashCommandMode,
+  commandNameWidth,
+}: SuggestionRowProps) {
+  const originalIndex = startIndex + index;
+  const isActive = originalIndex === activeIndex;
+  const textColor = isActive ? '#00ff00' : Colors.Foreground;
+  const labelElement = (
+    <PrepareLabel
+      label={suggestion.label}
+      matchedIndex={suggestion.matchedIndex}
+      userInput={userInput}
+      textColor={textColor}
+    />
+  );
+
+  return (
+    <Box key={`${suggestion.value}-${originalIndex}`}>
+      <Box flexDirection="row">
+        {isSlashCommandMode ? (
+          <>
+            <Box width={commandNameWidth} flexShrink={0}>
+              {labelElement}
+            </Box>
+            {suggestion.description && (
+              <Box flexGrow={1} marginLeft={1}>
+                <Text color={textColor} wrap="wrap">
+                  {suggestion.description}
+                </Text>
+              </Box>
+            )}
+          </>
+        ) : (
+          <>
+            {labelElement}
+            {suggestion.description && (
+              <Box flexGrow={1} marginLeft={1}>
+                <Text color={textColor} wrap="wrap">
+                  {suggestion.description}
+                </Text>
+              </Box>
+            )}
+          </>
+        )}
+      </Box>
+    </Box>
+  );
+}
 
 /**
  * @plan:PLAN-20251013-AUTOCOMPLETE.P08
@@ -66,7 +122,6 @@ export function SuggestionsDisplay({
     return null;
   }
 
-  // Calculate the visible slice based on scrollOffset
   const startIndex = scrollOffset;
   const endIndex = Math.min(
     scrollOffset + MAX_SUGGESTIONS_TO_SHOW,
@@ -78,10 +133,10 @@ export function SuggestionsDisplay({
   let commandNameWidth = 0;
 
   if (isSlashCommandMode) {
-    const maxLabelLength = visibleSuggestions.length
-      ? Math.max(...visibleSuggestions.map((s) => s.label.length))
-      : 0;
-
+    const maxLabelLength =
+      visibleSuggestions.length > 0
+        ? Math.max(...visibleSuggestions.map((s) => s.label.length))
+        : 0;
     const maxAllowedWidth = Math.floor(width * 0.35);
     commandNameWidth = Math.max(
       15,
@@ -89,70 +144,32 @@ export function SuggestionsDisplay({
     );
   }
 
-  // Calculate how many lines we need to reserve
   const hasScrollUp = scrollOffset > 0;
   const hasScrollDown = endIndex < suggestions.length;
   const hasCounter = suggestions.length > MAX_SUGGESTIONS_TO_SHOW;
 
   return (
     <Box flexDirection="column" paddingX={1} width={width}>
-      {/* Hint line - rendered when feature flag is enabled and hint is provided */}
-      {SHOW_ARGUMENT_HINTS && activeHint ? (
+      {activeHint && (
         <Box marginBottom={1}>
           <Text color={Colors.Gray} wrap="wrap">
             {activeHint}
           </Text>
         </Box>
-      ) : null}
-
+      )}
       {hasScrollUp && <Text color={Colors.Foreground}>▲</Text>}
-
-      {visibleSuggestions.map((suggestion, index) => {
-        const originalIndex = startIndex + index;
-        const isActive = originalIndex === activeIndex;
-        const textColor = isActive ? '#00ff00' : Colors.Foreground;
-        const labelElement = (
-          <PrepareLabel
-            label={suggestion.label}
-            matchedIndex={suggestion.matchedIndex}
-            userInput={userInput}
-            textColor={textColor}
-          />
-        );
-
-        return (
-          <Box key={`${suggestion.value}-${originalIndex}`} width={width}>
-            <Box flexDirection="row">
-              {isSlashCommandMode ? (
-                <>
-                  <Box width={commandNameWidth} flexShrink={0}>
-                    {labelElement}
-                  </Box>
-                  {suggestion.description ? (
-                    <Box flexGrow={1} marginLeft={1}>
-                      <Text color={textColor} wrap="wrap">
-                        {suggestion.description}
-                      </Text>
-                    </Box>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  {labelElement}
-                  {suggestion.description ? (
-                    <Box flexGrow={1} marginLeft={1}>
-                      <Text color={textColor} wrap="wrap">
-                        {suggestion.description}
-                      </Text>
-                    </Box>
-                  ) : null}
-                </>
-              )}
-            </Box>
-          </Box>
-        );
-      })}
-
+      {visibleSuggestions.map((suggestion, index) => (
+        <SuggestionRow
+          key={`${suggestion.value}-${startIndex + index}`}
+          suggestion={suggestion}
+          index={index}
+          startIndex={startIndex}
+          activeIndex={activeIndex}
+          userInput={userInput}
+          isSlashCommandMode={isSlashCommandMode}
+          commandNameWidth={commandNameWidth}
+        />
+      ))}
       {hasScrollDown && <Text color={Colors.Gray}>▼</Text>}
       {hasCounter && (
         <Text color={Colors.Gray}>

@@ -24,15 +24,13 @@ async function resolveVersion(): Promise<string> {
 
   try {
     const pkgJson = await getPackageJson(__dirname);
-    return pkgJson?.version || 'unknown';
+    return pkgJson?.version ?? 'unknown';
   } catch {
     return 'unknown';
   }
 }
 
 export async function getCliVersion(): Promise<string> {
-  if (versionPromise === undefined) {
-    versionPromise = resolveVersion();
-  }
+  versionPromise ??= resolveVersion();
   return versionPromise;
 }

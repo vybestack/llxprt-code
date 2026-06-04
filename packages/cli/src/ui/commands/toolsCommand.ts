@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import {
   type CommandContext,
   type SlashCommand,
@@ -110,11 +112,12 @@ function persistToolLists(
       config.setEphemeralSetting('tools.allowed', allowedList);
     }
     if (typeof config.getEphemeralSettings === 'function') {
-      const ephemerals = config.getEphemeralSettings();
-      if (ephemerals) {
-        ephemerals['tools.disabled'] = disabledList;
-        ephemerals['disabled-tools'] = disabledList;
-        ephemerals['tools.allowed'] = allowedList;
+      const ephemerals: unknown = config.getEphemeralSettings();
+      if (ephemerals !== null && typeof ephemerals === 'object') {
+        const ephemeralSettings = ephemerals as Record<string, unknown>;
+        ephemeralSettings['tools.disabled'] = disabledList;
+        ephemeralSettings['disabled-tools'] = disabledList;
+        ephemeralSettings['tools.allowed'] = allowedList;
       }
     }
   }
@@ -187,6 +190,80 @@ function resolveToolByName(
   return null;
 }
 
+async function handleToggleTool(
+  context: CommandContext,
+  subcommand: string,
+  remainder: string,
+  disabled: Set<string>,
+  allowed: Set<string>,
+  tools: AnyDeclarativeTool[],
+): Promise<void> {
+  const identifier = stripQuotes(remainder);
+  if (!identifier) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: `Usage: /tools ${subcommand} <tool name>`,
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  const target = resolveToolByName(identifier, tools);
+  if (!target || 'serverName' in target) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: `Tool "${identifier}" not found.`,
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  const canonical = normalizeToolName(target.name);
+  let feedback: string;
+
+  if (subcommand === 'disable') {
+    disabled.add(canonical);
+    allowed.delete(canonical);
+    feedback = `Disabled tool '${target.displayName}'.`;
+  } else {
+    disabled.delete(canonical);
+    if (allowed.size > 0) {
+      allowed.add(canonical);
+    }
+    feedback = `Enabled tool '${target.displayName}'.`;
+  }
+
+  persistToolLists(context, disabled, allowed);
+
+  const config = context.services.config;
+  const geminiClient =
+    typeof config?.getGeminiClient === 'function'
+      ? config.getGeminiClient()
+      : undefined;
+
+  if (geminiClient && typeof geminiClient.setTools === 'function') {
+    try {
+      await geminiClient.setTools();
+    } catch (error) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: `Warning: failed to refresh Gemini tool schema after ${
+            subcommand === 'disable' ? 'disabling' : 'enabling'
+          } '${target.displayName}': ${error instanceof Error ? error.message : String(error)}`,
+        },
+        Date.now(),
+      );
+    }
+  }
+
+  context.ui.addItem({ type: MessageType.INFO, text: feedback }, Date.now());
+}
+
 export const toolsCommand: SlashCommand = {
   name: 'tools',
   description: 'List, enable, or disable LLxprt Code tools',
@@ -208,6 +285,8 @@ export const toolsCommand: SlashCommand = {
     }
 
     const raw = args.trim();
+    // Static regex for tokenizing quoted/unquoted args - no dynamic parts
+    // eslint-disable-next-line sonarjs/regular-expr
     const tokens = raw.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
     const rawSubcommand = tokens.shift();
     const subcommand = (rawSubcommand ?? 'list').toLowerCase();
@@ -234,74 +313,13 @@ export const toolsCommand: SlashCommand = {
     }
 
     if (subcommand === 'disable' || subcommand === 'enable') {
-      const identifier = stripQuotes(remainder);
-      if (!identifier) {
-        context.ui.addItem(
-          {
-            type: MessageType.ERROR,
-            text: `Usage: /tools ${subcommand} <tool name>`,
-          },
-          Date.now(),
-        );
-        return;
-      }
-
-      const target = resolveToolByName(identifier, tools);
-      if (!target || 'serverName' in target) {
-        context.ui.addItem(
-          {
-            type: MessageType.ERROR,
-            text: `Tool "${identifier}" not found.`,
-          },
-          Date.now(),
-        );
-        return;
-      }
-
-      const canonical = normalizeToolName(target.name);
-      let feedback: string;
-
-      if (subcommand === 'disable') {
-        disabled.add(canonical);
-        allowed.delete(canonical);
-        feedback = `Disabled tool '${target.displayName}'.`;
-      } else {
-        disabled.delete(canonical);
-        if (allowed.size > 0) {
-          allowed.add(canonical);
-        }
-        feedback = `Enabled tool '${target.displayName}'.`;
-      }
-
-      persistToolLists(context, disabled, allowed);
-
-      const geminiClient =
-        typeof config?.getGeminiClient === 'function'
-          ? config.getGeminiClient()
-          : undefined;
-
-      if (geminiClient && typeof geminiClient.setTools === 'function') {
-        try {
-          await geminiClient.setTools();
-        } catch (error) {
-          context.ui.addItem(
-            {
-              type: MessageType.INFO,
-              text: `Warning: failed to refresh Gemini tool schema after ${
-                subcommand === 'disable' ? 'disabling' : 'enabling'
-              } '${target.displayName}': ${error instanceof Error ? error.message : String(error)}`,
-            },
-            Date.now(),
-          );
-        }
-      }
-
-      context.ui.addItem(
-        {
-          type: MessageType.INFO,
-          text: feedback,
-        },
-        Date.now(),
+      await handleToggleTool(
+        context,
+        subcommand,
+        remainder,
+        disabled,
+        allowed,
+        tools,
       );
       return;
     }

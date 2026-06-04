@@ -236,7 +236,7 @@ describe('AnthropicProvider dumpContext integration', () => {
       for await (const chunk of generator) {
         void chunk;
       }
-    }).rejects.toThrow();
+    }).rejects.toThrow(/API Error/);
 
     // Should have called dumpContext on error
     expect(dumpContextSpy).toHaveBeenCalledExactlyOnceWith(

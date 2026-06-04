@@ -610,6 +610,7 @@ describe('PromptInstaller', () => {
       const result = await installer.backup(testBaseDir, backupPath);
 
       expect(result.success).toBe(true);
+      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(result.backupPath).toMatch(/prompt-backup-\d{8}_\d{6}/);
       expect(existsSync(result.backupPath!)).toBe(true);
     });

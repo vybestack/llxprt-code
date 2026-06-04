@@ -23,6 +23,7 @@ import { estimateTextOnlyLength, extractPromptText } from './clientHelpers.js';
 import { tokenLimit } from './tokenLimits.js';
 import type { Todo } from '../tools/todo-schemas.js';
 import type { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
+import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
 
 export interface MessageStreamDeps {
   config: Config;
@@ -56,7 +57,7 @@ export interface MessageStreamDeps {
   ) => AsyncGenerator<ServerGeminiStreamEvent, Turn>;
 }
 
-interface StreamContext {
+export interface StreamContext {
   prompt_id: string;
   promptText: string;
   responseChunks: string[];
@@ -66,7 +67,7 @@ interface StreamContext {
   is413Retry: boolean;
 }
 
-interface IterationResult {
+export interface IterationResult {
   earlyReturn: boolean;
   hadToolCallsThisTurn: boolean;
   todoPauseSeen: boolean;
@@ -81,7 +82,7 @@ interface PostTurnResult {
   newBaseRequest: PartListUnion | undefined;
 }
 
-const MAX_TURNS = 100;
+export const MAX_TURNS = 100;
 const MAX_RETRIES = 3;
 
 export class MessageStreamOrchestrator {
@@ -173,8 +174,8 @@ export class MessageStreamOrchestrator {
       );
 
       if (
-        hookOutput?.isBlockingDecision() ||
-        hookOutput?.shouldStopExecution()
+        hookOutput?.isBlockingDecision() === true ||
+        hookOutput?.shouldStopExecution() === true
       ) {
         yield {
           type: GeminiEventType.Error,
@@ -228,7 +229,7 @@ export class MessageStreamOrchestrator {
     }
 
     const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
-    if (!boundedTurns) {
+    if (boundedTurns === 0) {
       yield* this._fireAfterHookAndEmitClearContext(ctx);
       return new Turn(
         getChat(),
@@ -270,7 +271,7 @@ export class MessageStreamOrchestrator {
     const hasPendingToolCall =
       !!lastMessage &&
       lastMessage.role === 'model' &&
-      (lastMessage.parts?.some((p) => 'functionCall' in p) || false);
+      (lastMessage.parts?.some((p) => 'functionCall' in p) ?? false);
 
     if (config.getIdeMode() && !hasPendingToolCall) {
       const { contextParts, newIdeContext } = ideContextTracker.getContextParts(
@@ -404,11 +405,7 @@ export class MessageStreamOrchestrator {
         todoPauseSeen = true;
       if (event.type === GeminiEventType.Thought) hadThinking = true;
       if (event.type === GeminiEventType.Content) hadContent = true;
-      this._handleTodoToolCall(
-        event,
-        todoContinuationService,
-        this.deps.getSessionTurnCount,
-      );
+      this._handleTodoToolCall(event, todoContinuationService);
       if (event.type === GeminiEventType.Content && event.value)
         ctx.responseChunks.push(event.value);
 
@@ -419,7 +416,8 @@ export class MessageStreamOrchestrator {
       }
       updateTelemetryTokenCount();
 
-      const terminalResult = yield* this._handleTerminalEvent(
+      const terminalResult = yield* handleTerminalEvent(
+        this.deps,
         event,
         signal,
         ctx,
@@ -438,170 +436,6 @@ export class MessageStreamOrchestrator {
       hadContent,
       deferredEvents,
     };
-  }
-
-  private async *_handleTerminalEvent(
-    event: ServerGeminiStreamEvent,
-    signal: AbortSignal,
-    ctx: StreamContext,
-    deferredEvents: ServerGeminiStreamEvent[],
-    state: {
-      hadToolCallsThisTurn: boolean;
-      todoPauseSeen: boolean;
-      hadThinking: boolean;
-      hadContent: boolean;
-    },
-    initialRequest: PartListUnion,
-  ): AsyncGenerator<ServerGeminiStreamEvent, IterationResult | undefined> {
-    const { config, sendMessageStream } = this.deps;
-    const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
-
-    if (event.type === GeminiEventType.Error) {
-      const errorStatus =
-        event.value?.error && typeof event.value.error === 'object'
-          ? (event.value.error as { status?: number }).status
-          : undefined;
-
-      this.deps.logger.debug(
-        () => `[stream:orchestrator] handling error event`,
-        {
-          errorStatus,
-          continueOnFailedApiCall: config.getContinueOnFailedApiCall(),
-          deferredEventCount: deferredEvents.length,
-          hadToolCallsThisTurn: state.hadToolCallsThisTurn,
-          hadContent: state.hadContent,
-          hadThinking: state.hadThinking,
-        },
-      );
-
-      if (errorStatus === 413 && config.getContinueOnFailedApiCall()) {
-        if (ctx.is413Retry) {
-          this.deps.logger.warn(
-            () =>
-              `[stream:orchestrator] received repeated 413 after retry; ending iteration`,
-            {
-              deferredEventCount: deferredEvents.length,
-              hadToolCallsThisTurn: state.hadToolCallsThisTurn,
-            },
-          );
-          for (const d of deferredEvents) yield d;
-          await this._fireAfterHook(ctx);
-          return this._earlyIterResult(state.hadToolCallsThisTurn, {
-            ...state,
-            deferredEvents,
-          });
-        }
-        const toolNames = this._extractToolNamesFromRequest(initialRequest);
-        const toolList =
-          toolNames.length > 0
-            ? ` The tools involved were: ${toolNames.join(', ')}.`
-            : '';
-        const message = `System: The previous tool calls produced a response that was too large (HTTP 413).${toolList} Please retry with fewer or more focused queries.`;
-        this.deps.logger.warn(
-          () =>
-            `[stream:orchestrator] retrying after 413 tool-response overflow`,
-          {
-            toolNames,
-            deferredEventCount: deferredEvents.length,
-            hadToolCallsThisTurn: state.hadToolCallsThisTurn,
-          },
-        );
-        yield* sendMessageStream(
-          [{ text: message }],
-          signal,
-          ctx.prompt_id,
-          boundedTurns - 1,
-          false,
-          true,
-        );
-        await this._fireAfterHook(ctx);
-        return this._earlyIterResult(state.hadToolCallsThisTurn, {
-          ...state,
-          deferredEvents,
-        });
-      }
-
-      this.deps.logger.warn(
-        () =>
-          `[stream:orchestrator] error event ending iteration without retry`,
-        {
-          errorStatus,
-          deferredEventCount: deferredEvents.length,
-          hadToolCallsThisTurn: state.hadToolCallsThisTurn,
-          hadContent: state.hadContent,
-          hadThinking: state.hadThinking,
-        },
-      );
-      for (const d of deferredEvents) yield d;
-      yield* this._fireAfterHookAndEmitClearContext(ctx);
-      return this._earlyIterResult(state.hadToolCallsThisTurn, {
-        ...state,
-        deferredEvents,
-      });
-    }
-
-    if (event.type === GeminiEventType.InvalidStream) {
-      this.deps.logger.warn(
-        () => `[stream:orchestrator] handling InvalidStream event`,
-        {
-          continueOnFailedApiCall: config.getContinueOnFailedApiCall(),
-          isInvalidStreamRetry: ctx.isInvalidStreamRetry,
-          deferredEventCount: deferredEvents.length,
-          hadToolCallsThisTurn: state.hadToolCallsThisTurn,
-          hadContent: state.hadContent,
-          hadThinking: state.hadThinking,
-        },
-      );
-      if (config.getContinueOnFailedApiCall()) {
-        if (ctx.isInvalidStreamRetry) {
-          yield* this._fireAfterHookAndEmitClearContext(ctx);
-          return this._earlyIterResult(state.hadToolCallsThisTurn, {
-            ...state,
-            deferredEvents,
-          });
-        }
-        yield* sendMessageStream(
-          [{ text: 'System: Please continue.' }],
-          signal,
-          ctx.prompt_id,
-          boundedTurns - 1,
-          true,
-        );
-        yield* this._fireAfterHookAndEmitClearContext(ctx);
-        return this._earlyIterResult(state.hadToolCallsThisTurn, {
-          ...state,
-          deferredEvents,
-        });
-      }
-
-      for (const d of deferredEvents) yield d;
-      yield* this._fireAfterHookAndEmitClearContext(ctx);
-      return this._earlyIterResult(state.hadToolCallsThisTurn, {
-        ...state,
-        deferredEvents,
-      });
-    }
-
-    return undefined;
-  }
-
-  private _extractToolNamesFromRequest(request: PartListUnion): string[] {
-    if (!Array.isArray(request)) return [];
-    const names = new Set<string>();
-    for (const part of request) {
-      if (
-        typeof part === 'object' &&
-        part !== null &&
-        'functionResponse' in part
-      ) {
-        const funcResp = (part as { functionResponse: { name?: string } })
-          .functionResponse;
-        if (funcResp?.name) {
-          names.add(funcResp.name);
-        }
-      }
-    }
-    return [...names];
   }
 
   private _earlyIterResult(
@@ -631,6 +465,7 @@ export class MessageStreamOrchestrator {
       return yield* this._finishWithToolCalls(iter.deferredEvents, ctx);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
     if (iter.hadThinking && !iter.hadContent && !iter.hadToolCallsThisTurn) {
       const newRetry = retryCount + 1;
       this.deps.logger.debug(
@@ -700,7 +535,10 @@ export class MessageStreamOrchestrator {
       for (const d of iter.deferredEvents) yield d;
       this._resetTodoState(todoContinuationService, latestSnapshot);
       const afterOut = yield* this._fireAfterHookAndEmitClearContext(ctx);
-      if (afterOut?.isBlockingDecision() || afterOut?.shouldStopExecution()) {
+      if (
+        afterOut?.isBlockingDecision() === true ||
+        afterOut?.shouldStopExecution() === true
+      ) {
         yield* sendMessageStream(
           [{ text: afterOut.getEffectiveReason() }],
           ctx.signal,
@@ -760,7 +598,10 @@ export class MessageStreamOrchestrator {
     todoContinuationService.toolActivityCount = 0;
 
     const afterOut = yield* this._fireAfterHookAndEmitClearContext(ctx);
-    if (afterOut?.isBlockingDecision() || afterOut?.shouldStopExecution()) {
+    if (
+      afterOut?.isBlockingDecision() === true ||
+      afterOut?.shouldStopExecution() === true
+    ) {
       yield* sendMessageStream(
         [{ text: afterOut.getEffectiveReason() }],
         ctx.signal,
@@ -859,24 +700,30 @@ export class MessageStreamOrchestrator {
   private _handleTodoToolCall(
     event: ServerGeminiStreamEvent,
     todoContinuationService: TodoContinuationService,
-    getSessionTurnCount: () => number,
   ): void {
     if (
       event.type !== GeminiEventType.ToolCallRequest ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
       !todoContinuationService.isTodoToolCall(event.value?.name)
     )
       return;
 
-    todoContinuationService.setLastTodoToolTurn(getSessionTurnCount());
+    todoContinuationService.setLastTodoToolTurn(
+      this.deps.getSessionTurnCount(),
+    );
     todoContinuationService.consecutiveComplexTurns = 0;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
     const requestedTodos = Array.isArray(event.value?.args?.todos)
       ? (event.value.args.todos as Todo[])
       : [];
     if (requestedTodos.length > 0) {
       todoContinuationService.lastTodoSnapshot = requestedTodos.map((todo) => ({
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
         id: `${todo.id ?? ''}`,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
         content: todo.content ?? '',
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
         status: todo.status ?? 'pending',
       }));
     }
@@ -885,6 +732,7 @@ export class MessageStreamOrchestrator {
   private _getProviderName(): string {
     const contentGenConfig = this.deps.config.getContentGeneratorConfig();
     const providerManager = contentGenConfig?.providerManager;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty provider name should fall back to 'backend'
     return providerManager?.getActiveProviderName() || 'backend';
   }
 
@@ -918,7 +766,7 @@ export class MessageStreamOrchestrator {
     ctx: StreamContext,
   ): AsyncGenerator<ServerGeminiStreamEvent, AfterAgentHookOutput | undefined> {
     const afterOut = await this._fireAfterHook(ctx);
-    if (afterOut?.shouldClearContext()) {
+    if (afterOut?.shouldClearContext() === true) {
       yield {
         type: GeminiEventType.AgentExecutionStopped,
         reason:

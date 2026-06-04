@@ -14,7 +14,7 @@ class TestTokenStorage extends BaseTokenStorage {
   async getCredentials(
     serverName: string,
   ): Promise<MCPOAuthCredentials | null> {
-    return this.storage.get(serverName) || null;
+    return this.storage.get(serverName) ?? null;
   }
 
   async setCredentials(credentials: MCPOAuthCredentials): Promise<void> {

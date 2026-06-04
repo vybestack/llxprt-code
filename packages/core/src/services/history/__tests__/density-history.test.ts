@@ -505,6 +505,7 @@ describe('HistoryService — Density Extensions', () => {
               for (let origIdx = 0; origIdx < histSize; origIdx++) {
                 if (removals.includes(origIdx)) continue;
                 if (!touched.has(origIdx)) {
+                  // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                   expect(raw[rawIdx]).toBe(entries[origIdx]);
                 }
                 rawIdx++;

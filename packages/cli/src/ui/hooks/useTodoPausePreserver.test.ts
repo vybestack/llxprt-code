@@ -12,7 +12,7 @@ import { shouldClearTodos } from './useTodoPausePreserver.js';
 /**
  * @plan PLAN-20260129-TODOPERSIST.P02
  * @requirement REQ-001
- * Behavioral tests for conditional TODO clearing logic.
+ * Behavioral tests for conditional task-list clearing logic.
  */
 describe('shouldClearTodos', () => {
   describe('behavioral tests', () => {

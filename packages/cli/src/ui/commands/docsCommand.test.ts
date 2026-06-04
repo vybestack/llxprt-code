@@ -31,6 +31,7 @@ describe('docsCommand', () => {
   });
 
   it("should add an info message and call 'open' in a non-sandbox environment", async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!docsCommand.action) {
       throw new Error('docsCommand must have an action.');
     }
@@ -52,6 +53,7 @@ describe('docsCommand', () => {
   });
 
   it('should only add an info message in a sandbox environment', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!docsCommand.action) {
       throw new Error('docsCommand must have an action.');
     }
@@ -76,6 +78,7 @@ describe('docsCommand', () => {
   });
 
   it("should not open browser for 'sandbox-exec'", async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!docsCommand.action) {
       throw new Error('docsCommand must have an action.');
     }

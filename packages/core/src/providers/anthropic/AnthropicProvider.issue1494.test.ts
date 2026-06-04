@@ -81,9 +81,7 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
 
-    if (!runtimeContext.config) {
-      runtimeContext.config = createRuntimeConfigStub(settingsService);
-    }
+    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
 
     runtimeContext.config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),
@@ -261,10 +259,9 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
 
     // No assistant message should contain "[No content generated]"
     for (const msg of request.messages) {
-      if (msg.role === 'assistant') {
-        if (typeof msg.content === 'string') {
-          expect(msg.content).not.toBe('[No content generated]');
-        }
+      if (msg.role === 'assistant' && typeof msg.content === 'string') {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+        expect(msg.content).not.toBe('[No content generated]');
       }
     }
   });
@@ -419,6 +416,7 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
     // The old thinking should be preserved as text (fallback for redaction without signature)
     for (const msg of request.messages) {
       if (msg.role === 'assistant' && typeof msg.content === 'string') {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(msg.content).not.toBe('[No content generated]');
       }
     }

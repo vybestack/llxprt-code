@@ -113,10 +113,7 @@ export async function drainStdinBuffer(
 
     const onReadable = () => {
       // Read and discard any available data
-      while (
-        (stdin as NodeJS.ReadableStream & { read(): Buffer | null }).read() !==
-        null
-      ) {
+      while ((stdin as unknown as { read(): Buffer | null }).read() !== null) {
         // Intentionally discard the data
       }
     };

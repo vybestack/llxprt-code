@@ -152,7 +152,11 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       // Should have failed over to backend2 after timeout
       expect(chunks).toHaveLength(1);
       const text = chunks[0].parts?.[0];
-      expect(text && 'text' in text ? text.text : '').toBe('success');
+      expect(
+        text != null && typeof text === 'object' && 'text' in text
+          ? text.text
+          : '',
+      ).toBe('success');
     });
 
     it('should succeed if first chunk received before timeout', async () => {
@@ -233,7 +237,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
 
       for await (const chunk of gen) {
         const text = chunk.parts?.[0];
-        const textValue = text && 'text' in text ? text.text : '';
+        const textValue = text != null && 'text' in text ? text.text : '';
         receivedChunks.push(textValue);
         chunkOrder.push(`received:${textValue}`);
       }
@@ -301,7 +305,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       expect(backend2Called).toBe(true);
       expect(chunks).toHaveLength(1);
       const text = chunks[0].parts?.[0];
-      expect(text && 'text' in text ? text.text : '').toBe('from backend2');
+      expect(text != null && 'text' in text ? text.text : '').toBe(
+        'from backend2',
+      );
     });
   });
 

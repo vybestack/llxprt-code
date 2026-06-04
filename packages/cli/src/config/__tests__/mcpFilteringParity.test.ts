@@ -273,7 +273,7 @@ async function getMcpServers(
     undefined,
     { settingsService: runtimeSettingsService },
   );
-  return Object.keys(config.getMcpServers?.() ?? {});
+  return Object.keys(config.getMcpServers() ?? {});
 }
 
 async function getBlockedMcpServers(

@@ -109,7 +109,7 @@ describe('prepareTurnForQuery', () => {
     expect(thinkingBlocksRef.current).toStrictEqual([existingThinkingBlock]);
   });
 
-  it('falls back to the default runtime id when session id is unavailable', async () => {
+  it('preserves Config method binding when preparing a turn', async () => {
     const callOrder: string[] = [];
     const handler = {
       reset: vi.fn(() => {
@@ -121,17 +121,28 @@ describe('prepareTurnForQuery', () => {
       ensureBucketsAuthenticated: vi.fn(async () => {
         callOrder.push('ensure');
       }),
-      resetSession: vi.fn(),
     };
     const config = {
-      getBucketFailoverHandler: () => handler,
-      getSessionId: () => undefined,
+      sessionId: 'bound-runtime',
+      getBucketFailoverHandler(this: {
+        bucketFailoverHandler: typeof handler;
+      }) {
+        return this.bucketFailoverHandler;
+      },
+      getSessionId(this: { sessionId: string }) {
+        return this.sessionId;
+      },
+      bucketFailoverHandler: handler,
     } as unknown as Config;
 
     await prepareTurnForQuery(false, config, vi.fn(), vi.fn(), {
-      current: [],
+      current: [existingThinkingBlock],
     } as { current: ThinkingBlock[] });
 
-    expect(callOrder).toContain('invalidate:default');
+    expect(callOrder).toStrictEqual([
+      'reset',
+      'invalidate:bound-runtime',
+      'ensure',
+    ]);
   });
 });

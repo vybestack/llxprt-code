@@ -19,7 +19,7 @@ export const copyCommand: SlashCommand = {
     const client = context.services.config?.getGeminiClient();
 
     // Check if chat is initialized before accessing it
-    if (!client?.hasChatInitialized()) {
+    if (client == null || client.hasChatInitialized() !== true) {
       return {
         type: 'message',
         messageType: 'info',
@@ -28,12 +28,12 @@ export const copyCommand: SlashCommand = {
     }
 
     const chat = client.getChat();
-    const history = chat?.getHistory();
+    const history = chat.getHistory();
 
     // Get the last message from the AI (model role)
     const lastAiMessage = history
-      ? history.filter((item: Content) => item.role === 'model').pop()
-      : undefined;
+      .filter((item: Content) => item.role === 'model')
+      .pop();
 
     if (!lastAiMessage) {
       return {

@@ -53,6 +53,33 @@ const moduleDebugLogger = DebugLogger.getLogger(
   'llxprt:core:hooks:eventHandler',
 );
 
+function extractPayload(rawMessage: unknown): Record<string, unknown> | null {
+  if (
+    rawMessage !== null &&
+    typeof rawMessage === 'object' &&
+    'payload' in rawMessage
+  ) {
+    const payload = (rawMessage as { payload: unknown }).payload;
+    if (payload !== null && typeof payload === 'object') {
+      return payload as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function extractCorrelationIdFromPayload(
+  payload: Record<string, unknown>,
+): string | null {
+  if (
+    'correlationId' in payload &&
+    typeof payload.correlationId === 'string' &&
+    payload.correlationId.length > 0
+  ) {
+    return payload.correlationId;
+  }
+  return null;
+}
+
 /**
  * Metadata for failure envelopes
  * @plan PLAN-20250218-HOOKSYSTEM.P03
@@ -579,6 +606,7 @@ export class HookEventHandler {
     let suppressOutput = false;
 
     // Pass 1 - stop intent (first wins): triggered by continue === false (upstream parity)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
     for (const hookOutput of aggregated.allOutputs ?? []) {
       if (hookOutput.continue === false) {
         shouldStop = true;
@@ -592,6 +620,7 @@ export class HookEventHandler {
     }
 
     // Pass 2 - systemMessage and suppressOutput (first non-empty systemMessage wins)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
     for (const hookOutput of aggregated.allOutputs ?? []) {
       if (hookOutput.systemMessage != null && hookOutput.systemMessage !== '') {
         systemMessage = hookOutput.systemMessage;
@@ -631,6 +660,7 @@ export class HookEventHandler {
    */
   private getHookNameFromResult(result: HookExecutionResult): string {
     const config = result.hookConfig as { command?: string; type: string };
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string command falls through to placeholder
     return config.command || 'unknown-hook';
   }
 
@@ -662,10 +692,12 @@ export class HookEventHandler {
         }
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
       if (this.debugLogger === undefined) continue;
 
       const record = {
         eventName: String(eventName),
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
         hookIdentity: result.hookConfig?.type ?? 'unknown',
         duration: result.duration,
         success: result.success,
@@ -699,6 +731,7 @@ export class HookEventHandler {
     hookResults: readonly HookExecutionResult[],
     totalDurationMs: number,
   ): void {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
     if (this.debugLogger === undefined) return;
 
     const hookCount = hookResults.length;
@@ -899,22 +932,11 @@ export class HookEventHandler {
    */
   private extractCorrelationId = (rawMessage: unknown): string => {
     // Lines 261-263: IF rawMessage.payload.correlationId is non-empty string → return it
-    if (
-      rawMessage !== null &&
-      typeof rawMessage === 'object' &&
-      'payload' in rawMessage
-    ) {
-      const payload = (rawMessage as { payload: unknown }).payload;
-      if (
-        payload !== null &&
-        typeof payload === 'object' &&
-        'correlationId' in payload &&
-        typeof (payload as Record<string, unknown>).correlationId ===
-          'string' &&
-        ((payload as Record<string, unknown>).correlationId as string).length >
-          0
-      ) {
-        return (payload as Record<string, unknown>).correlationId as string;
+    const payload = extractPayload(rawMessage);
+    if (payload !== null) {
+      const correlationId = extractCorrelationIdFromPayload(payload);
+      if (correlationId !== null) {
+        return correlationId;
       }
     }
     // Line 264: RETURN crypto.randomUUID()

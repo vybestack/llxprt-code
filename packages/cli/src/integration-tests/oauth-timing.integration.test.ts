@@ -147,12 +147,10 @@ describe('OAuth Timing Integration Tests', () => {
       const loadedProfile = await profileManager.loadProfile('test-profile');
 
       // Apply profile settings to settings service
-      if (loadedProfile.ephemeralSettings) {
-        for (const [key, value] of Object.entries(
-          loadedProfile.ephemeralSettings,
-        )) {
-          settingsService.set(key, value);
-        }
+      for (const [key, value] of Object.entries(
+        loadedProfile.ephemeralSettings,
+      )) {
+        settingsService.set(key, value);
       }
 
       // Verify OAuth was NOT triggered during profile load
@@ -182,12 +180,10 @@ describe('OAuth Timing Integration Tests', () => {
         await profileManager.loadProfile('anthropic-profile');
 
       // Apply profile settings
-      if (loadedProfile.ephemeralSettings) {
-        for (const [key, value] of Object.entries(
-          loadedProfile.ephemeralSettings,
-        )) {
-          settingsService.set(key, value);
-        }
+      for (const [key, value] of Object.entries(
+        loadedProfile.ephemeralSettings,
+      )) {
+        settingsService.set(key, value);
       }
 
       // Verify OAuth was NOT triggered during profile load
@@ -214,12 +210,10 @@ describe('OAuth Timing Integration Tests', () => {
       const loadedProfile = await profileManager.loadProfile('no-auth-profile');
 
       // Apply profile settings
-      if (loadedProfile.ephemeralSettings) {
-        for (const [key, value] of Object.entries(
-          loadedProfile.ephemeralSettings,
-        )) {
-          settingsService.set(key, value);
-        }
+      for (const [key, value] of Object.entries(
+        loadedProfile.ephemeralSettings,
+      )) {
+        settingsService.set(key, value);
       }
 
       // Verify OAuth was NOT triggered during profile load

@@ -208,13 +208,11 @@ export function escapeAnsiCtrlCodes<T>(obj: T): T {
       const value = obj[i];
       const escapedValue = escapeAnsiCtrlCodes(value);
       if (escapedValue !== value) {
-        if (newArr === null) {
-          newArr = [...obj];
-        }
+        newArr ??= [...obj];
         newArr[i] = escapedValue;
       }
     }
-    return (newArr !== null ? newArr : obj) as T;
+    return (newArr ?? obj) as T;
   }
 
   let newObj: T | null = null;
@@ -225,12 +223,10 @@ export function escapeAnsiCtrlCodes<T>(obj: T): T {
     const escapedValue = escapeAnsiCtrlCodes(value);
 
     if (escapedValue !== value) {
-      if (newObj === null) {
-        newObj = { ...obj };
-      }
+      newObj ??= { ...obj };
       (newObj as Record<string, unknown>)[key] = escapedValue;
     }
   }
 
-  return newObj !== null ? newObj : obj;
+  return newObj ?? obj;
 }

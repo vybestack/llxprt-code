@@ -81,6 +81,7 @@ export function isLocalEndpoint(url: string | undefined): boolean {
  * The entire 127.x.x.x range is reserved for loopback (RFC 1122).
  */
 function isIPv4LoopbackRange(ip: string): boolean {
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const ipv4Match = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (!ipv4Match) {
     return false;
@@ -106,6 +107,7 @@ function isIPv4LoopbackRange(ip: string): boolean {
  */
 function isPrivateIPv4(ip: string): boolean {
   // Match IPv4 pattern
+  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const ipv4Match = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (!ipv4Match) {
     return false;

@@ -71,7 +71,7 @@ function preserveCommentsOnPropertyDeletion(
   const nextKey = idx >= 0 && idx + 1 < keys.length ? keys[idx + 1] : undefined;
   const prevKey = idx > 0 ? keys[idx - 1] : undefined;
 
-  function appendToSymbol(destSym: symbol, comments: unknown[]) {
+  function appendToSymbol(destSym: symbol, comments: unknown[] | undefined) {
     if (!comments || comments.length === 0) return;
     const existing = target[destSym];
     target[destSym] = Array.isArray(existing)

@@ -357,7 +357,7 @@ describe('Configuration Integration Tests', () => {
         process.argv = ['node', 'script.js', '--approval-mode', 'invalid_mode'];
 
         // Should throw during argument parsing due to yargs validation
-        await expect(parseArguments({} as Settings)).rejects.toThrow();
+        await expect(parseArguments({} as Settings)).rejects.toThrow(Error);
       } finally {
         process.argv = originalArgv;
       }
@@ -376,7 +376,7 @@ describe('Configuration Integration Tests', () => {
         ];
 
         // Should throw during argument parsing due to conflict validation
-        await expect(parseArguments({} as Settings)).rejects.toThrow();
+        await expect(parseArguments({} as Settings)).rejects.toThrow(Error);
       } finally {
         process.argv = originalArgv;
       }

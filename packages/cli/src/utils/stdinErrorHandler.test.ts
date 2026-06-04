@@ -77,12 +77,9 @@ describe('stdin EIO error handling', () => {
     // Clean up the isPaused mock if it was added during the test
     const stdinRecord = stdin as unknown as Record<string, unknown>;
     const isPaused = stdinRecord.isPaused;
-    if (
-      typeof isPaused === 'function' &&
-      isPaused &&
-      (isPaused as unknown as { mockRestore: () => void }).mockRestore
-    ) {
-      (isPaused as unknown as { mockRestore: () => void }).mockRestore();
+    const mockRestore = (isPaused as { mockRestore?: unknown }).mockRestore;
+    if (typeof isPaused === 'function' && typeof mockRestore === 'function') {
+      mockRestore.call(isPaused);
       delete stdinRecord.isPaused;
     }
 

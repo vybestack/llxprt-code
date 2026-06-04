@@ -24,7 +24,7 @@ export const useInactivityTimer = (
   useEffect(() => {
     if (!isActive) {
       setIsInactive(false);
-      return;
+      return undefined;
     }
 
     setIsInactive(false);

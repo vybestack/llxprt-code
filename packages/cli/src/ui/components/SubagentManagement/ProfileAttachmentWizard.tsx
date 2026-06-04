@@ -27,29 +27,12 @@ interface ProfileAttachmentWizardProps {
   isFocused?: boolean;
 }
 
-export const ProfileAttachmentWizard: React.FC<
-  ProfileAttachmentWizardProps
-> = ({
-  subagent,
-  profiles,
-  getProfileInfo,
-  onConfirm,
-  onCancel,
-  isFocused = true,
-}) => {
-  const [selectedIndex, setSelectedIndex] = useState(() => {
-    // Start at current profile if found
-    const idx = profiles.indexOf(subagent.profile);
-    return idx >= 0 ? idx : 0;
-  });
+function useProfilePreview(
+  selectedProfile: string,
+  getProfileInfo?: (profileName: string) => Promise<ProfileInfo | null>,
+) {
   const [previewInfo, setPreviewInfo] = useState<ProfileInfo | null>(null);
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Current selection
-  const selectedProfile = profiles[selectedIndex] || '';
-
-  // Load profile info when selection changes
   React.useEffect(() => {
     let cancelled = false;
     if (getProfileInfo && selectedProfile) {
@@ -60,27 +43,216 @@ export const ProfileAttachmentWizard: React.FC<
         .catch(() => {
           if (!cancelled) setPreviewInfo(null);
         });
-    } else if (!cancelled) setPreviewInfo(null);
+    } else {
+      setPreviewInfo(null);
+    }
     return () => {
       cancelled = true;
     };
   }, [selectedProfile, getProfileInfo]);
 
+  return previewInfo;
+}
+
+function ProfilePreview({
+  previewInfo,
+  selectedProfile,
+}: {
+  previewInfo: ProfileInfo | null;
+  selectedProfile: string;
+}) {
+  if (!previewInfo)
+    return <Text color={Colors.Gray}>Profile: {selectedProfile}</Text>;
+  return (
+    <>
+      {previewInfo.provider && (
+        <Box>
+          <Text color={Colors.Gray}>Provider: </Text>
+          <Text color={Colors.Foreground}>{previewInfo.provider}</Text>
+        </Box>
+      )}
+      {previewInfo.model && (
+        <Box>
+          <Text color={Colors.Gray}>Model: </Text>
+          <Text color={Colors.Foreground}>{previewInfo.model}</Text>
+        </Box>
+      )}
+      {previewInfo.temperature !== undefined && (
+        <Box>
+          <Text color={Colors.Gray}>Temperature: </Text>
+          <Text color={Colors.Foreground}>{previewInfo.temperature}</Text>
+        </Box>
+      )}
+      {previewInfo.maxTokens !== undefined && (
+        <Box>
+          <Text color={Colors.Gray}>Max Tokens: </Text>
+          <Text color={Colors.Foreground}>{previewInfo.maxTokens}</Text>
+        </Box>
+      )}
+    </>
+  );
+}
+
+function ProfileList({
+  visibleProfiles,
+  startIndex,
+  selectedIndex,
+  currentProfile,
+}: {
+  visibleProfiles: string[];
+  startIndex: number;
+  selectedIndex: number;
+  currentProfile: string;
+}) {
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      {visibleProfiles.map((profile, idx) => {
+        const actualIndex = startIndex + idx;
+        const isSelected = actualIndex === selectedIndex;
+        const isCurrent = profile === currentProfile;
+        return (
+          <Box key={profile}>
+            <Text color={isSelected ? '#00ff00' : Colors.Foreground}>
+              {isSelected ? '→ ' : '  '}
+              {profile}
+            </Text>
+            {isCurrent && <Text color={Colors.Gray}> (current)</Text>}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+function EmptyProfilesMessage() {
+  return (
+    <Box flexDirection="column">
+      <Text color={Colors.Foreground}>
+        No profiles available. Create a profile first.
+      </Text>
+      <Box marginTop={1}>
+        <Text color={Colors.Gray}>[ESC] Cancel</Text>
+      </Box>
+    </Box>
+  );
+}
+
+function ProfileAttachmentWizardView({
+  subagent,
+  profiles,
+  selectedProfile,
+  previewInfo,
+  startIndex,
+  selectedIndex,
+  endIndex,
+  visibleProfiles,
+  error,
+  isConfirming,
+}: {
+  subagent: SubagentInfo;
+  profiles: string[];
+  selectedProfile: string;
+  previewInfo: ProfileInfo | null;
+  startIndex: number;
+  selectedIndex: number;
+  endIndex: number;
+  visibleProfiles: string[];
+  error: string | null;
+  isConfirming: boolean;
+}) {
+  return (
+    <Box flexDirection="column">
+      <Text bold color={Colors.Foreground}>
+        Attach Profile to: {subagent.name}
+      </Text>
+      <Text color={Colors.Gray}>
+        ──────────────────────────────────────────────────────────
+      </Text>
+      {error && (
+        <Box marginBottom={1}>
+          <Text color="#ff0000">{error}</Text>
+        </Box>
+      )}
+      <Box marginY={1}>
+        <Text color={Colors.Foreground}>
+          Profile Selection (showing {startIndex + 1}-{endIndex} of{' '}
+          {profiles.length}):
+        </Text>
+      </Box>
+      <ProfileList
+        visibleProfiles={visibleProfiles}
+        startIndex={startIndex}
+        selectedIndex={selectedIndex}
+        currentProfile={subagent.profile}
+      />
+      <Box flexDirection="column" marginY={1}>
+        <Text bold color={Colors.Foreground}>
+          Selected Profile Preview:
+        </Text>
+        <Text color={Colors.Gray}>
+          ──────────────────────────────────────────────────────────
+        </Text>
+        <ProfilePreview
+          previewInfo={previewInfo}
+          selectedProfile={selectedProfile}
+        />
+      </Box>
+      <Box marginTop={1}>
+        <Text color={Colors.Gray}>
+          Controls: ↑↓ Navigate [Enter] Confirm [ESC] Cancel
+        </Text>
+      </Box>
+      {isConfirming && (
+        <Box marginTop={1}>
+          <Text color={Colors.Gray}>Attaching profile...</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function useProfileSelectionState(initialProfile: string, profiles: string[]) {
+  const [selectedIndex, setSelectedIndex] = useState(() => {
+    const idx = profiles.indexOf(initialProfile);
+    return idx >= 0 ? idx : 0;
+  });
+  const totalProfiles = profiles.length;
   const moveSelection = useCallback(
     (delta: number) => {
       setSelectedIndex((prev) => {
         let newIndex = prev + delta;
         if (newIndex < 0) newIndex = 0;
-        if (newIndex >= profiles.length) newIndex = profiles.length - 1;
+        if (newIndex >= totalProfiles) newIndex = totalProfiles - 1;
         return newIndex;
       });
     },
-    [profiles.length],
+    [totalProfiles],
   );
+  return { selectedIndex, moveSelection };
+}
+
+export const ProfileAttachmentWizard: React.FC<
+  ProfileAttachmentWizardProps
+> = ({
+  subagent,
+  profiles,
+  getProfileInfo,
+  onConfirm,
+  onCancel,
+  isFocused = true,
+}) => {
+  const { selectedIndex, moveSelection } = useProfileSelectionState(
+    subagent.profile,
+    profiles,
+  );
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectedProfile = profiles[selectedIndex] || '';
+  const previewInfo = useProfilePreview(selectedProfile, getProfileInfo);
 
   const handleConfirm = useCallback(async () => {
     if (!selectedProfile) return;
-
     setIsConfirming(true);
     setError(null);
     try {
@@ -94,12 +266,10 @@ export const ProfileAttachmentWizard: React.FC<
   useKeypress(
     (key) => {
       if (isConfirming) return;
-
       if (key.name === 'escape') {
         onCancel();
         return;
       }
-
       if (key.name === 'up') {
         moveSelection(-1);
         return;
@@ -108,17 +278,13 @@ export const ProfileAttachmentWizard: React.FC<
         moveSelection(1);
         return;
       }
-
       if (key.name === 'return') {
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        handleConfirm();
-        return;
+        void handleConfirm();
       }
     },
     { isActive: isFocused && !isConfirming },
   );
 
-  // Calculate visible profiles (viewport)
   const maxVisible = 6;
   const startIndex = useMemo(
     () => Math.max(0, selectedIndex - Math.floor(maxVisible / 2)),
@@ -127,111 +293,20 @@ export const ProfileAttachmentWizard: React.FC<
   const endIndex = Math.min(profiles.length, startIndex + maxVisible);
   const visibleProfiles = profiles.slice(startIndex, endIndex);
 
-  if (profiles.length === 0) {
-    return (
-      <Box flexDirection="column">
-        <Text color={Colors.Foreground}>
-          No profiles available. Create a profile first.
-        </Text>
-        <Box marginTop={1}>
-          <Text color={Colors.Gray}>[ESC] Cancel</Text>
-        </Box>
-      </Box>
-    );
-  }
+  if (profiles.length === 0) return <EmptyProfilesMessage />;
 
   return (
-    <Box flexDirection="column">
-      <Text bold color={Colors.Foreground}>
-        Attach Profile to: {subagent.name}
-      </Text>
-      <Text color={Colors.Gray}>
-        ──────────────────────────────────────────────────────
-      </Text>
-
-      {error && (
-        <Box marginBottom={1}>
-          <Text color="#ff0000">{error}</Text>
-        </Box>
-      )}
-
-      {/* Profile Selection */}
-      <Box marginY={1}>
-        <Text color={Colors.Foreground}>
-          Profile Selection (showing {startIndex + 1}-{endIndex} of{' '}
-          {profiles.length}):
-        </Text>
-      </Box>
-
-      <Box flexDirection="column" marginBottom={1}>
-        {visibleProfiles.map((profile, idx) => {
-          const actualIndex = startIndex + idx;
-          const isSelected = actualIndex === selectedIndex;
-          const isCurrent = profile === subagent.profile;
-          return (
-            <Box key={profile}>
-              <Text color={isSelected ? '#00ff00' : Colors.Foreground}>
-                {isSelected ? '→ ' : '  '}
-                {profile}
-              </Text>
-              {isCurrent && <Text color={Colors.Gray}> (current)</Text>}
-            </Box>
-          );
-        })}
-      </Box>
-
-      {/* Live Preview */}
-      <Box flexDirection="column" marginY={1}>
-        <Text bold color={Colors.Foreground}>
-          Selected Profile Preview:
-        </Text>
-        <Text color={Colors.Gray}>
-          ──────────────────────────────────────────────────────
-        </Text>
-        {previewInfo ? (
-          <>
-            {previewInfo.provider && (
-              <Box>
-                <Text color={Colors.Gray}>Provider: </Text>
-                <Text color={Colors.Foreground}>{previewInfo.provider}</Text>
-              </Box>
-            )}
-            {previewInfo.model && (
-              <Box>
-                <Text color={Colors.Gray}>Model: </Text>
-                <Text color={Colors.Foreground}>{previewInfo.model}</Text>
-              </Box>
-            )}
-            {previewInfo.temperature !== undefined && (
-              <Box>
-                <Text color={Colors.Gray}>Temperature: </Text>
-                <Text color={Colors.Foreground}>{previewInfo.temperature}</Text>
-              </Box>
-            )}
-            {previewInfo.maxTokens !== undefined && (
-              <Box>
-                <Text color={Colors.Gray}>Max Tokens: </Text>
-                <Text color={Colors.Foreground}>{previewInfo.maxTokens}</Text>
-              </Box>
-            )}
-          </>
-        ) : (
-          <Text color={Colors.Gray}>Profile: {selectedProfile}</Text>
-        )}
-      </Box>
-
-      {/* Controls */}
-      <Box marginTop={1}>
-        <Text color={Colors.Gray}>
-          Controls: ↑↓ Navigate [Enter] Confirm [ESC] Cancel
-        </Text>
-      </Box>
-
-      {isConfirming && (
-        <Box marginTop={1}>
-          <Text color={Colors.Gray}>Attaching profile...</Text>
-        </Box>
-      )}
-    </Box>
+    <ProfileAttachmentWizardView
+      subagent={subagent}
+      profiles={profiles}
+      selectedProfile={selectedProfile}
+      previewInfo={previewInfo}
+      startIndex={startIndex}
+      selectedIndex={selectedIndex}
+      endIndex={endIndex}
+      visibleProfiles={visibleProfiles}
+      error={error}
+      isConfirming={isConfirming}
+    />
   );
 };

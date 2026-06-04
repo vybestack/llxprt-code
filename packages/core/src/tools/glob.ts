@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
 import fs from 'fs';
 import path from 'path';
 import { glob, escape } from 'glob';
@@ -15,6 +17,7 @@ import { ToolErrorType } from './tool-error.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
+import type { WorkspaceContext } from '../utils/workspaceContext.js';
 
 // Subset of 'Path' interface provided by 'glob' that we can implement for testing
 export interface GlobPath {
@@ -94,6 +97,7 @@ class GlobToolInvocation extends BaseToolInvocation<
   }
 
   private getDirPath(): string | undefined {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through
     return this.params.dir_path || this.params.path;
   }
 
@@ -113,171 +117,42 @@ class GlobToolInvocation extends BaseToolInvocation<
 
   async execute(signal: AbortSignal): Promise<ToolResult> {
     try {
-      // Get ephemeral settings for output limits
       const ephemeralSettings = this.config.getEphemeralSettings();
       const maxItems =
         (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
         50;
 
       const workspaceContext = this.config.getWorkspaceContext();
-      const workspaceDirectories = workspaceContext.getDirectories();
+      const searchDirectoriesResult =
+        this.resolveSearchDirectories(workspaceContext);
+      if (searchDirectoriesResult.error) return searchDirectoriesResult.error;
+      const searchDirectories = searchDirectoriesResult.directories;
 
-      // If a specific path is provided, resolve it and check if it's within workspace
-      let searchDirectories: readonly string[];
-      const dirPath = this.getDirPath();
-      if (dirPath) {
-        const searchDirAbsolute = path.resolve(
-          this.config.getTargetDir(),
-          dirPath,
-        );
-        const pathError = validatePathWithinWorkspace(
-          workspaceContext,
-          searchDirAbsolute,
-          'Search path',
-        );
-        if (pathError) {
-          return {
-            llmContent: pathError,
-            returnDisplay: 'Path is not within workspace',
-            error: {
-              message: pathError,
-              type: ToolErrorType.PATH_NOT_IN_WORKSPACE,
-            },
-          };
-        }
-        searchDirectories = [searchDirAbsolute];
-      } else {
-        // Search across all workspace directories
-        searchDirectories = workspaceDirectories;
-      }
-
-      // Get centralized file discovery service
       const respectGitIgnore =
         this.params.respect_git_ignore ??
         this.config.getFileFilteringRespectGitIgnore();
       const fileDiscovery = this.config.getFileService();
 
-      // Collect entries from all search directories
-      let allEntries: GlobPath[] = [];
+      const allEntries = await this.collectGlobEntries(
+        searchDirectories,
+        signal,
+      );
+      const { filteredEntries, ignoredCount } = this.applyGitIgnoreFilter(
+        allEntries,
+        respectGitIgnore,
+        fileDiscovery,
+      );
 
-      for (const searchDir of searchDirectories) {
-        let pattern = this.params.pattern;
-        const fullPath = path.join(searchDir, pattern);
-        if (fs.existsSync(fullPath)) {
-          pattern = escape(pattern);
-        }
-
-        const entries = (await glob(pattern, {
-          cwd: searchDir,
-          withFileTypes: true,
-          nodir: true,
-          stat: true,
-          nocase: !this.params.case_sensitive,
-          dot: true,
-          ignore: this.config.getFileExclusions().getGlobExcludes(),
-          follow: false,
-          signal,
-        })) as GlobPath[];
-
-        allEntries = allEntries.concat(entries);
+      if (filteredEntries.length === 0) {
+        return this.buildNoFilesResult(searchDirectories, ignoredCount);
       }
 
-      const entries = allEntries;
-
-      // Apply git-aware filtering if enabled and in git repository
-      let filteredEntries = entries;
-      let ignoredCount = 0;
-
-      if (respectGitIgnore) {
-        const toCanonicalPath = (filePath: string): string => {
-          try {
-            return fs.realpathSync(filePath);
-          } catch (_error) {
-            return path.normalize(filePath);
-          }
-        };
-
-        const canonicalPaths = entries.map((entry) =>
-          toCanonicalPath(entry.fullpath()),
-        );
-        const filteredCanonicalPaths = new Set(
-          fileDiscovery
-            .filterFiles(canonicalPaths, {
-              respectGitIgnore,
-              respectLlxprtIgnore: false,
-            })
-            .map((p) => toCanonicalPath(p)),
-        );
-
-        filteredEntries = entries.filter((entry) =>
-          filteredCanonicalPaths.has(toCanonicalPath(entry.fullpath())),
-        );
-        ignoredCount = entries.length - filteredEntries.length;
-      }
-
-      if (!filteredEntries || filteredEntries.length === 0) {
-        let message = `No files found matching pattern "${this.params.pattern}"`;
-        if (searchDirectories.length === 1) {
-          message += ` within ${searchDirectories[0]}`;
-        } else {
-          message += ` within ${searchDirectories.length} workspace directories`;
-        }
-        if (ignoredCount > 0) {
-          message += ` (${ignoredCount} files were ignored)`;
-        }
-        return {
-          llmContent: message,
-          returnDisplay: `No files found`,
-        };
-      }
-
-      // Set filtering such that we first show the most recent files
-      const oneDayInMs = 24 * 60 * 60 * 1000;
-      const nowTimestamp = new Date().getTime();
-
-      // Sort the filtered entries using the new helper function
-      const sortedEntries = sortFileEntries(
+      return this.buildFileListResult(
         filteredEntries,
-        nowTimestamp,
-        oneDayInMs,
+        searchDirectories,
+        ignoredCount,
+        maxItems,
       );
-
-      const sortedAbsolutePaths = sortedEntries.map((entry) =>
-        entry.fullpath(),
-      );
-
-      const totalFileCount = sortedAbsolutePaths.length;
-      let fileListToShow = sortedAbsolutePaths;
-      let truncatedMessage = '';
-
-      // Apply max items limit
-      if (totalFileCount > maxItems) {
-        fileListToShow = sortedAbsolutePaths.slice(0, maxItems);
-        truncatedMessage = `\n\n**Note: Output limited to ${maxItems} files out of ${totalFileCount} total matches. Use more specific patterns or adjust 'tool-output-max-items' setting to see more.**`;
-      }
-
-      const fileListDescription = fileListToShow.join('\n');
-
-      let resultMessage = `Found ${totalFileCount} file(s) matching "${this.params.pattern}"`;
-      if (searchDirectories.length === 1) {
-        resultMessage += ` within ${searchDirectories[0]}`;
-      } else {
-        resultMessage += ` across ${searchDirectories.length} workspace directories`;
-      }
-      if (ignoredCount > 0) {
-        resultMessage += ` (${ignoredCount} additional files were ignored)`;
-      }
-
-      if (totalFileCount > 0) {
-        resultMessage += `, sorted by modification time (newest first):\n${fileListDescription}`;
-      }
-
-      resultMessage += truncatedMessage;
-
-      return {
-        llmContent: resultMessage,
-        returnDisplay: `Found ${totalFileCount} matching file(s)`,
-      };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -292,6 +167,165 @@ class GlobToolInvocation extends BaseToolInvocation<
         },
       };
     }
+  }
+
+  private resolveSearchDirectories(workspaceContext: WorkspaceContext): {
+    directories: readonly string[];
+    error?: ToolResult;
+  } {
+    const dirPath = this.getDirPath();
+    if (dirPath) {
+      const searchDirAbsolute = path.resolve(
+        this.config.getTargetDir(),
+        dirPath,
+      );
+      const pathError = validatePathWithinWorkspace(
+        workspaceContext,
+        searchDirAbsolute,
+        'Search path',
+      );
+      if (pathError) {
+        return {
+          directories: [],
+          error: {
+            llmContent: pathError,
+            returnDisplay: 'Path is not within workspace',
+            error: {
+              message: pathError,
+              type: ToolErrorType.PATH_NOT_IN_WORKSPACE,
+            },
+          },
+        };
+      }
+      return { directories: [searchDirAbsolute] };
+    }
+    return { directories: workspaceContext.getDirectories() };
+  }
+
+  private async collectGlobEntries(
+    searchDirectories: readonly string[],
+    signal: AbortSignal,
+  ): Promise<GlobPath[]> {
+    let allEntries: GlobPath[] = [];
+    for (const searchDir of searchDirectories) {
+      let pattern = this.params.pattern;
+      const fullPath = path.join(searchDir, pattern);
+      if (fs.existsSync(fullPath)) {
+        pattern = escape(pattern);
+      }
+      const entries = (await glob(pattern, {
+        cwd: searchDir,
+        withFileTypes: true,
+        nodir: true,
+        stat: true,
+        nocase: this.params.case_sensitive !== true,
+        dot: true,
+        ignore: this.config.getFileExclusions().getGlobExcludes(),
+        follow: false,
+        signal,
+      })) as GlobPath[];
+      allEntries = allEntries.concat(entries);
+    }
+    return allEntries;
+  }
+
+  private applyGitIgnoreFilter(
+    entries: GlobPath[],
+    respectGitIgnore: boolean,
+    fileDiscovery: {
+      filterFiles(
+        paths: string[],
+        opts: { respectGitIgnore: boolean; respectLlxprtIgnore: boolean },
+      ): string[];
+    },
+  ): { filteredEntries: GlobPath[]; ignoredCount: number } {
+    if (!respectGitIgnore) {
+      return { filteredEntries: entries, ignoredCount: 0 };
+    }
+    const toCanonicalPath = (filePath: string): string => {
+      try {
+        return fs.realpathSync(filePath);
+      } catch {
+        return path.normalize(filePath);
+      }
+    };
+    const canonicalPaths = entries.map((entry) =>
+      toCanonicalPath(entry.fullpath()),
+    );
+    const filteredCanonicalPaths = new Set(
+      fileDiscovery
+        .filterFiles(canonicalPaths, {
+          respectGitIgnore,
+          respectLlxprtIgnore: false,
+        })
+        .map((p) => toCanonicalPath(p)),
+    );
+    const filteredEntries = entries.filter((entry) =>
+      filteredCanonicalPaths.has(toCanonicalPath(entry.fullpath())),
+    );
+    return {
+      filteredEntries,
+      ignoredCount: entries.length - filteredEntries.length,
+    };
+  }
+
+  private buildNoFilesResult(
+    searchDirectories: readonly string[],
+    ignoredCount: number,
+  ): ToolResult {
+    let message = `No files found matching pattern "${this.params.pattern}"`;
+    if (searchDirectories.length === 1) {
+      message += ` within ${searchDirectories[0]}`;
+    } else {
+      message += ` within ${searchDirectories.length} workspace directories`;
+    }
+    if (ignoredCount > 0) {
+      message += ` (${ignoredCount} files were ignored)`;
+    }
+    return { llmContent: message, returnDisplay: `No files found` };
+  }
+
+  private buildFileListResult(
+    filteredEntries: GlobPath[],
+    searchDirectories: readonly string[],
+    ignoredCount: number,
+    maxItems: number,
+  ): ToolResult {
+    const oneDayInMs = 24 * 60 * 60 * 1000;
+    const nowTimestamp = new Date().getTime();
+    const sortedEntries = sortFileEntries(
+      filteredEntries,
+      nowTimestamp,
+      oneDayInMs,
+    );
+    const sortedAbsolutePaths = sortedEntries.map((entry) => entry.fullpath());
+    const totalFileCount = sortedAbsolutePaths.length;
+    let fileListToShow = sortedAbsolutePaths;
+    let truncatedMessage = '';
+
+    if (totalFileCount > maxItems) {
+      fileListToShow = sortedAbsolutePaths.slice(0, maxItems);
+      truncatedMessage = `\n\n**Note: Output limited to ${maxItems} files out of ${totalFileCount} total matches. Use more specific patterns or adjust 'tool-output-max-items' setting to see more.**`;
+    }
+
+    const fileListDescription = fileListToShow.join('\n');
+    let resultMessage = `Found ${totalFileCount} file(s) matching "${this.params.pattern}"`;
+    if (searchDirectories.length === 1) {
+      resultMessage += ` within ${searchDirectories[0]}`;
+    } else {
+      resultMessage += ` across ${searchDirectories.length} workspace directories`;
+    }
+    if (ignoredCount > 0) {
+      resultMessage += ` (${ignoredCount} additional files were ignored)`;
+    }
+    if (totalFileCount > 0) {
+      resultMessage += `, sorted by modification time (newest first):\n${fileListDescription}`;
+    }
+    resultMessage += truncatedMessage;
+    return {
+      llmContent: resultMessage,
+      returnDisplay: `Found ${totalFileCount} matching file(s)`,
+    };
   }
 }
 
@@ -350,9 +384,11 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
   protected override validateToolParamValues(
     params: GlobToolParams,
   ): string | null {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through
     const dirPath = params.dir_path || params.path;
     const searchDirAbsolute = path.resolve(
       this.config.getTargetDir(),
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should use current dir
       dirPath || '.',
     );
 

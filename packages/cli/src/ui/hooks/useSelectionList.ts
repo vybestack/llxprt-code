@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+
 import { useReducer, useRef, useEffect, useCallback } from 'react';
 import { useKeypress, type Key } from './useKeypress.js';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-core';
@@ -89,7 +91,7 @@ const findNextValidIndex = (
     // We add `len` before the modulo to ensure a positive result in JS for negative steps.
     nextIndex = (nextIndex + step + len) % len;
 
-    if (!items[nextIndex]?.disabled) {
+    if (items[nextIndex]?.disabled !== true) {
       return nextIndex;
     }
   }
@@ -109,7 +111,7 @@ const computeInitialIndex = (
 
   if (initialKey !== undefined) {
     for (let i = 0; i < items.length; i++) {
-      if (items[i].key === initialKey && !items[i].disabled) {
+      if (items[i].key === initialKey && items[i].disabled !== true) {
         return i;
       }
     }
@@ -121,7 +123,7 @@ const computeInitialIndex = (
     targetIndex = 0;
   }
 
-  if (items[targetIndex]?.disabled) {
+  if (items[targetIndex]?.disabled === true) {
     const nextValid = findNextValidIndex(targetIndex, 'down', items);
     targetIndex = nextValid;
   }
@@ -229,27 +231,11 @@ function toBaseItems<T>(
   return items.map(({ key, disabled }) => ({ key, disabled }));
 }
 
-/**
- * A headless hook that provides keyboard navigation and selection logic
- * for list-based selection components like radio buttons and menus.
- *
- * Features:
- * - Keyboard navigation with j/k and arrow keys
- * - Selection with Enter key
- * - Numeric quick selection (when showNumbers is true)
- * - Handles disabled items (skips them during navigation)
- * - Wrapping navigation (last to first, first to last)
- */
-export function useSelectionList<T>({
-  items,
-  initialIndex = 0,
-  onSelect,
-  onHighlight,
-  isFocused = true,
-  showNumbers = false,
-}: UseSelectionListOptions<T>): UseSelectionListResult {
+function useSelectionListState<T>(
+  items: Array<SelectionListItem<T>>,
+  initialIndex: number,
+) {
   const baseItems = toBaseItems(items);
-
   const [state, dispatch] = useReducer(selectionListReducer, {
     activeIndex: computeInitialIndex(initialIndex, baseItems),
     initialIndex,
@@ -257,13 +243,17 @@ export function useSelectionList<T>({
     pendingSelect: false,
     items: baseItems,
   });
-  const numberInputRef = useRef('');
-  const numberInputTimer = useRef<NodeJS.Timeout | null>(null);
+  return { baseItems, state, dispatch };
+}
 
+function useSelectionListSync(
+  baseItems: BaseSelectionItem[],
+  initialIndex: number,
+  dispatch: React.Dispatch<SelectionListAction>,
+) {
   const prevBaseItemsRef = useRef(baseItems);
   const prevInitialIndexRef = useRef(initialIndex);
 
-  // Initialize/synchronize state when initialIndex or items change
   useEffect(() => {
     const baseItemsChanged = !areBaseItemsEqual(
       prevBaseItemsRef.current,
@@ -280,19 +270,34 @@ export function useSelectionList<T>({
       prevInitialIndexRef.current = initialIndex;
     }
   });
+}
 
-  // Handle side effects based on state changes
+function useSelectionListEffects<T>(
+  state: SelectionListState,
+  items: Array<SelectionListItem<T>>,
+  onHighlight: ((value: T) => void) | undefined,
+  onSelect: (value: T) => void,
+  dispatch: React.Dispatch<SelectionListAction>,
+) {
   useEffect(() => {
     let needsClear = false;
 
-    if (state.pendingHighlight && items[state.activeIndex]) {
+    if (
+      state.pendingHighlight &&
+      state.activeIndex >= 0 &&
+      state.activeIndex < items.length
+    ) {
       onHighlight?.(items[state.activeIndex].value);
       needsClear = true;
     }
 
-    if (state.pendingSelect && items[state.activeIndex]) {
+    if (
+      state.pendingSelect &&
+      state.activeIndex >= 0 &&
+      state.activeIndex < items.length
+    ) {
       const currentItem = items[state.activeIndex];
-      if (currentItem && !currentItem.disabled) {
+      if (currentItem.disabled !== true) {
         if (selectionLogger.enabled) {
           selectionLogger.debug(
             () =>
@@ -316,7 +321,84 @@ export function useSelectionList<T>({
     items,
     onHighlight,
     onSelect,
+    dispatch,
   ]);
+}
+
+function handleNumericInput(
+  sequence: string,
+  itemsLength: number,
+  numberInputRef: React.MutableRefObject<string>,
+  numberInputTimer: React.MutableRefObject<NodeJS.Timeout | null>,
+  dispatch: React.Dispatch<SelectionListAction>,
+) {
+  if (numberInputTimer.current) {
+    clearTimeout(numberInputTimer.current);
+  }
+
+  const newNumberInput = numberInputRef.current + sequence;
+  numberInputRef.current = newNumberInput;
+
+  const targetIndex = Number.parseInt(newNumberInput, 10) - 1;
+
+  // Single '0' is invalid (1-indexed)
+  if (newNumberInput === '0') {
+    numberInputTimer.current = setTimeout(() => {
+      numberInputRef.current = '';
+    }, NUMBER_INPUT_TIMEOUT_MS);
+    return;
+  }
+
+  if (targetIndex >= 0 && targetIndex < itemsLength) {
+    if (selectionLogger.enabled) {
+      selectionLogger.debug(
+        () => `useSelectionList numeric selection targetIndex=${targetIndex}`,
+      );
+    }
+    dispatch({
+      type: 'SET_ACTIVE_INDEX',
+      payload: { index: targetIndex },
+    });
+
+    // If the number can't be a prefix for another valid number, select immediately
+    const potentialNextNumber = Number.parseInt(newNumberInput + '0', 10);
+    if (potentialNextNumber > itemsLength) {
+      dispatch({
+        type: 'SELECT_CURRENT',
+      });
+      if (selectionLogger.enabled) {
+        selectionLogger.debug(() => 'Numeric selection auto-submitted');
+      }
+      numberInputRef.current = '';
+    } else {
+      // Otherwise wait for more input or timeout
+      numberInputTimer.current = setTimeout(() => {
+        dispatch({
+          type: 'SELECT_CURRENT',
+        });
+        if (selectionLogger.enabled) {
+          selectionLogger.debug(
+            () => 'Numeric selection submitted after timeout',
+          );
+        }
+        numberInputRef.current = '';
+      }, NUMBER_INPUT_TIMEOUT_MS);
+    }
+  } else {
+    // Number is out of bounds
+    numberInputRef.current = '';
+  }
+}
+
+function useSelectionKeypressHandler(
+  items: Array<SelectionListItem<unknown>>,
+  showNumbers: boolean,
+  isFocused: boolean,
+  state: SelectionListState,
+  dispatch: React.Dispatch<SelectionListAction>,
+) {
+  const numberInputRef = useRef('');
+  const numberInputTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(
     () => () => {
@@ -331,7 +413,7 @@ export function useSelectionList<T>({
   const handleKeypress = useCallback(
     (key: Key) => {
       const { sequence, name } = key;
-      const isNumeric = showNumbers && /^[0-9]$/.test(sequence);
+      const isNumeric = showNumbers && /^\d$/.test(sequence);
 
       if (selectionLogger.enabled) {
         selectionLogger.debug(
@@ -371,69 +453,57 @@ export function useSelectionList<T>({
 
       // Handle numeric input for quick selection
       if (isNumeric) {
-        if (numberInputTimer.current) {
-          clearTimeout(numberInputTimer.current);
-        }
-
-        const newNumberInput = numberInputRef.current + sequence;
-        numberInputRef.current = newNumberInput;
-
-        const targetIndex = Number.parseInt(newNumberInput, 10) - 1;
-
-        // Single '0' is invalid (1-indexed)
-        if (newNumberInput === '0') {
-          numberInputTimer.current = setTimeout(() => {
-            numberInputRef.current = '';
-          }, NUMBER_INPUT_TIMEOUT_MS);
-          return;
-        }
-
-        if (targetIndex >= 0 && targetIndex < itemsLength) {
-          if (selectionLogger.enabled) {
-            selectionLogger.debug(
-              () =>
-                `useSelectionList numeric selection targetIndex=${targetIndex}`,
-            );
-          }
-          dispatch({
-            type: 'SET_ACTIVE_INDEX',
-            payload: { index: targetIndex },
-          });
-
-          // If the number can't be a prefix for another valid number, select immediately
-          const potentialNextNumber = Number.parseInt(newNumberInput + '0', 10);
-          if (potentialNextNumber > itemsLength) {
-            dispatch({
-              type: 'SELECT_CURRENT',
-            });
-            if (selectionLogger.enabled) {
-              selectionLogger.debug(() => 'Numeric selection auto-submitted');
-            }
-            numberInputRef.current = '';
-          } else {
-            // Otherwise wait for more input or timeout
-            numberInputTimer.current = setTimeout(() => {
-              dispatch({
-                type: 'SELECT_CURRENT',
-              });
-              if (selectionLogger.enabled) {
-                selectionLogger.debug(
-                  () => 'Numeric selection submitted after timeout',
-                );
-              }
-              numberInputRef.current = '';
-            }, NUMBER_INPUT_TIMEOUT_MS);
-          }
-        } else {
-          // Number is out of bounds
-          numberInputRef.current = '';
-        }
+        handleNumericInput(
+          sequence,
+          itemsLength,
+          numberInputRef,
+          numberInputTimer,
+          dispatch,
+        );
       }
     },
     [dispatch, itemsLength, showNumbers, isFocused, state.activeIndex],
   );
 
-  useKeypress(handleKeypress, { isActive: !!(isFocused && itemsLength > 0) });
+  return handleKeypress;
+}
+
+/**
+ * A headless hook that provides keyboard navigation and selection logic
+ * for list-based selection components like radio buttons and menus.
+ *
+ * Features:
+ * - Keyboard navigation with j/k and arrow keys
+ * - Selection with Enter key
+ * - Numeric quick selection (when showNumbers is true)
+ * - Handles disabled items (skips them during navigation)
+ * - Wrapping navigation (last to first, first to last)
+ */
+export function useSelectionList<T>({
+  items,
+  initialIndex = 0,
+  onSelect,
+  onHighlight,
+  isFocused = true,
+  showNumbers = false,
+}: UseSelectionListOptions<T>): UseSelectionListResult {
+  const { baseItems, state, dispatch } = useSelectionListState(
+    items,
+    initialIndex,
+  );
+
+  useSelectionListSync(baseItems, initialIndex, dispatch);
+  useSelectionListEffects(state, items, onHighlight, onSelect, dispatch);
+
+  const handleKeypress = useSelectionKeypressHandler(
+    items as Array<SelectionListItem<unknown>>,
+    showNumbers,
+    !!isFocused,
+    state,
+    dispatch,
+  );
+
+  useKeypress(handleKeypress, { isActive: !!(isFocused && items.length > 0) });
 
   const setActiveIndex = (index: number) => {
     dispatch({

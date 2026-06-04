@@ -24,10 +24,12 @@ export async function createPolicyEngineConfig(
   //
   // Handle both legacy (settings.allowedTools) and new (settings.tools.allowed) structures
   // to ensure compatibility during the transition period
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty arrays should fall back to next source */
   const allowedTools =
     settings.tools?.allowed || settings.allowedTools || undefined;
   const excludeTools =
     settings.tools?.exclude || settings.excludeTools || undefined;
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
   const policySettings: PolicySettings = {
     mcp: settings.mcp,

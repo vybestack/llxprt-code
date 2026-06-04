@@ -8,7 +8,7 @@ import { useState, useCallback } from 'react';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface Logger {
-  getPreviousUserMessages(): Promise<string[]>;
+  getPreviousUserMessages(): Promise<string[] | null | undefined>;
 }
 
 export interface UseInputHistoryStoreReturn {
@@ -64,7 +64,7 @@ export function useInputHistoryStore(): UseInputHistoryStoreReturn {
       if (isInitialized || !logger) return;
 
       try {
-        const pastMessages = (await logger.getPreviousUserMessages()) || [];
+        const pastMessages = (await logger.getPreviousUserMessages()) ?? [];
         setPastSessionMessages(pastMessages); // Store as newest first
         recalculateHistory([], pastMessages);
         setIsInitialized(true);

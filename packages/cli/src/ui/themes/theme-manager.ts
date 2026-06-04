@@ -103,7 +103,6 @@ class ThemeManager {
     }
     // If the current active theme is a custom theme, keep it if still valid
     if (
-      this.activeTheme &&
       this.activeTheme.type === 'custom' &&
       this.customThemes.has(this.activeTheme.name)
     ) {
@@ -136,17 +135,13 @@ class ThemeManager {
       return NoColorTheme;
     }
 
-    if (this.activeTheme) {
-      const isBuiltIn = this.availableThemes.some(
-        (t) => t.name === this.activeTheme.name,
-      );
-      const isCustom = [...this.customThemes.values()].includes(
-        this.activeTheme,
-      );
+    const isBuiltIn = this.availableThemes.some(
+      (t) => t.name === this.activeTheme.name,
+    );
+    const isCustom = [...this.customThemes.values()].includes(this.activeTheme);
 
-      if (isBuiltIn || isCustom) {
-        return this.activeTheme;
-      }
+    if (isBuiltIn || isCustom) {
+      return this.activeTheme;
     }
 
     // Fallback to default if no active theme or if it's no longer valid.

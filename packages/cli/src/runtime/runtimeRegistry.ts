@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
+
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P15
  * @requirement REQ-SP2-003
@@ -151,7 +153,7 @@ export function disposeCliRuntime(
   runtimeId: string,
   context?: RuntimeAuthScopeFlushResult,
 ): void {
-  if (context?.revokedTokens?.length) {
+  if (context !== undefined && context.revokedTokens.length > 0) {
     logger.debug(
       () =>
         `[cli-runtime] Revoked ${context.revokedTokens.length} scoped OAuth token(s) for runtime ${runtimeId}.`,

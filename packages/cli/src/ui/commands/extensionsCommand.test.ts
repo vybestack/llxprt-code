@@ -45,6 +45,7 @@ describe('extensionsCommand', () => {
       mockGetExtensions.mockReturnValue([
         { name: 'test-ext', version: '1.0.0' },
       ]);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!extensionsCommand.action) throw new Error('Action not defined');
       await extensionsCommand.action(mockContext, '');
 
@@ -56,6 +57,7 @@ describe('extensionsCommand', () => {
 
     it('should show a message if no extensions are installed', async () => {
       mockGetExtensions.mockReturnValue([]);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!extensionsCommand.action) throw new Error('Action not defined');
       await extensionsCommand.action(mockContext, '');
 

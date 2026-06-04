@@ -32,12 +32,14 @@ export function validateToolResults(
   for (const msg of messages) {
     if (msg.role === 'assistant' && Array.isArray(msg.content)) {
       for (const block of msg.content) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (block.type === 'tool_use') {
           toolUseIds.add(block.id);
         }
       }
     } else if (msg.role === 'user' && Array.isArray(msg.content)) {
       for (const block of msg.content) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (block.type === 'tool_result') {
           toolResultIds.add(block.tool_use_id);
         }
@@ -259,9 +261,10 @@ function removeCollectedResults(
   messages: AnthropicMessage[],
   pendingRemovals: Array<{ msgIndex: number; blockIndex: number }>,
 ): void {
-  for (const removal of pendingRemovals.sort(
-    (a, b) => b.msgIndex - a.msgIndex || b.blockIndex - a.blockIndex,
-  )) {
+  for (const removal of pendingRemovals.sort((a, b) => {
+    const msgDiff = b.msgIndex - a.msgIndex;
+    return msgDiff !== 0 ? msgDiff : b.blockIndex - a.blockIndex;
+  })) {
     const laterMsg = messages[removal.msgIndex];
     if (Array.isArray(laterMsg.content)) {
       laterMsg.content.splice(removal.blockIndex, 1);
@@ -283,6 +286,7 @@ function handleMissingUserMessage(
   for (const msg of messages) {
     if (msg.role === 'user' && Array.isArray(msg.content)) {
       for (const block of msg.content) {
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (block.type === 'tool_result') {
           currentToolResultIds.add(block.tool_use_id);
         }

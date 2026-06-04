@@ -46,21 +46,19 @@ export function clearRipgrepAvailabilityCache(): void {
   ripgrepAvailabilityCache = null;
 }
 
-export async function getRipgrepPath(): Promise<string> {
-  const isWindows = os.platform() === 'win32';
-
-  // 1. Try packaged version first
+async function tryPackagedRipgrep(): Promise<string | null> {
   try {
     const { rgPath } = await import('@lvce-editor/ripgrep');
-    // Verify the binary actually exists
     if (fs.existsSync(rgPath)) {
       return rgPath;
     }
-  } catch (_error) {
-    // Package not available or binary doesn't exist, continue to next option
+  } catch {
+    // Package not available or binary doesn't exist
   }
+  return null;
+}
 
-  // 2. Try system installation
+async function trySystemRipgrep(isWindows: boolean): Promise<string | null> {
   try {
     const { execSync } = await import('child_process');
     const checkCmd = isWindows ? 'where rg' : 'which rg';
@@ -68,76 +66,96 @@ export async function getRipgrepPath(): Promise<string> {
     if (fs.existsSync(systemPath)) {
       return systemPath;
     }
-  } catch (_error) {
+  } catch {
     // System ripgrep not found
   }
+  return null;
+}
 
-  // 3. Windows specific locations
-  if (isWindows) {
-    const windowsPaths = [
-      path.join(
-        process.env.PROGRAMFILES || 'C:\\Program Files',
-        'ripgrep',
-        'rg.exe',
-      ),
-      path.join(
-        process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
-        'ripgrep',
-        'rg.exe',
-      ),
-    ];
-    for (const windowsPath of windowsPaths) {
-      if (fs.existsSync(windowsPath)) {
-        return windowsPath;
-      }
-    }
-
-    // Try common installation locations
-    const commonWindowsPaths = [
-      'C:\\Program Files\\ripgrep\\rg.exe',
-      'C:\\Program Files (x86)\\ripgrep\\rg.exe',
-      'C:\\tools\\ripgrep\\rg.exe',
-    ];
-
-    for (const windowsPath of commonWindowsPaths) {
-      if (fs.existsSync(windowsPath)) {
-        return windowsPath;
-      }
-    }
+function findFirstExistingPath(paths: string[]): string | null {
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
   }
+  return null;
+}
 
-  // 4. Try common Unix locations (macOS/Linux)
-  if (!isWindows) {
-    const unixPaths = [
-      '/usr/local/bin/rg',
-      '/usr/bin/rg',
-      '/opt/homebrew/bin/rg',
-      '/home/linuxbrew/.linuxbrew/bin/rg',
-    ];
+function tryWindowsPaths(): string | null {
+  const envPaths = [
+    path.join(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var fallback for path
+      process.env.PROGRAMFILES || 'C:\\Program Files',
+      'ripgrep',
+      'rg.exe',
+    ),
+    path.join(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var fallback for path
+      process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
+      'ripgrep',
+      'rg.exe',
+    ),
+  ];
+  const result = findFirstExistingPath(envPaths);
+  if (result) return result;
 
-    for (const unixPath of unixPaths) {
-      if (fs.existsSync(unixPath)) {
-        return unixPath;
-      }
-    }
-  }
+  const commonPaths = [
+    'C:\\Program Files\\ripgrep\\rg.exe',
+    'C:\\Program Files (x86)\\ripgrep\\rg.exe',
+    'C:\\tools\\ripgrep\\rg.exe',
+  ];
+  return findFirstExistingPath(commonPaths);
+}
 
-  // 5. Bundle-specific path resolution
-  // Check if running from bundled environment
+function tryUnixPaths(): string | null {
+  const unixPaths = [
+    '/usr/local/bin/rg',
+    '/usr/bin/rg',
+    '/opt/homebrew/bin/rg',
+    '/home/linuxbrew/.linuxbrew/bin/rg',
+  ];
+  return findFirstExistingPath(unixPaths);
+}
+
+function tryBundledPath(isWindows: boolean): string | null {
   const projectRoot = process.cwd();
+  const pkgEntrypoint = (
+    process as unknown as { pkg?: { entrypoint?: string } }
+  ).pkg?.entrypoint;
+  const nodeModulesExists = fs.existsSync(
+    path.join(projectRoot, 'node_modules'),
+  );
   const isBundled =
-    (process as unknown as { pkg?: { entrypoint?: string } }).pkg?.entrypoint ||
-    !fs.existsSync(path.join(projectRoot, 'node_modules'));
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string property may be empty, check node_modules as fallback
+    Boolean(pkgEntrypoint || !nodeModulesExists);
 
   if (isBundled) {
-    // In bundle environment, look for ripgrep in bundle directory
     const bundleDir = path.join(projectRoot, 'bundle');
     const bundledRgPath = path.join(bundleDir, isWindows ? 'rg.exe' : 'rg');
-
     if (fs.existsSync(bundledRgPath)) {
       return bundledRgPath;
     }
   }
+  return null;
+}
+
+export async function getRipgrepPath(): Promise<string> {
+  const isWindows = os.platform() === 'win32';
+
+  const packaged = await tryPackagedRipgrep();
+  if (packaged) return packaged;
+
+  const system = await trySystemRipgrep(isWindows);
+  if (system) return system;
+
+  if (isWindows) {
+    const windowsResult = tryWindowsPaths();
+    if (windowsResult) return windowsResult;
+  } else {
+    const unixResult = tryUnixPaths();
+    if (unixResult) return unixResult;
+  }
+
+  const bundled = tryBundledPath(isWindows);
+  if (bundled) return bundled;
 
   throw new Error(
     `ripgrep not found. Please install @lvce-editor/ripgrep or system ripgrep.\n` +
@@ -169,8 +187,8 @@ export function ensureWindowsShortcut(source: string, target: string): boolean {
       try {
         fs.linkSync(source, target);
         return true;
-      } catch (_linkError) {
-        // If hard link fails (common on Windows without admin), copy the binary
+      } catch {
+        // Hard link failed (common on Windows without admin); copy instead.
         fs.copyFileSync(source, target);
         return true;
       }

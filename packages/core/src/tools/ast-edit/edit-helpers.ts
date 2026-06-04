@@ -32,7 +32,7 @@ export function applyReplacement(
   if (currentContent === null) {
     return oldString === '' ? newString : '';
   }
-  if (oldString === '' && !isNewFile) {
+  if (oldString === '') {
     return currentContent;
   }
 

@@ -143,6 +143,7 @@ export class SkillManager {
           // Check for config.json in this directory
           const configPath = path.join(fullPath, 'config.json');
 
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (await this.pathExists(configPath)) {
             // This is a skill directory
             try {
@@ -182,7 +183,7 @@ export class SkillManager {
   ): Promise<SkillDefinition | null> {
     try {
       const content = await fs.readFile(configPath, 'utf-8');
-      const config: BuiltinSkillConfig = JSON.parse(content);
+      const config = JSON.parse(content) as BuiltinSkillConfig | null;
 
       // Validate required fields
       if (!config || typeof config !== 'object') {
@@ -190,14 +191,18 @@ export class SkillManager {
       }
 
       // Skill name can come from config or use directory name
-      const skillName = config.name || name;
+      const skillName =
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty name string should fall through to directory name
+        config.name || name;
 
       // Look for skill instruction file (SKILL.md or similar)
       const body = await this.loadSkillBody(skillPath);
 
       return {
         name: skillName,
-        description: config.description || '',
+        description:
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty description should default to empty string
+          config.description || '',
         location: skillPath,
         body,
         source: 'builtin',
@@ -221,6 +226,7 @@ export class SkillManager {
         if (await this.pathExists(filePath)) {
           const content = await fs.readFile(filePath, 'utf-8');
           // Extract body after frontmatter if present
+          // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
           const frontmatterRegex = /^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)/;
           const match = content.match(frontmatterRegex);
           return match ? match[1].trim() : content.trim();
@@ -312,7 +318,7 @@ export class SkillManager {
    * Returns the list of enabled discovered skills.
    */
   getSkills(): SkillDefinition[] {
-    return this.skills.filter((s) => !s.disabled);
+    return this.skills.filter((s) => s.disabled !== true);
   }
 
   /**

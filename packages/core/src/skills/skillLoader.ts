@@ -35,6 +35,7 @@ export interface SkillDefinition {
   source?: SkillSource;
 }
 
+// eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)/;
 
 /**
@@ -46,7 +47,7 @@ function parseFrontmatter(
 ): { name: string; description: string } | null {
   try {
     const parsed = yaml.load(content);
-    if (parsed && typeof parsed === 'object') {
+    if (parsed !== null && parsed !== undefined && typeof parsed === 'object') {
       const { name, description } = parsed as Record<string, unknown>;
       if (typeof name === 'string' && typeof description === 'string') {
         return { name, description };
@@ -73,10 +74,12 @@ function parseSimpleFrontmatter(
   let name: string | undefined;
   let description: string | undefined;
 
+  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // Match "name:" at the start of the line (optional whitespace)
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const nameMatch = line.match(/^\s*name:\s*(.*)$/);
     if (nameMatch) {
       name = nameMatch[1].trim();
@@ -84,6 +87,7 @@ function parseSimpleFrontmatter(
     }
 
     // Match "description:" at the start of the line (optional whitespace)
+    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const descMatch = line.match(/^\s*description:\s*(.*)$/);
     if (descMatch) {
       const descLines = [descMatch[1].trim()];
@@ -92,6 +96,7 @@ function parseSimpleFrontmatter(
       while (i + 1 < lines.length) {
         const nextLine = lines[i + 1];
         // If next line is indented, it's a continuation of the description
+        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (nextLine.match(/^[ \t]+\S/)) {
           descLines.push(nextLine.trim());
           i++;
@@ -123,7 +128,7 @@ export async function loadSkillsFromDir(
   try {
     const absoluteSearchPath = path.resolve(dir);
     const stats = await fs.stat(absoluteSearchPath).catch(() => null);
-    if (!stats?.isDirectory()) {
+    if (stats === null || stats.isDirectory() !== true) {
       return [];
     }
 
@@ -182,7 +187,7 @@ export async function loadSkillFromFile(
       name: frontmatter.name,
       description: frontmatter.description,
       location: filePath,
-      body: match[2]?.trim() ?? '',
+      body: match[2].trim(),
       source,
     };
   } catch (error) {
@@ -203,7 +208,11 @@ function loadSkillFromFileSync(
     }
 
     const frontmatter = yaml.load(match[1]);
-    if (!frontmatter || typeof frontmatter !== 'object') {
+    if (
+      frontmatter === null ||
+      frontmatter === undefined ||
+      typeof frontmatter !== 'object'
+    ) {
       return null;
     }
 
@@ -243,6 +252,7 @@ export function loadSkillsFromDirSync(
     const entries = fsSync.readdirSync(absoluteSearchPath, {
       withFileTypes: true,
     });
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const entry of entries) {
       if (!entry.isDirectory()) {
         continue;

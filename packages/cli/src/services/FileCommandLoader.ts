@@ -62,9 +62,9 @@ export class FileCommandLoader implements ICommandLoader {
   private readonly isTrustedFolder: boolean;
 
   constructor(private readonly config: Config | null) {
-    this.folderTrustEnabled = !!config?.getFolderTrust();
-    this.isTrustedFolder = !!config?.isTrustedFolder();
-    this.projectRoot = config?.getProjectRoot() || process.cwd();
+    this.folderTrustEnabled = config?.getFolderTrust() === true;
+    this.isTrustedFolder = config?.isTrustedFolder() === true;
+    this.projectRoot = config?.getProjectRoot() ?? process.cwd();
   }
 
   /**
@@ -115,10 +115,9 @@ export class FileCommandLoader implements ICommandLoader {
         // Add all commands without deduplication
         allCommands.push(...commands);
       } catch (error) {
-        if (
-          !signal.aborted &&
-          (error as { code?: string })?.code !== 'ENOENT'
-        ) {
+        const errorCode =
+          error == null ? undefined : (error as { code?: unknown }).code;
+        if (!signal.aborted && errorCode !== 'ENOENT') {
           debugLogger.error(
             `[FileCommandLoader] Error loading commands from ${dirInfo.path}:`,
             error,
@@ -176,9 +175,36 @@ export class FileCommandLoader implements ICommandLoader {
     baseDir: string,
     extensionName?: string,
   ): Promise<SlashCommand | null> {
-    let fileContent: string;
+    const fileContent = await this.readFileContent(filePath);
+    if (fileContent === null) return null;
+
+    const validDef = this.validateTomlContent(filePath, fileContent);
+    if (validDef === null) return null;
+
+    const baseCommandName = this.computeCommandName(baseDir, filePath);
+    const description = this.buildDescription(
+      filePath,
+      validDef.description,
+      extensionName,
+    );
+    const processors = this.buildProcessors(baseCommandName, validDef.prompt);
+
+    return {
+      name: baseCommandName,
+      description,
+      kind: CommandKind.FILE,
+      extensionName,
+      action: this.createCommandAction(
+        baseCommandName,
+        validDef.prompt,
+        processors,
+      ),
+    };
+  }
+
+  private async readFileContent(filePath: string): Promise<string | null> {
     try {
-      fileContent = await fs.readFile(filePath, 'utf-8');
+      return await fs.readFile(filePath, 'utf-8');
     } catch (error: unknown) {
       debugLogger.error(
         `[FileCommandLoader] Failed to read file ${filePath}:`,
@@ -186,7 +212,12 @@ export class FileCommandLoader implements ICommandLoader {
       );
       return null;
     }
+  }
 
+  private validateTomlContent(
+    filePath: string,
+    fileContent: string,
+  ): z.infer<typeof TomlCommandDefSchema> | null {
     let parsed: unknown;
     try {
       parsed = toml.parse(fileContent);
@@ -199,7 +230,6 @@ export class FileCommandLoader implements ICommandLoader {
     }
 
     const validationResult = TomlCommandDefSchema.safeParse(parsed);
-
     if (!validationResult.success) {
       debugLogger.error(
         `[FileCommandLoader] Skipping invalid command file: ${filePath}. Validation errors:`,
@@ -207,93 +237,95 @@ export class FileCommandLoader implements ICommandLoader {
       );
       return null;
     }
+    return validationResult.data;
+  }
 
-    const validDef = validationResult.data;
-
+  private computeCommandName(baseDir: string, filePath: string): string {
     const relativePathWithExt = path.relative(baseDir, filePath);
     const relativePath = relativePathWithExt.substring(
       0,
       relativePathWithExt.length - 5, // length of '.toml'
     );
-    const baseCommandName = relativePath
+    return relativePath
       .split(path.sep)
-      // Sanitize each path segment to prevent ambiguity. Since ':' is our
-      // namespace separator, we replace any literal colons in filenames
-      // with underscores to avoid naming conflicts.
       .map((segment) => segment.replaceAll(':', '_'))
       .join(':');
+  }
 
-    // Add extension name tag for extension commands
+  private buildDescription(
+    filePath: string,
+    promptDescription: string | undefined,
+    extensionName?: string,
+  ): string {
     const defaultDescription = `Custom command from ${path.basename(filePath)}`;
-    let description = validDef.description || defaultDescription;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string description sentinel
+    let description = promptDescription || defaultDescription;
     if (extensionName) {
       description = `[${extensionName}] ${description}`;
     }
+    return description;
+  }
 
+  private buildProcessors(
+    baseCommandName: string,
+    prompt: string,
+  ): IPromptProcessor[] {
     const processors: IPromptProcessor[] = [];
-    const usesArgs = validDef.prompt.includes(SHORTHAND_ARGS_PLACEHOLDER);
-    const usesShellInjection = validDef.prompt.includes(
-      SHELL_INJECTION_TRIGGER,
-    );
+    const usesArgs = prompt.includes(SHORTHAND_ARGS_PLACEHOLDER);
+    const usesShellInjection = prompt.includes(SHELL_INJECTION_TRIGGER);
 
-    // Interpolation (Shell Execution and Argument Injection)
-    // If the prompt uses either shell injection OR argument placeholders,
-    // we must use the ShellProcessor.
     if (usesShellInjection || usesArgs) {
       processors.push(new ShellProcessor(baseCommandName));
     }
-
-    // Default Argument Handling
-    // If NO explicit argument injection ({{args}}) was used, we append the raw invocation.
     if (!usesArgs) {
       processors.push(new DefaultArgumentProcessor());
     }
+    return processors;
+  }
 
-    return {
-      name: baseCommandName,
-      description,
-      kind: CommandKind.FILE,
-      extensionName,
-      action: async (
-        context: CommandContext,
-        _args: string,
-      ): Promise<SlashCommandActionReturn> => {
-        if (!context.invocation) {
-          debugLogger.error(
-            `[FileCommandLoader] Critical error: Command '${baseCommandName}' was executed without invocation context.`,
-          );
+  private createCommandAction(
+    baseCommandName: string,
+    prompt: string,
+    processors: IPromptProcessor[],
+  ): (
+    context: CommandContext,
+    _args: string,
+  ) => Promise<SlashCommandActionReturn> {
+    return async (
+      context: CommandContext,
+      _args: string,
+    ): Promise<SlashCommandActionReturn> => {
+      if (!context.invocation) {
+        debugLogger.error(
+          `[FileCommandLoader] Critical error: Command '${baseCommandName}' was executed without invocation context.`,
+        );
+        return {
+          type: 'submit_prompt',
+          content: prompt,
+        };
+      }
+
+      try {
+        let processedPrompt = prompt;
+        for (const processor of processors) {
+          processedPrompt = await processor.process(processedPrompt, context);
+        }
+        return {
+          type: 'submit_prompt',
+          content: processedPrompt,
+        };
+      } catch (e) {
+        if (e instanceof ConfirmationRequiredError) {
           return {
-            type: 'submit_prompt',
-            content: validDef.prompt, // Fallback to unprocessed prompt
+            type: 'confirm_shell_commands',
+            commandsToConfirm: e.commandsToConfirm,
+            originalInvocation: {
+              raw: context.invocation.raw,
+            },
           };
         }
-
-        try {
-          let processedPrompt = validDef.prompt;
-          for (const processor of processors) {
-            processedPrompt = await processor.process(processedPrompt, context);
-          }
-
-          return {
-            type: 'submit_prompt',
-            content: processedPrompt,
-          };
-        } catch (e) {
-          // Check if it's our specific error type
-          if (e instanceof ConfirmationRequiredError) {
-            // Halt and request confirmation from the UI layer.
-            return {
-              type: 'confirm_shell_commands',
-              commandsToConfirm: e.commandsToConfirm,
-              originalInvocation: {
-                raw: context.invocation.raw,
-              },
-            };
-          }
-          // Re-throw other errors to be handled by the global error handler.
-          throw e;
-        }
-      },
+        throw e;
+      }
     };
   }
 }

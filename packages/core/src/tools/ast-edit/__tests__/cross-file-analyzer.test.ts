@@ -71,8 +71,13 @@ describe('CrossFileRelationshipAnalyzer', () => {
         'export class MyClass {}\nexport function myFunc() {}',
       );
 
-      // Since ENABLE_SYMBOL_INDEXING is false by default, this should be a no-op
+      // Since ENABLE_SYMBOL_INDEXING is false by default, this must be a
+      // no-op: the symbol indexing path must not populate any discoverable
+      // state, so findRelatedSymbols still returns an empty array after the
+      // build call completes without error.
       await analyzer.buildSymbolIndex([file]);
+      const related = await analyzer.findRelatedSymbols('MyClass', testDir);
+      expect(related).toStrictEqual([]);
     });
   });
 

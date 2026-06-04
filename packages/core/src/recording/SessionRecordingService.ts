@@ -204,27 +204,44 @@ export class SessionRecordingService {
       while (this.queue.length > 0) {
         const batch = [...this.queue];
         this.queue = [];
-        let lines = '';
-        for (const event of batch) {
-          lines += JSON.stringify(event) + '\n';
-        }
-        try {
-          await fs.appendFile(this.filePath!, lines, 'utf-8');
-        } catch (error: unknown) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code === 'ENOSPC' || code === 'EACCES') {
-            this.queue = [];
-            this.chatsDirWatcher?.close();
-            this.chatsDirWatcher = null;
-            this.active = false;
-            return;
-          }
-          throw error;
+        const lines =
+          batch.map((event) => JSON.stringify(event)).join('\n') + '\n';
+        const shouldContinue = await this.writeBatchToFile(lines);
+        if (!shouldContinue) {
+          return;
         }
       }
     } finally {
       this.draining = false;
     }
+  }
+
+  /**
+   * Write a batch of events to the file.
+   * Returns true if draining should continue, false if it should stop.
+   */
+  private async writeBatchToFile(lines: string): Promise<boolean> {
+    try {
+      await fs.appendFile(this.filePath!, lines, 'utf-8');
+      return true;
+    } catch (error: unknown) {
+      if (this.isDiskSpaceError(error)) {
+        this.queue = [];
+        this.chatsDirWatcher?.close();
+        this.chatsDirWatcher = null;
+        this.active = false;
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Check if an error indicates disk space or permission issues.
+   */
+  private isDiskSpaceError(error: unknown): boolean {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOSPC' || code === 'EACCES';
   }
 
   /**

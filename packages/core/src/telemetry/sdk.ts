@@ -131,7 +131,7 @@ export function initializeTelemetry(config: Config): void {
 }
 
 export async function flushTelemetry(): Promise<void> {
-  if (!sdk) return;
+  if (!sdk) return undefined;
   if (flushInProgress) return flushInProgress;
 
   flushInProgress = (async () => {

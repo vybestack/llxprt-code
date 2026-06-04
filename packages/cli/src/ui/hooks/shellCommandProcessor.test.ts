@@ -152,6 +152,7 @@ describe('useShellCommandProcessor', () => {
   const createMockServiceResult = (
     overrides: Partial<ShellExecutionResult> = {},
   ): ShellExecutionResult => ({
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for output
     rawOutput: Buffer.from(overrides.output || ''),
     output: 'Success',
     exitCode: 0,
@@ -186,6 +187,7 @@ describe('useShellCommandProcessor', () => {
     });
     expect(mockShellExecutionService).toHaveBeenCalledWith(
       expect.stringMatching(
+        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /^{ ls -l; }; __code=\$\?; pwd > ".*shell_pwd_abcdef\.tmp"; exit \$__code$/,
       ),
       '/test/dir',
@@ -577,12 +579,14 @@ describe('useShellCommandProcessor', () => {
     });
     // Verify that the temporary file was cleaned up
     expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(
+      // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       expect.stringMatching(/.*shell_pwd_abcdef\.tmp$/),
     );
   });
 
   describe('Directory Change Warning', () => {
     it('should show a warning if the working directory changes', async () => {
+      // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       const tmpFile = expect.stringMatching(/.*shell_pwd_abcdef\.tmp$/);
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('/test/dir/new'); // A different directory

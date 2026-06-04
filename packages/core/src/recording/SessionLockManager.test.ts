@@ -610,15 +610,25 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
 
     const lockWriteCalls = writeFileMock.mock.calls.filter(
       ([targetPath, , options]) =>
-        targetPath === lockPath &&
-        typeof options === 'object' &&
-        options !== null &&
-        'flag' in options &&
-        (options as { flag?: string }).flag === 'wx',
+        isWxLockWriteCall(targetPath, options, lockPath),
     );
 
     expect(lockWriteCalls).toHaveLength(2);
   });
+
+  /**
+   * Helper function to check if a write call is a 'wx' flag lock write.
+   */
+  function isWxLockWriteCall(
+    targetPath: string,
+    options: unknown,
+    expectedLockPath: string,
+  ): boolean {
+    if (targetPath !== expectedLockPath) return false;
+    if (typeof options !== 'object' || options === null) return false;
+    if (!('flag' in options)) return false;
+    return (options as { flag?: string }).flag === 'wx';
+  }
 
   // -------------------------------------------------------------------------
   // removeStaleLock
