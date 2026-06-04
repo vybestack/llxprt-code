@@ -433,7 +433,7 @@ export class DirectMessageProcessor {
       'allowedFunctionNames' in modifiedConfig.toolConfig
     ) {
       const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
-      if (allowedFunctions !== undefined && allowedFunctions.length > 0) {
+      if (Array.isArray(allowedFunctions)) {
         return toolsFromConfig
           .map((toolGroup) => ({
             ...toolGroup,

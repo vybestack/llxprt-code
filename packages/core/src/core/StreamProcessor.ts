@@ -536,8 +536,7 @@ export class StreamProcessor {
       toolConfig !== null &&
       typeof toolConfig === 'object' &&
       'allowedFunctionNames' in toolConfig &&
-      Array.isArray(toolConfig.allowedFunctionNames) &&
-      toolConfig.allowedFunctionNames.length > 0
+      Array.isArray(toolConfig.allowedFunctionNames)
     ) {
       const allowedFunctions = toolConfig.allowedFunctionNames;
       return toolsFromConfig
