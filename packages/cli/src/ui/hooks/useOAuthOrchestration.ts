@@ -22,25 +22,46 @@ import type { AppAction } from '../reducers/appReducer.js';
 interface UseOAuthOrchestrationOptions {
   appDispatch: React.Dispatch<AppAction>;
   isOAuthCodeDialogOpen: boolean;
+  getActiveProviderName?: () => string;
+}
+
+function oauthProviderMatchesActive(
+  getActiveProviderName: (() => string) | undefined,
+): boolean {
+  const pendingProvider = (global as Record<string, unknown>).__oauth_provider;
+  if (typeof pendingProvider !== 'string') {
+    return true;
+  }
+  if (!getActiveProviderName) {
+    return true;
+  }
+  let activeProviderName: string;
+  try {
+    activeProviderName = getActiveProviderName();
+  } catch {
+    return false;
+  }
+  return pendingProvider === activeProviderName;
 }
 
 export function useOAuthOrchestration({
   appDispatch,
   isOAuthCodeDialogOpen,
+  getActiveProviderName,
 }: UseOAuthOrchestrationOptions): void {
-  // Check for OAuth code needed flag
   useEffect(() => {
     const checkOAuthFlag = setInterval(() => {
       if ((global as Record<string, unknown>).__oauth_needs_code === true) {
-        // Clear the flag
+        if (!oauthProviderMatchesActive(getActiveProviderName)) {
+          return;
+        }
         (global as Record<string, unknown>).__oauth_needs_code = false;
-        // Open the OAuth code dialog
         appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
       }
-    }, 100); // Check every 100ms
+    }, 100);
 
     return () => clearInterval(checkOAuthFlag);
-  }, [appDispatch]);
+  }, [appDispatch, getActiveProviderName]);
 
   // Auto-dismiss OAuth dialog when auth completes via browser callback
   // Issue #1404: Dialog should automatically hide after auth completes
