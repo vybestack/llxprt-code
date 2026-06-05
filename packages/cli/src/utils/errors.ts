@@ -13,6 +13,10 @@ import {
   isFatalToolError,
   type Config,
 } from '@vybestack/llxprt-code-core';
+import {
+  getActiveProviderNameForApiError,
+  getErrorFallbackModel,
+} from './apiErrorFormatting.js';
 
 /**
  * Extracts a string error message from an unknown error type
@@ -69,7 +73,13 @@ export function handleError(
   config: Config,
   customErrorCode?: string | number,
 ): never {
-  const errorMessage = parseAndFormatApiError(error);
+  const providerName = getActiveProviderNameForApiError(config);
+  const errorMessage = parseAndFormatApiError(
+    error,
+    undefined,
+    getErrorFallbackModel(config, providerName),
+    providerName,
+  );
 
   console.error(errorMessage);
 

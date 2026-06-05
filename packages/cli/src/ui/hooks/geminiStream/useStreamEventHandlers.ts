@@ -49,6 +49,10 @@ import {
   getCurrentProfileName,
   buildFinishReasonMessage,
 } from './streamUtils.js';
+import {
+  getActiveProviderNameForApiError,
+  getErrorFallbackModel,
+} from '../../../utils/apiErrorFormatting.js';
 import { StreamProcessingStatus } from './types.js';
 import {
   processContentEvent,
@@ -302,13 +306,16 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
         flushPendingHistoryItem(userMessageTimestamp);
         setPendingHistoryItem(null);
       }
+      const providerName = getActiveProviderNameForApiError(config);
+      const fallbackModel = getErrorFallbackModel(config, providerName);
       addItem(
         {
           type: MessageType.ERROR,
           text: parseAndFormatApiError(
             eventValue.error,
             undefined,
-            config.getModel(),
+            fallbackModel,
+            providerName,
           ),
         },
         userMessageTimestamp,
