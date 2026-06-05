@@ -48,6 +48,7 @@ import {
   InvalidStreamError,
   EmptyStreamError,
   isSchemaDepthError,
+  isThoughtPart,
   type UsageMetadataWithCache,
 } from './geminiChatTypes.js';
 import type { ResponseOutcome } from '../utils/generateContentResponseUtilities.js';
@@ -812,9 +813,7 @@ export class StreamProcessor {
           isActionable: acc.outcome.isActionable || chunkOutcome.isActionable,
         };
         acc.modelResponseParts.push(
-          ...(includeThoughts
-            ? parts
-            : parts.filter((p) => p.thought !== true)),
+          ...(includeThoughts ? parts : parts.filter((p) => !isThoughtPart(p))),
         );
       }
     }
