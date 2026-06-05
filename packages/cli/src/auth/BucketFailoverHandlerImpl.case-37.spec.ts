@@ -38,7 +38,9 @@ describe('BucketFailoverHandlerImpl #37', () => {
 
     // Assert: authenticate should be called exactly ONCE (not for every bucket)
     expect(authenticateSpy).toHaveBeenCalledTimes(1);
-    expect(authenticateSpy).toHaveBeenCalledWith('anthropic', 'bucket-b'); // First eligible after bucket-a
+    expect(authenticateSpy).toHaveBeenCalledWith('anthropic', 'bucket-b', {
+      signalAuthCompletion: false,
+    }); // First eligible after bucket-a
     expect(result).toBe(false); // Failed because reauth didn't save token
   });
 });

@@ -19,6 +19,7 @@ import type {
   TokenStore,
 } from '@vybestack/llxprt-code-core';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
+import type { LocalOAuthCallbackServer } from './local-oauth-callback.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 
 const startLocalOAuthCallbackMock = vi.mocked(startLocalOAuthCallback);
@@ -163,6 +164,131 @@ describe('AnthropicOAuthProvider local callback flow', () => {
 
     expect(startLocalOAuthCallbackMock).toHaveBeenCalled();
     // After cancelAuth(), __oauth_needs_code is cleared (false)
+    expect(
+      (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
+    ).toBe(false);
+  });
+
+  it('does not wait on a newer dialog after an auth attempt becomes stale', async () => {
+    let resolveOldManualEntry: (code: string) => void = () => {};
+    const oldManualEntryPromise = new Promise<string>((resolve) => {
+      resolveOldManualEntry = resolve;
+    });
+    const neverCompletesCallback = new Promise<{ code: string; state: string }>(
+      () => {},
+    );
+    const shutdown = vi.fn<LocalOAuthCallbackServer['shutdown']>(
+      async () => undefined,
+    );
+    const localCallback: LocalOAuthCallbackServer = {
+      redirectUri: 'http://localhost:8765/callback',
+      waitForCallback: () => neverCompletesCallback,
+      shutdown,
+    };
+    const internals = provider as unknown as {
+      currentAuthAttemptId: string;
+      pendingAuthPromise: Promise<string>;
+      dialog: { hasPendingPromise(): boolean };
+      raceCallbackVsManualEntry(
+        attemptId: string,
+        callback: LocalOAuthCallbackServer,
+      ): Promise<OAuthToken>;
+    };
+
+    internals.currentAuthAttemptId = 'attempt-1';
+    internals.pendingAuthPromise = oldManualEntryPromise;
+    const authResult = internals
+      .raceCallbackVsManualEntry('attempt-1', localCallback)
+      .then(
+        () => 'resolved',
+        (error: unknown) =>
+          error instanceof Error ? error.message : String(error),
+      );
+
+    internals.currentAuthAttemptId = 'attempt-2';
+    internals.pendingAuthPromise = new Promise<string>(() => {});
+    internals.dialog = { hasPendingPromise: () => true };
+    resolveOldManualEntry('old-code');
+
+    await expect(
+      Promise.race([
+        authResult,
+        new Promise<string>((resolve) =>
+          setTimeout(() => resolve('timed-out'), 50),
+        ),
+      ]),
+    ).resolves.toBe('Auth attempt cancelled');
+    expect(shutdown).toHaveBeenCalled();
+  });
+
+  it('treats stale manual-entry-only attempts as user cancellations', async () => {
+    startLocalOAuthCallbackMock.mockRejectedValue(
+      new Error('callback unavailable'),
+    );
+    shouldLaunchBrowserSpy.mockReturnValue(true);
+
+    const firstAttempt = provider.initiateAuth().then(
+      () => 'resolved',
+      (error: unknown) =>
+        error instanceof coreModule.OAuthError ? error.type : String(error),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    (
+      provider as unknown as { currentAuthAttemptId: string }
+    ).currentAuthAttemptId = 'newer-attempt';
+    provider.submitAuthCode('old-code');
+
+    await expect(
+      Promise.race([
+        firstAttempt,
+        new Promise<string>((resolve) =>
+          setTimeout(() => resolve('timed-out'), 50),
+        ),
+      ]),
+    ).resolves.toBe(coreModule.OAuthErrorType.USER_CANCELLED);
+  });
+
+  it('does not wait for manual entry after callback token exchange fails', async () => {
+    const waitForCallback = vi
+      .fn()
+      .mockResolvedValue({ code: 'auth-code', state: 'generated-state' });
+    const shutdown = vi.fn<LocalOAuthCallbackServer['shutdown']>(
+      async () => undefined,
+    );
+
+    startLocalOAuthCallbackMock.mockResolvedValue({
+      redirectUri: 'http://localhost:8765/callback',
+      waitForCallback,
+      shutdown,
+    });
+    (
+      deviceFlow as unknown as {
+        exchangeCodeForToken: (authCode: string) => Promise<OAuthToken>;
+      }
+    ).exchangeCodeForToken = vi.fn(async () => {
+      throw new coreModule.OAuthError(
+        coreModule.OAuthErrorType.INVALID_CREDENTIALS,
+        'anthropic',
+        'token exchange failed',
+      );
+    });
+
+    const result = provider.initiateAuth().then(
+      () => 'resolved',
+      (error: unknown) =>
+        error instanceof coreModule.OAuthError ? error.message : String(error),
+    );
+
+    await expect(
+      Promise.race([
+        result,
+        new Promise<string>((resolve) =>
+          setTimeout(() => resolve('timed-out'), 50),
+        ),
+      ]),
+    ).resolves.toBe('token exchange failed');
+    expect(shutdown).toHaveBeenCalled();
     expect(
       (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
     ).toBe(false);

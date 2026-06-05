@@ -12,6 +12,7 @@ import type { AppState } from '../reducers/appReducer.js';
 export const useAuthCommand = (
   settings: LoadedSettings,
   appState: AppState,
+  setAuthError: (error: string | null) => void,
 ) => {
   const appDispatch = useAppDispatch();
   const isAuthDialogOpen = appState.openDialogs.auth;
@@ -21,11 +22,14 @@ export const useAuthCommand = (
   }, [appDispatch]);
 
   const handleAuthSelect = useCallback(
-    async (_selection: string | undefined, _scope: SettingScope) => {
+    async (selection: string | undefined, _scope: SettingScope) => {
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
+      if (selection === undefined) return;
+
+      setAuthError(null);
       appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
     },
-    [appDispatch],
+    [appDispatch, setAuthError],
   );
 
   return {

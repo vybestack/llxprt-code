@@ -78,6 +78,7 @@ describe('useEditorSettings', () => {
         auth: null,
         editor: null,
       },
+      needsRelogin: false,
       lastAddItemAction: null,
     };
 

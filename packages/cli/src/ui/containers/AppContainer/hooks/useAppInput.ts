@@ -119,7 +119,7 @@ function useInputCoreCallbacks(p: AppInputParams) {
   }, [settings, openEditorDialog]);
   const onAuthError = useCallback(() => {
     setAuthError('reauth required');
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
+    appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: true });
   }, [setAuthError, appDispatch]);
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
@@ -404,6 +404,8 @@ function useInputStreamWiring(
     todoContinuationRef,
     isMcpReady,
     addMessage,
+    needsRelogin: p.appState.needsRelogin,
+    appDispatch: p.appDispatch,
   });
   const { handleUserInputSubmit } = useTodoPausePreserver({
     controller: todoPauseController,

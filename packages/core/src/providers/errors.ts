@@ -302,8 +302,25 @@ export type BucketFailureReason =
   | 'quota-exhausted'
   | 'expired-refresh-failed'
   | 'reauth-failed'
+  | 'reauth-timeout'
   | 'no-token'
   | 'skipped';
+
+const AUTH_BUCKET_FAILURE_REASONS: ReadonlySet<BucketFailureReason> = new Set([
+  'expired-refresh-failed',
+  'reauth-failed',
+  'reauth-timeout',
+]);
+
+/**
+ * Returns whether a bucket failure reason requires user re-authentication.
+ * AUTH_BUCKET_FAILURE_REASONS is the canonical set for UI and display decisions.
+ */
+export function isAuthBucketFailureReason(
+  reason: BucketFailureReason,
+): boolean {
+  return AUTH_BUCKET_FAILURE_REASONS.has(reason);
+}
 
 /**
  * Thrown when all OAuth buckets are exhausted during failover
@@ -342,10 +359,18 @@ export class AllBucketsExhaustedError extends Error {
     const cleanedLastErrorMsg =
       AllBucketsExhaustedError.extractHumanReadableMessage(lastError.message);
 
+    const hasAuthReason = Object.values(storedReasons).some((r) =>
+      isAuthBucketFailureReason(r),
+    );
+    const reauthenticateSuffix = hasAuthReason
+      ? '\nPlease re-authenticate to continue. The auth dialog will open on your next message.'
+      : '';
+
     super(
       `All buckets exhausted for provider '${providerName}': ${attemptedBuckets.join(', ')}` +
         (bucketDetails ? `\n${bucketDetails}` : '') +
-        `\nLast error: ${cleanedLastErrorMsg}`,
+        `\nLast error: ${cleanedLastErrorMsg}` +
+        reauthenticateSuffix,
     );
     this.name = 'AllBucketsExhaustedError';
     this.attemptedBuckets = [...attemptedBuckets];

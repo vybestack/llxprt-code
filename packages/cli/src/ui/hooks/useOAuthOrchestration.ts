@@ -7,11 +7,11 @@
 /**
  * @hook useOAuthOrchestration
  * @description OAuth flow coordination via global flags
- * @inputs appDispatch, isOAuthCodeDialogOpen
+ * @inputs appDispatch, isOAuthCodeDialogOpen, setAuthError
  * @outputs void
  * @sideEffects Interval polling (100ms), dispatch
- * @cleanup Clears interval on unmount/dialog close
- * @strictMode Safe - interval cleared on both unmounts
+ * @cleanup Clears intervals on unmount/dialog close
+ * @strictMode Safe - intervals cleared on both unmounts
  * @subscriptionStrategy Poll with dedupe
  * @technicalDebt ISSUE-1576-OAUTH-EVENT: Replace with event-driven
  */
@@ -23,12 +23,17 @@ interface UseOAuthOrchestrationOptions {
   appDispatch: React.Dispatch<AppAction>;
   isOAuthCodeDialogOpen: boolean;
   getActiveProviderName?: () => string;
+  setAuthError: (error: string | null) => void;
+}
+
+function getOAuthGlobalState(): Record<string, unknown> {
+  return global as Record<string, unknown>;
 }
 
 function oauthProviderMatchesActive(
   getActiveProviderName: (() => string) | undefined,
 ): boolean {
-  const pendingProvider = (global as Record<string, unknown>).__oauth_provider;
+  const pendingProvider = getOAuthGlobalState().__oauth_provider;
   if (typeof pendingProvider !== 'string') {
     return true;
   }
@@ -48,14 +53,16 @@ export function useOAuthOrchestration({
   appDispatch,
   isOAuthCodeDialogOpen,
   getActiveProviderName,
+  setAuthError,
 }: UseOAuthOrchestrationOptions): void {
   useEffect(() => {
     const checkOAuthFlag = setInterval(() => {
-      if ((global as Record<string, unknown>).__oauth_needs_code === true) {
+      const oauthState = getOAuthGlobalState();
+      if (oauthState.__oauth_needs_code === true) {
         if (!oauthProviderMatchesActive(getActiveProviderName)) {
           return;
         }
-        (global as Record<string, unknown>).__oauth_needs_code = false;
+        oauthState.__oauth_needs_code = false;
         appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
       }
     }, 100);
@@ -70,15 +77,27 @@ export function useOAuthOrchestration({
     // Poll for the browser-auth-success signal (global flag, not React state)
     // This polling approach is necessary because the global flag is set outside React
     const interval = setInterval(() => {
-      if (
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-        true
-      ) {
-        (global as Record<string, unknown>).__oauth_browser_auth_complete =
-          false;
+      const oauthState = getOAuthGlobalState();
+      if (oauthState.__oauth_browser_auth_complete === true) {
+        oauthState.__oauth_browser_auth_complete = false;
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
       }
     }, 100);
     return () => clearInterval(interval);
   }, [isOAuthCodeDialogOpen, appDispatch]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const oauthState = getOAuthGlobalState();
+      if (oauthState.__oauth_auth_complete === true) {
+        oauthState.__oauth_auth_complete = false;
+        setAuthError(null);
+        appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
+        appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: false });
+        appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
+        appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [appDispatch, setAuthError]);
 }

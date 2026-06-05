@@ -43,7 +43,9 @@ describe('BucketFailoverHandlerImpl #36', () => {
     const result = await handler.tryFailover({ triggeringStatus: 429 });
 
     // Assert: Should skip bucket-a (quota-exhausted) and reauth bucket-b (no-token)
-    expect(authenticateSpy).toHaveBeenCalledWith('anthropic', 'bucket-b');
+    expect(authenticateSpy).toHaveBeenCalledWith('anthropic', 'bucket-b', {
+      signalAuthCompletion: false,
+    });
     expect(result).toBe(true);
     expect(handler.getCurrentBucket()).toBe('bucket-b');
 

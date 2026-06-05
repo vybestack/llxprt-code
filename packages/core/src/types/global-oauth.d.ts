@@ -10,6 +10,8 @@ declare global {
     interface Global {
       __oauth_needs_code?: boolean;
       __oauth_provider?: string;
+      __oauth_browser_auth_complete?: boolean;
+      __oauth_auth_complete?: boolean;
     }
   }
 }

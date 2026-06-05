@@ -1587,9 +1587,11 @@ describe('RetryOrchestrator', () => {
      * @requirement REQ-1598-IC11
      * @pseudocode error-reporting.md usage lines 7-8
      */
-    it('should pass FailoverContext with triggeringStatus to tryFailover when 429 detected', async () => {
+    it('should pass FailoverContext with triggeringStatus and auth retry timeout to tryFailover when 429 detected', async () => {
       const rateLimitError = createRateLimitError();
-      let capturedContext: { triggeringStatus?: number } | undefined;
+      let capturedContext:
+        | { triggeringStatus?: number; authRetryTimeoutMs?: number }
+        | undefined;
 
       const provider = createTestProvider({
         responses: [
@@ -1628,6 +1630,98 @@ describe('RetryOrchestrator', () => {
       // EXPECTATION: tryFailover was called with context containing status 429
       expect(capturedContext).toBeDefined();
       expect(capturedContext?.triggeringStatus).toBe(429);
+      expect(capturedContext?.authRetryTimeoutMs).toBe(30000);
+    });
+
+    it('should pass configured authRetryTimeoutMs to tryFailover', async () => {
+      const rateLimitError = createRateLimitError();
+      let capturedAuthRetryTimeoutMs: number | undefined;
+
+      const provider = createTestProvider({
+        responses: [
+          { error: rateLimitError },
+          { error: rateLimitError },
+          'success',
+        ],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async (context?: {
+          triggeringStatus?: number;
+          authRetryTimeoutMs?: number;
+        }) => {
+          capturedAuthRetryTimeoutMs = context?.authRetryTimeoutMs;
+          return true;
+        },
+        isEnabled: () => true,
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 5,
+        initialDelayMs: 10,
+        authRetryTimeoutMs: 250,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      await consumeStream(orchestrator.generateChatCompletion(options));
+
+      expect(capturedAuthRetryTimeoutMs).toBe(250);
+    });
+
+    it('should read auth-retry-timeout from ephemeral settings', async () => {
+      const authError = createAuthError();
+      let capturedAuthRetryTimeoutMs: number | undefined;
+
+      const provider = createTestProvider({
+        responses: [{ error: authError }, { error: authError }, 'success'],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async (context?: {
+          triggeringStatus?: number;
+          authRetryTimeoutMs?: number;
+        }) => {
+          capturedAuthRetryTimeoutMs = context?.authRetryTimeoutMs;
+          return true;
+        },
+        isEnabled: () => true,
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 5,
+        initialDelayMs: 10,
+        authRetryTimeoutMs: 30000,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        invocation: {
+          ephemerals: {
+            'auth-retry-timeout': 125,
+          },
+        } as unknown as GenerateChatOptions['invocation'],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      await consumeStream(orchestrator.generateChatCompletion(options));
+
+      expect(capturedAuthRetryTimeoutMs).toBe(125);
     });
 
     /**

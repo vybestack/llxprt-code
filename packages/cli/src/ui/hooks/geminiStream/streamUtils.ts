@@ -20,6 +20,8 @@ import {
   getCodeAssistServer,
   UserTierId,
   UnauthorizedError,
+  AllBucketsExhaustedError,
+  isAuthBucketFailureReason,
   getErrorMessage,
   parseAndFormatApiError,
   type ToolCallRequestInfo,
@@ -387,6 +389,22 @@ export function handleSubmissionError(
   if (error instanceof UnauthorizedError) {
     onAuthError();
     return true;
+  }
+  if (error instanceof AllBucketsExhaustedError) {
+    const hasAuthReason = Object.values(error.bucketFailureReasons).some((r) =>
+      isAuthBucketFailureReason(r),
+    );
+    if (hasAuthReason) {
+      addItem(
+        {
+          type: MessageType.ERROR,
+          text: error.message,
+        },
+        timestamp,
+      );
+      onAuthError();
+      return true;
+    }
   }
   const isAbortError = error instanceof Error && error.name === 'AbortError';
   if (!isAbortError) {

@@ -16,6 +16,7 @@ import {
   shouldLaunchBrowser,
   OAuthError,
   OAuthErrorFactory,
+  OAuthErrorType,
   GracefulErrorHandler,
   RetryHandler,
   DebugLogger,
@@ -35,6 +36,22 @@ import {
 
 const CALLBACK_PORT_RANGE: [number, number] = [8765, 8795];
 const CALLBACK_TIMEOUT_MS = 3 * 60 * 1000;
+
+class AuthAttemptCancelledError extends OAuthError {
+  constructor() {
+    super(
+      OAuthErrorType.USER_CANCELLED,
+      'anthropic',
+      'Auth attempt cancelled',
+      {
+        userMessage: 'Anthropic authentication was cancelled.',
+        actionRequired:
+          'Complete the Anthropic authentication process to continue.',
+      },
+    );
+    this.name = 'AuthAttemptCancelledError';
+  }
+}
 
 export class AnthropicOAuthProvider implements OAuthProvider {
   name = 'anthropic';
@@ -149,7 +166,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         if (this.currentAuthAttemptId === attemptId) {
           return this.completeAuth(authCode);
         }
-        throw new Error('Auth attempt cancelled');
+        throw new AuthAttemptCancelledError();
       },
       this.name,
       'initiateAuth',
@@ -290,36 +307,43 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     attemptId: string,
     localCallback: LocalOAuthCallbackServer,
   ): Promise<OAuthToken> {
+    const manualEntryPromise = this.pendingAuthPromise!;
+    const dialog = this.dialog;
     const callbackPromise = localCallback
       .waitForCallback()
       .then(({ code, state }) => `${code}#${state}`);
 
+    let committedToComplete = false;
     try {
       const authCode = await Promise.race([
         callbackPromise,
-        this.pendingAuthPromise!,
+        manualEntryPromise,
       ]);
 
-      this.pendingAuthPromise!.catch(() => {});
+      manualEntryPromise.catch(() => {});
       callbackPromise.catch(() => {});
 
       await localCallback.shutdown().catch(() => undefined);
-      (
-        global as unknown as { __oauth_needs_code: boolean }
-      ).__oauth_needs_code = false;
-      (
-        global as unknown as { __oauth_browser_auth_complete: boolean }
-      ).__oauth_browser_auth_complete = true;
-
       if (this.currentAuthAttemptId === attemptId) {
+        (
+          global as unknown as { __oauth_needs_code: boolean }
+        ).__oauth_needs_code = false;
+        (
+          global as unknown as { __oauth_browser_auth_complete: boolean }
+        ).__oauth_browser_auth_complete = true;
+        committedToComplete = true;
         return await this.completeAuth(authCode);
       }
-      throw new Error('Auth attempt cancelled');
+
+      throw new AuthAttemptCancelledError();
     } catch (error) {
       callbackPromise.catch(() => {});
-      this.pendingAuthPromise!.catch(() => {});
+      manualEntryPromise.catch(() => {});
 
       await localCallback.shutdown().catch(() => undefined);
+      if (error instanceof AuthAttemptCancelledError || committedToComplete) {
+        throw error;
+      }
       this.logger.debug(
         () =>
           `Local OAuth callback failed, falling back to manual entry: ${
@@ -327,12 +351,12 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }`,
       );
 
-      if (this.dialog.hasPendingPromise()) {
-        const authCode = await this.pendingAuthPromise!;
+      if (dialog.hasPendingPromise()) {
+        const authCode = await manualEntryPromise;
         if (this.currentAuthAttemptId === attemptId) {
           return this.completeAuth(authCode);
         }
-        throw new Error('Auth attempt cancelled');
+        throw new AuthAttemptCancelledError();
       }
       throw error;
     }

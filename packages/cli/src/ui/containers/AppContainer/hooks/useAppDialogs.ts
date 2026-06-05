@@ -207,12 +207,13 @@ function useDialogsAuthProviders(
     recordingIntegration,
     runtime,
   } = p;
-  const auth = useAuthCommand(settings, appState);
+  const auth = useAuthCommand(settings, appState, st.setAuthError);
   const isOAuthCodeDialogOpen = appState.openDialogs.oauthCode;
   useOAuthOrchestration({
     appDispatch,
     isOAuthCodeDialogOpen,
     getActiveProviderName: runtime.getActiveProviderName,
+    setAuthError: st.setAuthError,
   });
   const editor = useEditorSettings(settings, appState, addItem);
   const provider = useProviderDialog({

@@ -113,6 +113,9 @@ export interface EphemeralSettings {
   retries?: number;
   /** Initial delay in milliseconds between retry attempts */
   retrywait?: number;
+  /** Timeout in milliseconds for mid-turn OAuth reauthentication attempts */
+  'auth-retry-timeout'?: number;
+
   /** Force OAuth authentication and ignore API keys/env vars */
   authOnly?: boolean;
   /** Explicit allow-list of tool names */
