@@ -39,6 +39,7 @@ export interface StreamEventDeps {
     blocked: boolean;
     feedback?: string;
   };
+  flushPendingHistoryItem: (timestamp: number) => void;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
@@ -93,10 +94,14 @@ type DispatchResult = {
 function dispatchAgentExecutionEvent(
   event: AgentExecEvent,
   prefix: string,
-  addItem: (item: HistoryItemWithoutId, timestamp: number) => void,
+  deps: StreamEventDeps,
+  geminiMessageBuffer: string,
   userMessageTimestamp: number,
-): void {
-  addItem(
+): DispatchResult {
+  if (event.contextCleared === true)
+    flushPendingGeminiContentForContextClear(deps, userMessageTimestamp);
+
+  deps.addItem(
     {
       type: MessageType.INFO,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty system message should fall back to reason
@@ -105,14 +110,33 @@ function dispatchAgentExecutionEvent(
     userMessageTimestamp,
   );
   if (event.contextCleared === true) {
-    addItem(
+    deps.addItem(
       {
         type: MessageType.INFO,
         text: 'Conversation context has been cleared.',
       },
       userMessageTimestamp,
     );
+    return { geminiMessageBuffer: '' };
   }
+
+  return { geminiMessageBuffer };
+}
+
+function flushPendingGeminiContentForContextClear(
+  deps: StreamEventDeps,
+  userMessageTimestamp: number,
+): void {
+  if (
+    deps.pendingHistoryItemRef.current?.type === 'gemini' ||
+    deps.pendingHistoryItemRef.current?.type === 'gemini_content'
+  ) {
+    deps.flushPendingHistoryItem(userMessageTimestamp);
+    deps.setPendingHistoryItem(null);
+  }
+
+  deps.thinkingBlocksRef.current = [];
+  deps.setThought(null);
 }
 
 function handleEarlyReturnEvent(
@@ -180,11 +204,14 @@ export function dispatchStreamEvent(
   );
   if (earlyReturn) return earlyReturn;
 
-  if (
-    handleCoreStreamEvent(event, deps, toolCallRequests, userMessageTimestamp)
-  ) {
-    return { geminiMessageBuffer };
-  }
+  const coreResult = handleCoreStreamEvent(
+    event,
+    deps,
+    toolCallRequests,
+    userMessageTimestamp,
+    geminiMessageBuffer,
+  );
+  if (coreResult) return coreResult;
 
   if (handleNotificationStreamEvent(event, deps, userMessageTimestamp)) {
     return { geminiMessageBuffer };
@@ -203,36 +230,37 @@ function handleCoreStreamEvent(
   deps: StreamEventDeps,
   toolCallRequests: ToolCallRequestInfo[],
   userMessageTimestamp: number,
-): boolean {
+  geminiMessageBuffer: string,
+): DispatchResult | null {
   switch (event.type) {
     case ServerGeminiEventType.ToolCallRequest:
       toolCallRequests.push({
         ...event.value,
         agentId: event.value.agentId ?? DEFAULT_AGENT_ID,
       });
-      return true;
+      return { geminiMessageBuffer };
     case ServerGeminiEventType.LoopDetected:
       deps.loopDetectedRef.current = true;
       toolCallRequests.length = 0;
-      return true;
+      return { geminiMessageBuffer };
     case ServerGeminiEventType.AgentExecutionStopped:
-      dispatchAgentExecutionEvent(
+      return dispatchAgentExecutionEvent(
         event as AgentExecEvent,
         'Execution stopped by hook: ',
-        deps.addItem,
+        deps,
+        geminiMessageBuffer,
         userMessageTimestamp,
       );
-      return true;
     case ServerGeminiEventType.AgentExecutionBlocked:
-      dispatchAgentExecutionEvent(
+      return dispatchAgentExecutionEvent(
         event as AgentExecEvent,
         'Execution blocked by hook: ',
-        deps.addItem,
+        deps,
+        geminiMessageBuffer,
         userMessageTimestamp,
       );
-      return true;
     default:
-      return false;
+      return null;
   }
 }
 

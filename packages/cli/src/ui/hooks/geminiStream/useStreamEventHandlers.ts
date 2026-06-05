@@ -650,6 +650,7 @@ async function consumeStreamEvents(
         config: deps.config,
         addItem: deps.addItem,
         sanitizeContent: deps.sanitizeContent,
+        flushPendingHistoryItem: deps.flushPendingHistoryItem,
         pendingHistoryItemRef: deps.pendingHistoryItemRef,
         thinkingBlocksRef: deps.thinkingBlocksRef,
         turnCancelledRef: deps.turnCancelledRef,
