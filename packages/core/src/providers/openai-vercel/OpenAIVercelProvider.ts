@@ -73,7 +73,7 @@ import {
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
 import { extractThinkTagsAsBlock } from '../utils/thinkingExtraction.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
-import { detectToolFormat } from '../utils/toolFormatDetection.js';
+import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { getContentPreview } from '../utils/contentPreview.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
@@ -502,10 +502,18 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
    */
   private convertToModelMessages(
     contents: IContent[],
-    options?: { includeReasoningInContext?: boolean },
+    options?: { includeReasoningInContext?: boolean; resolvedModel?: string },
   ): ModelMessage[] {
-    const toolFormat = detectToolFormat(
-      this.getModel() || this.getDefaultModel(),
+    const settings = this.resolveSettingsService();
+    // Use per-call resolved model (options.resolved.model) when available,
+    // falling back to provider model/default. This ensures tool format
+    // detection matches the actual model being used for the request.
+    const modelName =
+      options?.resolvedModel ?? (this.getModel() || this.getDefaultModel());
+    const toolFormat = resolveToolFormat(
+      modelName,
+      this.name,
+      settings,
       this.getLogger(),
     );
 
@@ -1680,7 +1688,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     const filteredContents = filterThinkingForContext(contents, stripPolicy);
     const messages: ModelMessage[] = this.convertToModelMessages(
       filteredContents,
-      { includeReasoningInContext: rs.includeInContext },
+      {
+        includeReasoningInContext: rs.includeInContext,
+        resolvedModel: modelId,
+      },
     );
 
     const formattedTools = convertToolsToOpenAIVercel(tools);
@@ -1906,8 +1917,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
   override getToolFormat(): string {
     const modelName = this.getModel() || this.getDefaultModel();
+    const settings = this.resolveSettingsService();
     const logger = new DebugLogger('llxprt:provider:openaivercel');
-    const format = detectToolFormat(modelName, logger);
+    const format = resolveToolFormat(modelName, this.name, settings, logger);
     logger.debug(() => `getToolFormat() called, returning: ${format}`, {
       provider: this.name,
       model: modelName,

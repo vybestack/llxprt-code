@@ -376,17 +376,19 @@ export async function getActiveToolFormatState(): Promise<ToolFormatState> {
 export async function setActiveToolFormatOverride(
   formatName: ToolFormatOverrideLiteral | null,
 ): Promise<ToolFormatState> {
-  const { settingsService } = getCliRuntimeServices();
+  const { config, settingsService } = getCliRuntimeServices();
   const provider = _internal.getActiveProviderOrThrow();
 
   if (!formatName || formatName === 'auto') {
     await settingsService.updateSettings(provider.name, { toolFormat: 'auto' });
+    config.setEphemeralSetting('tool-format', 'auto');
     return getActiveToolFormatState();
   }
 
   await settingsService.updateSettings(provider.name, {
     toolFormat: formatName,
   });
+  config.setEphemeralSetting('tool-format', formatName);
   return getActiveToolFormatState();
 }
 

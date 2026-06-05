@@ -46,7 +46,7 @@ import { ToolCallPipeline } from './ToolCallPipeline.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { type DumpMode } from '../utils/dumpContext.js';
 
-import { detectToolFormat } from '../utils/toolFormatDetection.js';
+import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
 
@@ -614,6 +614,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       this.getDefaultModel(),
       options.config,
       logger,
+      this.name,
     );
 
     const {
@@ -664,12 +665,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P08
    * @requirement:REQ-SP4-003
-   * Returns the detected tool format for the current model
+   * Returns the detected tool format for the current model,
+   * honoring explicit provider toolFormat overrides from SettingsService.
    */
   override getToolFormat(): string {
     const modelName = this.getModel() || this.getDefaultModel();
-    const format = detectToolFormat(
+    const settings = this.resolveSettingsService();
+    const format = resolveToolFormat(
       modelName,
+      this.name,
+      settings,
       new DebugLogger('llxprt:provider:openai'),
     );
     const logger = new DebugLogger('llxprt:provider:openai');
