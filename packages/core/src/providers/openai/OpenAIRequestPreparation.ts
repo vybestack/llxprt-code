@@ -23,7 +23,7 @@ import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
-import { detectToolFormat } from '../utils/toolFormatDetection.js';
+import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { type Config } from '../../config/config.js';
@@ -189,6 +189,7 @@ export async function prepareRequest(
   defaultModel: string,
   config: Config | undefined,
   logger: DebugLogger,
+  providerName?: string,
 ): Promise<RequestContext> {
   const { contents, tools, metadata } = options;
   const model = options.resolved.model || defaultModel;
@@ -196,7 +197,15 @@ export async function prepareRequest(
   const ephemeralSettings = options.invocation?.ephemerals ?? {};
 
   // Detect the tool format to use BEFORE building messages
-  const detectedFormat = detectToolFormat(model, logger);
+  // Check for provider toolFormat override before auto-detecting
+  const settings = options.settings;
+  const resolvedProviderName = providerName ?? 'openai';
+  const detectedFormat = resolveToolFormat(
+    model,
+    resolvedProviderName,
+    settings,
+    logger,
+  );
 
   logger.debug(
     () =>
@@ -204,7 +213,7 @@ export async function prepareRequest(
     {
       model,
       detectedFormat,
-      provider: 'openai',
+      provider: resolvedProviderName,
     },
   );
 
