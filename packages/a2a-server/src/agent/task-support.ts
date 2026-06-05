@@ -514,6 +514,8 @@ function deleteCompletedConfirmation(
  */
 export interface TaskStreamContext {
   taskState: TaskState;
+  currentModel?: string;
+  providerName?: string;
   cancelPendingTools: (reason: string) => void;
   setTaskStateAndPublishUpdate: (
     state: TaskState,
@@ -526,6 +528,19 @@ export interface TaskStreamContext {
   ) => void;
 }
 
+function getErrorFallbackModel(context: TaskStreamContext): string | undefined {
+  const normalizedProviderName = context.providerName?.trim().toLowerCase();
+  if (
+    normalizedProviderName !== undefined &&
+    normalizedProviderName !== '' &&
+    normalizedProviderName !== 'gemini'
+  ) {
+    return undefined;
+  }
+
+  return context.currentModel;
+}
+
 /**
  * Handles stream idle timeout events by cancelling pending tools
  * and publishing an input-required state update.
@@ -535,6 +550,7 @@ export function handleStreamIdleTimeout(
     type: typeof GeminiEventType.StreamIdleTimeout;
   },
   context: TaskStreamContext,
+
   stateChange: StateChange,
   traceId?: string,
 ): void {
@@ -552,7 +568,12 @@ export function handleStreamIdleTimeout(
     'Task timed out waiting for model response.',
     undefined,
     true,
-    parseAndFormatApiError(event.value.error),
+    parseAndFormatApiError(
+      event.value.error,
+      undefined,
+      getErrorFallbackModel(context),
+      context.providerName,
+    ),
     traceId,
   );
 }
@@ -598,7 +619,12 @@ export function handleStreamError(
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Runtime boundary: error.message may be undefined in malformed payloads despite type definitions
     event.value.error.message ?? 'Unknown error from LLM stream';
   logger.error('[Task] Received error event from LLM stream:', errorMessage);
-  const errMessage = parseAndFormatApiError(event.value.error);
+  const errMessage = parseAndFormatApiError(
+    event.value.error,
+    undefined,
+    getErrorFallbackModel(context),
+    context.providerName,
+  );
   context.cancelPendingTools(`LLM stream error: ${errorMessage}`);
   context.setTaskStateAndPublishUpdate(
     context.taskState,

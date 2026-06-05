@@ -62,6 +62,76 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     vi.useRealTimers();
   });
 
+  it('formats stream error events with Anthropic provider guidance', () => {
+    const pendingHistoryItemRef = {
+      current: null as HistoryItemWithoutId | null,
+    };
+    const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
+    const anthropicConfig = {
+      getModel: vi.fn(() => 'claude-opus-4-6'),
+      getMaxSessionTurns: vi.fn(() => 42),
+      getEphemeralSetting: vi.fn(() => undefined),
+      getProviderManager: vi.fn(() => ({
+        getActiveProviderName: vi.fn(() => 'anthropic'),
+      })),
+      getSettingsService: vi.fn(() => ({
+        get: vi.fn(() => 'profile-name'),
+      })),
+    } as unknown as Config;
+
+    const { result } = renderHook(() =>
+      useStreamEventHandlers({
+        config: anthropicConfig,
+        settings: mockSettings,
+        addItem: mockAddItem,
+        onDebugMessage: vi.fn(),
+        onCancelSubmit: vi.fn(),
+        sanitizeContent: (text: string) => ({ text, blocked: false }),
+        flushPendingHistoryItem: vi.fn(),
+        pendingHistoryItemRef,
+        thinkingBlocksRef: { current: [] as ThinkingBlock[] },
+        turnCancelledRef: { current: false },
+        queuedSubmissionsRef,
+        setPendingHistoryItem: vi.fn(),
+        setIsResponding: vi.fn(),
+        setThought,
+        setLastGeminiActivityTime,
+        scheduleToolCalls: mockScheduleToolCalls,
+        abortActiveStream,
+        handleShellCommand: vi.fn(() => false),
+        handleSlashCommand: vi.fn().mockResolvedValue(false),
+        logger: null,
+        shellModeActive: false,
+        loopDetectedRef: { current: false },
+        lastProfileNameRef: { current: undefined as string | undefined },
+      }),
+    );
+
+    result.current.handleErrorEvent(
+      {
+        error: {
+          message: 'Rate limit exceeded',
+          status: 429,
+        },
+      },
+      123,
+    );
+
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.ERROR,
+        text: expect.stringContaining('Anthropic rate limit exceeded'),
+      }),
+      123,
+    );
+    const errorItem = mockAddItem.mock.calls[0][0] as { text: string };
+    expect(errorItem.text).not.toContain('gemini-2.5-flash');
+    expect(errorItem.text).not.toContain('AI Studio');
+    expect(errorItem.text).not.toContain('Gemini Code Assist');
+    expect(errorItem.text).not.toContain('Switching to the');
+    expect(queuedSubmissionsRef.current).toStrictEqual([]);
+  });
+
   it('aborts a stalled stream after partial content without scheduling buffered tool calls', async () => {
     const pendingHistoryItemRef = {
       current: null as HistoryItemWithoutId | null,
