@@ -393,7 +393,12 @@ export function useAppDialogs(params: AppDialogsParams) {
     core.setShowErrorDetails,
   );
   const profiles = useDialogsProfiles(params);
-  return { ...st, ...core, ...auth, ...profiles };
+  const [startupGuardsInitialized, setStartupGuardsInitialized] =
+    useState(false);
+  useEffect(() => {
+    setStartupGuardsInitialized(true);
+  }, []);
+  return { ...st, ...core, ...auth, ...profiles, startupGuardsInitialized };
 }
 
 export type AppDialogsResult = ReturnType<typeof useAppDialogs>;

@@ -65,8 +65,10 @@ export interface AppLayoutParams {
   isCreateProfileDialogOpen: AppDialogsResult['isCreateProfileDialogOpen'];
   showPrivacyNotice: AppDialogsResult['showPrivacyNotice'];
   isWelcomeDialogOpen: AppDialogsResult['isWelcomeDialogOpen'];
+  isFolderTrustDialogOpen: AppDialogsResult['isFolderTrustDialogOpen'];
   embeddedShellFocused: AppDialogsResult['embeddedShellFocused'];
   setEmbeddedShellFocused: AppDialogsResult['setEmbeddedShellFocused'];
+  startupGuardsInitialized: AppDialogsResult['startupGuardsInitialized'];
 
   // From input
   streamingState: AppInputResult['streamingState'];
@@ -233,10 +235,12 @@ function useLayoutContext(p: AppLayoutParams) {
     isCreateProfileDialogOpen,
     showPrivacyNotice,
     isWelcomeDialogOpen,
+    isFolderTrustDialogOpen,
     terminalHeight,
     terminalWidth,
     submitQuery,
     vimModeEnabled,
+    startupGuardsInitialized,
   } = p;
   const debugMode = config.getDebugMode();
   const filteredConsoleMessages = useMemo(() => {
@@ -264,7 +268,9 @@ function useLayoutContext(p: AppLayoutParams) {
       isCreateProfileDialogOpen,
       showPrivacyNotice,
       isWelcomeDialogOpen,
+      isFolderTrustDialogOpen,
     },
+    startupGuardsInitialized,
   });
   const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
   const placeholder = usePowerShellPlaceholder({ vimModeEnabled });
