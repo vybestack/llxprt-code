@@ -988,7 +988,6 @@ Expectation for required parameters:
             );
           }
 
-          // For nonexistent files, isNewFile is true when old_string is empty
           const isNewFile = params.old_string === '' && currentContent === '';
           return applyReplacement(
             currentContent,
