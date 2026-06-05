@@ -527,6 +527,18 @@ describe('parseAndFormatApiError', () => {
       expect(result).not.toContain('Switching to the');
     });
 
+    it('should preserve explicit Gemini provider behavior for Claude model names', () => {
+      const result = parseAndFormatApiError(
+        rateLimitErrorMessage,
+        undefined,
+        'claude-opus-4-6',
+        'gemini',
+      );
+      expect(result).toContain('Rate limit exceeded. Please wait a moment');
+      expect(result).toContain('/model to switch to a different model');
+      expect(result).not.toContain('Anthropic rate limit exceeded');
+    });
+
     it('should preserve existing Gemini rate limit behavior when providerName is blank', () => {
       const result = parseAndFormatApiError(
         rateLimitErrorMessage,

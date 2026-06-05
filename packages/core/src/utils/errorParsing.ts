@@ -141,6 +141,10 @@ function getProviderFamily(
     return undefined;
   }
 
+  if (normalizedProviderName === 'gemini') {
+    return normalizedProviderName;
+  }
+
   const normalizedModelName = currentModel?.trim().toLowerCase() ?? '';
   if (
     normalizedProviderName.includes('anthropic') ||
