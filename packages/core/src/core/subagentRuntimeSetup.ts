@@ -498,8 +498,11 @@ export async function createChatObject(
   const { foregroundConfig: config, context } = params;
   const logger = new DebugLogger('llxprt:subagent');
 
-  if (!promptConfig.systemPrompt) {
-    throw new Error('PromptConfig must have `systemPrompt` defined.');
+  if (
+    typeof promptConfig.systemPrompt !== 'string' ||
+    promptConfig.systemPrompt.trim().length === 0
+  ) {
+    throw new Error('PromptConfig.systemPrompt must be a non-empty string.');
   }
 
   const startHistory: Content[] = [];

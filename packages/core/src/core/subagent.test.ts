@@ -1057,7 +1057,9 @@ describe('subagent.ts', () => {
 
         await expect(
           scope.runNonInteractive(new ContextState()),
-        ).rejects.toThrow('PromptConfig must have `systemPrompt` defined.');
+        ).rejects.toThrow(
+          'PromptConfig.systemPrompt must be a non-empty string.',
+        );
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
       });
 

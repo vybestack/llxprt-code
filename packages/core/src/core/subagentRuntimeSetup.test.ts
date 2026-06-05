@@ -427,7 +427,7 @@ describe('subagentRuntimeSetup', () => {
       };
 
       await expect(createChatObject(params)).rejects.toThrow(
-        'PromptConfig must have `systemPrompt` defined.',
+        'PromptConfig.systemPrompt must be a non-empty string.',
       );
     });
 
@@ -458,7 +458,69 @@ describe('subagentRuntimeSetup', () => {
       };
 
       await expect(createChatObject(params)).rejects.toThrow(
-        'PromptConfig must have `systemPrompt` defined.',
+        'PromptConfig.systemPrompt must be a non-empty string.',
+      );
+    });
+
+    it('should throw when systemPrompt is whitespace-only', async () => {
+      const whitespacePromptConfig = {
+        systemPrompt: '   \t\n  ',
+      } as CreateChatObjectParams['promptConfig'];
+
+      const params: CreateChatObjectParams = {
+        promptConfig: whitespacePromptConfig,
+        modelConfig: { model: 'test-model', temp: 0, top_p: 1 },
+        outputConfig: undefined,
+        toolConfig: undefined,
+        runtimeContext: {
+          state: {
+            sessionId: 'test-session',
+            provider: 'gemini',
+            model: 'test',
+          },
+          tools: { listToolNames: () => [], getToolMetadata: () => undefined },
+        },
+        contentGenerator: {},
+        environmentContextLoader: async () => [],
+        foregroundConfig: {
+          getMcpClientManager: () => ({ getMcpInstructions: () => undefined }),
+        } as unknown as CreateChatObjectParams['foregroundConfig'],
+        context: { get: () => undefined, get_keys: () => [], set: () => {} },
+      };
+
+      await expect(createChatObject(params)).rejects.toThrow(
+        'PromptConfig.systemPrompt must be a non-empty string.',
+      );
+    });
+
+    it('should throw when systemPrompt is a non-string type', async () => {
+      const numericPromptConfig = {
+        systemPrompt: 42,
+      } as unknown as CreateChatObjectParams['promptConfig'];
+
+      const params: CreateChatObjectParams = {
+        promptConfig: numericPromptConfig,
+        modelConfig: { model: 'test-model', temp: 0, top_p: 1 },
+        outputConfig: undefined,
+        toolConfig: undefined,
+        runtimeContext: {
+          state: {
+            sessionId: 'test-session',
+            provider: 'gemini',
+            model: 'test',
+          },
+          tools: { listToolNames: () => [], getToolMetadata: () => undefined },
+        },
+        contentGenerator: {},
+        environmentContextLoader: async () => [],
+        foregroundConfig: {
+          getMcpClientManager: () => ({ getMcpInstructions: () => undefined }),
+        } as unknown as CreateChatObjectParams['foregroundConfig'],
+        context: { get: () => undefined, get_keys: () => [], set: () => {} },
+      };
+
+      await expect(createChatObject(params)).rejects.toThrow(
+        'PromptConfig.systemPrompt must be a non-empty string.',
       );
     });
   });
