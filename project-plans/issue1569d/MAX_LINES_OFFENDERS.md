@@ -1,5 +1,26 @@
 # Issue #1569d — max-lines offenders
 
+## Phase 5 C5-MLF / C5-CogC / C5-ML Validation Summary (Issue #1915)
+
+Validated on branch `issue1915` that promoted production-only size and
+cognitive-complexity rules remain at zero diagnostics:
+
+- **Scope**: `packages/core/src` and `packages/cli/src`, excluding
+  `*.test.ts`, `*.test.tsx`, `*.spec.ts`, `*.spec.tsx`, and `__tests__`
+- **Rules & caps**:
+  - `max-lines`: error, cap 800 (skipBlankLines, skipComments)
+  - `max-lines-per-function`: error, cap 80 (skipBlankLines, skipComments)
+  - `sonarjs/cognitive-complexity`: error, cap 30
+- **Result**: 0 diagnostics across all three rules in production-only files
+- **eslint.config.js change**: `subagent.ts` coordinator `max-lines` override
+  promoted from `warn` to `error` (file now compliant at <800 counted lines)
+
+The historical offender table below is retained from the Phase 5 C5-PREP
+inventory. It was captured when `max-lines` was at warning level and includes
+test files and counts that do not reflect the current production-only status.
+
+---
+
 Captured for Phase 5 C5-PREP after enabling global `max-lines` warning policy:
 
 - Rule config: `max-lines: ["warn", { max: 800, skipBlankLines: true, skipComments: true }]`

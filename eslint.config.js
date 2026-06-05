@@ -898,10 +898,10 @@ export default tseslint.config(
   //
   // Error-level max-lines and max-lines-per-function rules on the four new
   // modules ensure they never grow past their design targets. The coordinator
-  // file (subagent.ts) uses 'warn' during the decomposition (Phases 1-4) and
-  // will be promoted to 'error' in Phase 5 once the file is thin enough.
-  // These rules target files that don't exist yet — ESLint silently ignores
-  // unmatched globs, so CI stays green during Phase 0.
+  // file (subagent.ts) was promoted from 'warn' to 'error' in Phase 5 (Issue
+  // #1915) once the file was thin enough to comply. These rules target files
+  // that don't exist yet — ESLint silently ignores unmatched globs, so CI
+  // stays green during Phase 0.
   {
     files: [
       'packages/core/src/core/subagentTypes.ts',
@@ -921,13 +921,13 @@ export default tseslint.config(
       ],
     },
   },
-  // subagent.ts coordinator: warn during decomposition, promoted to error in Phase 5
+  // subagent.ts coordinator: promoted from warn to error in Phase 5 (Issue #1915)
   {
     files: ['packages/core/src/core/subagent.ts'],
     ignores: ['**/*.test.ts'],
     rules: {
       'max-lines': [
-        'warn',
+        'error',
         { max: 800, skipBlankLines: true, skipComments: true },
       ],
       'max-lines-per-function': [
