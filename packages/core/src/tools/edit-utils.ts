@@ -12,6 +12,117 @@ import type { EditToolParams } from './edit.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
 
 /**
+ * Computes the character offset for the start of a 1-based line number
+ * within content split by newlines.
+ */
+function getOffsetForLine(lines: string[], lineNumber: number): number {
+  let offset = 0;
+  for (let i = 0; i < lineNumber - 1; i++) {
+    offset += lines[i].length + 1;
+  }
+  return offset;
+}
+
+/**
+ * Counts occurrences of oldString that start within the line range
+ * [replaceLine, replaceLine+1) — i.e., occurrences whose start position
+ * falls on the specified 1-based line number.
+ * Returns 0 if replaceLine is out of range.
+ */
+export function countLineGuardedOccurrences(
+  currentContent: string,
+  oldString: string,
+  replaceLine: number,
+): number {
+  if (oldString === '') {
+    return 0;
+  }
+  const lines = currentContent.split('\n');
+  if (replaceLine > lines.length) {
+    return 0;
+  }
+  const lineStartOffset = getOffsetForLine(lines, replaceLine);
+  const nextLineStartOffset =
+    replaceLine < lines.length
+      ? getOffsetForLine(lines, replaceLine + 1)
+      : currentContent.length;
+
+  let count = 0;
+  let searchStart = lineStartOffset;
+  while (searchStart < nextLineStartOffset) {
+    const foundAt = currentContent.indexOf(oldString, searchStart);
+    if (foundAt === -1 || foundAt >= nextLineStartOffset) {
+      break;
+    }
+    count++;
+    searchStart = foundAt + oldString.length;
+  }
+  return count;
+}
+
+/**
+ * Applies replacement of oldString with newString, but only for occurrences
+ * whose start position falls within the line range [replaceLine, replaceLine+1).
+ * Replaces up to expectedReplacements eligible occurrences.
+ * Returns the resulting content string.
+ *
+ * Deterministic approach: collect all eligible match offsets from the original
+ * content first, then build the output string from original content slices.
+ * This avoids the stale-bounds bug that arises when searching a mutated result
+ * string with offsets computed from the original content.
+ */
+export function applyLineGuardedReplacement(
+  currentContent: string,
+  oldString: string,
+  newString: string,
+  expectedReplacements: number,
+  replaceLine: number,
+): string {
+  if (oldString === '') {
+    return currentContent;
+  }
+  const lines = currentContent.split('\n');
+  if (replaceLine > lines.length) {
+    return currentContent;
+  }
+  const lineStartOffset = getOffsetForLine(lines, replaceLine);
+  const nextLineStartOffset =
+    replaceLine < lines.length
+      ? getOffsetForLine(lines, replaceLine + 1)
+      : currentContent.length;
+
+  // Collect eligible match start offsets from the original content.
+  const matchOffsets: number[] = [];
+  let searchStart = lineStartOffset;
+  while (
+    matchOffsets.length < expectedReplacements &&
+    searchStart < nextLineStartOffset
+  ) {
+    const foundAt = currentContent.indexOf(oldString, searchStart);
+    if (foundAt === -1 || foundAt >= nextLineStartOffset) {
+      break;
+    }
+    matchOffsets.push(foundAt);
+    searchStart = foundAt + oldString.length;
+  }
+
+  if (matchOffsets.length === 0) {
+    return currentContent;
+  }
+
+  // Build result from original content slices, replacing at collected offsets.
+  let result = '';
+  let prevEnd = 0;
+  for (const offset of matchOffsets) {
+    result += currentContent.substring(prevEnd, offset);
+    result += newString;
+    prevEnd = offset + oldString.length;
+  }
+  result += currentContent.substring(prevEnd);
+  return result;
+}
+
+/**
  * Gets emoji filter instance based on configuration
  */
 export function getEmojiFilter(config: Config): EmojiFilter {
@@ -188,8 +299,8 @@ export function buildNoOccurrenceError(
     }
 
     return {
-      display: `Failed to edit: no occurrences of old_string found on the specified line ${replaceLine}.`,
-      raw: `Failed to edit, 0 occurrences found for old_string on line ${replaceLine} in ${filePath}. No edits made. The exact text in old_string was not found on that line.\n\n${preview}`,
+      display: `Failed to edit: no occurrences of old_string found starting at the specified line ${replaceLine}.`,
+      raw: `Failed to edit, 0 occurrences found for old_string starting at line ${replaceLine} in ${filePath}. No edits made. The exact text in old_string was not found starting at that line.\n\n${preview}`,
       type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
     };
   }
