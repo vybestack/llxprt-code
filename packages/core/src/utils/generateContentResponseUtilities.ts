@@ -20,7 +20,56 @@ import {
   type ToolCallResponseInfo,
 } from '../index.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
+import { isThoughtPart } from '../core/geminiChatTypes.js';
 import { DebugLogger } from '../debug/index.js';
+
+/**
+ * Canonical outcome of a model response, derived from its parts.
+ * Single source of truth for whether a response produced visible text,
+ * thinking content, tool calls, or any actionable output.
+ */
+export interface ResponseOutcome {
+  hasVisibleText: boolean;
+  hasThinking: boolean;
+  hasToolCalls: boolean;
+  isActionable: boolean;
+}
+
+/**
+ * Analyze response parts to determine the canonical outcome.
+ * This is the single authoritative function for detecting visible text,
+ * thinking content, and tool calls — eliminating ad-hoc duplication
+ * across StreamProcessor, turn.ts, MessageConverter, and client.ts.
+ */
+export function analyzeResponseOutcome(parts: Part[]): ResponseOutcome {
+  let hasVisibleText = false;
+  let hasThinking = false;
+  let hasToolCalls = false;
+
+  for (const part of parts) {
+    const isThinking = isThoughtPart(part);
+    if (isThinking) {
+      hasThinking = true;
+    }
+    if (part.functionCall !== undefined) {
+      hasToolCalls = true;
+    }
+    if (
+      !isThinking &&
+      typeof part.text === 'string' &&
+      part.text.trim() !== ''
+    ) {
+      hasVisibleText = true;
+    }
+  }
+
+  return {
+    hasVisibleText,
+    hasThinking,
+    hasToolCalls,
+    isActionable: hasVisibleText || hasToolCalls,
+  };
+}
 
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
@@ -31,25 +80,16 @@ export function getResponseText(
   if (!parts) {
     return undefined;
   }
-
-  // Filter out thought parts - thinking content should only go through Thought events,
-  // not be duplicated in Content events. Model context path handles thinking separately
-  // via IContent blocks and reasoning ephemerals. (fixes #721 duplicate thinking)
-  const textSegments = parts
-    .filter((part) => (part as { thought?: boolean }).thought !== true)
-    .map((part) => part.text)
-    .filter((text): text is string => typeof text === 'string');
-
-  if (textSegments.length === 0) {
-    return undefined;
-  }
-  return textSegments.join('');
+  return getResponseTextFromParts(parts);
 }
 
 export function getResponseTextFromParts(parts: Part[]): string | undefined {
-  // Filter out thought parts - same as getResponseText (fixes #721)
+  // Filter out thought parts - thinking content should only go through Thought events,
+  // not be duplicated in Content events. Model context path handles thinking separately
+  // via IContent blocks and reasoning ephemerals. Uses canonical isThoughtPart
+  // from geminiChatTypes for consistent filtering. (fixes #721, #1730)
   const textSegments = parts
-    .filter((part) => (part as { thought?: boolean }).thought !== true)
+    .filter((part) => !isThoughtPart(part))
     .map((part) => part.text)
     .filter((text): text is string => typeof text === 'string');
 
