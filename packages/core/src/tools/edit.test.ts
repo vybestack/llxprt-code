@@ -39,6 +39,10 @@ import type { Mock } from 'vitest';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { EditToolParams } from './edit.js';
 import { applyReplacement, EditTool } from './edit.js';
+import {
+  countLineGuardedOccurrences,
+  applyLineGuardedReplacement,
+} from './edit-utils.js';
 import type { FileDiff } from './tools.js';
 import { ToolConfirmationOutcome } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
@@ -546,13 +550,98 @@ describe('EditTool', () => {
       });
     });
 
-    it('should only replace occurrences on the specified line when replaceBeginLineNumber is provided', async () => {
-      fs.writeFileSync(filePath, 'old here\nold here\nold here\n', 'utf8');
+    it('should only replace the occurrence starting on replaceBeginLineNumber with repeated single-line old_string', async () => {
+      fs.writeFileSync(filePath, 'old\nold\nold\n', 'utf8');
       const params: EditToolParams = {
         file_path: filePath,
         old_string: 'old',
         new_string: 'new',
-        expected_replacements: 1,
+        replaceBeginLineNumber: 2,
+      };
+
+      (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+        ApprovalMode.AUTO_EDIT,
+      );
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(/Successfully modified file/);
+      expect(fs.readFileSync(filePath, 'utf8')).toBe('old\nnew\nold\n');
+    });
+
+    it('should only replace the occurrence starting on replaceBeginLineNumber with repeated multi-line old_string', async () => {
+      fs.writeFileSync(
+        filePath,
+        'alpha\nbeta\ngamma\nalpha\nbeta\ngamma\n',
+        'utf8',
+      );
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'alpha\nbeta',
+        new_string: 'ALPHA\nBETA',
+        replaceBeginLineNumber: 4,
+      };
+
+      (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+        ApprovalMode.AUTO_EDIT,
+      );
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(/Successfully modified file/);
+      expect(fs.readFileSync(filePath, 'utf8')).toBe(
+        'alpha\nbeta\ngamma\nALPHA\nBETA\ngamma\n',
+      );
+    });
+
+    it('should fail with zero-occurrence error when old_string only appears later than replaceBeginLineNumber', async () => {
+      fs.writeFileSync(filePath, 'alpha\nno match\nbeta\nold\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'old',
+        new_string: 'new',
+        replaceBeginLineNumber: 2,
+      };
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(
+        /0 occurrences found for old_string starting at line 2/,
+      );
+    });
+
+    it('should not mismatch when a later duplicate exists and expected_replacements=1 with one eligible occurrence on the specified line', async () => {
+      fs.writeFileSync(filePath, 'target\nother\ntarget\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'target',
+        new_string: 'replaced',
+        replaceBeginLineNumber: 1,
+      };
+
+      (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+        ApprovalMode.AUTO_EDIT,
+      );
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(/Successfully modified file/);
+      expect(fs.readFileSync(filePath, 'utf8')).toBe(
+        'replaced\nother\ntarget\n',
+      );
+    });
+
+    it('should replace multiple eligible occurrences starting on the same specified line with expected_replacements=2', async () => {
+      fs.writeFileSync(filePath, 'foo bar\nbaz bar bar\nqux\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'bar',
+        new_string: 'BAR',
+        expected_replacements: 2,
         replaceBeginLineNumber: 2,
       };
 
@@ -565,16 +654,95 @@ describe('EditTool', () => {
 
       expect(result.llmContent).toMatch(/Successfully modified file/);
       expect(fs.readFileSync(filePath, 'utf8')).toBe(
-        'old here\nnew here\nold here\n',
+        'foo bar\nbaz BAR BAR\nqux\n',
       );
     });
 
-    it('should return a helpful error context when replaceBeginLineNumber is provided and old_string is not on that line', async () => {
-      fs.writeFileSync(filePath, 'old here\nno match\nold here\n', 'utf8');
+    it('should error when expected_replacements exceeds eligible occurrences on the specified line', async () => {
+      fs.writeFileSync(filePath, 'foo bar\nbaz bar bar\nqux\n', 'utf8');
       const params: EditToolParams = {
         file_path: filePath,
-        old_string: 'old',
-        new_string: 'new',
+        old_string: 'bar',
+        new_string: 'BAR',
+        expected_replacements: 3,
+        replaceBeginLineNumber: 2,
+      };
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(/Expected 3 occurrences but found 2/);
+    });
+
+    it('should reject multi-line old_string starting before replaceBeginLineNumber', async () => {
+      fs.writeFileSync(
+        filePath,
+        'alpha_first\nbeta_first\nmiddle\nalpha_second\nbeta_second\nend\n',
+        'utf8',
+      );
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'alpha_first\nbeta_first',
+        new_string: 'ALPHA_FIRST\nBETA_FIRST',
+        replaceBeginLineNumber: 4,
+      };
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(
+        /0 occurrences found for old_string starting at line 4/,
+      );
+    });
+
+    it('should preserve trailing newline with multi-line replaceBeginLineNumber replacement', async () => {
+      fs.writeFileSync(filePath, 'line1\nline2\nline3\nline4\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'line2\nline3',
+        new_string: 'LINE2\nLINE3',
+        replaceBeginLineNumber: 2,
+      };
+
+      (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+        ApprovalMode.AUTO_EDIT,
+      );
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(/Successfully modified file/);
+      expect(fs.readFileSync(filePath, 'utf8')).toBe(
+        'line1\nLINE2\nLINE3\nline4\n',
+      );
+    });
+
+    it('should handle multi-line replacement at the end of file with replaceBeginLineNumber', async () => {
+      fs.writeFileSync(filePath, 'line1\nline2\nline3', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'line2\nline3',
+        new_string: 'LINE2\nLINE3',
+        replaceBeginLineNumber: 2,
+      };
+
+      (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+        ApprovalMode.AUTO_EDIT,
+      );
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(/Successfully modified file/);
+      expect(fs.readFileSync(filePath, 'utf8')).toBe('line1\nLINE2\nLINE3');
+    });
+
+    it('should return a helpful error context when replaceBeginLineNumber is provided and old_string is not starting at that line', async () => {
+      fs.writeFileSync(filePath, 'alpha\nno match\nbeta\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'alpha\nbeta',
+        new_string: 'ALPHA\nBETA',
         replaceBeginLineNumber: 2,
       };
 
@@ -582,7 +750,7 @@ describe('EditTool', () => {
       const result = await invocation.execute(new AbortController().signal);
 
       expect(result.llmContent).toMatch(
-        /0 occurrences found for old_string on line 2/,
+        /0 occurrences found for old_string starting at line 2/,
       );
       expect(result.llmContent).toMatch(/Context around requested line:/);
       // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
@@ -1103,6 +1271,567 @@ describe('EditTool', () => {
         0,
       );
       expect(totalActualRemoved).toBe(totalExpectedRemoved);
+    });
+  });
+
+  describe('getOffsetForLine', () => {
+    it('should count single occurrence on the specified line', () => {
+      const content = 'foo\nbar\nbaz\n';
+      expect(countLineGuardedOccurrences(content, 'bar', 2)).toBe(1);
+    });
+
+    it('should count multiple occurrences on the same line', () => {
+      const content = 'a bar b bar c\nnope\n';
+      expect(countLineGuardedOccurrences(content, 'bar', 1)).toBe(2);
+    });
+
+    it('should return 0 when old_string only appears on a different line', () => {
+      const content = 'target\nother\ntarget\n';
+      expect(countLineGuardedOccurrences(content, 'target', 2)).toBe(0);
+    });
+
+    it('should return 1 when old_string appears on lines 1 and 3 but guard is line 1', () => {
+      const content = 'target\nother\ntarget\n';
+      expect(countLineGuardedOccurrences(content, 'target', 1)).toBe(1);
+    });
+
+    it('should return 0 when old_string only appears before the guarded line', () => {
+      const content = 'target\nother\nnope\n';
+      expect(countLineGuardedOccurrences(content, 'target', 2)).toBe(0);
+    });
+
+    it('should return 0 for empty old_string', () => {
+      const content = 'foo\nbar\n';
+      expect(countLineGuardedOccurrences(content, '', 1)).toBe(0);
+    });
+
+    it('should return 0 for out-of-range line number', () => {
+      const content = 'foo\nbar\n';
+      expect(countLineGuardedOccurrences(content, 'foo', 999)).toBe(0);
+    });
+
+    it('should count multi-line old_string starting on the guarded line', () => {
+      const content = 'alpha\nbeta\ngamma\nalpha\nbeta\ngamma\n';
+      expect(countLineGuardedOccurrences(content, 'alpha\nbeta', 1)).toBe(1);
+    });
+
+    it('should return 0 when multi-line old_string starts before the guarded line but spans it', () => {
+      const content = 'alpha\nbeta\ngamma\n';
+      expect(countLineGuardedOccurrences(content, 'alpha\nbeta', 2)).toBe(0);
+    });
+  });
+
+  describe('applyLineGuardedReplacement', () => {
+    it('should replace only the occurrence on the specified line', () => {
+      const content = 'old\nold\nold\n';
+      const result = applyLineGuardedReplacement(content, 'old', 'new', 1, 2);
+      expect(result).toBe('old\nnew\nold\n');
+    });
+
+    it('should replace multiple occurrences on the same line when expected_replacements > 1', () => {
+      const content = 'foo bar\nbaz bar bar\nqux\n';
+      const result = applyLineGuardedReplacement(content, 'bar', 'BAR', 2, 2);
+      expect(result).toBe('foo bar\nbaz BAR BAR\nqux\n');
+    });
+
+    it('should not replace occurrences on other lines', () => {
+      const content = 'target\nother\ntarget\n';
+      const result = applyLineGuardedReplacement(
+        content,
+        'target',
+        'REPLACED',
+        1,
+        3,
+      );
+      expect(result).toBe('target\nother\nREPLACED\n');
+    });
+
+    it('should not replace when old_string only appears before the guarded line', () => {
+      const content = 'target\nother\nnope\n';
+      const result = applyLineGuardedReplacement(
+        content,
+        'target',
+        'REPLACED',
+        1,
+        2,
+      );
+      expect(result).toBe('target\nother\nnope\n');
+    });
+
+    it('should return content unchanged for empty old_string', () => {
+      const content = 'foo\nbar\n';
+      const result = applyLineGuardedReplacement(content, '', 'new', 1, 1);
+      expect(result).toBe('foo\nbar\n');
+    });
+
+    it('should return content unchanged when replaceLine is out of range', () => {
+      const content = 'foo\nbar\n';
+      const result = applyLineGuardedReplacement(content, 'foo', 'new', 1, 999);
+      expect(result).toBe('foo\nbar\n');
+    });
+
+    it('should replace multi-line old_string starting on the guarded line', () => {
+      const content = 'alpha\nbeta\ngamma\nalpha\nbeta\ngamma\n';
+      const result = applyLineGuardedReplacement(
+        content,
+        'alpha\nbeta',
+        'ALPHA\nBETA',
+        1,
+        4,
+      );
+      expect(result).toBe('alpha\nbeta\ngamma\nALPHA\nBETA\ngamma\n');
+    });
+
+    it('should not replace multi-line old_string when it starts before the guarded line', () => {
+      const content = 'alpha\nbeta\ngamma\n';
+      const result = applyLineGuardedReplacement(
+        content,
+        'alpha\nbeta',
+        'ALPHA\nBETA',
+        1,
+        2,
+      );
+      expect(result).toBe('alpha\nbeta\ngamma\n');
+    });
+  });
+
+  describe('getModifyContext().getProposedContent', () => {
+    const testFile = 'modify_proposed.txt';
+    let filePath: string;
+
+    beforeEach(() => {
+      filePath = path.join(rootDir, testFile);
+    });
+
+    it('should replace only the occurrence on replaceBeginLineNumber with duplicate single-line old_string', async () => {
+      fs.writeFileSync(filePath, 'old\nold\nold\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'old',
+        new_string: 'new',
+        replaceBeginLineNumber: 2,
+      };
+      const modifyContext = tool.getModifyContext(new AbortController().signal);
+      const proposed = await modifyContext.getProposedContent(params);
+      expect(proposed).toBe('old\nnew\nold\n');
+    });
+
+    it('should replace only the occurrence on replaceBeginLineNumber with duplicate multi-line old_string', async () => {
+      fs.writeFileSync(
+        filePath,
+        'alpha\nbeta\ngamma\nalpha\nbeta\ngamma\n',
+        'utf8',
+      );
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'alpha\nbeta',
+        new_string: 'ALPHA\nBETA',
+        replaceBeginLineNumber: 4,
+      };
+      const modifyContext = tool.getModifyContext(new AbortController().signal);
+      const proposed = await modifyContext.getProposedContent(params);
+      expect(proposed).toBe('alpha\nbeta\ngamma\nALPHA\nBETA\ngamma\n');
+    });
+
+    it('should not replace occurrences before replaceBeginLineNumber', async () => {
+      fs.writeFileSync(filePath, 'target\nother\ntarget\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'target',
+        new_string: 'replaced',
+        replaceBeginLineNumber: 3,
+      };
+      const modifyContext = tool.getModifyContext(new AbortController().signal);
+      const proposed = await modifyContext.getProposedContent(params);
+      expect(proposed).toBe('target\nother\nreplaced\n');
+    });
+
+    it('should propose unchanged content when old_string only appears before replaceBeginLineNumber', async () => {
+      fs.writeFileSync(filePath, 'alpha\nno match\nbeta\nold\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'old',
+        new_string: 'new',
+        replaceBeginLineNumber: 2,
+      };
+      const modifyContext = tool.getModifyContext(new AbortController().signal);
+      const proposed = await modifyContext.getProposedContent(params);
+      // No occurrence of 'old' starts on line 2, so applyLineGuardedReplacement
+      // returns unchanged content — identical to execute() path behavior.
+      expect(proposed).toBe('alpha\nno match\nbeta\nold\n');
+    });
+
+    it('should replace multiple eligible occurrences on the same specified line', async () => {
+      fs.writeFileSync(filePath, 'foo bar\nbaz bar bar\nqux\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'bar',
+        new_string: 'BAR',
+        expected_replacements: 2,
+        replaceBeginLineNumber: 2,
+      };
+      const modifyContext = tool.getModifyContext(new AbortController().signal);
+      const proposed = await modifyContext.getProposedContent(params);
+      expect(proposed).toBe('foo bar\nbaz BAR BAR\nqux\n');
+    });
+
+    it('should not replace occurrences on other lines even when expected_replacements exceeds guarded occurrences', async () => {
+      fs.writeFileSync(filePath, 'bar bar bar\nbar bar\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'bar',
+        new_string: 'BAR',
+        expected_replacements: 5,
+        replaceBeginLineNumber: 2,
+      };
+      const modifyContext = tool.getModifyContext(new AbortController().signal);
+      const proposed = await modifyContext.getProposedContent(params);
+      // Only 2 occurrences on line 2, but expected_replacements=5 → mismatch.
+      // execute() would reject; proposedContent returns unchanged content.
+      expect(proposed).toBe('bar bar bar\nbar bar\n');
+    });
+
+    it('should handle normal replacement without replaceBeginLineNumber', async () => {
+      fs.writeFileSync(filePath, 'hello old world\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'old',
+        new_string: 'new',
+      };
+      const modifyContext = tool.getModifyContext(new AbortController().signal);
+      const proposed = await modifyContext.getProposedContent(params);
+      expect(proposed).toBe('hello new world\n');
+    });
+
+    it('should return empty string for nonexistent file without replaceBeginLineNumber', async () => {
+      const newPath = path.join(rootDir, 'nonexistent.txt');
+      const params: EditToolParams = {
+        file_path: newPath,
+        old_string: 'old',
+        new_string: 'new',
+      };
+      const modifyContext = tool.getModifyContext(new AbortController().signal);
+      const proposed = await modifyContext.getProposedContent(params);
+      expect(proposed).toBe('');
+    });
+
+    it('should create new file content with empty old_string for nonexistent file', async () => {
+      const newPath = path.join(rootDir, 'brand_new.txt');
+      const params: EditToolParams = {
+        file_path: newPath,
+        old_string: '',
+        new_string: 'new file content',
+      };
+      const modifyContext = tool.getModifyContext(new AbortController().signal);
+      const proposed = await modifyContext.getProposedContent(params);
+      expect(proposed).toBe('new file content');
+    });
+  });
+
+  describe('replaceBeginLineNumber fuzzy behavior', () => {
+    const testFile = 'fuzzy_guard_test.txt';
+    let filePath: string;
+
+    beforeEach(() => {
+      filePath = path.join(rootDir, testFile);
+    });
+
+    it('should not fuzzy-replace when replaceBeginLineNumber is set and old_string has whitespace differences', async () => {
+      // old_string has single space but content has double space on the guarded line.
+      // With replaceBeginLineNumber active, only exact matches on the guarded line count.
+      // Fuzzy matching is NOT applied for line-guarded edits.
+      fs.writeFileSync(filePath, 'line 1\nline  2\nline 3', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'line 1\nline 2\nline 3',
+        new_string: 'line 1\nnew line 2\nline 3',
+        replaceBeginLineNumber: 1,
+      };
+
+      (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+        ApprovalMode.AUTO_EDIT,
+      );
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      // With replaceBeginLineNumber set, exact match is required on the guarded line.
+      // The multi-line old_string starts on line 1 but "line 2" (single space) does not
+      // match "line  2" (double space) on line 2. Since indexOf searches for the entire
+      // multi-line string, it won't be found. This should fail with 0 occurrences
+      // rather than fuzzy-matching a different line.
+      expect(result.llmContent).toMatch(
+        /0 occurrences found for old_string starting at line 1/,
+      );
+    });
+
+    it('should only exact-match on the guarded line and not fall back to fuzzy matching elsewhere', async () => {
+      // old_string appears on a later line but not on the guarded line.
+      // With replaceBeginLineNumber, the guarded search should find 0 occurrences.
+      fs.writeFileSync(
+        filePath,
+        'no match here\ntarget line\ntarget line\n',
+        'utf8',
+      );
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'target',
+        new_string: 'REPLACED',
+        replaceBeginLineNumber: 1,
+      };
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      // No occurrence starts on line 1
+      expect(result.llmContent).toMatch(
+        /0 occurrences found for old_string starting at line 1/,
+      );
+    });
+
+    describe('applyLineGuardedReplacement length-difference correctness', () => {
+      it('should replace all 3 "a" with "AAAA" on the guarded line (review scenario)', () => {
+        const content = 'a a a\nnext\n';
+        const result = applyLineGuardedReplacement(content, 'a', 'AAAA', 3, 1);
+        expect(result).toBe('AAAA AAAA AAAA\nnext\n');
+      });
+
+      it('should replace multiple short matches with longer replacements on the same line', () => {
+        const content = 'ab ab ab\nother\n';
+        const result = applyLineGuardedReplacement(content, 'ab', 'XYZ', 3, 1);
+        expect(result).toBe('XYZ XYZ XYZ\nother\n');
+      });
+
+      it('should replace multiple long matches with shorter replacements on the same line', () => {
+        const content = 'ABCDEF ABCDEF\nrest\n';
+        const result = applyLineGuardedReplacement(
+          content,
+          'ABCDEF',
+          'X',
+          2,
+          1,
+        );
+        expect(result).toBe('X X\nrest\n');
+      });
+
+      it('should handle overlapping-free adjacent matches with length change', () => {
+        const content = 'xy xy xy\nother\n';
+        const result = applyLineGuardedReplacement(
+          content,
+          'xy',
+          'ZZZZZ',
+          3,
+          1,
+        );
+        expect(result).toBe('ZZZZZ ZZZZZ ZZZZZ\nother\n');
+      });
+
+      it('should preserve content after the guarded line when replacement grows', () => {
+        const content = 'a a\nline2\nline3\n';
+        const result = applyLineGuardedReplacement(content, 'a', 'LONG', 2, 1);
+        expect(result).toBe('LONG LONG\nline2\nline3\n');
+      });
+
+      it('should preserve content before the guarded line when replacement shrinks', () => {
+        const content = 'prefix\nABCDEF ABCDEF\nsuffix\n';
+        const result = applyLineGuardedReplacement(
+          content,
+          'ABCDEF',
+          'X',
+          2,
+          2,
+        );
+        expect(result).toBe('prefix\nX X\nsuffix\n');
+      });
+    });
+
+    describe('execute with multiple matches on guarded line and length-changing replacement', () => {
+      const testFile = 'multi_len_replace.txt';
+      let filePath: string;
+
+      beforeEach(() => {
+        filePath = path.join(rootDir, testFile);
+      });
+
+      it('should replace all 3 "a" with "AAAA" on the guarded line through EditTool.execute', async () => {
+        fs.writeFileSync(filePath, 'a a a\nnext\n', 'utf8');
+        const params: EditToolParams = {
+          file_path: filePath,
+          old_string: 'a',
+          new_string: 'AAAA',
+          expected_replacements: 3,
+          replaceBeginLineNumber: 1,
+        };
+
+        (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+          ApprovalMode.AUTO_EDIT,
+        );
+
+        const invocation = tool.build(params);
+        const result = await invocation.execute(new AbortController().signal);
+
+        expect(result.llmContent).toMatch(/Successfully modified file/);
+        expect(fs.readFileSync(filePath, 'utf8')).toBe(
+          'AAAA AAAA AAAA\nnext\n',
+        );
+      });
+
+      it('should replace short old_string with longer new_string for multiple occurrences on the same line', async () => {
+        fs.writeFileSync(filePath, 'ab ab ab\nother\n', 'utf8');
+        const params: EditToolParams = {
+          file_path: filePath,
+          old_string: 'ab',
+          new_string: 'XYZ',
+          expected_replacements: 3,
+          replaceBeginLineNumber: 1,
+        };
+
+        (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+          ApprovalMode.AUTO_EDIT,
+        );
+
+        const invocation = tool.build(params);
+        const result = await invocation.execute(new AbortController().signal);
+
+        expect(result.llmContent).toMatch(/Successfully modified file/);
+        expect(fs.readFileSync(filePath, 'utf8')).toBe('XYZ XYZ XYZ\nother\n');
+      });
+
+      it('should replace long old_string with shorter new_string for multiple occurrences on same line', async () => {
+        fs.writeFileSync(filePath, 'prefix\nABCDEF ABCDEF\nsuffix\n', 'utf8');
+        const params: EditToolParams = {
+          file_path: filePath,
+          old_string: 'ABCDEF',
+          new_string: 'X',
+          expected_replacements: 2,
+          replaceBeginLineNumber: 2,
+        };
+
+        (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+          ApprovalMode.AUTO_EDIT,
+        );
+
+        const invocation = tool.build(params);
+        const result = await invocation.execute(new AbortController().signal);
+
+        expect(result.llmContent).toMatch(/Successfully modified file/);
+        expect(fs.readFileSync(filePath, 'utf8')).toBe('prefix\nX X\nsuffix\n');
+      });
+
+      it('should report success count matching expected_replacements when new_string is longer', async () => {
+        fs.writeFileSync(filePath, 'a a a\nnext\n', 'utf8');
+        const params: EditToolParams = {
+          file_path: filePath,
+          old_string: 'a',
+          new_string: 'AAAA',
+          expected_replacements: 3,
+          replaceBeginLineNumber: 1,
+        };
+
+        (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+          ApprovalMode.AUTO_EDIT,
+        );
+
+        const invocation = tool.build(params);
+        const result = await invocation.execute(new AbortController().signal);
+
+        expect(result.llmContent).toMatch(/3 replacements/);
+      });
+    });
+
+    describe('getProposedContent expected_replacements mismatch alignment', () => {
+      const testFile = 'proposed_mismatch.txt';
+      let filePath: string;
+
+      beforeEach(() => {
+        filePath = path.join(rootDir, testFile);
+      });
+
+      it('should return unchanged content when eligible occurrences differ from expected_replacements (too few)', async () => {
+        // 2 eligible occurrences on line 2, but expected_replacements=3 → mismatch
+        fs.writeFileSync(filePath, 'foo bar\nbaz bar bar\nqux\n', 'utf8');
+        const params: EditToolParams = {
+          file_path: filePath,
+          old_string: 'bar',
+          new_string: 'BAR',
+          expected_replacements: 3,
+          replaceBeginLineNumber: 2,
+        };
+        const modifyContext = tool.getModifyContext(
+          new AbortController().signal,
+        );
+        const proposed = await modifyContext.getProposedContent(params);
+        // execute() would reject this; proposedContent should not show partial replacement
+        expect(proposed).toBe('foo bar\nbaz bar bar\nqux\n');
+      });
+
+      it('should return unchanged content when eligible occurrences differ from expected_replacements (too many)', async () => {
+        // 3 eligible occurrences on line 1, but expected_replacements=2 → mismatch
+        fs.writeFileSync(filePath, 'bar bar bar\nother\n', 'utf8');
+        const params: EditToolParams = {
+          file_path: filePath,
+          old_string: 'bar',
+          new_string: 'BAR',
+          expected_replacements: 2,
+          replaceBeginLineNumber: 1,
+        };
+        const modifyContext = tool.getModifyContext(
+          new AbortController().signal,
+        );
+        const proposed = await modifyContext.getProposedContent(params);
+        expect(proposed).toBe('bar bar bar\nother\n');
+      });
+
+      it('should return proposed content when eligible occurrences match expected_replacements', async () => {
+        // 3 eligible occurrences on line 1, expected_replacements=3 → match
+        fs.writeFileSync(filePath, 'a a a\nnext\n', 'utf8');
+        const params: EditToolParams = {
+          file_path: filePath,
+          old_string: 'a',
+          new_string: 'AAAA',
+          expected_replacements: 3,
+          replaceBeginLineNumber: 1,
+        };
+        const modifyContext = tool.getModifyContext(
+          new AbortController().signal,
+        );
+        const proposed = await modifyContext.getProposedContent(params);
+        expect(proposed).toBe('AAAA AAAA AAAA\nnext\n');
+      });
+
+      it('should return unchanged content when no eligible occurrences exist on guarded line', async () => {
+        // old_string not on line 2 at all
+        fs.writeFileSync(filePath, 'target\nother\n', 'utf8');
+        const params: EditToolParams = {
+          file_path: filePath,
+          old_string: 'target',
+          new_string: 'REPLACED',
+          expected_replacements: 1,
+          replaceBeginLineNumber: 2,
+        };
+        const modifyContext = tool.getModifyContext(
+          new AbortController().signal,
+        );
+        const proposed = await modifyContext.getProposedContent(params);
+        expect(proposed).toBe('target\nother\n');
+      });
+
+      it('should not affect non-replaceBeginLineNumber path for mismatch', async () => {
+        // Without replaceBeginLineNumber, getProposedContent does not guard against mismatch
+        // (that path relies on execute() validation, consistent with current behavior)
+        fs.writeFileSync(filePath, 'hello old world old\n', 'utf8');
+        const params: EditToolParams = {
+          file_path: filePath,
+          old_string: 'old',
+          new_string: 'new',
+          expected_replacements: 1,
+        };
+        const modifyContext = tool.getModifyContext(
+          new AbortController().signal,
+        );
+        const proposed = await modifyContext.getProposedContent(params);
+        expect(proposed).toBe('hello new world old\n');
+      });
     });
   });
 });

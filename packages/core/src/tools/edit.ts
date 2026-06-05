@@ -45,6 +45,8 @@ import {
   getEmojiFilter,
   validateEditState,
   applyReplacement,
+  countLineGuardedOccurrences,
+  applyLineGuardedReplacement,
   type EditErrorInfo,
 } from './edit-utils.js';
 export { applyReplacement } from './edit-utils.js';
@@ -97,7 +99,6 @@ export interface EditToolParams {
    */
   ai_proposed_content?: string;
 }
-
 interface CalculatedEdit {
   currentContent: string | null;
   newContent: string;
@@ -166,13 +167,12 @@ class EditToolInvocation extends BaseToolInvocation<
           },
         };
       }
-      const lineText = lines[replaceLine - 1];
-      let count = 0;
-      let pos = lineText.indexOf(finalOldString);
-      while (pos !== -1) {
-        count++;
-        pos = lineText.indexOf(finalOldString, pos + finalOldString.length);
-      }
+
+      const count = countLineGuardedOccurrences(
+        currentContent,
+        finalOldString,
+        replaceLine,
+      );
       return { occurrences: count, error: undefined };
     }
 
@@ -256,25 +256,16 @@ class EditToolInvocation extends BaseToolInvocation<
           },
         };
       }
-      let offset = 0;
 
-      for (let i = 0; i < replaceLine - 1; i++) {
-        offset += lines[i].length + 1; // +1 for the '\n'
-      }
-      const lineText = lines[replaceLine - 1];
-      const beforeLine = currentContent.substring(0, offset);
-      const afterLine = currentContent.substring(offset + lineText.length);
-
-      const updatedLine = applyReplacement(
-        lineText,
+      const result = applyLineGuardedReplacement(
+        currentContent,
         finalOldString,
         finalNewString,
-        false,
         expectedReplacements,
+        replaceLine,
       );
-
       return {
-        newContent: beforeLine + updatedLine + afterLine,
+        newContent: result,
         error: undefined,
       };
     }
@@ -961,18 +952,57 @@ Expectation for required parameters:
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         const filePath = params.absolute_path || params.file_path || '';
         try {
-          const currentContent = await this.config
+          const raw = await this.config
             .getFileSystemService()
             .readTextFile(filePath);
+          const currentContent = raw.replace(/\r\n/g, '\n');
+          const replaceLine = params.replaceBeginLineNumber;
+
+          if (
+            replaceLine !== undefined &&
+            replaceLine > 0 &&
+            params.old_string !== ''
+          ) {
+            // When replaceBeginLineNumber is set, only replace occurrences
+            // whose start falls on the specified line.
+            const expectedReplacements = params.expected_replacements ?? 1;
+            const eligibleCount = countLineGuardedOccurrences(
+              currentContent,
+              params.old_string,
+              replaceLine,
+            );
+
+            // If eligible count doesn't match expected_replacements, execute()
+            // would reject with a mismatch error. Return unchanged content to
+            // avoid presenting a partial proposal that would never be written.
+            if (eligibleCount !== expectedReplacements) {
+              return currentContent;
+            }
+
+            return applyLineGuardedReplacement(
+              currentContent,
+              params.old_string,
+              params.new_string,
+              expectedReplacements,
+              replaceLine,
+            );
+          }
+
+          // For nonexistent files, isNewFile is true when old_string is empty
+          const isNewFile = params.old_string === '' && currentContent === '';
           return applyReplacement(
             currentContent,
             params.old_string,
             params.new_string,
-            params.old_string === '' && currentContent === '',
+            isNewFile,
             params.expected_replacements ?? 1,
           );
         } catch (err) {
           if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
+          // File does not exist: if old_string is empty, this is a new-file creation.
+          if (params.old_string === '') {
+            return params.new_string;
+          }
           return '';
         }
       },
