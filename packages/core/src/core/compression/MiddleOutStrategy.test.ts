@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- comprehensive behavioral test coverage for media sanitization (#1889) */
+
 /**
  * @plan PLAN-20260211-COMPRESSION.P05
  * @requirement REQ-CS-002.1, REQ-CS-002.2, REQ-CS-002.3, REQ-CS-002.4
@@ -18,7 +20,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { IContent } from '../../services/history/IContent.js';
+import type { IContent, MediaBlock } from '../../services/history/IContent.js';
 import type { CompressionContext } from './types.js';
 import { EmptySummaryError, isTransientCompressionError } from './types.js';
 import type { IProvider } from '../../providers/IProvider.js';
@@ -69,6 +71,32 @@ function toolResponseMsg(
         result,
       },
     ],
+  };
+}
+
+function _mediaBlock(
+  mimeType: string,
+  filename?: string,
+  data = 'base64data',
+  caption?: string,
+): MediaBlock {
+  return {
+    type: 'media',
+    mimeType,
+    filename,
+    data,
+    encoding: 'base64',
+    caption,
+  };
+}
+
+function humanMsgWithMedia(
+  text: string,
+  ...mediaBlocks: MediaBlock[]
+): IContent {
+  return {
+    speaker: 'human',
+    blocks: [{ type: 'text', text }, ...mediaBlocks],
   };
 }
 
@@ -306,10 +334,10 @@ describe('MiddleOutStrategy', () => {
       // no tool response should appear as the first message after the summary
       const topMessages = result.newHistory.slice(
         0,
-        result.metadata.topPreserved,
+        result.metadata.topPreserved ?? 0,
       );
       const bottomMessages = result.newHistory.slice(
-        result.newHistory.length - result.metadata.bottomPreserved!,
+        result.newHistory.length - (result.metadata.bottomPreserved ?? 0),
       );
 
       // Check: top messages shouldn't end with an orphaned tool call
@@ -834,6 +862,206 @@ describe('MiddleOutStrategy', () => {
       const ackMsg = result.newHistory[topCount + 1];
       const ackText = (ackMsg.blocks[0] as { type: 'text'; text: string }).text;
       expect(ackText).toContain('most recent request');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Media block sanitization — issue #1889
+  // -----------------------------------------------------------------------
+
+  describe('media block sanitization (issue #1889)', () => {
+    it('does not send raw media bytes to the compression provider for middle messages with images', async () => {
+      // Build 20 messages where some middle messages contain MediaBlocks
+      // with raw base64 data. The compression provider should never
+      // receive a MediaBlock in its request — all should be text placeholders.
+      const history: IContent[] = [];
+      for (let i = 0; i < 20; i++) {
+        if (i === 5) {
+          // This message is in the compressed middle section and has a media block
+          history.push(
+            humanMsgWithMedia('Here is the screenshot:', {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'not-valid-base64===',
+              encoding: 'base64',
+              filename: 'screenshot.png',
+            }),
+          );
+        } else if (i === 8) {
+          // Another middle message with a media block
+          history.push(
+            humanMsgWithMedia('And this PDF document:', {
+              type: 'media',
+              mimeType: 'application/pdf',
+              data: 'JVBERi0xLjQ=',
+              encoding: 'base64',
+              filename: 'report.pdf',
+            }),
+          );
+        } else if (i % 2 === 0) {
+          history.push(humanMsg(`user message ${i}`));
+        } else {
+          history.push(aiTextMsg(`ai response ${i}`));
+        }
+      }
+
+      // Capture what the provider receives
+      const capturedRequests: IContent[] = [];
+      const captureProvider: IProvider = {
+        name: 'capture-provider',
+        getModels: async () => [],
+        getDefaultModel: () => 'capture-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({}),
+        async *generateChatCompletion(options: { contents: IContent[] }) {
+          capturedRequests.push(...options.contents);
+          yield {
+            speaker: 'ai' as const,
+            blocks: [
+              {
+                type: 'text' as const,
+                text: '<state_snapshot>Compressed summary</state_snapshot>',
+              },
+            ],
+          };
+        },
+      } as unknown as IProvider;
+
+      const ctx = buildContext({
+        history,
+        resolveProvider: () => captureProvider,
+      });
+      const strategy = new MiddleOutStrategy();
+      const result = await strategy.compress(ctx);
+
+      // Verify compression succeeded
+      expect(result.metadata.llmCallMade).toBe(true);
+      expect(result.metadata.strategyUsed).toBe('middle-out');
+
+      // Verify the provider received no MediaBlock in its request
+      const allBlocks = capturedRequests.flatMap((m) => m.blocks);
+      const mediaBlocks = allBlocks.filter((b) => b.type === 'media');
+      expect(mediaBlocks).toHaveLength(0);
+
+      // Verify no raw base64 data leaked into text blocks either
+      const textBlocks = allBlocks.filter(
+        (b): b is { type: 'text'; text: string } => b.type === 'text',
+      );
+      for (const tb of textBlocks) {
+        expect(tb.text).not.toContain('not-valid-base64===');
+        expect(tb.text).not.toContain('JVBERi0xLjQ=');
+      }
+
+      // Verify media placeholders are present in the provider request
+      const placeholderTexts = textBlocks.map((b) => b.text);
+      const hasScreenshotPlaceholder = placeholderTexts.some(
+        (t) =>
+          t.includes('[Attached image: screenshot.png]') ||
+          t.includes('screenshot.png'),
+      );
+      const hasPdfPlaceholder = placeholderTexts.some(
+        (t) =>
+          t.includes('[Attached PDF: report.pdf]') || t.includes('report.pdf'),
+      );
+      expect(hasScreenshotPlaceholder).toBe(true);
+      expect(hasPdfPlaceholder).toBe(true);
+
+      // Verify preserved bottom messages retain their original media blocks
+      const bottomCount = result.metadata.bottomPreserved!;
+      const bottomMessages = result.newHistory.slice(
+        result.newHistory.length - bottomCount,
+      );
+      // Bottom messages are untouched from original, so they can have media
+      // which is fine — they're never sent to the compression LLM
+      expect(bottomMessages.length).toBeGreaterThan(0);
+    });
+
+    it('preserves media blocks in top and bottom sections that are not sent to the LLM', async () => {
+      // Build history where top and bottom sections contain media blocks
+      // These should appear unchanged in the final result
+      const history: IContent[] = [];
+      for (let i = 0; i < 20; i++) {
+        if (i === 0) {
+          // Top section message with media
+          history.push(
+            humanMsgWithMedia('Initial screenshot', {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'toppngdata',
+              encoding: 'base64',
+              filename: 'initial.png',
+            }),
+          );
+        } else if (i === 19) {
+          // Bottom section message with media
+          history.push(
+            humanMsgWithMedia('Final screenshot', {
+              type: 'media',
+              mimeType: 'image/jpeg',
+              data: 'bottomjpgdata',
+              encoding: 'base64',
+              filename: 'final.jpg',
+            }),
+          );
+        } else if (i % 2 === 0) {
+          history.push(humanMsg(`user message ${i}`));
+        } else {
+          history.push(aiTextMsg(`ai response ${i}`));
+        }
+      }
+
+      const capturedRequests: IContent[] = [];
+      const captureProvider: IProvider = {
+        name: 'capture-provider',
+        getModels: async () => [],
+        getDefaultModel: () => 'capture-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({}),
+        async *generateChatCompletion(options: { contents: IContent[] }) {
+          capturedRequests.push(...options.contents);
+          yield {
+            speaker: 'ai' as const,
+            blocks: [
+              {
+                type: 'text' as const,
+                text: '<state_snapshot>Compressed</state_snapshot>',
+              },
+            ],
+          };
+        },
+      } as unknown as IProvider;
+
+      const ctx = buildContext({
+        history,
+        resolveProvider: () => captureProvider,
+      });
+      const strategy = new MiddleOutStrategy();
+      const result = await strategy.compress(ctx);
+
+      // Top message with media should be preserved in final result
+      const topCount = result.metadata.topPreserved!;
+      const topMessages = result.newHistory.slice(0, topCount);
+      const topMediaBlocks = topMessages.flatMap((m) =>
+        m.blocks.filter((b) => b.type === 'media'),
+      );
+      expect(topMediaBlocks).toHaveLength(1);
+      expect(topMediaBlocks[0].filename).toBe('initial.png');
+
+      // Bottom message with media should be preserved in final result
+      const bottomCount = result.metadata.bottomPreserved!;
+      const bottomMessages = result.newHistory.slice(
+        result.newHistory.length - bottomCount,
+      );
+      const bottomMediaBlocks = bottomMessages.flatMap((m) =>
+        m.blocks.filter((b) => b.type === 'media'),
+      );
+      expect(bottomMediaBlocks).toHaveLength(1);
+      expect(bottomMediaBlocks[0].filename).toBe('final.jpg');
+
+      // But the provider request should contain NO media blocks
+      const allBlocks = capturedRequests.flatMap((m) => m.blocks);
+      const mediaInRequest = allBlocks.filter((b) => b.type === 'media');
+      expect(mediaInRequest).toHaveLength(0);
     });
   });
 

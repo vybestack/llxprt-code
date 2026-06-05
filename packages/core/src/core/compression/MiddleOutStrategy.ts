@@ -21,11 +21,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import type {
-  IContent,
-  TextBlock,
-  UsageStats,
-} from '../../services/history/IContent.js';
+import type { IContent, UsageStats } from '../../services/history/IContent.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type {
   CompressionContext,
@@ -48,6 +44,7 @@ import {
   COMPRESSION_SECURITY_PREAMBLE,
   runVerificationPass,
   sanitizeHistoryForCompression,
+  mediaBlockToCompressionPlaceholder,
 } from './utils.js';
 import { getCompressionPrompt } from '../prompts.js';
 import { estimateTokens } from '../../utils/toolOutputLimiter.js';
@@ -368,8 +365,16 @@ ${messageText}`,
 
   private extractTextFromMessage(message: IContent): string {
     return message.blocks
-      .filter((b): b is TextBlock => b.type === 'text')
-      .map((b) => b.text)
+      .map((block) => {
+        if (block.type === 'text') {
+          return block.text;
+        }
+        if (block.type === 'media') {
+          return mediaBlockToCompressionPlaceholder(block);
+        }
+        return '';
+      })
+      .filter((text) => text.length > 0)
       .join(' ');
   }
 
