@@ -12,7 +12,7 @@
  * Extracted from subagent.ts as part of Issue #1581.
  */
 
-import type { Content, FunctionDeclaration, Part } from '@google/genai';
+import type { FunctionDeclaration, Part } from '@google/genai';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
@@ -68,19 +68,17 @@ export interface OutputObject {
 
 /**
  * Configures the initial prompt for the subagent.
+ * The subagent always operates in non-interactive mode with a systemPrompt
+ * that receives outputConfig instructions and non-interactive rules appended
+ * automatically by buildChatSystemPrompt.
  */
 export interface PromptConfig {
   /**
    * A single system prompt string that defines the subagent's persona and instructions.
-   * Note: Use either `systemPrompt` or `initialMessages`, but not both.
+   * Required. The system prompt is templated against the context state and
+   * automatically receives appended outputConfig instructions and non-interactive rules.
    */
-  systemPrompt?: string;
-
-  /**
-   * An array of user/model content pairs to seed the chat history for few-shot prompting.
-   * Note: Use either `systemPrompt` or `initialMessages`, but not both.
-   */
-  initialMessages?: Content[];
+  systemPrompt: string;
 }
 
 /**
