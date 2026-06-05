@@ -19,7 +19,9 @@ interface UseInitialPromptSubmitParams {
     isCreateProfileDialogOpen: boolean;
     showPrivacyNotice: boolean;
     isWelcomeDialogOpen: boolean;
+    isFolderTrustDialogOpen: boolean;
   };
+  startupGuardsInitialized: boolean;
 }
 
 export function useInitialPromptSubmit({
@@ -27,6 +29,7 @@ export function useInitialPromptSubmit({
   submitQuery,
   geminiClientPresent,
   blockedByDialogs,
+  startupGuardsInitialized,
 }: UseInitialPromptSubmitParams): void {
   const initialPromptSubmittedRef = useRef<'idle' | 'pending' | 'done'>('idle');
 
@@ -45,7 +48,8 @@ export function useInitialPromptSubmit({
       blockedByDialogs.isCreateProfileDialogOpen;
     const isSpecialDialogOpen =
       blockedByDialogs.showPrivacyNotice ||
-      blockedByDialogs.isWelcomeDialogOpen;
+      blockedByDialogs.isWelcomeDialogOpen ||
+      blockedByDialogs.isFolderTrustDialogOpen;
 
     if (
       isDialogOpen ||
@@ -53,6 +57,10 @@ export function useInitialPromptSubmit({
       isSpecialDialogOpen ||
       !geminiClientPresent
     ) {
+      return;
+    }
+
+    if (!startupGuardsInitialized) {
       return;
     }
 
@@ -77,5 +85,7 @@ export function useInitialPromptSubmit({
     blockedByDialogs.isCreateProfileDialogOpen,
     blockedByDialogs.showPrivacyNotice,
     blockedByDialogs.isWelcomeDialogOpen,
+    blockedByDialogs.isFolderTrustDialogOpen,
+    startupGuardsInitialized,
   ]);
 }
