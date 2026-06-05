@@ -1002,14 +1002,13 @@ describe('subagent.ts', () => {
         );
       });
 
-      it('should use initialMessages instead of systemPrompt if provided', async () => {
+      it('should always start with empty chat history when using systemPrompt', async () => {
         const { config } = await createMockConfig();
         vi.mocked(GeminiChat).mockClear();
 
-        const initialMessages: Content[] = [
-          { role: 'user', parts: [{ text: 'Hi' }] },
-        ];
-        const promptConfig: PromptConfig = { initialMessages };
+        const promptConfig: PromptConfig = {
+          systemPrompt: 'You are a subagent.',
+        };
         const context = new ContextState();
 
         // Model stops immediately
@@ -1030,14 +1029,36 @@ describe('subagent.ts', () => {
         await scope.runNonInteractive(context);
 
         const callArgs = vi.mocked(GeminiChat).mock.calls[0];
-        const generationConfig = getGenerationConfigFromMock();
         const history = callArgs[3];
 
-        const systemInstruction = generationConfig.systemInstruction as string;
-        // Environment context should now be in system instruction
-        expect(systemInstruction).toContain('Env Context');
-        // History should only contain initialMessages, not environment context
-        expect(history).toStrictEqual([...initialMessages]);
+        // GeminiChat constructor history is always empty;
+        // runtime initial messages are generated separately by buildInitialMessages
+        expect(history).toStrictEqual([]);
+      });
+
+      it('should reject with required error when PromptConfig lacks systemPrompt', async () => {
+        const { config } = await createMockConfig();
+        const { overrides } = createRuntimeOverrides();
+
+        // Bypass TypeScript's required systemPrompt via cast to simulate
+        // a runtime-malformed PromptConfig that bypassed compile-time checks
+        const malformedPromptConfig = {} as unknown as PromptConfig;
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          malformedPromptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        await expect(
+          scope.runNonInteractive(new ContextState()),
+        ).rejects.toThrow('PromptConfig must have `systemPrompt` defined.');
+        expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
       });
 
       it('should substitute placeholders for missing template variables', async () => {
@@ -1100,30 +1121,43 @@ describe('subagent.ts', () => {
         expect(systemInstruction).toContain('Session <missing:sessionId>');
       });
 
-      it('should validate that systemPrompt and initialMessages are mutually exclusive', async () => {
+      it('should always include outputConfig instructions in system instruction when systemPrompt is used', async () => {
         const { config } = await createMockConfig();
-        const promptConfig: PromptConfig = {
-          systemPrompt: 'System',
-          initialMessages: [{ role: 'user', parts: [{ text: 'Hi' }] }],
+        vi.mocked(GeminiChat).mockClear();
+
+        const promptConfig: PromptConfig = { systemPrompt: 'Do the task.' };
+        const outputConfig: OutputConfig = {
+          outputs: {
+            result1: 'The first result',
+          },
         };
         const context = new ContextState();
 
+        // Model stops immediately
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
         const { overrides } = createRuntimeOverrides();
-        const agent = await SubAgentScope.create(
-          'TestAgent',
+        const scope = await SubAgentScope.create(
+          'test-agent',
           config,
           promptConfig,
           defaultModelConfig,
           defaultRunConfig,
           undefined,
-          undefined,
+          outputConfig,
           overrides,
         );
 
-        await expect(agent.runNonInteractive(context)).rejects.toThrow(
-          'PromptConfig cannot have both `systemPrompt` and `initialMessages` defined.',
-        );
-        expect(agent.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
+        await scope.runNonInteractive(context);
+
+        const generationConfig = getGenerationConfigFromMock();
+        const systemInstruction = generationConfig.systemInstruction as string;
+
+        // systemPrompt-based PromptConfig must always include output instructions
+        expect(systemInstruction).toContain('self_emitvalue');
+        expect(systemInstruction).toContain('result1');
+        // And non-interactive rules must always be present
+        expect(systemInstruction).toContain('non-interactive');
       });
 
       it('should pass interactionMode subagent when building system prompt', async () => {

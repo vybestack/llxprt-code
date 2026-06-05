@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
+import type { CreateChatObjectParams } from './subagentRuntimeSetup.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let convertMetadataToFunctionDeclaration: any;
@@ -24,6 +25,8 @@ let buildChatSystemPrompt: any;
 let createSchedulerConfig: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let createEmojiFilter: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let createChatObject: any;
 
 describe('subagentRuntimeSetup', () => {
   beforeAll(async () => {
@@ -38,6 +41,7 @@ describe('subagentRuntimeSetup', () => {
     buildChatSystemPrompt = mod.buildChatSystemPrompt;
     createSchedulerConfig = mod.createSchedulerConfig;
     createEmojiFilter = mod.createEmojiFilter;
+    createChatObject = mod.createChatObject;
   }, 30000); // Increase timeout for dynamic import during full test suite runs
 
   describe('convertMetadataToFunctionDeclaration', () => {
@@ -348,8 +352,6 @@ describe('subagentRuntimeSetup', () => {
     it('should template systemPrompt and add non-interactive rules', () => {
       const promptConfig = {
         systemPrompt: 'You are a ${role}.',
-        goal_prompt: 'Do something.',
-        behaviour_prompts: [],
       };
       const context = {
         get: (k: string) => (k === 'role' ? 'tester' : ''),
@@ -364,8 +366,6 @@ describe('subagentRuntimeSetup', () => {
     it('should add output instructions when outputConfig has outputs', () => {
       const promptConfig = {
         systemPrompt: 'Hello',
-        goal_prompt: 'Do something.',
-        behaviour_prompts: [],
       };
       const outputConfig = { outputs: { summary: 'A summary' } };
       const context = { get: () => '', get_keys: () => [], set: () => {} };
@@ -374,14 +374,92 @@ describe('subagentRuntimeSetup', () => {
       expect(result).toContain('summary');
     });
 
-    it('should return empty string when no systemPrompt', () => {
+    it('should always append non-interactive rules even without outputConfig', () => {
       const promptConfig = {
-        goal_prompt: 'Do something.',
-        behaviour_prompts: [],
+        systemPrompt: 'Do the task.',
       };
       const context = { get: () => '', get_keys: () => [], set: () => {} };
       const result = buildChatSystemPrompt(promptConfig, undefined, context);
-      expect(result).toBe('');
+      expect(result).toContain('non-interactive');
+      expect(result).toContain('stop calling tools');
+    });
+
+    it('should always append output instructions and non-interactive rules when outputConfig has outputs', () => {
+      const promptConfig = {
+        systemPrompt: 'Be helpful.',
+      };
+      const outputConfig = { outputs: { result: 'The answer' } };
+      const context = { get: () => '', get_keys: () => [], set: () => {} };
+      const result = buildChatSystemPrompt(promptConfig, outputConfig, context);
+      expect(result).toContain('self_emitvalue');
+      expect(result).toContain("emit the 'result' key");
+      expect(result).toContain('non-interactive');
+      expect(result).toContain('stop calling tools');
+    });
+  });
+
+  describe('createChatObject', () => {
+    it('should throw when PromptConfig lacks systemPrompt', async () => {
+      // Bypass TypeScript's required systemPrompt via cast to simulate
+      // a runtime-malformed PromptConfig that bypassed compile-time checks
+      const malformedPromptConfig =
+        {} as CreateChatObjectParams['promptConfig'];
+
+      const params: CreateChatObjectParams = {
+        promptConfig: malformedPromptConfig,
+        modelConfig: { model: 'test-model', temp: 0, top_p: 1 },
+        outputConfig: undefined,
+        toolConfig: undefined,
+        runtimeContext: {
+          state: {
+            sessionId: 'test-session',
+            provider: 'gemini',
+            model: 'test',
+          },
+          tools: { listToolNames: () => [], getToolMetadata: () => undefined },
+        },
+        contentGenerator: {},
+        environmentContextLoader: async () => [],
+        foregroundConfig: {
+          getMcpClientManager: () => ({ getMcpInstructions: () => undefined }),
+        } as unknown as CreateChatObjectParams['foregroundConfig'],
+        context: { get: () => undefined, get_keys: () => [], set: () => {} },
+      };
+
+      await expect(createChatObject(params)).rejects.toThrow(
+        'PromptConfig must have `systemPrompt` defined.',
+      );
+    });
+
+    it('should throw when systemPrompt is an empty string', async () => {
+      const emptyPromptConfig = {
+        systemPrompt: '',
+      } as CreateChatObjectParams['promptConfig'];
+
+      const params: CreateChatObjectParams = {
+        promptConfig: emptyPromptConfig,
+        modelConfig: { model: 'test-model', temp: 0, top_p: 1 },
+        outputConfig: undefined,
+        toolConfig: undefined,
+        runtimeContext: {
+          state: {
+            sessionId: 'test-session',
+            provider: 'gemini',
+            model: 'test',
+          },
+          tools: { listToolNames: () => [], getToolMetadata: () => undefined },
+        },
+        contentGenerator: {},
+        environmentContextLoader: async () => [],
+        foregroundConfig: {
+          getMcpClientManager: () => ({ getMcpInstructions: () => undefined }),
+        } as unknown as CreateChatObjectParams['foregroundConfig'],
+        context: { get: () => undefined, get_keys: () => [], set: () => {} },
+      };
+
+      await expect(createChatObject(params)).rejects.toThrow(
+        'PromptConfig must have `systemPrompt` defined.',
+      );
     });
   });
 

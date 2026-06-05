@@ -350,10 +350,6 @@ export function buildChatSystemPrompt(
   outputConfig: OutputConfig | undefined,
   context: ContextState,
 ): string {
-  if (!promptConfig.systemPrompt) {
-    return '';
-  }
-
   let finalPrompt = templateString(promptConfig.systemPrompt, context);
 
   if (outputConfig?.outputs) {
@@ -502,21 +498,16 @@ export async function createChatObject(
   const { foregroundConfig: config, context } = params;
   const logger = new DebugLogger('llxprt:subagent');
 
-  if (!promptConfig.systemPrompt && !promptConfig.initialMessages) {
-    throw new Error(
-      'PromptConfig must have either `systemPrompt` or `initialMessages` defined.',
-    );
-  }
-  if (promptConfig.systemPrompt && promptConfig.initialMessages) {
-    throw new Error(
-      'PromptConfig cannot have both `systemPrompt` and `initialMessages` defined.',
-    );
+  if (!promptConfig.systemPrompt) {
+    throw new Error('PromptConfig must have `systemPrompt` defined.');
   }
 
-  const startHistory = [...(promptConfig.initialMessages ?? [])];
-  const personaPrompt = promptConfig.systemPrompt
-    ? buildChatSystemPrompt(promptConfig, outputConfig, context)
-    : '';
+  const startHistory: Content[] = [];
+  const personaPrompt = buildChatSystemPrompt(
+    promptConfig,
+    outputConfig,
+    context,
+  );
 
   const runtimeDecls = buildRuntimeFunctionDeclarations(
     runtimeContext.tools,
