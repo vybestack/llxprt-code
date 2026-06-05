@@ -52,6 +52,7 @@ export interface AppDialogsParams {
   recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
   runtime: {
     getActiveModelName: () => string;
+    getActiveProviderName: () => string;
     getCliOAuthManager: () => unknown;
   };
   consoleMessages: ConsoleMessageItem[];
@@ -208,7 +209,11 @@ function useDialogsAuthProviders(
   } = p;
   const auth = useAuthCommand(settings, appState);
   const isOAuthCodeDialogOpen = appState.openDialogs.oauthCode;
-  useOAuthOrchestration({ appDispatch, isOAuthCodeDialogOpen });
+  useOAuthOrchestration({
+    appDispatch,
+    isOAuthCodeDialogOpen,
+    getActiveProviderName: runtime.getActiveProviderName,
+  });
   const editor = useEditorSettings(settings, appState, addItem);
   const provider = useProviderDialog({
     addMessage: (msg) =>
