@@ -85,6 +85,14 @@ export class AnthropicProvider extends BaseProvider {
     return true;
   }
 
+  /**
+   * Classify whether a given auth token is an Anthropic OAuth token.
+   * Anthropic OAuth tokens start with the 'sk-ant-oat' prefix.
+   */
+  protected override classifyOAuthToken(authToken: string): boolean {
+    return authToken.startsWith('sk-ant-oat');
+  }
+
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
   // Create loggers on-demand to avoid instance state
   // @requirement REQ-SP4-002: Eliminate provider-level caching
@@ -117,7 +125,7 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   private instantiateClient(authToken: string, baseURL?: string): Anthropic {
-    const isOAuthToken = authToken.startsWith('sk-ant-oat');
+    const isOAuthToken = this.classifyOAuthToken(authToken);
     const clientConfig: Record<string, unknown> = {
       dangerouslyAllowBrowser: true,
     };
@@ -237,7 +245,7 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     // Check if using OAuth - the models.list endpoint doesn't work with OAuth tokens
-    const isOAuthToken = authToken.startsWith('sk-ant-oat');
+    const isOAuthToken = this.classifyOAuthToken(authToken);
 
     if (isOAuthToken) {
       // For OAuth, return only the working models
@@ -522,7 +530,7 @@ export class AnthropicProvider extends BaseProvider {
       options,
       options.resolved.telemetry,
     );
-    const isOAuth = authToken.startsWith('sk-ant-oat');
+    const isOAuth = this.classifyOAuthToken(authToken);
 
     const requestContext = await this.prepareRequestContext(options, isOAuth);
 
