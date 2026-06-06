@@ -72,6 +72,7 @@ import {
   switchActiveProvider,
 } from '../runtime/runtimeSettings.js';
 import { runExitCleanup } from '../utils/cleanup.js';
+import { configureProviderRuntimeFactories } from '../providers/providerManagerInstance.js';
 
 type ToolRunResult = {
   parts: Part[];
@@ -358,7 +359,7 @@ export class GeminiAgent {
           `ProviderManager exists: ${pm.hasActiveProvider() ? 'has active provider' : 'no active provider'}`,
       );
       this.logger.debug(
-        () => `Active provider name: ${providerName || 'none'}`,
+        () => `Active provider name: ${providerName ?? 'none'}`,
       );
     } else {
       this.logger.debug(() => 'No ProviderManager available');
@@ -509,13 +510,8 @@ export class GeminiAgent {
       ReturnType<Config['getProviderManager']>
     >,
   ): Promise<void> {
-    if (sessionConfig.getProviderManager()) {
-      return;
-    }
-
-    this.logger.debug(() => 'Setting provider manager on config');
-    (sessionConfig as unknown as Record<string, unknown>).providerManager =
-      providerManagerForAuth;
+    this.logger.debug(() => 'Setting provider runtime factories on config');
+    configureProviderRuntimeFactories(sessionConfig, providerManagerForAuth);
 
     // Ensure serverToolsProvider (Gemini) has config set BEFORE refreshAuth
     // This is critical for web search to work properly

@@ -5,9 +5,16 @@
  */
 
 import { SettingsService } from '../settings/SettingsService.js';
-import { PROVIDER_CONFIG_KEYS } from '../providers/providerConfigKeys.js';
-import type { GenerateChatOptions } from '../providers/IProvider.js';
-import type { ProviderToolset } from '../providers/IProvider.js';
+import { SETTINGS_REGISTRY } from '../settings/settingsRegistry.js';
+const PROVIDER_CONFIG_KEYS = new Set(
+  SETTINGS_REGISTRY.filter((entry) => entry.category === 'provider-config').map(
+    (entry) => entry.key,
+  ),
+);
+import type {
+  RuntimeGenerateChatOptions as GenerateChatOptions,
+  RuntimeProviderToolset as ProviderToolset,
+} from '../runtime/contracts/RuntimeProviderChat.js';
 import type { Config } from '../config/config.js';
 import {
   createProviderRuntimeContext,

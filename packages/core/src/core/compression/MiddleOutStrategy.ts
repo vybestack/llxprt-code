@@ -26,7 +26,7 @@ import type {
   TextBlock,
   UsageStats,
 } from '../../services/history/IContent.js';
-import type { IProvider } from '../../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
 import type {
   CompressionContext,
   CompressionResult,

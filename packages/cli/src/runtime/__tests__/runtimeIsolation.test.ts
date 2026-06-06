@@ -3,8 +3,15 @@
  * @requirement REQ-SP2-003
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { IProvider, Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-core';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   activateIsolatedRuntimeContext,
   applyProfileSnapshot,

@@ -295,66 +295,13 @@ export { OAuthUtils } from './mcp/oauth-utils.js';
 export * from './telemetry/index.js';
 export * from './telemetry/uiTelemetry.js';
 export { sessionId } from './utils/session.js';
-// Export provider types and classes
-export type {
-  Provider,
-  ProviderMessage,
-  ProviderTool,
-  ProviderToolCall,
-} from './providers/types.js';
-// Export the actual interfaces too
-export * from './providers/IProvider.js';
-export type {
-  GenerateChatOptions,
-  ProviderToolset,
-} from './providers/IProvider.js';
-export * from './providers/ITool.js';
-export * from './providers/IModel.js';
-export * from './providers/IProviderManager.js';
-export * from './providers/ContentGeneratorRole.js';
-export * from './providers/ProviderContentGenerator.js';
-export * from './providers/ProviderManager.js';
-
 // Export content interfaces
 export * from './services/history/IContent.js';
 
-// Export provider implementations
-export { OpenAIProvider } from './providers/openai/OpenAIProvider.js';
-export { OpenAIResponsesProvider } from './providers/openai-responses/OpenAIResponsesProvider.js';
-export { ConversationCache } from './providers/openai/ConversationCache.js';
-export { getOpenAIProviderInfo } from './providers/openai/getOpenAIProviderInfo.js';
-export { OpenAIVercelProvider } from './providers/openai-vercel/index.js';
-export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';
-export * from './providers/anthropic/usageInfo.js';
-export * from './providers/gemini/usageInfo.js';
-export * from './providers/openai/codexUsageInfo.js';
-export * from './providers/zai/usageInfo.js';
-export * from './providers/synthetic/usageInfo.js';
-export * from './providers/chutes/usageInfo.js';
-export * from './providers/kimi/usageInfo.js';
-export * from './providers/apiKeyQuotaResolver.js';
-export { GeminiProvider } from './providers/gemini/GeminiProvider.js';
-export { FakeProvider } from './providers/fake/FakeProvider.js';
-export * from './providers/ProviderManager.js';
-export * from './providers/errors.js';
-export {
-  LoadBalancingProvider,
-  type LoadBalancingProviderConfig,
-  type LoadBalancerSubProfile,
-  type LoadBalancerStats,
-  type ExtendedLoadBalancerStats,
-  type BackendMetrics,
-  type CircuitBreakerState,
-  type ResolvedSubProfile,
-} from './providers/LoadBalancingProvider.js';
-
-// Export provider utilities
-export type { DumpMode } from './providers/utils/dumpContext.js';
-
-// Export tokenizers
-export * from './providers/tokenizers/ITokenizer.js';
-export * from './providers/tokenizers/OpenAITokenizer.js';
-export * from './providers/tokenizers/AnthropicTokenizer.js';
+// @plan:PLAN-20260603-ISSUE1584.P11
+// @requirement:REQ-SHIM-001
+// Provider implementations and provider public APIs live outside core.
+// Core intentionally does not re-export provider package symbols.
 export * from './utils/browser.js';
 export * from './utils/stdio.js';
 export * from './utils/terminal.js';
@@ -440,6 +387,20 @@ export type {
 } from './runtime/AgentRuntimeContext.js';
 export { TelemetryTarget } from './runtime/AgentRuntimeContext.js';
 export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.js';
+export type {
+  RuntimeProvider,
+  RuntimeProviderManager,
+  RuntimeModel,
+  RuntimeTokenizer,
+  RuntimeTokenizerFactory,
+  RuntimeContentGeneratorFactory,
+  TelemetryContext,
+  BucketFailureReason,
+  ReasoningOutput,
+  RuntimeGenerateChatOptions,
+  RuntimeProviderTool,
+  RuntimeProviderToolset,
+} from './runtime/contracts/index.js';
 
 // Export emoji filter system
 export { EmojiFilter } from './filters/EmojiFilter.js';

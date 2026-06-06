@@ -28,7 +28,7 @@ import {
   type OpenAITool,
   type ResponsesTool,
 } from './IToolFormatter.js';
-import { type ITool } from '../providers/ITool.js';
+import type { RuntimeProviderTool as ITool } from '../runtime/contracts/RuntimeProviderChat.js';
 import { type ToolCallBlock } from '../services/history/IContent.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import {

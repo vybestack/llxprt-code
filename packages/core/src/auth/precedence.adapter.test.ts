@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import type { BaseProviderConfig } from '../providers/BaseProvider.js';
-import { BaseProvider } from '../providers/BaseProvider.js';
-import type { IProviderConfig } from '../providers/types/IProviderConfig.js';
+import type { BaseProviderConfig } from '@vybestack/llxprt-code-providers/BaseProvider.js';
+import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
+import type { IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import { SettingsService as SettingsServiceImpl } from '../settings/SettingsService.js';
 import {
@@ -12,7 +12,7 @@ import {
 import type {
   GenerateChatOptions,
   ProviderToolset,
-} from '../providers/IProvider.js';
+} from '@vybestack/llxprt-code-providers/IProvider.js';
 import type { Config } from '../config/config.js';
 
 class TestProvider extends BaseProvider {

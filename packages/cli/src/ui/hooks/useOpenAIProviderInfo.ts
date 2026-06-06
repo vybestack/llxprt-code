@@ -4,12 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { useState, useEffect, useCallback } from 'react';
-import type {
-  Config,
-  ProviderMessage as Message,
-} from '@vybestack/llxprt-code-core';
-import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+import {
+  getOpenAIProviderInfo,
+  type ProviderMessage as Message,
+} from '@vybestack/llxprt-code-providers';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 // Import OpenAIProviderInfo type from the function return type
@@ -34,7 +40,7 @@ export function useOpenAIProviderInfo(
   const runtime = useRuntimeApi();
   const getProviderInfo = useCallback(() => {
     const services = runtime.getCliRuntimeServices();
-    return getOpenAIProviderInfo(services.providerManager);
+    return getOpenAIProviderInfo(services.providerManager as never);
   }, [runtime]);
   const [providerInfo, setProviderInfo] = useState<OpenAIProviderInfo>(() =>
     getProviderInfo(),

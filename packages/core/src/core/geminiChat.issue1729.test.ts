@@ -5,7 +5,7 @@ import { GeminiChat } from './geminiChat.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { Config } from '../config/config.js';
 import { SettingsService } from '../settings/SettingsService.js';
-import { ProviderManager } from '../providers/ProviderManager.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';

@@ -4,8 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { IContent, ITool } from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
+import type { ITool } from '@vybestack/llxprt-code-providers';
 import { ConversationDataRedactor } from './ConversationDataRedactor.js';
 
 // Note: Interface will be implemented in the next phase

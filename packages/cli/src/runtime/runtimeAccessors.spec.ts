@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import {
   upsertRuntimeEntry,
@@ -14,7 +20,7 @@ import { setCliRuntimeContext } from './runtimeLifecycle.js';
 import type {
   Config,
   SettingsService,
-  ProviderManager,
+  RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 
@@ -49,7 +55,7 @@ import {
 describe('runtimeAccessors', () => {
   let mockConfig: Config;
   let mockSettingsService: SettingsService;
-  let mockProviderManager: ProviderManager;
+  let mockRuntimeProviderManager: RuntimeProviderManager;
 
   beforeEach(() => {
     resetCliRuntimeRegistryForTesting();
@@ -65,7 +71,7 @@ describe('runtimeAccessors', () => {
         .fn()
         .mockImplementation((_key: string) => undefined),
       setEphemeralSetting: vi.fn(),
-      setProviderManager: vi.fn(),
+      setRuntimeProviderManager: vi.fn(),
       setProvider: vi.fn(),
       setModel: vi.fn(),
     } as unknown as Config;
@@ -80,7 +86,7 @@ describe('runtimeAccessors', () => {
       set: vi.fn(),
     } as unknown as SettingsService;
 
-    mockProviderManager = {
+    mockRuntimeProviderManager = {
       getActiveProvider: vi.fn().mockReturnValue({
         name: 'openai',
         getDefaultModel: vi.fn().mockReturnValue('gpt-4'),
@@ -100,7 +106,7 @@ describe('runtimeAccessors', () => {
       getAvailableModels: vi.fn().mockResolvedValue([]),
       setConfig: vi.fn(),
       prepareStatelessProviderInvocation: vi.fn(),
-    } as unknown as ProviderManager;
+    } as unknown as RuntimeProviderManager;
   });
 
   afterEach(() => {
@@ -119,7 +125,9 @@ describe('runtimeAccessors', () => {
     setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
 
     // Update the entry with the provider manager
-    upsertRuntimeEntry(runtimeId, { providerManager: mockProviderManager });
+    upsertRuntimeEntry(runtimeId, {
+      providerManager: mockRuntimeProviderManager,
+    });
     return runtimeId;
   };
 
@@ -240,7 +248,7 @@ describe('runtimeAccessors', () => {
       setupCompleteRuntime();
 
       const manager = getCliProviderManager();
-      expect(manager).toBe(mockProviderManager);
+      expect(manager).toBe(mockRuntimeProviderManager);
     });
 
     it('should get session token usage', () => {

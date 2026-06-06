@@ -4,16 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Core interfaces - re-export from core package
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
+// Provider interfaces and implementations live in the providers package.
 export {
   IProvider,
   IModel,
-  IContent,
   ITool,
   IProviderManager,
   ContentGeneratorRole,
   ProviderManager,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-providers';
+export type { IContent } from '@vybestack/llxprt-code-core';
 
 // Provider management
 export * from './providerManagerInstance.js';

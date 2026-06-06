@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "paths": {
+      "@vybestack/llxprt-code-providers": ["./index.ts"],
+      "@vybestack/llxprt-code-providers/*": ["./src/*"],
+      "@vybestack/llxprt-code-core": ["../core/dist/index.d.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/dist/src/*"]
+    }
+  },
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.json",
+    "../core/src/types/wasm.d.ts"
+  ],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}

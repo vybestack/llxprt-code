@@ -4,7 +4,89 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
+
+const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
+const corePackagePrefix = '@vybestack/llxprt-code-core/';
+const providersEntry = fileURLToPath(
+  new URL('../providers/index.ts', import.meta.url),
+);
+const providersSrcDir = fileURLToPath(
+  new URL('../providers/src/', import.meta.url),
+);
+const coreEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
+const coreSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
+const ajvCjsEntry = fileURLToPath(
+  new URL(
+    '../../node_modules/ajv-formats/node_modules/ajv/dist/ajv.js',
+    import.meta.url,
+  ),
+);
+const ajv2020Entry = fileURLToPath(
+  new URL(
+    '../../node_modules/ajv-formats/node_modules/ajv/dist/2020.js',
+    import.meta.url,
+  ),
+);
+const fdirEntry = fileURLToPath(
+  new URL(
+    '../../node_modules/vite/node_modules/fdir/dist/index.mjs',
+    import.meta.url,
+  ),
+);
+
+function resolveTsSource(baseDir: string, specifier: string): string {
+  const direct = baseDir + specifier;
+  if (direct.endsWith('.js')) {
+    const tsPath = direct.slice(0, -3) + '.ts';
+    if (existsSync(tsPath)) {
+      return tsPath;
+    }
+  }
+  return direct;
+}
+
+const workspaceDependencyAliasPlugin = {
+  name: 'llxprt-core-workspace-dependency-aliases',
+  enforce: 'pre' as const,
+  /**
+   * @plan:PLAN-20260603-ISSUE1584.P16
+   * @requirement:REQ-VERIFY-001
+   * @pseudocode verification.md lines 19-22
+   */
+  resolveId(source: string) {
+    if (source === '@vybestack/llxprt-code-providers') {
+      return providersEntry;
+    }
+    if (source.startsWith(providersPackagePrefix)) {
+      return resolveTsSource(
+        providersSrcDir,
+        source.slice(providersPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-core') {
+      return coreEntry;
+    }
+    if (source.startsWith(corePackagePrefix)) {
+      return resolveTsSource(
+        coreSrcDir,
+        source.slice(corePackagePrefix.length),
+      );
+    }
+    if (source === 'ajv') {
+      return ajvCjsEntry;
+    }
+    if (source === 'ajv/dist/2020.js') {
+      return ajv2020Entry;
+    }
+    if (source === 'fdir') {
+      return fdirEntry;
+    }
+    return null;
+  },
+};
 
 const isWindows = process.platform === 'win32';
 const isMacCi = process.platform === 'darwin' && process.env.CI === 'true';
@@ -25,6 +107,7 @@ const coverageReporter = isWindows
     ];
 
 export default defineConfig({
+  plugins: [workspaceDependencyAliasPlugin],
   test: {
     passWithNoTests: true,
     reporters: ['default', 'junit'],
@@ -44,6 +127,11 @@ export default defineConfig({
       : undefined,
     outputFile: {
       junit: 'junit.xml',
+    },
+    server: {
+      deps: {
+        inline: ['@vybestack/llxprt-code-providers', 'ajv', 'fdir'],
+      },
     },
     coverage: {
       enabled: true,

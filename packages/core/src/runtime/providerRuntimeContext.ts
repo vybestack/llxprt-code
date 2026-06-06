@@ -10,9 +10,17 @@
  * Derived from pseudocode/provider-invocation.md:2 and pseudocode/cli-runtime.md:5.
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P05
+ * @requirement:REQ-DEP-001
+ * @pseudocode component-boundaries.md C-CB-04, lines 40-44
+ *
+ * Updated to import MissingRuntimeProviderError from the core-owned
+ * runtime errors module instead of the providers package.
+ */
 import { SettingsService } from '../settings/SettingsService.js';
 import type { Config } from '../config/config.js';
-import { MissingProviderRuntimeError } from '../providers/errors.js';
+import { MissingRuntimeProviderError } from './errors/MissingRuntimeProviderError.js';
 
 /**
  * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
@@ -78,7 +86,7 @@ export function getActiveProviderRuntimeContext(): ProviderRuntimeContext {
     return activeContext;
   }
 
-  throw new MissingProviderRuntimeError({
+  throw new MissingRuntimeProviderError({
     providerKey: 'provider-runtime',
     missingFields: ['settings'],
     requirement: 'REQ-SP4-004',

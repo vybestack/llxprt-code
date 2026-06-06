@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 /* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type {
@@ -22,7 +28,7 @@ import {
   writeProviderAliasConfig,
   type ProviderAliasConfig,
 } from '../../providers/providerAliases.js';
-import type { IProvider } from '@vybestack/llxprt-code-core/providers/IProvider.js';
+import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 type WrappedProvider = IProvider & { wrappedProvider: IProvider };

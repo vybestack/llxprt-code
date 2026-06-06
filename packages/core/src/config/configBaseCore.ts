@@ -3,10 +3,19 @@
  * ConfigBase extends this and adds abstract methods + complex multi-line logic.
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import * as path from 'node:path';
 import type { EventEmitter } from 'node:events';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
-import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
+import type {
+  ContentGenerator,
+  ContentGeneratorConfig,
+} from '../core/contentGenerator.js';
 import type { GeminiClient } from '../core/client.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
@@ -34,7 +43,9 @@ import {
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
 } from '../telemetry/index.js';
-import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
+import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
+import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
+import type { RuntimeTokenizerFactory } from '../runtime/contracts/RuntimeTokenizerFactory.js';
 import type { IdeClient } from '../ide/ide-client.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import type { ProfileManager } from './profileManager.js';
@@ -142,7 +153,9 @@ export abstract class ConfigBaseCore {
   protected readonly listExtensions!: boolean;
   protected readonly _extensionLoader!: ExtensionLoader;
   protected readonly enableExtensionReloading!: boolean;
-  protected providerManager?: ProviderManager;
+  protected providerManager?: RuntimeProviderManager;
+  protected contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>;
+  protected tokenizerFactory?: RuntimeTokenizerFactory;
   protected profileManager?: ProfileManager;
   protected subagentManager?: SubagentManager;
   protected subagentSchedulerFactory?: SubagentSchedulerFactory;
@@ -217,11 +230,35 @@ export abstract class ConfigBaseCore {
 
   // ---- Simple field accessors ----
 
-  setProviderManager(providerManager: ProviderManager) {
+  setProviderManager(providerManager: RuntimeProviderManager) {
     this.providerManager = providerManager;
   }
-  getProviderManager(): ProviderManager | undefined {
+  getProviderManager(): RuntimeProviderManager | undefined {
     return this.providerManager;
+  }
+  /**
+   * @plan:PLAN-20260603-ISSUE1584.P16a
+   * @requirement:REQ-DEP-001
+   */
+  setContentGeneratorFactory(
+    factory: RuntimeContentGeneratorFactory<ContentGenerator> | undefined,
+  ): void {
+    this.contentGeneratorFactory = factory;
+  }
+  getContentGeneratorFactory():
+    | RuntimeContentGeneratorFactory<ContentGenerator>
+    | undefined {
+    return this.contentGeneratorFactory;
+  }
+  /**
+   * @plan:PLAN-20260603-ISSUE1584.P16a
+   * @requirement:REQ-DEP-001
+   */
+  setTokenizerFactory(factory: RuntimeTokenizerFactory | undefined): void {
+    this.tokenizerFactory = factory;
+  }
+  getTokenizerFactory(): RuntimeTokenizerFactory | undefined {
+    return this.tokenizerFactory;
   }
   setProfileManager(manager: ProfileManager | undefined): void {
     this.profileManager = manager;

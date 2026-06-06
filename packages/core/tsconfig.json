@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
-    "tsBuildInfoFile": ".tsbuildinfo",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/core.tsbuildinfo",
     "lib": ["DOM", "DOM.Iterable", "ES2021"],
     "composite": true,
     "types": ["node", "vitest/globals"],

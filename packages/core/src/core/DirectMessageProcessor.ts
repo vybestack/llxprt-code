@@ -17,11 +17,11 @@ import {
 import { retryWithBackoff } from '../utils/retry.js';
 import { createAbortError } from '../utils/delay.js';
 import type { IContent } from '../services/history/IContent.js';
+import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import type {
-  GenerateChatOptions,
-  IProvider,
-  ProviderToolset,
-} from '../providers/IProvider.js';
+  RuntimeGenerateChatOptions as GenerateChatOptions,
+  RuntimeProviderToolset as ProviderToolset,
+} from '../runtime/contracts/RuntimeProviderChat.js';
 import type { AgentRuntimeContext } from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import type { HistoryService } from '../services/history/HistoryService.js';

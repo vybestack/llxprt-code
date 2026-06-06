@@ -12,12 +12,55 @@ import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import { ToolConfirmationOutcome } from '../tools/tools.js';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import type { IContent } from '../services/history/IContent.js';
-import type {
-  ProviderCapabilities,
-  ProviderContext,
-  ToolCall,
-  ProviderPerformanceMetrics,
-} from '../providers/types.js';
+export interface ProviderCapabilities {
+  supportsStreaming: boolean;
+  supportsTools: boolean;
+  supportsVision: boolean;
+  maxTokens: number;
+  supportedFormats: string[];
+  hasModelSelection?: boolean;
+  hasApiKeyConfig?: boolean;
+  hasBaseUrlConfig?: boolean;
+  supportsPaidMode?: boolean;
+}
+
+export interface ProviderContext {
+  providerName: string;
+  currentModel: string;
+  toolFormat: string;
+  isPaidMode: boolean;
+  capabilities: ProviderCapabilities;
+  sessionStartTime: number;
+}
+
+export interface ToolCall {
+  provider: string;
+  name: string;
+  arguments: unknown;
+  id: string;
+}
+
+export interface ProviderPerformanceMetrics {
+  providerName: string;
+  totalRequests: number;
+  totalTokens: number;
+  averageLatency: number;
+  timeToFirstToken: number | null;
+  tokensPerSecond: number;
+  tokensPerMinute: number;
+  throttleWaitTimeMs: number;
+  chunksReceived: number;
+  errorRate: number;
+  errors: Array<{ timestamp: number; duration: number; error: string }>;
+  sessionTokenUsage: {
+    input: number;
+    output: number;
+    cache: number;
+    tool: number;
+    thought: number;
+    total: number;
+  };
+}
 import type { HookEventName } from '../hooks/types.js';
 import { type HookExecutionResult, type HookInput } from '../hooks/types.js';
 

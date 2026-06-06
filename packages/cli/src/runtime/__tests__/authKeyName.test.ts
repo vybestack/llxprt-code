@@ -5,6 +5,12 @@
  */
 
 /**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
+/**
  * Behavioral tests for auth-key-name profile field and --key-name CLI flag.
  *
  * Bootstrap parsing tests run without runtime infrastructure.
@@ -24,8 +30,8 @@ import {
   SecureStore,
   clearActiveProviderRuntimeContext,
   type KeyringAdapter,
-  type IProvider,
 } from '@vybestack/llxprt-code-core';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 

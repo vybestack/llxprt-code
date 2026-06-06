@@ -4,8 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config, IProvider } from '@vybestack/llxprt-code-core';
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
+import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import {
   getCliOAuthManager,
@@ -21,6 +28,7 @@ import {
   type ProviderAliasConfig,
 } from '../providers/providerAliases.js';
 import { ensureOAuthProviderRegistered } from '../providers/oauth-provider-registration.js';
+import { configureProviderRuntimeFactories } from '../providers/providerManagerInstance.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
 
@@ -143,9 +151,12 @@ function getProviderForBaseUrl(context: ProviderSwitchContext): IProvider {
     context.providerManager as typeof context.providerManager & {
       getProviderByName?: (name: string) => IProvider | undefined;
     };
-  return (
-    providerManager.getProviderByName(context.name) ?? context.activeProvider
-  );
+  const provider =
+    providerManager.getProviderByName(context.name) ?? context.activeProvider;
+  if (!provider) {
+    throw new Error(`Provider '${context.name}' is not available.`);
+  }
+  return provider as IProvider;
 }
 
 function isScalarAliasEphemeralValue(
@@ -228,6 +239,21 @@ function clearPreviousProviderSettings(context: ProviderSwitchContext): void {
   if (!currentProvider) {
     return;
   }
+
+  /**
+   * @plan:PLAN-20260603-ISSUE1584.P14
+   * @requirement:REQ-API-001
+   * @pseudocode consumer-migration.md lines 10-18
+   */
+  const legacyProviderManager = context.providerManager as {
+    getServerToolsProvider?: () => { name?: string } | null | undefined;
+  };
+  const serverToolsProviderName =
+    legacyProviderManager.getServerToolsProvider?.()?.name;
+  if (serverToolsProviderName === currentProvider) {
+    return;
+  }
+
   const previousSettings = getProviderSettingsSnapshot(
     settingsService,
     currentProvider,
@@ -277,8 +303,8 @@ function clearEphemeralsForSwitch(
 
 function activateProviderContext(context: ProviderSwitchContext): void {
   const { name, config, providerManager } = context;
-  providerManager.setActiveProvider(name);
-  config.setProviderManager(providerManager);
+  void providerManager.setActiveProvider(name);
+  configureProviderRuntimeFactories(config, providerManager);
   config.setProvider(name);
   logger.debug(() => `[cli-runtime] set config provider=${name}`);
   config.setEphemeralSetting('activeProvider', name);
@@ -401,7 +427,7 @@ function resolveModelToApply(
   const aliasDefaultModel = normalizeSetting(context.aliasConfig?.defaultModel);
   const defaultModel =
     aliasDefaultModel ??
-    normalizeSetting(context.activeProvider.getDefaultModel());
+    normalizeSetting(context.activeProvider?.getDefaultModel?.());
   const maybeStoredModel =
     context.currentProvider === context.name &&
     storedModelSetting &&
@@ -701,7 +727,7 @@ function createProviderSwitchContext(
   }
 
   const { config, settingsService, providerManager } = getCliRuntimeServices();
-  const currentProvider = providerManager.getActiveProviderName() || null;
+  const currentProvider = providerManager.getActiveProviderName() ?? null;
 
   if (currentProvider === name) {
     return {

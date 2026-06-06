@@ -6,6 +6,12 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P24
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 /* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type { HistoryItemStats } from '../types.js';
@@ -17,15 +23,15 @@ import {
   CommandKind,
 } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import {
   CodexUsageInfoSchema,
-  DebugLogger,
   detectApiKeyProvider,
   detectApiKeyProviderFromName,
   fetchApiKeyQuota,
   formatAllUsagePeriods,
   formatCodexUsage,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-providers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';

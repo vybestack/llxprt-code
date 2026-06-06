@@ -27,6 +27,7 @@ import {
 } from './runtimeLifecycle.js';
 import { disposeCliRuntime } from './runtimeRegistry.js';
 import { createProviderKeyStorage } from '../auth/proxy/credential-store-factory.js';
+import { configureProviderRuntimeFactories } from '../providers/providerManagerInstance.js';
 
 export { createProviderKeyStorage };
 
@@ -139,7 +140,7 @@ registerIsolatedRuntimeBindings({
   setRuntimeContext: setCliRuntimeContext,
   registerInfrastructure: registerCliProviderInfrastructure,
   linkProviderManager: (config, manager) => {
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
   },
   disposeRuntime: disposeCliRuntime,
 });

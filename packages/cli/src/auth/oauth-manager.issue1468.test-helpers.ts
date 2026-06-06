@@ -21,6 +21,7 @@
 
 import { vi } from 'vitest';
 import type * as Core from '@vybestack/llxprt-code-core';
+import type * as Providers from '@vybestack/llxprt-code-providers';
 
 // Hoisted mocks used by module factories
 const { mockLoadProfile, mockFetchAnthropicUsage } = vi.hoisted(() => ({
@@ -30,13 +31,22 @@ const { mockLoadProfile, mockFetchAnthropicUsage } = vi.hoisted(() => ({
 
 export { mockFetchAnthropicUsage, mockLoadProfile };
 
+vi.mock('@vybestack/llxprt-code-providers', async () => {
+  const actual = await vi.importActual<typeof Providers>(
+    '@vybestack/llxprt-code-providers',
+  );
+  return {
+    ...actual,
+    fetchAnthropicUsage: mockFetchAnthropicUsage,
+  };
+});
+
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual<typeof Core>(
     '@vybestack/llxprt-code-core',
   );
   return {
     ...actual,
-    fetchAnthropicUsage: mockFetchAnthropicUsage,
     ProfileManager: class MockProfileManager {
       async loadProfile(name: string) {
         return mockLoadProfile(name);

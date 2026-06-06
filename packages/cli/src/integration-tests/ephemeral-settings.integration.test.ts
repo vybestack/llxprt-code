@@ -4,12 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { Profile } from '@vybestack/llxprt-code-core';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {
   Config,
   ProfileManager,
-  ProviderManager,
   SettingsService,
 } from '@vybestack/llxprt-code-core';
 import {

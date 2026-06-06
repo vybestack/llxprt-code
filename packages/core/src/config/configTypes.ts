@@ -11,7 +11,15 @@
 
 import type { HookEventName, HookDefinition } from '../hooks/types.js';
 import type { SkillDefinition } from '../skills/skillManager.js';
-import type { BucketFailureReason } from '../providers/errors.js';
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P05
+ * @requirement:REQ-DEP-001
+ * @pseudocode component-boundaries.md C-CB-05, lines 50-54
+ *
+ * BucketFailureReason now imported from core-owned contract
+ * instead of providers package.
+ */
+import type { BucketFailureReason } from '../runtime/contracts/BucketFailureReason.js';
 import type { MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import type { OutputFormat } from '../utils/output-format.js';
 import type { FileFilteringOptions } from './constants.js';
@@ -21,7 +29,7 @@ import type { ExtensionLoader } from '../utils/extensionLoader.js';
 import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
 import type { PolicyEngineConfig } from '../policy/types.js';
 import type { SettingsService } from '../settings/SettingsService.js';
-import type { ProviderManager } from '../providers/ProviderManager.js';
+import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { IdeClient } from '../ide/ide-client.js';
 import type { AnyToolInvocation } from '../tools/tools.js';
 import { TelemetryTarget } from '../telemetry/index.js';
@@ -379,7 +387,7 @@ export interface ConfigParameters {
   experimentalZedIntegration?: boolean;
   listExtensions?: boolean;
   activeExtensions?: ActiveExtension[];
-  providerManager?: ProviderManager;
+  providerManager?: RuntimeProviderManager;
   provider?: string;
   extensions?: GeminiCLIExtension[];
   extensionLoader?: ExtensionLoader;

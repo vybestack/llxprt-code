@@ -42,7 +42,7 @@ import type {
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
-import type { IProvider } from '../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import { initializeTestConfig } from '../test-utils/config.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
