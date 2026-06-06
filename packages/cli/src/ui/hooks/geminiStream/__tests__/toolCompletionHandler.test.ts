@@ -338,10 +338,9 @@ describe('recordCancelledToolHistory', () => {
       mockMarkToolsAsSubmitted,
     );
 
-    expect(mockMarkToolsAsSubmitted).toHaveBeenCalledOnce();
-    const callArg = mockMarkToolsAsSubmitted.mock.calls[0][0];
-    expect(callArg).toContain('call-a');
-    expect(callArg).toContain('call-b');
+    expect(mockMarkToolsAsSubmitted).toHaveBeenCalledExactlyOnceWith(
+      expect.arrayContaining(['call-a', 'call-b']),
+    );
   });
 
   it('handles empty responseParts gracefully', () => {
@@ -354,7 +353,9 @@ describe('recordCancelledToolHistory', () => {
     // No history calls when no parts
     expect(mockAddHistory).not.toHaveBeenCalled();
     // But still marks as submitted
-    expect(mockMarkToolsAsSubmitted).toHaveBeenCalledOnce();
+    expect(mockMarkToolsAsSubmitted).toHaveBeenCalledExactlyOnceWith(
+      expect.arrayContaining(['call-1']),
+    );
   });
 });
 
@@ -420,9 +421,8 @@ describe('recordCancelledToolHistory (all-cancelled branch)', () => {
       mockMarkToolsAsSubmitted,
     );
 
-    expect(mockMarkToolsAsSubmitted).toHaveBeenCalledOnce();
-    expect(mockMarkToolsAsSubmitted.mock.calls[0][0]).toContain(
-      'cancelled-call',
+    expect(mockMarkToolsAsSubmitted).toHaveBeenCalledExactlyOnceWith(
+      expect.arrayContaining(['cancelled-call']),
     );
   });
 

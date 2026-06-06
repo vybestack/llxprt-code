@@ -463,10 +463,15 @@ describe('processSlashCommandResult', () => {
       'prompt-1',
       mockSignal,
     );
-    expect(mockScheduleToolCalls).toHaveBeenCalledOnce();
-    const calledWith = mockScheduleToolCalls.mock.calls[0][0];
-    expect(calledWith[0].name).toBe('my_tool');
-    expect(calledWith[0].isClientInitiated).toBe(true);
+    expect(mockScheduleToolCalls).toHaveBeenCalledExactlyOnceWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'my_tool',
+          isClientInitiated: true,
+        }),
+      ]),
+      mockSignal,
+    );
     expect(result.queryToSend).toBeNull();
     expect(result.shouldProceed).toBe(false);
   });
@@ -581,9 +586,10 @@ describe('handleSubmissionError', () => {
       Date.now(),
     );
     expect(result).toBe(false);
-    expect(mockAddItem).toHaveBeenCalledOnce();
-    const itemArg = mockAddItem.mock.calls[0][0];
-    expect(itemArg.type).toBe('error');
+    expect(mockAddItem).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ type: 'error' }),
+      expect.any(Number),
+    );
   });
 
   it('passes Anthropic provider without Gemini fallback model', () => {
