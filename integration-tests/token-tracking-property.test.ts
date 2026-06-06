@@ -6,10 +6,10 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { it as itProp, fc } from '@fast-check/vitest';
-import { ProviderManager } from '../packages/core/src/providers/ProviderManager';
-import { ProviderPerformanceTracker } from '../packages/core/src/providers/logging/ProviderPerformanceTracker';
-import { LoggingProviderWrapper } from '../packages/core/src/providers/LoggingProviderWrapper';
-import { retryWithBackoff } from '../packages/core/src/utils/retry';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
+import { ProviderPerformanceTracker } from '@vybestack/llxprt-code-providers/logging/ProviderPerformanceTracker.js';
+import { LoggingProviderWrapper } from '@vybestack/llxprt-code-providers/LoggingProviderWrapper.js';
+import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 // These imports verify the components exist but are not used in tests
 // import { TelemetryService } from '../packages/core/src/telemetry/TelemetryService';
 // import { Footer } from '../packages/cli/src/ui/components/Footer';
@@ -20,10 +20,10 @@ import {
   formatTokensPerMinute,
   formatThrottleTime,
 } from '../packages/cli/src/ui/utils/tokenFormatters';
-import type { RedactionConfig } from '../packages/core/src/config/types';
-import { initializeTestProviderRuntime } from '../packages/core/src/test-utils/runtime';
-import { clearActiveProviderRuntimeContext } from '../packages/core/src/runtime/providerRuntimeContext';
-import { resetSettingsService } from '../packages/core/src/settings/settingsServiceInstance';
+import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
 
 // Mock Config class
 class MockConfig {

@@ -8,16 +8,16 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { ProviderManager } from '../packages/core/src/providers/ProviderManager.js';
-import { OpenAIProvider } from '../packages/core/src/providers/openai/OpenAIProvider.js';
-import { AnthropicProvider } from '../packages/core/src/providers/anthropic/AnthropicProvider.js';
-import { GeminiProvider } from '../packages/core/src/providers/gemini/GeminiProvider.js';
-import { LoggingProviderWrapper } from '../packages/core/src/providers/LoggingProviderWrapper.js';
-import { Config } from '../packages/core/src/config/config.js';
-import type { RedactionConfig } from '../packages/core/src/config/types.js';
-import { initializeTestProviderRuntime } from '../packages/core/src/test-utils/runtime.js';
-import { clearActiveProviderRuntimeContext } from '../packages/core/src/runtime/providerRuntimeContext.js';
-import { resetSettingsService } from '../packages/core/src/settings/settingsServiceInstance.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
+import { OpenAIProvider } from '@vybestack/llxprt-code-providers';
+import { AnthropicProvider } from '@vybestack/llxprt-code-providers';
+import { GeminiProvider } from '@vybestack/llxprt-code-providers';
+import { LoggingProviderWrapper } from '@vybestack/llxprt-code-providers/LoggingProviderWrapper.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
 
 /**
  * Provider-Specific Token Tracking Behavioral Tests
