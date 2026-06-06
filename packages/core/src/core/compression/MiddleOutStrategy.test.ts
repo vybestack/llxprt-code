@@ -23,7 +23,10 @@ import { describe, it, expect } from 'vitest';
 import type { IContent, MediaBlock } from '../../services/history/IContent.js';
 import type { CompressionContext } from './types.js';
 import { EmptySummaryError, isTransientCompressionError } from './types.js';
-import type { IProvider } from '../../providers/IProvider.js';
+import type {
+  GenerateChatOptions,
+  IProvider,
+} from '../../providers/IProvider.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
 import type { Logger } from '../logger.js';
@@ -124,6 +127,55 @@ function createFakeProvider(
       };
     },
   } as unknown as IProvider;
+}
+
+class CaptureProvider implements IProvider {
+  readonly name = 'capture-provider';
+
+  constructor(
+    private readonly capturedRequests: IContent[],
+    private readonly summaryText: string = KNOWN_SUMMARY,
+  ) {}
+
+  getModels(): Promise<[]> {
+    return Promise.resolve([]);
+  }
+
+  getDefaultModel(): string {
+    return 'capture-model';
+  }
+
+  getServerTools(): string[] {
+    return [];
+  }
+
+  invokeServerTool(): Promise<Record<string, never>> {
+    return Promise.resolve({});
+  }
+
+  generateChatCompletion(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent>;
+  generateChatCompletion(content: IContent[]): AsyncIterableIterator<IContent>;
+  async *generateChatCompletion(
+    optionsOrContent: GenerateChatOptions | IContent[],
+  ): AsyncIterableIterator<IContent> {
+    const contents = Array.isArray(optionsOrContent)
+      ? optionsOrContent
+      : optionsOrContent.contents;
+    this.capturedRequests.push(...contents);
+    yield {
+      speaker: 'ai' as const,
+      blocks: [{ type: 'text' as const, text: this.summaryText }],
+    };
+  }
+}
+
+function createCaptureProvider(
+  capturedRequests: IContent[],
+  summaryText: string = KNOWN_SUMMARY,
+): IProvider {
+  return new CaptureProvider(capturedRequests, summaryText);
 }
 
 // ---------------------------------------------------------------------------
@@ -905,27 +957,11 @@ describe('MiddleOutStrategy', () => {
         }
       }
 
-      // Capture what the provider receives
       const capturedRequests: IContent[] = [];
-      const captureProvider: IProvider = {
-        name: 'capture-provider',
-        getModels: async () => [],
-        getDefaultModel: () => 'capture-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
-        async *generateChatCompletion(options: { contents: IContent[] }) {
-          capturedRequests.push(...options.contents);
-          yield {
-            speaker: 'ai' as const,
-            blocks: [
-              {
-                type: 'text' as const,
-                text: '<state_snapshot>Compressed summary</state_snapshot>',
-              },
-            ],
-          };
-        },
-      } as unknown as IProvider;
+      const captureProvider = createCaptureProvider(
+        capturedRequests,
+        '<state_snapshot>Compressed summary</state_snapshot>',
+      );
 
       const ctx = buildContext({
         history,
@@ -966,14 +1002,13 @@ describe('MiddleOutStrategy', () => {
       expect(hasScreenshotPlaceholder).toBe(true);
       expect(hasPdfPlaceholder).toBe(true);
 
-      // Verify preserved bottom messages retain their original media blocks
       const bottomCount = result.metadata.bottomPreserved!;
       const bottomMessages = result.newHistory.slice(
         result.newHistory.length - bottomCount,
       );
-      // Bottom messages are untouched from original, so they can have media
-      // which is fine — they're never sent to the compression LLM
-      expect(bottomMessages.length).toBeGreaterThan(0);
+      expect(bottomMessages).toStrictEqual(
+        history.slice(history.length - bottomCount),
+      );
     });
 
     it('preserves media blocks in top and bottom sections that are not sent to the LLM', async () => {
@@ -1011,25 +1046,10 @@ describe('MiddleOutStrategy', () => {
       }
 
       const capturedRequests: IContent[] = [];
-      const captureProvider: IProvider = {
-        name: 'capture-provider',
-        getModels: async () => [],
-        getDefaultModel: () => 'capture-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
-        async *generateChatCompletion(options: { contents: IContent[] }) {
-          capturedRequests.push(...options.contents);
-          yield {
-            speaker: 'ai' as const,
-            blocks: [
-              {
-                type: 'text' as const,
-                text: '<state_snapshot>Compressed</state_snapshot>',
-              },
-            ],
-          };
-        },
-      } as unknown as IProvider;
+      const captureProvider = createCaptureProvider(
+        capturedRequests,
+        '<state_snapshot>Compressed</state_snapshot>',
+      );
 
       const ctx = buildContext({
         history,
@@ -1062,6 +1082,222 @@ describe('MiddleOutStrategy', () => {
       const allBlocks = capturedRequests.flatMap((m) => m.blocks);
       const mediaInRequest = allBlocks.filter((b) => b.type === 'media');
       expect(mediaInRequest).toHaveLength(0);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Regression: media in largeLastPromptInjection — issue #1889
+  // -----------------------------------------------------------------------
+
+  describe('largeLastPromptInjection media sanitization (issue #1889)', () => {
+    it('uses text placeholders for media blocks in the largeLastPromptInjection (no raw media in provider request)', async () => {
+      const longText = 'x'.repeat(5000);
+      const history: IContent[] = [];
+      for (let i = 0; i < 20; i++) {
+        if (i === 9) {
+          history.push(
+            humanMsgWithMedia(longText, {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'malformed-base64===',
+              encoding: 'base64',
+              filename: 'crash-screenshot.png',
+              caption: 'Error screenshot showing crash',
+            }),
+          );
+        } else if (i % 2 === 0) {
+          history.push(humanMsg(`user message ${i}`));
+        } else {
+          history.push(aiTextMsg(`ai response ${i}`));
+        }
+      }
+
+      const capturedRequests: IContent[] = [];
+      const captureProvider = createCaptureProvider(
+        capturedRequests,
+        '<state_snapshot>Compressed summary</state_snapshot>',
+      );
+
+      const ctx = buildContext({
+        history,
+        resolveProvider: () => captureProvider,
+      });
+      const strategy = new MiddleOutStrategy();
+      const result = await strategy.compress(ctx);
+
+      expect(result.metadata.llmCallMade).toBe(true);
+
+      const allBlocks = capturedRequests.flatMap((m) => m.blocks);
+      const mediaBlocks = allBlocks.filter((b) => b.type === 'media');
+      expect(mediaBlocks).toHaveLength(0);
+
+      const textBlocks = allBlocks.filter(
+        (b): b is { type: 'text'; text: string } => b.type === 'text',
+      );
+      for (const tb of textBlocks) {
+        expect(tb.text).not.toContain('malformed-base64===');
+      }
+
+      const injectionTexts = textBlocks.map((b) => b.text);
+      const hasCrashPlaceholder = injectionTexts.some(
+        (t) =>
+          t.includes('[Attached image: Error screenshot showing crash]') ||
+          t.includes('[Attached image: crash-screenshot.png]'),
+      );
+      expect(hasCrashPlaceholder).toBe(true);
+
+      const topCount = result.metadata.topPreserved!;
+      const ackMsg = result.newHistory[topCount + 1];
+      expect(ackMsg.speaker).toBe('ai');
+      const ackText = (ackMsg.blocks[0] as { type: 'text'; text: string }).text;
+      expect(ackText).not.toContain('malformed-base64===');
+    });
+
+    it('uses placeholders when the large last human prompt in compress range includes media', async () => {
+      const longText = 'y'.repeat(5000);
+      const history: IContent[] = [];
+      for (let i = 0; i < 20; i++) {
+        if (i === 9) {
+          history.push({
+            speaker: 'human',
+            blocks: [
+              { type: 'text', text: longText },
+              {
+                type: 'media',
+                mimeType: 'image/webp',
+                data: 'AAAA=',
+                encoding: 'base64',
+                filename: 'diagram.webp',
+              },
+            ],
+          });
+        } else if (i % 2 === 0) {
+          history.push(humanMsg(`user message ${i}`));
+        } else {
+          history.push(aiTextMsg(`ai response ${i}`));
+        }
+      }
+
+      const capturedRequests: IContent[] = [];
+      const captureProvider = createCaptureProvider(
+        capturedRequests,
+        '<state_snapshot>Compressed</state_snapshot>',
+      );
+
+      const ctx = buildContext({
+        history,
+        resolveProvider: () => captureProvider,
+      });
+      const strategy = new MiddleOutStrategy();
+      const result = await strategy.compress(ctx);
+
+      expect(result.metadata.llmCallMade).toBe(true);
+
+      const allBlocks = capturedRequests.flatMap((m) => m.blocks);
+      const mediaBlocks = allBlocks.filter((b) => b.type === 'media');
+      expect(mediaBlocks).toHaveLength(0);
+
+      const textBlocks = allBlocks.filter(
+        (b): b is { type: 'text'; text: string } => b.type === 'text',
+      );
+      for (const tb of textBlocks) {
+        expect(tb.text).not.toContain('AAAA=');
+      }
+
+      const injectionTexts = textBlocks.map((b) => b.text);
+      const hasDiagramPlaceholder = injectionTexts.some((t) =>
+        t.includes('[Attached image: diagram.webp]'),
+      );
+      expect(hasDiagramPlaceholder).toBe(true);
+    });
+
+    it('no media blocks reach the provider when short prompt with media is moved to bottom', async () => {
+      const history: IContent[] = [];
+      for (let i = 0; i < 20; i++) {
+        if (i === 9) {
+          history.push(
+            humanMsgWithMedia('Check this image:', {
+              type: 'media',
+              mimeType: 'image/jpeg',
+              data: 'base64imagedata==',
+              encoding: 'base64',
+              filename: 'photo.jpg',
+            }),
+          );
+        } else if (i % 2 === 0) {
+          history.push(humanMsg(`user message ${i}`));
+        } else {
+          history.push(aiTextMsg(`ai response ${i}`));
+        }
+      }
+
+      const capturedRequests: IContent[] = [];
+      const captureProvider = createCaptureProvider(
+        capturedRequests,
+        '<state_snapshot>Compressed</state_snapshot>',
+      );
+
+      const ctx = buildContext({
+        history,
+        resolveProvider: () => captureProvider,
+      });
+      const strategy = new MiddleOutStrategy();
+      const result = await strategy.compress(ctx);
+
+      expect(result.metadata.llmCallMade).toBe(true);
+
+      const allBlocks = capturedRequests.flatMap((m) => m.blocks);
+      const mediaInRequest = allBlocks.filter((b) => b.type === 'media');
+      expect(mediaInRequest).toHaveLength(0);
+
+      const textBlocks = allBlocks.filter(
+        (b): b is { type: 'text'; text: string } => b.type === 'text',
+      );
+      for (const tb of textBlocks) {
+        expect(tb.text).not.toContain('base64imagedata==');
+      }
+
+      const topCount = result.metadata.topPreserved!;
+      const ackMsg = result.newHistory[topCount + 1];
+      const ackText = (ackMsg.blocks[0] as { type: 'text'; text: string }).text;
+      expect(ackText).not.toContain('base64imagedata==');
+    });
+
+    it('lastUserPromptContext string contains placeholder text, not raw media data, for messages with media', async () => {
+      const history: IContent[] = [];
+      for (let i = 0; i < 20; i++) {
+        if (i === 19) {
+          history.push(
+            humanMsgWithMedia('Look at this chart:', {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'rawchartdata=',
+              encoding: 'base64',
+              filename: 'chart.png',
+              caption: 'Revenue chart Q4',
+            }),
+          );
+        } else if (i % 2 === 0) {
+          history.push(humanMsg(`user message ${i}`));
+        } else {
+          history.push(aiTextMsg(`ai response ${i}`));
+        }
+      }
+
+      const defaultProvider = createFakeProvider('default-provider');
+      const ctx = buildContext({
+        history,
+        resolveProvider: () => defaultProvider,
+      });
+      const strategy = new MiddleOutStrategy();
+      const result = await strategy.compress(ctx);
+
+      const topCount = result.metadata.topPreserved!;
+      const ackMsg = result.newHistory[topCount + 1];
+      const ackText = (ackMsg.blocks[0] as { type: 'text'; text: string }).text;
+
+      expect(ackText).not.toContain('rawchartdata=');
+      expect(ackText).toContain('[Attached image: Revenue chart Q4]');
     });
   });
 

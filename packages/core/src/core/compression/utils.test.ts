@@ -20,6 +20,7 @@ import {
   findForwardValidSplitPoint,
   findBackwardValidSplitPoint,
   sanitizeHistoryForCompression,
+  mediaBlockToCompressionPlaceholder,
 } from './utils.js';
 
 // ---------------------------------------------------------------------------
@@ -926,5 +927,91 @@ describe('sanitizeHistoryForCompression', () => {
     for (const text of allTexts) {
       expect(text).not.toContain('AAAA=');
     }
+  });
+
+  // Regression: mediaBlockToCompressionPlaceholder must never include raw data
+  // This function is used in extractTextFromMessage which builds the
+  // largeLastPromptInjection text — ensuring malformed images never reach
+  // the compression provider (issue #1889).
+  describe('mediaBlockToCompressionPlaceholder (issue #1889 regression)', () => {
+    it('never includes the raw data field in the placeholder output', () => {
+      const media: MediaBlock = {
+        type: 'media',
+        mimeType: 'image/png',
+        data: 'iVBORw0KGgoAAAANSUhEUg==',
+        encoding: 'base64',
+        filename: 'diagram.png',
+        caption: 'Architecture overview',
+      };
+      const result = mediaBlockToCompressionPlaceholder(media);
+      // The placeholder should use caption (preferred) or filename, never raw data
+      expect(result).toBe('[Attached image: Architecture overview]');
+      expect(result).not.toContain('iVBORw0KGgo');
+      expect(result).not.toContain('AAA');
+    });
+
+    it('falls back to filename when caption is absent', () => {
+      const media: MediaBlock = {
+        type: 'media',
+        mimeType: 'image/png',
+        data: 'malformed===',
+        encoding: 'base64',
+        filename: 'screenshot.png',
+      };
+      const result = mediaBlockToCompressionPlaceholder(media);
+      expect(result).toBe('[Attached image: screenshot.png]');
+      expect(result).not.toContain('malformed');
+    });
+
+    it('falls back to mimeType when neither caption nor filename is present', () => {
+      const media: MediaBlock = {
+        type: 'media',
+        mimeType: 'image/webp',
+        data: 'AAAA=',
+        encoding: 'base64',
+      };
+      const result = mediaBlockToCompressionPlaceholder(media);
+      expect(result).toBe('[Attached image: image/webp]');
+      expect(result).not.toContain('AAAA');
+    });
+
+    it('handles PDF media blocks without leaking base64 data', () => {
+      const media: MediaBlock = {
+        type: 'media',
+        mimeType: 'application/pdf',
+        data: 'JVBERi0xLjQ=',
+        encoding: 'base64',
+        filename: 'report.pdf',
+      };
+      const result = mediaBlockToCompressionPlaceholder(media);
+      expect(result).toBe('[Attached PDF: report.pdf]');
+      expect(result).not.toContain('JVBERi0xLjQ');
+    });
+
+    it('handles URL-encoded media without leaking the URL', () => {
+      const media: MediaBlock = {
+        type: 'media',
+        mimeType: 'image/jpeg',
+        data: 'https://example.com/photo.jpg',
+        encoding: 'url',
+        filename: 'photo.jpg',
+      };
+      const result = mediaBlockToCompressionPlaceholder(media);
+      // filename is present, so it should be used (not the URL)
+      expect(result).toBe('[Attached image: photo.jpg]');
+      expect(result).not.toContain('https://example.com');
+    });
+
+    it('handles URL-encoded media with no filename by falling back to mimeType', () => {
+      const media: MediaBlock = {
+        type: 'media',
+        mimeType: 'image/jpeg',
+        data: 'https://example.com/photo.jpg',
+        encoding: 'url',
+      };
+      const result = mediaBlockToCompressionPlaceholder(media);
+      expect(result).toBe('[Attached image: image/jpeg]');
+      expect(result).not.toContain('https://example.com');
+    });
   });
 });
