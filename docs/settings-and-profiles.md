@@ -66,6 +66,67 @@ At startup:
 llxprt --set context-limit=100000 --set streaming=disabled
 ```
 
+## Settings File Compatibility
+
+Persistent settings files accept both legacy flat keys and the V2 namespaced shape for settings that have moved under a clearer namespace. Existing files continue to work; new writes for mapped UI primitive keys use the V2 path.
+
+```json
+{
+  "ui": {
+    "accessibility": {
+      "screenReader": true,
+      "enableLoadingPhrases": false
+    },
+    "checkpointing": {
+      "enabled": true
+    },
+    "fileFiltering": {
+      "respectGitIgnore": true,
+      "respectLlxprtIgnore": true,
+      "enableRecursiveFileSearch": true,
+      "enableFuzzySearch": false
+    }
+  }
+}
+```
+
+Backward-compatible mappings:
+
+| Legacy path       | V2 path written by settings updates |
+| ----------------- | ----------------------------------- |
+| `accessibility.*` | `ui.accessibility.*`                |
+| `checkpointing.*` | `ui.checkpointing.*`                |
+| `fileFiltering.*` | `ui.fileFiltering.*`                |
+
+When both legacy and V2 locations are present in the same settings layer, the V2 value wins. Normal scope precedence still applies across settings files.
+
+This is the complete V2 compatibility mapping currently supported by LLxprt. Other root-level settings remain in their existing locations until they get an explicit namespaced compatibility path.
+
+Model settings have one compatibility exception: the legacy `model` setting is a string and remains supported as-is for model selection. V2 files may also use an object when they need compression settings next to the model name:
+
+```json
+{
+  "model": {
+    "name": "gpt-4.1",
+    "compressionThreshold": 0.7
+  }
+}
+```
+
+`compressionThreshold` must be a number from 0 to 1.
+
+`model.name` is normalized back to the active model string, and `model.compressionThreshold` maps to the legacy runtime shape `chatCompression.contextPercentageThreshold`. Existing files using `"model": "gpt-4.1"` and/or `chatCompression.contextPercentageThreshold` continue to work.
+
+Merged runtime settings keep `model` as the active model string for existing callers and also expose the V2 object fields as `modelConfig` for code that needs the full namespaced model configuration.
+
+```json
+{
+  "chatCompression": {
+    "contextPercentageThreshold": 0.7
+  }
+}
+```
+
 ### Core Settings
 
 | Setting                 | Description                                    | Default          |

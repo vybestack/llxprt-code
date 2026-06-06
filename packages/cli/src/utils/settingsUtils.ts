@@ -15,6 +15,7 @@ import type {
   SettingsSchema,
 } from '../config/settingsSchema.js';
 import { SETTINGS_SCHEMA } from '../config/settingsSchema.js';
+import { getV2NamespacedSettingPath } from '../config/settingsMerge.js';
 
 // The schema is now nested, but many parts of the UI and logic work better
 // with a flattened structure and dot-notation keys. This section flattens the
@@ -168,6 +169,28 @@ export function getNestedValue(
   return undefined;
 }
 
+function getSettingStoragePaths(key: string): string[][] {
+  const legacyPath = key.split('.');
+  const namespacedKey = getV2NamespacedSettingPath(key);
+  if (namespacedKey === key) {
+    return [legacyPath];
+  }
+  return [namespacedKey.split('.'), legacyPath];
+}
+
+function getSettingValueFromStoragePaths(
+  settings: Record<string, unknown>,
+  key: string,
+): unknown {
+  for (const path of getSettingStoragePaths(key)) {
+    const value = getNestedValue(settings, path);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Get the effective value for a setting, considering inheritance from higher scopes
  * Always returns a value (never undefined) - falls back to default if not set anywhere
@@ -182,16 +205,20 @@ export function getEffectiveValue(
     return undefined;
   }
 
-  const path = key.split('.');
-
   // Check the current scope's settings first
-  let value = getNestedValue(settings as Record<string, unknown>, path);
+  let value = getSettingValueFromStoragePaths(
+    settings as Record<string, unknown>,
+    key,
+  );
   if (value !== undefined) {
     return value as SettingDefinition['default'];
   }
 
   // Check the merged settings for an inherited value
-  value = getNestedValue(mergedSettings as Record<string, unknown>, path);
+  value = getSettingValueFromStoragePaths(
+    mergedSettings as Record<string, unknown>,
+    key,
+  );
   if (value !== undefined) {
     return value as SettingDefinition['default'];
   }
@@ -338,9 +365,12 @@ export function settingExistsInScope(
   key: string,
   scopeSettings: Settings,
 ): boolean {
-  const path = key.split('.');
-  const value = getNestedValue(scopeSettings as Record<string, unknown>, path);
-  return value !== undefined;
+  return (
+    getSettingValueFromStoragePaths(
+      scopeSettings as Record<string, unknown>,
+      key,
+    ) !== undefined
+  );
 }
 
 /**

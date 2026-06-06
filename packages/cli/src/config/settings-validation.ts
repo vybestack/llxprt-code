@@ -49,6 +49,24 @@ function buildStringJsonSchema(def: JsonSchemaLike): z.ZodTypeAny {
   return z.string();
 }
 
+function applyNumberBounds(
+  schema: z.ZodNumber,
+  def: { minimum?: unknown; maximum?: unknown },
+): z.ZodNumber {
+  let boundedSchema = schema;
+  if (typeof def.minimum === 'number') {
+    boundedSchema = boundedSchema.min(def.minimum);
+  }
+  if (typeof def.maximum === 'number') {
+    boundedSchema = boundedSchema.max(def.maximum);
+  }
+  return boundedSchema;
+}
+
+function buildNumberJsonSchema(def: JsonSchemaLike): z.ZodTypeAny {
+  return applyNumberBounds(z.number(), def);
+}
+
 function buildBooleanJsonSchema(def: JsonSchemaLike): z.ZodTypeAny {
   if ('const' in def) {
     return z.literal(def.const as never);
@@ -114,7 +132,7 @@ function buildZodSchemaFromJsonSchema(def: unknown): z.ZodTypeAny {
     case 'string':
       return buildStringJsonSchema(def);
     case 'number':
-      return z.number();
+      return buildNumberJsonSchema(def);
     case 'boolean':
       return buildBooleanJsonSchema(def);
     case 'array':
@@ -176,14 +194,16 @@ function buildObjectShapeFromProperties(
 /**
  * Builds a Zod schema for primitive types (string, number, boolean).
  */
-function buildPrimitiveSchema(
-  type: 'string' | 'number' | 'boolean',
-): z.ZodTypeAny {
-  switch (type) {
+function buildPrimitiveSchema(definition: {
+  type: 'string' | 'number' | 'boolean';
+  minimum?: number;
+  maximum?: number;
+}): z.ZodTypeAny {
+  switch (definition.type) {
     case 'string':
       return z.string();
     case 'number':
-      return z.number();
+      return applyNumberBounds(z.number(), definition);
     case 'boolean':
       return z.boolean();
     default:
@@ -210,12 +230,23 @@ function buildZodSchemaFromDefinition(
   if (definition.ref && definition.ref in REF_SCHEMAS) {
     return REF_SCHEMAS[definition.ref].optional();
   }
+  if (definition.type === 'union' && definition.refs) {
+    return unionJsonSchemas(
+      definition.refs.map((ref) => REF_SCHEMAS[ref] ?? z.unknown()),
+    ).optional();
+  }
 
   switch (definition.type) {
     case 'string':
     case 'number':
     case 'boolean':
-      baseSchema = buildPrimitiveSchema(definition.type);
+      baseSchema = buildPrimitiveSchema(
+        definition as {
+          type: 'string' | 'number' | 'boolean';
+          minimum?: number;
+          maximum?: number;
+        },
+      );
       break;
 
     case 'enum': {
@@ -237,17 +268,23 @@ function buildZodSchemaFromDefinition(
         const shape = buildObjectShapeFromProperties(definition.properties);
         baseSchema = z.object(shape).passthrough();
 
-        if (definition.additionalProperties) {
+        if (definition.additionalProperties === false) {
+          baseSchema = z.object(shape).strict();
+        } else if (definition.additionalProperties) {
           const additionalSchema = buildZodSchemaFromCollection(
             definition.additionalProperties,
           );
           baseSchema = z.object(shape).catchall(additionalSchema);
         }
-      } else if (definition.additionalProperties) {
-        const valueSchema = buildZodSchemaFromCollection(
-          definition.additionalProperties,
-        );
-        baseSchema = z.record(z.string(), valueSchema);
+      } else if (definition.additionalProperties !== undefined) {
+        const additionalProperties = definition.additionalProperties;
+        baseSchema =
+          additionalProperties === false
+            ? z.record(z.string(), z.never())
+            : z.record(
+                z.string(),
+                buildZodSchemaFromCollection(additionalProperties),
+              );
       } else {
         baseSchema = z.record(z.string(), z.unknown());
       }
@@ -275,7 +312,13 @@ function buildZodSchemaFromCollection(
     case 'string':
     case 'number':
     case 'boolean':
-      return buildPrimitiveSchema(collection.type);
+      return buildPrimitiveSchema(
+        collection as {
+          type: 'string' | 'number' | 'boolean';
+          minimum?: number;
+          maximum?: number;
+        },
+      );
 
     case 'enum': {
       return buildEnumSchema(collection.options);
@@ -294,6 +337,10 @@ function buildZodSchemaFromCollection(
         return z.object(shape).passthrough();
       }
       return z.record(z.string(), z.unknown());
+    case 'union':
+      return unionJsonSchemas(
+        (collection.refs ?? []).map((ref) => REF_SCHEMAS[ref] ?? z.unknown()),
+      );
 
     default:
       return z.unknown();
@@ -328,6 +375,41 @@ export function validateSettings(data: unknown): {
   return result;
 }
 
+function getValidationGuidance(
+  path: string,
+  message?: string,
+): string | undefined {
+  if (
+    path === 'chatCompression' &&
+    message?.includes('compressionThreshold') === true
+  ) {
+    return 'Use model.compressionThreshold instead of chatCompression.compressionThreshold.';
+  }
+  if (path === 'model' && message?.includes('chatCompression') === true) {
+    return 'model.chatCompression is not supported. Use model.compressionThreshold.';
+  }
+
+  switch (path) {
+    case 'accessibility':
+    case 'accessibility.screenReader':
+    case 'accessibility.enableLoadingPhrases':
+      return 'Use ui.accessibility.* for V2 settings; root accessibility.* remains accepted for legacy compatibility.';
+    case 'chatCompression':
+    case 'chatCompression.contextPercentageThreshold':
+      return 'Use model.compressionThreshold for V2 settings; root chatCompression.contextPercentageThreshold remains accepted for legacy compatibility.';
+    case 'chatCompression.compressionThreshold':
+      return 'Use model.compressionThreshold instead of chatCompression.compressionThreshold.';
+    case 'model.chatCompression':
+      return 'model.chatCompression is not supported. Use model.compressionThreshold.';
+    case 'model.compressionThreshold':
+      return 'model.compressionThreshold must be a number between 0 and 1.';
+    case 'model':
+      return 'Use either a model name string or { name, compressionThreshold }.';
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Format a Zod error into a helpful error message for end users.
  */
@@ -359,6 +441,11 @@ export function formatValidationError(
       const received = issue.received;
       lines.push(`Expected: ${expected}, but received: ${received}`);
     }
+    const guidance = getValidationGuidance(path, issue.message);
+    if (guidance) {
+      lines.push(`Guidance: ${guidance}`);
+    }
+
     lines.push('');
   }
 

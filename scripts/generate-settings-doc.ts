@@ -181,6 +181,21 @@ function formatDescription(definition: SettingDefinition) {
 }
 
 function formatType(definition: SettingDefinition): string {
+  if (definition.type === 'union' && definition.refs) {
+    return definition.refs
+      .map((ref) => {
+        switch (ref) {
+          case 'ModelName':
+            return 'string';
+          case 'ModelConfig':
+            return 'object';
+          default:
+            return ref;
+        }
+      })
+      .join(' | ');
+  }
+
   switch (definition.ref) {
     case 'StringOrStringArray':
       return 'string | string[]';

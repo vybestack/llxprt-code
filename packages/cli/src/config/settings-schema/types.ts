@@ -10,7 +10,8 @@ export type SettingsType =
   | 'number'
   | 'array'
   | 'object'
-  | 'enum';
+  | 'enum'
+  | 'union';
 
 export type SettingsValue =
   | boolean
@@ -46,6 +47,10 @@ export interface SettingCollectionDefinition {
    * For example, a JSON schema generator can use this to point to a shared definition.
    */
   ref?: string;
+  /**
+   * For union settings, references the allowed schema alternatives.
+   */
+  refs?: readonly string[];
 }
 
 export enum MergeStrategy {
@@ -80,9 +85,14 @@ export interface SettingDefinition {
    */
   items?: SettingCollectionDefinition;
   /**
+   * For union settings, references the allowed schema alternatives.
+   */
+  refs?: readonly string[];
+  /**
    * For map-like objects without explicit `properties`, describes the shape of the values.
    */
-  additionalProperties?: SettingCollectionDefinition;
+  additionalProperties?: SettingCollectionDefinition | false;
+
   /**
    * Optional reference identifier for generators that emit a `$ref`.
    */

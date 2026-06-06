@@ -1,6 +1,7 @@
 import { type WittyPhraseStyle } from '../../ui/constants/phrasesCollections.js';
 import type { MemoryImportFormat } from './types.js';
 import type { CustomTheme } from '../../ui/themes/theme.js';
+import { CORE_SETTINGS_SCHEMA } from './schema-core.js';
 
 export const UI_SETTINGS_SCHEMA = {
   ui: {
@@ -12,6 +13,9 @@ export const UI_SETTINGS_SCHEMA = {
     description: 'User interface settings.',
     showInDialog: false,
     properties: {
+      accessibility: CORE_SETTINGS_SCHEMA.accessibility,
+      checkpointing: CORE_SETTINGS_SCHEMA.checkpointing,
+      fileFiltering: CORE_SETTINGS_SCHEMA.fileFiltering,
       theme: {
         type: 'string',
         label: 'Theme',

@@ -164,6 +164,22 @@ describe('SettingsUtils', () => {
         expect(value).toBe(false);
       });
 
+      it('should read V2 namespaced storage for legacy schema keys', () => {
+        const settings = {
+          ui: { accessibility: { enableLoadingPhrases: false } },
+        };
+        const mergedSettings = {
+          accessibility: { enableLoadingPhrases: true },
+        };
+
+        const value = getEffectiveValue(
+          'accessibility.enableLoadingPhrases',
+          settings,
+          mergedSettings,
+        );
+        expect(value).toBe(false);
+      });
+
       it('should return undefined for invalid settings', () => {
         const settings = {};
         const mergedSettings = {};
@@ -480,6 +496,33 @@ describe('SettingsUtils', () => {
         };
         expect(
           settingExistsInScope('accessibility.enableLoadingPhrases', settings),
+        ).toBe(true);
+      });
+
+      it('should return true for V2 namespaced settings that map to legacy schema keys', () => {
+        const settings = {
+          ui: {
+            accessibility: { enableLoadingPhrases: true },
+            checkpointing: { enabled: true },
+            fileFiltering: { enableFuzzySearch: false },
+          },
+          model: { compressionThreshold: 0.7 },
+        };
+
+        expect(
+          settingExistsInScope('accessibility.enableLoadingPhrases', settings),
+        ).toBe(true);
+        expect(settingExistsInScope('checkpointing.enabled', settings)).toBe(
+          true,
+        );
+        expect(
+          settingExistsInScope('fileFiltering.enableFuzzySearch', settings),
+        ).toBe(true);
+        expect(
+          settingExistsInScope(
+            'chatCompression.contextPercentageThreshold',
+            settings,
+          ),
         ).toBe(true);
       });
 

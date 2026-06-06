@@ -4,7 +4,7 @@
   "title": "LLxprt Code Settings",
   "description": "Configuration file schema for LLxprt Code settings. This schema enables IDE completion for `settings.json`.",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "properties": {
     "$schema": {
       "title": "Schema",
@@ -256,6 +256,99 @@
       "default": {},
       "type": "object",
       "properties": {
+        "accessibility": {
+          "title": "Accessibility",
+          "description": "Accessibility settings.",
+          "markdownDescription": "Accessibility settings.\n\n- Category: `Accessibility`\n- Requires restart: `yes`\n- Default: `{}`",
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enableLoadingPhrases": {
+              "title": "Enable Loading Phrases",
+              "description": "Enable loading phrases during operations.",
+              "markdownDescription": "Enable loading phrases during operations.\n\n- Category: `Accessibility`\n- Requires restart: `yes`\n- Default: `true`",
+              "default": true,
+              "type": "boolean"
+            },
+            "screenReader": {
+              "title": "Screen Reader Mode",
+              "description": "Render output in plain-text to be more screen reader accessible",
+              "markdownDescription": "Render output in plain-text to be more screen reader accessible\n\n- Category: `Accessibility`\n- Requires restart: `yes`\n- Default: `false`",
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "checkpointing": {
+          "title": "Checkpointing",
+          "description": "Session checkpointing settings.",
+          "markdownDescription": "Session checkpointing settings.\n\n- Category: `Checkpointing`\n- Requires restart: `yes`\n- Default: `{}`",
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "title": "Enable Checkpointing",
+              "description": "Enable session checkpointing for recovery",
+              "markdownDescription": "Enable session checkpointing for recovery\n\n- Category: `Checkpointing`\n- Requires restart: `yes`\n- Default: `false`",
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "fileFiltering": {
+          "title": "File Filtering",
+          "description": "Settings for git-aware file filtering.",
+          "markdownDescription": "Settings for git-aware file filtering.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `{}`",
+          "default": {},
+          "type": "object",
+          "properties": {
+            "respectGitIgnore": {
+              "title": "Respect .gitignore",
+              "description": "Respect .gitignore files when searching",
+              "markdownDescription": "Respect .gitignore files when searching\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `true`",
+              "default": true,
+              "type": "boolean"
+            },
+            "respectLlxprtIgnore": {
+              "title": "Respect .llxprtignore",
+              "description": "Respect .llxprtignore files when searching",
+              "markdownDescription": "Respect .llxprtignore files when searching\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `true`",
+              "default": true,
+              "type": "boolean"
+            },
+            "enableRecursiveFileSearch": {
+              "title": "Enable Recursive File Search",
+              "description": "Enable recursive file search functionality",
+              "markdownDescription": "Enable recursive file search functionality\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `true`",
+              "default": true,
+              "type": "boolean"
+            },
+            "enableFuzzySearch": {
+              "title": "Enable Fuzzy Search",
+              "description": "Enable fuzzy search when searching for files.",
+              "markdownDescription": "Enable fuzzy search when searching for files.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `true`",
+              "default": true,
+              "type": "boolean"
+            },
+            "maxFileCount": {
+              "title": "Max File Count",
+              "description": "Maximum number of files to index during file search. Prevents OOM on large projects.",
+              "markdownDescription": "Maximum number of files to index during file search. Prevents OOM on large projects.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `20000`",
+              "default": 20000,
+              "type": "number"
+            },
+            "searchTimeout": {
+              "title": "Search Timeout (ms)",
+              "description": "Timeout in milliseconds for file search operations.",
+              "markdownDescription": "Timeout in milliseconds for file search operations.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `5000`",
+              "default": 5000,
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
         "theme": {
           "title": "Theme",
           "description": "The color theme for the UI.",
@@ -921,9 +1014,16 @@
     },
     "model": {
       "title": "Model",
-      "description": "The Gemini model to use for conversations.",
-      "markdownDescription": "The Gemini model to use for conversations.\n\n- Category: `General`\n- Requires restart: `no`",
-      "type": "string"
+      "description": "The model to use for conversations. V2 settings may use { name, compressionThreshold }; compressionThreshold maps to chatCompression.contextPercentageThreshold.",
+      "markdownDescription": "The model to use for conversations. V2 settings may use { name, compressionThreshold }; compressionThreshold maps to chatCompression.contextPercentageThreshold.\n\n- Category: `General`\n- Requires restart: `no`",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ModelName"
+        },
+        {
+          "$ref": "#/$defs/ModelConfig"
+        }
+      ]
     },
     "hasSeenIdeIntegrationNudge": {
       "title": "Has Seen IDE Integration Nudge",
@@ -948,10 +1048,32 @@
     },
     "chatCompression": {
       "title": "Chat Compression",
-      "description": "Chat compression settings.",
-      "markdownDescription": "Chat compression settings.\n\n- Category: `General`\n- Requires restart: `no`",
+      "description": "Legacy chat compression settings. V2 model.compressionThreshold maps to contextPercentageThreshold.",
+      "markdownDescription": "Legacy chat compression settings. V2 model.compressionThreshold maps to contextPercentageThreshold.\n\n- Category: `General`\n- Requires restart: `no`",
       "type": "object",
-      "additionalProperties": true
+      "properties": {
+        "contextPercentageThreshold": {
+          "title": "Context Percentage Threshold",
+          "description": "Fraction of context-limit that triggers history compression (0.0–1.0).",
+          "markdownDescription": "Fraction of context-limit that triggers history compression (0.0–1.0).\n\n- Category: `General`\n- Requires restart: `no`",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "strategy": {
+          "title": "Compression Strategy",
+          "description": "Legacy compression strategy selector.",
+          "markdownDescription": "Legacy compression strategy selector.\n\n- Category: `General`\n- Requires restart: `no`",
+          "type": "string"
+        },
+        "profile": {
+          "title": "Compression Profile",
+          "description": "Legacy compression profile selector.",
+          "markdownDescription": "Legacy compression profile selector.\n\n- Category: `General`\n- Requires restart: `no`",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     },
     "experimental": {
       "title": "Experimental",
@@ -1719,6 +1841,25 @@
           "type": "string"
         }
       ]
+    },
+    "ModelName": {
+      "type": "string",
+      "description": "Model name string."
+    },
+    "ModelConfig": {
+      "type": "object",
+      "description": "V2 model configuration object with optional name and compressionThreshold.",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "compressionThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
     },
     "BooleanOrLspConfig": {
       "description": "Set to true to enable LSP with defaults, false to disable, or provide an object to configure LSP servers and diagnostics behavior.",

@@ -15,6 +15,8 @@ import {
   getEnableHooks,
   getEnableHooksUI,
 } from './settingsSchema.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 describe('SettingsSchema', () => {
   describe('SETTINGS_SCHEMA', () => {
@@ -275,43 +277,102 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.defaultDisabledTools.requiresRestart).toBe(true);
     });
 
+    it('should represent model as an explicit string-or-object union', () => {
+      expect(SETTINGS_SCHEMA.model.type).toBe('union');
+      expect(SETTINGS_SCHEMA.model.refs).toStrictEqual([
+        'ModelName',
+        'ModelConfig',
+      ]);
+      expect(SETTINGS_SCHEMA_DEFINITIONS.ModelName).toMatchObject({
+        type: 'string',
+      });
+      expect(SETTINGS_SCHEMA_DEFINITIONS.ModelConfig).toMatchObject({
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          compressionThreshold: { type: 'number', minimum: 0, maximum: 1 },
+        },
+      });
+    });
+
+    it('should keep generated JSON schema model union consistent with schema definitions', () => {
+      const generatedSchema = JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), '../../schemas/settings.schema.json'),
+          'utf8',
+        ),
+      ) as {
+        properties: { model: { anyOf?: Array<{ $ref: string }> } };
+      };
+
+      expect(generatedSchema.properties.model.anyOf).toStrictEqual([
+        { $ref: '#/$defs/ModelName' },
+        { $ref: '#/$defs/ModelConfig' },
+      ]);
+      const modelConfig = (
+        generatedSchema as unknown as {
+          $defs: {
+            ModelConfig: {
+              properties: {
+                compressionThreshold: { minimum?: number; maximum?: number };
+              };
+            };
+          };
+        }
+      ).$defs.ModelConfig;
+      expect(modelConfig.properties.compressionThreshold).toMatchObject({
+        minimum: 0,
+        maximum: 1,
+      });
+    });
+
     it('has JSON schema definitions for every referenced ref', () => {
       const schema = getSettingsSchema();
       const referenced = new Set<string>();
       const missing: string[] = [];
 
-      const visitDefinition = (definition: SettingDefinition) => {
-        if (definition.ref) {
-          referenced.add(definition.ref);
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- verifying all refs are defined at runtime
-          if (SETTINGS_SCHEMA_DEFINITIONS[definition.ref] === undefined) {
-            missing.push(definition.ref);
-          }
+      const recordReference = (ref: string): void => {
+        referenced.add(ref);
+        if (!(ref in SETTINGS_SCHEMA_DEFINITIONS)) {
+          missing.push(ref);
         }
+      };
+
+      const visitRefs = (refs: readonly string[] | undefined): void => {
+        for (const ref of refs ?? []) {
+          recordReference(ref);
+        }
+      };
+
+      const visitDefinition = (definition: SettingDefinition): void => {
+        if (definition.ref) {
+          recordReference(definition.ref);
+        }
+        visitRefs(definition.refs);
+
         if (definition.properties) {
           Object.values(definition.properties).forEach(visitDefinition);
         }
         if (definition.items) {
           visitCollection(definition.items);
         }
-        if (definition.additionalProperties) {
-          visitCollection(definition.additionalProperties);
+        if (definition.additionalProperties !== undefined) {
+          const additionalProperties = definition.additionalProperties;
+          if (additionalProperties !== false) {
+            visitCollection(additionalProperties);
+          }
         }
       };
 
-      const visitCollection = (collection: SettingCollectionDefinition) => {
+      const visitCollection = (
+        collection: SettingCollectionDefinition,
+      ): void => {
         if (collection.ref) {
-          referenced.add(collection.ref);
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- verifying all refs are defined at runtime
-          if (SETTINGS_SCHEMA_DEFINITIONS[collection.ref] === undefined) {
-            missing.push(collection.ref);
-          }
-          return;
+          recordReference(collection.ref);
         }
+        visitRefs(collection.refs);
+
         if (collection.properties) {
-          Object.values(collection.properties).forEach(visitDefinition);
-        }
-        if (collection.type === 'array' && collection.properties) {
           Object.values(collection.properties).forEach(visitDefinition);
         }
       };

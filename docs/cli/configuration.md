@@ -2,7 +2,9 @@
 
 This page covers `settings.json` — the persistent configuration file. You can also edit settings interactively with the `/settings` command during a session.
 
-For session-level settings (the `/set` command), profiles, and reasoning configuration, see [Settings and Profiles](../settings-and-profiles.md).
+For session-level settings (the `/set` command), profiles, reasoning configuration, and V2 namespaced settings compatibility, see [Settings and Profiles](../settings-and-profiles.md).
+
+Unknown top-level keys in settings files are intentionally accepted and preserved for forward/backward compatibility with extensions, migrations, and older configuration files. Unknown nested keys inside strict built-in sections are still rejected during validation.
 
 ## Configuration layers
 
@@ -227,6 +229,51 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Values:** `"text"`, `"json"`
 
 #### `ui`
+
+- **`ui.accessibility.enableLoadingPhrases`** (boolean):
+  - **Description:** Enable loading phrases during operations.
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`ui.accessibility.screenReader`** (boolean):
+  - **Description:** Render output in plain-text to be more screen reader accessible
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`ui.checkpointing.enabled`** (boolean):
+  - **Description:** Enable session checkpointing for recovery
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`ui.fileFiltering.respectGitIgnore`** (boolean):
+  - **Description:** Respect .gitignore files when searching
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`ui.fileFiltering.respectLlxprtIgnore`** (boolean):
+  - **Description:** Respect .llxprtignore files when searching
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`ui.fileFiltering.enableRecursiveFileSearch`** (boolean):
+  - **Description:** Enable recursive file search functionality
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`ui.fileFiltering.enableFuzzySearch`** (boolean):
+  - **Description:** Enable fuzzy search when searching for files.
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`ui.fileFiltering.maxFileCount`** (number):
+  - **Description:** Maximum number of files to index during file search. Prevents OOM on large projects.
+  - **Default:** `20000`
+  - **Requires restart:** Yes
+
+- **`ui.fileFiltering.searchTimeout`** (number):
+  - **Description:** Timeout in milliseconds for file search operations.
+  - **Default:** `5000`
+  - **Requires restart:** Yes
 
 - **`ui.theme`** (string):
   - **Description:** The color theme for the UI.
@@ -622,8 +669,8 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 #### `model`
 
-- **`model`** (string):
-  - **Description:** The Gemini model to use for conversations.
+- **`model`** (string | object):
+  - **Description:** The model to use for conversations. V2 settings may use { name, compressionThreshold }; compressionThreshold maps to chatCompression.contextPercentageThreshold.
   - **Default:** `undefined`
 
 #### `hasSeenIdeIntegrationNudge`
@@ -648,8 +695,16 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 #### `chatCompression`
 
-- **`chatCompression`** (object):
-  - **Description:** Chat compression settings.
+- **`chatCompression.contextPercentageThreshold`** (number):
+  - **Description:** Fraction of context-limit that triggers history compression (0.0–1.0).
+  - **Default:** `undefined`
+
+- **`chatCompression.strategy`** (string):
+  - **Description:** Legacy compression strategy selector.
+  - **Default:** `undefined`
+
+- **`chatCompression.profile`** (string):
+  - **Description:** Legacy compression profile selector.
   - **Default:** `undefined`
 
 #### `experimental`
@@ -1021,21 +1076,9 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
   - **Description:** The Gemini model to use for conversations.
   - **Default:** `undefined`
 
-- **`model.maxSessionTurns`** (number):
-  - **Description:** Maximum number of user/model/tool turns to keep in a session. -1 means unlimited.
-  - **Default:** `-1`
-
-- **`model.summarizeToolOutput`** (object):
-  - **Description:** Settings for summarizing tool output.
+- **`model.compressionThreshold`** (number):
+  - **Description:** V2 setting for the token threshold that triggers chat history compression, expressed as a percentage of the model context limit. This maps to legacy `chatCompression.contextPercentageThreshold`.
   - **Default:** `undefined`
-
-- **`model.chatCompression`** (object):
-  - **Description:** Chat compression settings.
-  - **Default:** `undefined`
-
-- **`model.skipNextSpeakerCheck`** (boolean):
-  - **Description:** Skip the next speaker check.
-  - **Default:** `false`
 
 #### `context`
 
@@ -1325,12 +1368,20 @@ The following settings remain at the top level of the `settings.json` file.
     "loadMemoryFromIncludeDirectories": true
     ```
 
-- **`chatCompression`** (object):
-  - **Description:** Controls the settings for chat history compression, both automatic and
-    when manually invoked through the /compress command.
+- **`chatCompression`** (object, legacy compatibility):
+  - **Description:** Legacy root setting for chat history compression, both automatic and when manually invoked through the /compress command. New V2 configuration should use `model.compressionThreshold`.
   - **Properties:**
-    - **`contextPercentageThreshold`** (number): A value between 0 and 1 that specifies the token threshold for compression as a percentage of the model's total token limit. For example, a value of `0.6` will trigger compression when the chat history exceeds 60% of the token limit.
+    - **`contextPercentageThreshold`** (number): A value between 0 and 1 that specifies the token threshold for compression as a percentage of the model's total token limit. For example, a value of `0.6` will trigger compression when the chat history exceeds 60% of the token limit. This is equivalent to `model.compressionThreshold`.
   - **Example:**
+
+    ```json
+    "model": {
+      "compressionThreshold": 0.6
+    }
+    ```
+
+  - **Legacy example:**
+
     ```json
     "chatCompression": {
       "contextPercentageThreshold": 0.6
@@ -1371,28 +1422,32 @@ The following settings remain at the top level of the `settings.json` file.
     ```
   - **Note:** When set, the specified profile will be loaded automatically each time LLxprt Code starts
 
-- **`accessibility`** (object):
-  - **Description:** Configures accessibility features for the CLI.
+- **`ui.accessibility`** (object):
+  - **Description:** V2 namespace for accessibility features for the CLI. Root `accessibility` remains accepted for legacy compatibility.
   - **Properties:**
     - **`screenReader`** (boolean): Enables screen reader mode, which adjusts the TUI for better compatibility with screen readers. This can also be enabled with the `--screen-reader` command-line flag, which will take precedence over the setting.
     - **`enableLoadingPhrases`** (boolean): Enables the display of loading phrases during operations.
   - **Default:** `{"screenReader": false, "enableLoadingPhrases": true}`
 
   - **Example:**
+
+    ```json
+    "ui": {
+      "accessibility": {
+        "screenReader": true,
+        "enableLoadingPhrases": false
+      }
+    }
+    ```
+
+  - **Legacy example:**
+
     ```json
     "accessibility": {
       "screenReader": true,
       "enableLoadingPhrases": false
     }
     ```
-
-#### Additional Dialog Settings
-
-The following settings are available in the `/settings` dialog:
-
-- **`enableAutoUpdateNotification`** (boolean):
-  - **Description:** Enable update notification prompts.
-  - **Default:** `true`
 
 - **`enablePromptCompletion`** (boolean):
   - **Description:** Enable AI-powered prompt completion suggestions while typing. Provides intelligent autocomplete based on context and command history.

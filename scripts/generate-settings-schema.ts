@@ -116,7 +116,7 @@ function buildSchemaObject(schema: SettingsSchemaType): JsonSchema {
     description:
       'Configuration file schema for LLxprt Code settings. This schema enables IDE completion for `settings.json`.',
     type: 'object',
-    additionalProperties: false,
+    additionalProperties: true,
     properties: {},
   };
 
@@ -156,7 +156,9 @@ function buildSettingSchema(
 
   const schemaShape = definition.ref
     ? buildRefSchema(definition.ref, defs)
-    : buildSchemaForType(definition, pathSegments, defs);
+    : definition.type === 'union' && definition.refs
+      ? buildUnionSchema(definition.refs, defs)
+      : buildSchemaForType(definition, pathSegments, defs);
 
   return { ...base, ...schemaShape };
 }
@@ -296,6 +298,13 @@ function buildInlineObjectSchema(
     properties: childSchemas,
     additionalProperties: false,
   };
+}
+
+function buildUnionSchema(
+  refs: readonly string[],
+  defs: Map<string, JsonSchema>,
+): JsonSchema {
+  return { anyOf: refs.map((ref) => buildRefSchema(ref, defs)) };
 }
 
 function buildRefSchema(

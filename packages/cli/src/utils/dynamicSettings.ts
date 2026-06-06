@@ -17,6 +17,7 @@ const allowedTypes = [
   'array',
   'object',
   'enum',
+  'union',
 ] as const;
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {

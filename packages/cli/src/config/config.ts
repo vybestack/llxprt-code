@@ -15,7 +15,7 @@ import {
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
 
-import { type Settings } from './settings.js';
+import { type MergedSettings, type Settings } from './settings.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
 import { resolveMcpServers } from './mcpServerConfig.js';
 import { type CliArgs } from './cliArgParser.js';
@@ -109,15 +109,17 @@ async function bootstrapAndLoadProfile(
 /** Steps 7-8: Resolve approval mode and provider/model, sync to SettingsService */
 function resolveApprovalAndProvider(
   argv: CliArgs,
-  profileMergedSettings: Settings,
+  profileMergedSettings: MergedSettings,
   context: ContextResolutionResult,
   profileResult: ProfileLoadResult,
   runtimeState: BootstrapRuntimeState,
 ) {
+  const securitySettings = (profileMergedSettings as Partial<MergedSettings>)
+    .security;
   const approvalMode = resolveApprovalMode({
     cliApprovalMode: argv.approvalMode,
     cliYolo: argv.yolo,
-    disableYoloMode: profileMergedSettings.security?.disableYoloMode,
+    disableYoloMode: securitySettings?.disableYoloMode,
     secureModeEnabled: profileMergedSettings.admin?.secureModeEnabled,
     trustedFolder: context.trustedFolder,
   });
@@ -144,7 +146,7 @@ function resolveApprovalAndProvider(
 async function resolveConfigBuildPieces(
   argv: CliArgs,
   settings: Settings,
-  profileMergedSettings: Settings,
+  profileMergedSettings: MergedSettings,
   profileResult: ProfileLoadResult,
   runtimeState: BootstrapRuntimeState,
   cwd: string,

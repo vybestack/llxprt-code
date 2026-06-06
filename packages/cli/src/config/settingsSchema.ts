@@ -314,6 +314,20 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
     description: 'Accepts either a boolean flag or a string command name.',
     anyOf: [{ type: 'boolean' }, { type: 'string' }],
   },
+  ModelName: {
+    type: 'string',
+    description: 'Model name string.',
+  },
+  ModelConfig: {
+    type: 'object',
+    description:
+      'V2 model configuration object with optional name and compressionThreshold.',
+    additionalProperties: false,
+    properties: {
+      name: { type: 'string' },
+      compressionThreshold: { type: 'number', minimum: 0, maximum: 1 },
+    },
+  },
   BooleanOrLspConfig: {
     description:
       'Set to true to enable LSP with defaults, false to disable, or provide an object to configure LSP servers and diagnostics behavior.',
@@ -410,7 +424,13 @@ export type Settings = InferSettings<SettingsSchemaType>;
  * Settings type for the merged settings object. Sub-objects that are
  * always populated by mergeSettings() are marked as required.
  */
-export type MergedSettings = Settings & {
+export type MergedSettings = Omit<Settings, 'model'> & {
+  model?: string;
+  modelConfig?: {
+    name?: string;
+    compressionThreshold?: number;
+  };
+
   ui: NonNullable<Settings['ui']>;
   security: NonNullable<Settings['security']>;
   telemetry: NonNullable<Settings['telemetry']>;
