@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { IContent } from '../../services/history/IContent.js';
+import type { IContent, MediaBlock } from '../../services/history/IContent.js';
 import type { CompressionContext } from './types.js';
 import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
@@ -69,6 +69,16 @@ function toolResponseMsg(
         result,
       },
     ],
+  };
+}
+
+function humanMsgWithMedia(
+  text: string,
+  ...mediaBlocks: MediaBlock[]
+): IContent {
+  return {
+    speaker: 'human',
+    blocks: [{ type: 'text', text }, ...mediaBlocks],
   };
 }
 
@@ -552,6 +562,168 @@ describe('OneShotStrategy', () => {
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(isTransientCompressionError(error)).toBe(false);
       }
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Media block sanitization — issue #1889
+  // -----------------------------------------------------------------------
+
+  describe('media block sanitization (issue #1889)', () => {
+    it('does not send raw media bytes to the compression provider for compressed messages with images', async () => {
+      // Build 20 messages where some compressed messages contain MediaBlocks
+      // with raw base64 data. The provider should never receive a MediaBlock.
+      const history: IContent[] = [];
+      for (let i = 0; i < 20; i++) {
+        if (i === 3) {
+          history.push(
+            humanMsgWithMedia('Check this image:', {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'not-valid-base64===',
+              encoding: 'base64',
+              filename: 'screenshot.png',
+            }),
+          );
+        } else if (i === 7) {
+          history.push(
+            humanMsgWithMedia('And this PDF:', {
+              type: 'media',
+              mimeType: 'application/pdf',
+              data: 'JVBERi0xLjQ=',
+              encoding: 'base64',
+              filename: 'report.pdf',
+            }),
+          );
+        } else if (i % 2 === 0) {
+          history.push(humanMsg(`user message ${i}`));
+        } else {
+          history.push(aiTextMsg(`ai response ${i}`));
+        }
+      }
+
+      const capturedRequests: IContent[] = [];
+      const captureProvider: IProvider = {
+        name: 'capture-provider',
+        getModels: async () => [],
+        getDefaultModel: () => 'capture-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({}),
+        async *generateChatCompletion(options: { contents: IContent[] }) {
+          capturedRequests.push(...options.contents);
+          yield {
+            speaker: 'ai' as const,
+            blocks: [
+              {
+                type: 'text' as const,
+                text: '<state_snapshot>One-shot compressed</state_snapshot>',
+              },
+            ],
+          };
+        },
+      } as unknown as IProvider;
+
+      const ctx = buildContext({
+        history,
+        resolveProvider: () => captureProvider,
+      });
+      const strategy = new OneShotStrategy();
+      const result = await strategy.compress(ctx);
+
+      expect(result.metadata.llmCallMade).toBe(true);
+
+      // Provider received no MediaBlock instances
+      const allBlocks = capturedRequests.flatMap((m) => m.blocks);
+      const mediaBlocks = allBlocks.filter((b) => b.type === 'media');
+      expect(mediaBlocks).toHaveLength(0);
+
+      // No raw base64 data in provider request text
+      const textBlocks = allBlocks.filter(
+        (b): b is { type: 'text'; text: string } => b.type === 'text',
+      );
+      for (const tb of textBlocks) {
+        expect(tb.text).not.toContain('not-valid-base64===');
+        expect(tb.text).not.toContain('JVBERi0xLjQ=');
+      }
+
+      // Media placeholders are present
+      const placeholderTexts = textBlocks.map((b) => b.text);
+      const hasScreenshotPlaceholder = placeholderTexts.some(
+        (t) =>
+          t.includes('[Attached image: screenshot.png]') ||
+          t.includes('screenshot.png'),
+      );
+      const hasPdfPlaceholder = placeholderTexts.some(
+        (t) =>
+          t.includes('[Attached PDF: report.pdf]') || t.includes('report.pdf'),
+      );
+      expect(hasScreenshotPlaceholder).toBe(true);
+      expect(hasPdfPlaceholder).toBe(true);
+    });
+
+    it('preserves media blocks in the kept tail that are not sent to the LLM', async () => {
+      // Build history where the preserved tail contains a media block
+      const history: IContent[] = [];
+      for (let i = 0; i < 20; i++) {
+        if (i === 19) {
+          // Last message (in preserved tail) with media
+          history.push(
+            humanMsgWithMedia('Look at this:', {
+              type: 'media',
+              mimeType: 'image/jpeg',
+              data: 'tailjpgdata',
+              encoding: 'base64',
+              filename: 'photo.jpg',
+            }),
+          );
+        } else if (i % 2 === 0) {
+          history.push(humanMsg(`user message ${i}`));
+        } else {
+          history.push(aiTextMsg(`ai response ${i}`));
+        }
+      }
+
+      const capturedRequests: IContent[] = [];
+      const captureProvider: IProvider = {
+        name: 'capture-provider',
+        getModels: async () => [],
+        getDefaultModel: () => 'capture-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({}),
+        async *generateChatCompletion(options: { contents: IContent[] }) {
+          capturedRequests.push(...options.contents);
+          yield {
+            speaker: 'ai' as const,
+            blocks: [
+              {
+                type: 'text' as const,
+                text: '<state_snapshot>Compressed</state_snapshot>',
+              },
+            ],
+          };
+        },
+      } as unknown as IProvider;
+
+      const ctx = buildContext({
+        history,
+        resolveProvider: () => captureProvider,
+      });
+      const strategy = new OneShotStrategy();
+      const result = await strategy.compress(ctx);
+
+      // The kept tail should retain the original media block since
+      // it's not sent to the compression LLM
+      const preservedTail = result.newHistory.slice(2); // skip summary + ack
+      const tailMediaBlocks = preservedTail.flatMap((m) =>
+        m.blocks.filter((b) => b.type === 'media'),
+      );
+      expect(tailMediaBlocks).toHaveLength(1);
+      expect(tailMediaBlocks[0].filename).toBe('photo.jpg');
+
+      // Provider request should still have no media blocks
+      const allBlocks = capturedRequests.flatMap((m) => m.blocks);
+      const mediaInRequest = allBlocks.filter((b) => b.type === 'media');
+      expect(mediaInRequest).toHaveLength(0);
     });
   });
 });
