@@ -389,9 +389,6 @@ function applyCoreMergedSections(
     ...getChatCompressionSettings(workspace),
     ...getChatCompressionSettings(system),
   };
-
-  merged.model = getPrioritizedModel(layers);
-  merged.modelConfig = getPrioritizedModelConfig(layers);
   merged.coreToolSettings = schemaDefaults.coreToolSettings ?? {};
 }
 

@@ -1373,12 +1373,15 @@ The following settings remain at the top level of the `settings.json` file.
   - **Properties:**
     - **`contextPercentageThreshold`** (number): A value between 0 and 1 that specifies the token threshold for compression as a percentage of the model's total token limit. For example, a value of `0.6` will trigger compression when the chat history exceeds 60% of the token limit. This is equivalent to `model.compressionThreshold`.
   - **Example:**
+
     ```json
     "model": {
       "compressionThreshold": 0.6
     }
     ```
+
   - **Legacy example:**
+
     ```json
     "chatCompression": {
       "contextPercentageThreshold": 0.6
@@ -1427,6 +1430,7 @@ The following settings remain at the top level of the `settings.json` file.
   - **Default:** `{"screenReader": false, "enableLoadingPhrases": true}`
 
   - **Example:**
+
     ```json
     "ui": {
       "accessibility": {
@@ -1435,7 +1439,9 @@ The following settings remain at the top level of the `settings.json` file.
       }
     }
     ```
+
   - **Legacy example:**
+
     ```json
     "accessibility": {
       "screenReader": true,

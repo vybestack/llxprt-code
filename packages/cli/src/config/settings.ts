@@ -212,7 +212,15 @@ export class LoadedSettings {
       settingsRecord.model !== null &&
       !Array.isArray(settingsRecord.model)
     ) {
-      this.setNestedValue(settingsRecord, ['model', 'name'], value);
+      if (
+        typeof value === 'object' &&
+        value !== null &&
+        !Array.isArray(value)
+      ) {
+        settingsRecord.model = value;
+      } else {
+        this.setNestedValue(settingsRecord, ['model', 'name'], value);
+      }
     } else if (typeof resolvedKey === 'string' && resolvedKey.includes('.')) {
       this.setNestedValue(settingsRecord, resolvedKey.split('.'), value);
     } else {

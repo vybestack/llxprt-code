@@ -2061,6 +2061,40 @@ describe('Settings Loading and Merging', () => {
       });
     });
 
+    it('setValue should replace an existing V2 model object when setting a model object', () => {
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
+      );
+      const userSettingsContent = {
+        model: { name: 'existing-model', compressionThreshold: 0.7 },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          return '{}';
+        },
+      );
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      loadedSettings.setValue(SettingScope.User, 'model', {
+        name: 'replacement-model',
+        compressionThreshold: 0.5,
+      });
+
+      expect(loadedSettings.user.settings.model).toStrictEqual({
+        name: 'replacement-model',
+        compressionThreshold: 0.5,
+      });
+      expect(loadedSettings.merged.model).toBe('replacement-model');
+      expect(loadedSettings.merged.chatCompression).toStrictEqual({
+        contextPercentageThreshold: 0.5,
+      });
+    });
+
     it('setValue should support direct V2 model.compressionThreshold writes and preserve name', () => {
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) => p === USER_SETTINGS_PATH,
