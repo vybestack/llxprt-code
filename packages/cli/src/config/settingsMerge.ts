@@ -25,6 +25,31 @@ const LEGACY_UI_KEYS = [
   'hasSeenIdeIntegrationNudge',
 ] as const;
 
+export const V2_NAMESPACE_MAPPINGS = {
+  accessibility: 'ui',
+  checkpointing: 'ui',
+  fileFiltering: 'ui',
+} as const satisfies Partial<Record<keyof Settings, keyof Settings>>;
+
+const V2_WRITE_PATH_MAPPINGS = {
+  'chatCompression.contextPercentageThreshold': 'model.compressionThreshold',
+} as const satisfies Record<string, string>;
+
+export type V2NamespacedSettingKey = keyof typeof V2_NAMESPACE_MAPPINGS;
+
+export function getV2NamespacedSettingPath(key: string): string {
+  if (Object.prototype.hasOwnProperty.call(V2_WRITE_PATH_MAPPINGS, key)) {
+    return V2_WRITE_PATH_MAPPINGS[key as keyof typeof V2_WRITE_PATH_MAPPINGS];
+  }
+
+  const [topLevel, ...nestedParts] = key.split('.');
+  if (!Object.prototype.hasOwnProperty.call(V2_NAMESPACE_MAPPINGS, topLevel)) {
+    return key;
+  }
+  const namespace = V2_NAMESPACE_MAPPINGS[topLevel as V2NamespacedSettingKey];
+  return [namespace, topLevel, ...nestedParts].join('.');
+}
+
 type SettingsLayer = Partial<Settings>;
 type MergeLayers = {
   schemaDefaults: SettingsLayer;
@@ -80,6 +105,36 @@ function extractLegacyUiKeys(settings: SettingsLayer): Record<string, unknown> {
   return legacy;
 }
 
+function getObjectSettingValue(
+  settings: SettingsLayer,
+  key: keyof Settings,
+): object | undefined {
+  const value: unknown = settings[key];
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value
+    : undefined;
+}
+
+function extractV2NestedKeys(
+  settings: SettingsLayer,
+  namespace: keyof Settings,
+): Record<string, unknown> {
+  const namespacedSettings = getObjectSettingValue(settings, namespace) as
+    | Record<string, unknown>
+    | undefined;
+  const nested: Record<string, unknown> = {};
+  for (const [key, mappedNamespace] of Object.entries(V2_NAMESPACE_MAPPINGS)) {
+    if (mappedNamespace !== namespace) {
+      continue;
+    }
+    const value = namespacedSettings?.[key];
+    if (value !== undefined) {
+      nested[key] = value;
+    }
+  }
+  return nested;
+}
+
 function getPrioritizedTheme({
   schemaDefaults,
   systemDefaults,
@@ -102,12 +157,16 @@ function mergeUiSettings(layers: MergeLayers): MergedSettings['ui'] {
   const ui = {
     ...(schemaDefaults.ui ?? {}),
     ...extractLegacyUiKeys(systemDefaults),
+    ...extractV2NestedKeys(systemDefaults, 'ui'),
     ...(systemDefaults.ui ?? {}),
     ...extractLegacyUiKeys(user),
+    ...extractV2NestedKeys(user, 'ui'),
     ...(user.ui ?? {}),
     ...extractLegacyUiKeys(workspace),
+    ...extractV2NestedKeys(workspace, 'ui'),
     ...(workspace.ui ?? {}),
     ...extractLegacyUiKeys(system),
+    ...extractV2NestedKeys(system, 'ui'),
     ...(system.ui ?? {}),
     customThemes: {
       ...(systemDefaults.ui?.customThemes ?? {}),
@@ -169,6 +228,128 @@ function mergeObjectSection<K extends keyof Settings>(
   } as NonNullable<Settings[K]>;
 }
 
+function getModelSettings(settings: SettingsLayer):
+  | {
+      name?: unknown;
+      compressionThreshold?: unknown;
+    }
+  | undefined {
+  const model: unknown = settings.model;
+  return typeof model === 'object' && model !== null && !Array.isArray(model)
+    ? (model as { name?: unknown; compressionThreshold?: unknown })
+    : undefined;
+}
+
+function getModelName(settings: SettingsLayer): string | undefined {
+  const model = settings.model;
+  if (typeof model === 'string') {
+    return model;
+  }
+  const name = getModelSettings(settings)?.name;
+  return typeof name === 'string' ? name : undefined;
+}
+
+function getModelCompressionThreshold(
+  settings: SettingsLayer,
+): number | undefined {
+  const threshold = getModelSettings(settings)?.compressionThreshold;
+  return typeof threshold === 'number' ? threshold : undefined;
+}
+
+function getModelCompressionSettings(
+  settings: SettingsLayer,
+): { contextPercentageThreshold: number } | undefined {
+  const threshold = getModelCompressionThreshold(settings);
+  return threshold === undefined
+    ? undefined
+    : { contextPercentageThreshold: threshold };
+}
+
+function getChatCompressionSettings(
+  settings: SettingsLayer,
+): Record<string, unknown> {
+  const chatCompression: unknown = settings.chatCompression;
+  return {
+    ...(typeof chatCompression === 'object' &&
+    chatCompression !== null &&
+    !Array.isArray(chatCompression)
+      ? chatCompression
+      : {}),
+    ...(getModelCompressionSettings(settings) ?? {}),
+  };
+}
+
+function getPrioritizedModel(layers: MergeLayers): string | undefined {
+  return [
+    getModelName(layers.workspace),
+    getModelName(layers.user),
+    getModelName(layers.system),
+    getModelName(layers.systemDefaults),
+    getModelName(layers.schemaDefaults),
+  ].find((model) => model !== undefined);
+}
+
+function getPrioritizedModelCompressionThreshold(
+  layers: MergeLayers,
+): number | undefined {
+  return [
+    getModelCompressionThreshold(layers.workspace),
+    getModelCompressionThreshold(layers.user),
+    getModelCompressionThreshold(layers.system),
+    getModelCompressionThreshold(layers.systemDefaults),
+    getModelCompressionThreshold(layers.schemaDefaults),
+  ].find((threshold) => threshold !== undefined);
+}
+
+function getPrioritizedModelConfig(
+  layers: MergeLayers,
+): MergedSettings['modelConfig'] | undefined {
+  const name = getPrioritizedModel(layers);
+  const compressionThreshold = getPrioritizedModelCompressionThreshold(layers);
+  if (name === undefined && compressionThreshold === undefined) {
+    return undefined;
+  }
+  return {
+    ...(name === undefined ? {} : { name }),
+    ...(compressionThreshold === undefined ? {} : { compressionThreshold }),
+  };
+}
+
+function getV2NestedObjectSection<K extends V2NamespacedSettingKey>(
+  settings: SettingsLayer,
+  key: K,
+): object | undefined {
+  const namespace = V2_NAMESPACE_MAPPINGS[key];
+  const namespacedSettings = getObjectSettingValue(settings, namespace) as
+    | Record<string, unknown>
+    | undefined;
+  const value = namespacedSettings?.[key];
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value
+    : undefined;
+}
+
+function mergeV2CompatibleObjectSection<K extends V2NamespacedSettingKey>(
+  key: K,
+  schemaDefaults: SettingsLayer,
+  systemDefaults: SettingsLayer,
+  user: SettingsLayer,
+  workspace: SettingsLayer,
+  system: SettingsLayer,
+): NonNullable<Settings[K]> {
+  return {
+    ...((schemaDefaults[key] as object | undefined) ?? {}),
+    ...((systemDefaults[key] as object | undefined) ?? {}),
+    ...(getV2NestedObjectSection(systemDefaults, key) ?? {}),
+    ...((user[key] as object | undefined) ?? {}),
+    ...(getV2NestedObjectSection(user, key) ?? {}),
+    ...((workspace[key] as object | undefined) ?? {}),
+    ...(getV2NestedObjectSection(workspace, key) ?? {}),
+    ...((system[key] as object | undefined) ?? {}),
+    ...(getV2NestedObjectSection(system, key) ?? {}),
+  } as NonNullable<Settings[K]>;
+}
+
 function mergeBaseSettings(layers: MergeLayers): Partial<MergedSettings> {
   const { schemaDefaults, systemDefaults, user, workspace, system } = layers;
   return {
@@ -177,7 +358,9 @@ function mergeBaseSettings(layers: MergeLayers): Partial<MergedSettings> {
     ...user,
     ...workspace,
     ...system,
-  };
+    model: getPrioritizedModel(layers),
+    modelConfig: getPrioritizedModelConfig(layers),
+  } as Partial<MergedSettings>;
 }
 
 function applyCoreMergedSections(
@@ -200,14 +383,15 @@ function applyCoreMergedSections(
     ...(workspace.includeDirectories ?? []),
     ...(system.includeDirectories ?? []),
   ];
-  merged.chatCompression = mergeObjectSection(
-    'chatCompression',
-    {},
-    systemDefaults,
-    user,
-    workspace,
-    system,
-  );
+  merged.chatCompression = {
+    ...getChatCompressionSettings(systemDefaults),
+    ...getChatCompressionSettings(user),
+    ...getChatCompressionSettings(workspace),
+    ...getChatCompressionSettings(system),
+  };
+
+  merged.model = getPrioritizedModel(layers);
+  merged.modelConfig = getPrioritizedModelConfig(layers);
   merged.coreToolSettings = schemaDefaults.coreToolSettings ?? {};
 }
 
@@ -218,6 +402,18 @@ function applySchemaBackedSections(
   const { schemaDefaults, systemDefaults, user, workspace, system } = layers;
   for (const key of ['security', 'telemetry', 'mcp', 'tools'] as const) {
     merged[key] = mergeObjectSection(
+      key,
+      schemaDefaults,
+      systemDefaults,
+      user,
+      workspace,
+      system,
+    );
+  }
+  for (const key of Object.keys(
+    V2_NAMESPACE_MAPPINGS,
+  ) as V2NamespacedSettingKey[]) {
+    merged[key] = mergeV2CompatibleObjectSection(
       key,
       schemaDefaults,
       systemDefaults,

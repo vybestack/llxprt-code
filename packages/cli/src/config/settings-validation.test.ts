@@ -85,15 +85,6 @@ describe('settings-validation', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should accept unknown top-level keys (passthrough for migration)', () => {
-      const validSettings = {
-        unknownKey: 'some value',
-        anotherUnknown: 123,
-      };
-      const result = validateSettings(validSettings);
-      expect(result.success).toBe(true);
-    });
-
     it('should accept complex valid settings', () => {
       const validSettings = {
         enableAutoUpdate: false,
@@ -249,6 +240,142 @@ describe('settings-validation', () => {
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.error) throw new Error('unreachable: narrowing failed');
       expect(result.error.issues.length).toBeGreaterThan(1);
+    });
+
+    it('should accept V2 nested ui compatibility namespaces', () => {
+      const validSettings = {
+        ui: {
+          accessibility: { screenReader: true },
+          checkpointing: { enabled: true },
+          fileFiltering: {
+            respectGitIgnore: true,
+            enableFuzzySearch: false,
+          },
+        },
+      };
+
+      const result = validateSettings(validSettings);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject invalid V2 nested ui compatibility paths', () => {
+      const invalidSettings = {
+        ui: {
+          accessibility: { screenReader: 'yes' },
+          checkpointing: { enabled: 'yes' },
+          fileFiltering: { enableFuzzySearch: 'no' },
+        },
+      };
+
+      const result = validateSettings(invalidSettings);
+
+      expect(result.success).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      expect(result.error.issues.map((issue) => issue.path)).toStrictEqual(
+        expect.arrayContaining([
+          ['ui', 'accessibility', 'screenReader'],
+          ['ui', 'checkpointing', 'enabled'],
+          ['ui', 'fileFiltering', 'enableFuzzySearch'],
+        ]),
+      );
+    });
+
+    it('should accept model object compatibility settings', () => {
+      const validSettings = {
+        model: {
+          name: 'provider-model',
+          compressionThreshold: 0.7,
+        },
+      };
+
+      const result = validateSettings(validSettings);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject model compression thresholds outside the 0 to 1 range', () => {
+      expect(
+        validateSettings({ model: { compressionThreshold: -0.1 } }).success,
+      ).toBe(false);
+      expect(
+        validateSettings({ model: { compressionThreshold: 1.1 } }).success,
+      ).toBe(false);
+      expect(
+        validateSettings({
+          chatCompression: { contextPercentageThreshold: 1.1 },
+        }).success,
+      ).toBe(false);
+    });
+
+    it('should reject invalid model object compatibility settings', () => {
+      const invalidSettings = {
+        model: {
+          name: 123,
+          compressionThreshold: '0.7',
+          extra: true,
+        },
+      };
+
+      const result = validateSettings(invalidSettings);
+
+      expect(result.success).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (!result.error) throw new Error('unreachable: narrowing failed');
+      expect(result.error.issues.length).toBeGreaterThan(0);
+    });
+
+    it('should validate legacy chatCompression fields and reject unknown nested keys', () => {
+      const validSettings = {
+        chatCompression: {
+          contextPercentageThreshold: 0.5,
+          strategy: 'high-density',
+          profile: 'balanced',
+        },
+      };
+      const invalidSettings = {
+        chatCompression: { compressionThreshold: 0.5 },
+      };
+
+      expect(validateSettings(validSettings).success).toBe(true);
+      expect(validateSettings(invalidSettings).success).toBe(false);
+    });
+
+    it('should include guidance for mistaken compression paths', () => {
+      const result = validateSettings({
+        chatCompression: { compressionThreshold: 0.5 },
+        model: { chatCompression: { contextPercentageThreshold: 0.5 } },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+
+      const message = formatValidationError(result.error!, '/settings.json');
+      expect(message).toContain(
+        'Use model.compressionThreshold instead of chatCompression.compressionThreshold.',
+      );
+      expect(message).toContain(
+        'model.chatCompression is not supported. Use model.compressionThreshold.',
+      );
+    });
+
+    it('should include guidance for invalid root compatibility paths', () => {
+      const result = validateSettings({
+        accessibility: { screenReader: 'yes' },
+        chatCompression: { contextPercentageThreshold: '0.5' },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+
+      const message = formatValidationError(result.error!, '/settings.json');
+      expect(message).toContain(
+        'Use ui.accessibility.* for V2 settings; root accessibility.* remains accepted for legacy compatibility.',
+      );
+      expect(message).toContain(
+        'Use model.compressionThreshold for V2 settings; root chatCompression.contextPercentageThreshold remains accepted for legacy compatibility.',
+      );
     });
 
     it('should validate mcpServers with type field for all transport types', () => {

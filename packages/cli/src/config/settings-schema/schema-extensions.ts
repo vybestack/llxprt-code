@@ -172,12 +172,17 @@ export const EXTENSION_SETTINGS_SCHEMA = {
     showInDialog: true,
   },
   model: {
-    type: 'string',
+    type: 'union',
+    refs: ['ModelName', 'ModelConfig'],
     label: 'Model',
     category: 'General',
     requiresRestart: false,
-    default: undefined as string | undefined,
-    description: 'The Gemini model to use for conversations.',
+    default: undefined as
+      | string
+      | { name?: string; compressionThreshold?: number }
+      | undefined,
+    description:
+      'The model to use for conversations. V2 settings may use { name, compressionThreshold }; compressionThreshold maps to chatCompression.contextPercentageThreshold.',
     showInDialog: false,
   },
   hasSeenIdeIntegrationNudge: {
@@ -213,8 +218,42 @@ export const EXTENSION_SETTINGS_SCHEMA = {
     category: 'General',
     requiresRestart: false,
     default: undefined as ChatCompressionSettings | undefined,
-    description: 'Chat compression settings.',
+    description:
+      'Legacy chat compression settings. V2 model.compressionThreshold maps to contextPercentageThreshold.',
     showInDialog: false,
+    properties: {
+      contextPercentageThreshold: {
+        type: 'number',
+        label: 'Context Percentage Threshold',
+        category: 'General',
+        requiresRestart: false,
+        default: undefined,
+        description:
+          'Fraction of context-limit that triggers history compression (0.0–1.0).',
+        showInDialog: false,
+        minimum: 0,
+        maximum: 1,
+      },
+      strategy: {
+        type: 'string',
+        label: 'Compression Strategy',
+        category: 'General',
+        requiresRestart: false,
+        default: undefined,
+        description: 'Legacy compression strategy selector.',
+        showInDialog: false,
+      },
+      profile: {
+        type: 'string',
+        label: 'Compression Profile',
+        category: 'General',
+        requiresRestart: false,
+        default: undefined,
+        description: 'Legacy compression profile selector.',
+        showInDialog: false,
+      },
+    },
+    additionalProperties: false,
   },
 
   experimental: {

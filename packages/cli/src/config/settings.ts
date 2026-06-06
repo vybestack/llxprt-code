@@ -20,7 +20,7 @@ import {
   type MergedSettings,
   type MemoryImportFormat,
 } from './settingsSchema.js';
-import { mergeSettings } from './settingsMerge.js';
+import { getV2NamespacedSettingPath, mergeSettings } from './settingsMerge.js';
 export { loadSettings } from './settingsLoader.js';
 export { migrateDeprecatedSettings } from './settingsMigrations.js';
 import {
@@ -196,35 +196,86 @@ export class LoadedSettings {
     value: Settings[K] | unknown,
   ): void {
     const settingsFile = this.forScope(scope);
+    const resolvedKey =
+      typeof key === 'string' ? getV2NamespacedSettingPath(key) : key;
+    const settingsRecord = settingsFile.settings as Record<string, unknown>;
+    const legacyPath = typeof key === 'string' ? key.split('.') : undefined;
+    const shouldRemoveLegacyPath =
+      typeof key === 'string' &&
+      typeof resolvedKey === 'string' &&
+      resolvedKey !== key &&
+      legacyPath !== undefined;
 
-    // Handle nested paths like 'ui.ideMode'
-    if (typeof key === 'string' && key.includes('.')) {
-      const parts = key.split('.');
-      const topLevel = parts[0] as keyof Settings;
-      const nested = parts.slice(1).join('.');
-
-      // Ensure the top-level object exists
-      const settingsRecord = settingsFile.settings as Record<string, unknown>;
-      const existingTopLevel = settingsRecord[topLevel];
-      if (typeof existingTopLevel !== 'object' || existingTopLevel === null) {
-        settingsRecord[topLevel] = {};
-      }
-
-      // Navigate to the nested property
-      let current = settingsRecord[topLevel] as Record<string, unknown>;
-      const nestedParts = nested.split('.');
-      for (let i = 0; i < nestedParts.length - 1; i++) {
-        current[nestedParts[i]] ??= {};
-        current = current[nestedParts[i]] as Record<string, unknown>;
-      }
-      current[nestedParts[nestedParts.length - 1]] = value;
+    if (
+      resolvedKey === 'model' &&
+      typeof settingsRecord.model === 'object' &&
+      settingsRecord.model !== null &&
+      !Array.isArray(settingsRecord.model)
+    ) {
+      this.setNestedValue(settingsRecord, ['model', 'name'], value);
+    } else if (typeof resolvedKey === 'string' && resolvedKey.includes('.')) {
+      this.setNestedValue(settingsRecord, resolvedKey.split('.'), value);
     } else {
-      settingsFile.settings[key as K] = value as Settings[K];
+      settingsFile.settings[resolvedKey as K] = value as Settings[K];
+    }
+
+    if (shouldRemoveLegacyPath) {
+      this.deleteNestedValue(settingsRecord, legacyPath);
     }
 
     this._merged = this.computeMergedSettings();
     saveSettings(settingsFile);
     coreEvents.emitSettingsChanged();
+  }
+
+  private setNestedValue(
+    settingsRecord: Record<string, unknown>,
+    parts: string[],
+    value: unknown,
+  ): void {
+    let current = settingsRecord;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i];
+      const existing = current[part];
+      if (
+        typeof existing !== 'object' ||
+        existing === null ||
+        Array.isArray(existing)
+      ) {
+        current[part] = {};
+      }
+      current = current[part] as Record<string, unknown>;
+    }
+    current[parts[parts.length - 1]] = value;
+  }
+
+  private deleteNestedValue(
+    settingsRecord: Record<string, unknown>,
+    parts: string[],
+  ): boolean {
+    const [part, ...rest] = parts;
+    if (!part || !(part in settingsRecord)) {
+      return Object.keys(settingsRecord).length === 0;
+    }
+
+    if (rest.length === 0) {
+      delete settingsRecord[part];
+      return Object.keys(settingsRecord).length === 0;
+    }
+
+    const existing = settingsRecord[part];
+    if (
+      typeof existing !== 'object' ||
+      existing === null ||
+      Array.isArray(existing)
+    ) {
+      return Object.keys(settingsRecord).length === 0;
+    }
+
+    if (this.deleteNestedValue(existing as Record<string, unknown>, rest)) {
+      delete settingsRecord[part];
+    }
+    return Object.keys(settingsRecord).length === 0;
   }
 
   // Provider keyfile methods for llxprt multi-provider support

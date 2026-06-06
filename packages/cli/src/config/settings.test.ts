@@ -63,6 +63,8 @@ import {
   type Settings,
   loadEnvironment,
 } from './settings';
+import { getV2NamespacedSettingPath } from './settingsMerge.js';
+
 import { FatalConfigError, LLXPRT_DIR } from '@vybestack/llxprt-code-core';
 
 const MOCK_WORKSPACE_DIR = '/mock/workspace';
@@ -780,6 +782,373 @@ describe('Settings Loading and Merging', () => {
       });
     });
 
+    it('should map V2 model.compressionThreshold to chatCompression without changing model string selection', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userSettingsContent = {
+        model: {
+          name: 'user-model',
+          compressionThreshold: 0.5,
+        },
+      };
+      const workspaceSettingsContent = {
+        model: 'workspace-model',
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.model).toBe('workspace-model');
+      expect(settings.merged.chatCompression).toStrictEqual({
+        contextPercentageThreshold: 0.5,
+      });
+      expect(settings.merged.modelConfig).toStrictEqual({
+        name: 'workspace-model',
+        compressionThreshold: 0.5,
+      });
+    });
+
+    it('should let higher-precedence model.compressionThreshold override legacy chatCompression', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userSettingsContent = {
+        chatCompression: { contextPercentageThreshold: 0.5 },
+      };
+      const workspaceSettingsContent = {
+        model: {
+          name: 'workspace-model',
+          compressionThreshold: 0.8,
+        },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.model).toBe('workspace-model');
+      expect(settings.merged.chatCompression).toStrictEqual({
+        contextPercentageThreshold: 0.8,
+      });
+    });
+
+    it('should preserve legacy chatCompression when lower-precedence model.compressionThreshold exists', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userSettingsContent = {
+        model: { compressionThreshold: 0.5 },
+      };
+      const workspaceSettingsContent = {
+        chatCompression: { contextPercentageThreshold: 0.8 },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.chatCompression).toStrictEqual({
+        contextPercentageThreshold: 0.8,
+      });
+    });
+
+    it('should preserve legacy chatCompression strategy and profile fields', () => {
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
+      );
+      const userSettingsContent = {
+        chatCompression: {
+          contextPercentageThreshold: 0.5,
+          strategy: 'high-density',
+          profile: 'balanced',
+        },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.user.settings.chatCompression).toStrictEqual({
+        contextPercentageThreshold: 0.5,
+        strategy: 'high-density',
+        profile: 'balanced',
+      });
+      expect(settings.merged.chatCompression).toStrictEqual({
+        contextPercentageThreshold: 0.5,
+        strategy: 'high-density',
+        profile: 'balanced',
+      });
+    });
+
+    it('should keep workspace and user model precedence over system model settings', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const systemSettingsContent = {
+        model: 'system-model',
+      };
+      const systemDefaultsContent = {
+        model: 'system-default-model',
+      };
+      const userSettingsContent = {
+        model: 'user-model',
+      };
+      const workspaceSettingsContent = {
+        model: { name: 'workspace-model' },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === '/mock/system/settings.json')
+            return JSON.stringify(systemSettingsContent);
+          if (p === '/mock/system/system-defaults.json')
+            return JSON.stringify(systemDefaultsContent);
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.model).toBe('workspace-model');
+    });
+
+    it('should keep user model precedence over system model settings when workspace model is absent', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const systemSettingsContent = {
+        model: { name: 'system-model' },
+      };
+      const systemDefaultsContent = {
+        model: { name: 'system-default-model' },
+      };
+      const userSettingsContent = {
+        model: 'user-model',
+      };
+      const workspaceSettingsContent = {};
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === '/mock/system/settings.json')
+            return JSON.stringify(systemSettingsContent);
+          if (p === '/mock/system/system-defaults.json')
+            return JSON.stringify(systemDefaultsContent);
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.model).toBe('user-model');
+    });
+
+    it('should use system model precedence over systemDefaults when user and workspace are absent', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const systemSettingsContent = {
+        model: 'system-model',
+      };
+      const systemDefaultsContent = {
+        model: { name: 'system-default-model' },
+      };
+      const userSettingsContent = {};
+      const workspaceSettingsContent = {};
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === '/mock/system/settings.json')
+            return JSON.stringify(systemSettingsContent);
+          if (p === '/mock/system/system-defaults.json')
+            return JSON.stringify(systemDefaultsContent);
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.model).toBe('system-model');
+    });
+
+    it('should use systemDefaults model when no higher precedence model exists', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const systemSettingsContent = {};
+      const systemDefaultsContent = {
+        model: 'system-default-model',
+      };
+      const userSettingsContent = {};
+      const workspaceSettingsContent = {};
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === '/mock/system/settings.json')
+            return JSON.stringify(systemSettingsContent);
+          if (p === '/mock/system/system-defaults.json')
+            return JSON.stringify(systemDefaultsContent);
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.model).toBe('system-default-model');
+    });
+
+    it('should read V2 namespaced UI settings into their top-level compatibility sections', () => {
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
+      );
+      const userSettingsContent = {
+        ui: {
+          accessibility: { screenReader: true },
+          checkpointing: { enabled: true },
+          fileFiltering: { enableFuzzySearch: false },
+        },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.accessibility).toMatchObject({
+        enableLoadingPhrases: true,
+        screenReader: true,
+      });
+      expect(settings.merged.checkpointing).toStrictEqual({ enabled: true });
+      expect(settings.merged.fileFiltering).toMatchObject({
+        enableFuzzySearch: false,
+        respectGitIgnore: true,
+      });
+    });
+
+    it('should prefer V2 namespaced values over legacy top-level values in the same settings layer', () => {
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
+      );
+      const userSettingsContent = {
+        accessibility: { screenReader: false },
+        checkpointing: { enabled: false },
+        fileFiltering: { enableFuzzySearch: true },
+        ui: {
+          accessibility: { screenReader: true },
+          checkpointing: { enabled: true },
+          fileFiltering: { enableFuzzySearch: false },
+        },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.accessibility.screenReader).toBe(true);
+      expect(settings.merged.checkpointing.enabled).toBe(true);
+      expect(settings.merged.fileFiltering.enableFuzzySearch).toBe(false);
+    });
+
+    it('should keep layer precedence when merging legacy top-level and V2 namespaced settings', () => {
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) =>
+          p === USER_SETTINGS_PATH || p === MOCK_WORKSPACE_SETTINGS_PATH,
+      );
+      const userSettingsContent = {
+        ui: {
+          accessibility: { screenReader: true },
+          checkpointing: { enabled: true },
+          fileFiltering: { enableFuzzySearch: false },
+        },
+      };
+      const workspaceSettingsContent = {
+        accessibility: { screenReader: false },
+        checkpointing: { enabled: false },
+        fileFiltering: { enableFuzzySearch: true },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.accessibility.screenReader).toBe(false);
+      expect(settings.merged.checkpointing.enabled).toBe(false);
+      expect(settings.merged.fileFiltering.enableFuzzySearch).toBe(true);
+    });
+
+    it('should map legacy V2-compatible setting paths to namespaced write paths', () => {
+      expect(getV2NamespacedSettingPath('accessibility.screenReader')).toBe(
+        'ui.accessibility.screenReader',
+      );
+      expect(getV2NamespacedSettingPath('checkpointing.enabled')).toBe(
+        'ui.checkpointing.enabled',
+      );
+      expect(
+        getV2NamespacedSettingPath('fileFiltering.enableFuzzySearch'),
+      ).toBe('ui.fileFiltering.enableFuzzySearch');
+      expect(getV2NamespacedSettingPath('ui.theme')).toBe('ui.theme');
+      expect(getV2NamespacedSettingPath('chatCompression.enabled')).toBe(
+        'chatCompression.enabled',
+      );
+      expect(
+        getV2NamespacedSettingPath(
+          'chatCompression.contextPercentageThreshold',
+        ),
+      ).toBe('model.compressionThreshold');
+    });
+
     it('should merge includeDirectories from all scopes', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const systemSettingsContent = {
@@ -1429,7 +1798,7 @@ describe('Settings Loading and Merging', () => {
 
       // Verify migrated value (inverted: disableLoadingPhrases=true → enableLoadingPhrases=false)
       expect(
-        (settings.user.settings.accessibility as Record<string, unknown>)[
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
           'enableLoadingPhrases'
         ],
       ).toBe(false);
@@ -1457,7 +1826,7 @@ describe('Settings Loading and Merging', () => {
 
       // Verify migrated value (inverted: disableFuzzySearch=true → enableFuzzySearch=false)
       expect(
-        (settings.user.settings.fileFiltering as Record<string, unknown>)[
+        (settings.user.settings.ui?.fileFiltering as Record<string, unknown>)[
           'enableFuzzySearch'
         ],
       ).toBe(false);
@@ -1512,6 +1881,250 @@ describe('Settings Loading and Merging', () => {
       );
       expect(loadedSettings.systemDefaults.settings.ui?.theme).toBe('default');
       expect(loadedSettings.merged.ui.theme).toBe('matrix');
+    });
+
+    it('setValue should write V2-compatible settings to namespaced paths', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(false);
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      loadedSettings.setValue(
+        SettingScope.User,
+        'accessibility.screenReader',
+        true,
+      );
+      expect(loadedSettings.user.settings.accessibility).toBeUndefined();
+      expect(loadedSettings.user.settings.ui?.accessibility).toStrictEqual({
+        screenReader: true,
+      });
+      expect(loadedSettings.merged.accessibility.screenReader).toBe(true);
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        USER_SETTINGS_PATH,
+        JSON.stringify(
+          { ui: { accessibility: { screenReader: true } } },
+          null,
+          2,
+        ),
+        'utf-8',
+      );
+    });
+
+    it('setValue should write additional V2-compatible settings to namespaced paths', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(false);
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      loadedSettings.setValue(SettingScope.User, 'checkpointing.enabled', true);
+      expect(loadedSettings.user.settings.checkpointing).toBeUndefined();
+      expect(loadedSettings.user.settings.ui?.checkpointing).toStrictEqual({
+        enabled: true,
+      });
+      expect(loadedSettings.merged.checkpointing.enabled).toBe(true);
+
+      loadedSettings.setValue(
+        SettingScope.User,
+        'fileFiltering.enableFuzzySearch',
+        false,
+      );
+      expect(loadedSettings.user.settings.fileFiltering).toBeUndefined();
+      expect(loadedSettings.user.settings.ui?.fileFiltering).toStrictEqual({
+        enableFuzzySearch: false,
+      });
+      expect(loadedSettings.merged.fileFiltering.enableFuzzySearch).toBe(false);
+    });
+
+    it('setValue should write chatCompression threshold updates to V2 model path', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(false);
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      loadedSettings.setValue(
+        SettingScope.User,
+        'chatCompression.contextPercentageThreshold',
+        0.7,
+      );
+      expect(loadedSettings.user.settings.chatCompression).toBeUndefined();
+      expect(
+        (
+          loadedSettings.user.settings.model as {
+            compressionThreshold?: number;
+          }
+        ).compressionThreshold,
+      ).toBe(0.7);
+      expect(loadedSettings.merged.chatCompression).toStrictEqual({
+        contextPercentageThreshold: 0.7,
+      });
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        USER_SETTINGS_PATH,
+        JSON.stringify({ model: { compressionThreshold: 0.7 } }, null, 2),
+        'utf-8',
+      );
+    });
+
+    it('setValue should remove duplicate legacy leaves when writing V2 paths', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify({
+              accessibility: {
+                screenReader: false,
+                enableLoadingPhrases: true,
+              },
+              checkpointing: { enabled: false },
+              fileFiltering: { enableFuzzySearch: true },
+              chatCompression: {
+                contextPercentageThreshold: 0.5,
+                strategy: 'high-density',
+                profile: 'balanced',
+              },
+            });
+          }
+          return '{}';
+        },
+      );
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      loadedSettings.setValue(
+        SettingScope.User,
+        'accessibility.screenReader',
+        true,
+      );
+      loadedSettings.setValue(SettingScope.User, 'checkpointing.enabled', true);
+      loadedSettings.setValue(
+        SettingScope.User,
+        'fileFiltering.enableFuzzySearch',
+        false,
+      );
+      loadedSettings.setValue(
+        SettingScope.User,
+        'chatCompression.contextPercentageThreshold',
+        0.8,
+      );
+
+      expect(loadedSettings.user.settings.accessibility).toStrictEqual({
+        enableLoadingPhrases: true,
+      });
+      expect(loadedSettings.user.settings.checkpointing).toBeUndefined();
+      expect(loadedSettings.user.settings.fileFiltering).toBeUndefined();
+      expect(loadedSettings.user.settings.chatCompression).toStrictEqual({
+        strategy: 'high-density',
+        profile: 'balanced',
+      });
+      expect(loadedSettings.user.settings.ui?.accessibility).toStrictEqual({
+        screenReader: true,
+      });
+      expect(loadedSettings.user.settings.ui?.checkpointing).toStrictEqual({
+        enabled: true,
+      });
+      expect(loadedSettings.user.settings.ui?.fileFiltering).toStrictEqual({
+        enableFuzzySearch: false,
+      });
+      expect(loadedSettings.user.settings.model).toStrictEqual({
+        compressionThreshold: 0.8,
+      });
+    });
+
+    it('setValue should preserve an existing V2 model object when setting the legacy model name', () => {
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
+      );
+      const userSettingsContent = {
+        model: { compressionThreshold: 0.7 },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          return '{}';
+        },
+      );
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      loadedSettings.setValue(SettingScope.User, 'model', 'updated-model');
+
+      expect(loadedSettings.user.settings.model).toStrictEqual({
+        name: 'updated-model',
+        compressionThreshold: 0.7,
+      });
+      expect(loadedSettings.merged.model).toBe('updated-model');
+      expect(loadedSettings.merged.chatCompression).toStrictEqual({
+        contextPercentageThreshold: 0.7,
+      });
+    });
+
+    it('setValue should support direct V2 model.compressionThreshold writes and preserve name', () => {
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
+      );
+      const userSettingsContent = {
+        model: { name: 'existing-model' },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          return '{}';
+        },
+      );
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      loadedSettings.setValue(
+        SettingScope.User,
+        'model.compressionThreshold',
+        0.8,
+      );
+
+      expect(loadedSettings.user.settings.model).toStrictEqual({
+        name: 'existing-model',
+        compressionThreshold: 0.8,
+      });
+      expect(loadedSettings.merged.model).toBe('existing-model');
+      expect(loadedSettings.merged.chatCompression).toStrictEqual({
+        contextPercentageThreshold: 0.8,
+      });
+    });
+
+    it('setValue should support direct V2 model.name writes and preserve compressionThreshold', () => {
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
+      );
+      const userSettingsContent = {
+        model: { compressionThreshold: 0.7 },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          return '{}';
+        },
+      );
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      loadedSettings.setValue(SettingScope.User, 'model.name', 'updated-model');
+
+      expect(loadedSettings.user.settings.model).toStrictEqual({
+        name: 'updated-model',
+        compressionThreshold: 0.7,
+      });
+      expect(loadedSettings.merged.model).toBe('updated-model');
+      expect(loadedSettings.merged.chatCompression).toStrictEqual({
+        contextPercentageThreshold: 0.7,
+      });
     });
   });
 

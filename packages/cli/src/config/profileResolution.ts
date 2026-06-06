@@ -11,7 +11,7 @@ import {
   debugLogger,
   type Profile,
 } from '@vybestack/llxprt-code-core';
-import type { Settings } from './settings.js';
+import type { MergedSettings, Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { BootstrapProfileArgs } from './profileBootstrap.js';
 
@@ -24,7 +24,7 @@ export interface ProfilePreparationResult {
   readonly profileModel: string | undefined;
   readonly profileModelParams: Record<string, unknown> | undefined;
   readonly profileBaseUrl: string | undefined;
-  readonly profileMergedSettings: Settings;
+  readonly profileMergedSettings: MergedSettings;
 }
 
 export interface ProfileResolutionInput {
@@ -42,7 +42,7 @@ export interface ProfileResolutionResult {
 }
 
 export interface ProfileLoadResult {
-  readonly profileMergedSettings: Settings;
+  readonly profileMergedSettings: MergedSettings;
   readonly profileModel: string | undefined;
   readonly profileProvider: string | undefined;
   readonly profileModelParams: Record<string, unknown> | undefined;
@@ -95,12 +95,12 @@ export function prepareProfileForApplication(
   const loadSummary = `Loaded ${profileSource === 'inline' ? 'inline profile from --profile' : `profile ${profileSource}`}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!ephemeralSettings}`;
   logger.debug(() => loadSummary);
 
-  let profileMergedSettings = baseSettings;
+  let profileMergedSettings: MergedSettings = baseSettings as MergedSettings;
   if (argv.provider === undefined && ephemeralSettings) {
     profileMergedSettings = {
       ...baseSettings,
       ...ephemeralSettings,
-    } as Settings;
+    } as MergedSettings;
     logger.debug(
       () =>
         `Merged ephemeral settings from ${profileSource === 'inline' ? 'inline profile' : `profile '${profileSource}'`}`,
@@ -255,7 +255,7 @@ export async function loadAndPrepareProfile(input: {
     profileExplicitlySpecified,
   } = input;
 
-  let profileMergedSettings = settings;
+  let profileMergedSettings: MergedSettings = settings as MergedSettings;
   let profileModel: string | undefined;
   let profileProvider: string | undefined;
   let profileModelParams: Record<string, unknown> | undefined;
