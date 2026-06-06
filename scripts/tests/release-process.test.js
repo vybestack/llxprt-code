@@ -171,16 +171,35 @@ describe('scripts/build_sandbox.js', () => {
 describe('Dockerfile', () => {
   const dockerfile = readRootFile('Dockerfile');
 
-  it('copies and installs providers tarball in dependency order', () => {
-    const coreInstall = dockerfile.indexOf('vybestack-llxprt-code-core-*.tgz');
-    const providersInstall = dockerfile.indexOf(
-      'vybestack-llxprt-code-providers-*.tgz',
+  it('copies providers tarball after core and before CLI', () => {
+    const coreCopy = dockerfile.indexOf(
+      'COPY --chown=node:node packages/core/dist/vybestack-llxprt-code-core-*.tgz',
     );
-    const cliInstall = dockerfile.indexOf('vybestack-llxprt-code-*.tgz');
+    const providersCopy = dockerfile.indexOf(
+      'COPY --chown=node:node packages/providers/dist/vybestack-llxprt-code-providers-*.tgz',
+    );
+    const cliCopy = dockerfile.indexOf(
+      'COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz',
+    );
 
-    expect(coreInstall).toBeGreaterThan(0);
-    expect(providersInstall).toBeGreaterThan(coreInstall);
-    expect(cliInstall).toBeGreaterThan(providersInstall);
+    expect(coreCopy).toBeGreaterThan(0);
+    expect(providersCopy).toBeGreaterThan(coreCopy);
+    expect(cliCopy).toBeGreaterThan(providersCopy);
+  });
+
+  it('installs local tarballs in one npm transaction for unpublished versions', () => {
+    const installCommand = dockerfile.slice(
+      dockerfile.indexOf('RUN npm install -g'),
+      dockerfile.indexOf('npm cache clean --force'),
+    );
+
+    expect(installCommand).toContain('vybestack-llxprt-code-core-*.tgz');
+    expect(installCommand).toContain('vybestack-llxprt-code-providers-*.tgz');
+    expect(installCommand).toContain('vybestack-llxprt-code-*.tgz');
+    expect(installCommand).not.toContain(
+      '&& \
+    npm install -g',
+    );
   });
 });
 
