@@ -30,7 +30,6 @@ export interface RuntimeToolDeclaration {
   name: string;
   description?: string;
   parametersJsonSchema?: unknown;
-  parameters?: unknown;
 }
 
 export interface RuntimeToolset {

@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": "dist",
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/core.tsbuildinfo",
-    "lib": ["DOM", "DOM.Iterable", "ES2021"],
+    "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
     "composite": true,
     "types": ["node", "vitest/globals"],
     "baseUrl": ".",

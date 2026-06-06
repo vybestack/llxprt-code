@@ -276,7 +276,21 @@ export function ensureStatelessProviderReady(): void {
     metadata,
   });
 
-  providerManager!.prepareStatelessProviderInvocation?.(runtimeContext);
+  const runtimeProviderManager = providerManager!;
+  if (
+    typeof runtimeProviderManager.prepareStatelessProviderInvocation !==
+    'function'
+  ) {
+    throw new Error(
+      formatNormalizationFailureMessage({
+        runtimeId,
+        missingFields: ['prepareStatelessProviderInvocation'],
+        hint: 'RuntimeProviderManager must expose stateless invocation preparation when stateless hardening is enabled.',
+      }),
+    );
+  }
+
+  runtimeProviderManager.prepareStatelessProviderInvocation(runtimeContext);
 }
 
 export function getCliOAuthManager(): OAuthManager | null {

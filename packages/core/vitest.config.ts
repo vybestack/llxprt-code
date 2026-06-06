@@ -37,7 +37,7 @@ const fdirEntry = fileURLToPath(
   ),
 );
 
-function resolveTsSource(baseDir: string, specifier: string): string {
+function resolveTsSource(baseDir: string, specifier: string): string | null {
   const direct = baseDir + specifier;
   if (direct.endsWith('.js')) {
     const tsPath = direct.slice(0, -3) + '.ts';
@@ -45,7 +45,10 @@ function resolveTsSource(baseDir: string, specifier: string): string {
       return tsPath;
     }
   }
-  return direct;
+  if (existsSync(direct)) {
+    return direct;
+  }
+  return null;
 }
 
 const workspaceDependencyAliasPlugin = {

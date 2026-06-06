@@ -193,7 +193,7 @@ describe('CLI provider manager creation uses concrete providers', () => {
   it('CLI runtime infrastructure path yields a reachable provider manager', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
+    const { manager, oauthManager } = createProviderManager(runtime, {
       allowBrowserEnvironment: true,
     });
 
@@ -210,13 +210,9 @@ describe('CLI provider manager creation uses concrete providers', () => {
     );
 
     setCliRuntimeContext(settingsService, config);
-    registerCliProviderInfrastructure(
-      manager,
-      {
-        messageBus: runtimeMessageBus,
-      } as never,
-      { messageBus: runtimeMessageBus },
-    );
+    registerCliProviderInfrastructure(manager, oauthManager, {
+      messageBus: runtimeMessageBus,
+    });
 
     // getCliProviderManager must return the same manager
     const retrievedManager = getCliProviderManager();
@@ -411,6 +407,7 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
       runtimeMessageBus,
     });
     providerManager = result.manager;
+    const { oauthManager } = result;
 
     // Register test providers
     const providerA = createTestProvider('provider-a', 'model-a');
@@ -421,13 +418,9 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
     setCliRuntimeContext(settingsService, config, {
       metadata: { source: 'p13-switch-test' },
     });
-    registerCliProviderInfrastructure(
-      providerManager,
-      {
-        messageBus: runtimeMessageBus,
-      } as never,
-      { messageBus: runtimeMessageBus },
-    );
+    registerCliProviderInfrastructure(providerManager, oauthManager, {
+      messageBus: runtimeMessageBus,
+    });
   });
 
   afterEach(async () => {
@@ -697,12 +690,15 @@ describe('Core no-shim and dependency-direction boundary', () => {
     const content = fs.readFileSync(coreIndexPath, 'utf-8');
 
     // No import from the providers package
-    const providersPackageImport =
-      /from\s+['"]@vybestack\/llxprt-code-providers['"]/;
+    const hasProvidersPackageImport =
+      content.includes("from '@vybestack/llxprt-code-providers'") ||
+      content.includes("from '@vybestack/llxprt-code-providers/") ||
+      content.includes('from "@vybestack/llxprt-code-providers"') ||
+      content.includes('from "@vybestack/llxprt-code-providers/');
     expect(
-      content.match(providersPackageImport),
+      hasProvidersPackageImport,
       'core index.ts must not import from @vybestack/llxprt-code-providers',
-    ).toBeNull();
+    ).toBe(false);
   });
 
   /**
@@ -758,7 +754,11 @@ describe('Core no-shim and dependency-direction boundary', () => {
   it('core production source has no imports from providers package', () => {
     const coreSrcDir = path.resolve(__dirname, '../../../core/src');
     const violations: string[] = [];
-    const forbiddenPattern = /from\s+['"]@vybestack\/llxprt-code-providers['"]/;
+    const hasForbiddenProvidersImport = (content: string): boolean =>
+      content.includes("from '@vybestack/llxprt-code-providers'") ||
+      content.includes("from '@vybestack/llxprt-code-providers/") ||
+      content.includes('from "@vybestack/llxprt-code-providers"') ||
+      content.includes('from "@vybestack/llxprt-code-providers/');
 
     function scanDir(dir: string) {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -786,10 +786,11 @@ describe('Core no-shim and dependency-direction boundary', () => {
             ) {
               continue;
             }
+            const currentLine = lines[i] ?? '';
             // eslint-disable-next-line sonarjs/nested-control-flow -- File scanning requires nested iteration for line-by-line analysis
-            if (forbiddenPattern.test(lines[i])) {
+            if (hasForbiddenProvidersImport(currentLine)) {
               const rel = path.relative(coreSrcDir, fullPath);
-              violations.push(`${rel}:${i + 1}: ${lines[i].trim()}`);
+              violations.push(`${rel}:${i + 1}: ${currentLine.trim()}`);
             }
           }
         }

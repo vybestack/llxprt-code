@@ -223,6 +223,7 @@ export abstract class ProviderError extends Error {
   abstract readonly shouldFailover: boolean;
   readonly status?: number;
   readonly retryAfter?: number;
+  override readonly cause?: Error;
   constructor(
     message: string,
     options?: { status?: number; retryAfter?: number; cause?: Error },
@@ -231,9 +232,7 @@ export abstract class ProviderError extends Error {
     this.name = this.constructor.name;
     this.status = options?.status;
     this.retryAfter = options?.retryAfter;
-    if (options?.cause) {
-      (this as { cause?: Error }).cause = options.cause;
-    }
+    this.cause = options?.cause;
   }
 }
 

@@ -28,7 +28,7 @@ import {
   writeProviderAliasConfig,
   type ProviderAliasConfig,
 } from '../../providers/providerAliases.js';
-import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 type WrappedProvider = IProvider & { wrappedProvider: IProvider };

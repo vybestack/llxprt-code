@@ -187,8 +187,22 @@ describe('Providers package dependency direction', () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(PROVIDERS_DIR, 'package.json'), 'utf-8'),
     ) as Record<string, unknown>;
-    const deps = (pkg.dependencies ?? {}) as Record<string, string>;
-    expect(deps['@vybestack/llxprt-code']).toBeUndefined();
+    const dependencySections = [
+      pkg.dependencies,
+      pkg.devDependencies,
+      pkg.peerDependencies,
+      pkg.optionalDependencies,
+    ] as Array<Record<string, string> | undefined>;
+    const forbiddenDependencies = [
+      '@vybestack/llxprt-code',
+      '@vybestack/llxprt-code-tools',
+    ];
+
+    for (const deps of dependencySections) {
+      for (const forbiddenDependency of forbiddenDependencies) {
+        expect(deps?.[forbiddenDependency]).toBeUndefined();
+      }
+    }
   });
 
   /**

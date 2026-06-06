@@ -90,7 +90,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 38 | `packages/core/src/providers/RetryOrchestrator.ts` | `packages/providers/src/RetryOrchestrator.ts` | Rule 8 | B |
 | 39 | `packages/core/src/providers/types.ts` | `packages/providers/src/types.ts` | Rule 7 | A/H/G (mixed public types) |
 | 40 | `packages/core/src/providers/errors.spec.ts` | `packages/providers/src/errors.spec.ts` | Rule 8 | F |
-| 41 | `packages/core/src/providers/providerInterface.compat.test.ts` | `packages/providers/src/providerInterface.compat.test.ts` | Rule 8 | B |
+| 41 | `packages/core/src/providers/providerInterface.compat.test.ts` | `packages/providers/src/providerInterface.contract.test.ts` | Rule 8 | B |
 
 ### types/ (sub-directory of Rule 7)
 
@@ -267,7 +267,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 155 | `packages/core/src/providers/openai/OpenAIProvider.emptyResponseRetry.test.ts` | `packages/providers/src/openai/OpenAIProvider.emptyResponseRetry.test.ts` | Rule 4 | B |
 | 156 | `packages/core/src/providers/openai/OpenAIProvider.integration.test.ts` | `packages/providers/src/openai/OpenAIProvider.integration.test.ts` | Rule 4 | B |
 | 157 | `packages/core/src/providers/openai/OpenAIProvider.mediaBlock.test.ts` | `packages/providers/src/openai/OpenAIProvider.mediaBlock.test.ts` | Rule 4 | B |
-| 158 | `packages/core/src/providers/openai/OpenAIProvider.mistralCompatibility.test.ts` | `packages/providers/src/openai/OpenAIProvider.mistralCompatibility.test.ts` | Rule 4 | B |
+| 158 | `packages/core/src/providers/openai/OpenAIProvider.mistralCompatibility.test.ts` | `packages/providers/src/openai/OpenAIProvider.mistralPayload.test.ts` | Rule 4 | B |
 | 159 | `packages/core/src/providers/openai/OpenAIProvider.modelParamsAndHeaders.test.ts` | `packages/providers/src/openai/OpenAIProvider.modelParamsAndHeaders.test.ts` | Rule 4 | B |
 | 160 | `packages/core/src/providers/openai/OpenAIProvider.reasoning.test.ts` | `packages/providers/src/openai/OpenAIProvider.reasoning.test.ts` | Rule 4 | B |
 | 161 | `packages/core/src/providers/openai/OpenAIProvider.setModel.test.ts` | `packages/providers/src/openai/OpenAIProvider.setModel.test.ts` | Rule 4 | B |
@@ -323,7 +323,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 201 | `packages/core/src/providers/openai-vercel/index.ts` | `packages/providers/src/openai-vercel/index.ts` | Rule 4 | B (barrel export) |
 | 202 | `packages/core/src/providers/openai-vercel/messageConversion.ts` | `packages/providers/src/openai-vercel/messageConversion.ts` | Rule 4 | B |
 | 203 | `packages/core/src/providers/openai-vercel/schemaConverter.ts` | `packages/providers/src/openai-vercel/schemaConverter.ts` | Rule 4 | B |
-| 204 | `packages/core/src/providers/openai-vercel/toolIdUtils.ts` | `packages/providers/src/openai-vercel/toolIdUtils.ts` | Rule 4 | B |
+| 204 | `packages/core/src/providers/openai-vercel/toolIdUtils.ts` | `packages/core/src/tools/toolIdNormalization.ts` | Rule 4 | B |
 | 205 | `packages/core/src/providers/openai-vercel/errorHandling.test.ts` | `packages/providers/src/openai-vercel/errorHandling.test.ts` | Rule 4 | B |
 | 206 | `packages/core/src/providers/openai-vercel/messageConversion.test.ts` | `packages/providers/src/openai-vercel/messageConversion.test.ts` | Rule 4 | B |
 | 207 | `packages/core/src/providers/openai-vercel/modelListing.test.ts` | `packages/providers/src/openai-vercel/modelListing.test.ts` | Rule 4 | B |
@@ -335,7 +335,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 213 | `packages/core/src/providers/openai-vercel/providerRegistry.test.ts` | `packages/providers/src/openai-vercel/providerRegistry.test.ts` | Rule 4 | B |
 | 214 | `packages/core/src/providers/openai-vercel/schemaConverter.issue1844.test.ts` | `packages/providers/src/openai-vercel/schemaConverter.issue1844.test.ts` | Rule 4 | B |
 | 215 | `packages/core/src/providers/openai-vercel/streaming.test.ts` | `packages/providers/src/openai-vercel/streaming.test.ts` | Rule 4 | B |
-| 216 | `packages/core/src/providers/openai-vercel/toolIdUtils.test.ts` | `packages/providers/src/openai-vercel/toolIdUtils.test.ts` | Rule 4 | B |
+| 216 | `packages/core/src/providers/openai-vercel/toolIdUtils.test.ts` | `packages/core/src/tools/toolIdNormalization.test.ts` | Rule 4 | B |
 | 217 | `packages/core/src/providers/openai-vercel/__tests__/schemaConverter.parameterFallback.test.ts` | `packages/providers/src/openai-vercel/__tests__/schemaConverter.parameterFallback.test.ts` | Rule 1 | B |
 
 ### synthetic/ (Rule 4)
@@ -379,8 +379,8 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 242 | `packages/core/src/providers/utils/thinkingExtraction.test.ts` | `packages/providers/src/utils/thinkingExtraction.test.ts` | Rule 13 | B |
 | 243 | `packages/core/src/providers/utils/toolFormatDetection.ts` | `packages/providers/src/utils/toolFormatDetection.ts` | Rule 13 | B |
 | 244 | `packages/core/src/providers/utils/toolFormatDetection.test.ts` | `packages/providers/src/utils/toolFormatDetection.test.ts` | Rule 13 | B |
-| 245 | `packages/core/src/providers/utils/toolIdNormalization.ts` | `packages/providers/src/utils/toolIdNormalization.ts` | Rule 13 (EXPLICIT EXCEPTION) | E (Core-owned — currently imported by `core/src/tools/ToolIdStrategy.ts`. Must move to providers, then core imports from providers or copies to core utility) |
-| 246 | `packages/core/src/providers/utils/toolIdNormalization.test.ts` | `packages/providers/src/utils/toolIdNormalization.test.ts` | Rule 13 (EXPLICIT EXCEPTION) | E |
+| 245 | `packages/core/src/providers/utils/toolIdNormalization.ts` | `packages/core/src/tools/toolIdNormalization.ts` | Rule 13 (EXPLICIT EXCEPTION) | E (Core-owned — currently imported by `core/src/tools/ToolIdStrategy.ts`. Must move to providers, then core imports from providers or copies to core utility) |
+| 246 | `packages/core/src/providers/utils/toolIdNormalization.test.ts` | `packages/core/src/tools/toolIdNormalization.test.ts` | Rule 13 (EXPLICIT EXCEPTION) | E |
 | 247 | `packages/core/src/providers/utils/toolNameNormalization.ts` | `packages/providers/src/utils/toolNameNormalization.ts` | Rule 13 | B |
 | 248 | `packages/core/src/providers/utils/toolNameNormalization.test.ts` | `packages/providers/src/utils/toolNameNormalization.test.ts` | Rule 13 | B |
 | 249 | `packages/core/src/providers/utils/toolResponsePayload.ts` | `packages/providers/src/utils/toolResponsePayload.ts` | Rule 13 | B |

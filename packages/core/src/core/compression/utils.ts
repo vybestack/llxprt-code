@@ -35,9 +35,9 @@ import type { RuntimeProvider as IProvider } from '../../runtime/contracts/Runti
  * @requirement:REQ-DEP-001
  * @pseudocode component-boundaries.md C-CB-09, lines 80-85
  *
- * classifyMediaBlock import retained from providers for backward
- * compatibility. Core-owned MediaBlock contracts available for
- * injection path where providers pass pre-classified blocks.
+ * classifyMediaBlock is imported from core tools/mediaUtils to keep
+ * media classification owned by core while supporting provider-injected
+ * MediaBlock flows.
  */
 import { classifyMediaBlock } from '../../tools/mediaUtils.js';
 import type { CompressionContext } from './types.js';

@@ -37,7 +37,6 @@ export type RuntimeProviderToolset = Array<{
     name: string;
     description?: string;
     parametersJsonSchema?: unknown;
-    parameters?: unknown;
   }>;
 }>;
 

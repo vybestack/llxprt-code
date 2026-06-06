@@ -263,10 +263,13 @@ describe('P09 Move-map completeness validation', () => {
 
     const violations: string[] = [];
     for (const row of parsedRows) {
-      const expectedDest = row.sourcePath.replace(
-        'packages/core/src/providers/',
-        'packages/providers/src/',
-      );
+      const expectedDest =
+        CORE_OWNED_DESTINATION_OVERRIDES.get(row.sourcePath) ??
+        RENAMED_DESTINATION_OVERRIDES.get(row.sourcePath) ??
+        row.sourcePath.replace(
+          'packages/core/src/providers/',
+          'packages/providers/src/',
+        );
       if (row.destPath !== expectedDest) {
         violations.push(
           `Row ${row.rowNum}: source="${row.sourcePath}" dest="${row.destPath}" expected="${expectedDest}"`,
@@ -489,8 +492,26 @@ describe('P09 Move-map completeness validation', () => {
       'providers',
       'package.json',
     );
-    const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
-    expect(pkg.dependencies?.['@vybestack/llxprt-code']).toBeUndefined();
+    const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8')) as Record<
+      string,
+      Record<string, string> | undefined
+    >;
+    const dependencySections = [
+      pkg.dependencies,
+      pkg.devDependencies,
+      pkg.peerDependencies,
+      pkg.optionalDependencies,
+    ];
+    const forbiddenDependencies = [
+      '@vybestack/llxprt-code',
+      '@vybestack/llxprt-code-tools',
+    ];
+
+    for (const deps of dependencySections) {
+      for (const forbiddenDependency of forbiddenDependencies) {
+        expect(deps?.[forbiddenDependency]).toBeUndefined();
+      }
+    }
   });
 
   /**
