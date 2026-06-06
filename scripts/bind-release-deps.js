@@ -7,9 +7,9 @@
 import { execSync } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { join, resolve } from 'path';
+import { dirname, join, resolve } from 'path';
 
-const ROOT = resolve(import.meta.dirname, '..');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BACKUP_SUFFIX = '.bind-backup';
 
 const NON_NPM_RELEASE_PACKAGES = new Set([
