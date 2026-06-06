@@ -5,6 +5,12 @@
  */
 
 /**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
+/**
  * Provider usage and auth-priority query functions.
  * These are pure functions that receive dependencies as parameters,
  * with no coupling to OAuthManager internals.
@@ -41,7 +47,9 @@ export async function getAnthropicUsageInfo(
   }
 
   try {
-    const { fetchAnthropicUsage } = await import('@vybestack/llxprt-code-core');
+    const { fetchAnthropicUsage } = await import(
+      '@vybestack/llxprt-code-providers'
+    );
     return await fetchAnthropicUsage(token.access_token);
   } catch (error) {
     logger.debug(
@@ -67,7 +75,9 @@ export async function getAllAnthropicUsageInfo(
   const buckets = await tokenStore.listBuckets('anthropic');
   const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
 
-  const { fetchAnthropicUsage } = await import('@vybestack/llxprt-code-core');
+  const { fetchAnthropicUsage } = await import(
+    '@vybestack/llxprt-code-providers'
+  );
 
   // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const bucket of bucketsToCheck) {
@@ -118,7 +128,7 @@ export async function getAllCodexUsageInfo(
   const buckets = await tokenStore.listBuckets('codex');
   const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
 
-  const { fetchCodexUsage } = await import('@vybestack/llxprt-code-core');
+  const { fetchCodexUsage } = await import('@vybestack/llxprt-code-providers');
 
   // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const bucket of bucketsToCheck) {
@@ -185,7 +195,7 @@ export async function getAllGeminiUsageInfo(
   const buckets = await tokenStore.listBuckets('gemini');
   const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
 
-  const { fetchGeminiQuota } = await import('@vybestack/llxprt-code-core');
+  const { fetchGeminiQuota } = await import('@vybestack/llxprt-code-providers');
 
   // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const bucket of bucketsToCheck) {

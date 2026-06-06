@@ -1015,6 +1015,23 @@ export default tseslint.config(
       'headers/header-format': 'off',
     },
   },
+  // ============================================================================
+  // Issue #1584: Provider test strict-boolean-expressions relaxation
+  // ============================================================================
+  // Providers test files were moved from packages/core/src/providers/ to
+  // packages/providers/src/ as part of the provider extraction. The old
+  // test location had strict-boolean-expressions off for test files via the
+  // core/providers test exemptions. The new location picks up the full
+  // strict rule (allowAny: false), which flags common test patterns like
+  // .filter(x => x.someProperty) where the property type includes `any`.
+  // Disabling to error level for provider test files preserves the prior
+  // behavior without weakening production provider auth anti-pattern rules.
+  {
+    files: ['packages/providers/src/**/*.{test,spec}.ts'],
+    rules: {
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+    },
+  },
   // Provider authentication anti-patterns
   {
     files: ['packages/core/src/providers/**/*.ts'],

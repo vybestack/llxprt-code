@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import type {
   SlashCommand,
   CommandContext,
@@ -12,7 +18,7 @@ import type {
 import { CommandKind } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { DumpMode } from '@vybestack/llxprt-code-core';
+import type { DumpMode } from '@vybestack/llxprt-code-providers';
 import * as os from 'node:os';
 import * as path from 'node:path';
 

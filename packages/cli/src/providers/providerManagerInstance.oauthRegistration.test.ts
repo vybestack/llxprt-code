@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-core';
@@ -48,10 +54,10 @@ describe('Anthropic OAuth registration with environment key', () => {
     }));
 
     const activeContext: any = { scope: 'test' };
-    vi.doMock('@vybestack/llxprt-code-core', async () => {
+    vi.doMock('@vybestack/llxprt-code-providers', async () => {
       const actual = await vi.importActual<
-        typeof import('@vybestack/llxprt-code-core')
-      >('@vybestack/llxprt-code-core');
+        typeof import('@vybestack/llxprt-code-providers')
+      >('@vybestack/llxprt-code-providers');
 
       class MockProviderManager {
         setConfig(): void {}
@@ -122,10 +128,10 @@ describe('Anthropic OAuth registration with environment key', () => {
     }));
 
     const activeContext: any = { scope: 'test' };
-    vi.doMock('@vybestack/llxprt-code-core', async () => {
+    vi.doMock('@vybestack/llxprt-code-providers', async () => {
       const actual = await vi.importActual<
-        typeof import('@vybestack/llxprt-code-core')
-      >('@vybestack/llxprt-code-core');
+        typeof import('@vybestack/llxprt-code-providers')
+      >('@vybestack/llxprt-code-providers');
 
       class MockProviderManager {
         setConfig(): void {}
@@ -205,10 +211,10 @@ describe('Anthropic OAuth registration with environment key', () => {
     }));
 
     const activeContext: any = { scope: 'test' };
-    vi.doMock('@vybestack/llxprt-code-core', async () => {
+    vi.doMock('@vybestack/llxprt-code-providers', async () => {
       const actual = await vi.importActual<
-        typeof import('@vybestack/llxprt-code-core')
-      >('@vybestack/llxprt-code-core');
+        typeof import('@vybestack/llxprt-code-providers')
+      >('@vybestack/llxprt-code-providers');
 
       class MockProviderManager {
         setConfig(): void {}

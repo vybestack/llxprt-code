@@ -11,7 +11,7 @@
  * Provides a unified path for all model-fetching flows.
  */
 
-import type { IModel } from '../providers/IModel.js';
+import type { RuntimeModel as IModel } from '../runtime/contracts/RuntimeModel.js';
 import type {
   LlxprtModel,
   LlxprtModelCapabilities,

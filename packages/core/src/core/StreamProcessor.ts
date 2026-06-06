@@ -28,11 +28,11 @@ import { isFunctionResponse } from '../utils/messageInspectors.js';
 import type { AgentRuntimeContext } from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import type { IContent, UsageStats } from '../services/history/IContent.js';
+import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import type {
-  GenerateChatOptions,
-  IProvider,
-  ProviderToolset,
-} from '../providers/IProvider.js';
+  RuntimeGenerateChatOptions as GenerateChatOptions,
+  RuntimeProviderToolset as ProviderToolset,
+} from '../runtime/contracts/RuntimeProviderChat.js';
 import { DebugLogger } from '../debug/index.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { CompressionHandler } from './compression/CompressionHandler.js';

@@ -4,13 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 /* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
-import type {
-  IContent,
-  ITool,
-  ContentBlock,
-} from '@vybestack/llxprt-code-core';
+import type { IContent, ContentBlock } from '@vybestack/llxprt-code-core';
+import type { ITool } from '@vybestack/llxprt-code-providers';
 
 export interface RedactionPattern {
   name: string;

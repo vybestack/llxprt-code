@@ -1,4 +1,10 @@
 /* eslint-disable no-console */
+
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -9,9 +15,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   sanitizeForByteString,
   needsSanitization,
-  OpenAIProvider,
   SettingsService,
 } from '@vybestack/llxprt-code-core';
+import { OpenAIProvider } from '@vybestack/llxprt-code-providers';
 import { MockFileSystem } from './IFileSystem.js';
 import {
   setFileSystem,

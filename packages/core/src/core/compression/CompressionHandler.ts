@@ -10,7 +10,7 @@ import type { GenerateContentConfig } from '@google/genai';
 import type { HistoryService } from '../../services/history/HistoryService.js';
 import type { IContent } from '../../services/history/IContent.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
-import type { IProvider } from '../../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
 import type { CompressionContext, DensityConfig } from './types.js';
 import {
   shouldRetryCompressionError,
@@ -20,10 +20,20 @@ import {
   getCompressionStrategy,
   parseCompressionStrategyName,
 } from './compressionStrategyFactory.js';
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P05
+ * @requirement:REQ-DEP-001
+ * @pseudocode component-boundaries.md C-CB-08, lines 80-85
+ *
+ * extractThinkingBlocks and estimateThinkingTokens are retained from
+ * the providers path for backward compatibility. The ReasoningOutput
+ * contract is available for the injection path where providers pass
+ * pre-extracted reasoning data through the RuntimeProvider contract.
+ */
 import {
   extractThinkingBlocks,
   estimateThinkingTokens,
-} from '../../providers/reasoning/reasoningUtils.js';
+} from './reasoningUtils.js';
 import { PromptResolver } from '../../prompt-config/prompt-resolver.js';
 import { DebugLogger } from '../../debug/index.js';
 import { retryWithBackoff } from '../../utils/retry.js';

@@ -47,7 +47,7 @@ import type {
 import type { ToolRegistry } from '../../tools/tool-registry.js';
 import type { ContentGenerator } from '../contentGenerator.js';
 import type { Part } from '@google/genai';
-import type { IProvider } from '../../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
 import type { HistoryService } from '../../services/history/HistoryService.js';
 
 /**

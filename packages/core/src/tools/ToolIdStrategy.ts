@@ -21,7 +21,12 @@ import type {
   ContentBlock,
 } from '../services/history/IContent.js';
 import type { ToolFormat } from './IToolFormatter.js';
-import { normalizeToOpenAIToolId } from '../providers/utils/toolIdNormalization.js';
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P05
+ * @requirement:REQ-DEP-001
+ * @pseudocode component-boundaries.md C-CB-02, lines 20-24
+ */
+import { normalizeToOpenAIToolId } from './toolIdNormalization.js';
 import crypto from 'node:crypto';
 
 /**

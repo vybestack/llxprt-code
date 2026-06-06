@@ -21,7 +21,7 @@ import { getErrorStatus, isNetworkTransientError } from '../../utils/retry.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
 import type { DebugLogger } from '../../debug/DebugLogger.js';
-import type { IProvider } from '../../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
 import type { PromptResolver } from '../../prompt-config/prompt-resolver.js';
 import type { PromptContext } from '../../prompt-config/types.js';
 import type { Config } from '../../config/config.js';

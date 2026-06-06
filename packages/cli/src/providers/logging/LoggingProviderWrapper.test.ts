@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  type IProvider,
-  type IContent,
-  type ITool,
-  type Config,
-} from '@vybestack/llxprt-code-core';
+import type { IContent, Config } from '@vybestack/llxprt-code-core';
+import type { IProvider, ITool } from '@vybestack/llxprt-code-providers';
 
 // These interfaces will be implemented in the next phase
 interface LoggingProviderWrapper {

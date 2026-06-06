@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 /* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: behavioral coverage boundary retained while larger decomposition continues. */
 
 import {
@@ -40,7 +46,7 @@ import {
   type ToolResult,
   type WaitingToolCall,
 } from '@vybestack/llxprt-code-core';
-import { MockTool } from '@vybestack/llxprt-code-core/src/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { ToolCallStatus } from '../types.js';
 
 const buildRequest = (

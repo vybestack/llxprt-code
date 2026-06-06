@@ -5,6 +5,12 @@
  */
 
 /**
+ * @plan:PLAN-20260603-ISSUE1584.P13
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-18
+ */
+
+/**
  * Task 1.3 – MCP filtering parity tests
  *
  * Locks the behavior of MCP server filtering via:
@@ -22,6 +28,7 @@ import {
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
+import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
@@ -111,7 +118,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
     runtimeId: string;
     metadata?: Record<string, unknown>;
   } | null,
-  providerManager: null as ServerConfig.ProviderManager | null,
+  providerManager: null as ProviderManager | null,
   oauthManager: null as unknown,
 }));
 
@@ -124,7 +131,7 @@ vi.mock('../runtime/runtimeSettings.js', () => {
       setActiveProvider: vi.fn(),
       getActiveProvider: vi.fn(() => null),
       getAvailableModels: vi.fn(async () => []),
-    } as unknown as ServerConfig.ProviderManager);
+    } as unknown as ProviderManager);
 
   return {
     applyProfileSnapshot: vi.fn(async () => ({
@@ -154,7 +161,7 @@ vi.mock('../runtime/runtimeSettings.js', () => {
       infoMessages: [],
     })),
     registerCliProviderInfrastructure: vi.fn(
-      (mgr: ServerConfig.ProviderManager, oauth: unknown) => {
+      (mgr: ProviderManager, oauth: unknown) => {
         runtimeSettingsState.providerManager = mgr;
         runtimeSettingsState.oauthManager = oauth ?? null;
       },

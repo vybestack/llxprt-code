@@ -4,12 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P14
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-18
+ */
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import type {
-  IProvider,
-  ProviderManager,
-  SettingsService,
-} from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-core';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   Config,
   createProviderRuntimeContext,
@@ -72,11 +81,11 @@ describe('Runtime Provider Switching Integration', () => {
       runtimeMessageBus,
     });
     providerManager = manager;
-    registerCliProviderInfrastructure(providerManager, oauthManager, {
-      messageBus: runtimeMessageBus,
-    });
     setCliRuntimeContext(settingsService, config, {
       metadata: { source: 'provider-switch-test' },
+    });
+    registerCliProviderInfrastructure(providerManager, oauthManager, {
+      messageBus: runtimeMessageBus,
     });
   });
 
@@ -152,7 +161,7 @@ describe('Runtime Provider Switching Integration', () => {
     geminiProvider.getServerTools = () => ['web-search'];
     const otherProvider = createMockProvider('other');
 
-    providerManager.registerProvider(geminiProvider);
+    providerManager.registerProvider(geminiProvider as never);
     providerManager.registerProvider(otherProvider);
 
     providerManager.setServerToolsProvider(geminiProvider);
@@ -188,7 +197,7 @@ describe('Runtime Provider Switching Integration', () => {
 
   it('uses alias default model for gemini when switching', async () => {
     const geminiProvider = createMockProvider('gemini');
-    providerManager.registerProvider(geminiProvider);
+    providerManager.registerProvider(geminiProvider as never);
 
     providerManager.setActiveProvider('openai');
     await switchActiveProvider('gemini');

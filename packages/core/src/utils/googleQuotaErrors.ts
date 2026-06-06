@@ -18,7 +18,7 @@ import { getErrorStatus, ModelNotFoundError } from './retry.js';
  */
 export class TerminalQuotaError extends Error {
   retryDelayMs?: number;
-  readonly cause: GoogleApiError;
+  override readonly cause: GoogleApiError;
 
   constructor(
     message: string,
@@ -42,7 +42,7 @@ export class TerminalQuotaError extends Error {
  */
 export class RetryableQuotaError extends Error {
   retryDelayMs?: number;
-  readonly cause: GoogleApiError;
+  override readonly cause: GoogleApiError;
 
   constructor(
     message: string,

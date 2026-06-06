@@ -1,0 +1,236 @@
+/**
+ * Copyright 2025 Vybestack LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * ToolCallPipeline - Simplified tool call processing pipeline
+ *
+ * Focused on collection and normalization phases only.
+ * Tool execution is handled by the Core layer, not Provider layer.
+ */
+
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { ToolCallCollector } from './ToolCallCollector.js';
+import {
+  ToolCallNormalizer,
+  type NormalizedToolCall,
+} from './ToolCallNormalizer.js';
+
+const logger = new DebugLogger('llxprt:providers:openai:toolCallPipeline');
+
+export interface FailedToolCall {
+  index: number;
+  name?: string;
+  args?: string;
+  isValid: boolean;
+  validationErrors: string[];
+}
+
+export interface PipelineResult {
+  normalized: NormalizedToolCall[];
+  failed: FailedToolCall[];
+  stats: {
+    collected: number;
+    normalized: number;
+    failed: number;
+  };
+}
+
+/**
+ * Simplified ToolCallPipeline - Collection and normalization only
+ */
+export class ToolCallPipeline {
+  private collector: ToolCallCollector;
+  private normalizer: ToolCallNormalizer;
+
+  constructor() {
+    this.collector = new ToolCallCollector();
+    this.normalizer = new ToolCallNormalizer();
+  }
+
+  /**
+   * Check for cancellation at the start
+   */
+  private createAbortError(): Error {
+    // Use DOMException if available (modern environments)
+    if (typeof DOMException !== 'undefined') {
+      return new DOMException('Aborted', 'AbortError');
+    }
+
+    // Fallback for environments without DOMException support
+    const error = new Error('Aborted');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  /**
+   * Add tool call fragment
+   */
+  addFragment(index: number, fragment: Partial<ToolCallFragment>): void {
+    this.collector.addFragment(index, fragment);
+  }
+
+  /**
+   * Process all collected tool calls (collection + normalization only)
+   */
+  async process(abortSignal?: AbortSignal): Promise<PipelineResult> {
+    logger.debug('Starting simplified tool call pipeline processing');
+
+    // Check for cancellation at the start
+    if (abortSignal !== undefined && abortSignal.aborted === true) {
+      throw this.createAbortError();
+    }
+
+    // Phase 1: Collect complete calls
+    const candidates = this.collector.getCompleteCalls();
+    logger.debug(`Collected ${candidates.length} complete tool calls`);
+
+    // Phase 2: Normalize calls directly (no separate validation needed)
+    const normalizedCalls: NormalizedToolCall[] = [];
+    const failedCalls: FailedToolCall[] = [];
+
+    try {
+      for (const candidate of candidates) {
+        // Check for cancellation in processing loop
+        if (abortSignal !== undefined && abortSignal.aborted === true) {
+          throw this.createAbortError();
+        }
+
+        const result = this.normalizeCandidate(candidate);
+        if (result.success) {
+          normalizedCalls.push(result.call);
+        } else {
+          failedCalls.push(result.failure);
+        }
+      }
+
+      logger.debug(
+        `Normalized ${normalizedCalls.length} tool calls, ${failedCalls.length} failed`,
+      );
+    } finally {
+      // Reset collector for next batch - always executed even on abort
+      this.collector.reset();
+    }
+
+    const result: PipelineResult = {
+      normalized: normalizedCalls,
+      failed: failedCalls,
+      stats: {
+        collected: candidates.length,
+        normalized: normalizedCalls.length,
+        failed: failedCalls.length,
+      },
+    };
+
+    logger.debug(
+      `Pipeline processing completed: ${JSON.stringify(result.stats)}`,
+    );
+    return result;
+  }
+
+  /**
+   * Normalize a single candidate tool call.
+   * Returns either a successful normalized call or a failure record.
+   */
+  private normalizeCandidate(
+    candidate: ToolCallCandidate,
+  ):
+    | { success: true; call: NormalizedToolCall }
+    | { success: false; failure: FailedToolCall } {
+    try {
+      // Create a mock validated call for normalization
+      const mockValidatedCall = {
+        index: candidate.index,
+        id: candidate.id,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: name is optional string, empty string should fall through
+        name: candidate.name || '',
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: args is optional string, empty string should fall through
+        args: candidate.args || '',
+        isValid: true,
+        validationErrors: [],
+      };
+
+      const normalized = this.normalizer.normalize(mockValidatedCall);
+      if (normalized) {
+        return { success: true, call: normalized };
+      }
+      return {
+        success: false,
+        failure: {
+          index: candidate.index,
+          name: candidate.name,
+          args: candidate.args,
+          isValid: false,
+          validationErrors: ['Normalization failed'],
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        failure: {
+          index: candidate.index,
+          name: candidate.name,
+          args: candidate.args,
+          isValid: false,
+          validationErrors: [
+            error instanceof Error ? error.message : 'Unknown error',
+          ],
+        },
+      };
+    }
+  }
+
+  /**
+   * Normalize single tool name (for non-streaming path)
+   */
+  normalizeToolName(name: string, args?: string): string {
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: name is string, args is optional string, empty strings should fall through */
+    const mockValidatedCall = {
+      index: 0,
+      name: name || '',
+      args: args || '',
+      isValid: true,
+      validationErrors: [],
+    };
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+
+    const normalized = this.normalizer.normalize(mockValidatedCall);
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, strings have fallthrough intent
+    return normalized?.name || name || '';
+  }
+
+  /**
+   * Get pipeline statistics
+   */
+  getStats() {
+    return {
+      collector: this.collector.getStats(),
+    };
+  }
+
+  /**
+   * Reset pipeline state
+   */
+  reset(): void {
+    this.collector.reset();
+    logger.debug('ToolCallPipeline reset');
+  }
+}
+
+// Import type from ToolCallCollector
+import {
+  type ToolCallFragment,
+  type ToolCallCandidate,
+} from './ToolCallCollector.js';

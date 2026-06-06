@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import {
   resetCliRuntimeRegistryForTesting,
@@ -19,7 +25,7 @@ import {
 import type {
   Config,
   SettingsService,
-  ProviderManager,
+  RuntimeProviderManager,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
@@ -35,7 +41,7 @@ import { getCliProviderManager } from './runtimeAccessors.js';
 describe('runtimeLifecycle', () => {
   let mockConfig: Config;
   let mockSettingsService: SettingsService;
-  let mockProviderManager: ProviderManager;
+  let mockRuntimeProviderManager: RuntimeProviderManager;
   let mockOAuthManager: OAuthManager;
   let mockMessageBus: MessageBus;
 
@@ -68,7 +74,7 @@ describe('runtimeLifecycle', () => {
       set: vi.fn(),
     } as unknown as SettingsService;
 
-    mockProviderManager = {
+    mockRuntimeProviderManager = {
       getActiveProvider: vi.fn().mockReturnValue({
         name: 'openai',
         getDefaultModel: vi.fn().mockReturnValue('gpt-4'),
@@ -88,7 +94,7 @@ describe('runtimeLifecycle', () => {
       getAvailableModels: vi.fn().mockResolvedValue([]),
       setConfig: vi.fn(),
       prepareStatelessProviderInvocation: vi.fn(),
-    } as unknown as ProviderManager;
+    } as unknown as RuntimeProviderManager;
 
     mockOAuthManager = {
       configureProactiveRenewalsForProfile: vi
@@ -172,12 +178,16 @@ describe('runtimeLifecycle', () => {
       const runtimeId = 'test-runtime-infra-1';
       setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
 
-      registerCliProviderInfrastructure(mockProviderManager, mockOAuthManager, {
-        messageBus: mockMessageBus,
-      });
+      registerCliProviderInfrastructure(
+        mockRuntimeProviderManager,
+        mockOAuthManager,
+        {
+          messageBus: mockMessageBus,
+        },
+      );
 
       const entry = runtimeRegistry.get(runtimeId);
-      expect(entry?.providerManager).toBe(mockProviderManager);
+      expect(entry?.providerManager).toBe(mockRuntimeProviderManager);
       expect(entry?.oauthManager).toBe(mockOAuthManager);
     });
 
@@ -185,26 +195,36 @@ describe('runtimeLifecycle', () => {
       const runtimeId = 'test-runtime-infra-2';
       setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
 
-      registerCliProviderInfrastructure(mockProviderManager, mockOAuthManager, {
-        messageBus: mockMessageBus,
-      });
+      registerCliProviderInfrastructure(
+        mockRuntimeProviderManager,
+        mockOAuthManager,
+        {
+          messageBus: mockMessageBus,
+        },
+      );
 
       const manager = getCliProviderManager();
-      expect(manager).toBe(mockProviderManager);
+      expect(manager).toBe(mockRuntimeProviderManager);
     });
 
     it('should link provider manager to config when config exists', () => {
       const runtimeId = 'test-runtime-infra-3';
       setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
 
-      registerCliProviderInfrastructure(mockProviderManager, mockOAuthManager, {
-        messageBus: mockMessageBus,
-      });
+      registerCliProviderInfrastructure(
+        mockRuntimeProviderManager,
+        mockOAuthManager,
+        {
+          messageBus: mockMessageBus,
+        },
+      );
 
       expect(mockConfig.setProviderManager).toHaveBeenCalledWith(
-        mockProviderManager,
+        mockRuntimeProviderManager,
       );
-      expect(mockProviderManager.setConfig).toHaveBeenCalledWith(mockConfig);
+      expect(mockRuntimeProviderManager.setConfig).toHaveBeenCalledWith(
+        mockConfig,
+      );
     });
   });
 
@@ -212,9 +232,13 @@ describe('runtimeLifecycle', () => {
     it('should clear providerManager from runtime entry', () => {
       const runtimeId = 'test-runtime-reset-1';
       setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
-      registerCliProviderInfrastructure(mockProviderManager, mockOAuthManager, {
-        messageBus: mockMessageBus,
-      });
+      registerCliProviderInfrastructure(
+        mockRuntimeProviderManager,
+        mockOAuthManager,
+        {
+          messageBus: mockMessageBus,
+        },
+      );
 
       resetCliProviderInfrastructure(runtimeId);
 
@@ -232,9 +256,13 @@ describe('runtimeLifecycle', () => {
     it('should use active runtime ID when not provided', () => {
       const runtimeId = 'test-runtime-reset-2';
       setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
-      registerCliProviderInfrastructure(mockProviderManager, mockOAuthManager, {
-        messageBus: mockMessageBus,
-      });
+      registerCliProviderInfrastructure(
+        mockRuntimeProviderManager,
+        mockOAuthManager,
+        {
+          messageBus: mockMessageBus,
+        },
+      );
 
       // Call without runtimeId - should use the active one
       resetCliProviderInfrastructure();
@@ -254,7 +282,7 @@ describe('runtimeLifecycle', () => {
       metadata: {},
       settingsService: mockSettingsService,
       config: mockConfig,
-      providerManager: mockProviderManager,
+      providerManager: mockRuntimeProviderManager as never,
       oauthManager: mockOAuthManager,
       activate: vi.fn().mockResolvedValue(undefined),
       cleanup: vi.fn().mockResolvedValue(undefined),

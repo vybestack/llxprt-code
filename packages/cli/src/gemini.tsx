@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 /* eslint-disable max-lines, complexity, max-lines-per-function, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Legacy CLI entrypoint remains a bootstrap orchestrator after other Phase 5 offenders were decomposed. */
 
 const wantWarningSuppression =
@@ -715,7 +721,7 @@ export async function main() {
 
       if (!configModel || configModel === 'placeholder-model') {
         // No model specified or placeholder, get the provider's default
-        configModel = activeProvider.getDefaultModel();
+        configModel = activeProvider?.getDefaultModel?.() ?? configModel;
       }
 
       if (configModel && configModel !== 'placeholder-model') {
@@ -761,7 +767,7 @@ export async function main() {
     // This initializes contentGeneratorConfig to avoid runtime errors on first request
     try {
       const defaultProvider =
-        providerManager.getActiveProviderName() || 'gemini';
+        providerManager.getActiveProviderName() ?? 'gemini';
       await switchActiveProvider(defaultProvider);
       await config.refreshAuth();
     } catch (e) {
@@ -1072,7 +1078,7 @@ export async function main() {
         // Set the active provider if not already set
         // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (!providerManagerForAcp.hasActiveProvider()) {
-          providerManagerForAcp.setActiveProvider(configProvider);
+          void providerManagerForAcp.setActiveProvider(configProvider);
         }
       } catch {
         // Non-fatal - continue without provider

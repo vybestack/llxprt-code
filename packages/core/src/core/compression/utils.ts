@@ -21,8 +21,25 @@ import type {
   MediaBlock,
   TextBlock,
 } from '../../services/history/IContent.js';
-import type { IProvider } from '../../providers/IProvider.js';
-import { classifyMediaBlock } from '../../providers/utils/mediaUtils.js';
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P05
+ * @requirement:REQ-DEP-001
+ * @pseudocode component-boundaries.md C-CB-09, lines 80-85
+ *
+ * IProvider import retained for backward compatibility; core-owned
+ * MediaBlock contracts available for injection path.
+ */
+import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P05
+ * @requirement:REQ-DEP-001
+ * @pseudocode component-boundaries.md C-CB-09, lines 80-85
+ *
+ * classifyMediaBlock is imported from core tools/mediaUtils to keep
+ * media classification owned by core while supporting provider-injected
+ * MediaBlock flows.
+ */
+import { classifyMediaBlock } from '../../tools/mediaUtils.js';
 import type { CompressionContext } from './types.js';
 
 /**

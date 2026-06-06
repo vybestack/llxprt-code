@@ -26,15 +26,24 @@ const {
   };
 });
 
+vi.mock('@vybestack/llxprt-code-providers', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-providers')
+  >('@vybestack/llxprt-code-providers');
+  return {
+    ...actual,
+    fetchAnthropicUsage: mockFetchAnthropicUsage,
+    fetchCodexUsage: mockFetchCodexUsage,
+    fetchGeminiQuota: mockFetchGeminiQuota,
+  };
+});
+
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual<
     typeof import('@vybestack/llxprt-code-core')
   >('@vybestack/llxprt-code-core');
   return {
     ...actual,
-    fetchAnthropicUsage: mockFetchAnthropicUsage,
-    fetchCodexUsage: mockFetchCodexUsage,
-    fetchGeminiQuota: mockFetchGeminiQuota,
     getSettingsService: mockGetSettingsService,
   };
 });

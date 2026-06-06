@@ -9,8 +9,8 @@
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { Config } from '../config/config.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
-import type { ProviderManager } from '../providers/ProviderManager.js';
-import type { IProviderManager } from '../providers/IProviderManager.js';
+import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
+import type { RuntimeProviderManager as IRuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapterFromConfig,
@@ -39,7 +39,7 @@ export interface AgentRuntimeProfileSnapshot {
   providerRuntime: ProviderRuntimeContext;
   contentGeneratorConfig?: ContentGeneratorConfig;
   toolRegistry?: ToolRegistry;
-  providerManager?: ProviderManager | IProviderManager;
+  providerManager?: RuntimeProviderManager | IRuntimeProviderManager;
 }
 
 export interface AgentRuntimeLoaderOverrides {

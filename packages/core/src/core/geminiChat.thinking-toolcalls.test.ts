@@ -41,8 +41,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiChat } from './geminiChat.js';
 import { HistoryService } from '../services/history/HistoryService.js';
-import type { IProvider, GenerateChatOptions } from '../providers/IProvider.js';
-import { ProviderManager } from '../providers/ProviderManager.js';
+import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '../runtime/contracts/RuntimeProviderChat.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { Config } from '../config/config.js';
 import type { ConfigParameters } from '../config/config.js';
 import {

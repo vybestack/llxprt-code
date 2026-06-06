@@ -322,6 +322,16 @@ export async function createChatSession(
     runtimeState,
   );
 
+  const getTokenizerFactory = (config as Config & Record<string, unknown>)[
+    'getTokenizerFactory'
+  ];
+  if (typeof getTokenizerFactory === 'function') {
+    const tokenizerFactory = getTokenizerFactory.call(config);
+    if (tokenizerFactory) {
+      historyService.setTokenizerFactory(tokenizerFactory);
+    }
+  }
+
   const enabledToolNames = getEnabledToolNamesForPrompt(config);
   const envParts = await getEnvironmentContext(config);
   const model = runtimeState.model;

@@ -7,8 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GoogleWebFetchTool } from './google-web-fetch.js';
 import type { Config } from '../config/config.js';
-import type { IProvider } from '../providers/IProvider.js';
-import type { IProviderManager } from '../providers/IProviderManager.js';
+import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
+import type { RuntimeProviderManager as IProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import * as fetchUtils from '../utils/fetch.js';
 

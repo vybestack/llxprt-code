@@ -1,5 +1,20 @@
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.json",
-  "references": [{ "path": "../core" }]
+  "compilerOptions": {
+    "rootDir": ".",
+    "paths": {
+      "@vybestack/llxprt-code-core": ["../core/dist/index.d.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/dist/src/*"],
+      "@vybestack/llxprt-code-providers": ["../providers/dist/index.d.ts"],
+      "@vybestack/llxprt-code-providers/*": ["../providers/dist/src/*"]
+    }
+  },
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "src/**/*.json",
+    "./package.json"
+  ]
 }

@@ -5,6 +5,12 @@
  */
 
 /**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
+/**
  * @plan:PLAN-20251018-STATELESSPROVIDER2.P01
  * @requirement:REQ-SP2-002
  * @plan PLAN-20251018-STATELESSPROVIDER2.P01
@@ -12,7 +18,8 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { type IProvider, type Profile } from '@vybestack/llxprt-code-core';
+import { type Profile } from '@vybestack/llxprt-code-core';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
