@@ -176,13 +176,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Fallback to base URL check for direct instantiation
-    const baseURL = this.getBaseURL();
-    if (
-      baseURL &&
-      (baseURL.includes('dashscope.aliyuncs.com') ||
-        baseURL.includes('api.qwen.com') ||
-        baseURL.includes('qwen'))
-    ) {
+    if (isQwenBaseURL(this.getBaseURL())) {
       return true;
     }
 
@@ -278,11 +272,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   override getDefaultModel(): string {
     // Return hardcoded default - do NOT call getModel() to avoid circular dependency
     // Check if this is a Qwen provider instance based on baseURL
-    const baseURL = this.getBaseURL();
-    if (
-      baseURL &&
-      (baseURL.includes('qwen') || baseURL.includes('dashscope'))
-    ) {
+    if (isQwenBaseURL(this.getBaseURL())) {
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env var should fall through to default
       return process.env.LLXPRT_DEFAULT_MODEL || 'qwen3-coder-plus';
     }

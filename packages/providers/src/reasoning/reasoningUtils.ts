@@ -142,56 +142,32 @@ export function extractKimiToolCallsFromText(raw: string): {
   const toolCalls: ToolCallBlock[] = [];
   let text = raw;
 
-  // Extract tool calls from complete sections if present
+  // Extract tool calls from complete sections if present without regex backtracking.
   if (raw.includes('<|tool_calls_section_begin|>')) {
-    const sectionRegex =
-      /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/g;
+    const sectionBeginToken = '<|tool_calls_section_begin|>';
+    const sectionEndToken = '<|tool_calls_section_end|>';
+    const cleanedParts: string[] = [];
+    let cursor = 0;
 
-    text = text.replace(
-      sectionRegex,
-      (_sectionMatch: string, sectionBody: string) => {
-        try {
-          const callRegex =
-            // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-            /<\|tool_call_begin\|>\s*([^<]+?)\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/g;
+    let shouldContinue = true;
+    while (shouldContinue && cursor < text.length) {
+      const section = findNextKimiToolCallSection(
+        text,
+        cursor,
+        sectionBeginToken,
+        sectionEndToken,
+      );
+      if (section == null) {
+        cleanedParts.push(text.slice(cursor));
+        shouldContinue = false;
+      } else {
+        cleanedParts.push(text.slice(cursor, section.sectionBegin));
+        extractKimiToolCallsFromSection(section.sectionBody, toolCalls);
+        cursor = section.nextCursor;
+      }
+    }
 
-          let m: RegExpExecArray | null;
-          while ((m = callRegex.exec(sectionBody)) !== null) {
-            const rawId = m[1].trim();
-            const rawArgs = m[2].trim();
-
-            // Infer tool name from ID
-            const toolName = inferToolNameFromId(rawId);
-
-            // Normalize tool name (handles Kimi-K2 style prefixes like call_functionsglob7)
-            const normalizedToolName = normalizeToolName(toolName);
-
-            const sanitizedArgs = sanitizeToolArgumentsString(rawArgs);
-            const processedParameters = processToolParameters(
-              sanitizedArgs,
-              normalizedToolName,
-            );
-
-            toolCalls.push({
-              type: 'tool_call',
-              id: normalizeToHistoryToolId(rawId),
-              name: normalizedToolName,
-              parameters: processedParameters,
-            } as ToolCallBlock);
-          }
-        } catch (err) {
-          // Log malformed tool sections for debugging, then skip
-          logger.debug(
-            () =>
-              `Failed to parse K2 tool section: ${err instanceof Error ? err.message : String(err)}`,
-            { sectionPreview: sectionBody.substring(0, 200) },
-          );
-        }
-
-        // Strip the entire tool section from user-visible text
-        return '';
-      },
-    );
+    text = cleanedParts.join('');
   }
 
   // ALWAYS run stray token cleanup, even if no complete sections were found
@@ -268,6 +244,91 @@ function sanitizeToolArgumentsString(raw: unknown): string {
   }
 
   return text.length > 0 ? text : '{}';
+}
+
+function findNextKimiToolCallSection(
+  text: string,
+  cursor: number,
+  sectionBeginToken: string,
+  sectionEndToken: string,
+):
+  | {
+      sectionBegin: number;
+      sectionBody: string;
+      nextCursor: number;
+    }
+  | undefined {
+  const sectionBegin = text.indexOf(sectionBeginToken, cursor);
+  if (sectionBegin === -1) {
+    return undefined;
+  }
+
+  const sectionBodyBegin = sectionBegin + sectionBeginToken.length;
+  const sectionEnd = text.indexOf(sectionEndToken, sectionBodyBegin);
+  if (sectionEnd === -1) {
+    return undefined;
+  }
+
+  return {
+    sectionBegin,
+    sectionBody: text.slice(sectionBodyBegin, sectionEnd),
+    nextCursor: sectionEnd + sectionEndToken.length,
+  };
+}
+
+function extractKimiToolCallsFromSection(
+  sectionBody: string,
+  toolCalls: ToolCallBlock[],
+): void {
+  const callBeginToken = '<|tool_call_begin|>';
+  const argumentBeginToken = '<|tool_call_argument_begin|>';
+  const callEndToken = '<|tool_call_end|>';
+  let cursor = 0;
+
+  try {
+    while (cursor < sectionBody.length) {
+      const callBegin = sectionBody.indexOf(callBeginToken, cursor);
+      if (callBegin === -1) {
+        return;
+      }
+
+      const rawIdBegin = callBegin + callBeginToken.length;
+      const argumentBegin = sectionBody.indexOf(argumentBeginToken, rawIdBegin);
+      if (argumentBegin === -1) {
+        return;
+      }
+
+      const rawArgsBegin = argumentBegin + argumentBeginToken.length;
+      const callEnd = sectionBody.indexOf(callEndToken, rawArgsBegin);
+      if (callEnd === -1) {
+        return;
+      }
+
+      const rawId = sectionBody.slice(rawIdBegin, argumentBegin).trim();
+      const rawArgs = sectionBody.slice(rawArgsBegin, callEnd).trim();
+      const toolName = inferToolNameFromId(rawId);
+      const normalizedToolName = normalizeToolName(toolName);
+      const sanitizedArgs = sanitizeToolArgumentsString(rawArgs);
+      const processedParameters = processToolParameters(
+        sanitizedArgs,
+        normalizedToolName,
+      );
+
+      toolCalls.push({
+        type: 'tool_call',
+        id: normalizeToHistoryToolId(rawId),
+        name: normalizedToolName,
+        parameters: processedParameters,
+      } as ToolCallBlock);
+      cursor = callEnd + callEndToken.length;
+    }
+  } catch (err) {
+    logger.debug(
+      () =>
+        `Failed to parse K2 tool section: ${err instanceof Error ? err.message : String(err)}`,
+      { sectionPreview: sectionBody.substring(0, 200) },
+    );
+  }
 }
 
 /**
