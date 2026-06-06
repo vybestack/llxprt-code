@@ -26,8 +26,17 @@ const PAID_TIER_THANKS =
 const PAID_TIER_AUTH_HINT = `consider using /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
 
 // Provider-neutral rate limit message (used when no Google-specific quota detector matches)
-const GENERIC_RATE_LIMIT_MESSAGE =
+const GEMINI_RATE_LIMIT_MESSAGE =
   '\nRate limit exceeded. Please wait a moment and retry, or use /model to switch to a different model.';
+
+const getRateLimitErrorMessageAnthropicFree = () =>
+  '\nAnthropic rate limit exceeded. LLxprt Code retries rate-limited requests with backoff when possible. Please wait before retrying manually.';
+
+const getRateLimitErrorMessageAnthropicPaid = () =>
+  '\nAnthropic rate limit exceeded. LLxprt Code retries rate-limited requests with backoff when possible. Please wait before retrying manually or check your Anthropic plan limits.';
+
+const getRateLimitErrorMessageGeneric = () =>
+  '\nRate limit exceeded. LLxprt Code retries rate-limited requests with backoff when possible. Please wait before retrying manually.';
 
 // Google Free Tier message functions
 const getRateLimitErrorMessageGoogleProQuotaFree = (
@@ -118,14 +127,56 @@ function getErrorCodeFromUnknown(error: unknown): string | undefined {
   return undefined;
 }
 
+function normalizeProviderName(providerName?: string): string | undefined {
+  const trimmedProviderName = providerName?.trim().toLowerCase();
+  return trimmedProviderName === '' ? undefined : trimmedProviderName;
+}
+
+function getProviderFamily(
+  providerName?: string,
+  currentModel?: string,
+): string | undefined {
+  const normalizedProviderName = normalizeProviderName(providerName);
+  if (normalizedProviderName === undefined) {
+    return undefined;
+  }
+
+  if (normalizedProviderName === 'gemini') {
+    return normalizedProviderName;
+  }
+
+  const normalizedModelName = currentModel?.trim().toLowerCase() ?? '';
+  if (
+    normalizedProviderName.includes('anthropic') ||
+    normalizedModelName.startsWith('anthropic:') ||
+    normalizedModelName.startsWith('claude')
+  ) {
+    return 'anthropic';
+  }
+
+  return normalizedProviderName;
+}
+
 function getRateLimitMessage(
   error?: unknown,
   userTier?: UserTierId,
   currentModel?: string,
+  providerName?: string,
 ): string {
   // Determine if user is on a paid tier (Legacy or Standard) - default to FREE if not specified
   const isPaidTier =
     userTier === UserTierId.LEGACY || userTier === UserTierId.STANDARD;
+  const providerFamily = getProviderFamily(providerName, currentModel);
+
+  if (providerFamily === 'anthropic') {
+    return isPaidTier
+      ? getRateLimitErrorMessageAnthropicPaid()
+      : getRateLimitErrorMessageAnthropicFree();
+  }
+
+  if (providerFamily !== undefined && providerFamily !== 'gemini') {
+    return getRateLimitErrorMessageGeneric();
+  }
 
   if (isProQuotaExceededError(error)) {
     return isPaidTier
@@ -148,7 +199,7 @@ function getRateLimitMessage(
       : getRateLimitErrorMessageGoogleGenericQuotaFree();
   }
 
-  return GENERIC_RATE_LIMIT_MESSAGE;
+  return GEMINI_RATE_LIMIT_MESSAGE;
 }
 
 function formatStreamInterruptedError(error: unknown): string {
@@ -172,11 +223,12 @@ function formatStructuredApiError(
   error: StructuredError,
   userTier?: UserTierId,
   currentModel?: string,
+  providerName?: string,
 ): string {
   const status = getErrorStatus(error);
   let text = `[API Error: ${formatErrorMessageWithStatus(error.message, status)}]`;
   if (status === 429) {
-    text += getRateLimitMessage(error, userTier, currentModel);
+    text += getRateLimitMessage(error, userTier, currentModel, providerName);
   }
   return text;
 }
@@ -185,6 +237,7 @@ function formatStringApiError(
   error: string,
   userTier?: UserTierId,
   currentModel?: string,
+  providerName?: string,
 ): string {
   const jsonStart = error.indexOf('{');
   if (jsonStart === -1) {
@@ -195,6 +248,7 @@ function formatStringApiError(
     error.substring(jsonStart),
     userTier,
     currentModel,
+    providerName,
   );
   return parsedMessage ?? `[API Error: ${error}]`;
 }
@@ -203,6 +257,7 @@ function formatEmbeddedJsonApiError(
   jsonString: string,
   userTier?: UserTierId,
   currentModel?: string,
+  providerName?: string,
 ): string | undefined {
   const parsedError = parseApiErrorJson(jsonString);
   if (parsedError === undefined) {
@@ -219,10 +274,30 @@ function formatEmbeddedJsonApiError(
       : undefined,
   );
   let text = `[API Error: ${finalMessage}${statusSuffix}]`;
-  if (parsedError.error.code === 429) {
-    text += getRateLimitMessage(parsedError, userTier, currentModel);
+  if (isRateLimitApiError(parsedError)) {
+    text += getRateLimitMessage(
+      parsedError,
+      userTier,
+      currentModel,
+      providerName,
+    );
   }
   return text;
+}
+
+function isRateLimitApiError(error: ApiError): boolean {
+  if (error.error.code === 429) {
+    return true;
+  }
+
+  if (
+    error.error.status === 'RESOURCE_EXHAUSTED' ||
+    error.error.status === 'rate_limit_error'
+  ) {
+    return true;
+  }
+
+  return 'type' in error.error && error.error.type === 'rate_limit_error';
 }
 
 function parseApiErrorJson(jsonString: string): ApiError | undefined {
@@ -247,6 +322,7 @@ export function parseAndFormatApiError(
   error: unknown,
   userTier?: UserTierId,
   currentModel?: string,
+  providerName?: string,
 ): string {
   const errorCode = getErrorCodeFromUnknown(error);
   if (errorCode === STREAM_INTERRUPTED_ERROR_CODE) {
@@ -254,16 +330,26 @@ export function parseAndFormatApiError(
   }
 
   if (isStructuredError(error)) {
-    return formatStructuredApiError(error, userTier, currentModel);
+    return formatStructuredApiError(
+      error,
+      userTier,
+      currentModel,
+      providerName,
+    );
   }
 
   if (typeof error === 'string') {
-    return formatStringApiError(error, userTier, currentModel);
+    return formatStringApiError(error, userTier, currentModel, providerName);
   }
 
-  const fallbackStatusSuffix = buildStatusSuffix(getErrorStatus(error));
+  const fallbackStatus = getErrorStatus(error);
+  const fallbackStatusSuffix = buildStatusSuffix(fallbackStatus);
   if (fallbackStatusSuffix) {
-    return `[API Error: An unknown error occurred.${fallbackStatusSuffix}]`;
+    let text = `[API Error: An unknown error occurred.${fallbackStatusSuffix}]`;
+    if (fallbackStatus === 429) {
+      text += getRateLimitMessage(error, userTier, currentModel, providerName);
+    }
+    return text;
   }
 
   return '[API Error: An unknown error occurred.]';

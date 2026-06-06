@@ -4,9 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CacheStatistics } from '@vybestack/llxprt-code-core';
+import type { CacheStatistics } from '@vybestack/llxprt-code-providers';
 import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import * as RuntimeContext from '../contexts/RuntimeContext.js';
 

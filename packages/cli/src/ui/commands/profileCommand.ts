@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 /* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type {
@@ -614,8 +620,8 @@ async function applyLoadedProfileConfig(
 
 async function switchProviderManager(
   providerManager: {
-    setActiveProvider(name: string): void;
-    getActiveProvider(): { name: string };
+    setActiveProvider(name: string): void | Promise<void>;
+    getActiveProvider(): { name: string } | undefined;
   },
   providerName: string,
 ): Promise<void> {
@@ -624,7 +630,7 @@ async function switchProviderManager(
       `[profile] forcing config provider manager switch to '${providerName}'`,
   );
   try {
-    providerManager.setActiveProvider(providerName);
+    void providerManager.setActiveProvider(providerName);
     logActiveProviderName(providerManager);
   } catch (error) {
     logger.error(
@@ -635,13 +641,13 @@ async function switchProviderManager(
 }
 
 function logActiveProviderName(providerManager: {
-  setActiveProvider(name: string): void;
-  getActiveProvider(): { name: string };
+  setActiveProvider(name: string): void | Promise<void>;
+  getActiveProvider(): { name: string } | undefined;
 }): void {
   logger.debug(() => {
     let activeName = 'unknown';
     try {
-      activeName = providerManager.getActiveProvider().name;
+      activeName = providerManager.getActiveProvider()?.name ?? 'unknown';
     } catch (readError) {
       logger.debug(
         () =>

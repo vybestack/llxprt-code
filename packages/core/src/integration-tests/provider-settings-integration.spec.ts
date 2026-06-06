@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SettingsService } from '../settings/SettingsService.js';
-import { BaseProvider } from '../providers/BaseProvider.js';
+import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import { createProviderWithRuntime } from '../test-utils/runtime.js';
 

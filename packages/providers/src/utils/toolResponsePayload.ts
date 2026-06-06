@@ -1,0 +1,263 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolResponseBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { limitOutputTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import {
+  ensureJsonSafe,
+  hasJsonUnsafeCharacters,
+} from '@vybestack/llxprt-code-core/utils/unicodeUtils.js';
+
+export function formatToolResponseText(params: {
+  status: 'success' | 'error';
+  toolName?: string;
+  error?: string;
+  output?: string;
+}): string {
+  const blocks: string[] = [];
+
+  blocks.push('status:');
+  blocks.push(params.status);
+
+  blocks.push('');
+  blocks.push('toolName:');
+  blocks.push(params.toolName ?? '');
+
+  blocks.push('');
+  blocks.push('error:');
+  blocks.push(params.error ?? '');
+
+  blocks.push('');
+  blocks.push('output:');
+  blocks.push(params.output ?? '');
+
+  return blocks.join('\n');
+}
+
+export interface ToolResponsePayload {
+  status: 'success' | 'error';
+  toolName?: string;
+  result: string;
+  error?: string;
+  truncated?: boolean;
+  originalLength?: number;
+  limitMessage?: string;
+}
+
+export const EMPTY_TOOL_RESULT_PLACEHOLDER = '[no tool result]';
+
+export function humanizeJsonForDisplay(value: unknown): string | undefined {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const obj = value as Record<string, unknown>;
+
+  // Prefer common text fields to avoid JSON-stringifying multi-line output.
+  for (const key of [
+    'error',
+    'error_text',
+    'message',
+    'llmContent',
+    'returnDisplay',
+  ]) {
+    const v = obj[key];
+    if (typeof v === 'string' && v.trim()) {
+      return v;
+    }
+  }
+
+  // Common shell-like result shape.
+  const stdout = obj.stdout;
+  const stderr = obj.stderr;
+  const exitCode = obj.exitCode;
+  const hasStdout = typeof stdout === 'string' && stdout.trim().length > 0;
+  const hasStderr = typeof stderr === 'string' && stderr.trim().length > 0;
+  const hasExitCode = typeof exitCode === 'number';
+
+  if (hasStdout === true || hasStderr === true || hasExitCode === true) {
+    const out: string[] = [];
+
+    if (hasExitCode === true) {
+      out.push('exitCode:');
+      out.push(String(exitCode));
+      out.push('');
+    }
+
+    if (hasStdout === true) {
+      out.push('stdout:');
+      out.push(
+        String(stdout)
+          // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
+          .replace(/[\r\n]+$/, '')
+          .trimEnd(),
+      );
+      out.push('');
+    }
+
+    if (hasStderr === true) {
+      out.push('stderr:');
+      out.push(
+        String(stderr)
+          // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
+          .replace(/[\r\n]+$/, '')
+          .trimEnd(),
+      );
+      out.push('');
+    }
+
+    return out.join('\n').trimEnd();
+  }
+
+  return undefined;
+}
+
+function coerceToString(value: unknown, humanizeJson?: boolean): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  // Default behavior is JSON.stringify for non-strings. For OpenAI tool output we may prefer
+  // a human-readable multi-line rendering to preserve newlines.
+  if (humanizeJson === true) {
+    const human = humanizeJsonForDisplay(value);
+    if (typeof human === 'string' && human.trim().length > 0) {
+      return human;
+    }
+    // Fallback: pretty JSON (multi-line) instead of a single-line blob.
+    if (value !== null && typeof value === 'object') {
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch {
+        // no-op
+      }
+    }
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    try {
+      return String(value);
+    } catch {
+      return '[unserializable value]';
+    }
+  }
+}
+
+function sanitizeUnicode(result: string): string {
+  return hasJsonUnsafeCharacters(result) ? ensureJsonSafe(result) : result;
+}
+
+function formatToolResultValue(text: string): {
+  value: string;
+  originalLength: number;
+} {
+  return { value: text, originalLength: text.length };
+}
+
+function formatToolResult(
+  result: unknown,
+  humanizeJson?: boolean,
+): {
+  value?: string;
+  originalLength?: number;
+  raw?: string;
+} {
+  if (result === undefined || result === null) {
+    return {};
+  }
+  if (typeof result === 'string') {
+    const formatted = formatToolResultValue(result);
+    return { ...formatted, raw: result };
+  }
+
+  if (typeof result === 'object') {
+    const output = (result as { output?: unknown }).output;
+    if (typeof output === 'string') {
+      const formatted = formatToolResultValue(output);
+      return { ...formatted, raw: output };
+    }
+  }
+
+  const coerced = coerceToString(result, humanizeJson);
+  return { value: coerced, raw: coerced };
+}
+
+function limitToolPayload(
+  serializedResult: string,
+  block: ToolResponseBlock,
+  config?: Config,
+): {
+  text: string;
+  truncated: boolean;
+  originalLength?: number;
+  limitMessage?: string;
+} {
+  if (!serializedResult) {
+    return {
+      text: EMPTY_TOOL_RESULT_PLACEHOLDER,
+      truncated: false,
+    };
+  }
+
+  const originalLength = serializedResult.length;
+
+  if (!config) {
+    const sanitized = sanitizeUnicode(serializedResult);
+    return {
+      text: sanitized,
+      truncated: false,
+      originalLength,
+    };
+  }
+
+  const limited = limitOutputTokens(serializedResult, config, block.toolName);
+  const candidate =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty content should fall through to message, then placeholder
+    limited.content || limited.message || EMPTY_TOOL_RESULT_PLACEHOLDER;
+  const sanitized = sanitizeUnicode(candidate);
+  return {
+    text: sanitized,
+    truncated: limited.wasTruncated,
+    originalLength,
+    limitMessage: limited.wasTruncated ? limited.message : undefined,
+  };
+}
+
+export function buildToolResponsePayload(
+  block: ToolResponseBlock,
+  config?: Config,
+  humanizeJson?: boolean,
+): ToolResponsePayload {
+  const payload: ToolResponsePayload = {
+    status: block.error ? 'error' : 'success',
+    toolName: block.toolName,
+    result: EMPTY_TOOL_RESULT_PLACEHOLDER,
+  };
+
+  const formatted = formatToolResult(block.result, humanizeJson);
+  const serializedResult =
+    config && formatted.raw ? formatted.raw : formatted.value;
+  if (serializedResult) {
+    const limited = limitToolPayload(serializedResult, block, config);
+    payload.result = limited.text;
+    if (limited.truncated) {
+      payload.truncated = true;
+      payload.originalLength = limited.originalLength;
+    }
+    if (limited.limitMessage) {
+      payload.limitMessage = limited.limitMessage;
+    }
+  }
+
+  if (block.error) {
+    payload.error = sanitizeUnicode(coerceToString(block.error, humanizeJson));
+  }
+
+  return payload;
+}

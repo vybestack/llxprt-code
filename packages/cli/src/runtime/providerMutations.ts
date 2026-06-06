@@ -5,6 +5,12 @@
  */
 
 /**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
+/**
  * @plan:PLAN-20260320-ISSUE1575.P03
  * @requirement:REQ-1575-003
  * Provider mutations: model, API key, base URL, and tool format changes.
@@ -251,8 +257,8 @@ function recomputeAndApplyModelDefaultsDiff(
 export async function updateActiveProviderApiKey(
   apiKey: string | null,
 ): Promise<ApiKeyUpdateResult> {
-  const { config, settingsService, providerManager } = getCliRuntimeServices();
-  const provider = providerManager.getActiveProvider();
+  const { config, settingsService } = getCliRuntimeServices();
+  const provider = _internal.getActiveProviderOrThrow();
   const providerName = provider.name;
   const trimmed = apiKey?.trim();
 
@@ -376,17 +382,19 @@ export async function getActiveToolFormatState(): Promise<ToolFormatState> {
 export async function setActiveToolFormatOverride(
   formatName: ToolFormatOverrideLiteral | null,
 ): Promise<ToolFormatState> {
-  const { settingsService } = getCliRuntimeServices();
+  const { config, settingsService } = getCliRuntimeServices();
   const provider = _internal.getActiveProviderOrThrow();
 
   if (!formatName || formatName === 'auto') {
     await settingsService.updateSettings(provider.name, { toolFormat: 'auto' });
+    config.setEphemeralSetting('tool-format', 'auto');
     return getActiveToolFormatState();
   }
 
   await settingsService.updateSettings(provider.name, {
     toolFormat: formatName,
   });
+  config.setEphemeralSetting('tool-format', formatName);
   return getActiveToolFormatState();
 }
 

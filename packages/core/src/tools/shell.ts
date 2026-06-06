@@ -811,7 +811,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     const serverToolsProvider =
       contentGenConfig.providerManager.getServerToolsProvider();
 
-    if (serverToolsProvider !== null && serverToolsProvider.name === 'gemini') {
+    if (serverToolsProvider != null && serverToolsProvider.name === 'gemini') {
       const summary = (await summarizeToolOutput(
         llmContent,
         this.config.getGeminiClient(),

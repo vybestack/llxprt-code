@@ -24,9 +24,9 @@ import {
   type MediaBlock,
 } from './IContent.js';
 import { EventEmitter } from 'events';
-import { type ITokenizer } from '../../providers/tokenizers/ITokenizer.js';
-import { OpenAITokenizer } from '../../providers/tokenizers/OpenAITokenizer.js';
-import { AnthropicTokenizer } from '../../providers/tokenizers/AnthropicTokenizer.js';
+// @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
+import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
+import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
 import { type TokensUpdatedEvent } from './HistoryEvents.js';
 import { DebugLogger } from '../../debug/index.js';
 import { randomUUID } from 'crypto';
@@ -109,32 +109,78 @@ export class HistoryService
   private tokenizerLock: Promise<void> = Promise.resolve();
   private logger = new DebugLogger('llxprt:history:service');
 
+  /**
+   * @plan:PLAN-20260603-ISSUE1584.P05
+   * @requirement:REQ-DEP-001
+   * @pseudocode component-boundaries.md C-CB-01, lines 10-15
+   *
+   * Injected tokenizer factory. When provided, HistoryService uses the factory
+   * to obtain tokenizers instead of constructing provider tokenizers directly.
+   * This eliminates the core→providers import dependency on the injection path.
+   */
+  private tokenizerFactory?: RuntimeTokenizerFactory;
+
   // Compression state and queue
   private isCompressing: boolean = false;
   private pendingOperations: Array<() => void> = [];
 
   /**
-   * Get or create tokenizer for a specific model
+   * @plan:PLAN-20260603-ISSUE1584.P05
+   * @requirement:REQ-DEP-001
+   * @pseudocode component-boundaries.md C-CB-01, lines 10-15
+   *
+   * Set the tokenizer factory for injection-based tokenizer resolution.
+   * When set, getTokenizerForModel will prefer the factory over
+   * constructing provider tokenizers directly.
+   */
+  setTokenizerFactory(factory: RuntimeTokenizerFactory): void {
+    this.tokenizerFactory = factory;
+    this.tokenizerCache.clear();
+  }
+
+  /**
+   * Get or create tokenizer for a specific model.
+   *
+   * @plan:PLAN-20260603-ISSUE1584.P05
+   * @requirement:REQ-DEP-001
+   * @pseudocode component-boundaries.md C-CB-01, lines 10-15
+   *
+   * When a RuntimeTokenizerFactory is injected, it is preferred over
+   * direct provider tokenizer construction. This removes the core→providers
+   * dependency when using the injection path.
    */
   private getTokenizerForModel(modelName: string): ITokenizer {
     if (this.tokenizerCache.has(modelName)) {
       return this.tokenizerCache.get(modelName)!;
     }
 
-    let tokenizer: ITokenizer;
-    if (modelName.includes('claude') || modelName.includes('anthropic')) {
-      tokenizer = new AnthropicTokenizer();
-    } else if (
-      modelName.includes('gpt') ||
-      modelName.includes('openai') ||
-      modelName.includes('o1') ||
-      modelName.includes('o3')
-    ) {
-      tokenizer = new OpenAITokenizer();
-    } else {
-      // Default to OpenAI tokenizer for Gemini and other models (tiktoken is pretty universal)
-      tokenizer = new OpenAITokenizer();
+    // @plan:PLAN-20260603-ISSUE1584.P05
+    // @requirement:REQ-DEP-001
+    // Prefer injected factory when available — this is the injection path
+    if (this.tokenizerFactory) {
+      const runtimeTokenizer = this.tokenizerFactory.getTokenizer(modelName);
+      if (runtimeTokenizer) {
+        // Adapt RuntimeTokenizer to ITokenizer interface for backward compatibility
+        const adapter: ITokenizer = {
+          countTokens: (text: string, _model?: string) =>
+            Promise.resolve(runtimeTokenizer.countTokens(text)),
+        };
+        this.tokenizerCache.set(modelName, adapter);
+        return adapter;
+      }
     }
+
+    // @plan:PLAN-20260603-ISSUE1584.P11
+    // @requirement:REQ-DEP-001
+    // Core fallback is estimate-only; concrete provider tokenizers are injected by CLI/providers.
+    const tokenizer: ITokenizer = {
+      countTokens: (content: unknown) => {
+        if (typeof content === 'string') {
+          return this.simpleTokenEstimateForText(content);
+        }
+        return estimateTextTokens(String(content ?? ''));
+      },
+    };
 
     this.tokenizerCache.set(modelName, tokenizer);
     return tokenizer;
@@ -200,7 +246,7 @@ export class HistoryService
 
     try {
       const tokenizer = this.getTokenizerForModel(modelName);
-      return await tokenizer.countTokens(text, modelName);
+      return await tokenizer.countTokens(text);
     } catch (error) {
       this.logger.debug(
         'Error counting tokens for raw text, using fallback:',
@@ -450,7 +496,7 @@ export class HistoryService
 
       if (blockText) {
         try {
-          const blockTokens = await tokenizer.countTokens(blockText, modelName);
+          const blockTokens = await tokenizer.countTokens(blockText);
           totalTokens += blockTokens;
         } catch (error) {
           this.logger.debug(

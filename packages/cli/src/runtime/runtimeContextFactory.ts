@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 /* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -17,7 +23,6 @@ import * as path from 'node:path';
 import {
   Config,
   type KeyringTokenStore,
-  ProviderManager,
   SettingsService,
   MessageBus,
   clearActiveProviderRuntimeContext,
@@ -28,6 +33,7 @@ import {
   ProfileManager,
   SubagentManager,
 } from '@vybestack/llxprt-code-core';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
 import { LoadedSettings, USER_SETTINGS_PATH } from '../config/settings.js';

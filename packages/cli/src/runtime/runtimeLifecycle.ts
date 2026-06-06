@@ -5,6 +5,12 @@
  */
 
 /**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
+/**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P06
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
  * @requirement:REQ-SP-005
@@ -22,12 +28,15 @@ import {
   type SettingsService,
   type ProfileManager,
   type MessageBus,
-  type ProviderManager,
+  type RuntimeProviderManager,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { type OAuthManager } from '../auth/oauth-manager.js';
-import { registerProviderManagerSingleton } from '../providers/providerManagerInstance.js';
+import {
+  configureProviderRuntimeFactories,
+  registerProviderManagerSingleton,
+} from '../providers/providerManagerInstance.js';
 import {
   type IsolatedRuntimeActivationOptions,
   type IsolatedRuntimeContextHandle,
@@ -75,7 +84,7 @@ export async function activateIsolatedRuntimeContext(
  * @pseudocode lines 122-133
  */
 export function registerCliProviderInfrastructure(
-  manager: ProviderManager,
+  manager: RuntimeProviderManager,
   oauthManager: OAuthManager,
   _options: {
     messageBus: MessageBus;
@@ -87,11 +96,11 @@ export function registerCliProviderInfrastructure(
     oauthManager,
     metadata,
   });
-  registerProviderManagerSingleton(manager, oauthManager);
+  registerProviderManagerSingleton(manager as never, oauthManager);
 
   const config = entry.config ?? null;
   if (config) {
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
     manager.setConfig(config);
 
     logger.debug(

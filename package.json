@@ -7,6 +7,7 @@
   "type": "module",
   "workspaces": [
     "packages/core",
+    "packages/providers",
     "packages/cli",
     "packages/a2a-server",
     "packages/test-utils",

@@ -2,16 +2,17 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/cli.tsbuildinfo",
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "types": ["node", "vitest/globals"],
     "baseUrl": ".",
+    "rootDir": "..",
     "paths": {
       "@vybestack/llxprt-code-core": ["../core/src/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
-      "@vybestack/llxprt-code-core/providers/types/IProviderConfig.js": [
-        "../core/src/providers/types/IProviderConfig.ts"
-      ]
+      "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
+      "@vybestack/llxprt-code-providers/*": ["../providers/src/*"]
     }
   },
   "include": [
@@ -20,11 +21,17 @@
     "src/**/*.tsx",
     "src/**/*.d.ts",
     "src/**/*.json",
-    "./package.json"
+    "./package.json",
+    "../providers/index.ts",
+    "../providers/src/**/*.ts",
+    "../providers/src/**/*.json"
   ],
   "exclude": [
     "node_modules",
     "dist",
+    "../providers/src/**/*.test.ts",
+    "../providers/src/**/*.spec.ts",
+
     // TODO(5691): Fix type errors and remove excludes.
     "src/config/config.integration.test.ts",
     "src/config/config.test.ts",

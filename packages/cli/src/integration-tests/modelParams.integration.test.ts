@@ -4,14 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import {
   Config,
-  ProviderManager,
   type SettingsService,
   MessageBus,
-  type IProvider,
 } from '@vybestack/llxprt-code-core';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
 import type { OAuthManager } from '../auth/oauth-manager.js';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import { setCommand } from '../ui/commands/setCommand.js';

@@ -32,6 +32,10 @@ import { handleSlashCommand } from './nonInteractiveCliCommands.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
 import { processResponseTurns } from './nonInteractiveCliSupport.js';
+import {
+  getActiveProviderNameForApiError,
+  getErrorFallbackModel,
+} from './utils/apiErrorFormatting.js';
 
 interface RunNonInteractiveParams {
   config: Config;
@@ -304,7 +308,15 @@ export async function runNonInteractive(
     });
   } catch (error) {
     if (!jsonOutput) {
-      debugLogger.error(parseAndFormatApiError(error));
+      const providerName = getActiveProviderNameForApiError(config);
+      debugLogger.error(
+        parseAndFormatApiError(
+          error,
+          undefined,
+          getErrorFallbackModel(config, providerName),
+          providerName,
+        ),
+      );
     }
     throw error;
   } finally {

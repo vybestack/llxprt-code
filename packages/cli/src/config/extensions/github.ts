@@ -560,6 +560,19 @@ export interface DownloadOptions {
   headers?: Record<string, string>;
 }
 
+function cleanupAfterFileClosed(
+  file: fs.WriteStream,
+  err: Error,
+  cleanupAndReject: (err: Error) => void,
+): void {
+  if (file.closed) {
+    cleanupAndReject(err);
+    return;
+  }
+  file.once('close', () => cleanupAndReject(err));
+  file.destroy();
+}
+
 export async function downloadFile(
   url: string,
   dest: string,
@@ -577,7 +590,14 @@ export async function downloadFile(
   }
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+
     const cleanupAndReject = (error: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+
       // Try to clean up the partial file, but don't mask the original error
       fs.unlink(dest, (unlinkErr) => {
         if (unlinkErr && unlinkErr.code !== 'ENOENT') {
@@ -619,17 +639,21 @@ export async function downloadFile(
         // Handle file write errors
         file.on('error', (err) => {
           res.destroy();
-          cleanupAndReject(err);
+          cleanupAfterFileClosed(file, err, cleanupAndReject);
         });
 
         // Handle response stream errors
         res.on('error', (err) => {
-          file.destroy();
-          cleanupAndReject(err);
+          cleanupAfterFileClosed(file, err, cleanupAndReject);
         });
 
         res.pipe(file);
-        file.on('finish', () => file.close(resolve as () => void));
+        file.on('finish', () => {
+          if (!settled) {
+            settled = true;
+            file.close(resolve as () => void);
+          }
+        });
       })
       .on('error', (err) => {
         cleanupAndReject(err);

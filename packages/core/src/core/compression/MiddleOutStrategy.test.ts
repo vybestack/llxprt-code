@@ -23,10 +23,8 @@ import { describe, it, expect } from 'vitest';
 import type { IContent, MediaBlock } from '../../services/history/IContent.js';
 import type { CompressionContext } from './types.js';
 import { EmptySummaryError, isTransientCompressionError } from './types.js';
-import type {
-  GenerateChatOptions,
-  IProvider,
-} from '../../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions } from '../../runtime/contracts/RuntimeProviderChat.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
 import type { Logger } from '../logger.js';
@@ -154,11 +152,11 @@ class CaptureProvider implements IProvider {
   }
 
   generateChatCompletion(
-    options: GenerateChatOptions,
+    options: RuntimeGenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(content: IContent[]): AsyncIterableIterator<IContent>;
   async *generateChatCompletion(
-    optionsOrContent: GenerateChatOptions | IContent[],
+    optionsOrContent: RuntimeGenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
     const contents = Array.isArray(optionsOrContent)
       ? optionsOrContent

@@ -4,12 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import {
   SettingsService,
   MessageBus,
   type ProviderRuntimeContext,
-  type ProviderManager,
 } from '@vybestack/llxprt-code-core';
+import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createProviderManager } from '../providers/providerManagerInstance.js';
 import { registerCliProviderInfrastructure } from '../runtime/runtimeLifecycle.js';
 import type { OAuthManager } from '../auth/oauth-manager.js';

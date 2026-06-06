@@ -6,6 +6,12 @@
  * and logs the configuration.
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 /* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
 
 import * as path from 'node:path';
@@ -64,7 +70,7 @@ import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
-import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
+import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { EventEmitter } from 'node:events';
 import type { Config } from './config.js';
 
@@ -138,7 +144,7 @@ export interface ConfigConstructorTarget {
   experimentalZedIntegration: boolean;
   listExtensions: boolean;
   _activeExtensions: ActiveExtension[];
-  providerManager: ProviderManager | undefined;
+  providerManager: RuntimeProviderManager | undefined;
   provider: string | undefined;
   _extensionLoader: ExtensionLoader;
   noBrowser: boolean;

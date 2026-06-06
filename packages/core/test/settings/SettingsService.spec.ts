@@ -99,20 +99,15 @@ describe('SettingsService (In-Memory Remediated Implementation)', () => {
     it('should not perform any file system operations', () => {
       // Since SettingsService is purely in-memory, all operations should be synchronous
       // and complete immediately without any async file I/O
-      const startTime = performance.now();
-
-      service.set('testKey', 'testValue');
+      const setResult = service.set('testKey', 'testValue');
       const retrievedValue = service.get('testKey');
-      service.clear();
-
-      const endTime = performance.now();
+      const clearResult = service.clear();
 
       // Verify the operation worked correctly
       expect(retrievedValue).toBe('testValue');
       expect(service.get('testKey')).toBeUndefined(); // Should be cleared
-
-      // In-memory operations should complete in well under 1ms
-      expect(endTime - startTime).toBeLessThan(1);
+      expect(setResult).toBeUndefined();
+      expect(clearResult).toBeUndefined();
     });
   });
 

@@ -1,11 +1,18 @@
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
 import {
   LoadBalancingProvider,
-  type LoadBalancerProfile,
   type LoadBalancingProviderConfig,
   type LoadBalancerSubProfile,
+  type ResolvedSubProfile,
+} from '@vybestack/llxprt-code-providers';
+import {
+  type LoadBalancerProfile,
   type Profile,
   ProfileManager,
-  type ResolvedSubProfile,
   isLoadBalancerProfile,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs/promises';
@@ -183,7 +190,10 @@ export async function maybeRegisterLoadBalancerProfile(
       `Created LoadBalancingProvider config with ${lbConfig.subProfiles.length} sub-profiles`,
   );
   runtimeServices.providerManager.registerProvider(
-    new LoadBalancingProvider(lbConfig, runtimeServices.providerManager),
+    new LoadBalancingProvider(
+      lbConfig,
+      runtimeServices.providerManager as never,
+    ),
   );
   lbLogger.debug(() => `Registered LoadBalancingProvider as "load-balancer"`);
 }

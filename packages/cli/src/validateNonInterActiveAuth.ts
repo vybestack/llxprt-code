@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
   ExitCodes,
@@ -103,7 +109,7 @@ export async function validateNonInteractiveAuth(
   if (providerManager !== undefined) {
     const serverToolsProvider = providerManager.getServerToolsProvider();
     if (
-      serverToolsProvider !== null &&
+      serverToolsProvider != null &&
       serverToolsProvider.name === 'gemini' &&
       'setConfig' in serverToolsProvider &&
       typeof serverToolsProvider.setConfig === 'function'

@@ -4,8 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { describe, expect, it } from 'vitest';
-import type { IModel } from '@vybestack/llxprt-code-core';
+import type { IModel } from '@vybestack/llxprt-code-providers';
 
 describe('Provider Manager Static Models Integration (Issue #1206)', () => {
   describe('getModels() behavior with staticModels', () => {

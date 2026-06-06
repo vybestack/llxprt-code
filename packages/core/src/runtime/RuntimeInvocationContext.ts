@@ -15,9 +15,23 @@
 
 import type { RedactionConfig } from '../config/config.js';
 import type { SettingsService } from '../settings/SettingsService.js';
-import type { ProviderTelemetryContext } from '../providers/types/providerRuntime.js';
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P05
+ * @requirement:REQ-DEP-001
+ * ProviderTelemetryContext import retained for backward compatibility;
+ * core-owned TelemetryContext contract is available for injection path.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import type { TelemetryContext as ProviderTelemetryContext } from './contracts/TelemetryContext.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 import { separateSettings } from '../settings/settingsRegistry.js';
+
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P05
+ * @requirement:REQ-DEP-001
+ * Re-export core-owned TelemetryContext for injection path.
+ */
+export type { TelemetryContext } from './contracts/TelemetryContext.js';
 
 export interface RuntimeInvocationContext {
   /** Stable identifier for the invocation/runtime */

@@ -16,7 +16,7 @@
 import { describe, it, expect } from 'vitest';
 import type { IContent, MediaBlock } from '../../services/history/IContent.js';
 import type { CompressionContext } from './types.js';
-import type { IProvider } from '../../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
 import type { Logger } from '../logger.js';

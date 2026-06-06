@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createAgentRuntimeState } from './AgentRuntimeState.js';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
-import type { IProvider } from '../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import type { ToolRegistryView } from './AgentRuntimeContext.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
 import { SettingsService } from '../settings/SettingsService.js';

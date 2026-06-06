@@ -4,13 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 /* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P15
  * @requirement REQ-SP2-003
  * @pseudocode cli-runtime-isolation.md lines 1-3
- * Runtime registry that scopes Config/SettingsService/ProviderManager instances per runtimeId.
+ * Runtime registry that scopes Config/SettingsService/RuntimeProviderManager instances per runtimeId.
  */
 
 import {
@@ -20,7 +26,7 @@ import {
   type ProfileManager,
   clearActiveProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
-  type ProviderManager,
+  type RuntimeProviderManager,
   type RuntimeAuthScopeFlushResult,
 } from '@vybestack/llxprt-code-core';
 import { type OAuthManager } from '../auth/oauth-manager.js';
@@ -34,7 +40,7 @@ export interface RuntimeRegistryEntry {
   runtimeId: string;
   settingsService: SettingsService | null;
   config: Config | null;
-  providerManager: ProviderManager | null;
+  providerManager: RuntimeProviderManager | null;
   oauthManager: OAuthManager | null;
   profileManager: ProfileManager | null;
   metadata: Record<string, unknown>;

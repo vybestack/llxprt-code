@@ -4,15 +4,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import {
   type Config,
-  ProviderManager,
-  FakeProvider,
   type SettingsService,
   getSettingsService,
   DebugLogger,
   type MessageBus,
+  type RuntimeContentGeneratorFactory,
+  type ContentGenerator,
+  type RuntimeProviderManager,
+  type RuntimeTokenizer,
+  type RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
+import {
+  ProviderManager,
+  FakeProvider,
+  ProviderContentGenerator,
+  OpenAITokenizer,
+  AnthropicTokenizer,
+  type IProviderManager,
+} from '@vybestack/llxprt-code-providers';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
 import { type IFileSystem, NodeFileSystem } from './IFileSystem.js';
@@ -29,7 +46,7 @@ import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js'
 import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
 import { type HistoryItemWithoutId } from '../ui/types.js';
 
-import { type IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
+import { type IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
 import {
   loadProviderAliasEntries,
   type ProviderAliasEntry,
@@ -72,6 +89,113 @@ interface OpenAIRegistrationContext {
   oauthManager: OAuthManager;
   config?: Config;
   authOnlyEnabled?: boolean;
+}
+
+class RuntimeTokenizerAdapter implements RuntimeTokenizer {
+  constructor(
+    private readonly tokenizer: {
+      countTokens(text: string, model: string): Promise<number>;
+    },
+    private readonly model: string,
+  ) {}
+
+  async countTokens(content: unknown): Promise<number> {
+    const text =
+      typeof content === 'string' ? content : JSON.stringify(content);
+    return this.tokenizer.countTokens(text, this.model);
+  }
+}
+
+const ANTHROPIC_TOKENIZER_MATCHERS = ['anthropic', 'claude'] as const;
+const OPENAI_TOKENIZER_MATCHERS = [
+  'openai',
+  'codex',
+  'gpt',
+  'o1',
+  'o3',
+  'o4',
+  'deepseek',
+] as const;
+
+function matchesTokenizer(
+  providerKey: string,
+  modelKey: string,
+  matchers: readonly string[],
+): boolean {
+  return matchers.some(
+    (matcher) => providerKey.includes(matcher) || modelKey.includes(matcher),
+  );
+}
+
+function createCliTokenizerFactory(): RuntimeTokenizerFactory {
+  const openaiTokenizer = new OpenAITokenizer();
+  const anthropicTokenizer = new AnthropicTokenizer();
+
+  return {
+    getTokenizer(
+      providerName: string,
+      model?: string,
+    ): RuntimeTokenizer | undefined {
+      const providerKey = providerName.toLowerCase();
+      const modelKey = (model ?? providerName).toLowerCase();
+      if (
+        matchesTokenizer(providerKey, modelKey, ANTHROPIC_TOKENIZER_MATCHERS)
+      ) {
+        return new RuntimeTokenizerAdapter(
+          anthropicTokenizer,
+          model ?? providerName,
+        );
+      }
+      if (matchesTokenizer(providerKey, modelKey, OPENAI_TOKENIZER_MATCHERS)) {
+        return new RuntimeTokenizerAdapter(
+          openaiTokenizer,
+          model ?? providerName,
+        );
+      }
+      return undefined;
+    },
+  };
+}
+
+function createCliContentGeneratorFactory(
+  config: Config,
+): RuntimeContentGeneratorFactory<ContentGenerator> {
+  return {
+    createContentGenerator(manager: RuntimeProviderManager) {
+      return new ProviderContentGenerator(
+        manager as unknown as IProviderManager,
+        {
+          model: config.getModel(),
+          providerManager: manager,
+          proxy: config.getProxy(),
+        },
+      );
+    },
+  };
+}
+
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P16a
+ * @requirement:REQ-DEP-001
+ */
+export function configureProviderRuntimeFactories(
+  config: Config,
+  manager: RuntimeProviderManager,
+): void {
+  config.setProviderManager(manager);
+  const configWithFactories = config as Config & Record<string, unknown>;
+  const setContentGeneratorFactory =
+    configWithFactories['setContentGeneratorFactory'];
+  if (typeof setContentGeneratorFactory === 'function') {
+    setContentGeneratorFactory.call(
+      config,
+      createCliContentGeneratorFactory(config),
+    );
+  }
+  const setTokenizerFactory = configWithFactories['setTokenizerFactory'];
+  if (typeof setTokenizerFactory === 'function') {
+    setTokenizerFactory.call(config, createCliTokenizerFactory());
+  }
 }
 
 /**
@@ -419,7 +543,7 @@ export function createProviderManager(
   if (fakeResponsesPath) {
     if (config) {
       manager.setConfig(config);
-      config.setProviderManager(manager);
+      configureProviderRuntimeFactories(config, manager);
     }
     const fakeProvider = new FakeProvider(fakeResponsesPath, process.cwd());
     manager.registerProvider(fakeProvider);
@@ -437,7 +561,7 @@ export function createProviderManager(
 
   if (config) {
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
   }
 
   const authOnlyEnabled = resolveAuthOnlyFlag(config, loadedSettings);

@@ -5,6 +5,12 @@
  */
 
 /**
+ * @plan:PLAN-20260603-ISSUE1584.P13
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-18
+ */
+
+/**
  * Task 1.2 – Provider/model precedence parity tests
  *
  * Locks the 4-level provider precedence chain:
@@ -24,6 +30,7 @@ import {
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
+import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
@@ -117,7 +124,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
     runtimeId: string;
     metadata?: Record<string, unknown>;
   } | null,
-  providerManager: null as ServerConfig.ProviderManager | null,
+  providerManager: null as ProviderManager | null,
   oauthManager: null as unknown,
 }));
 
@@ -130,7 +137,7 @@ vi.mock('../runtime/runtimeSettings.js', () => {
       setActiveProvider: vi.fn(),
       getActiveProvider: vi.fn(() => null),
       getAvailableModels: vi.fn(async () => []),
-    } as unknown as ServerConfig.ProviderManager);
+    } as unknown as ProviderManager);
 
   return {
     applyProfileSnapshot: vi.fn(
@@ -165,7 +172,7 @@ vi.mock('../runtime/runtimeSettings.js', () => {
       infoMessages: [],
     })),
     registerCliProviderInfrastructure: vi.fn(
-      (manager: ServerConfig.ProviderManager, oauthManager: unknown) => {
+      (manager: ProviderManager, oauthManager: unknown) => {
         runtimeSettingsState.providerManager = manager;
         runtimeSettingsState.oauthManager = oauthManager ?? null;
       },
