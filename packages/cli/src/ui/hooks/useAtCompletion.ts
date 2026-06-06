@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useReducer, useRef } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+} from 'react';
 import { setTimeout as setTimeoutPromise } from 'node:timers/promises';
 import { AsyncFzf } from 'fzf';
 import type {
@@ -13,11 +19,18 @@ import type {
   FileSearch,
   MCPResource,
 } from '@vybestack/llxprt-code-core';
-import { FileSearchFactory, escapePath } from '@vybestack/llxprt-code-core';
+import {
+  FileSearchFactory,
+  escapePath,
+  DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
+  DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
+  DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
+} from '@vybestack/llxprt-code-core';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import { MAX_SUGGESTIONS_TO_SHOW } from '../components/SuggestionsDisplay.js';
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 5000;
+const SEARCH_DEBOUNCE_MS = 150;
 
 export enum AtCompletionStatus {
   IDLE = 'idle',
@@ -259,14 +272,16 @@ async function createFileSearcher(
   const filteringOptions = fileFilteringOptions(config);
   const searcher = FileSearchFactory.create({
     projectRoot: cwd,
-    ignoreDirs: [],
+    ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
+    ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
     useGitignore: filteringOptions?.respectGitIgnore ?? true,
-    useGeminiignore: filteringOptions?.respectGitIgnore ?? true,
+    useGeminiignore: filteringOptions?.respectLlxprtIgnore ?? true,
     cache: true,
     cacheTtl: 30, // 30 seconds
     enableRecursiveFileSearch: config?.getEnableRecursiveFileSearch() ?? true,
     enableFuzzySearch: !(config?.getFileFilteringDisableFuzzySearch() ?? false),
     maxFiles: filteringOptions?.maxFileCount,
+    maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
   });
   await searcher.initialize();
   return searcher;
@@ -278,6 +293,7 @@ async function performSearch(
   config: Config | undefined,
   controller: AbortController,
   clearSlowSearchTimer: () => void,
+  shouldDispatchResult: (pattern: string) => boolean,
   dispatch: React.Dispatch<AtCompletionAction>,
 ): Promise<void> {
   const timeoutMs =
@@ -303,7 +319,7 @@ async function performSearch(
 
     clearSlowSearchTimer();
 
-    if (controller.signal.aborted) {
+    if (!shouldDispatchResult(pattern)) {
       return;
     }
 
@@ -326,6 +342,10 @@ async function performSearch(
       controller.signal,
     );
 
+    if (!shouldDispatchResult(pattern)) {
+      return;
+    }
+
     dispatch({
       type: 'SEARCH_SUCCESS',
       payload: [
@@ -335,7 +355,11 @@ async function performSearch(
       ],
     });
   } catch (error) {
-    if (!(error instanceof Error && error.name === 'AbortError')) {
+    if (
+      !(error instanceof Error && error.name === 'AbortError') &&
+      !controller.signal.aborted &&
+      shouldDispatchResult(pattern)
+    ) {
       dispatch({ type: 'ERROR' });
     }
   } finally {
@@ -373,45 +397,114 @@ function useSyncLoadingState(
 function useResetOnCwdChange(
   cwd: string,
   config: Config | undefined,
+  fileSearch: React.MutableRefObject<FileSearch | null>,
+
+  latestRequestedPattern: React.MutableRefObject<PatternInput>,
+  lifecycleGeneration: React.MutableRefObject<number>,
+  abortCurrentSearch: () => void,
   dispatch: React.Dispatch<AtCompletionAction>,
 ): void {
-  useEffect(() => {
+  useLayoutEffect(() => {
+    lifecycleGeneration.current += 1;
+    fileSearch.current = null;
+
+    latestRequestedPattern.current = null;
+    abortCurrentSearch();
     dispatch({ type: 'RESET' });
-  }, [cwd, config, dispatch]);
+  }, [
+    fileSearch,
+
+    cwd,
+    config,
+    latestRequestedPattern,
+    lifecycleGeneration,
+    abortCurrentSearch,
+    dispatch,
+  ]);
 }
 
 function usePatternChangeHandler(
   enabled: boolean,
   pattern: PatternInput,
   state: AtCompletionState,
+  latestRequestedPattern: React.MutableRefObject<PatternInput>,
+  lifecycleGeneration: React.MutableRefObject<number>,
+  abortCurrentSearch: () => void,
   dispatch: React.Dispatch<AtCompletionAction>,
 ): void {
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!enabled) {
-      // reset when first getting out of completion suggestions
-      if (
-        state.status === AtCompletionStatus.READY ||
-        state.status === AtCompletionStatus.ERROR
-      ) {
+      lifecycleGeneration.current += 1;
+      latestRequestedPattern.current = null;
+      abortCurrentSearch();
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      if (state.status !== AtCompletionStatus.IDLE) {
         dispatch({ type: 'RESET' });
       }
-      return;
-    }
-    if (pattern === null) {
-      dispatch({ type: 'RESET' });
-      return;
+
+      return undefined;
     }
 
+    if (pattern === null) {
+      lifecycleGeneration.current += 1;
+      latestRequestedPattern.current = null;
+      abortCurrentSearch();
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      dispatch({ type: 'RESET' });
+      return undefined;
+    }
+
+    const normalizedPattern = pattern.toLowerCase();
+    latestRequestedPattern.current = normalizedPattern;
     if (state.status === AtCompletionStatus.IDLE) {
       dispatch({ type: 'INITIALIZE' });
     } else if (
       (state.status === AtCompletionStatus.READY ||
         state.status === AtCompletionStatus.SEARCHING) &&
-      pattern.toLowerCase() !== state.pattern // Only search if the pattern has changed
+      normalizedPattern !== state.pattern
     ) {
-      dispatch({ type: 'SEARCH', payload: pattern.toLowerCase() });
+      lifecycleGeneration.current += 1;
+      abortCurrentSearch();
+      if (normalizedPattern === '') {
+        if (debounceTimerRef.current !== null) {
+          clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = null;
+        }
+        dispatch({ type: 'SEARCH', payload: normalizedPattern });
+      } else {
+        if (debounceTimerRef.current !== null) {
+          clearTimeout(debounceTimerRef.current);
+        }
+        debounceTimerRef.current = setTimeout(() => {
+          dispatch({ type: 'SEARCH', payload: normalizedPattern });
+        }, SEARCH_DEBOUNCE_MS);
+      }
     }
-  }, [enabled, pattern, state.status, state.pattern, dispatch]);
+
+    return (): void => {
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+  }, [
+    enabled,
+    pattern,
+    state.status,
+    state.pattern,
+    latestRequestedPattern,
+    lifecycleGeneration,
+    abortCurrentSearch,
+    dispatch,
+  ]);
 }
 
 function useInitializationHandler(
@@ -419,6 +512,7 @@ function useInitializationHandler(
   config: Config | undefined,
   cwd: string,
   fileSearch: React.MutableRefObject<FileSearch | null>,
+  initializationGeneration: React.MutableRefObject<number>,
   dispatch: React.Dispatch<AtCompletionAction>,
 ): void {
   useEffect(() => {
@@ -426,30 +520,47 @@ function useInitializationHandler(
       return;
     }
 
+    const generation = initializationGeneration.current;
     const initialize = async (): Promise<void> => {
       try {
         const searcher = await createFileSearcher(config, cwd);
+        if (generation !== initializationGeneration.current) {
+          return;
+        }
         fileSearch.current = searcher;
         dispatch({ type: 'INITIALIZE_SUCCESS' });
         if (state.pattern !== null) {
           dispatch({ type: 'SEARCH', payload: state.pattern });
         }
       } catch {
-        dispatch({ type: 'ERROR' });
+        if (generation === initializationGeneration.current) {
+          dispatch({ type: 'ERROR' });
+        }
       }
     };
 
     void initialize();
-  }, [state.status, state.pattern, config, cwd, fileSearch, dispatch]);
+  }, [
+    state.status,
+    state.pattern,
+    config,
+    cwd,
+    fileSearch,
+    initializationGeneration,
+    dispatch,
+  ]);
 }
 
 function useSearchHandler(
   state: AtCompletionState,
   config: Config | undefined,
   fileSearch: React.MutableRefObject<FileSearch | null>,
+  latestRequestedPattern: React.MutableRefObject<PatternInput>,
+  lifecycleGeneration: React.MutableRefObject<number>,
+
+  searchAbortController: React.MutableRefObject<AbortController | null>,
   dispatch: React.Dispatch<AtCompletionAction>,
 ): void {
-  const searchAbortController = useRef<AbortController | null>(null);
   const slowSearchTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -464,11 +575,19 @@ function useSearchHandler(
       clearTimeout(slowSearchTimer.current);
     }
 
+    const generation = lifecycleGeneration.current;
+
     const controller = new AbortController();
     searchAbortController.current = controller;
 
     slowSearchTimer.current = setTimeout(() => {
-      dispatch({ type: 'SET_LOADING', payload: true });
+      if (
+        searchAbortController.current === controller &&
+        lifecycleGeneration.current === generation &&
+        latestRequestedPattern.current === state.pattern
+      ) {
+        dispatch({ type: 'SET_LOADING', payload: true });
+      }
     }, 200);
 
     void performSearch(
@@ -477,11 +596,19 @@ function useSearchHandler(
       config,
       controller,
       () => {
-        if (slowSearchTimer.current !== null) {
+        if (
+          searchAbortController.current === controller &&
+          slowSearchTimer.current !== null
+        ) {
           clearTimeout(slowSearchTimer.current);
           slowSearchTimer.current = null;
         }
       },
+
+      (searchPattern) =>
+        lifecycleGeneration.current === generation &&
+        latestRequestedPattern.current === searchPattern,
+
       dispatch,
     );
 
@@ -494,7 +621,18 @@ function useSearchHandler(
         slowSearchTimer.current = null;
       }
     };
-  }, [state.status, state.pattern, config, fileSearch, dispatch]);
+  }, [
+    state.status,
+    state.pattern,
+    lifecycleGeneration,
+
+    config,
+    fileSearch,
+    latestRequestedPattern,
+    searchAbortController,
+
+    dispatch,
+  ]);
 }
 
 export function useAtCompletion(props: UseAtCompletionProps): void {
@@ -508,11 +646,57 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
   } = props;
   const [state, dispatch] = useReducer(atCompletionReducer, initialState);
   const fileSearch = useRef<FileSearch | null>(null);
+  const latestRequestedPattern = useRef<PatternInput>(
+    enabled && pattern !== null ? pattern.toLowerCase() : null,
+  );
+  const searchAbortController = useRef<AbortController | null>(null);
+  const lifecycleGeneration = useRef(0);
+
+  latestRequestedPattern.current =
+    enabled && pattern !== null ? pattern.toLowerCase() : null;
+
+  const abortCurrentSearch = useCallback((): void => {
+    searchAbortController.current?.abort();
+  }, []);
 
   useSyncSuggestions(state.suggestions, setSuggestions);
   useSyncLoadingState(state.isLoading, setIsLoadingSuggestions);
-  useResetOnCwdChange(cwd, config, dispatch);
-  usePatternChangeHandler(enabled, pattern, state, dispatch);
-  useInitializationHandler(state, config, cwd, fileSearch, dispatch);
-  useSearchHandler(state, config, fileSearch, dispatch);
+  useResetOnCwdChange(
+    cwd,
+    config,
+    fileSearch,
+
+    latestRequestedPattern,
+    lifecycleGeneration,
+    abortCurrentSearch,
+    dispatch,
+  );
+  usePatternChangeHandler(
+    enabled,
+    pattern,
+    state,
+    latestRequestedPattern,
+    lifecycleGeneration,
+    abortCurrentSearch,
+    dispatch,
+  );
+  useInitializationHandler(
+    state,
+    config,
+    cwd,
+    fileSearch,
+    lifecycleGeneration,
+    dispatch,
+  );
+
+  useSearchHandler(
+    state,
+    config,
+    fileSearch,
+    latestRequestedPattern,
+    lifecycleGeneration,
+
+    searchAbortController,
+    dispatch,
+  );
 }
