@@ -524,7 +524,9 @@ async function handleAnthropicOAuth(
     }
 
     logger.debug(() => '[cli-runtime] Initiating Anthropic OAuth flow');
-    await oauthManager.authenticate('anthropic');
+    await oauthManager.authenticate('anthropic', undefined, {
+      signalAuthCompletion: true,
+    });
     context.infoMessages.push(
       'Anthropic OAuth authentication completed. Use /auth anthropic to view status.',
     );

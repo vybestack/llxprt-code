@@ -37,6 +37,7 @@ describe('appReducer', () => {
           auth: null,
           editor: null,
         },
+        needsRelogin: false,
         lastAddItemAction: null,
       });
     });
@@ -583,6 +584,7 @@ describe('appReducer', () => {
           auth: null,
           editor: null,
         },
+        needsRelogin: false,
         lastAddItemAction: null,
       };
 

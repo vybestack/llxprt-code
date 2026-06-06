@@ -36,6 +36,10 @@ import type { ProviderRegistry } from './provider-registry.js';
 
 const logger = new DebugLogger('llxprt:oauth:auth-flow');
 
+function markGlobalAuthComplete(): void {
+  (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete = true;
+}
+
 type MultiBucketAuthResult = {
   cancelled: boolean;
   authenticatedBuckets: string[];
@@ -117,7 +121,13 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
    * expired token with a refresh_token is found — to avoid replaying
    * single-use refresh tokens concurrently.
    */
-  async authenticate(providerName: string, bucket?: string): Promise<void> {
+
+  async authenticate(
+    providerName: string,
+    bucket?: string,
+    options?: { signalAuthCompletion?: boolean },
+  ): Promise<void> {
+    const shouldSignalAuthCompletion = options?.signalAuthCompletion ?? false;
     logger.debug(
       () => `[FLOW] authenticate() called for provider: ${providerName}`,
     );
@@ -138,15 +148,20 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
     if (!lockAcquired) {
       await this.handleAuthLockTimeout(providerName, bucket);
+      if (shouldSignalAuthCompletion) {
+        markGlobalAuthComplete();
+      }
       return;
     }
 
+    let authenticated = false;
     try {
       const earlyReturn = await this.checkDiskTokenUnderLock(
         providerName,
         bucket,
       );
       if (earlyReturn) {
+        authenticated = true;
         return;
       }
 
@@ -157,10 +172,12 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         diskToken ?? undefined,
       );
       if (refreshed) {
+        authenticated = true;
         return;
       }
 
       await this.doInitiateAuth(providerName, bucket, provider);
+      authenticated = true;
     } catch (error) {
       logger.debug(
         () =>
@@ -174,6 +191,9 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       );
     } finally {
       await this.tokenStore.releaseAuthLock(providerName, bucket);
+      if (authenticated && shouldSignalAuthCompletion) {
+        markGlobalAuthComplete();
+      }
       logger.debug(() => `[FLOW] Released auth lock for ${providerName}`);
     }
   }

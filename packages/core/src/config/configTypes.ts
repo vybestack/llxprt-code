@@ -255,6 +255,7 @@ export interface ActiveExtension {
  */
 export interface FailoverContext {
   triggeringStatus?: number;
+  authRetryTimeoutMs?: number;
 }
 
 /**

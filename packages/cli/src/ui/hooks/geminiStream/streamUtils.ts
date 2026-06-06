@@ -26,6 +26,10 @@ import {
   DEFAULT_AGENT_ID,
   type ThinkingBlock,
 } from '@vybestack/llxprt-code-core';
+import {
+  AllBucketsExhaustedError,
+  isAuthBucketFailureReason,
+} from '@vybestack/llxprt-code-providers';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
@@ -391,6 +395,22 @@ export function handleSubmissionError(
   if (error instanceof UnauthorizedError) {
     onAuthError();
     return true;
+  }
+  if (error instanceof AllBucketsExhaustedError) {
+    const hasAuthReason = Object.values(error.bucketFailureReasons).some((r) =>
+      isAuthBucketFailureReason(r),
+    );
+    if (hasAuthReason) {
+      addItem(
+        {
+          type: MessageType.ERROR,
+          text: error.message,
+        },
+        timestamp,
+      );
+      onAuthError();
+      return true;
+    }
   }
   const isAbortError = error instanceof Error && error.name === 'AbortError';
   if (!isAbortError) {

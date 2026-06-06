@@ -63,11 +63,16 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    */
   private lastFailoverReasons: Record<string, BucketFailureReason> = {};
 
+  private readonly configuredAuthRetryTimeoutMs: number;
+
+  static readonly DEFAULT_AUTH_RETRY_TIMEOUT_MS = 30000;
+
   constructor(
     buckets: string[],
     provider: string,
     oauthManager: BucketFailoverOAuthManagerLike,
     metadata?: OAuthTokenRequestMetadata,
+    options?: { authRetryTimeoutMs?: number },
   ) {
     this.buckets = buckets;
     this.currentBucketIndex = 0;
@@ -75,6 +80,9 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     this.oauthManager = oauthManager;
     this.metadata = metadata;
     this.triedBucketsThisSession = new Set<string>();
+    this.configuredAuthRetryTimeoutMs =
+      options?.authRetryTimeoutMs ??
+      BucketFailoverHandlerImpl.DEFAULT_AUTH_RETRY_TIMEOUT_MS;
 
     // Align the handler state with any existing session override.
     const sessionBucket = this.oauthManager.getSessionBucket(
@@ -137,6 +145,8 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    */
   async tryFailover(context?: FailoverContext): Promise<boolean> {
     this.lastFailoverReasons = {};
+    const authRetryTimeoutMs =
+      context?.authRetryTimeoutMs ?? this.configuredAuthRetryTimeoutMs;
     this.syncCursorFromSession();
 
     const currentBucket = this.getCurrentBucket();
@@ -156,7 +166,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
 
     const candidateBucket = this.findPassThreeCandidate(currentBucket);
     if (candidateBucket !== undefined) {
-      return this.tryForegroundReauth(currentBucket, candidateBucket);
+      return this.tryForegroundReauth(
+        currentBucket,
+        candidateBucket,
+        authRetryTimeoutMs,
+      );
     }
 
     this.logAllBucketsExhausted(currentBucket);
@@ -397,12 +411,14 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private async tryForegroundReauth(
     currentBucket: string,
     candidateBucket: string,
+    authRetryTimeoutMs: number,
   ): Promise<boolean> {
     const existingForegroundReauth =
       this.foregroundReauthInFlightByBucket.get(candidateBucket);
     if (existingForegroundReauth) return existingForegroundReauth;
 
     const pass3Promise = this.runPassThreeReauth(
+      authRetryTimeoutMs,
       currentBucket,
       candidateBucket,
     );
@@ -425,6 +441,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    */
 
   private async runPassThreeReauth(
+    authRetryTimeoutMs: number,
     currentBucket: string,
     candidateBucket: string,
   ): Promise<boolean> {
@@ -448,7 +465,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       return true;
     }
 
-    return this.performForegroundReauth(currentBucket, candidateBucket);
+    return this.performForegroundReauth(
+      authRetryTimeoutMs,
+      currentBucket,
+      candidateBucket,
+    );
   }
 
   private async waitForEagerAuth(
@@ -519,6 +540,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   }
 
   private async performForegroundReauth(
+    authRetryTimeoutMs: number,
     currentBucket: string,
     candidateBucket: string,
   ): Promise<boolean> {
@@ -526,7 +548,19 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       logger.debug(
         `Attempting foreground reauth for bucket: ${candidateBucket}`,
       );
-      await this.oauthManager.authenticate(this.provider, candidateBucket);
+      const authResult = await this.authenticateWithTimeout(
+        candidateBucket,
+        authRetryTimeoutMs,
+      );
+      if (authResult === 'timeout') {
+        logger.debug(
+          `Foreground reauth timed out after ${authRetryTimeoutMs}ms for bucket: ${candidateBucket}`,
+        );
+        this.lastFailoverReasons[candidateBucket] = 'reauth-timeout';
+        this.triedBucketsThisSession.add(candidateBucket);
+        return false;
+      }
+
       const token = await this.oauthManager.getOAuthToken(
         this.provider,
         candidateBucket,
@@ -559,6 +593,31 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     );
     this.lastFailoverReasons[candidateBucket] = 'reauth-failed';
     this.triedBucketsThisSession.add(candidateBucket);
+  }
+
+  private async authenticateWithTimeout(
+    candidateBucket: string,
+    authRetryTimeoutMs: number,
+  ): Promise<'completed' | 'timeout'> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<'timeout'>((resolve) => {
+      timeoutId = setTimeout(() => resolve('timeout'), authRetryTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([
+        this.oauthManager
+          .authenticate(this.provider, candidateBucket, {
+            signalAuthCompletion: false,
+          })
+          .then(() => 'completed' as const),
+        timeoutPromise,
+      ]);
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+    }
   }
 
   private logAllBucketsExhausted(currentBucket: string): void {
@@ -648,6 +707,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   getLastFailoverReasons(): Record<string, BucketFailureReason> {
     return { ...this.lastFailoverReasons };
   }
+
+  getAuthRetryTimeoutMs(): number {
+    return this.configuredAuthRetryTimeoutMs;
+  }
+
   /**
    * Invalidate the auth cache for a runtime, forcing fresh keychain reads.
    * Called at turn boundaries and after auth errors.

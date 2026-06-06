@@ -400,6 +400,7 @@ describe('OAuthManager wiring', () => {
     expect(authFlowOrchestrator.authenticate).toHaveBeenCalledWith(
       'anthropic',
       'bucket-a',
+      undefined,
     );
 
     await manager.authenticateMultipleBuckets('anthropic', ['bucket-a']);

@@ -9,11 +9,20 @@ import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { renderWithProviders } from '../../test-utils/render.js';
 
 const mockGetAuthStatus = vi.fn();
-const mockToggleOAuthEnabled = vi.fn();
+const mockAuthenticate = vi.fn();
+
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  useRuntimeApi: () => ({
+    getCliOAuthManager: () => ({
+      authenticate: mockAuthenticate,
+      getAuthStatus: mockGetAuthStatus,
+    }),
+  }),
+}));
 
 vi.mock('../../providers/providerManagerInstance.js', () => ({
   getOAuthManager: () => ({
-    toggleOAuthEnabled: mockToggleOAuthEnabled,
+    authenticate: mockAuthenticate,
     getAuthStatus: mockGetAuthStatus,
   }),
 }));
@@ -30,9 +39,9 @@ describe('AuthDialog', () => {
     process.env.GEMINI_API_KEY = '';
     vi.clearAllMocks();
     mockGetAuthStatus.mockReset();
-    mockToggleOAuthEnabled.mockReset();
+    mockAuthenticate.mockReset();
     mockGetAuthStatus.mockResolvedValue([]);
-    mockToggleOAuthEnabled.mockResolvedValue(false);
+    mockAuthenticate.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -180,7 +189,44 @@ describe('AuthDialog', () => {
     });
   });
 
-  it('should close dialog when ESC is pressed', async () => {
+  it('should authenticate provider when selected', async () => {
+    const onSelect = vi.fn();
+    const settings: LoadedSettings = new LoadedSettings(
+      {
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
+        path: '',
+      },
+      {
+        settings: {},
+        path: '',
+      },
+      {
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
+        path: '',
+      },
+      {
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
+        path: '',
+      },
+      true,
+    );
+
+    const { stdin, unmount } = renderWithProviders(
+      <AuthDialog onSelect={onSelect} settings={settings} />,
+    );
+    await wait();
+
+    stdin.write('1');
+    await wait();
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('gemini', undefined, {
+      signalAuthCompletion: true,
+    });
+    expect(onSelect).toHaveBeenCalledWith('oauth_gemini', SettingScope.User);
+    unmount();
+  });
+
+  it('should close dialog when Close is selected', async () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
@@ -216,16 +262,13 @@ describe('AuthDialog', () => {
 
     expect(lastFrame()).toContain('Initial error');
 
-    // Simulate pressing escape key
-    stdin.write('\u001b'); // ESC key
+    stdin.write('5');
     await wait();
-
-    // Should call onSelect with undefined to close the dialog
     expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
     unmount();
   });
 
-  it('should allow exiting when auth method is already selected', async () => {
+  it('should allow exiting by selecting Close', async () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
@@ -255,11 +298,8 @@ describe('AuthDialog', () => {
     );
     await wait();
 
-    // Simulate pressing escape key
-    stdin.write('\u001b'); // ESC key
+    stdin.write('5');
     await wait();
-
-    // Should call onSelect with undefined to exit
     expect(onSelect).toHaveBeenCalledWith(undefined, SettingScope.User);
     unmount();
   });

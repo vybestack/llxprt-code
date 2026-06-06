@@ -70,6 +70,8 @@ export interface RetryOrchestratorConfig {
   circuitBreakerRecoveryTimeoutMs?: number;
   /** Timeout for first chunk in streaming mode in ms (optional) */
   streamingTimeoutMs?: number;
+  /** Timeout for blocking OAuth reauthentication during bucket failover in ms (default: 30000) */
+  authRetryTimeoutMs?: number;
   /** Callback to track throttle wait time for metrics */
   trackThrottleWaitTime?: (waitTimeMs: number) => void;
 }
@@ -111,6 +113,7 @@ export class RetryOrchestrator implements IProvider {
       circuitBreakerRecoveryTimeoutMs:
         config?.circuitBreakerRecoveryTimeoutMs ?? 30000,
       streamingTimeoutMs: config?.streamingTimeoutMs ?? 0,
+      authRetryTimeoutMs: config?.authRetryTimeoutMs ?? 30000,
       trackThrottleWaitTime: config?.trackThrottleWaitTime ?? (() => {}),
     };
   }
@@ -253,6 +256,10 @@ export class RetryOrchestrator implements IProvider {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
       (options.invocation?.ephemerals?.['retrywait'] as number | undefined) ??
       this.config.initialDelayMs;
+    const invocationEphemerals = options.invocation?.ephemerals;
+    const authRetryTimeoutMs =
+      (invocationEphemerals?.['auth-retry-timeout'] as number | undefined) ??
+      this.config.authRetryTimeoutMs;
 
     const bucketFailoverHandler = this.getBucketFailoverHandler(options);
 
@@ -305,6 +312,7 @@ export class RetryOrchestrator implements IProvider {
           failoverThreshold,
           bucketFailoverHandler,
           signal,
+          authRetryTimeoutMs,
         );
         if (action.type === 'throw') {
           throw action.error;
@@ -364,6 +372,7 @@ export class RetryOrchestrator implements IProvider {
     failoverThreshold: number,
     bucketFailoverHandler: BucketFailoverHandler | undefined,
     signal: AbortSignal | undefined,
+    authRetryTimeoutMs: number,
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
     if (error instanceof Error && error.name === 'AbortError') {
       return { type: 'throw', error };
@@ -414,6 +423,7 @@ export class RetryOrchestrator implements IProvider {
         initialDelayMs,
         bucketFailoverHandler,
         error,
+        authRetryTimeoutMs,
       );
     }
 
@@ -468,6 +478,7 @@ export class RetryOrchestrator implements IProvider {
     initialDelayMs: number,
     bucketFailoverHandler: BucketFailoverHandler,
     error: unknown,
+    authRetryTimeoutMs: number,
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
     const failoverResult = await this.attemptBucketFailover(
       errorStatus,
@@ -475,6 +486,7 @@ export class RetryOrchestrator implements IProvider {
       isNetworkError,
       state,
       bucketFailoverHandler,
+      authRetryTimeoutMs,
     );
     if (failoverResult === 'continue') {
       state.currentDelay = initialDelayMs;
@@ -576,6 +588,7 @@ export class RetryOrchestrator implements IProvider {
       consecutiveAuthErrors: number;
     },
     bucketFailoverHandler: BucketFailoverHandler,
+    authRetryTimeoutMs: number,
   ): Promise<'continue' | 'exhausted'> {
     const failoverReason = is429
       ? `${state.consecutive429s} consecutive 429 errors`
@@ -589,6 +602,7 @@ export class RetryOrchestrator implements IProvider {
 
     const failoverContext: FailoverContext = {
       triggeringStatus: errorStatus,
+      authRetryTimeoutMs,
     };
 
     const failoverResult =

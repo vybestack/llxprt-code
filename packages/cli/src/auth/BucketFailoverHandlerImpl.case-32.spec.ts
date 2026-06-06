@@ -67,7 +67,9 @@ describe('BucketFailoverHandlerImpl #32', () => {
     const result = await handler.tryFailover();
 
     // Assert: Should attempt reauth for bucket-b (first expired-refresh-failed after bucket-a)
-    expect(authenticateSpy).toHaveBeenCalledWith('anthropic', 'bucket-b');
+    expect(authenticateSpy).toHaveBeenCalledWith('anthropic', 'bucket-b', {
+      signalAuthCompletion: false,
+    });
     expect(result).toBe(true);
     expect(handler.getCurrentBucket()).toBe('bucket-b');
   });

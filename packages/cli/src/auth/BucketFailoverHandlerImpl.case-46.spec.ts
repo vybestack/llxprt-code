@@ -62,6 +62,7 @@ describe('BucketFailoverHandlerImpl #46', () => {
     expect(oauthManager.authenticate).toHaveBeenCalledWith(
       'anthropic',
       'bucket-a',
+      { signalAuthCompletion: false },
     );
   });
 });

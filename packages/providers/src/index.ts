@@ -73,6 +73,7 @@ export {
   MissingProviderRuntimeError,
   LoadBalancerFailoverError,
   AllBucketsExhaustedError,
+  isAuthBucketFailureReason,
   type BucketFailureReason,
 } from './errors.js';
 

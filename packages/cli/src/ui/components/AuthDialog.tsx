@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import type React from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
@@ -12,11 +13,21 @@ import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { AuthStatus } from '../../auth/types.js';
 
 interface AuthDialogProps {
   onSelect: (authMethod: string | undefined, scope: SettingScope) => void;
   settings: LoadedSettings;
   initialErrorMessage?: string | null;
+}
+
+interface AuthDialogState {
+  enabledProviders: Set<string>;
+  setEnabledProviders: React.Dispatch<React.SetStateAction<Set<string>>>;
+  authStatuses: Map<string, AuthStatus>;
+  setAuthStatuses: React.Dispatch<
+    React.SetStateAction<Map<string, AuthStatus>>
+  >;
 }
 
 function getEnabledProviders(
@@ -71,7 +82,19 @@ const AuthDialogFooter: React.FC = () => (
   </>
 );
 
-function buildAuthItems(enabledProviders: Set<string>): Array<{
+function getStatusLabel(
+  provider: string,
+  authStatuses: ReadonlyMap<string, AuthStatus>,
+): string {
+  const status = authStatuses.get(provider);
+  if (status === undefined) return '';
+  return status.authenticated ? ' (Authenticated)' : ' (Not authenticated)';
+}
+
+function buildAuthItems(
+  enabledProviders: Set<string>,
+  authStatuses: ReadonlyMap<string, AuthStatus>,
+): Array<{
   key: string;
   label: string;
   value: string;
@@ -79,22 +102,22 @@ function buildAuthItems(enabledProviders: Set<string>): Array<{
   return [
     {
       key: 'oauth_gemini',
-      label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}`,
+      label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}${getStatusLabel('gemini', authStatuses)}`,
       value: 'oauth_gemini',
     },
     {
       key: 'oauth_qwen',
-      label: `Qwen (OAuth) ${enabledProviders.has('oauth_qwen') ? '[ON]' : '[OFF]'}`,
+      label: `Qwen (OAuth) ${enabledProviders.has('oauth_qwen') ? '[ON]' : '[OFF]'}${getStatusLabel('qwen', authStatuses)}`,
       value: 'oauth_qwen',
     },
     {
       key: 'oauth_anthropic',
-      label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}`,
+      label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}${getStatusLabel('anthropic', authStatuses)}`,
       value: 'oauth_anthropic',
     },
     {
       key: 'oauth_codex',
-      label: `Codex (ChatGPT OAuth) ${enabledProviders.has('oauth_codex') ? '[ON]' : '[OFF]'}`,
+      label: `Codex (ChatGPT OAuth) ${enabledProviders.has('oauth_codex') ? '[ON]' : '[OFF]'}${getStatusLabel('codex', authStatuses)}`,
       value: 'oauth_codex',
     },
     {
@@ -134,30 +157,131 @@ const AuthDialogContent: React.FC<AuthDialogContentProps> = ({
   </>
 );
 
+function useMountedRef(): React.MutableRefObject<boolean> {
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  return mountedRef;
+}
+
+function useAuthDialogState(
+  settings: LoadedSettings,
+  runtime: ReturnType<typeof useRuntimeApi>,
+  mountedRef: React.MutableRefObject<boolean>,
+): AuthDialogState {
+  const [enabledProviders, setEnabledProviders] = useState<Set<string>>(() =>
+    getEnabledProviders(settings.merged.oauthEnabledProviders),
+  );
+  const [authStatuses, setAuthStatuses] = useState<Map<string, AuthStatus>>(
+    () => new Map(),
+  );
+
+  useEffect(() => {
+    setEnabledProviders(
+      getEnabledProviders(settings.merged.oauthEnabledProviders),
+    );
+  }, [settings.merged.oauthEnabledProviders]);
+
+  useEffect(() => {
+    const oauthManager = runtime.getCliOAuthManager();
+    const getAuthStatus = oauthManager?.getAuthStatus;
+    if (getAuthStatus === undefined) return;
+
+    void (async () => {
+      try {
+        const statuses = await getAuthStatus.call(oauthManager);
+        if (!mountedRef.current) return;
+        setAuthStatuses(
+          new Map(statuses.map((status) => [status.provider, status])),
+        );
+        syncEnabledProvidersFromAuthStatus(setEnabledProviders, statuses);
+      } catch {
+        if (mountedRef.current) setAuthStatuses(new Map());
+      }
+    })();
+  }, [mountedRef, runtime]);
+
+  return {
+    enabledProviders,
+    setEnabledProviders,
+    authStatuses,
+    setAuthStatuses,
+  };
+}
+
+function syncEnabledProvidersFromAuthStatus(
+  setEnabledProviders: React.Dispatch<React.SetStateAction<Set<string>>>,
+  statuses: AuthStatus[],
+): void {
+  setEnabledProviders((prev) => {
+    const next = new Set(prev);
+    for (const status of statuses) {
+      const key = `oauth_${status.provider}`;
+      if (status.oauthEnabled === true) {
+        next.add(key);
+      } else if (status.oauthEnabled === false) {
+        next.delete(key);
+      }
+    }
+    return next;
+  });
+}
+
+function recordAuthenticatedProvider(
+  authMethod: string,
+  providerName: string,
+  setEnabledProviders: React.Dispatch<React.SetStateAction<Set<string>>>,
+  setAuthStatuses: React.Dispatch<
+    React.SetStateAction<Map<string, AuthStatus>>
+  >,
+): void {
+  setEnabledProviders((prev) => new Set([...prev, authMethod]));
+  setAuthStatuses((prev) =>
+    new Map(prev).set(providerName, {
+      provider: providerName,
+      authenticated: true,
+      oauthEnabled: true,
+    }),
+  );
+}
+
+function useCloseAuthDialogOnEscape(
+  onSelect: AuthDialogProps['onSelect'],
+): void {
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        onSelect(undefined, SettingScope.User);
+      }
+    },
+    { isActive: true },
+  );
+}
+
 export function AuthDialog({
   onSelect,
   settings,
   initialErrorMessage,
 }: AuthDialogProps): React.JSX.Element {
   const runtime = useRuntimeApi();
+  const mountedRef = useMountedRef();
   const [errorMessage, setErrorMessage] = useState<string | null>(
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error message should be treated as null
     initialErrorMessage || null,
   );
-
-  const [enabledProviders, setEnabledProviders] = useState<Set<string>>(() =>
-    getEnabledProviders(settings.merged.oauthEnabledProviders),
-  );
-
-  React.useEffect(() => {
-    setEnabledProviders(
-      getEnabledProviders(settings.merged.oauthEnabledProviders),
-    );
-  }, [settings.merged.oauthEnabledProviders]);
-
+  const {
+    enabledProviders,
+    setEnabledProviders,
+    authStatuses,
+    setAuthStatuses,
+  } = useAuthDialogState(settings, runtime, mountedRef);
   const items = useMemo(
-    () => buildAuthItems(enabledProviders),
-    [enabledProviders],
+    () => buildAuthItems(enabledProviders, authStatuses),
+    [enabledProviders, authStatuses],
   );
 
   const handleAuthSelect = useCallback(
@@ -172,38 +296,37 @@ export function AuthDialog({
       const providerName = authMethod.replace('oauth_', '');
       const oauthManager = runtime.getCliOAuthManager();
 
-      if (oauthManager) {
-        void (async () => {
-          try {
-            const newState =
-              await oauthManager.toggleOAuthEnabled(providerName);
+      if (!oauthManager) {
+        setErrorMessage('OAuth manager unavailable');
+        return;
+      }
 
-            setEnabledProviders((prev) => {
-              const next = new Set(prev);
-              if (newState) {
-                next.add(authMethod);
-              } else {
-                next.delete(authMethod);
-              }
-              return next;
-            });
-          } catch (error) {
-            setErrorMessage(`Failed to toggle ${providerName}: ${error}`);
+      void (async () => {
+        try {
+          await oauthManager.authenticate(providerName, undefined, {
+            signalAuthCompletion: true,
+          });
+          if (!mountedRef.current) return;
+          recordAuthenticatedProvider(
+            authMethod,
+            providerName,
+            setEnabledProviders,
+            setAuthStatuses,
+          );
+          onSelect(authMethod, SettingScope.User);
+        } catch (error) {
+          if (mountedRef.current) {
+            setErrorMessage(
+              `Authentication failed for ${providerName}: ${error}`,
+            );
           }
-        })();
-      }
+        }
+      })();
     },
-    [onSelect, runtime],
+    [mountedRef, onSelect, runtime, setAuthStatuses, setEnabledProviders],
   );
 
-  useKeypress(
-    (key) => {
-      if (key.name === 'escape') {
-        onSelect(undefined, SettingScope.User);
-      }
-    },
-    { isActive: true },
-  );
+  useCloseAuthDialogOnEscape(onSelect);
 
   return (
     <Box

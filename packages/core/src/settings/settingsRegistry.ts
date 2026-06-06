@@ -533,6 +533,27 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'auth-retry-timeout',
+    category: 'cli-behavior',
+    description:
+      'Timeout in milliseconds for mid-turn OAuth reauthentication attempts',
+    type: 'number',
+    hint: 'positive integer in milliseconds (default: 30000)',
+    persistToProfile: true,
+    default: 30000,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'auth-retry-timeout must be a positive integer in milliseconds (e.g., 30000)',
+      };
+    },
+  },
+
+  {
     key: 'socket-timeout',
     category: 'cli-behavior',
     description: 'Request timeout in milliseconds for local AI servers',

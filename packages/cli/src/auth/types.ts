@@ -86,8 +86,16 @@ export interface OAuthProvider {
  * Implemented by AuthFlowOrchestrator (Phase 6); injected into TokenAccessCoordinator
  * via setAuthenticator() to avoid a module import cycle.
  */
+export interface AuthCompletionOptions {
+  signalAuthCompletion?: boolean;
+}
+
 export interface AuthenticatorInterface {
-  authenticate(providerName: string, bucket?: string): Promise<void>;
+  authenticate(
+    providerName: string,
+    bucket?: string,
+    options?: AuthCompletionOptions,
+  ): Promise<void>;
   authenticateMultipleBuckets(
     providerName: string,
     buckets: string[],
@@ -114,7 +122,11 @@ export interface BucketFailoverOAuthManagerLike {
     providerName: string,
     bucket?: string,
   ): Promise<OAuthToken | null>;
-  authenticate(providerName: string, bucket?: string): Promise<void>;
+  authenticate(
+    providerName: string,
+    bucket?: string,
+    options?: AuthCompletionOptions,
+  ): Promise<void>;
   authenticateMultipleBuckets(
     providerName: string,
     buckets: string[],

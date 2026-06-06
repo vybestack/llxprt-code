@@ -153,8 +153,16 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * @param providerName - Name of the provider to authenticate with
    * @param bucket - Optional bucket name for multi-account support
    */
-  async authenticate(providerName: string, bucket?: string): Promise<void> {
-    return this.authFlowOrchestrator.authenticate(providerName, bucket);
+  async authenticate(
+    providerName: string,
+    bucket?: string,
+    options?: { signalAuthCompletion?: boolean },
+  ): Promise<void> {
+    return this.authFlowOrchestrator.authenticate(
+      providerName,
+      bucket,
+      options,
+    );
   }
 
   /**

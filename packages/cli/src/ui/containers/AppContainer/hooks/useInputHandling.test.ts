@@ -23,6 +23,8 @@ interface InputHandlingHarness {
   todoContinuationRef: { current: { clearPause: () => void } | null };
   isMcpReady: boolean;
   addMessage: ReturnType<typeof vi.fn>;
+  needsRelogin: boolean;
+  appDispatch: ReturnType<typeof vi.fn>;
 }
 
 const createHarness = (
@@ -45,6 +47,8 @@ const createHarness = (
     todoContinuationRef: { current: { clearPause } },
     isMcpReady: true,
     addMessage: vi.fn(),
+    needsRelogin: false,
+    appDispatch: vi.fn(),
     ...overrides,
   };
 };
@@ -68,6 +72,8 @@ describe('useInputHandling', () => {
         todoContinuationRef: harness.todoContinuationRef,
         isMcpReady: harness.isMcpReady,
         addMessage: harness.addMessage,
+        needsRelogin: harness.needsRelogin,
+        appDispatch: harness.appDispatch,
       }),
     );
 
@@ -92,6 +98,8 @@ describe('useInputHandling', () => {
         todoContinuationRef: harness.todoContinuationRef,
         isMcpReady: harness.isMcpReady,
         addMessage: harness.addMessage,
+        needsRelogin: harness.needsRelogin,
+        appDispatch: harness.appDispatch,
       }),
     );
 
@@ -132,6 +140,8 @@ describe('useInputHandling', () => {
         todoContinuationRef: harness.todoContinuationRef,
         isMcpReady: harness.isMcpReady,
         addMessage: harness.addMessage,
+        needsRelogin: harness.needsRelogin,
+        appDispatch: harness.appDispatch,
       }),
     );
 
@@ -162,6 +172,8 @@ describe('useInputHandling', () => {
         todoContinuationRef: harness.todoContinuationRef,
         isMcpReady: harness.isMcpReady,
         addMessage: harness.addMessage,
+        needsRelogin: harness.needsRelogin,
+        appDispatch: harness.appDispatch,
       }),
     );
 
@@ -193,6 +205,8 @@ describe('useInputHandling', () => {
         todoContinuationRef: harness.todoContinuationRef,
         isMcpReady: harness.isMcpReady,
         addMessage: harness.addMessage,
+        needsRelogin: harness.needsRelogin,
+        appDispatch: harness.appDispatch,
       }),
     );
 
@@ -223,6 +237,8 @@ describe('useInputHandling', () => {
         todoContinuationRef: harness.todoContinuationRef,
         isMcpReady: harness.isMcpReady,
         addMessage: harness.addMessage,
+        needsRelogin: harness.needsRelogin,
+        appDispatch: harness.appDispatch,
       }),
     );
 
@@ -254,6 +270,8 @@ describe('useInputHandling', () => {
         todoContinuationRef: harness.todoContinuationRef,
         isMcpReady: harness.isMcpReady,
         addMessage: harness.addMessage,
+        needsRelogin: harness.needsRelogin,
+        appDispatch: harness.appDispatch,
       }),
     );
 
@@ -263,12 +281,11 @@ describe('useInputHandling', () => {
 
     // Slash commands bypass MCP gate
     expect(harness.submitQuery).toHaveBeenCalledWith('/help');
-    expect(harness.addMessage).not.toHaveBeenCalled();
   });
 
-  it('submits directly when MCP is ready', () => {
+  it('opens auth dialog instead of submitting when needsRelogin is true', () => {
     const harness = createHarness({
-      isMcpReady: true,
+      needsRelogin: true,
     });
 
     const { result } = renderHook(() =>
@@ -282,14 +299,84 @@ describe('useInputHandling', () => {
         todoContinuationRef: harness.todoContinuationRef,
         isMcpReady: harness.isMcpReady,
         addMessage: harness.addMessage,
+        needsRelogin: harness.needsRelogin,
+        appDispatch: harness.appDispatch,
       }),
     );
 
     act(() => {
-      result.current.handleFinalSubmit('analyze the codebase');
+      result.current.handleFinalSubmit('search my files');
     });
 
-    expect(harness.submitQuery).toHaveBeenCalledWith('analyze the codebase');
-    expect(harness.addMessage).not.toHaveBeenCalled();
+    expect(harness.appDispatch).toHaveBeenCalledWith({
+      type: 'OPEN_DIALOG',
+      payload: 'auth',
+    });
+    expect(harness.submitQuery).not.toHaveBeenCalled();
+    expect(harness.addInput).toHaveBeenCalledWith('search my files');
+    expect(harness.lastSubmittedPromptRef.current).toBe('search my files');
+  });
+
+  it('does not add the same deferred relogin prompt to history repeatedly', () => {
+    const harness = createHarness({
+      needsRelogin: true,
+    });
+    harness.lastSubmittedPromptRef.current = 'search my files';
+
+    const { result } = renderHook(() =>
+      useInputHandling({
+        buffer: harness.buffer,
+        inputHistoryStore: { addInput: harness.addInput },
+        submitQuery: harness.submitQuery,
+        pendingHistoryItems: harness.pendingHistoryItems,
+        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
+        hadToolCallsRef: harness.hadToolCallsRef,
+        todoContinuationRef: harness.todoContinuationRef,
+        isMcpReady: harness.isMcpReady,
+        addMessage: harness.addMessage,
+        needsRelogin: harness.needsRelogin,
+        appDispatch: harness.appDispatch,
+      }),
+    );
+
+    act(() => {
+      result.current.handleFinalSubmit('search my files');
+    });
+
+    expect(harness.appDispatch).toHaveBeenCalledWith({
+      type: 'OPEN_DIALOG',
+      payload: 'auth',
+    });
+    expect(harness.addInput).not.toHaveBeenCalled();
+    expect(harness.submitQuery).not.toHaveBeenCalled();
+  });
+
+  it('lets slash commands through even when needsRelogin is true', () => {
+    const harness = createHarness({
+      needsRelogin: true,
+    });
+
+    const { result } = renderHook(() =>
+      useInputHandling({
+        buffer: harness.buffer,
+        inputHistoryStore: { addInput: harness.addInput },
+        submitQuery: harness.submitQuery,
+        pendingHistoryItems: harness.pendingHistoryItems,
+        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
+        hadToolCallsRef: harness.hadToolCallsRef,
+        todoContinuationRef: harness.todoContinuationRef,
+        isMcpReady: harness.isMcpReady,
+        addMessage: harness.addMessage,
+        needsRelogin: harness.needsRelogin,
+        appDispatch: harness.appDispatch,
+      }),
+    );
+
+    act(() => {
+      result.current.handleFinalSubmit('/help');
+    });
+
+    expect(harness.appDispatch).not.toHaveBeenCalled();
+    expect(harness.submitQuery).toHaveBeenCalledWith('/help');
   });
 });

@@ -415,7 +415,9 @@ export class AuthCommandExecutor {
   ): Promise<SlashCommandActionReturn> {
     try {
       // Authenticate with bucket (default if not specified)
-      await this.oauthManager.authenticate(provider, bucket);
+      await this.oauthManager.authenticate(provider, bucket, {
+        signalAuthCompletion: true,
+      });
 
       const bucketInfo = bucket ? ` (bucket: ${bucket})` : '';
       return {

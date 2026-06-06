@@ -26,5 +26,6 @@ export type BucketFailureReason =
   | 'quota-exhausted'
   | 'expired-refresh-failed'
   | 'reauth-failed'
+  | 'reauth-timeout'
   | 'no-token'
   | 'skipped';

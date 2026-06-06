@@ -13,13 +13,16 @@ const OAUTH_POLL_MS = 100;
 
 describe('useOAuthOrchestration', () => {
   let appDispatch: React.Dispatch<AppAction>;
+  let setAuthError: (error: string | null) => void;
 
   beforeEach(() => {
     vi.useFakeTimers();
     appDispatch = vi.fn();
+    setAuthError = vi.fn();
     delete (global as Record<string, unknown>).__oauth_needs_code;
     delete (global as Record<string, unknown>).__oauth_provider;
     delete (global as Record<string, unknown>).__oauth_browser_auth_complete;
+    delete (global as Record<string, unknown>).__oauth_auth_complete;
   });
 
   afterEach(() => {
@@ -27,6 +30,7 @@ describe('useOAuthOrchestration', () => {
     delete (global as Record<string, unknown>).__oauth_needs_code;
     delete (global as Record<string, unknown>).__oauth_provider;
     delete (global as Record<string, unknown>).__oauth_browser_auth_complete;
+    delete (global as Record<string, unknown>).__oauth_auth_complete;
   });
 
   describe('provider guard (Issue #1878)', () => {
@@ -40,6 +44,7 @@ describe('useOAuthOrchestration', () => {
           appDispatch,
           isOAuthCodeDialogOpen: false,
           getActiveProviderName,
+          setAuthError,
         }),
       );
 
@@ -59,6 +64,7 @@ describe('useOAuthOrchestration', () => {
           appDispatch,
           isOAuthCodeDialogOpen: false,
           getActiveProviderName,
+          setAuthError,
         }),
       );
 
@@ -82,6 +88,7 @@ describe('useOAuthOrchestration', () => {
           appDispatch,
           isOAuthCodeDialogOpen: false,
           getActiveProviderName,
+          setAuthError,
         }),
       );
 
@@ -108,6 +115,7 @@ describe('useOAuthOrchestration', () => {
           appDispatch,
           isOAuthCodeDialogOpen: false,
           getActiveProviderName,
+          setAuthError,
         }),
       );
 
@@ -124,6 +132,7 @@ describe('useOAuthOrchestration', () => {
         useOAuthOrchestration({
           appDispatch,
           isOAuthCodeDialogOpen: false,
+          setAuthError,
         }),
       );
 
@@ -144,6 +153,7 @@ describe('useOAuthOrchestration', () => {
         useOAuthOrchestration({
           appDispatch,
           isOAuthCodeDialogOpen: true,
+          setAuthError,
         }),
       );
 

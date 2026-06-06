@@ -47,7 +47,8 @@ export type AppAction =
   | { type: 'CLEAR_WARNING'; payload: string }
   | { type: 'SET_THEME_ERROR'; payload: string | null }
   | { type: 'SET_AUTH_ERROR'; payload: string | null }
-  | { type: 'SET_EDITOR_ERROR'; payload: string | null };
+  | { type: 'SET_EDITOR_ERROR'; payload: string | null }
+  | { type: 'SET_NEEDS_RELOGIN'; payload: boolean };
 
 export interface AppState {
   openDialogs: {
@@ -70,6 +71,7 @@ export interface AppState {
     auth: string | null;
     editor: string | null;
   };
+  needsRelogin: boolean;
   lastAddItemAction: {
     itemData: Omit<HistoryItem, 'id'>;
     baseTimestamp?: number;
@@ -97,6 +99,7 @@ export const initialAppState: AppState = {
     auth: null,
     editor: null,
   },
+  needsRelogin: false,
   lastAddItemAction: null,
 };
 
@@ -170,6 +173,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           ...state.errors,
           editor: action.payload,
         },
+      };
+
+    case 'SET_NEEDS_RELOGIN':
+      return {
+        ...state,
+        needsRelogin: action.payload,
       };
 
     default:

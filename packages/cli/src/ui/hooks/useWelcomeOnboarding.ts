@@ -363,7 +363,9 @@ function useTriggerAuth(runtime: ReturnType<typeof useRuntimeApi>) {
           throw new Error('OAuth manager not available');
         }
         debug.log(`[triggerAuth] Starting OAuth for ${provider}`);
-        await oauthManager.authenticate(provider);
+        await oauthManager.authenticate(provider, undefined, {
+          signalAuthCompletion: true,
+        });
         debug.log(`[triggerAuth] OAuth complete for ${provider}`);
       }
 

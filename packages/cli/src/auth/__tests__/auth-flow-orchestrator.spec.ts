@@ -254,6 +254,172 @@ describe('AuthFlowOrchestrator', () => {
     });
   });
 
+  describe('authenticate() — auth completion signaling', () => {
+    it('marks global auth complete after successful browser authentication', async () => {
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+      const tokenStore = createTokenStore();
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      const freshToken = makeToken('fresh-token');
+      vi.mocked(provider.initiateAuth).mockResolvedValue(freshToken);
+      registry.registerProvider(provider);
+
+      const orchestrator = createOrchestrator(tokenStore, registry);
+      await orchestrator.authenticate('anthropic', 'default', {
+        signalAuthCompletion: true,
+      });
+
+      expect(
+        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
+      ).toBe(true);
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+    });
+
+    it('marks global auth complete when a valid disk token is found under the auth lock', async () => {
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+      const tokenStore = createTokenStore();
+      const validToken = makeToken('existing-token', 3600);
+      vi.mocked(tokenStore.getToken).mockResolvedValueOnce(validToken);
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      registry.registerProvider(provider);
+
+      const orchestrator = createOrchestrator(tokenStore, registry);
+      await orchestrator.authenticate('anthropic', 'default', {
+        signalAuthCompletion: true,
+      });
+
+      expect(provider.initiateAuth).not.toHaveBeenCalled();
+      expect(
+        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
+      ).toBe(true);
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+    });
+
+    it('marks global auth complete when an expired disk token refreshes successfully', async () => {
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+      const tokenStore = createTokenStore();
+      const expiredToken = makeToken('expired-token', -100);
+      expiredToken.refresh_token = 'valid-refresh';
+      vi.mocked(tokenStore.getToken)
+        .mockResolvedValueOnce(expiredToken)
+        .mockResolvedValueOnce(expiredToken);
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      vi.mocked(provider.refreshToken).mockResolvedValue(
+        makeToken('refreshed-token'),
+      );
+      registry.registerProvider(provider);
+
+      const orchestrator = createOrchestrator(tokenStore, registry);
+      await orchestrator.authenticate('anthropic', 'default', {
+        signalAuthCompletion: true,
+      });
+
+      expect(provider.initiateAuth).not.toHaveBeenCalled();
+      expect(
+        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
+      ).toBe(true);
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+    });
+
+    it('marks global auth complete when auth lock times out but a valid disk token exists', async () => {
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+      const tokenStore = createTokenStore();
+      vi.mocked(tokenStore.acquireAuthLock).mockResolvedValue(false);
+      vi.mocked(tokenStore.getToken).mockResolvedValue(
+        makeToken('cross-process-token', 3600),
+      );
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      registry.registerProvider(provider);
+
+      const orchestrator = createOrchestrator(tokenStore, registry);
+      await orchestrator.authenticate('anthropic', 'default', {
+        signalAuthCompletion: true,
+      });
+
+      expect(provider.initiateAuth).not.toHaveBeenCalled();
+      expect(
+        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
+      ).toBe(true);
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+    });
+
+    it('does not mark global auth complete when browser authentication fails', async () => {
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+      const tokenStore = createTokenStore();
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      vi.mocked(provider.initiateAuth).mockRejectedValue(
+        new Error('browser auth failed'),
+      );
+      registry.registerProvider(provider);
+
+      const orchestrator = createOrchestrator(tokenStore, registry);
+      await expect(
+        orchestrator.authenticate('anthropic', 'default', {
+          signalAuthCompletion: true,
+        }),
+      ).rejects.toThrow(/browser auth failed/);
+
+      expect(
+        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
+      ).toBeUndefined();
+    });
+
+    it('does not mark global auth complete by default', async () => {
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+      const tokenStore = createTokenStore();
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      vi.mocked(provider.initiateAuth).mockResolvedValue(
+        makeToken('fresh-token'),
+      );
+      registry.registerProvider(provider);
+
+      const orchestrator = createOrchestrator(tokenStore, registry);
+      await orchestrator.authenticate('anthropic', 'default');
+
+      expect(provider.initiateAuth).toHaveBeenCalledOnce();
+      expect(
+        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
+      ).toBeUndefined();
+    });
+
+    it('does not mark global auth complete when completion signaling is disabled', async () => {
+      delete (global as { __oauth_auth_complete?: boolean })
+        .__oauth_auth_complete;
+      const tokenStore = createTokenStore();
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      vi.mocked(provider.initiateAuth).mockResolvedValue(
+        makeToken('fresh-token'),
+      );
+      registry.registerProvider(provider);
+
+      const orchestrator = createOrchestrator(tokenStore, registry);
+      await orchestrator.authenticate('anthropic', 'default', {
+        signalAuthCompletion: false,
+      });
+
+      expect(provider.initiateAuth).toHaveBeenCalledOnce();
+      expect(
+        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
+      ).toBeUndefined();
+    });
+  });
+
   describe('authenticate() — successful path', () => {
     it('saves token and marks provider OAuth-enabled after successful auth', async () => {
       const tokenStore = createTokenStore();

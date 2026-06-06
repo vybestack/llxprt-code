@@ -10,17 +10,7 @@ import type { UseInputHistoryStoreReturn } from '../../../hooks/useInputHistoryS
 import type { HistoryItemWithoutId } from '../../../types.js';
 import { ToolCallStatus } from '../../../types.js';
 import { isSlashCommand } from '../../../utils/commandUtils.js';
-
-/**
- * @hook useInputHandling
- * @description Cancel handler and final submit logic with MCP-readiness gating
- * @inputs buffer, inputHistoryStore, submitQuery, pendingHistoryItems, lastSubmittedPromptRef, hadToolCallsRef, todoContinuationRef, isMcpReady, addMessage
- * @outputs handleUserCancel, handleFinalSubmit, cancelHandlerRef
- * @sideEffects None (callbacks only)
- * @cleanup N/A
- * @strictMode Safe - callbacks use latest refs
- * @subscriptionStrategy N/A
- */
+import type { AppAction } from '../../../reducers/appReducer.js';
 
 export interface UseInputHandlingParams {
   buffer: TextBuffer;
@@ -36,6 +26,10 @@ export interface UseInputHandlingParams {
   isMcpReady: boolean;
   /** Enqueue a message when gates are closed. From useMessageQueue. */
   addMessage: (message: string) => void;
+  /** Whether the user needs to re-authenticate before continuing. */
+  needsRelogin: boolean;
+  /** Dispatch app actions (e.g., open auth dialog). */
+  appDispatch: React.Dispatch<AppAction>;
 }
 
 export interface UseInputHandlingResult {
@@ -60,95 +54,81 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]): boolean {
   });
 }
 
-export function useInputHandling({
-  buffer,
+function restoreOrClearBuffer(
+  buffer: TextBuffer,
+  lastSubmittedPromptRef: React.MutableRefObject<string | null>,
+  shouldRestorePrompt?: boolean,
+): void {
+  if (shouldRestorePrompt === true) {
+    const lastUserMessage = lastSubmittedPromptRef.current;
+    if (lastUserMessage != null) {
+      buffer.setText(lastUserMessage);
+    }
+  } else {
+    buffer.setText('');
+  }
+}
+
+function captureDeferredPrompt(
+  trimmedValue: string,
+  inputHistoryStore: Pick<UseInputHistoryStoreReturn, 'addInput'>,
+  lastSubmittedPromptRef: React.MutableRefObject<string | null>,
+): void {
+  if (lastSubmittedPromptRef.current !== trimmedValue) {
+    inputHistoryStore.addInput(trimmedValue);
+  }
+  lastSubmittedPromptRef.current = trimmedValue;
+}
+
+function useFinalSubmitHandler({
   inputHistoryStore,
   submitQuery,
-  pendingHistoryItems,
   lastSubmittedPromptRef,
   hadToolCallsRef,
   todoContinuationRef,
   isMcpReady,
   addMessage,
-}: UseInputHandlingParams): UseInputHandlingResult {
-  const cancelHandlerRef = useRef<
-    ((shouldRestorePrompt?: boolean) => void) | null
-  >(null);
+  needsRelogin,
+  appDispatch,
+}: UseInputHandlingParams): (submittedValue: string) => void {
+  return useCallback(
+    (submittedValue: string) => {
+      const trimmedValue = submittedValue.trim();
+      if (trimmedValue.length === 0) return;
 
-  // Keybinding-triggered cancel: intentionally skips the isToolExecuting() check.
-  // This handler is invoked from keyboard shortcuts (e.g. Ctrl+C) and should always
-  // clear or restore the buffer regardless of tool state. The cancelHandlerRef below
-  // is the programmatic cancel path that guards against tool execution.
-  const handleUserCancel = useCallback(
-    (shouldRestorePrompt?: boolean) => {
-      if (shouldRestorePrompt === true) {
-        const lastUserMessage = lastSubmittedPromptRef.current;
-        if (lastUserMessage != null) {
-          buffer.setText(lastUserMessage);
-        }
-      } else {
-        buffer.setText('');
-      }
-    },
-    [buffer, lastSubmittedPromptRef],
-  );
-
-  // Update the cancel handler with message queue support.
-  // The handler is stored in a ref to avoid stale closures, and the assignment
-  // is deferred to useEffect to avoid mutating a ref during render.
-  const cancelHandler = useCallback(
-    (shouldRestorePrompt?: boolean) => {
-      if (isToolExecuting(pendingHistoryItems)) {
-        buffer.setText('');
+      const isCommand = isSlashCommand(trimmedValue);
+      if (!isCommand && needsRelogin) {
+        appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
+        captureDeferredPrompt(
+          trimmedValue,
+          inputHistoryStore,
+          lastSubmittedPromptRef,
+        );
         return;
       }
 
-      if (shouldRestorePrompt === true) {
-        const lastUserMessage = lastSubmittedPromptRef.current;
-        if (lastUserMessage != null) {
-          buffer.setText(lastUserMessage);
-        }
-      } else {
-        buffer.setText('');
+      if (!isCommand && !isMcpReady) {
+        addMessage(trimmedValue);
+        captureDeferredPrompt(
+          trimmedValue,
+          inputHistoryStore,
+          lastSubmittedPromptRef,
+        );
+        return;
       }
-    },
-    [buffer, pendingHistoryItems, lastSubmittedPromptRef],
-  );
 
-  // useLayoutEffect ensures the ref is updated synchronously after render,
-  // before any event handlers can read it (avoids one-render stale window).
-  useLayoutEffect(() => {
-    cancelHandlerRef.current = cancelHandler;
-  }, [cancelHandlerRef, cancelHandler]);
-
-  const handleFinalSubmit = useCallback(
-    (submittedValue: string) => {
-      const trimmedValue = submittedValue.trim();
-      if (trimmedValue.length > 0) {
-        // Slash commands always pass through regardless of MCP readiness.
-        if (!isSlashCommand(trimmedValue) && !isMcpReady) {
-          addMessage(trimmedValue);
-          inputHistoryStore.addInput(trimmedValue);
-          lastSubmittedPromptRef.current = trimmedValue;
-          return;
-        }
-
-        /**
-         * @plan PLAN-20260129-TODOPERSIST.P12
-         * Reset continuation attempt counter when user submits a new prompt.
-         * This prevents the continuation limit from blocking future continuations
-         * after user interaction.
-         */
-        hadToolCallsRef.current = false;
-        todoContinuationRef.current?.clearPause();
-
-        // Capture synchronously before async state updates (prevents race condition on restore)
-        lastSubmittedPromptRef.current = trimmedValue;
-        // Add to independent input history
-        inputHistoryStore.addInput(trimmedValue);
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        submitQuery(trimmedValue);
-      }
+      /**
+       * @plan PLAN-20260129-TODOPERSIST.P12
+       * Reset continuation attempt counter when user submits a new prompt.
+       * This prevents the continuation limit from blocking future continuations
+       * after user interaction.
+       */
+      hadToolCallsRef.current = false;
+      todoContinuationRef.current?.clearPause();
+      lastSubmittedPromptRef.current = trimmedValue;
+      inputHistoryStore.addInput(trimmedValue);
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      submitQuery(trimmedValue);
     },
     [
       submitQuery,
@@ -158,8 +138,40 @@ export function useInputHandling({
       lastSubmittedPromptRef,
       isMcpReady,
       addMessage,
+      needsRelogin,
+      appDispatch,
     ],
   );
+}
+
+export function useInputHandling(
+  params: UseInputHandlingParams,
+): UseInputHandlingResult {
+  const { buffer, pendingHistoryItems, lastSubmittedPromptRef } = params;
+  const cancelHandlerRef = useRef<
+    ((shouldRestorePrompt?: boolean) => void) | null
+  >(null);
+  const handleFinalSubmit = useFinalSubmitHandler(params);
+  const handleUserCancel = useCallback(
+    (shouldRestorePrompt?: boolean) => {
+      restoreOrClearBuffer(buffer, lastSubmittedPromptRef, shouldRestorePrompt);
+    },
+    [buffer, lastSubmittedPromptRef],
+  );
+  const cancelHandler = useCallback(
+    (shouldRestorePrompt?: boolean) => {
+      if (isToolExecuting(pendingHistoryItems)) {
+        buffer.setText('');
+        return;
+      }
+      restoreOrClearBuffer(buffer, lastSubmittedPromptRef, shouldRestorePrompt);
+    },
+    [buffer, pendingHistoryItems, lastSubmittedPromptRef],
+  );
+
+  useLayoutEffect(() => {
+    cancelHandlerRef.current = cancelHandler;
+  }, [cancelHandlerRef, cancelHandler]);
 
   return {
     handleUserCancel,
