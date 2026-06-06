@@ -12,7 +12,8 @@
 /* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
 
 import type { IContent, ContentBlock } from '../services/history/IContent.js';
-import type { IProvider, GenerateChatOptions } from '../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '../runtime/contracts/RuntimeProviderChat.js';
 import { DebugLogger } from '../debug/index.js';
 
 /**

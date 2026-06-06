@@ -7,7 +7,7 @@
 import type { IContent } from '../../services/history/IContent.js';
 import type { HistoryService } from '../../services/history/HistoryService.js';
 import type { GenerateContentConfig } from '@google/genai';
-import type { IProvider } from '../../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
 import { estimateTokens as estimateTextTokens } from '../../utils/toolOutputLimiter.js';
 import { DebugLogger } from '../../debug/index.js';
 

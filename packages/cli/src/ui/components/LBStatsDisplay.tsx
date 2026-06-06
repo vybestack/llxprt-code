@@ -7,9 +7,15 @@
  * Issue #489 Phase 8
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import type React from 'react';
 import { Box, Text } from 'ink';
-import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-core';
+import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-providers';
 import { Colors } from '../colors.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 

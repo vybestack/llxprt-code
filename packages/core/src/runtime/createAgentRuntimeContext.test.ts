@@ -15,7 +15,7 @@ import type {
 } from './AgentRuntimeContext.js';
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
-import type { IProvider } from '../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 
 describe('createAgentRuntimeContext', () => {
   let mockProvider: IProvider;

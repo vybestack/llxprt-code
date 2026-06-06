@@ -11,6 +11,7 @@ import type {
   ServerGeminiToolCallRequestEvent,
   ServerGeminiErrorEvent,
   ServerGeminiStreamEvent,
+  ServerGeminiFinishedEvent,
 } from './turn.js';
 import { Turn, GeminiEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type {
@@ -51,7 +52,37 @@ vi.mock('../utils/generateContentResponseUtilities', () => ({
       .map((part) => part.text)
       .join('') ?? undefined,
   getFunctionCalls: (resp: GenerateContentResponse) => resp.functionCalls ?? [],
+  analyzeResponseOutcome: (parts: Part[]) => {
+    let hasVisibleText = false;
+    let hasThinking = false;
+    let hasToolCalls = false;
+    for (const part of parts) {
+      const isThinking = (part as { thought?: boolean }).thought === true;
+      if (isThinking) hasThinking = true;
+      if (part.functionCall !== undefined) hasToolCalls = true;
+      if (
+        !isThinking &&
+        typeof part.text === 'string' &&
+        part.text.trim() !== ''
+      )
+        hasVisibleText = true;
+    }
+    return {
+      hasVisibleText,
+      hasThinking,
+      hasToolCalls,
+      isActionable: hasVisibleText || hasToolCalls,
+    };
+  },
 }));
+
+const findFinishedEvent = (
+  events: ServerGeminiStreamEvent[],
+): ServerGeminiFinishedEvent | undefined =>
+  events.find(
+    (event): event is ServerGeminiFinishedEvent =>
+      event.type === GeminiEventType.Finished,
+  );
 
 describe('Turn', () => {
   let turn: Turn;
@@ -576,6 +607,11 @@ describe('Turn', () => {
               thoughtsTokenCount: 5,
               toolUsePromptTokenCount: 2,
             },
+            outcome: {
+              hadVisibleOutput: true,
+              hadThinking: false,
+              hadToolCalls: false,
+            },
           },
         },
       ]);
@@ -618,7 +654,15 @@ describe('Turn', () => {
         },
         {
           type: GeminiEventType.Finished,
-          value: { reason: 'MAX_TOKENS', usageMetadata: undefined },
+          value: {
+            reason: 'MAX_TOKENS',
+            usageMetadata: undefined,
+            outcome: {
+              hadVisibleOutput: true,
+              hadThinking: false,
+              hadToolCalls: false,
+            },
+          },
         },
       ]);
     });
@@ -656,7 +700,15 @@ describe('Turn', () => {
         },
         {
           type: GeminiEventType.Finished,
-          value: { reason: 'SAFETY', usageMetadata: undefined },
+          value: {
+            reason: 'SAFETY',
+            usageMetadata: undefined,
+            outcome: {
+              hadVisibleOutput: true,
+              hadThinking: false,
+              hadToolCalls: false,
+            },
+          },
         },
       ]);
     });
@@ -747,7 +799,15 @@ describe('Turn', () => {
         },
         {
           type: GeminiEventType.Finished,
-          value: { reason: 'OTHER', usageMetadata: undefined },
+          value: {
+            reason: 'OTHER',
+            usageMetadata: undefined,
+            outcome: {
+              hadVisibleOutput: true,
+              hadThinking: false,
+              hadToolCalls: false,
+            },
+          },
         },
       ]);
     });
@@ -1069,6 +1129,323 @@ describe('Turn', () => {
         // consume stream
       }
       expect(turn.getDebugResponses()).toStrictEqual([resp1, resp2]);
+    });
+    describe('Finished event outcome', () => {
+      it('should include outcome with hadVisibleOutput true for text-only response', async () => {
+        const mockResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: { parts: [{ text: 'Hello world' }] },
+                  finishReason: 'STOP',
+                },
+              ],
+            } as GenerateContentResponse,
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+        const events: ServerGeminiStreamEvent[] = [];
+        for await (const event of turn.run(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+        )) {
+          events.push(event);
+        }
+
+        const finishedEvent = findFinishedEvent(events);
+        expect(finishedEvent).toBeDefined();
+        expect(finishedEvent?.value.outcome).toStrictEqual({
+          hadVisibleOutput: true,
+          hadThinking: false,
+          hadToolCalls: false,
+        });
+      });
+
+      it('should include outcome with hadThinking true for thinking-only response', async () => {
+        const mockResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: 'internal reasoning', thought: true }],
+                  },
+                  finishReason: 'STOP',
+                },
+              ],
+            } as unknown as GenerateContentResponse,
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+        const events: ServerGeminiStreamEvent[] = [];
+        for await (const event of turn.run(
+          [{ text: 'Think about it' }],
+          new AbortController().signal,
+        )) {
+          events.push(event);
+        }
+
+        const finishedEvent = findFinishedEvent(events);
+        expect(finishedEvent).toBeDefined();
+        expect(finishedEvent?.value.outcome).toStrictEqual({
+          hadVisibleOutput: false,
+          hadThinking: true,
+          hadToolCalls: false,
+        });
+      });
+
+      it('should include outcome with hadToolCalls true for tool-call response', async () => {
+        const mockResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          name: 'read_file',
+                          args: { path: '/tmp/x' },
+                        },
+                      },
+                    ],
+                  },
+                  finishReason: 'STOP',
+                },
+              ],
+            } as unknown as GenerateContentResponse,
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+        const events: ServerGeminiStreamEvent[] = [];
+        for await (const event of turn.run(
+          [{ text: 'Read a file' }],
+          new AbortController().signal,
+        )) {
+          events.push(event);
+        }
+
+        const finishedEvent = findFinishedEvent(events);
+        expect(finishedEvent).toBeDefined();
+        expect(finishedEvent?.value.outcome).toStrictEqual({
+          hadVisibleOutput: false,
+          hadThinking: false,
+          hadToolCalls: true,
+        });
+      });
+
+      it('should include cumulative visible-output outcome when finish reason is in a later chunk', async () => {
+        const mockResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [{ content: { parts: [{ text: 'Hello world' }] } }],
+            } as GenerateContentResponse,
+          };
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [{ content: { parts: [] }, finishReason: 'STOP' }],
+            } as GenerateContentResponse,
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+        const events: ServerGeminiStreamEvent[] = [];
+        for await (const event of turn.run(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+        )) {
+          events.push(event);
+        }
+
+        const finishedEvent = findFinishedEvent(events);
+        expect(finishedEvent).toBeDefined();
+        expect(finishedEvent?.value.outcome).toStrictEqual({
+          hadVisibleOutput: true,
+          hadThinking: false,
+          hadToolCalls: false,
+        });
+      });
+
+      it('should include cumulative thinking outcome when finish reason is in a later chunk', async () => {
+        const mockResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: 'internal reasoning', thought: true }],
+                  },
+                },
+              ],
+            } as unknown as GenerateContentResponse,
+          };
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [{ content: { parts: [] }, finishReason: 'STOP' }],
+            } as GenerateContentResponse,
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+        const events: ServerGeminiStreamEvent[] = [];
+        for await (const event of turn.run(
+          [{ text: 'Think about it' }],
+          new AbortController().signal,
+        )) {
+          events.push(event);
+        }
+
+        const finishedEvent = findFinishedEvent(events);
+        expect(finishedEvent).toBeDefined();
+        expect(finishedEvent?.value.outcome).toStrictEqual({
+          hadVisibleOutput: false,
+          hadThinking: true,
+          hadToolCalls: false,
+        });
+      });
+
+      it('should include cumulative tool-call outcome when finish reason is in a later chunk', async () => {
+        const mockResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          name: 'read_file',
+                          args: { path: '/tmp/x' },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            } as unknown as GenerateContentResponse,
+          };
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [{ content: { parts: [] }, finishReason: 'STOP' }],
+            } as GenerateContentResponse,
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+        const events: ServerGeminiStreamEvent[] = [];
+        for await (const event of turn.run(
+          [{ text: 'Read a file' }],
+          new AbortController().signal,
+        )) {
+          events.push(event);
+        }
+
+        const finishedEvent = findFinishedEvent(events);
+        expect(finishedEvent).toBeDefined();
+        expect(finishedEvent?.value.outcome).toStrictEqual({
+          hadVisibleOutput: false,
+          hadThinking: false,
+          hadToolCalls: true,
+        });
+      });
+
+      it('should reset cumulative outcome after retry events', async () => {
+        const mockResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                { content: { parts: [{ text: 'discarded text' }] } },
+              ],
+            } as GenerateContentResponse,
+          };
+          yield { type: StreamEventType.RETRY };
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: 'internal reasoning', thought: true }],
+                  },
+                },
+              ],
+            } as unknown as GenerateContentResponse,
+          };
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [{ content: { parts: [] }, finishReason: 'STOP' }],
+            } as GenerateContentResponse,
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+        const events: ServerGeminiStreamEvent[] = [];
+        for await (const event of turn.run(
+          [{ text: 'Think about it' }],
+          new AbortController().signal,
+        )) {
+          events.push(event);
+        }
+
+        const finishedEvent = findFinishedEvent(events);
+        expect(finishedEvent).toBeDefined();
+        expect(finishedEvent?.value.outcome).toStrictEqual({
+          hadVisibleOutput: false,
+          hadThinking: true,
+          hadToolCalls: false,
+        });
+      });
+
+      it('should not emit content for whitespace-only text', async () => {
+        const mockResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: { parts: [{ text: '   ' }] },
+                  finishReason: 'STOP',
+                },
+              ],
+            } as GenerateContentResponse,
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+        const events: ServerGeminiStreamEvent[] = [];
+        for await (const event of turn.run(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+        )) {
+          events.push(event);
+        }
+
+        expect(
+          events.some((event) => event.type === GeminiEventType.Content),
+        ).toBe(false);
+        const finishedEvent = findFinishedEvent(events);
+        expect(finishedEvent).toBeDefined();
+        expect(finishedEvent?.value.outcome).toStrictEqual({
+          hadVisibleOutput: false,
+          hadThinking: false,
+          hadToolCalls: false,
+        });
+      });
     });
   });
 

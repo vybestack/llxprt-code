@@ -251,6 +251,10 @@ export class Config extends ConfigBase {
     if (this.providerManager) {
       newContentGeneratorConfig.providerManager = this.providerManager;
     }
+    if (this.contentGeneratorFactory) {
+      newContentGeneratorConfig.contentGeneratorFactory =
+        this.contentGeneratorFactory;
+    }
     const updatedRuntimeState = createAgentRuntimeStateFromConfig(this, {
       runtimeId: this.runtimeState.runtimeId,
       overrides: {
@@ -339,6 +343,10 @@ export class Config extends ConfigBase {
 
     const newHistory = await this.geminiClient.getHistory();
     const newHistoryService = this.geminiClient.getHistoryService();
+    if (newHistoryService && this.tokenizerFactory) {
+      newHistoryService.setTokenizerFactory(this.tokenizerFactory);
+    }
+
     logger.debug('State verification after refreshAuth', {
       originalHistoryLength: existingHistory.length,
       newHistoryLength: newHistory.length,

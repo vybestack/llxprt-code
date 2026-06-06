@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Mock before imports
@@ -28,7 +34,8 @@ import {
   type SessionContextType,
 } from './SessionController.js';
 import { MessageType } from '../types.js';
-import type { Config, IProvider } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 

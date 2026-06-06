@@ -681,8 +681,11 @@ export class Task {
   }
 
   private createStreamContext() {
+    const providerName = this.config.getProvider()?.trim();
     return {
       taskState: this.taskState,
+      currentModel: this.modelInfo?.model ?? this.config.getModel(),
+      providerName: providerName === '' ? undefined : providerName,
       cancelPendingTools: this.cancelPendingTools.bind(this),
       setTaskStateAndPublishUpdate:
         this.setTaskStateAndPublishUpdate.bind(this),

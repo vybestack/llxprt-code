@@ -5,6 +5,12 @@
  */
 
 /**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
+/**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P06
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
  * @requirement:REQ-SP-005
@@ -21,7 +27,7 @@ import {
   type Config,
   DebugLogger,
   type SettingsService,
-  type ProviderManager,
+  type RuntimeProviderManager,
   type ProfileManager,
   createProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
@@ -47,7 +53,7 @@ const logger = new DebugLogger('llxprt:runtime:settings');
 export interface CliRuntimeServices {
   settingsService: SettingsService;
   config: Config;
-  providerManager: ProviderManager;
+  providerManager: RuntimeProviderManager;
   profileManager?: ProfileManager;
 }
 
@@ -169,7 +175,7 @@ export function getCliProviderManager(
       baseTimestamp?: number,
     ) => number;
   } = {},
-): ProviderManager {
+): RuntimeProviderManager {
   const services = getCliRuntimeServices();
   const { runtimeId } = resolveActiveRuntimeIdentity();
   const entry = requireRuntimeEntry(runtimeId);
@@ -222,13 +228,13 @@ export function isCliRuntimeStatelessReady(): boolean {
  * @requirement:REQ-SP4-005
  *
  * Ensure the active provider runtime context is normalized and pushed into
- * ProviderManager before any provider invocation. This function enforces
+ * RuntimeProviderManager before any provider invocation. This function enforces
  * stateless provider guarantees by requiring explicit runtime-scoped services
  * (settings, config, userMemory) before execution.
  *
  * When stateless hardening is enabled (runtime metadata/global preference),
  * this helper normalizes the current runtime context and registers it with
- * ProviderManager so downstream providers always receive call-scoped
+ * RuntimeProviderManager so downstream providers always receive call-scoped
  * configuration without relying on singleton fallbacks.
  */
 export function ensureStatelessProviderReady(): void {
@@ -270,7 +276,21 @@ export function ensureStatelessProviderReady(): void {
     metadata,
   });
 
-  providerManager!.prepareStatelessProviderInvocation(runtimeContext);
+  const runtimeProviderManager = providerManager!;
+  if (
+    typeof runtimeProviderManager.prepareStatelessProviderInvocation !==
+    'function'
+  ) {
+    throw new Error(
+      formatNormalizationFailureMessage({
+        runtimeId,
+        missingFields: ['prepareStatelessProviderInvocation'],
+        hint: 'RuntimeProviderManager must expose stateless invocation preparation when stateless hardening is enabled.',
+      }),
+    );
+  }
+
+  runtimeProviderManager.prepareStatelessProviderInvocation(runtimeContext);
 }
 
 export function getCliOAuthManager(): OAuthManager | null {
@@ -330,7 +350,7 @@ export function getCliRuntimeConfig(): Config {
   return config;
 }
 
-function getProviderManagerOrThrow(): ProviderManager {
+function getProviderManagerOrThrow(): RuntimeProviderManager {
   ensureStatelessProviderReady();
   const { providerManager } = getCliRuntimeServices();
   return providerManager;
@@ -339,7 +359,11 @@ function getProviderManagerOrThrow(): ProviderManager {
 function getActiveProviderOrThrow() {
   const manager = getProviderManagerOrThrow();
   try {
-    return manager.getActiveProvider();
+    const provider = manager.getActiveProvider();
+    if (!provider) {
+      throw new Error('No active provider is configured.');
+    }
+    return provider;
   } catch (error) {
     throw new Error(
       `[cli-runtime] Failed to resolve active provider: ${error instanceof Error ? error.message : String(error)}`,
@@ -368,7 +392,7 @@ export function getActiveModelName(): string {
 
   try {
     const provider = providerManager.getActiveProvider();
-    return provider.getDefaultModel();
+    return provider?.getDefaultModel?.() ?? '';
   } catch {
     return '';
   }
@@ -390,6 +414,9 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
 
   try {
     const provider = providerManager.getActiveProvider();
+    if (!provider) {
+      throw new Error('No active provider is configured.');
+    }
     const displayLabel = modelName
       ? `${provider.name}:${modelName}`
       : provider.name;
@@ -442,7 +469,7 @@ export async function listAvailableModels(
 }
 
 export function getActiveProviderMetrics(): ReturnType<
-  ProviderManager['getProviderMetrics']
+  RuntimeProviderManager['getProviderMetrics']
 > {
   const manager = getProviderManagerOrThrow();
   return manager.getProviderMetrics();
@@ -517,7 +544,11 @@ export function listProviders(): string[] {
 
 export function getActiveProviderName(): string {
   const { providerManager } = getCliRuntimeServices();
-  return providerManager.getActiveProviderName();
+  const providerName = providerManager.getActiveProviderName();
+  if (providerName === undefined) {
+    throw new Error('No active provider is configured.');
+  }
+  return providerName;
 }
 
 // Export private helpers for internal use by other runtime modules

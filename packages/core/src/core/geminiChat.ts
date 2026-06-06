@@ -17,7 +17,7 @@ import type {
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
-import type { IProvider } from '../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import { DebugLogger } from '../debug/index.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type {

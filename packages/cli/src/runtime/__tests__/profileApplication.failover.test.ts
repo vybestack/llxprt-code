@@ -11,12 +11,15 @@
  * the failover policy to the failover strategy.
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type {
-  LoadBalancingProvider,
-  Profile,
-  LoadBalancerProfile,
-} from '@vybestack/llxprt-code-core';
+import type { LoadBalancingProvider } from '@vybestack/llxprt-code-providers';
+import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
 
 type ProviderManagerStub = {
   providers: Map<string, unknown>;

@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ProviderManager } from '../providers/ProviderManager.js';
-import type { IProviderManager } from '../providers/IProviderManager.js';
-import type { IProvider } from '../providers/IProvider.js';
+import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
+import type { RuntimeProviderManager as IRuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
+import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import type { Config } from '../config/config.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import {
@@ -26,34 +26,44 @@ import type {
 } from './AgentRuntimeContext.js';
 
 /**
- * Creates a mutable provider adapter backed by a ProviderManager instance.
+ * Creates a mutable provider adapter backed by a RuntimeProviderManager instance.
  */
 export function createProviderAdapterFromManager(
-  manager?: ProviderManager | IProviderManager,
+  manager?: RuntimeProviderManager | IRuntimeProviderManager,
 ): AgentRuntimeProviderAdapter {
   if (!manager) {
     return {
       getActiveProvider: () => {
         throw new Error(
-          'AgentRuntimeContext provider adapter requires a ProviderManager instance.',
+          'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
         );
       },
       setActiveProvider: () => {
         throw new Error(
-          'AgentRuntimeContext provider adapter requires a ProviderManager instance.',
+          'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
         );
       },
       getProviderByName: () => {
         throw new Error(
-          'AgentRuntimeContext provider adapter requires a ProviderManager instance.',
+          'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
         );
       },
     };
   }
 
   return {
-    getActiveProvider: () => manager.getActiveProvider(),
-    setActiveProvider: (name: string) => manager.setActiveProvider(name),
+    getActiveProvider: () => {
+      const provider = manager.getActiveProvider();
+      if (!provider) {
+        throw new Error(
+          'AgentRuntimeContext provider adapter requires an active provider.',
+        );
+      }
+      return provider;
+    },
+    setActiveProvider: (name: string) => {
+      void manager.setActiveProvider(name);
+    },
     getProviderByName:
       typeof (manager as unknown as { getProviderByName?: unknown })
         .getProviderByName === 'function'

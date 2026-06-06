@@ -20,14 +20,16 @@ import {
   getCodeAssistServer,
   UserTierId,
   UnauthorizedError,
-  AllBucketsExhaustedError,
-  isAuthBucketFailureReason,
   getErrorMessage,
   parseAndFormatApiError,
   type ToolCallRequestInfo,
   DEFAULT_AGENT_ID,
   type ThinkingBlock,
 } from '@vybestack/llxprt-code-core';
+import {
+  AllBucketsExhaustedError,
+  isAuthBucketFailureReason,
+} from '@vybestack/llxprt-code-providers';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
@@ -40,6 +42,10 @@ import {
 import { findLastSafeSplitPoint } from '../../utils/markdownUtilities.js';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
+import {
+  getActiveProviderNameForApiError,
+  getErrorFallbackModel,
+} from '../../../utils/apiErrorFormatting.js';
 
 // ─── Re-exported constant ────────────────────────────────────────────────────
 
@@ -408,13 +414,16 @@ export function handleSubmissionError(
   }
   const isAbortError = error instanceof Error && error.name === 'AbortError';
   if (!isAbortError) {
+    const providerName = getActiveProviderNameForApiError(config);
+    const fallbackModel = getErrorFallbackModel(config, providerName);
     addItem(
       {
         type: MessageType.ERROR,
         text: parseAndFormatApiError(
           getErrorMessage(error) || 'Unknown error',
           undefined,
-          config.getModel(),
+          fallbackModel,
+          providerName,
         ),
       },
       timestamp,

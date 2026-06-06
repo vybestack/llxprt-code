@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { getCliVersion } from '../../utils/version.js';
 import type { CommandContext, SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
@@ -102,7 +108,7 @@ function getProviderDetailsFromRuntime(
 
   const providerManager = runtimeApi.getCliProviderManager();
   const activeProvider = getActiveProviderOrNull(providerManager);
-  if (activeProvider !== null) {
+  if (activeProvider) {
     provider = activeProvider.name;
     const wrappedProvider = (activeProvider as WrappedProvider).wrappedProvider;
     const finalProvider = wrappedProvider ?? activeProvider;

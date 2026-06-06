@@ -31,7 +31,7 @@ import type {
   AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
-import type { IProvider } from '../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,

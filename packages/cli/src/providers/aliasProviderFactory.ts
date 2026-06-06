@@ -4,20 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import {
   type Config,
-  type ProviderManager,
-  OpenAIProvider,
-  OpenAIResponsesProvider,
-  OpenAIVercelProvider,
-  AnthropicProvider,
-  GeminiProvider,
   sanitizeForByteString,
   needsSanitization,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 
-import { type IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
+import {
+  OpenAIProvider,
+  OpenAIResponsesProvider,
+  OpenAIVercelProvider,
+  AnthropicProvider,
+  GeminiProvider,
+} from '@vybestack/llxprt-code-providers';
+import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { type IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
 import { type OAuthManager } from '../auth/oauth-manager.js';
 import { type ProviderAliasEntry } from './providerAliases.js';
 
@@ -407,7 +415,7 @@ export function registerAliasProviders(
           oauthManager,
         );
         if (provider) {
-          providerManagerInstance.registerProvider(provider);
+          providerManagerInstance.registerProvider(provider as never);
         }
         break;
       }
@@ -420,7 +428,7 @@ export function registerAliasProviders(
           oauthManager,
         );
         if (provider) {
-          providerManagerInstance.registerProvider(provider);
+          providerManagerInstance.registerProvider(provider as never);
         }
         break;
       }
@@ -434,14 +442,14 @@ export function registerAliasProviders(
           oauthManager,
         );
         if (provider) {
-          providerManagerInstance.registerProvider(provider);
+          providerManagerInstance.registerProvider(provider as never);
         }
         break;
       }
       case 'gemini': {
         const provider = createGeminiAliasProvider(entry, oauthManager, config);
         if (provider) {
-          providerManagerInstance.registerProvider(provider);
+          providerManagerInstance.registerProvider(provider as never);
         }
         break;
       }
@@ -452,7 +460,7 @@ export function registerAliasProviders(
           authOnlyEnabled,
         );
         if (provider) {
-          providerManagerInstance.registerProvider(provider);
+          providerManagerInstance.registerProvider(provider as never);
         }
         break;
       }

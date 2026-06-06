@@ -13,7 +13,7 @@ import {
   ApprovalMode,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
-import { MockTool } from '@vybestack/llxprt-code-core/src/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import type {
   TaskStatusUpdateEvent,
   SendStreamingMessageSuccessResponse,

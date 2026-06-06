@@ -5,8 +5,8 @@
  */
 
 import type { Config } from '../config/config.js';
-import type { IProvider } from '../providers/IProvider.js';
-import type { ProviderManager } from '../providers/ProviderManager.js';
+import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
+import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import {
   createProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
@@ -147,8 +147,8 @@ export function createRuntimeConfigStub(
     getFeatures: () => ({}),
     setFeatures: noop,
     getRedactionConfig: () => ({ replacements: [] }),
-    setProviderManager: noop,
-    getProviderManager: () => undefined as ProviderManager | undefined,
+    setRuntimeProviderManager: noop,
+    getProviderManager: () => undefined as RuntimeProviderManager | undefined,
     getProviderSetting: () => undefined,
     getEphemeralSettings: () => ({ model: 'test-model' }),
     getEphemeralSetting: () => undefined,
@@ -245,7 +245,7 @@ interface GeminiChatConfigShape {
 
 interface GeminiChatRuntimeOptions {
   provider?: IProvider;
-  providerManager?: Pick<ProviderManager, 'getActiveProvider'>;
+  providerManager?: Pick<RuntimeProviderManager, 'getActiveProvider'>;
   settingsService?: SettingsService;
   runtimeId?: string;
   metadata?: Record<string, unknown>;
@@ -255,7 +255,7 @@ interface GeminiChatRuntimeOptions {
 interface GeminiChatRuntimeResult {
   config: Config;
   provider: IProvider;
-  providerManager: Pick<ProviderManager, 'getActiveProvider'>;
+  providerManager: Pick<RuntimeProviderManager, 'getActiveProvider'>;
   settingsService: SettingsService;
   runtime: ProviderRuntimeContext;
 }
@@ -300,7 +300,7 @@ export function createGeminiChatRuntime(
     options.providerManager ??
     ({
       getActiveProvider: vi.fn().mockReturnValue(provider),
-    } as Pick<ProviderManager, 'getActiveProvider'>);
+    } as Pick<RuntimeProviderManager, 'getActiveProvider'>);
   let currentProviderName = provider.name;
   const getProviderSpy = vi.fn().mockImplementation(() => currentProviderName);
   const setProviderSpy = vi.fn().mockImplementation((next: unknown) => {

@@ -5,14 +5,14 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ProviderManager } from '../packages/core/src/providers/ProviderManager';
-import { ProviderPerformanceTracker } from '../packages/core/src/providers/logging/ProviderPerformanceTracker';
-import { LoggingProviderWrapper } from '../packages/core/src/providers/LoggingProviderWrapper';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
+import { ProviderPerformanceTracker } from '@vybestack/llxprt-code-providers/logging/ProviderPerformanceTracker.js';
+import { LoggingProviderWrapper } from '@vybestack/llxprt-code-providers/LoggingProviderWrapper.js';
 // import { TelemetryService } from '../packages/core/src/telemetry/TelemetryService'; // Not used in tests
-import type { RedactionConfig } from '../packages/core/src/config/types';
-import { initializeTestProviderRuntime } from '../packages/core/src/test-utils/runtime.js';
-import { clearActiveProviderRuntimeContext } from '../packages/core/src/runtime/providerRuntimeContext.js';
-import { resetSettingsService } from '../packages/core/src/settings/settingsServiceInstance.js';
+import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
 
 // Mock the telemetry service to capture logs
 vi.mock('../packages/core/src/telemetry/TelemetryService', () => {

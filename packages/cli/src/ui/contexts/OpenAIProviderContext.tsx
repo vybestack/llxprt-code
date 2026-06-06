@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import type React from 'react';
 import {
   createContext,
@@ -13,11 +19,11 @@ import {
   useEffect,
   useMemo,
 } from 'react';
+import type { Config } from '@vybestack/llxprt-code-core';
 import type {
-  Config,
   ProviderMessage as Message,
   ConversationCache,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-providers';
 import { useOpenAIProviderInfo } from '../hooks/useOpenAIProviderInfo.js';
 
 interface RemoteTokenStats {

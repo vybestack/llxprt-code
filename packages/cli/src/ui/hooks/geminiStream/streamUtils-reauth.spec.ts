@@ -9,7 +9,7 @@ import { handleSubmissionError } from './streamUtils.js';
 import {
   AllBucketsExhaustedError,
   isAuthBucketFailureReason,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-providers';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../../types.js';
 

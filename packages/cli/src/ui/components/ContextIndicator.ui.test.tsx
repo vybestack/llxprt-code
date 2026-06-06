@@ -4,12 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Footer } from './Footer.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import type { IProvider } from '@vybestack/llxprt-code-core';
-import { ProviderManager } from '@vybestack/llxprt-code-core';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
 
 // Mock the hooks
 vi.mock('../hooks/useResponsive.js', () => ({

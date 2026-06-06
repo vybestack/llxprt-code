@@ -11,7 +11,7 @@
  * from the ModelsRegistry with graceful fallback to hardcoded lists.
  */
 
-import type { IModel } from '../providers/IModel.js';
+import type { RuntimeModel as IModel } from '../runtime/contracts/RuntimeModel.js';
 import type { LlxprtModel } from './schema.js';
 import { getModelRegistry } from './registry.js';
 

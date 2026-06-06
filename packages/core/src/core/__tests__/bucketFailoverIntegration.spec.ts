@@ -15,10 +15,8 @@ import {
   type BucketFailoverConfig,
 } from '../bucketFailoverIntegration.js';
 import type { IContent } from '../../services/history/IContent.js';
-import type {
-  IProvider,
-  GenerateChatOptions,
-} from '../../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '../../runtime/contracts/RuntimeProviderChat.js';
 
 describe('bucketFailoverIntegration', () => {
   describe('shouldEnableBucketFailover', () => {

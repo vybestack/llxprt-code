@@ -11,7 +11,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FinishReason } from '@google/genai';
 import type { Part } from '@google/genai';
-import { UnauthorizedError } from '@vybestack/llxprt-code-core';
+import {
+  UnauthorizedError,
+  parseAndFormatApiError,
+} from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
@@ -31,6 +34,7 @@ import {
   getCurrentProfileName,
   SYSTEM_NOTICE_EVENT,
 } from '../streamUtils.js';
+import { getActiveProviderNameForApiError } from '../../../../utils/apiErrorFormatting.js';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -493,16 +497,65 @@ describe('processSlashCommandResult', () => {
 
 // ─── handleSubmissionError ────────────────────────────────────────────────────
 
+describe('getActiveProviderNameForApiError', () => {
+  const makeConfig = (
+    activeProvider: unknown,
+    providerManagerName?: string,
+  ): Config =>
+    ({
+      getProviderManager: vi.fn(() =>
+        providerManagerName === undefined
+          ? undefined
+          : { getActiveProviderName: vi.fn(() => providerManagerName) },
+      ),
+      getSettingsService: vi.fn(() => ({
+        get: vi.fn(() => activeProvider),
+      })),
+    }) as unknown as Config;
+
+  it('prefers the provider manager active provider when available', () => {
+    const result = getActiveProviderNameForApiError(
+      makeConfig('profile-name', 'anthropic'),
+    );
+    expect(result).toBe('anthropic');
+  });
+
+  it('falls back to activeProvider setting when provider manager is unavailable', () => {
+    const result = getActiveProviderNameForApiError(makeConfig('openai'));
+    expect(result).toBe('openai');
+  });
+
+  it('treats blank provider manager and setting values as unknown provider', () => {
+    const result = getActiveProviderNameForApiError(makeConfig('   ', ''));
+    expect(result).toBeUndefined();
+  });
+});
+
 describe('handleSubmissionError', () => {
   const mockAddItem = vi.fn();
   const mockOnAuthError = vi.fn();
-  const mockConfig = {
-    getModel: vi.fn(() => 'test-model'),
-  } as unknown as Config;
+  const mockParseAndFormatApiError = vi.mocked(parseAndFormatApiError);
+  const makeConfig = (
+    activeProvider: unknown,
+    providerManagerName?: string,
+  ): Config =>
+    ({
+      getModel: vi.fn(() => 'test-model'),
+      getProviderManager: vi.fn(() =>
+        providerManagerName === undefined
+          ? undefined
+          : { getActiveProviderName: vi.fn(() => providerManagerName) },
+      ),
+      getSettingsService: vi.fn(() => ({
+        get: vi.fn(() => activeProvider),
+      })),
+    }) as unknown as Config;
+  const mockConfig = makeConfig(undefined);
 
   beforeEach(() => {
     mockAddItem.mockClear();
     mockOnAuthError.mockClear();
+    mockParseAndFormatApiError.mockClear();
   });
 
   it('calls onAuthError and returns true for UnauthorizedError', () => {
@@ -531,6 +584,54 @@ describe('handleSubmissionError', () => {
     expect(mockAddItem).toHaveBeenCalledOnce();
     const itemArg = mockAddItem.mock.calls[0][0];
     expect(itemArg.type).toBe('error');
+  });
+
+  it('passes Anthropic provider without Gemini fallback model', () => {
+    handleSubmissionError(
+      new Error('Rate limited'),
+      mockAddItem,
+      makeConfig('anthropic'),
+      mockOnAuthError,
+      Date.now(),
+    );
+    expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
+      'Error: Rate limited',
+      undefined,
+      undefined,
+      'anthropic',
+    );
+  });
+
+  it('passes Gemini provider with fallback model', () => {
+    handleSubmissionError(
+      new Error('Rate limited'),
+      mockAddItem,
+      makeConfig('Gemini'),
+      mockOnAuthError,
+      Date.now(),
+    );
+    expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
+      'Error: Rate limited',
+      undefined,
+      'test-model',
+      'Gemini',
+    );
+  });
+
+  it('treats blank active provider as default Gemini behavior', () => {
+    handleSubmissionError(
+      new Error('Rate limited'),
+      mockAddItem,
+      makeConfig('   '),
+      mockOnAuthError,
+      Date.now(),
+    );
+    expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
+      'Error: Rate limited',
+      undefined,
+      'test-model',
+      undefined,
+    );
   });
 
   it('does not add error item for AbortError (swallows it)', () => {

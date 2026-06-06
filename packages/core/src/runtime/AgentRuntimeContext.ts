@@ -296,7 +296,7 @@ export interface AgentRuntimeContextFactoryOptions {
 // Type imports (these will be resolved from existing modules)
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
-import type { IProvider } from '../providers/IProvider.js';
+import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import type { GenerateContentResponseUsageMetadata } from '@google/genai';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 
