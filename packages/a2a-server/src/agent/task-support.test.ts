@@ -4,8 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
-import { applyReplacement } from './task-support.js';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  GeminiEventType,
+  type ServerGeminiStreamEvent,
+} from '@vybestack/llxprt-code-core';
+import {
+  applyReplacement,
+  handleStreamError,
+  type TaskStreamContext,
+} from './task-support.js';
+import { CoderAgentEvent } from '../types.js';
+import type { StateChange } from '../types.js';
 
 describe('applyReplacement', () => {
   describe('isNewFile behavior', () => {
@@ -95,5 +105,47 @@ describe('applyReplacement', () => {
         applyReplacement('price: $100 price: $200', '$', '€', false, 2),
       ).toBe('price: €100 price: €200');
     });
+  });
+});
+
+describe('handleStreamError', () => {
+  it('formats Anthropic rate-limit errors without Gemini fallback guidance', () => {
+    const publishedUpdates: Array<{ error?: string }> = [];
+    const context: TaskStreamContext = {
+      taskState: 'working',
+      providerName: 'anthropic',
+      currentModel: 'claude-opus-4-6',
+      cancelPendingTools: vi.fn(),
+      setTaskStateAndPublishUpdate: vi.fn(
+        (_state, _msg, _text, _parts, _final, error) => {
+          publishedUpdates.push({ error });
+        },
+      ),
+    };
+    const stateChange: StateChange = {
+      kind: CoderAgentEvent.StateChangeEvent,
+    };
+    const event: ServerGeminiStreamEvent & {
+      type: typeof GeminiEventType.Error;
+    } = {
+      type: GeminiEventType.Error,
+      value: {
+        error: {
+          message: 'Rate limit exceeded',
+          status: 429,
+        },
+      },
+    };
+
+    handleStreamError(event, context, stateChange);
+
+    expect(publishedUpdates[0]?.error).toContain(
+      'Anthropic rate limit exceeded',
+    );
+    expect(publishedUpdates[0]?.error).not.toContain('gemini');
+    expect(publishedUpdates[0]?.error).not.toContain('gemini-2.5-flash');
+    expect(publishedUpdates[0]?.error).not.toContain('AI Studio');
+    expect(publishedUpdates[0]?.error).not.toContain('Gemini Code Assist');
+    expect(publishedUpdates[0]?.error).not.toContain('Switching to the');
   });
 });

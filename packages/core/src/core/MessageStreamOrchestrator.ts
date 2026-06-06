@@ -10,6 +10,7 @@ import {
   type ServerGeminiStreamEvent,
   GeminiEventType,
   DEFAULT_AGENT_ID,
+  type ServerGeminiFinishedOutcome,
 } from './turn.js';
 import type { Config } from '../config/config.js';
 import type { GeminiChat } from './geminiChat.js';
@@ -74,6 +75,7 @@ export interface IterationResult {
   hadThinking: boolean;
   hadContent: boolean;
   deferredEvents: ServerGeminiStreamEvent[];
+  outcome?: ServerGeminiFinishedOutcome;
 }
 
 interface PostTurnResult {
@@ -382,6 +384,7 @@ export class MessageStreamOrchestrator {
     let hadContent = false;
     let hadToolCallsThisTurn = hadToolCallsPrior;
     const deferredEvents: ServerGeminiStreamEvent[] = [];
+    let finishedOutcome: ServerGeminiFinishedOutcome | undefined;
 
     for await (const event of turn.run(iterRequest, signal)) {
       if (loopDetector.addAndCheck(event)) {
@@ -392,6 +395,7 @@ export class MessageStreamOrchestrator {
           hadThinking,
           hadContent,
           deferredEvents,
+          outcome: finishedOutcome,
         });
       }
 
@@ -405,6 +409,8 @@ export class MessageStreamOrchestrator {
         todoPauseSeen = true;
       if (event.type === GeminiEventType.Thought) hadThinking = true;
       if (event.type === GeminiEventType.Content) hadContent = true;
+      if (event.type === GeminiEventType.Finished && event.value.outcome)
+        finishedOutcome = event.value.outcome;
       this._handleTodoToolCall(event, todoContinuationService);
       if (event.type === GeminiEventType.Content && event.value)
         ctx.responseChunks.push(event.value);
@@ -435,6 +441,7 @@ export class MessageStreamOrchestrator {
       hadThinking,
       hadContent,
       deferredEvents,
+      outcome: finishedOutcome,
     };
   }
 
@@ -465,8 +472,12 @@ export class MessageStreamOrchestrator {
       return yield* this._finishWithToolCalls(iter.deferredEvents, ctx);
     }
 
+    // Prefer authoritative Finished outcome when available, fallback to event-inferred flags
+    const hadVisible = iter.outcome?.hadVisibleOutput ?? iter.hadContent;
+    const hadThinking = iter.outcome?.hadThinking ?? iter.hadThinking;
+
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
-    if (iter.hadThinking && !iter.hadContent && !iter.hadToolCallsThisTurn) {
+    if (hadThinking && !hadVisible && !iter.hadToolCallsThisTurn) {
       const newRetry = retryCount + 1;
       this.deps.logger.debug(
         () =>

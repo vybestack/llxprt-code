@@ -409,6 +409,18 @@ export abstract class BaseProvider implements IProvider {
   protected abstract supportsOAuth(): boolean;
 
   /**
+   * Classify whether a given auth token is an OAuth token.
+   * Default implementation always returns false; providers that support
+   * token-prefix-based OAuth detection (e.g., Anthropic) should override.
+   *
+   * @param _authToken - The resolved auth token string
+   * @returns true if the token should be treated as an OAuth token
+   */
+  protected classifyOAuthToken(_authToken: string): boolean {
+    return false;
+  }
+
+  /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 1-3

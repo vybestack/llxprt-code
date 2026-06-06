@@ -32,6 +32,7 @@ import {
   isThoughtPart,
   type UsageMetadataWithCache,
 } from './geminiChatTypes.js';
+import { getResponseTextFromParts } from '../utils/generateContentResponseUtilities.js';
 
 const logger = new DebugLogger('llxprt:core:message-converter');
 
@@ -463,12 +464,7 @@ export function convertIContentToResponse(
       },
     ],
     get text() {
-      return (
-        parts
-          .filter((p) => 'text' in p && !isThoughtPart(p))
-          .map((p) => p.text)
-          .join('') || ''
-      );
+      return getResponseTextFromParts(parts) ?? '';
     },
     functionCalls: parts
       .filter((p) => 'functionCall' in p)

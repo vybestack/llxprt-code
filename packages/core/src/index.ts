@@ -135,6 +135,8 @@ export {
   convertToFunctionResponse,
   extractAgentIdFromMetadata,
   createErrorResponse,
+  analyzeResponseOutcome,
+  type ResponseOutcome,
 } from './utils/generateContentResponseUtilities.js';
 export * from './utils/filesearch/fileSearch.js';
 export * from './utils/secure-browser-launcher.js';

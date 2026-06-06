@@ -19,6 +19,7 @@ import {
   limitFunctionResponsePart,
   limitStringOutput,
   toParts,
+  analyzeResponseOutcome,
 } from './generateContentResponseUtilities.js';
 import type {
   GenerateContentResponse,
@@ -74,6 +75,102 @@ const minimalMockResponse = (
 });
 
 describe('generateContentResponseUtilities', () => {
+  describe('analyzeResponseOutcome', () => {
+    it('should detect visible text', () => {
+      const outcome = analyzeResponseOutcome([{ text: 'Hello' }]);
+      expect(outcome).toStrictEqual({
+        hasVisibleText: true,
+        hasThinking: false,
+        hasToolCalls: false,
+        isActionable: true,
+      });
+    });
+
+    it('should treat whitespace-only text as not visible', () => {
+      const outcome = analyzeResponseOutcome([{ text: '   ' }]);
+      expect(outcome).toStrictEqual({
+        hasVisibleText: false,
+        hasThinking: false,
+        hasToolCalls: false,
+        isActionable: false,
+      });
+    });
+
+    it('should detect thought parts as thinking only', () => {
+      const outcome = analyzeResponseOutcome([
+        { text: 'thinking...', thought: true },
+      ]);
+      expect(outcome).toStrictEqual({
+        hasVisibleText: false,
+        hasThinking: true,
+        hasToolCalls: false,
+        isActionable: false,
+      });
+    });
+
+    it('should detect tool calls', () => {
+      const outcome = analyzeResponseOutcome([
+        { functionCall: { name: 'testFunc', args: {} } },
+      ]);
+      expect(outcome).toStrictEqual({
+        hasVisibleText: false,
+        hasThinking: false,
+        hasToolCalls: true,
+        isActionable: true,
+      });
+    });
+
+    it('should detect mixed parts', () => {
+      const outcome = analyzeResponseOutcome([
+        { text: 'Hello' },
+        { text: 'thinking...', thought: true },
+        { functionCall: { name: 'func', args: {} } },
+      ]);
+      expect(outcome).toStrictEqual({
+        hasVisibleText: true,
+        hasThinking: true,
+        hasToolCalls: true,
+        isActionable: true,
+      });
+    });
+
+    it('should return all false for empty parts', () => {
+      const outcome = analyzeResponseOutcome([]);
+      expect(outcome).toStrictEqual({
+        hasVisibleText: false,
+        hasThinking: false,
+        hasToolCalls: false,
+        isActionable: false,
+      });
+    });
+
+    it('should not count thought text as visible text', () => {
+      const outcome = analyzeResponseOutcome([
+        { text: 'thinking only', thought: true },
+        { text: '' },
+      ]);
+      expect(outcome.hasVisibleText).toBe(false);
+      expect(outcome.hasThinking).toBe(true);
+      expect(outcome.isActionable).toBe(false);
+    });
+
+    it('should detect tool calls independently from thought status', () => {
+      const outcome = analyzeResponseOutcome([
+        {
+          text: 'thinking while calling',
+          thought: true,
+          functionCall: { name: 'testFunc', args: {} },
+        },
+      ]);
+      expect(outcome).toStrictEqual({
+        hasVisibleText: false,
+        hasThinking: true,
+        hasToolCalls: true,
+        isActionable: true,
+      });
+    });
+  });
+
   describe('getResponseText', () => {
     it('should return undefined for no candidates', () => {
       expect(getResponseText(minimalMockResponse(undefined))).toBeUndefined();
@@ -111,6 +208,20 @@ describe('generateContentResponseUtilities', () => {
       ]);
       expect(getResponseText(response)).toBeUndefined();
     });
+    it('should filter out thought parts using canonical isThoughtPart', () => {
+      const response = mockResponse([
+        { text: 'thinking...', thought: true } as Part,
+        mockTextPart('visible'),
+        { text: 'more thinking', thought: true } as Part,
+      ]);
+      expect(getResponseText(response)).toBe('visible');
+    });
+    it('should return undefined when only thought parts exist', () => {
+      const response = mockResponse([
+        { text: 'thinking...', thought: true } as Part,
+      ]);
+      expect(getResponseText(response)).toBeUndefined();
+    });
   });
 
   describe('getResponseTextFromParts', () => {
@@ -142,6 +253,22 @@ describe('generateContentResponseUtilities', () => {
         getResponseTextFromParts([
           mockFunctionCallPart('testFunc'),
           mockFunctionCallPart('anotherFunc'),
+        ]),
+      ).toBeUndefined();
+    });
+    it('should filter out thought parts using canonical isThoughtPart', () => {
+      expect(
+        getResponseTextFromParts([
+          { text: 'thinking...', thought: true } as Part,
+          mockTextPart('visible'),
+          { text: 'more thinking', thought: true } as Part,
+        ]),
+      ).toBe('visible');
+    });
+    it('should return undefined when only thought parts exist', () => {
+      expect(
+        getResponseTextFromParts([
+          { text: 'thinking...', thought: true } as Part,
         ]),
       ).toBeUndefined();
     });

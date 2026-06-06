@@ -38,6 +38,10 @@ import {
 import { findLastSafeSplitPoint } from '../../utils/markdownUtilities.js';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
+import {
+  getActiveProviderNameForApiError,
+  getErrorFallbackModel,
+} from '../../../utils/apiErrorFormatting.js';
 
 // ─── Re-exported constant ────────────────────────────────────────────────────
 
@@ -390,13 +394,16 @@ export function handleSubmissionError(
   }
   const isAbortError = error instanceof Error && error.name === 'AbortError';
   if (!isAbortError) {
+    const providerName = getActiveProviderNameForApiError(config);
+    const fallbackModel = getErrorFallbackModel(config, providerName);
     addItem(
       {
         type: MessageType.ERROR,
         text: parseAndFormatApiError(
           getErrorMessage(error) || 'Unknown error',
           undefined,
-          config.getModel(),
+          fallbackModel,
+          providerName,
         ),
       },
       timestamp,

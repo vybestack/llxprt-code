@@ -51,6 +51,8 @@ import {
   isThoughtPart,
   type UsageMetadataWithCache,
 } from './geminiChatTypes.js';
+import type { ResponseOutcome } from '../utils/generateContentResponseUtilities.js';
+import { analyzeResponseOutcome } from '../utils/generateContentResponseUtilities.js';
 import { hasCycleInSchema } from '../tools/tools.js';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
 import {
@@ -766,18 +768,19 @@ export class StreamProcessor {
 
   private _createStreamAccumulator(): {
     modelResponseParts: Part[];
-    hasToolCall: boolean;
+    outcome: ResponseOutcome;
     finishReason: FinishReason | undefined;
-    hasTextResponse: boolean;
-    hasThinkingResponse: boolean;
     allChunks: GenerateContentResponse[];
   } {
     return {
       modelResponseParts: [],
-      hasToolCall: false,
+      outcome: {
+        hasVisibleText: false,
+        hasThinking: false,
+        hasToolCalls: false,
+        isActionable: false,
+      },
       finishReason: undefined,
-      hasTextResponse: false,
-      hasThinkingResponse: false,
       allChunks: [],
     };
   }
@@ -786,10 +789,8 @@ export class StreamProcessor {
     chunk: GenerateContentResponse,
     acc: {
       modelResponseParts: Part[];
-      hasToolCall: boolean;
+      outcome: ResponseOutcome;
       finishReason: FinishReason | undefined;
-      hasTextResponse: boolean;
-      hasThinkingResponse: boolean;
       allChunks: GenerateContentResponse[];
     },
     includeThoughts: boolean,
@@ -803,26 +804,16 @@ export class StreamProcessor {
     if (isValidResponse(chunk)) {
       const parts = chunk.candidates?.[0]?.content?.parts;
       if (parts !== undefined) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (parts.some((p) => p.functionCall !== undefined))
-          acc.hasToolCall = true;
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (
-          parts.some(
-            (p) =>
-              p.text !== undefined &&
-              typeof p.text === 'string' &&
-              p.text.trim() !== '' &&
-              !isThoughtPart(p),
-          )
-        )
-          acc.hasTextResponse = true;
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (parts.some((p) => isThoughtPart(p))) acc.hasThinkingResponse = true;
+        const chunkOutcome = analyzeResponseOutcome(parts);
+        acc.outcome = {
+          hasVisibleText:
+            acc.outcome.hasVisibleText || chunkOutcome.hasVisibleText,
+          hasThinking: acc.outcome.hasThinking || chunkOutcome.hasThinking,
+          hasToolCalls: acc.outcome.hasToolCalls || chunkOutcome.hasToolCalls,
+          isActionable: acc.outcome.isActionable || chunkOutcome.isActionable,
+        };
         acc.modelResponseParts.push(
-          ...(includeThoughts
-            ? parts
-            : parts.filter((p) => p.thought !== true)),
+          ...(includeThoughts ? parts : parts.filter((p) => !isThoughtPart(p))),
         );
       }
     }
@@ -849,10 +840,8 @@ export class StreamProcessor {
   private async _finalizeStreamProcessing(
     acc: {
       modelResponseParts: Part[];
-      hasToolCall: boolean;
+      outcome: ResponseOutcome;
       finishReason: FinishReason | undefined;
-      hasTextResponse: boolean;
-      hasThinkingResponse: boolean;
       allChunks: GenerateContentResponse[];
     },
     userInput: Content | Content[],
@@ -865,16 +854,16 @@ export class StreamProcessor {
     if (isMissingFinishReason(acc.finishReason)) {
       this.logger.debug(
         () =>
-          `[stream:terminal] stream ended without finishReason (hasToolCall=${String(acc.hasToolCall)}, hasTextResponse=${String(acc.hasTextResponse)}, hasThinkingResponse=${String(acc.hasThinkingResponse)}, responseTextLength=${responseText.length})`,
+          `[stream:terminal] stream ended without finishReason (hasToolCall=${String(acc.outcome.hasToolCalls)}, hasTextResponse=${String(acc.outcome.hasVisibleText)}, hasThinkingResponse=${String(acc.outcome.hasThinking)}, responseTextLength=${responseText.length})`,
       );
     } else {
       this.logger.debug(
         () => `[stream:terminal] finalized stream with finishReason`,
         {
           finishReason: acc.finishReason,
-          hasToolCall: acc.hasToolCall,
-          hasTextResponse: acc.hasTextResponse,
-          hasThinkingResponse: acc.hasThinkingResponse,
+          hasToolCall: acc.outcome.hasToolCalls,
+          hasTextResponse: acc.outcome.hasVisibleText,
+          hasThinkingResponse: acc.outcome.hasThinking,
           responseTextLength: responseText.length,
           chunkCount: acc.allChunks.length,
         },
@@ -883,9 +872,7 @@ export class StreamProcessor {
 
     this._validateStreamCompletion(
       userInput,
-      acc.hasToolCall,
-      acc.hasTextResponse,
-      acc.hasThinkingResponse,
+      acc.outcome,
       acc.finishReason,
       responseText,
     );
@@ -934,9 +921,7 @@ export class StreamProcessor {
    */
   private _validateStreamCompletion(
     userInput: Content | Content[],
-    hasToolCall: boolean,
-    hasTextResponse: boolean,
-    hasThinkingResponse: boolean,
+    outcome: ResponseOutcome,
     finishReason: FinishReason | undefined,
     responseText: string,
   ): void {
@@ -945,9 +930,9 @@ export class StreamProcessor {
       : isFunctionResponse(userInput);
 
     const validationContext = {
-      hasToolCall,
-      hasTextResponse,
-      hasThinkingResponse,
+      hasToolCall: outcome.hasToolCalls,
+      hasTextResponse: outcome.hasVisibleText,
+      hasThinkingResponse: outcome.hasThinking,
       finishReason,
       responseTextLength: responseText.length,
       isToolContinuationInput,
@@ -959,17 +944,17 @@ export class StreamProcessor {
     );
 
     const hasMissingFinishAndNoText =
-      isMissingFinishReason(finishReason) && !hasTextResponse;
+      isMissingFinishReason(finishReason) && !outcome.hasVisibleText;
     const isEmptyResponse = responseText === '';
     const noRelevantContent =
-      !hasToolCall && !isToolContinuationInput && !hasThinkingResponse;
+      !outcome.hasToolCalls && !isToolContinuationInput && !outcome.hasThinking;
     const isInvalidResponse =
       noRelevantContent && (hasMissingFinishAndNoText || isEmptyResponse);
 
     if (isInvalidResponse) {
       this._throwMissingResponseError(
         finishReason,
-        hasTextResponse,
+        outcome.hasVisibleText,
         validationContext,
       );
     }

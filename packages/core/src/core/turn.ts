@@ -26,6 +26,8 @@ import type { ToolErrorType } from '../tools/tool-error.js';
 import {
   getResponseText,
   getFunctionCalls,
+  analyzeResponseOutcome,
+  type ResponseOutcome,
 } from '../utils/generateContentResponseUtilities.js';
 import { reportError } from '../utils/errorReporting.js';
 import {
@@ -262,11 +264,18 @@ export type ServerGeminiMaxSessionTurnsEvent = {
   type: GeminiEventType.MaxSessionTurns;
 };
 
+export type ServerGeminiFinishedOutcome = {
+  hadVisibleOutput: boolean;
+  hadThinking: boolean;
+  hadToolCalls: boolean;
+};
+
 export type ServerGeminiFinishedEvent = {
   type: GeminiEventType.Finished;
   value: {
     reason: FinishReason;
     usageMetadata?: GenerateContentResponseUsageMetadata;
+    outcome?: ServerGeminiFinishedOutcome;
   };
 };
 
@@ -394,7 +403,9 @@ export class Turn {
     text: string | undefined,
     usageMetadata: GenerateContentResponseUsageMetadata | undefined,
     traceId: string | undefined,
+    cumulativeOutcome: ResponseOutcome,
   ): Generator<ServerGeminiStreamEvent> {
+    const outcome = cumulativeOutcome;
     this.logger.debug(() => `[stream:turn] emitting Finished event`, {
       finishReason,
       traceId,
@@ -402,6 +413,7 @@ export class Turn {
       toolCallCount: functionCalls.length,
       textLength: text?.length ?? 0,
       hasUsageMetadata: Boolean(usageMetadata),
+      outcome,
     });
     this.finishReason = finishReason;
     yield {
@@ -409,6 +421,11 @@ export class Turn {
       value: {
         reason: finishReason,
         usageMetadata,
+        outcome: {
+          hadVisibleOutput: outcome.hasVisibleText,
+          hadThinking: outcome.hasThinking,
+          hadToolCalls: outcome.hasToolCalls,
+        },
       },
     };
   }
@@ -432,6 +449,7 @@ export class Turn {
   private *processStreamChunk(
     resp: GenerateContentResponse,
     traceId: string | undefined,
+    cumulativeOutcome: ResponseOutcome,
   ): Generator<ServerGeminiStreamEvent> {
     this.debugResponses.push(resp);
 
@@ -452,8 +470,9 @@ export class Turn {
       }
     }
 
+    const chunkOutcome = analyzeResponseOutcome(allParts);
     const text = getResponseText(resp);
-    if (text) {
+    if (chunkOutcome.hasVisibleText && text !== undefined) {
       yield { type: GeminiEventType.Content, value: text, traceId };
 
       // Emit citation event if conditions are met
@@ -487,6 +506,7 @@ export class Turn {
         text,
         resp.usageMetadata,
         traceId,
+        cumulativeOutcome,
       );
     } else {
       this.logNoFinishReason(
@@ -499,6 +519,15 @@ export class Turn {
     }
   }
 
+  private createEmptyResponseOutcome(): ResponseOutcome {
+    return {
+      hasVisibleText: false,
+      hasThinking: false,
+      hasToolCalls: false,
+      isActionable: false,
+    };
+  }
+
   private async *consumeStreamEvents(
     streamIterator: AsyncIterator<StreamEvent>,
     timeoutController: AbortController,
@@ -506,6 +535,7 @@ export class Turn {
     effectiveTimeoutMs: number,
     idleFlag: { timedOut: boolean },
   ): AsyncGenerator<ServerGeminiStreamEvent> {
+    let cumulativeOutcome = this.createEmptyResponseOutcome();
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Turn events cross provider/runtime boundaries despite declared types.
     while (true) {
       // Use watchdog if timeout > 0, otherwise call iterator.next() directly
@@ -542,6 +572,7 @@ export class Turn {
 
       // Handle the RETRY event
       if (streamEvent.type === StreamEventType.RETRY) {
+        cumulativeOutcome = this.createEmptyResponseOutcome();
         yield { type: GeminiEventType.Retry };
         continue;
       }
@@ -573,8 +604,24 @@ export class Turn {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
       if (resp === null || resp === undefined) continue;
 
+      const parts = resp.candidates?.[0]?.content?.parts ?? [];
+      const chunkOutcome = analyzeResponseOutcome(parts);
+      cumulativeOutcome = {
+        hasVisibleText:
+          cumulativeOutcome.hasVisibleText || chunkOutcome.hasVisibleText,
+        hasThinking: cumulativeOutcome.hasThinking || chunkOutcome.hasThinking,
+        hasToolCalls:
+          cumulativeOutcome.hasToolCalls || chunkOutcome.hasToolCalls,
+        isActionable:
+          cumulativeOutcome.isActionable || chunkOutcome.isActionable,
+      };
+
       const traceId = resp.responseId ?? undefined;
-      yield* this.processStreamChunk(resp, traceId as string);
+      yield* this.processStreamChunk(
+        resp,
+        traceId as string,
+        cumulativeOutcome,
+      );
     }
   }
 
