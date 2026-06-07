@@ -727,6 +727,15 @@ export class SubagentOrchestrator {
         : undefined;
     if (providerManager) {
       contentGeneratorConfig.providerManager = providerManager;
+      const contentGeneratorFactory =
+        typeof this.options.foregroundConfig.getContentGeneratorFactory ===
+        'function'
+          ? this.options.foregroundConfig.getContentGeneratorFactory()
+          : undefined;
+      if (contentGeneratorFactory) {
+        contentGeneratorConfig.contentGeneratorFactory =
+          contentGeneratorFactory;
+      }
     }
 
     const toolRegistry: ToolRegistry | undefined =

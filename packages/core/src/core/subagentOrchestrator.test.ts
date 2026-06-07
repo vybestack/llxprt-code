@@ -460,6 +460,53 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(result.dispose).toBeTypeOf('function');
   });
 
+  it('passes the foreground content generator factory into provider-backed subagent runtimes', async () => {
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const loadProfile = vi.fn().mockResolvedValue(profile);
+
+    const providerManager = { getActiveProvider: vi.fn() };
+    const contentGeneratorFactory = {
+      createContentGenerator: vi.fn(),
+    };
+    const config = {
+      ...makeForegroundConfig(),
+      getProviderManager: () => providerManager,
+      getContentGeneratorFactory: () => contentGeneratorFactory,
+    } as unknown as Config;
+
+    const runtimeBundle = createRuntimeBundle('provider-backed');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+    const scope = {
+      runtimeContext: runtimeBundle.runtimeContext,
+      getAgentId: () => 'planner-provider-backed',
+    } as unknown as SubAgentScopeInstance;
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockResolvedValue(scope);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: config,
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({
+      name: subagentConfig.name,
+      runConfig,
+    });
+
+    const loaderArgs = runtimeLoader.mock.calls[0][0];
+    expect(loaderArgs.profile.providerManager).toBe(providerManager);
+    expect(loaderArgs.profile.contentGeneratorConfig.providerManager).toBe(
+      providerManager,
+    );
+    expect(
+      loaderArgs.profile.contentGeneratorConfig.contentGeneratorFactory,
+    ).toBe(contentGeneratorFactory);
+  });
+
   it('seeds default disabled tools into subagent runtime settings when profile omits disabled tools', async () => {
     const profileWithoutDisabled: Profile = {
       ...profile,
