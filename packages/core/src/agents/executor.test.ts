@@ -461,7 +461,7 @@ describe('AgentExecutor', () => {
       expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
     });
 
-    it('should error immediately if the model stops tools without calling complete_task (Protocol Violation)', async () => {
+    it('should attempt recovery and then fail if the model stops tools without calling complete_task (Protocol Violation)', async () => {
       const definition = createTestDefinition();
       const executor = await AgentExecutor.create(
         definition,
@@ -1407,6 +1407,47 @@ describe('AgentExecutor', () => {
       expect(mockExecuteToolCall).toHaveBeenCalledTimes(1); // only the normal-turn call
     });
 
+    it('should preserve the latest partial result before recovery failure', async () => {
+      const definition = createTestDefinition([LSTool.Name], {
+        max_turns: 2,
+      });
+      const executor = await AgentExecutor.create(
+        definition,
+        mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
+        onActivity,
+      );
+
+      mockModelResponse([{ name: LSTool.Name, args: { path: '.' }, id: 't1' }]);
+      mockExecuteToolCall.mockResolvedValueOnce(
+        createCompletedToolCallResponse({
+          callId: 't1',
+          name: LSTool.Name,
+          resultDisplay: 'First partial result',
+          responseParts: [],
+        }),
+      );
+      mockModelResponse([{ name: LSTool.Name, args: { path: '.' }, id: 't2' }]);
+      mockExecuteToolCall.mockResolvedValueOnce(
+        createCompletedToolCallResponse({
+          callId: 't2',
+          name: LSTool.Name,
+          resultDisplay: 'Latest partial result',
+          responseParts: [],
+        }),
+      );
+      mockModelResponse([], 'Recovery fails.');
+
+      const output = await executor.run(
+        { goal: 'Preserve latest partial result' },
+        signal,
+      );
+
+      expect(output.terminate_reason).toBe(AgentTerminateMode.MAX_TURNS);
+      expect(output.result).toContain('Latest partial result');
+      expect(output.result).not.toContain('First partial result');
+    });
+
     it('should preserve partial result from before recovery when recovery fails on TIMEOUT', async () => {
       const definition = createTestDefinition([LSTool.Name], {
         max_time_minutes: 1,
@@ -1442,6 +1483,7 @@ describe('AgentExecutor', () => {
       expect(output.result).toContain(
         'Recovery turn attempted but agent failed',
       );
+      expect(output.result).toContain('Found data');
 
       // RECOVERY_OUTCOME telemetry: failure
       const outcomeEvents = activities.filter(

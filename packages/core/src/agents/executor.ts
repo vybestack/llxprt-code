@@ -75,6 +75,11 @@ type AgentLoopIterationResult =
       };
     };
 
+type ToolExecutionResult = {
+  responseParts: Part[];
+  partialResult: string | null;
+};
+
 import { type z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { debugLogger } from '../utils/debugLogger.js';
@@ -396,7 +401,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         this.emitRecoveryOutcome(
           recoveryState.originalReason,
           'failure',
-          AgentTerminateMode.TIMEOUT,
+          recoveryState.originalReason,
           recoveryState.gracePeriodSeconds,
         );
         return {
@@ -461,7 +466,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       return { kind: 'done', result: enterResult.result };
     }
 
-    const { nextMessage, submittedOutput, taskCompleted } =
+    const { nextMessage, submittedOutput, taskCompleted, partialResult } =
       await this.processFunctionCalls(functionCalls, signal, promptId);
 
     if (taskCompleted) {
@@ -480,13 +485,29 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       };
     }
 
+    if (recoveryState.phase === 'active' && newRecoveryModelResponseUsed) {
+      const fail = recoveryFailureResult(
+        recoveryState.originalReason,
+        finalResult,
+      );
+      this.emitRecoveryOutcome(
+        recoveryState.originalReason,
+        'failure',
+        fail.terminateReason,
+        recoveryState.gracePeriodSeconds,
+      );
+      return { kind: 'done', result: fail };
+    }
+
+    const nextFinalResult = partialResult ?? finalResult;
+
     return {
       kind: 'continue',
       recoveryState,
       currentMessage: nextMessage,
       recoveryModelResponseUsed: newRecoveryModelResponseUsed,
       turnCounter: nextTurnCounter,
-      finalResult,
+      finalResult: nextFinalResult,
     };
   }
 
@@ -932,6 +953,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     nextMessage: Content;
     submittedOutput: string | null;
     taskCompleted: boolean;
+    partialResult: string | null;
   }> {
     const allowedToolNames = new Set(this.toolRegistry.getAllToolNames());
     allowedToolNames.add(TASK_COMPLETE_TOOL_NAME);
@@ -939,7 +961,8 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     let submittedOutput: string | null = null;
     let taskCompleted = false;
 
-    const toolExecutionPromises: Array<Promise<Part[] | void>> = [];
+    const toolExecutionPromises: Array<Promise<ToolExecutionResult | void>> =
+      [];
     const syncResponseParts: Part[] = [];
 
     // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
@@ -1173,7 +1196,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     args: Record<string, unknown>,
     signal: AbortSignal,
     promptId: string,
-  ): Promise<Part[] | void> {
+  ): Promise<ToolExecutionResult | void> {
     const requestInfo: ToolCallRequestInfo = {
       callId,
       name: functionCall.name as string,
@@ -1204,7 +1227,13 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         });
       }
 
-      return toolResponse.responseParts;
+      return {
+        responseParts: toolResponse.responseParts,
+        partialResult:
+          typeof toolResponse.resultDisplay === 'string'
+            ? toolResponse.resultDisplay
+            : null,
+      };
     })();
   }
 
@@ -1212,20 +1241,25 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   private async assembleToolResponses(
     functionCalls: FunctionCall[],
     syncResponseParts: Part[],
-    toolExecutionPromises: Array<Promise<Part[] | void>>,
+    toolExecutionPromises: Array<Promise<ToolExecutionResult | void>>,
     submittedOutput: string | null,
     taskCompleted: boolean,
   ): Promise<{
     nextMessage: Content;
     submittedOutput: string | null;
     taskCompleted: boolean;
+    partialResult: string | null;
   }> {
     const asyncResults = await Promise.all(toolExecutionPromises);
 
     const toolResponseParts: Part[] = [...syncResponseParts];
+    let partialResult: string | null = null;
     for (const result of asyncResults) {
       if (result) {
-        toolResponseParts.push(...result);
+        toolResponseParts.push(...result.responseParts);
+        if (result.partialResult !== null) {
+          partialResult = result.partialResult;
+        }
       }
     }
 
@@ -1243,6 +1277,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       nextMessage: { role: 'user', parts: toolResponseParts },
       submittedOutput,
       taskCompleted,
+      partialResult,
     };
   }
 

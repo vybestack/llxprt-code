@@ -176,9 +176,15 @@ export function recoveryFailureResult(
       String(originalReason) +
       '.'
     : 'failed. Original reason: ' + String(originalReason) + '.';
+  const failureMessage = 'Recovery turn attempted but agent ' + suffix;
 
   return {
     terminateReason: originalReason,
-    finalResult: partialResult ?? 'Recovery turn attempted but agent ' + suffix,
+    finalResult:
+      partialResult === null
+        ? failureMessage
+        : failureMessage +
+          '\n\nPartial result before recovery:\n' +
+          partialResult,
   };
 }
