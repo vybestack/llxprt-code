@@ -143,12 +143,10 @@ describe('createToolCheckpoint', () => {
     );
 
     expect(fsOps.writeFile).toHaveBeenCalledOnce();
-    const writtenPath = fsOps.writeFile.mock.calls[0][0];
+    expect(fsOps.writeFile.mock.calls[0][0]).toContain('/tmp/checkpoints');
+    expect(fsOps.writeFile.mock.calls[0][0]).toContain('foo.ts');
+    expect(fsOps.writeFile.mock.calls[0][0]).toContain('replace');
     const writtenContent = JSON.parse(fsOps.writeFile.mock.calls[0][1]);
-
-    expect(writtenPath).toContain('/tmp/checkpoints');
-    expect(writtenPath).toContain('foo.ts');
-    expect(writtenPath).toContain('replace');
     expect(writtenContent.commitHash).toBe('snap456');
     expect(writtenContent.filePath).toBe('/project/src/foo.ts');
     expect(writtenContent.toolCall.name).toBe('replace');
@@ -179,9 +177,8 @@ describe('createToolCheckpoint', () => {
     const writtenContent = JSON.parse(fsOps.writeFile.mock.calls[0][1]);
     expect(writtenContent.commitHash).toBe('fallback-hash');
     // Debug message about failed snapshot should have been logged
-    expect(onDebugMessage).toHaveBeenCalledOnce();
-    expect(onDebugMessage.mock.calls[0][0]).toContain(
-      'Attempting to use current commit',
+    expect(onDebugMessage).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('Attempting to use current commit'),
     );
   });
 
@@ -231,8 +228,9 @@ describe('createToolCheckpoint', () => {
 
     expect(fsOps.writeFile).not.toHaveBeenCalled();
     expect(gitService.createFileSnapshot).not.toHaveBeenCalled();
-    expect(onDebugMessage).toHaveBeenCalledOnce();
-    expect(onDebugMessage.mock.calls[0][0]).toContain('missing file_path');
+    expect(onDebugMessage).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('missing file_path'),
+    );
   });
 });
 
@@ -350,9 +348,8 @@ describe('useCheckpointPersistence', () => {
     });
 
     expect(fsOps.writeFile).not.toHaveBeenCalled();
-    expect(onDebugMessage).toHaveBeenCalledOnce();
-    expect(onDebugMessage.mock.calls[0][0]).toContain(
-      'Git service is not available',
+    expect(onDebugMessage).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('Git service is not available'),
     );
   });
 
@@ -413,9 +410,8 @@ describe('useCheckpointPersistence', () => {
     });
 
     expect(fsOps.writeFile).not.toHaveBeenCalled();
-    expect(onDebugMessage).toHaveBeenCalledOnce();
-    expect(onDebugMessage.mock.calls[0][0]).toContain(
-      'Failed to create checkpoint directory',
+    expect(onDebugMessage).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('Failed to create checkpoint directory'),
     );
   });
 

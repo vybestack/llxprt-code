@@ -181,6 +181,7 @@ export default defineConfig({
       ink: inkStubPath,
       'ink-testing-library': inkTestingLibraryPath,
       [inkTestingLibraryActualPath]: inkTestingLibraryPath,
+      react: resolve(__dirname, '../../node_modules/react'),
     },
   },
   test: {

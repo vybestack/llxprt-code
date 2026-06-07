@@ -582,7 +582,7 @@ describe('memoryCommand', () => {
 
       await refreshCommand.action(jitContext, '');
 
-      expect(mockRefresh).toHaveBeenCalledOnce();
+      expect(mockRefresh).toHaveBeenCalledExactlyOnceWith();
       expect(mockLoadHierarchicalLlxprtMemory).not.toHaveBeenCalled();
       expect(jitContext.ui.setGeminiMdFileCount).toHaveBeenCalledWith(3);
       expect(jitContext.ui.addItem).toHaveBeenCalledWith(

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/** @vitest-environment jsdom */
+
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
