@@ -277,6 +277,7 @@ class DirectoryFileSearch implements FileSearch {
       return [];
     }
 
+    throwIfAborted(options.signal);
     const results = await crawl({
       crawlDirectory: path.join(this.options.projectRoot, dir),
       cwd: this.options.projectRoot,
@@ -284,6 +285,7 @@ class DirectoryFileSearch implements FileSearch {
       ignore: this.ignore,
       cache: this.options.cache,
       cacheTtl: this.options.cacheTtl,
+      signal: options.signal,
     });
 
     const filteredResults = await filter(results, pattern, options.signal);

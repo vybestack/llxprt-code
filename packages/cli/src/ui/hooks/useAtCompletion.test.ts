@@ -981,6 +981,53 @@ describe('useAtCompletion', () => {
       });
     });
 
+    it('should not publish results after search timeout aborts during enrichment', async () => {
+      testRootDir = await createTmpDir({});
+      let resolveSubagents = (_names: string[]): void => {
+        throw new Error('Expected the subagent promise to be initialized');
+      };
+      const subagentPromise = new Promise<string[]>((resolve) => {
+        resolveSubagents = resolve;
+      });
+      const mockFileSearch: FileSearch = {
+        initialize: vi.fn().mockResolvedValue(undefined),
+        search: vi.fn().mockResolvedValue(['file.txt']),
+      };
+      vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
+
+      const timeoutConfig = {
+        ...mockConfig,
+        getFileFilteringOptions: vi.fn(() => ({
+          respectGitIgnore: true,
+          respectLlxprtIgnore: true,
+          searchTimeout: 1,
+        })),
+        getSubagentManager: () => ({
+          listSubagents: () => subagentPromise,
+        }),
+      } as unknown as Config;
+
+      const { result } = renderHook(() =>
+        useTestHarnessForAtCompletion(true, '', timeoutConfig, testRootDir),
+      );
+
+      await waitFor(() => {
+        expect(mockFileSearch.search).toHaveBeenCalledWith(
+          '',
+          expect.any(Object),
+        );
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await act(async () => {
+        resolveSubagents(['deepthinker']);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(result.current.suggestions).toStrictEqual([]);
+    });
+
     it('should dispatch empty pattern immediately without debounce', async () => {
       const structure: FileSystemStructure = { 'a.txt': '' };
       testRootDir = await createTmpDir(structure);

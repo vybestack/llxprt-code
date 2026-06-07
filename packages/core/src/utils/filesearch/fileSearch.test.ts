@@ -873,6 +873,35 @@ describe('FileSearch', () => {
       const results = await fileSearch.search('target/');
       expect(results).toStrictEqual([]);
     });
+
+    it('should reject before crawling when non-recursive search is already aborted', async () => {
+      tmpDir = await createTmpDir({
+        src: {
+          'main.rs': '',
+        },
+      });
+
+      const fileSearch = FileSearchFactory.create({
+        projectRoot: tmpDir,
+        useGitignore: false,
+        useGeminiignore: false,
+        ignoreDirs: [],
+        cache: false,
+        cacheTtl: 0,
+        enableRecursiveFileSearch: false,
+        enableFuzzySearch: true,
+      });
+
+      await fileSearch.initialize();
+      const crawlSpy = vi.spyOn(crawler, 'crawl');
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        fileSearch.search('src/', { signal: controller.signal }),
+      ).rejects.toThrow(AbortError);
+      expect(crawlSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('Default autocomplete filtering', () => {

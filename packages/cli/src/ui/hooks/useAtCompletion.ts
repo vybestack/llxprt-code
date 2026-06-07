@@ -283,8 +283,17 @@ async function createFileSearcher(
     maxFiles: filteringOptions?.maxFileCount,
     maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
   });
+
   await searcher.initialize();
   return searcher;
+}
+
+function shouldSkipSearchDispatch(
+  signal: AbortSignal,
+  pattern: string,
+  shouldDispatchResult: (pattern: string) => boolean,
+): boolean {
+  return signal.aborted || !shouldDispatchResult(pattern);
 }
 
 async function performSearch(
@@ -319,7 +328,9 @@ async function performSearch(
 
     clearSlowSearchTimer();
 
-    if (!shouldDispatchResult(pattern)) {
+    if (
+      shouldSkipSearchDispatch(controller.signal, pattern, shouldDispatchResult)
+    ) {
       return;
     }
 
@@ -342,7 +353,9 @@ async function performSearch(
       controller.signal,
     );
 
-    if (!shouldDispatchResult(pattern)) {
+    if (
+      shouldSkipSearchDispatch(controller.signal, pattern, shouldDispatchResult)
+    ) {
       return;
     }
 
