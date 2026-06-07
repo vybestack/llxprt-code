@@ -24,6 +24,7 @@ export interface FileSearchOptions {
   enableFuzzySearch: boolean;
   maxDepth?: number;
   maxFiles?: number;
+  ignorePatterns?: string[];
 }
 
 export class AbortError extends Error {
@@ -80,6 +81,46 @@ export async function filter(
   });
 
   return results;
+}
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) {
+    throw new AbortError();
+  }
+}
+
+async function withAbort<T>(
+  promiseFactory: () => Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
+  throwIfAborted(signal);
+  const promise = promiseFactory();
+  if (signal === undefined) {
+    return promise;
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => {
+      signal.removeEventListener('abort', onAbort);
+
+      reject(new AbortError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        try {
+          throwIfAborted(signal);
+          resolve(value);
+        } catch (error) {
+          reject(error);
+        }
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
 }
 
 export interface SearchOptions {
@@ -140,7 +181,8 @@ class RecursiveFileSearch implements FileSearch {
       filteredCandidates = candidates;
     } else {
       const shouldCacheCandidates = await (async () => {
-        if (pattern.includes('*') || this.fzf === undefined) {
+        const fzf = this.fzf;
+        if (pattern.includes('*') || fzf === undefined) {
           filteredCandidates = await filter(
             candidates,
             pattern,
@@ -150,12 +192,19 @@ class RecursiveFileSearch implements FileSearch {
         }
 
         try {
-          const results = await this.fzf.find(pattern);
+          const results: Array<FzfResultItem<string>> = await withAbort(
+            () => fzf.find(pattern),
+            options.signal,
+          );
           filteredCandidates = results.map(
             (entry: FzfResultItem<string>) => entry.item,
           );
           return true;
         } catch {
+          if (options.signal?.aborted === true) {
+            throw new AbortError();
+          }
+
           // FZF search failed - return empty results
           filteredCandidates = [];
           return false;
@@ -223,14 +272,29 @@ class DirectoryFileSearch implements FileSearch {
     pattern = pattern || '*';
 
     const dir = pattern.endsWith('/') ? pattern : path.dirname(pattern);
-    const results = await crawl({
-      crawlDirectory: path.join(this.options.projectRoot, dir),
-      cwd: this.options.projectRoot,
-      maxDepth: 0,
-      ignore: this.ignore,
-      cache: this.options.cache,
-      cacheTtl: this.options.cacheTtl,
-    });
+    const dirFilter = this.ignore.getDirectoryFilter();
+    if (dir !== '.' && dirFilter(`${dir.replace(/\/$/, '')}/`)) {
+      return [];
+    }
+
+    throwIfAborted(options.signal);
+    let results: string[];
+    try {
+      results = await crawl({
+        crawlDirectory: path.join(this.options.projectRoot, dir),
+        cwd: this.options.projectRoot,
+        maxDepth: 0,
+        ignore: this.ignore,
+        cache: this.options.cache,
+        cacheTtl: this.options.cacheTtl,
+        signal: options.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new AbortError();
+      }
+      throw error;
+    }
 
     const filteredResults = await filter(results, pattern, options.signal);
 

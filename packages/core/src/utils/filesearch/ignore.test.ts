@@ -104,6 +104,21 @@ describe('loadIgnoreRules', () => {
     expect(fileFilter('test.txt')).toBe(false);
   });
 
+  it('should load rules from .llxprtignore', async () => {
+    tmpDir = await createTmpDir({
+      '.llxprtignore': '*.secret',
+    });
+    const ignore = loadIgnoreRules({
+      projectRoot: tmpDir,
+      useGitignore: false,
+      useGeminiignore: true,
+      ignoreDirs: [],
+    });
+    const fileFilter = ignore.getFileFilter();
+    expect(fileFilter('token.secret')).toBe(true);
+    expect(fileFilter('token.txt')).toBe(false);
+  });
+
   it('should combine rules from .gitignore and .geminiignore', async () => {
     tmpDir = await createTmpDir({
       '.gitignore': '*.log',
@@ -156,5 +171,90 @@ describe('loadIgnoreRules', () => {
     });
     const dirFilter = ignore.getDirectoryFilter();
     expect(dirFilter('.git/')).toBe(true);
+  });
+
+  it('should apply ignorePatterns to filter binary and build artifact files', async () => {
+    tmpDir = await createTmpDir({});
+    const ignore = loadIgnoreRules({
+      projectRoot: tmpDir,
+      useGitignore: false,
+      useGeminiignore: false,
+      ignoreDirs: [],
+      ignorePatterns: ['*.o', '*.so', '*.dll', '*.exe', '*.pyc'],
+    });
+    const fileFilter = ignore.getFileFilter();
+    expect(fileFilter('main.o')).toBe(true);
+    expect(fileFilter('libfoo.so')).toBe(true);
+    expect(fileFilter('bar.dll')).toBe(true);
+    expect(fileFilter('app.exe')).toBe(true);
+    expect(fileFilter('module.pyc')).toBe(true);
+    expect(fileFilter('main.rs')).toBe(false);
+  });
+
+  it('should apply ignorePatterns with directory patterns like *.dSYM/', async () => {
+    tmpDir = await createTmpDir({});
+    const ignore = loadIgnoreRules({
+      projectRoot: tmpDir,
+      useGitignore: false,
+      useGeminiignore: false,
+      ignoreDirs: [],
+      ignorePatterns: ['*.dSYM/'],
+    });
+    const dirFilter = ignore.getDirectoryFilter();
+    expect(dirFilter('MyApp.dSYM/')).toBe(true);
+    expect(dirFilter('src/')).toBe(false);
+  });
+
+  it('should combine ignorePatterns with .gitignore and ignoreDirs', async () => {
+    tmpDir = await createTmpDir({
+      '.gitignore': '*.log',
+    });
+    const ignore = loadIgnoreRules({
+      projectRoot: tmpDir,
+      useGitignore: true,
+      useGeminiignore: false,
+      ignoreDirs: ['build/'],
+      ignorePatterns: ['*.o', '*.class'],
+    });
+    const fileFilter = ignore.getFileFilter();
+    expect(fileFilter('test.log')).toBe(true);
+    expect(fileFilter('main.o')).toBe(true);
+    expect(fileFilter('MyClass.class')).toBe(true);
+    expect(fileFilter('main.rs')).toBe(false);
+    const dirFilter = ignore.getDirectoryFilter();
+    expect(dirFilter('build/')).toBe(true);
+    expect(dirFilter('.git/')).toBe(true);
+  });
+
+  it('should allow .gitignore negations to override ignorePatterns', async () => {
+    tmpDir = await createTmpDir({
+      '.gitignore': '!keep.o',
+    });
+    const ignore = loadIgnoreRules({
+      projectRoot: tmpDir,
+      useGitignore: true,
+      useGeminiignore: false,
+      ignoreDirs: [],
+      ignorePatterns: ['*.o'],
+    });
+    const fileFilter = ignore.getFileFilter();
+    expect(fileFilter('main.o')).toBe(true);
+    expect(fileFilter('keep.o')).toBe(false);
+  });
+
+  it('should apply ignoreDirs to nested build output directories', async () => {
+    tmpDir = await createTmpDir({});
+    const ignore = loadIgnoreRules({
+      projectRoot: tmpDir,
+      useGitignore: false,
+      useGeminiignore: false,
+      ignoreDirs: ['target/', 'cmake-build-*/', '*.egg-info/'],
+      ignorePatterns: [],
+    });
+    const dirFilter = ignore.getDirectoryFilter();
+    expect(dirFilter('src/crate/target/')).toBe(true);
+    expect(dirFilter('native/cmake-build-debug/')).toBe(true);
+    expect(dirFilter('package/pkg.egg-info/')).toBe(true);
+    expect(dirFilter('src/crate/src/')).toBe(false);
   });
 });

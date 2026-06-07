@@ -22,10 +22,24 @@ export interface LoadIgnoreRulesOptions {
   useGitignore: boolean;
   useGeminiignore: boolean;
   ignoreDirs: string[];
+  ignorePatterns?: string[];
 }
 
 export function loadIgnoreRules(options: LoadIgnoreRulesOptions): Ignore {
   const ignorer = new Ignore();
+  ignorer.add(
+    options.ignoreDirs.map((dir) => {
+      if (dir.endsWith('/')) {
+        return dir;
+      }
+      return `${dir}/`;
+    }),
+  );
+
+  if (options.ignorePatterns && options.ignorePatterns.length > 0) {
+    ignorer.add(options.ignorePatterns);
+  }
+
   if (options.useGitignore) {
     const gitignorePath = path.join(options.projectRoot, '.gitignore');
     if (fs.existsSync(gitignorePath)) {
@@ -34,21 +48,18 @@ export function loadIgnoreRules(options: LoadIgnoreRulesOptions): Ignore {
   }
 
   if (options.useGeminiignore) {
+    const llxprtignorePath = path.join(options.projectRoot, '.llxprtignore');
+    if (fs.existsSync(llxprtignorePath)) {
+      ignorer.add(fs.readFileSync(llxprtignorePath, 'utf8'));
+    }
+
     const geminiignorePath = path.join(options.projectRoot, '.geminiignore');
     if (fs.existsSync(geminiignorePath)) {
       ignorer.add(fs.readFileSync(geminiignorePath, 'utf8'));
     }
   }
 
-  const ignoreDirs = ['.git', ...options.ignoreDirs];
-  ignorer.add(
-    ignoreDirs.map((dir) => {
-      if (dir.endsWith('/')) {
-        return dir;
-      }
-      return `${dir}/`;
-    }),
-  );
+  ignorer.add('.git/');
 
   return ignorer;
 }

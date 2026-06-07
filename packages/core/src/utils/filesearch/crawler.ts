@@ -23,13 +23,33 @@ export interface CrawlOptions {
   // Caching options.
   cache: boolean;
   cacheTtl: number;
+  signal?: AbortSignal;
 }
 
 function toPosixPath(p: string) {
   return p.split(path.sep).join(path.posix.sep);
 }
 
+class CrawlAbortError extends Error {
+  constructor() {
+    super('Crawl aborted');
+    this.name = 'AbortError';
+  }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) {
+    throw new CrawlAbortError();
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 export async function crawl(options: CrawlOptions): Promise<string[]> {
+  throwIfAborted(options.signal);
+
   if (options.cache) {
     const cacheKey = cache.getCacheKey(
       options.crawlDirectory,
@@ -40,6 +60,7 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
     const cachedResults = cache.read(cacheKey);
 
     if (cachedResults) {
+      throwIfAborted(options.signal);
       return cachedResults;
     }
   }
@@ -57,7 +78,9 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
       .withRelativePaths()
       .withDirs()
       .withPathSeparator('/') // Always use unix style paths
-      .filter((path, isDirectory) => {
+      .filter((_entryPath, isDirectory) => {
+        throwIfAborted(options.signal);
+
         if (!isDirectory) {
           fileCount++;
           if (fileCount > maxFiles) {
@@ -67,7 +90,9 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
         }
         return true;
       })
-      .exclude((_, dirPath) => {
+      .exclude((_dirName, dirPath) => {
+        throwIfAborted(options.signal);
+
         if (fileCount > maxFiles) {
           truncated = true;
           return true;
@@ -81,7 +106,11 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
     }
 
     results = await api.crawl(options.crawlDirectory).withPromise();
-  } catch {
+    throwIfAborted(options.signal);
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
     // Directory probably doesn't exist
     return [];
   }
@@ -103,5 +132,6 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
     cache.write(cacheKey, relativeToCwdResults, options.cacheTtl * 1000);
   }
 
+  throwIfAborted(options.signal);
   return relativeToCwdResults;
 }
