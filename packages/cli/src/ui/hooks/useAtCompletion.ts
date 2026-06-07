@@ -11,7 +11,6 @@ import {
   useReducer,
   useRef,
 } from 'react';
-import { setTimeout as setTimeoutPromise } from 'node:timers/promises';
 import { AsyncFzf } from 'fzf';
 import type {
   Config,
@@ -53,6 +52,7 @@ type AtCompletionAction =
   | { type: 'SEARCH'; payload: string }
   | { type: 'SEARCH_SUCCESS'; payload: Suggestion[] }
   | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SEARCH_CANCELLED' }
   | { type: 'ERROR' }
   | { type: 'RESET' };
 
@@ -96,6 +96,12 @@ function atCompletionReducer(
         return { ...state, isLoading: action.payload, suggestions: [] };
       }
       return state;
+    case 'SEARCH_CANCELLED':
+      if (state.status === AtCompletionStatus.SEARCHING) {
+        return { ...state, status: AtCompletionStatus.READY, isLoading: false };
+      }
+      return state;
+
     case 'ERROR':
       return {
         ...state,
@@ -288,12 +294,20 @@ async function createFileSearcher(
   return searcher;
 }
 
-function shouldSkipSearchDispatch(
+function handleSkippedSearchDispatch(
   signal: AbortSignal,
   pattern: string,
   shouldDispatchResult: (pattern: string) => boolean,
+  dispatch: React.Dispatch<AtCompletionAction>,
 ): boolean {
-  return signal.aborted || !shouldDispatchResult(pattern);
+  const isCurrentPattern = shouldDispatchResult(pattern);
+  if (signal.aborted) {
+    if (isCurrentPattern) {
+      dispatch({ type: 'SEARCH_CANCELLED' });
+    }
+    return true;
+  }
+  return !isCurrentPattern;
 }
 
 async function performSearch(
@@ -308,17 +322,9 @@ async function performSearch(
   const timeoutMs =
     fileFilteringOptions(config)?.searchTimeout ?? DEFAULT_SEARCH_TIMEOUT_MS;
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  (async () => {
-    try {
-      await setTimeoutPromise(timeoutMs, undefined, {
-        signal: controller.signal,
-      });
-      controller.abort();
-    } catch {
-      // ignore
-    }
-  })();
+  const searchTimeout = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const results = await fileSearch.search(pattern, {
@@ -329,7 +335,12 @@ async function performSearch(
     clearSlowSearchTimer();
 
     if (
-      shouldSkipSearchDispatch(controller.signal, pattern, shouldDispatchResult)
+      handleSkippedSearchDispatch(
+        controller.signal,
+        pattern,
+        shouldDispatchResult,
+        dispatch,
+      )
     ) {
       return;
     }
@@ -354,7 +365,12 @@ async function performSearch(
     );
 
     if (
-      shouldSkipSearchDispatch(controller.signal, pattern, shouldDispatchResult)
+      handleSkippedSearchDispatch(
+        controller.signal,
+        pattern,
+        shouldDispatchResult,
+        dispatch,
+      )
     ) {
       return;
     }
@@ -376,6 +392,8 @@ async function performSearch(
       dispatch({ type: 'ERROR' });
     }
   } finally {
+    clearTimeout(searchTimeout);
+
     controller.abort();
   }
 }

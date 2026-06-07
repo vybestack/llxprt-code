@@ -982,6 +982,7 @@ describe('useAtCompletion', () => {
     });
 
     it('should not publish results after search timeout aborts during enrichment', async () => {
+      vi.useFakeTimers();
       testRootDir = await createTmpDir({});
       let resolveSubagents = (_names: string[]): void => {
         throw new Error('Expected the subagent promise to be initialized');
@@ -1011,13 +1012,19 @@ describe('useAtCompletion', () => {
         useTestHarnessForAtCompletion(true, '', timeoutConfig, testRootDir),
       );
 
-      await waitFor(() => {
-        expect(mockFileSearch.search).toHaveBeenCalledWith(
-          '',
-          expect.any(Object),
-        );
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
       });
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(mockFileSearch.search).toHaveBeenCalledWith(
+        '',
+        expect.any(Object),
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2);
+        await Promise.resolve();
+      });
 
       await act(async () => {
         resolveSubagents(['deepthinker']);
@@ -1026,6 +1033,7 @@ describe('useAtCompletion', () => {
       });
 
       expect(result.current.suggestions).toStrictEqual([]);
+      expect(result.current.isLoadingSuggestions).toBe(false);
     });
 
     it('should dispatch empty pattern immediately without debounce', async () => {
