@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { Config } from '../config/config.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
@@ -79,6 +77,32 @@ const defaultContentGeneratorFactory: ContentGeneratorFactory = (
   config,
   sessionId,
 ) => createContentGenerator(contentConfig, config, sessionId);
+
+function hydrateContentGeneratorConfig(
+  profile: AgentRuntimeProfileSnapshot,
+  contentConfig: ContentGeneratorConfig,
+): ContentGeneratorConfig {
+  const providerManager =
+    contentConfig.providerManager ??
+    profile.providerManager ??
+    profile.config.getProviderManager();
+  const configFactory =
+    providerManager == null
+      ? undefined
+      : profile.config.getContentGeneratorFactory();
+  const contentGeneratorFactory =
+    contentConfig.contentGeneratorFactory ?? configFactory;
+
+  if (providerManager == null) {
+    return contentConfig;
+  }
+
+  return {
+    ...contentConfig,
+    providerManager,
+    ...(contentGeneratorFactory == null ? {} : { contentGeneratorFactory }),
+  };
+}
 
 type ToolGovernance = {
   allowed: Set<string>;
@@ -251,10 +275,16 @@ export async function loadAgentRuntime(
         'AgentRuntimeLoader requires contentGeneratorConfig when no contentGenerator override is supplied.',
       );
     }
+
+    const hydratedConfig = hydrateContentGeneratorConfig(
+      profile,
+      contentConfig,
+    );
+
     const factory =
       overrides.contentGeneratorFactory ?? defaultContentGeneratorFactory;
     contentGenerator = await factory(
-      contentConfig,
+      hydratedConfig,
       profile.config,
       profile.state.sessionId,
     );
