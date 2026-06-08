@@ -133,11 +133,7 @@ describe('compressCommand', () => {
   it('uses NOOP when token count is unchanged and compression did not run recently', async () => {
     const performCompression = async () =>
       PerformCompressionResult.SKIPPED_EMPTY;
-    let _tokenCall = 0;
-    const getTotalTokens = () => {
-      _tokenCall++;
-      return 1000;
-    };
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
@@ -167,11 +163,7 @@ describe('compressCommand', () => {
   it('uses NOOP when token count is unchanged, result is SKIPPED_EMPTY, and compression ran recently', async () => {
     const performCompression = async () =>
       PerformCompressionResult.SKIPPED_EMPTY;
-    let _tokenCall = 0;
-    const getTotalTokens = () => {
-      _tokenCall++;
-      return 1000;
-    };
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
@@ -218,11 +210,7 @@ describe('compressCommand', () => {
 
   it('uses COMPRESSION_FAILED when all strategies fail (PerformCompressionResult.FAILED)', async () => {
     const performCompression = async () => PerformCompressionResult.FAILED;
-    let _tokenCall = 0;
-    const getTotalTokens = () => {
-      _tokenCall++;
-      return 1000;
-    };
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
@@ -252,11 +240,7 @@ describe('compressCommand', () => {
   it('uses COMPRESSION_FAILED when compression is in cooldown (PerformCompressionResult.SKIPPED_COOLDOWN)', async () => {
     const performCompression = async () =>
       PerformCompressionResult.SKIPPED_COOLDOWN;
-    let _tokenCall = 0;
-    const getTotalTokens = () => {
-      _tokenCall++;
-      return 1000;
-    };
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
@@ -285,11 +269,7 @@ describe('compressCommand', () => {
 
   it('uses ALREADY_COMPRESSED when core reports COMPRESSED but tokens did not decrease and compression was recent before command', async () => {
     const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    let _tokenCall = 0;
-    const getTotalTokens = () => {
-      _tokenCall++;
-      return 1000;
-    };
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
@@ -318,11 +298,7 @@ describe('compressCommand', () => {
 
   it('uses NOOP when core reports COMPRESSED but tokens did not decrease and compression was not recent before command', async () => {
     const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    let _tokenCall = 0;
-    const getTotalTokens = () => {
-      _tokenCall++;
-      return 1000;
-    };
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
@@ -386,11 +362,7 @@ describe('compressCommand', () => {
     const performCompression = async () => {
       throw new Error('API connection refused');
     };
-    let _tokenCall = 0;
-    const getTotalTokens = () => {
-      _tokenCall++;
-      return 1000;
-    };
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
@@ -420,11 +392,7 @@ describe('compressCommand', () => {
   it('checks wasRecentlyCompressed when result is FAILED', async () => {
     let recentlyCompressedCalled = false;
     const performCompression = async () => PerformCompressionResult.FAILED;
-    let _tokenCall = 0;
-    const getTotalTokens = () => {
-      _tokenCall++;
-      return 1000;
-    };
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
@@ -459,11 +427,7 @@ describe('compressCommand', () => {
     let recentlyCompressedCalled = false;
     const performCompression = async () =>
       PerformCompressionResult.SKIPPED_COOLDOWN;
-    let _tokenCall = 0;
-    const getTotalTokens = () => {
-      _tokenCall++;
-      return 1000;
-    };
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
