@@ -23,12 +23,12 @@ Get started immediately with powerful LLM options:
 # Your Claude Pro / Max subscription
 /auth anthropic enable
 /provider anthropic
-/model claude-sonnet-4-6
+/model claude-sonnet-4-8
 
 # Your ChatGPT Plus / Pro subscription (Codex)
 /auth codex enable
 /provider codex
-/model gpt-5.3-codex
+/model gpt-5.5
 
 # Kimi subscription (K2 Thinking with reasoning)
 /provider kimi
