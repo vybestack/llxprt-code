@@ -30,6 +30,8 @@ import type {
   ContentGenerator,
   ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
+import type { RuntimeContentGeneratorFactory } from './contracts/RuntimeContentGeneratorFactory.js';
+import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 
 function createTestConfig(): Config {
   const settingsService = new SettingsService();
@@ -269,5 +271,156 @@ describe('AgentRuntimeLoader', () => {
       description: 'Alpha tool for testing.',
     });
     expect(bundle.toolsView.getToolMetadata('beta')).toBeUndefined();
+  });
+
+  it('hydrates contentGeneratorFactory from Config when providerManager is present but factory is missing from snapshot', async () => {
+    const factoryGenerator: ContentGenerator = {
+      generateContent: vi.fn(async () => ({ candidates: [] })),
+      generateContentStream: vi.fn(async function* () {
+        yield { candidates: [] };
+      }),
+      countTokens: vi.fn(async () => ({ totalTokens: 0 })),
+      embedContent: vi.fn(async () => ({ embeddings: [] })),
+    };
+
+    const factory: RuntimeContentGeneratorFactory<ContentGenerator> = {
+      createContentGenerator: vi.fn(() => factoryGenerator),
+    };
+
+    const fakeManager: RuntimeProviderManager = {
+      getActiveProvider: vi.fn(),
+      getActiveProviderName: vi.fn(),
+      setActiveProvider: vi.fn(),
+      getAvailableModels: vi.fn(async () => []),
+      getProviderNames: () => [],
+      listProviders: () => [],
+      getProviderByName: vi.fn(),
+      registerProvider: vi.fn(),
+      prepareStatelessProviderInvocation: vi.fn(),
+      getProviderMetrics: () => ({}),
+      getSessionTokenUsage: () => ({
+        input: 0,
+        output: 0,
+        cache: 0,
+        tool: 0,
+        thought: 0,
+        total: 0,
+      }),
+      getServerToolsProvider: () => null,
+      setServerToolsProvider: vi.fn(),
+      setConfig: vi.fn(),
+      hasActiveProvider: () => true,
+      accumulateSessionTokens: vi.fn(),
+    };
+
+    const configWithFactory = new Config({
+      sessionId: 'test-session',
+      targetDir: '/tmp/test-agent-runtime-loader',
+      settingsService: new SettingsService(),
+    } as unknown as import('../config/config.js').ConfigParameters);
+    configWithFactory.setContentGeneratorFactory(factory);
+    configWithFactory.setProviderManager(fakeManager);
+
+    const contentConfigWithManager: ContentGeneratorConfig = {
+      model: 'gemini-2.0-pro',
+      providerManager: fakeManager,
+    };
+
+    const bundle = await loadAgentRuntime({
+      profile: {
+        config: configWithFactory,
+        state: runtimeState,
+        settings: settingsSnapshot,
+        providerRuntime,
+        contentGeneratorConfig: contentConfigWithManager,
+      },
+      overrides: {
+        providerAdapter,
+        telemetryAdapter,
+        toolsView,
+      },
+    });
+
+    expect(bundle.contentGenerator).toBe(factoryGenerator);
+    expect(factory.createContentGenerator).toHaveBeenCalledWith(fakeManager);
+  });
+
+  it('succeeds without hydration when providerManager is absent', async () => {
+    const simpleConfig = createContentGeneratorConfig();
+    const bundle = await loadAgentRuntime({
+      profile: {
+        config,
+        state: runtimeState,
+        settings: settingsSnapshot,
+        providerRuntime,
+        contentGeneratorConfig: simpleConfig,
+      },
+      overrides: {
+        providerAdapter,
+        telemetryAdapter,
+        toolsView,
+      },
+    });
+
+    expect(bundle.contentGenerator).toBeDefined();
+    expect(bundle.contentGenerator.generateContent).toBeDefined();
+  });
+
+  it('throws when providerManager is present but contentGeneratorFactory is missing and Config has no factory', async () => {
+    const fakeManager: RuntimeProviderManager = {
+      getActiveProvider: vi.fn(),
+      getActiveProviderName: vi.fn(),
+      setActiveProvider: vi.fn(),
+      getAvailableModels: vi.fn(async () => []),
+      getProviderNames: () => [],
+      listProviders: () => [],
+      getProviderByName: vi.fn(),
+      registerProvider: vi.fn(),
+      prepareStatelessProviderInvocation: vi.fn(),
+      getProviderMetrics: () => ({}),
+      getSessionTokenUsage: () => ({
+        input: 0,
+        output: 0,
+        cache: 0,
+        tool: 0,
+        thought: 0,
+        total: 0,
+      }),
+      getServerToolsProvider: () => null,
+      setServerToolsProvider: vi.fn(),
+      setConfig: vi.fn(),
+      hasActiveProvider: () => true,
+      accumulateSessionTokens: vi.fn(),
+    };
+
+    const configNoFactory = new Config({
+      sessionId: 'test-session',
+      targetDir: '/tmp/test-agent-runtime-loader',
+      settingsService: new SettingsService(),
+    } as unknown as import('../config/config.js').ConfigParameters);
+
+    const contentConfigWithManagerOnly: ContentGeneratorConfig = {
+      model: 'gemini-2.0-pro',
+      providerManager: fakeManager,
+    };
+
+    await expect(
+      loadAgentRuntime({
+        profile: {
+          config: configNoFactory,
+          state: runtimeState,
+          settings: settingsSnapshot,
+          providerRuntime,
+          contentGeneratorConfig: contentConfigWithManagerOnly,
+        },
+        overrides: {
+          providerAdapter,
+          telemetryAdapter,
+          toolsView,
+        },
+      }),
+    ).rejects.toThrow(
+      'Provider content generator factory is required when a provider manager is configured',
+    );
   });
 });

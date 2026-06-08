@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/** @vitest-environment jsdom */
+
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useShellHistory } from './useShellHistory.js';

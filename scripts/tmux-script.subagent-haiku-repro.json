@@ -1,0 +1,47 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 30,
+    "historyLimit": 100000,
+    "scrollbackLines": 10000,
+    "initialWaitMs": 8000
+  },
+  "startCommand": ["node", "scripts/start.js", "--profile-load", "ollamakimi"],
+  "yolo": true,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "line",
+      "text": "Use the task tool exactly once with subagent_name docwriter and goal_prompt: Compose a haiku about writing documentation. Do NOT read or write any files. Simply output the haiku as your final answer. Then return only the subagent result.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "completed with status",
+      "timeoutMs": 180000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "scrollback",
+      "contains": "Provider content generator factory is required when a provider manager is configured",
+      "timeoutMs": 1000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "scrollback",
+      "contains": "Subagent execution failed",
+      "timeoutMs": 1000
+    },
+    {
+      "type": "capture",
+      "label": "after-subagent-result",
+      "scope": "scrollback"
+    }
+  ]
+}

@@ -17,7 +17,7 @@ const reactStub = vi.hoisted(() => {
     }
   };
 
-  const useState = <T>(
+  const useState = <T,>(
     initial: T | (() => T),
   ): [T, (value: T | ((prev: T) => T)) => void] => {
     const index = stateCursor++;
@@ -51,10 +51,10 @@ const reactStub = vi.hoisted(() => {
     module: {
       useState,
       useEffect,
-      useMemo: <T>(factory: () => T) => factory(),
+      useMemo: <T,>(factory: () => T) => factory(),
       useCallback: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
-      useRef: <T>(initial: T) => ({ current: initial }),
-      useMemoizedState: <T>(value: T) => value,
+      useRef: <T,>(initial: T) => ({ current: initial }),
+      useMemoizedState: <T,>(value: T) => value,
     },
     reset,
     states,

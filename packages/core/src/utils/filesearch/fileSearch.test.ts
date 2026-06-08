@@ -4,8 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- File keeps related file-search behavioral scenarios together. */
+
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { AsyncFzf } from 'fzf';
+
 import { FileSearchFactory, AbortError, filter } from './fileSearch.js';
+import {
+  DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
+  DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
+  DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
+} from '../../config/constants.js';
 import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
 import * as crawler from './crawler.js';
 
@@ -334,6 +343,40 @@ describe('FileSearch', () => {
     const results = await fileSearch.search('sst');
 
     expect(results).toStrictEqual(['src/style.css']);
+  });
+
+  it('should not start fuzzy matching when the search signal is already aborted', async () => {
+    tmpDir = await createTmpDir({
+      src: {
+        'style.css': '',
+      },
+    });
+
+    const fileSearch = FileSearchFactory.create({
+      projectRoot: tmpDir,
+      useGitignore: false,
+      useGeminiignore: false,
+      ignoreDirs: [],
+      cache: false,
+      cacheTtl: 0,
+      enableRecursiveFileSearch: true,
+      enableFuzzySearch: true,
+    });
+
+    await fileSearch.initialize();
+    const maybeFzf: AsyncFzf<string[]> = Reflect.get(
+      fileSearch,
+      'fzf',
+    ) as AsyncFzf<string[]>;
+    const findSpy = vi.spyOn(maybeFzf, 'find');
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      fileSearch.search('sst', { signal: controller.signal }),
+    ).rejects.toThrow(AbortError);
+    expect(findSpy).not.toHaveBeenCalled();
   });
 
   it('should not use fzf for fuzzy matching when enableFuzzySearch is false', async () => {
@@ -801,6 +844,157 @@ describe('FileSearch', () => {
       await fileSearch.initialize();
       const results = await fileSearch.search('*');
       expect(results).toStrictEqual(['.gitignore', 'file2.ts']);
+    });
+
+    it('should not list files inside an ignored directory when directly requested', async () => {
+      tmpDir = await createTmpDir({
+        target: {
+          debug: {
+            'artifact.o': '',
+          },
+        },
+        src: {
+          'main.rs': '',
+        },
+      });
+
+      const fileSearch = FileSearchFactory.create({
+        projectRoot: tmpDir,
+        useGitignore: false,
+        useGeminiignore: false,
+        ignoreDirs: ['target/'],
+        cache: false,
+        cacheTtl: 0,
+        enableRecursiveFileSearch: false,
+        enableFuzzySearch: true,
+      });
+
+      await fileSearch.initialize();
+      const results = await fileSearch.search('target/');
+      expect(results).toStrictEqual([]);
+    });
+
+    it('should reject before crawling when non-recursive search is already aborted', async () => {
+      tmpDir = await createTmpDir({
+        src: {
+          'main.rs': '',
+        },
+      });
+
+      const fileSearch = FileSearchFactory.create({
+        projectRoot: tmpDir,
+        useGitignore: false,
+        useGeminiignore: false,
+        ignoreDirs: [],
+        cache: false,
+        cacheTtl: 0,
+        enableRecursiveFileSearch: false,
+        enableFuzzySearch: true,
+      });
+
+      await fileSearch.initialize();
+      const crawlSpy = vi.spyOn(crawler, 'crawl');
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        fileSearch.search('src/', { signal: controller.signal }),
+      ).rejects.toThrow(AbortError);
+      expect(crawlSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Default autocomplete filtering', () => {
+    it('should exclude build output directories when ignoreDirs includes DEFAULT_AUTOCOMPLETE_IGNORE_DIRS', async () => {
+      tmpDir = await createTmpDir({
+        src: { 'main.rs': '' },
+        target: { debug: { 'main.o': '' } },
+        build: { 'app.o': '' },
+        dist: { 'bundle.js': '' },
+      });
+
+      const fileSearch = FileSearchFactory.create({
+        projectRoot: tmpDir,
+        useGitignore: false,
+        useGeminiignore: false,
+        ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
+        ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
+        maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
+        cache: false,
+        cacheTtl: 0,
+        enableRecursiveFileSearch: true,
+        enableFuzzySearch: true,
+      });
+
+      await fileSearch.initialize();
+      const results = await fileSearch.search('');
+
+      expect(results).not.toContain('target/');
+      expect(results).not.toContain('target/debug/');
+      expect(results).not.toContain('build/');
+      expect(results).not.toContain('dist/');
+      expect(results).toContain('src/');
+      expect(results).toContain('src/main.rs');
+    });
+
+    it('should exclude binary artifact files when ignorePatterns includes DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS', async () => {
+      tmpDir = await createTmpDir({
+        src: { 'main.rs': '' },
+        'main.o': '',
+        'app.dll': '',
+        'program.exe': '',
+      });
+
+      const fileSearch = FileSearchFactory.create({
+        projectRoot: tmpDir,
+        useGitignore: false,
+        useGeminiignore: false,
+        ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
+        ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
+        maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
+        cache: false,
+        cacheTtl: 0,
+        enableRecursiveFileSearch: true,
+        enableFuzzySearch: true,
+      });
+
+      await fileSearch.initialize();
+      const results = await fileSearch.search('');
+
+      expect(results).not.toContain('main.o');
+      expect(results).not.toContain('app.dll');
+      expect(results).not.toContain('program.exe');
+      expect(results).toContain('src/');
+    });
+
+    it('should still apply default excludes when .gitignore is also loaded', async () => {
+      tmpDir = await createTmpDir({
+        '.gitignore': '*.log',
+        src: { 'main.rs': '' },
+        target: { debug: { 'main.o': '' } },
+        'error.log': '',
+      });
+
+      const fileSearch = FileSearchFactory.create({
+        projectRoot: tmpDir,
+        useGitignore: true,
+        useGeminiignore: false,
+        ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
+        ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
+        maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
+        cache: false,
+        cacheTtl: 0,
+        enableRecursiveFileSearch: true,
+        enableFuzzySearch: true,
+      });
+
+      await fileSearch.initialize();
+      const results = await fileSearch.search('');
+
+      expect(results).not.toContain('target/');
+      expect(results).not.toContain('error.log');
+      expect(results).toContain('src/');
+      expect(results).toContain('.gitignore');
     });
   });
 });

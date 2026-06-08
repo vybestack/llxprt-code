@@ -86,6 +86,9 @@ export {
 export {
   DEFAULT_FILE_FILTERING_OPTIONS,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+  DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
+  DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
+  DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
 } from './constants.js';
 
 import type { MessageBus } from '../confirmation-bus/message-bus.js';

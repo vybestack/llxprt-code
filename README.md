@@ -20,20 +20,15 @@ Get started immediately with powerful LLM options:
 /provider gemini
 /model gemini-3-flash-preview
 
-# Free Qwen models
-/auth qwen enable
-/provider qwen
-/model qwen-3-coder
-
 # Your Claude Pro / Max subscription
 /auth anthropic enable
 /provider anthropic
-/model claude-sonnet-4-6
+/model claude-sonnet-4-8
 
 # Your ChatGPT Plus / Pro subscription (Codex)
 /auth codex enable
 /provider codex
-/model gpt-5.3-codex
+/model gpt-5.5
 
 # Kimi subscription (K2 Thinking with reasoning)
 /provider kimi
@@ -156,7 +151,7 @@ llxprt "Generate unit tests for payment module" > tests/payment.test.js
 
 LLxprt Code works seamlessly with the best open-weight models:
 
-### Kimi K2.5
+### Kimi K2.6
 
 - **Context Window**: 262,144 tokens
 - **Architecture**: Trillion-parameter MoE (32B active)
@@ -171,16 +166,16 @@ LLxprt Code works seamlessly with the best open-weight models:
 /model hf:moonshotai/Kimi-K2.5
 ```
 
-### GLM 5
+### GLM 5.2
 
 - **Context Window**: 200,000 tokens
 - **Max Output**: 131,072 tokens
 - **Architecture**: Mixture-of-Experts with 355B total parameters (32B active)
 - **Strengths**: Coding, multi-step planning, tool integration
 
-### MiniMax M2.5
+### MiniMax M3
 
-- **Context Window**: 196,608 tokens
+- **Context Window**: 1M tokens
 - **Architecture**: MoE with 230B total parameters (10B active)
 - **Strengths**: Coding workflows, multi-step agents, tool calling
 - **Cost**: Only 8% of Claude Sonnet, ~2x faster

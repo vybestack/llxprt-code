@@ -84,27 +84,50 @@ if (!argv.s) {
   execSync('npm run build --workspaces', { stdio: 'inherit' });
 }
 
-console.log('packing @vybestack/llxprt-code ...');
-const cliPackageDir = join('packages', 'cli');
-rmSync(join(cliPackageDir, 'dist', 'vybestack-llxprt-code-*.tgz'), {
-  force: true,
-});
-execSync(
-  `npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist`,
-  {
-    stdio: 'ignore',
-  },
-);
+// Rewrite workspace file: dependencies to release versions so packed tarballs
+// have publish-ready metadata instead of file:../ references.
+console.log('Binding release dependencies for sandbox tarballs...');
+execSync('node scripts/bind-release-deps.js --backup', { stdio: 'inherit' });
 
-console.log('packing @vybestack/llxprt-code-core ...');
+const cliPackageDir = join('packages', 'cli');
 const corePackageDir = join('packages', 'core');
-rmSync(join(corePackageDir, 'dist', 'vybestack-llxprt-code-core-*.tgz'), {
-  force: true,
-});
-execSync(
-  `npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist`,
-  { stdio: 'ignore' },
-);
+const providersPackageDir = join('packages', 'providers');
+
+try {
+  console.log('packing @vybestack/llxprt-code ...');
+  rmSync(join(cliPackageDir, 'dist', 'vybestack-llxprt-code-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist`,
+    {
+      stdio: 'ignore',
+    },
+  );
+
+  console.log('packing @vybestack/llxprt-code-core ...');
+  rmSync(join(corePackageDir, 'dist', 'vybestack-llxprt-code-core-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-providers ...');
+  rmSync(
+    join(providersPackageDir, 'dist', 'vybestack-llxprt-code-providers-*.tgz'),
+    { force: true },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist`,
+    { stdio: 'ignore' },
+  );
+} finally {
+  // Restore workspace file: dependencies so local development is unaffected.
+  console.log('Restoring workspace dependencies after sandbox pack...');
+  execSync('node scripts/bind-release-deps.js --restore', { stdio: 'inherit' });
+}
 
 const packageVersion = JSON.parse(
   readFileSync(join(process.cwd(), 'package.json'), 'utf-8'),
@@ -119,6 +142,14 @@ chmodSync(
     corePackageDir,
     'dist',
     `vybestack-llxprt-code-core-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    providersPackageDir,
+    'dist',
+    `vybestack-llxprt-code-providers-${packageVersion}.tgz`,
   ),
   0o755,
 );

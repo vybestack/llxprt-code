@@ -43,6 +43,7 @@ run(`npm version ${versionCommand} --no-git-tag-version --allow-same-version`);
 const actualWorkspaces = [
   '@vybestack/llxprt-code',
   '@vybestack/llxprt-code-core',
+  '@vybestack/llxprt-code-providers',
   '@vybestack/llxprt-code-test-utils',
   'llxprt-code-vscode-ide-companion',
   '@vybestack/llxprt-code-lsp',
