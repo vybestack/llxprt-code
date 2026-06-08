@@ -326,6 +326,10 @@ export class SubagentOrchestrator {
       runConfig.max_turns = Math.floor(maxTurns);
     }
 
+    if (custom?.grace_period_seconds !== undefined) {
+      runConfig.grace_period_seconds = custom.grace_period_seconds;
+    }
+
     return runConfig;
   }
 
