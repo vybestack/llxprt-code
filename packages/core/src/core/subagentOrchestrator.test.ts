@@ -460,18 +460,14 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(result.dispose).toBeTypeOf('function');
   });
 
-  it('passes the foreground content generator factory into provider-backed subagent runtimes', async () => {
+  it('forwards providerManager to loader for provider-backed subagent runtimes', async () => {
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
     const loadProfile = vi.fn().mockResolvedValue(profile);
 
     const providerManager = { getActiveProvider: vi.fn() };
-    const contentGeneratorFactory = {
-      createContentGenerator: vi.fn(),
-    };
     const config = {
       ...makeForegroundConfig(),
       getProviderManager: () => providerManager,
-      getContentGeneratorFactory: () => contentGeneratorFactory,
     } as unknown as Config;
 
     const runtimeBundle = createRuntimeBundle('provider-backed');
@@ -504,7 +500,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     );
     expect(
       loaderArgs.profile.contentGeneratorConfig.contentGeneratorFactory,
-    ).toBe(contentGeneratorFactory);
+    ).toBeUndefined();
   });
 
   it('seeds default disabled tools into subagent runtime settings when profile omits disabled tools', async () => {
