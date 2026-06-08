@@ -85,6 +85,21 @@ describe('activate', () => {
       displayName: 'VS Code',
     }));
 
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            extensions: [
+              {
+                versions: [{ version: '1.1.0' }],
+              },
+            ],
+          },
+        ],
+      }),
+    } as Response);
+
     context = {
       subscriptions: [],
       environmentVariableCollection: {
