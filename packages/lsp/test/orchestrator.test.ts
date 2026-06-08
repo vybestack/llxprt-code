@@ -298,7 +298,7 @@ describe('Orchestrator unit tests against real implementation', () => {
     );
   });
 
-  it('passes requestTimeoutMs to LspClient instances', async () => {
+  it('requestTimeoutMs config does not break client initialization', async () => {
     const o = createOrchestrator(
       {
         servers: [createFakeServer('fake-ts', ['.ts'])],

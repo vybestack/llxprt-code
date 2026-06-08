@@ -475,7 +475,9 @@ export class Orchestrator {
         operation(controller.signal),
         new Promise<T>((resolveTimeout) => {
           timer = setTimeout(() => {
-            controller.abort();
+            controller.abort(
+              new Error(`Navigation timeout after ${timeoutMs}ms`),
+            );
             resolveTimeout(fallback);
           }, timeoutMs);
         }),

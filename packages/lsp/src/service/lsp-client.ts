@@ -659,9 +659,6 @@ export class LspClient {
       rejectOnce(abortReason());
     };
 
-    timeoutTimer = setTimeout(onTimeout, effectiveTimeout);
-    abortSignal?.addEventListener('abort', onAbort, { once: true });
-
     this.pending.set(id, {
       resolve: (value: unknown) => {
         if (!settle()) {
@@ -674,6 +671,9 @@ export class LspClient {
       },
       cleanup,
     });
+
+    timeoutTimer = setTimeout(onTimeout, effectiveTimeout);
+    abortSignal?.addEventListener('abort', onAbort, { once: true });
 
     if (abortSignal?.aborted) {
       rejectOnce(abortReason());
