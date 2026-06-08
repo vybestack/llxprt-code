@@ -1930,7 +1930,6 @@
             "requestTimeout": {
               "type": "number",
               "minimum": 1,
-
               "description": "Timeout in milliseconds for individual LSP JSON-RPC requests."
             }
           }
