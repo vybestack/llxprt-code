@@ -740,6 +740,41 @@ describe('Config LSP Integration (P33)', () => {
       expect(lspConfig?.diagnosticTimeout).toBeUndefined();
       expect(lspConfig?.firstTouchTimeout).toBeUndefined();
       expect(lspConfig?.navigationTools).toBeUndefined();
+      expect(lspConfig?.requestTimeout).toBeUndefined();
+    });
+  });
+
+  describe('REQ-CFG-074: navigationTimeout configuration', () => {
+    it('should pass navigationTimeout to LspConfig', async () => {
+      const customTimeout = 6000;
+      const params = createBaseConfigParams({
+        lsp: {
+          servers: [],
+          navigationTimeout: customTimeout,
+        },
+      });
+      const config = new Config(params);
+      await initializeTestConfig(config);
+
+      const lspConfig = config.getLspConfig();
+      expect(lspConfig?.navigationTimeout).toBe(customTimeout);
+    });
+  });
+
+  describe('REQ-CFG-075: requestTimeout configuration', () => {
+    it('should pass requestTimeout to LspConfig', async () => {
+      const customTimeout = 5000;
+      const params = createBaseConfigParams({
+        lsp: {
+          servers: [],
+          requestTimeout: customTimeout,
+        },
+      });
+      const config = new Config(params);
+      await initializeTestConfig(config);
+
+      const lspConfig = config.getLspConfig();
+      expect(lspConfig?.requestTimeout).toBe(customTimeout);
     });
   });
 

@@ -30,6 +30,9 @@ type FakeServerMode = {
   delayMs?: number;
   crashOnDidOpen?: boolean;
   crashOnDidChange?: boolean;
+  delayRequestMethods?: Set<string>;
+  crashOnMethod?: string;
+  delayRespondMs?: number;
 };
 
 const mode: FakeServerMode = parseMode(process.argv.slice(2));
@@ -52,6 +55,18 @@ function parseMode(args: string[]): FakeServerMode {
       continue;
     }
 
+    if (arg === '--delay-request-method') {
+      const methodValue = args[i + 1];
+      if (typeof methodValue === 'string' && methodValue.length > 0) {
+        if (!parsed.delayRequestMethods) {
+          parsed.delayRequestMethods = new Set();
+        }
+        parsed.delayRequestMethods.add(methodValue);
+      }
+      i += 1;
+      continue;
+    }
+
     if (arg === '--crash-on-did-open') {
       parsed.crashOnDidOpen = true;
       continue;
@@ -59,6 +74,34 @@ function parseMode(args: string[]): FakeServerMode {
 
     if (arg === '--crash-on-did-change') {
       parsed.crashOnDidChange = true;
+      continue;
+    }
+
+    if (arg === '--no-definition-response') {
+      if (!parsed.delayRequestMethods) {
+        parsed.delayRequestMethods = new Set();
+      }
+      parsed.delayRequestMethods.add('textDocument/definition');
+      continue;
+    }
+
+    if (arg === '--crash-on-method') {
+      const methodValue = args[i + 1];
+      if (typeof methodValue === 'string' && methodValue.length > 0) {
+        parsed.crashOnMethod = methodValue;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--delay-respond-ms') {
+      const raw = args[i + 1];
+      const value = Number(raw);
+      if (Number.isFinite(value) && value >= 0) {
+        parsed.delayRespondMs = value;
+      }
+      i += 1;
+      continue;
     }
   }
 
@@ -172,6 +215,27 @@ async function handleRequest(message: JsonRpcRequest): Promise<void> {
     return;
   }
 
+  // Delay specific request methods without responding (for timeout testing)
+  if (
+    mode.delayRequestMethods &&
+    mode.delayRequestMethods.has(message.method) &&
+    typeof message.id === 'number'
+  ) {
+    if (mode.delayRespondMs && mode.delayRespondMs > 0) {
+      // Delay response then send it late (for late-response testing)
+      await sleep(mode.delayRespondMs);
+      // Fall through to normal handling below after the delay
+    } else {
+      // Never respond — the request will hang until timeout
+      return;
+    }
+  }
+
+  // Crash on a specific request method
+  if (mode.crashOnMethod && message.method === mode.crashOnMethod) {
+    process.exit(99);
+  }
+
   if (message.method === 'textDocument/didOpen') {
     if (mode.crashOnDidOpen) {
       process.exit(99);
@@ -218,6 +282,49 @@ async function handleRequest(message: JsonRpcRequest): Promise<void> {
       uri,
       diagnostics: createDiagnosticsForText(updated),
     });
+    return;
+  }
+
+  // Handle textDocument/hover
+  if (message.method === 'textDocument/hover') {
+    send({
+      jsonrpc: '2.0',
+      id: message.id,
+      result: {
+        contents: 'fake hover result',
+      },
+    });
+    return;
+  }
+
+  // Handle textDocument/definition
+  if (message.method === 'textDocument/definition') {
+    send({
+      jsonrpc: '2.0',
+      id: message.id,
+      result: [],
+    });
+    return;
+  }
+
+  // Handle textDocument/documentSymbol
+  if (message.method === 'textDocument/documentSymbol') {
+    send({
+      jsonrpc: '2.0',
+      id: message.id,
+      result: [],
+    });
+    return;
+  }
+
+  // Handle textDocument/references
+  if (message.method === 'textDocument/references') {
+    send({
+      jsonrpc: '2.0',
+      id: message.id,
+      result: [],
+    });
+    return;
   }
 }
 

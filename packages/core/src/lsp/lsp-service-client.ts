@@ -377,7 +377,14 @@ export class LspServiceClient {
         ...process.env,
         LSP_BOOTSTRAP: JSON.stringify({
           workspaceRoot: this.workspaceRoot,
-          config: this.config,
+          config: {
+            servers: this.config.servers,
+            diagnosticsTimeoutMs: this.config.diagnosticTimeout,
+            firstTouchTimeoutMs: this.config.firstTouchTimeout,
+            navigationTimeoutMs: this.config.navigationTimeout,
+            navigationTools: this.config.navigationTools,
+            requestTimeoutMs: this.config.requestTimeout,
+          },
         }),
       },
     });

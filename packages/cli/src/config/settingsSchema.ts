@@ -368,17 +368,31 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
           },
           diagnosticTimeout: {
             type: 'number',
+            minimum: 1,
             description: 'Timeout in milliseconds for diagnostic requests.',
           },
           firstTouchTimeout: {
             type: 'number',
+            minimum: 1,
             description:
               'Timeout in milliseconds for first-touch diagnostic requests.',
+          },
+          navigationTimeout: {
+            type: 'number',
+            minimum: 1,
+            description: 'Timeout in milliseconds for LSP navigation requests.',
           },
           navigationTools: {
             type: 'boolean',
             description:
               'Whether to register LSP navigation tools (goto definition, find references, etc.).',
+          },
+          requestTimeout: {
+            type: 'number',
+            minimum: 1,
+
+            description:
+              'Timeout in milliseconds for individual LSP JSON-RPC requests.',
           },
         },
       },
