@@ -62,6 +62,7 @@ function npmReleasePackages() {
 describe('release package derivation', () => {
   it('derives npm-published packages from workspace package metadata', () => {
     expect(npmReleasePackages()).toEqual([
+      '@vybestack/llxprt-code-mcp',
       '@vybestack/llxprt-code-core',
       '@vybestack/llxprt-code-providers',
       '@vybestack/llxprt-code',
@@ -102,7 +103,10 @@ describe('.github/workflows/release.yml', () => {
     }
   });
 
-  it('publishes providers after core but before CLI', () => {
+  it('publishes MCP before core, providers, and CLI', () => {
+    const mcpIndex = releaseYml.indexOf(
+      'npm publish --workspace=@vybestack/llxprt-code-mcp',
+    );
     const coreIndex = releaseYml.indexOf(
       'npm publish --workspace=@vybestack/llxprt-code-core',
     );
@@ -113,7 +117,8 @@ describe('.github/workflows/release.yml', () => {
       'npm publish --workspace=@vybestack/llxprt-code ',
     );
 
-    expect(coreIndex).toBeGreaterThan(0);
+    expect(mcpIndex).toBeGreaterThan(0);
+    expect(coreIndex).toBeGreaterThan(mcpIndex);
     expect(providersIndex).toBeGreaterThan(coreIndex);
     expect(cliIndex).toBeGreaterThan(providersIndex);
   });
