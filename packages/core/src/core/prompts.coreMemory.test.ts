@@ -41,7 +41,10 @@ const mockSettingsService = {
   get: vi.fn().mockReturnValue(undefined),
   set: vi.fn(),
 };
-vi.mock('../settings/settingsServiceInstance.js', () => ({
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
   getSettingsService: () => mockSettingsService,
 }));
 

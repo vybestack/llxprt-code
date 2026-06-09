@@ -206,13 +206,12 @@ describe('runtimeRegistry', () => {
       expect(identity.runtimeId).toBe(LEGACY_RUNTIME_ID);
     });
 
-    it('should return registered runtimeId when context has unregistered id', () => {
+    it('should return the first registered runtimeId when no scope or provider context exists', () => {
       const registeredId = 'registered-runtime-1';
       upsertRuntimeEntry(registeredId, {});
 
-      // When there's no active context, it should fall back to legacy
       const identity = resolveActiveRuntimeIdentity();
-      expect(identity.runtimeId).toBe(LEGACY_RUNTIME_ID);
+      expect(identity.runtimeId).toBe(registeredId);
     });
   });
 });

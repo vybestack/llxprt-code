@@ -13,7 +13,7 @@ import {
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 describe('ProviderManager - Gemini switching', () => {
   let manager: ProviderManager;

@@ -6,11 +6,11 @@
 
 import {
   getSettingHelp,
-  validateSetting,
   parseSetting,
   resolveAlias,
   SETTINGS_REGISTRY,
-} from '@vybestack/llxprt-code-core';
+  validateSetting,
+} from '@vybestack/llxprt-code-settings';
 
 export const ephemeralSettingHelp: Record<string, string> = getSettingHelp();
 

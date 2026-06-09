@@ -17,7 +17,7 @@ import { type FunctionDeclaration } from '@google/genai';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import process from 'node:process';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import * as Diff from 'diff';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { tildeifyPath } from '../utils/paths.js';
@@ -27,7 +27,7 @@ import {
 } from './modifiable-tool.js';
 import { ToolErrorType } from './tool-error.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import { getRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
 
 const logger = new DebugLogger('llxprt:tools:memory');
 
@@ -381,7 +381,7 @@ export class MemoryTool
     // Core scopes require model.canSaveCore to be enabled
     if (isCoreScope(params.scope)) {
       try {
-        const settingsService = getSettingsService();
+        const settingsService = getRuntimeSettingsService();
         const canSaveCore = settingsService.get('model.canSaveCore') as
           | boolean
           | undefined;

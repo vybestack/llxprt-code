@@ -22,8 +22,8 @@ import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import {
   resetSettingsService,
   registerSettingsService,
-} from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+} from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,

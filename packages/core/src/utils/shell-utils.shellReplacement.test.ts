@@ -10,7 +10,7 @@ import {
   checkCommandPermissions,
 } from './shell-utils.js';
 import { Config } from '../config/config.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 describe('Shell replacement settings', () => {

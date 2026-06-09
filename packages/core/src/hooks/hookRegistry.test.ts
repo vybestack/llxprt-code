@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import { HookRegistry, ConfigSource } from './hookRegistry.js';
-import type { Storage } from '../config/storage.js';
+import type { Storage } from '@vybestack/llxprt-code-settings';
 import { HookEventName, HookType } from './types.js';
 import type { Config } from '../config/config.js';
 import type { HookDefinition } from './types.js';

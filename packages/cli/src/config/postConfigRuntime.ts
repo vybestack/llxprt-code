@@ -7,10 +7,10 @@
 import {
   ApprovalMode,
   DebugLogger,
-  ProfileManager,
   type Config,
-  type SettingsService,
 } from '@vybestack/llxprt-code-core';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { getCliRuntimeContext } from '../runtime/runtimeAccessors.js';
 import { setCliRuntimeContext } from '../runtime/runtimeLifecycle.js';
 import { switchActiveProvider } from '../runtime/providerSwitch.js';
@@ -81,7 +81,7 @@ function getSettingsService(
 ): SettingsService {
   return (
     input.runtimeOverrides.settingsService ??
-    input.runtimeState.runtime.settingsService
+    (input.runtimeState.runtime.settingsService as SettingsService)
   );
 }
 

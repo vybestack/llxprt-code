@@ -465,7 +465,8 @@ export class TurnProcessor {
       invocation: {
         signal: timeoutSignal,
       } as unknown as GenerateChatOptions['invocation'],
-      settings: runtimeContext.settingsService,
+      settings:
+        runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
       userMemory: runtimeContext.config?.getUserMemory?.(),

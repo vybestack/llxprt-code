@@ -12,7 +12,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SettingsService } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 // This test tests provider registration behavior, needs real providerAliases

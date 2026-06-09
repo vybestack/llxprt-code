@@ -6,16 +6,18 @@
 
 /* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import {
-  type Profile,
-  type ModelParams,
-  type LoadBalancerProfile,
   ProfileManager,
-  DebugLogger,
   getProfilePersistableKeys,
-  resolveAlias,
   isLoadBalancerProfile,
-} from '@vybestack/llxprt-code-core';
+  resolveAlias,
+} from '@vybestack/llxprt-code-settings';
+import type {
+  Profile,
+  ModelParams,
+  LoadBalancerProfile,
+} from '@vybestack/llxprt-code-settings';
 import {
   getCliRuntimeServices,
   getCliOAuthManager,

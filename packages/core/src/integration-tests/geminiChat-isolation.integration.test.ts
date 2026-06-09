@@ -37,7 +37,7 @@ import {
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const noopProviderAdapter: AgentRuntimeProviderAdapter = {
   getActiveProvider: () => ({ name: 'stub-provider' }) as IProvider,

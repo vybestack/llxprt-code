@@ -9,8 +9,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 // Mock Storage before importing PersistentState
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-settings', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-settings');
   return {
     ...actual,
     Storage: {

@@ -33,9 +33,9 @@ vi.mock('fs', async (importOriginal) => {
     mkdirSync: vi.fn(),
   };
 });
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-settings', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
   const pathModule = await import('path');
   class Storage {
     getProjectTempDir(): string {

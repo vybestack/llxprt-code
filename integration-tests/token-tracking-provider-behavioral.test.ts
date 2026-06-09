@@ -17,7 +17,7 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-settings/settings/settingsServiceInstance.js';
 
 /**
  * Provider-Specific Token Tracking Behavioral Tests

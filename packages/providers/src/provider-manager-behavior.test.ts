@@ -45,7 +45,7 @@ import {
 } from '@vybestack/llxprt-code-providers';
 
 // Import SettingsService for proper ProviderManager construction
-import { SettingsService } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P10

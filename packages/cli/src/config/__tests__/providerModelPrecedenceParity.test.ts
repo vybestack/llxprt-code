@@ -30,6 +30,7 @@ import {
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
@@ -93,8 +94,8 @@ vi.mock('../profileBootstrap.js', async () => {
     '../profileBootstrap.js',
   );
   const { SettingsService: RealSettingsService } = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+    typeof import('@vybestack/llxprt-code-settings')
+  >('@vybestack/llxprt-code-settings');
   return {
     ...actual,
     prepareRuntimeForProfile: vi.fn(async () => ({
@@ -119,7 +120,7 @@ vi.mock('../profileBootstrap.js', async () => {
 
 const runtimeSettingsState = vi.hoisted(() => ({
   context: null as {
-    settingsService: ServerConfig.SettingsService;
+    settingsService: SettingsService;
     config: ServerConfig.Config | null;
     runtimeId: string;
     metadata?: Record<string, unknown>;
@@ -150,7 +151,7 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
     setCliRuntimeContext: vi.fn(
       (
-        settingsService: ServerConfig.SettingsService,
+        settingsService: SettingsService,
         config?: ServerConfig.Config,
         options: {
           metadata?: Record<string, unknown>;
@@ -184,8 +185,7 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     getCliRuntimeServices: vi.fn(() => ({
       config: runtimeSettingsState.context?.config ?? null,
       settingsService:
-        runtimeSettingsState.context?.settingsService ??
-        new ServerConfig.SettingsService(),
+        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
       providerManager: getProviderManager(),
     })),
     getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
@@ -271,7 +271,7 @@ async function runConfig(settings: Settings, argv?: string[]) {
     process.argv = ['node', 'script.js', ...argv];
   }
   const parsedArgv = await parseArguments(settings);
-  const runtimeSettingsService = new ServerConfig.SettingsService();
+  const runtimeSettingsService = new SettingsService();
   return loadCliConfig(
     settings,
     [],

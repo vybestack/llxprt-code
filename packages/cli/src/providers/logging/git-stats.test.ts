@@ -12,8 +12,8 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
-  SettingsService,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

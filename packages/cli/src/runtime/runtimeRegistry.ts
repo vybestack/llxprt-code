@@ -22,13 +22,15 @@
 import {
   type Config,
   DebugLogger,
-  type SettingsService,
-  type ProfileManager,
-  clearActiveProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
   type RuntimeProviderManager,
   type RuntimeAuthScopeFlushResult,
 } from '@vybestack/llxprt-code-core';
+import { clearSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import type {
+  SettingsService,
+  ProfileManager,
+} from '@vybestack/llxprt-code-settings';
 import { type OAuthManager } from '../auth/oauth-manager.js';
 import { resetProviderManager } from '../providers/providerManagerInstance.js';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
@@ -80,6 +82,11 @@ export function resolveActiveRuntimeIdentity(): {
     }
 
     return { runtimeId: candidateId, metadata: context.metadata ?? {} };
+  }
+
+  const firstRegistered = runtimeRegistry.keys().next().value;
+  if (firstRegistered) {
+    return { runtimeId: firstRegistered, metadata: {} };
   }
 
   return { runtimeId: LEGACY_RUNTIME_ID, metadata: {} };
@@ -170,7 +177,7 @@ export function disposeCliRuntime(
 
   const activeContext = peekActiveProviderRuntimeContext();
   if (activeContext?.runtimeId === runtimeId) {
-    clearActiveProviderRuntimeContext();
+    clearSettingsProviderRuntimeContext();
   }
 
   resetProviderManager();
@@ -178,6 +185,6 @@ export function disposeCliRuntime(
 
 export function resetCliRuntimeRegistryForTesting(): void {
   runtimeRegistry.clear();
-  clearActiveProviderRuntimeContext();
+  clearSettingsProviderRuntimeContext();
   resetProviderManager();
 }

@@ -19,7 +19,7 @@ import { DebugLogger } from '../debug/index.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
-import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { createSettingsProviderRuntimeContext } from '../runtime/settingsRuntimeAdapter.js';
 import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { getErrorMessage } from '../utils/errors.js';
 import type { ContentGenerator } from './contentGenerator.js';
@@ -248,7 +248,7 @@ async function buildChatFromRuntime(
   );
 
   const settings = buildSettingsSnapshot(config);
-  const providerRuntime = createProviderRuntimeContext({
+  const providerRuntime = createSettingsProviderRuntimeContext({
     settingsService: config.getSettingsService(),
     config,
     runtimeId: runtimeState.runtimeId,

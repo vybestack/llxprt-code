@@ -14,7 +14,7 @@ import {
   vi,
 } from 'vitest';
 import { Config } from './config.js';
-import type { ISettingsService } from '../settings/types.js';
+import type { ISettingsService } from '@vybestack/llxprt-code-settings/settings/types.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { clearAllSchedulers } from './schedulerSingleton.js';
 

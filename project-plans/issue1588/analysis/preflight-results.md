@@ -1,0 +1,3161 @@
+# Preflight Results
+
+Plan ID: PLAN-20260608-ISSUE1588
+Phase: PLAN-20260608-ISSUE1588.P0.5
+
+This artifact records actual command output gathered before implementation begins.
+
+## Prerequisite: branch and workspace status
+
+```bash
+git status --short && git branch --show-current
+```
+
+```text
+?? project-plans/issue1588/
+issue1588
+```
+
+Exit status: 0
+
+## Prerequisite: analysis artifact inventory
+
+```bash
+find project-plans/issue1588 -maxdepth 3 -type f | sort
+```
+
+```text
+project-plans/issue1588/analysis/anti-shim-policy.md
+project-plans/issue1588/analysis/behavioral-regression-matrix.md
+project-plans/issue1588/analysis/boundary-verification-script.md
+project-plans/issue1588/analysis/call-site-migration-matrix.md
+project-plans/issue1588/analysis/consumer-import-matrix.md
+project-plans/issue1588/analysis/dependency-audit.md
+project-plans/issue1588/analysis/final-architecture.md
+project-plans/issue1588/analysis/integration-contract.md
+project-plans/issue1588/analysis/package-metadata-constraints.md
+project-plans/issue1588/analysis/phase-verification-matrix.md
+project-plans/issue1588/analysis/preflight-results-template.md
+project-plans/issue1588/analysis/preflight-results.md
+project-plans/issue1588/analysis/pseudocode/consumer-migration.md
+project-plans/issue1588/analysis/pseudocode/package-boundary.md
+project-plans/issue1588/analysis/pseudocode/profile-storage.md
+project-plans/issue1588/analysis/pseudocode/settings-service.md
+project-plans/issue1588/analysis/pseudocode/verification.md
+project-plans/issue1588/analysis/settings-move-map.md
+project-plans/issue1588/execution-tracker.md
+project-plans/issue1588/plan/00-overview.md
+project-plans/issue1588/plan/00a-preflight-verification.md
+project-plans/issue1588/plan/01-analysis.md
+project-plans/issue1588/plan/01a-analysis-verification.md
+project-plans/issue1588/plan/02-pseudocode.md
+project-plans/issue1588/plan/02a-pseudocode-verification.md
+project-plans/issue1588/plan/02b-integration-contract.md
+project-plans/issue1588/plan/02c-integration-contract-verification.md
+project-plans/issue1588/plan/03-decoupling-stub.md
+project-plans/issue1588/plan/03a-decoupling-stub-verification.md
+project-plans/issue1588/plan/03b-minimal-adapter-wiring-verification.md
+project-plans/issue1588/plan/03b-minimal-adapter-wiring.md
+project-plans/issue1588/plan/04-settings-package-tdd.md
+project-plans/issue1588/plan/04a-settings-package-tdd-verification.md
+project-plans/issue1588/plan/04b-vertical-slice-integration-tdd-verification.md
+project-plans/issue1588/plan/04b-vertical-slice-integration-tdd.md
+project-plans/issue1588/plan/05-settings-package-impl.md
+project-plans/issue1588/plan/05a-settings-package-impl-verification.md
+project-plans/issue1588/plan/06-core-integration-stub.md
+project-plans/issue1588/plan/06a-core-integration-stub-verification.md
+project-plans/issue1588/plan/07-consumer-migration-tdd.md
+project-plans/issue1588/plan/07a-consumer-migration-tdd-verification.md
+project-plans/issue1588/plan/08-consumer-migration-impl.md
+project-plans/issue1588/plan/08a-consumer-migration-impl-verification.md
+project-plans/issue1588/plan/09-cleanup-no-shims.md
+project-plans/issue1588/plan/09a-cleanup-no-shims-verification.md
+project-plans/issue1588/plan/10-full-verification.md
+project-plans/issue1588/plan/10a-final-semantic-review.md
+project-plans/issue1588/reviews/review-01.md
+project-plans/issue1588/reviews/review-02.md
+project-plans/issue1588/reviews/review-03.md
+project-plans/issue1588/reviews/review-04.md
+project-plans/issue1588/reviews/review-05.md
+project-plans/issue1588/reviews/review-06.md
+project-plans/issue1588/reviews/review-07.md
+project-plans/issue1588/reviews/review-08.md
+project-plans/issue1588/reviews/review-09.md
+project-plans/issue1588/reviews/review-10.md
+project-plans/issue1588/reviews/review-prompt.md
+project-plans/issue1588/reviews/revision-01.md
+project-plans/issue1588/reviews/revision-02.md
+project-plans/issue1588/reviews/revision-03.md
+project-plans/issue1588/reviews/revision-04.md
+project-plans/issue1588/reviews/revision-05.md
+project-plans/issue1588/reviews/revision-06.md
+project-plans/issue1588/reviews/revision-07.md
+project-plans/issue1588/reviews/revision-08.md
+project-plans/issue1588/reviews/revision-09.md
+project-plans/issue1588/reviews/revision-10.md
+project-plans/issue1588/reviews/targeted-cleanup-remediation.md
+project-plans/issue1588/reviews/targeted-cleanup.md
+project-plans/issue1588/run-preflight.sh
+project-plans/issue1588/specification.md
+```
+
+Exit status: 0
+
+## Prerequisite: no production package changes
+
+```bash
+git diff --name-only HEAD -- packages || true; git status --short -- packages
+```
+
+```text
+```
+
+Exit status: 0
+
+## Compression Strategy Preflight Values
+
+```bash
+echo '=== COMPRESSION_STRATEGIES values ==='; grep -A5 'COMPRESSION_STRATEGIES = \[' packages/core/src/core/compression/types.ts
+```
+
+```text
+=== COMPRESSION_STRATEGIES values ===
+export const COMPRESSION_STRATEGIES = [
+  'middle-out',
+  'top-down-truncation',
+  'one-shot',
+  'high-density',
+] as const;
+```
+
+Exit status: 0
+
+## a2a-server settings symbol imports
+
+```bash
+echo '=== a2a-server settings symbol imports ==='; rg -n 'import.*Storage|import.*SettingsService|import.*ProfileManager|import.*getSettingsService|import.*registerSettingsService|import.*resetSettingsService|import.*SETTINGS_REGISTRY' packages/a2a-server/src --glob '*.ts' && echo 'FOUND: a2a-server imports settings symbols' || echo 'OK: a2a-server does not import settings symbols directly'; echo '=== a2a-server core imports ==='; rg -n 'from ['\''"'\'']@vybestack/llxprt-code-core' packages/a2a-server/src --glob '*.ts'
+```
+
+```text
+=== a2a-server settings symbol imports ===
+packages/a2a-server/src/persistence/gcs.ts:7:import { Storage } from '@google-cloud/storage';
+packages/a2a-server/src/persistence/gcs.test.ts:7:import { Storage } from '@google-cloud/storage';
+packages/a2a-server/src/http/requestStorage.ts:8:import { AsyncLocalStorage } from 'node:async_hooks';
+packages/a2a-server/src/http/app.ts:23:import { requestStorage } from './requestStorage.js';
+packages/a2a-server/src/agent/executor.ts:39:import { requestStorage } from '../http/requestStorage.js';
+FOUND: a2a-server imports settings symbols
+=== a2a-server core imports ===
+packages/a2a-server/src/commands/command-registry.ts:11:import { debugLogger } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/commands/extensions.test.ts:9:import type { Config } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/commands/restore.test.ts:9:import type { Config, GitService } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/commands/types.ts:7:import type { Config, GitService } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/commands/extensions.ts:7:import { listExtensions } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/commands/init.test.ts:17:import type { Config } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/commands/restore.ts:12:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/http/app.ts:29:import type { GitService } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/http/app.ts:30:import { debugLogger } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/http/app.test.ts:10:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/http/app.test.ts:15:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/http/app.test.ts:16:import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+packages/a2a-server/src/types.ts:10:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/agent/task.ts:20:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/agent/task.ts:33:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/agent/task-support.ts:25:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/agent/task.test.ts:18:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/agent/task-support.test.ts:11:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/agent/executor.ts:20:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/agent/executor.ts:21:import { GeminiEventType } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/utils/testing_utils.ts:15:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/utils/testing_utils.ts:22:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/utils/testing_utils.ts:23:import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/config/config.test.ts:12:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/config/config.ts:12:import type { TelemetryTarget } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/config/config.ts:13:import { debugLogger } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/config/config.ts:25:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/config/extension.ts:13:} from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/config/extension.ts:14:import { LLXPRT_CONFIG_DIR } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/config/settings.ts:11:import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/config/settings.ts:12:import { debugLogger } from '@vybestack/llxprt-code-core';
+packages/a2a-server/src/config/settings.ts:17:} from '@vybestack/llxprt-code-core';
+```
+
+Exit status: 0
+
+## Workspace Package Inventory
+
+```bash
+node -e "const p=require('./package.json'); console.log(p.workspaces.join('\n'))"; find packages -maxdepth 2 -name package.json -print | sort
+```
+
+```text
+packages/core
+packages/providers
+packages/cli
+packages/a2a-server
+packages/test-utils
+packages/vscode-ide-companion
+packages/lsp
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/lsp/package.json
+packages/providers/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+```
+
+Exit status: 0
+
+## Package Convention Baseline
+
+```bash
+cat packages/providers/package.json; cat packages/providers/tsconfig.json; cat packages/providers/vitest.config.ts; cat packages/providers/index.ts; cat packages/providers/src/index.ts
+```
+
+```text
+{
+  "name": "@vybestack/llxprt-code-providers",
+  "version": "0.10.0",
+  "description": "LLxprt Code Providers — LLM provider implementations and management",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./BaseProvider.js": "./dist/src/BaseProvider.js",
+    "./IModel.js": "./dist/src/IModel.js",
+    "./IProvider.js": "./dist/src/IProvider.js",
+    "./IProviderManager.js": "./dist/src/IProviderManager.js",
+    "./ITool.js": "./dist/src/ITool.js",
+    "./LoggingProviderWrapper.js": "./dist/src/LoggingProviderWrapper.js",
+    "./ProviderContentGenerator.js": "./dist/src/ProviderContentGenerator.js",
+    "./ProviderManager.js": "./dist/src/ProviderManager.js",
+    "./logging/ProviderPerformanceTracker.js": "./dist/src/logging/ProviderPerformanceTracker.js",
+    "./providerConfigKeys.js": "./dist/src/providerConfigKeys.js",
+    "./reasoning/reasoningUtils.js": "./dist/src/reasoning/reasoningUtils.js",
+    "./tokenizers/AnthropicTokenizer.js": "./dist/src/tokenizers/AnthropicTokenizer.js",
+    "./tokenizers/ITokenizer.js": "./dist/src/tokenizers/ITokenizer.js",
+    "./tokenizers/OpenAITokenizer.js": "./dist/src/tokenizers/OpenAITokenizer.js",
+    "./types.js": "./dist/src/types.js",
+    "./types/IProviderConfig.js": "./dist/src/types/IProviderConfig.js",
+    "./types/providerRuntime.js": "./dist/src/types/providerRuntime.js",
+    "./utils/mediaUtils.js": "./dist/src/utils/mediaUtils.js"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.74",
+    "@ai-sdk/provider-utils": "^2.0.6",
+    "@anthropic-ai/sdk": "^0.55.1",
+    "@dqbd/tiktoken": "^1.0.21",
+    "@google/genai": "1.30.0",
+    "@vybestack/llxprt-code-core": "file:../core",
+    "ai": "^5.0.104",
+    "openai": "^5.10.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "@vybestack/llxprt-code-test-utils": "file:../test-utils",
+    "typescript": "^5.3.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/providers.tsbuildinfo",
+    "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
+    "composite": false,
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-providers": ["./index.ts"],
+      "@vybestack/llxprt-code-providers/*": ["./src/*"],
+      "@vybestack/llxprt-code-core": ["../core/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"]
+    }
+  },
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.json",
+    "../core/src/types/wasm.d.ts"
+  ],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P06
+ * @requirement:REQ-PKG-001
+ * @pseudocode lines 13-14
+ */
+
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vitest/config';
+
+const isWindows = process.platform === 'win32';
+const isMacCi = process.platform === 'darwin' && process.env.CI === 'true';
+const shouldUseForkPool = isWindows || isMacCi;
+
+const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
+const corePackagePrefix = '@vybestack/llxprt-code-core/';
+const providersEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
+const providersSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
+const coreEntry = fileURLToPath(new URL('../core/index.ts', import.meta.url));
+const coreSrcDir = fileURLToPath(new URL('../core/src/', import.meta.url));
+
+function resolveTsSource(baseDir: string, specifier: string): string {
+  const direct = baseDir + specifier;
+  if (direct.endsWith('.js')) {
+    const tsPath = direct.slice(0, -3) + '.ts';
+    if (existsSync(tsPath)) {
+      return tsPath;
+    }
+  }
+  return direct;
+}
+
+const workspaceAliasPlugin = {
+  name: 'llxprt-workspace-source-aliases',
+  enforce: 'pre' as const,
+  resolveId(source: string) {
+    if (source === '@vybestack/llxprt-code-providers') {
+      return providersEntry;
+    }
+    if (source.startsWith(providersPackagePrefix)) {
+      return resolveTsSource(
+        providersSrcDir,
+        source.slice(providersPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-core') {
+      return coreEntry;
+    }
+    if (source.startsWith(corePackagePrefix)) {
+      return resolveTsSource(
+        coreSrcDir,
+        source.slice(corePackagePrefix.length),
+      );
+    }
+    if (source === 'ajv') {
+      return fileURLToPath(
+        new URL(
+          '../../node_modules/ajv-formats/node_modules/ajv/dist/ajv.js',
+          import.meta.url,
+        ),
+      );
+    }
+    if (source === 'ajv/dist/2020.js') {
+      return fileURLToPath(
+        new URL(
+          '../../node_modules/ajv-formats/node_modules/ajv/dist/2020.js',
+          import.meta.url,
+        ),
+      );
+    }
+    if (source === 'fdir') {
+      return fileURLToPath(
+        new URL(
+          '../../node_modules/vite/node_modules/fdir/dist/index.mjs',
+          import.meta.url,
+        ),
+      );
+    }
+    return null;
+  },
+};
+
+const coverageReporter = isWindows
+  ? [
+      ['text', { file: 'full-text-summary.txt' }],
+      ['json-summary', { outputFile: 'coverage-summary.json' }],
+    ]
+  : [
+      ['text', { file: 'full-text-summary.txt' }],
+      'html',
+      'json',
+      'lcov',
+      'cobertura',
+      ['json-summary', { outputFile: 'coverage-summary.json' }],
+    ];
+
+export default defineConfig({
+  plugins: [workspaceAliasPlugin],
+  test: {
+    passWithNoTests: true,
+    reporters: ['default', 'junit'],
+    testTimeout: 30000,
+    teardownTimeout: 120000,
+    silent: true,
+    setupFiles: ['./test-setup.ts'],
+    server: {
+      deps: {
+        inline: [
+          '@vybestack/llxprt-code-core',
+          '@vybestack/llxprt-code-providers',
+          'ajv',
+        ],
+      },
+    },
+    dangerouslyIgnoreUnhandledErrors: isWindows,
+    pool: shouldUseForkPool ? 'forks' : undefined,
+    poolOptions: shouldUseForkPool
+      ? {
+          forks: {
+            minForks: 1,
+            maxForks: 2,
+          },
+        }
+      : undefined,
+    outputFile: {
+      junit: 'junit.xml',
+    },
+    coverage: {
+      enabled: true,
+      provider: 'v8',
+      reportsDirectory: './coverage',
+      include: ['src/**/*'],
+      reporter: coverageReporter,
+    },
+  },
+});
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P06
+ * @requirement:REQ-PKG-001
+ * @pseudocode lines 13-14
+ */
+
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+export * from './src/index.js';
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P11
+ * @requirement:REQ-PKG-001
+ * @pseudocode lines 15-21
+ */
+
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Provider package public API entry point.
+ *
+ * Exports all provider implementations, manager, tokenizers, errors, and
+ * utility functions that were previously re-exported from core.
+ *
+ * Per integration-contract.md IC-01, this is the single source of truth
+ * for the providers package public API.
+ */
+
+// --- Contract interfaces ---
+export type {
+  IProvider,
+  GenerateChatOptions,
+  ProviderToolset,
+} from './IProvider.js';
+export type { IProviderManager } from './IProviderManager.js';
+export type { IModel } from './IModel.js';
+export type { ITool } from './ITool.js';
+export type { ITokenizer } from './tokenizers/ITokenizer.js';
+export type { NormalizedGenerateChatOptions } from './BaseProvider.js';
+export { ContentGeneratorRole } from './ContentGeneratorRole.js';
+
+// --- Provider manager ---
+export { ProviderManager, type CacheStatistics } from './ProviderManager.js';
+
+// --- Provider implementations ---
+export { OpenAIProvider } from './openai/OpenAIProvider.js';
+export { AnthropicProvider } from './anthropic/AnthropicProvider.js';
+export { GeminiProvider } from './gemini/GeminiProvider.js';
+export { OpenAIResponsesProvider } from './openai-responses/OpenAIResponsesProvider.js';
+export { OpenAIVercelProvider } from './openai-vercel/index.js';
+export { FakeProvider } from './fake/FakeProvider.js';
+export {
+  LoadBalancingProvider,
+  type LoadBalancingProviderConfig,
+  type LoadBalancerSubProfile,
+  type LoadBalancerStats,
+  type ExtendedLoadBalancerStats,
+  type BackendMetrics,
+  type CircuitBreakerState,
+  type ResolvedSubProfile,
+} from './LoadBalancingProvider.js';
+
+// --- Content generation ---
+export { ProviderContentGenerator } from './ProviderContentGenerator.js';
+
+// --- Tokenizers ---
+export { OpenAITokenizer } from './tokenizers/OpenAITokenizer.js';
+export { AnthropicTokenizer } from './tokenizers/AnthropicTokenizer.js';
+
+// --- Errors ---
+export {
+  AuthenticationRequiredError,
+  RateLimitError,
+  QuotaError,
+  AuthenticationError,
+  ServerError,
+  NetworkError,
+  ClientError,
+  MissingProviderRuntimeError,
+  LoadBalancerFailoverError,
+  AllBucketsExhaustedError,
+  isAuthBucketFailureReason,
+  type BucketFailureReason,
+} from './errors.js';
+
+// --- Provider types ---
+export type {
+  Provider,
+  ProviderMessage,
+  ProviderTool,
+  ProviderToolCall,
+} from './types.js';
+export type { IProviderConfig } from './types/IProviderConfig.js';
+export type {
+  ProviderTelemetryContext,
+  ResolvedAuthToken,
+} from './types/providerRuntime.js';
+export type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
+// --- Provider config keys ---
+export { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
+
+// --- Provider utilities ---
+export {
+  fetchApiKeyQuota,
+  detectApiKeyProvider,
+  detectApiKeyProviderFromName,
+  type ApiKeyQuotaResult,
+  type ApiKeyQuotaProvider,
+  API_KEY_PROVIDER_NAME_MAP,
+} from './apiKeyQuotaResolver.js';
+// --- Usage info ---
+export * from './anthropic/usageInfo.js';
+export { formatAllUsagePeriods } from './anthropic/usageInfo.js';
+export * from './gemini/usageInfo.js';
+export * from './openai/codexUsageInfo.js';
+export {
+  CodexUsageInfoSchema,
+  formatCodexUsage,
+} from './openai/codexUsageInfo.js';
+export * from './zai/usageInfo.js';
+export * from './synthetic/usageInfo.js';
+export * from './chutes/usageInfo.js';
+export * from './kimi/usageInfo.js';
+
+// --- Additional utilities ---
+export { ConversationCache } from './openai/ConversationCache.js';
+export { getOpenAIProviderInfo } from './openai/getOpenAIProviderInfo.js';
+
+// --- Additional types needed for provider construction ---
+export type { DumpMode } from './utils/dumpContext.js';
+```
+
+Exit status: 0
+
+## Settings Source Inventory
+
+```bash
+find packages/core/src/settings -maxdepth 3 -type f | sort; find packages/core/src/config -maxdepth 2 -type f | sort
+```
+
+```text
+packages/core/src/settings/__tests__/settingsRegistry.test.ts
+packages/core/src/settings/index.ts
+packages/core/src/settings/settingsRegistry.ts
+packages/core/src/settings/SettingsService.ts
+packages/core/src/settings/settingsServiceInstance.ts
+packages/core/src/settings/types.ts
+packages/core/src/config/__tests__/config-terminal-background.test.ts
+packages/core/src/config/__tests__/config.previewFeatures.test.ts
+packages/core/src/config/__tests__/models.test.ts
+packages/core/src/config/config-lsp-integration.test.ts
+packages/core/src/config/config-session-adoption.test.ts
+packages/core/src/config/config.alwaysAllow.test.ts
+packages/core/src/config/config.ephemeral.test.ts
+packages/core/src/config/config.scheduler.test.ts
+packages/core/src/config/config.test.ts
+packages/core/src/config/config.ts
+packages/core/src/config/configBase.ts
+packages/core/src/config/configBaseCore.ts
+packages/core/src/config/configConstructor.ts
+packages/core/src/config/configTypes.ts
+packages/core/src/config/constants.ts
+packages/core/src/config/endpoints.test.ts
+packages/core/src/config/endpoints.ts
+packages/core/src/config/ephemeralSettingsHelpers.ts
+packages/core/src/config/flashFallback.test.ts
+packages/core/src/config/index.ts
+packages/core/src/config/lspIntegration.ts
+packages/core/src/config/models.ts
+packages/core/src/config/onAuthErrorHandler.test.ts
+packages/core/src/config/profileManager.test.ts
+packages/core/src/config/profileManager.ts
+packages/core/src/config/schedulerSingleton.ts
+packages/core/src/config/storage.test.ts
+packages/core/src/config/storage.ts
+packages/core/src/config/subagentManager.ts
+packages/core/src/config/test/subagentManager.test.ts
+packages/core/src/config/toolRegistryFactory.ts
+packages/core/src/config/types.ts
+```
+
+Exit status: 0
+
+## Type/Interface Verification
+
+```bash
+sed -n '1,260p' packages/core/src/settings/types.ts; sed -n '1,260p' packages/core/src/settings/SettingsService.ts; sed -n '1,260p' packages/core/src/settings/settingsRegistry.ts; sed -n '1,180p' packages/core/src/settings/settingsServiceInstance.ts; sed -n '1,260p' packages/core/src/config/profileManager.ts; sed -n '1,260p' packages/core/src/config/storage.ts; sed -n '1,340p' packages/core/src/types/modelParams.ts
+```
+
+```text
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Settings service interfaces and types
+ */
+
+/**
+ * Emoji filter configuration
+ * @requirement REQ-003.2 - Default configuration in settings.json
+ * @plan PLAN-20250113-EMOJIFILTER.P08
+ */
+export interface EmojiFilterSettings {
+  mode: 'allowed' | 'auto' | 'warn' | 'error';
+}
+
+/**
+ * Global settings schema matching the specification
+ */
+export interface GlobalSettings {
+  defaultProvider?: string;
+  providers: Record<string, ProviderSettings>;
+  ui?: UISettings | null;
+  telemetry?: TelemetrySettings;
+  advanced?: AdvancedSettings;
+  /**
+   * Emoji filter configuration
+   * @requirement REQ-003.2 - Default configuration in settings.json
+   * @plan PLAN-20250113-EMOJIFILTER.P08
+   */
+  emojiFilter?: EmojiFilterSettings;
+}
+
+/**
+ * Provider-specific settings
+ */
+export interface ProviderSettings {
+  enabled: boolean;
+  apiKey?: string;
+  'base-url'?: string;
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+  toolFormat?:
+    | 'auto'
+    | 'openai'
+    | 'qwen'
+    | 'kimi'
+    | 'hermes'
+    | 'xml'
+    | 'anthropic'
+    | 'deepseek'
+    | 'gemma'
+    | 'llama';
+  /**
+   * Anthropic/OpenAI prompt caching configuration
+   * - 'off': No caching
+   * - '5m': 5-minute cache TTL (Anthropic only)
+   * - '1h': 1-hour cache TTL (default, Anthropic only)
+   * - '24h': 24-hour cache TTL (OpenAI only)
+   */
+  'prompt-caching'?: 'off' | '5m' | '1h' | '24h';
+  /** Whether to include folder structure in system prompts (default: false) */
+  'include-folder-structure'?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * UI-related settings
+ */
+export interface UISettings {
+  theme?: 'light' | 'dark' | 'auto';
+  fontSize?: number;
+  compactMode?: boolean;
+}
+
+/**
+ * Telemetry settings
+ */
+export interface TelemetrySettings {
+  enabled: boolean;
+  level?: 'minimal' | 'standard' | 'detailed';
+}
+
+/**
+ * Advanced settings
+ */
+export interface AdvancedSettings {
+  debug?: boolean;
+  logLevel?: 'error' | 'warn' | 'info' | 'debug';
+  maxRetries?: number;
+  timeout?: number;
+}
+
+/**
+ * Event emitted when settings change
+ */
+export interface SettingsChangeEvent {
+  type: 'settings_changed';
+  changes: Partial<GlobalSettings>;
+  timestamp: Date;
+}
+
+/**
+ * Event listener function type
+ */
+export type EventListener<T = unknown> = (event: T) => void;
+
+/**
+ * Event unsubscribe function type
+ */
+export type EventUnsubscribe = () => void;
+
+/**
+ * Comprehensive diagnostics information from SettingsService
+ */
+export interface DiagnosticsInfo {
+  provider: string;
+  model: string;
+  profile: string | null;
+  providerSettings: ProviderSettings;
+  ephemeralSettings: Record<string, unknown>;
+  modelParams: Record<string, unknown>;
+  allSettings: GlobalSettings;
+}
+
+/**
+ * Settings service interface
+ */
+export interface ISettingsService {
+  /**
+   * Get current global settings
+   */
+  getSettings(): Promise<GlobalSettings>;
+  getSettings(provider: string): Promise<ProviderSettings>;
+
+  /**
+   * Update global settings (partial update)
+   */
+  updateSettings(updates: Partial<GlobalSettings>): Promise<void>;
+  updateSettings(
+    provider: string,
+    updates: Partial<ProviderSettings>,
+  ): Promise<void>;
+
+  /**
+   * Switch to a different provider and update settings
+   */
+  switchProvider(providerId: string): Promise<void>;
+
+  /**
+   * Subscribe to settings change events
+   */
+  onSettingsChanged(
+    listener: EventListener<SettingsChangeEvent>,
+  ): EventUnsubscribe;
+
+  /**
+   * Subscribe to settings change events (legacy method)
+   */
+  on(
+    event: 'settings_changed',
+    listener: EventListener<SettingsChangeEvent>,
+  ): EventUnsubscribe;
+
+  /**
+   * Emit a settings change event
+   */
+  emit(event: 'settings_changed', data: SettingsChangeEvent): void;
+
+  /**
+   * Get comprehensive diagnostics data from centralized source
+   */
+  getDiagnosticsData?(): Promise<DiagnosticsInfo>;
+
+  /**
+   * Export current settings for profile storage
+   */
+  exportForProfile?(): Promise<{
+    defaultProvider: string;
+    providers: Record<string, ProviderSettings>;
+    ui?: UISettings;
+    telemetry?: TelemetrySettings;
+    advanced?: AdvancedSettings;
+    emojiFilter?: EmojiFilterSettings;
+  }>;
+
+  /**
+   * Import settings from profile data
+   */
+  importFromProfile?(profileData: {
+    defaultProvider: string;
+    providers: Record<string, ProviderSettings>;
+    ui?: UISettings;
+    telemetry?: TelemetrySettings;
+    advanced?: AdvancedSettings;
+    emojiFilter?: EmojiFilterSettings;
+  }): Promise<void>;
+
+  /**
+   * Set the current profile name (for tracking)
+   */
+  setCurrentProfileName?(profileName: string | null): void;
+
+  /**
+   * Get the current profile name
+   */
+  getCurrentProfileName?(): string | null;
+}
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
+import { EventEmitter } from 'events';
+import {
+  type ISettingsService,
+  type GlobalSettings,
+  type ProviderSettings,
+  type SettingsChangeEvent,
+  type EventListener,
+  type EventUnsubscribe,
+  type DiagnosticsInfo,
+} from './types.js';
+
+/**
+ * In-memory ephemeral settings structure
+ */
+interface EphemeralSettings {
+  providers: Record<string, Record<string, unknown>>;
+  global: Record<string, unknown>;
+  activeProvider: string | null;
+  tools?: {
+    allowed?: string[];
+    disabled?: string[];
+    // @plan PLAN-20260206-TOOLKEY.P11
+    // @requirement REQ-005.2
+    // Type-only: tool API keys are NOT persisted here; storage is via keychain/encrypted files
+    apiKeys?: Record<string, string>;
+    apiKeyFiles?: Record<string, string>;
+  };
+  // Required properties for correct TypeScript handling in tests
+  n?: unknown;
+}
+
+export class SettingsService extends EventEmitter implements ISettingsService {
+  private settings: EphemeralSettings;
+  private eventEmitter: EventEmitter;
+
+  constructor() {
+    super();
+    // Lines 05-14: Initialize in-memory only, no repository parameter
+    this.settings = {
+      providers: {},
+      global: {},
+      activeProvider: null,
+      tools: {},
+    };
+    this.eventEmitter = new EventEmitter();
+  }
+
+  // Lines 16-23: Direct synchronous access to settings object
+  get(key: string): unknown {
+    if (key.includes('.')) {
+      return this.getNestedValue(this.settings, key);
+    }
+    return this.settings.global[key];
+  }
+
+  // Lines 25-38: Store old value, update in-memory object, emit change event, NO file writes
+  set(key: string, value: unknown): void {
+    const oldValue = this.get(key);
+
+    if (key.includes('.')) {
+      const settingsRecord = this.settings as unknown as Record<
+        string,
+        unknown
+      >;
+
+      this.setNestedValue(settingsRecord, key, value);
+
+      const [root, ...rest] = key.split('.');
+      if (root && root !== 'providers') {
+        const rootValue = settingsRecord[root];
+        if (rootValue !== undefined) {
+          this.settings.global[root] = rootValue;
+        }
+
+        if (rest.length === 0) {
+          this.settings.global[root] = rootValue;
+        }
+      }
+    } else {
+      this.settings.global[key] = value;
+    }
+
+    this.eventEmitter.emit('change', {
+      key,
+      oldValue,
+      newValue: value,
+    });
+  }
+
+  // Lines 40-54: Provider-specific methods - direct manipulation of settings.providers
+  getProviderSettings(provider: string): Record<string, unknown> {
+    // Restore old `|| {}` truthiness semantics: falsy provider entries
+    // (false, 0, '', null, undefined) should fallback to {}.
+    // Cast to unknown to handle cross-boundary malformed data.
+
+    const entry = this.settings.providers[provider] as unknown;
+    if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      entry !== null &&
+      entry !== undefined &&
+      entry !== false &&
+      entry !== 0 &&
+      entry !== '' &&
+      !(typeof entry === 'number' && Number.isNaN(entry))
+    ) {
+      return entry as Record<string, unknown>;
+    }
+    return {};
+  }
+
+  setProviderSetting(provider: string, key: string, value: unknown): void {
+    // Restore old `if (!this.settings.providers[provider])` semantics:
+    // falsy entries (false, 0, '', null, undefined) should reset to {}.
+    // Cast to unknown to handle cross-boundary malformed data.
+
+    const entry = this.settings.providers[provider] as unknown;
+    if (
+      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      entry === null ||
+      entry === undefined ||
+      entry === false ||
+      entry === 0 ||
+      entry === '' ||
+      (typeof entry === 'number' && Number.isNaN(entry))
+    ) {
+      this.settings.providers[provider] = {};
+    }
+
+    const oldValue = this.settings.providers[provider][key];
+    this.settings.providers[provider][key] = value;
+
+    this.eventEmitter.emit('provider-change', {
+      provider,
+      key,
+      oldValue,
+      newValue: value,
+    });
+  }
+
+  // Lines 56-64: Clear method - reset to empty state, emit cleared event
+  clear(): void {
+    this.settings = {
+      providers: {},
+      global: {},
+      activeProvider: null,
+    };
+    this.eventEmitter.emit('cleared');
+  }
+
+  // Public method to get all global settings
+  getAllGlobalSettings(): Record<string, unknown> {
+    const snapshot: Record<string, unknown> = {
+      ...this.settings.global,
+    };
+
+    if (this.settings.tools) {
+      const tools = this.settings.tools;
+      snapshot.tools = { ...tools };
+
+      if (Array.isArray(tools.allowed)) {
+        snapshot['tools.allowed'] = [...tools.allowed];
+      }
+      if (Array.isArray(tools.disabled)) {
+        snapshot['tools.disabled'] = [...tools.disabled];
+      }
+    }
+
+    return snapshot;
+  }
+
+  // Helper methods for nested key support
+  private getNestedValue(obj: unknown, key: string): unknown {
+    const keys = key.split('.');
+    let current = obj as Record<string, unknown>;
+
+    for (const k of keys) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
+      if (current !== null && typeof current === 'object' && k in current) {
+        current = current[k] as Record<string, unknown>;
+      } else {
+        return undefined;
+      }
+    }
+
+    return current;
+  }
+
+  private setNestedValue(
+    obj: Record<string, unknown>,
+    key: string,
+    value: unknown,
+  ): void {
+    const keys = key.split('.');
+
+    // Security: Check for dangerous keys that can pollute prototypes
+    const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
+    for (const k of keys) {
+      if (dangerousKeys.includes(k)) {
+        throw new Error(`Cannot set dangerous property: ${k}`);
+      }
+    }
+
+    let current = obj;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      const k = keys[i];
+      if (
+        current[k] === null ||
+        current[k] === undefined ||
+        typeof current[k] !== 'object'
+      ) {
+        current[k] = {};
+      }
+      current = current[k] as Record<string, unknown>;
+    }
+
+    current[keys[keys.length - 1]] = value;
+  }
+
+  // Event handling
+  override on(
+    event: 'settings_changed',
+    listener: EventListener<SettingsChangeEvent>,
+  ): EventUnsubscribe;
+  override on(
+    eventName: string | symbol,
+    listener: (...args: unknown[]) => void,
+  ): this;
+  override on(
+    event: string | symbol | 'settings_changed',
+    listener: unknown,
+  ): EventUnsubscribe | this {
+    if (event === 'settings_changed') {
+      return this.onSettingsChanged(
+        listener as EventListener<SettingsChangeEvent>,
+      );
+    }
+    this.eventEmitter.on(event, listener as (...args: unknown[]) => void);
+    return this;
+  }
+
+  override off(event: string, listener: (...args: unknown[]) => void): this {
+    this.eventEmitter.off(event, listener);
+    return this;
+  }
+
+  // Legacy interface methods (maintained for compatibility but simplified)
+  getSettings(): Promise<GlobalSettings>;
+  getSettings(provider: string): Promise<ProviderSettings>;
+  getSettings(provider?: string): Promise<GlobalSettings | ProviderSettings> {
+    if (provider === undefined) {
+      return Promise.resolve({
+export const PLAN_MARKER = '@plan:PLAN-20260126-SETTINGS-SEPARATION.P05';
+/** @plan PLAN-20260211-COMPRESSION.P12 */
+/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
+import { COMPRESSION_STRATEGIES } from '../core/compression/types.js';
+
+export type SettingCategory =
+  | 'model-behavior'
+  | 'provider-config'
+  | 'cli-behavior'
+  | 'model-param'
+  | 'custom-header';
+
+export interface ValidationResult {
+  success: boolean;
+  value?: unknown;
+  message?: string;
+}
+
+export interface SettingSpec {
+  key: string;
+  aliases?: readonly string[];
+  category: SettingCategory;
+  providers?: readonly string[];
+  description: string;
+  hint?: string;
+  type: 'boolean' | 'number' | 'string' | 'enum' | 'json' | 'string-array';
+  enumValues?: readonly string[];
+  validate?: (value: unknown) => ValidationResult;
+  parse?: (raw: string) => unknown;
+  normalize?: (value: unknown) => unknown;
+  default?: unknown;
+  persistToProfile: boolean;
+  completionOptions?: ReadonlyArray<{ value: string; description?: string }>;
+}
+
+export interface SeparatedSettings {
+  cliSettings: Record<string, unknown>;
+  modelBehavior: Record<string, unknown>;
+  modelParams: Record<string, unknown>;
+  customHeaders: Record<string, string>;
+}
+
+const ALIAS_NORMALIZATION_RULES: Record<string, string> = {
+  'max-tokens': 'max_tokens',
+  maxTokens: 'max_tokens',
+  'response-format': 'response_format',
+  responseFormat: 'response_format',
+  'tool-choice': 'tool_choice',
+  toolChoice: 'tool_choice',
+  'disabled-tools': 'tools.disabled',
+};
+
+const HEADER_PRESERVE_SET = new Set([
+  'user-agent',
+  'content-type',
+  'authorization',
+  'x-api-key',
+]);
+
+export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
+  {
+    key: 'apiKey',
+    aliases: ['api-key'],
+    category: 'provider-config',
+    description: 'Provider API authentication key',
+    type: 'string',
+    persistToProfile: false,
+  },
+  {
+    key: 'auth-key',
+    category: 'provider-config',
+    description: 'Auth key alias (saved to profiles for auth persistence)',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'apiKeyfile',
+    aliases: ['api-keyfile'],
+    category: 'provider-config',
+    description: 'Path to file containing API key',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'auth-keyfile',
+    category: 'provider-config',
+    description: 'Auth keyfile alias (saved to profiles for auth persistence)',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'auth-key-name',
+    category: 'provider-config',
+    description:
+      'Name of a saved API key in the keyring (resolved via /key save)',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'base-url',
+    category: 'provider-config',
+    description: 'Provider API base URL',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'sandbox-base-url',
+    category: 'provider-config',
+    description:
+      'Base URL override used when running inside a container sandbox (Docker/Podman)',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'requires-auth',
+    category: 'provider-config',
+    description:
+      'Whether the provider requires API key authentication (set to false for local providers)',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
+    key: 'model',
+    category: 'provider-config',
+    description: 'Default model name',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'defaultModel',
+    category: 'provider-config',
+    description: 'Fallback model if primary unavailable',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'enabled',
+    category: 'provider-config',
+    description: 'Enable/disable provider',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
+    key: 'toolFormat',
+    aliases: ['tool-format'],
+    category: 'provider-config',
+    description: 'Tool format preference',
+    type: 'enum',
+    enumValues: [
+      'auto',
+      'openai',
+      'anthropic',
+      'qwen',
+      'kimi',
+      'hermes',
+      'xml',
+      'deepseek',
+      'gemma',
+      'llama',
+    ],
+    persistToProfile: true,
+  },
+  {
+    key: 'toolFormatOverride',
+    aliases: ['tool-format-override'],
+    category: 'provider-config',
+    description: 'Force specific tool format',
+    type: 'enum',
+    enumValues: [
+      'auto',
+      'openai',
+      'anthropic',
+      'qwen',
+      'kimi',
+      'hermes',
+      'xml',
+      'deepseek',
+      'gemma',
+      'llama',
+    ],
+    persistToProfile: true,
+  },
+  {
+    key: 'api-version',
+    category: 'cli-behavior',
+    description: 'API version to use',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.enabled',
+    category: 'model-behavior',
+    description: 'Enable thinking/reasoning for models that support it',
+    type: 'boolean',
+    persistToProfile: true,
+    completionOptions: [
+      { value: 'true', description: 'Enable thinking' },
+      { value: 'false', description: 'Disable thinking' },
+    ],
+  },
+  {
+    key: 'reasoning.effort',
+    category: 'model-behavior',
+    description:
+      'How much the model should think before responding (minimal/low/medium/high/xhigh)',
+    type: 'enum',
+    enumValues: ['minimal', 'low', 'medium', 'high', 'xhigh'],
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.maxTokens',
+    category: 'model-behavior',
+    description: 'Maximum token budget for reasoning',
+    type: 'number',
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.budgetTokens',
+    category: 'model-behavior',
+    description: 'Token budget for reasoning (Anthropic-specific)',
+    type: 'number',
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.adaptiveThinking',
+    category: 'model-behavior',
+    description:
+      'Enable adaptive thinking for Anthropic Opus 4.6+ (true/false)',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.includeInResponse',
+    category: 'cli-behavior',
+    description: 'Show thinking blocks in UI output',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.includeInContext',
+    category: 'cli-behavior',
+    description: 'Keep thinking in conversation history',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.stripFromContext',
+    category: 'cli-behavior',
+    description: 'Remove thinking blocks from context (all/allButLast/none)',
+    type: 'enum',
+    enumValues: ['all', 'allButLast', 'none'],
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.format',
+    category: 'cli-behavior',
+    description: 'API format for reasoning (native/field)',
+    type: 'enum',
+    enumValues: ['native', 'field'],
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Centralized SettingsService singleton instance
+ */
+
+import type { SettingsService } from './SettingsService.js';
+import {
+  clearActiveProviderRuntimeContext,
+  createProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
+
+let settingsServiceInstance: SettingsService | null = null;
+
+/**
+ * Get or create the global SettingsService singleton instance.
+ * Resolves through the currently active ProviderRuntimeContext when present.
+ */
+export function getSettingsService(): SettingsService {
+  const activeContext = peekActiveProviderRuntimeContext();
+  if (activeContext?.settingsService) {
+    settingsServiceInstance = activeContext.settingsService;
+    return activeContext.settingsService;
+  }
+
+  throw new Error(
+    '[settings] No SettingsService registered in the active provider runtime context. Call activateIsolatedRuntimeContext() and registerSettingsService() before accessing settings (@plan:PLAN-20251023-STATELESS-HARDENING.P08, @requirement:REQ-SP4-004).',
+  );
+}
+
+/**
+ * Register an externally created SettingsService with the active runtime context.
+ */
+export function registerSettingsService(
+  settingsService: SettingsService,
+): void {
+  settingsServiceInstance = settingsService;
+
+  const existingContext = peekActiveProviderRuntimeContext();
+  if (existingContext) {
+    setActiveProviderRuntimeContext({
+      ...existingContext,
+      settingsService,
+    });
+    return;
+  }
+
+  setActiveProviderRuntimeContext(
+    createProviderRuntimeContext({
+      settingsService,
+      runtimeId: 'registered-singleton',
+      metadata: { source: 'registerSettingsService' },
+    }),
+  );
+}
+
+/**
+ * Reset the settings service instance (for testing)
+ */
+export function resetSettingsService(): void {
+  if (settingsServiceInstance) {
+    settingsServiceInstance.clear();
+  }
+  settingsServiceInstance = null;
+  clearActiveProviderRuntimeContext();
+}
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
+import type { Profile, LoadBalancerProfile } from '../types/modelParams.js';
+import { isLoadBalancerProfile } from '../types/modelParams.js';
+import type { SettingsService } from '../settings/SettingsService.js';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+
+/**
+ * Manages saving and loading of configuration profiles.
+ * Profiles are stored in ~/.llxprt/profiles/<profileName>.json
+ *
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P04
+ * @requirement:REQ-018
+ */
+export class ProfileManager {
+  private profilesDir: string;
+
+  /**
+   * @param profilesDir Optional custom directory for testing. If not provided, uses ~/.llxprt/profiles.
+   */
+  constructor(profilesDir?: string) {
+    this.profilesDir =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should use default path
+      profilesDir || path.join(os.homedir(), '.llxprt', 'profiles');
+  }
+
+  /**
+   * Save the current configuration to a profile.
+   * @param profileName The name of the profile to save
+   * @param profile The profile configuration to save
+   */
+  async saveProfile(profileName: string, profile: Profile): Promise<void> {
+    await fs.mkdir(this.profilesDir, { recursive: true });
+
+    const filePath = path.join(this.profilesDir, `${profileName}.json`);
+
+    await fs.writeFile(filePath, JSON.stringify(profile, null, 2), 'utf8');
+  }
+
+  async saveLoadBalancerProfile(
+    name: string,
+    profile: LoadBalancerProfile,
+  ): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (profile.version !== 1) {
+      throw new Error('unsupported profile version');
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    if (profile.profiles == null || profile.profiles.length === 0) {
+      throw new Error(
+        `LoadBalancer profile '${name}' must reference at least one profile`,
+      );
+    }
+
+    const availableProfiles = await this.listProfiles();
+
+    for (const referencedProfile of profile.profiles) {
+      if (!availableProfiles.includes(referencedProfile)) {
+        throw new Error(
+          `LoadBalancer profile '${name}' references non-existent profile '${referencedProfile}'`,
+        );
+      }
+
+      const referencedProfilePath = path.join(
+        this.profilesDir,
+        `${referencedProfile}.json`,
+      );
+      const referencedContent = await fs.readFile(
+        referencedProfilePath,
+        'utf8',
+      );
+      const referencedProfileData = JSON.parse(referencedContent) as Profile;
+
+      if (isLoadBalancerProfile(referencedProfileData)) {
+        throw new Error(
+          `LoadBalancer profile '${name}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
+        );
+      }
+    }
+
+    await fs.mkdir(this.profilesDir, { recursive: true });
+
+    const filePath = path.join(this.profilesDir, `${name}.json`);
+
+    await fs.writeFile(filePath, JSON.stringify(profile, null, 2), 'utf8');
+  }
+
+  /**
+   * Load a profile configuration.
+   * @param profileName The name of the profile to load
+   * @returns The loaded profile configuration
+   */
+  async loadProfile(profileName: string): Promise<Profile> {
+    const filePath = path.join(this.profilesDir, `${profileName}.json`);
+
+    try {
+      const content = await fs.readFile(filePath, 'utf8');
+
+      const profile = JSON.parse(content) as Profile;
+
+      if (isLoadBalancerProfile(profile)) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        if (profile.version !== 1) {
+          throw new Error('unsupported profile version');
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        if (profile.profiles == null || profile.profiles.length === 0) {
+          throw new Error(
+            `LoadBalancer profile '${profileName}' must reference at least one profile`,
+          );
+        }
+
+        const availableProfiles = await this.listProfiles();
+
+        for (const referencedProfile of profile.profiles) {
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          if (!availableProfiles.includes(referencedProfile)) {
+            throw new Error(
+              `LoadBalancer profile '${profileName}' references non-existent profile '${referencedProfile}'`,
+            );
+          }
+
+          const referencedProfilePath = path.join(
+            this.profilesDir,
+            `${referencedProfile}.json`,
+          );
+          const referencedContent = await fs.readFile(
+            referencedProfilePath,
+            'utf8',
+          );
+          const referencedProfileData = JSON.parse(
+            referencedContent,
+          ) as Profile;
+
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          if (isLoadBalancerProfile(referencedProfileData)) {
+            throw new Error(
+              `LoadBalancer profile '${profileName}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
+            );
+          }
+        }
+
+        return profile;
+      }
+
+      const profileRecord = profile as unknown as Record<string, unknown>;
+      const profileVersion = profileRecord.version;
+      const profileProvider = profileRecord.provider;
+      const profileModel = profileRecord.model;
+
+      if (
+        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        profileVersion == null ||
+        profileVersion === 0 ||
+        (typeof profileVersion === 'number' && Number.isNaN(profileVersion)) ||
+        profileVersion === false ||
+        typeof profileProvider !== 'string' ||
+        profileProvider === '' ||
+        typeof profileModel !== 'string' ||
+        profileModel === '' ||
+        profileRecord.modelParams == null ||
+        profileRecord.ephemeralSettings == null
+      ) {
+        throw new Error('missing required fields');
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      if (profile.version !== 1) {
+        throw new Error('unsupported profile version');
+      }
+
+      return profile;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('ENOENT')) {
+        throw new Error(`Profile '${profileName}' not found`);
+      }
+      if (error instanceof SyntaxError) {
+        throw new Error(`Profile '${profileName}' is corrupted`);
+      }
+      if (
+        error instanceof Error &&
+        error.message === 'missing required fields'
+      ) {
+        throw new Error(
+          `Profile '${profileName}' is invalid: missing required fields`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * List all available profile names.
+   * @returns Array of profile names (without .json extension)
+   */
+  async listProfiles(): Promise<string[]> {
+    try {
+      // Ensure profiles directory exists
+      await fs.mkdir(this.profilesDir, { recursive: true });
+
+      // Read all files in the profiles directory
+      const files = await fs.readdir(this.profilesDir);
+
+      // Filter for .json files and remove extension
+      const profileNames = files
+        .filter((file) => file.endsWith('.json'))
+        .map((file) => file.slice(0, -5)); // Remove .json extension
+
+      return profileNames;
+    } catch {
+      // Directory doesn't exist or error; return empty array.
+      return [];
+    }
+  }
+
+  /**
+   * Delete a profile.
+   * @param profileName The name of the profile to delete
+   */
+  async deleteProfile(profileName: string): Promise<void> {
+    const filePath = path.join(this.profilesDir, `${profileName}.json`);
+
+    try {
+      await fs.unlink(filePath);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('ENOENT')) {
+        throw new Error(`Profile '${profileName}' not found`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a profile exists.
+   * @param profileName The name of the profile to check
+   * @returns True if the profile exists
+   */
+  async profileExists(profileName: string): Promise<boolean> {
+    const filePath = path.join(this.profilesDir, `${profileName}.json`);
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      // Profile doesn't exist.
+      return false;
+    }
+  }
+
+  /**
+   * Save current settings to a profile through SettingsService
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import * as path from 'node:path';
+import * as os from 'os';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+
+export const LLXPRT_DIR = '.llxprt';
+export const PROVIDER_ACCOUNTS_FILENAME = 'provider_accounts.json';
+export const OAUTH_FILE = 'oauth_creds.json';
+const TMP_DIR_NAME = 'tmp';
+
+export class Storage {
+  private readonly targetDir: string;
+
+  constructor(targetDir: string) {
+    this.targetDir = targetDir;
+  }
+
+  static getGlobalLlxprtDir(): string {
+    const homeDir = os.homedir();
+    if (!homeDir) {
+      return path.join(os.tmpdir(), '.llxprt');
+    }
+    return path.join(homeDir, LLXPRT_DIR);
+  }
+
+  static getMcpOAuthTokensPath(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), 'mcp-oauth-tokens.json');
+  }
+
+  static getGlobalSettingsPath(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), 'settings.json');
+  }
+
+  static getInstallationIdPath(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), 'installation_id');
+  }
+
+  static getProviderAccountsPath(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), PROVIDER_ACCOUNTS_FILENAME);
+  }
+
+  static getGoogleAccountsPath(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), 'google_accounts.json');
+  }
+
+  static getUserCommandsDir(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), 'commands');
+  }
+
+  static getUserSkillsDir(): string {
+    return path.join(Storage.getGlobalTempDir(), 'skills');
+  }
+
+  static getGlobalMemoryFilePath(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), 'memory.md');
+  }
+
+  static getUserPoliciesDir(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), 'policies');
+  }
+
+  static getSystemSettingsPath(): string {
+    if (process.env['LLXPRT_SYSTEM_SETTINGS_PATH']) {
+      return process.env['LLXPRT_SYSTEM_SETTINGS_PATH'];
+    }
+    if (os.platform() === 'darwin') {
+      return '/Library/Application Support/LlxprtCode/settings.json';
+    } else if (os.platform() === 'win32') {
+      return 'C:\\ProgramData\\llxprt-code\\settings.json';
+    }
+    return '/etc/llxprt-code/settings.json';
+  }
+
+  static getSystemPoliciesDir(): string {
+    return path.join(path.dirname(Storage.getSystemSettingsPath()), 'policies');
+  }
+
+  static getGlobalTempDir(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), TMP_DIR_NAME);
+  }
+
+  getLlxprtDir(): string {
+    return path.join(this.targetDir, LLXPRT_DIR);
+  }
+
+  getProjectTempDir(): string {
+    const hash = this.getFilePathHash(this.getProjectRoot());
+    const tempDir = Storage.getGlobalTempDir();
+    return path.join(tempDir, hash);
+  }
+
+  ensureProjectTempDirExists(): void {
+    fs.mkdirSync(this.getProjectTempDir(), { recursive: true });
+  }
+
+  static getOAuthCredsPath(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), OAUTH_FILE);
+  }
+
+  getProjectRoot(): string {
+    return this.targetDir;
+  }
+
+  private getFilePathHash(filePath: string): string {
+    return crypto.createHash('sha256').update(filePath).digest('hex');
+  }
+
+  getHistoryDir(): string {
+    const hash = this.getFilePathHash(this.getProjectRoot());
+    const historyDir = path.join(Storage.getGlobalLlxprtDir(), 'history');
+    return path.join(historyDir, hash);
+  }
+
+  getWorkspaceSettingsPath(): string {
+    return path.join(this.getLlxprtDir(), 'settings.json');
+  }
+
+  getProjectCommandsDir(): string {
+    return path.join(this.getLlxprtDir(), 'commands');
+  }
+
+  getProjectSkillsDir(): string {
+    return path.join(this.getLlxprtDir(), 'skills');
+  }
+
+  getProjectTempCheckpointsDir(): string {
+    return path.join(this.getProjectTempDir(), 'checkpoints');
+  }
+
+  getExtensionsDir(): string {
+    return path.join(this.getLlxprtDir(), 'extensions');
+  }
+
+  getExtensionsConfigPath(): string {
+    return path.join(this.getExtensionsDir(), 'llxprt-extension.json');
+  }
+
+  getHistoryFilePath(): string {
+    return path.join(this.getProjectTempDir(), 'shell_history');
+  }
+}
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { z } from 'zod';
+
+/**
+ * OAuth bucket authentication configuration
+ * @plan PLAN-20251213issue490 Phase 1
+ */
+export interface AuthConfig {
+  type: 'oauth' | 'apikey';
+  buckets?: string[];
+}
+
+/**
+ * Zod schema for AuthConfig validation
+ * @plan PLAN-20251213issue490 Phase 1
+ */
+export const AuthConfigSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('oauth'),
+    buckets: z.array(z.string()).optional(),
+  }),
+  z
+    .object({
+      type: z.literal('apikey'),
+    })
+    .strict(),
+]);
+
+/**
+ * Parameters that are sent directly to the model API
+ */
+export interface ModelParams {
+  /** Sampling temperature (0-2 for OpenAI) */
+  temperature?: number;
+  /** Maximum tokens to generate */
+  max_tokens?: number;
+  /** Nucleus sampling parameter */
+  top_p?: number;
+  /** Top-k sampling parameter */
+  top_k?: number;
+  /** Presence penalty (-2 to 2) */
+  presence_penalty?: number;
+  /** Frequency penalty (-2 to 2) */
+  frequency_penalty?: number;
+  /** Random seed for reproducibility */
+  seed?: number;
+  /** Additional provider-specific parameters */
+  [key: string]: unknown;
+}
+
+/**
+ * Settings that affect client behavior, not sent to API
+ */
+export interface EphemeralSettings {
+  /** Maximum context window in tokens */
+  'context-limit'?: number;
+  /** When to compress history (0-1) */
+  'compression-threshold'?: number;
+  /** API authentication key */
+  'auth-key'?: string;
+  /** Path to key file */
+  'auth-keyfile'?: string;
+  /** Named key reference for keyring lookup @plan PLAN-20260211-SECURESTORE.P16 @requirement R21.2 */
+  'auth-key-name'?: string;
+  /** API base URL */
+  'base-url'?: string;
+  /** Base URL override used when running inside a container sandbox (Docker/Podman) */
+  'sandbox-base-url'?: string;
+  /** Whether the provider requires API key authentication (set to false for local providers) */
+  'requires-auth'?: boolean;
+  /** Tool format override */
+  'tool-format'?: string;
+  /** API version (for Azure) */
+  'api-version'?: string;
+  /** Custom HTTP headers */
+  'custom-headers'?: Record<string, string>;
+  /** Maximum number of items/files/matches returned by tools (default: 50) */
+  'tool-output-max-items'?: number;
+  /** Maximum estimated tokens in tool output (default: 50000) */
+  'tool-output-max-tokens'?: number;
+  /** How to handle exceeding limits: 'warn' | 'truncate' | 'sample' (default: 'warn') */
+  'tool-output-truncate-mode'?: 'warn' | 'truncate' | 'sample';
+  /** Maximum size per item/file in bytes (default: 524288 bytes = 512KB) */
+  'tool-output-item-size-limit'?: number;
+  /** Maximum tokens allowed in any prompt sent to LLM (default: 200000) */
+  'max-prompt-tokens'?: number;
+  /** List of disabled tool names */
+  'disabled-tools'?: string[];
+  /**
+   * Control command substitution ($(), <(), backticks) in shell commands.
+   * - 'allowlist': Allow substitution, validate inner commands against coreTools (default, matches upstream)
+   * - 'all': Allow all substitution unconditionally (same as legacy `true`)
+   * - 'none': Block all substitution (same as legacy `false`)
+   * - true/false: Legacy boolean values for backward compatibility
+   */
+  'shell-replacement'?: 'allowlist' | 'all' | 'none' | boolean;
+  /** Enable task-list continuation after stream completion (default: true) */
+  'todo-continuation'?: boolean;
+  /** Socket timeout in milliseconds for local AI servers */
+  'socket-timeout'?: number;
+  /** Enable socket keep-alive for local AI servers */
+  'socket-keepalive'?: boolean;
+  /** Enable TCP_NODELAY for local AI servers */
+  'socket-nodelay'?: boolean;
+  /** Enable streaming responses from providers */
+  streaming?: 'enabled' | 'disabled';
+  /** Maximum number of retry attempts for API calls */
+  retries?: number;
+  /** Initial delay in milliseconds between retry attempts */
+  retrywait?: number;
+  /** Timeout in milliseconds for mid-turn OAuth reauthentication attempts */
+  'auth-retry-timeout'?: number;
+
+  /** Force OAuth authentication and ignore API keys/env vars */
+  authOnly?: boolean;
+  /** Explicit allow-list of tool names */
+  'tools.allowed'?: string[];
+  /** Explicit disable-list of tool names */
+  'tools.disabled'?: string[];
+  /** Google Cloud project identifier for Gemini auth */
+  GOOGLE_CLOUD_PROJECT?: string;
+  /** Google Cloud location identifier for Gemini auth */
+  GOOGLE_CLOUD_LOCATION?: string;
+  /** Whether to include folder structure in system prompts (default: false for better cache hit rates) */
+  'include-folder-structure'?: boolean;
+  /** Anthropic/OpenAI prompt caching configuration: 'off' | '5m' | '1h' | '24h' (default: '1h') */
+  'prompt-caching'?: 'off' | '5m' | '1h' | '24h';
+  /** Load tool-specific prompts from ~/.llxprt/prompts/tools/** (default: false) */
+  'enable-tool-prompts'?: boolean;
+
+  /** Proactive rate limit throttling (on/off) */
+  'rate-limit-throttle'?: 'on' | 'off';
+  /** Percentage threshold for rate limit throttling (1-100) */
+  'rate-limit-throttle-threshold'?: number;
+  /** Maximum wait time in milliseconds for rate limit throttling */
+  'rate-limit-max-wait'?: number;
+
+  /** Default timeout in seconds for task tool executions */
+  'task-default-timeout-seconds'?: number;
+  /** Maximum allowed timeout in seconds for task tool executions */
+  'task-max-timeout-seconds'?: number;
+  /** Default timeout in seconds for shell command executions */
+  'shell-default-timeout-seconds'?: number;
+  /** Maximum allowed timeout in seconds for shell command executions */
+  'shell-max-timeout-seconds'?: number;
+  /** Inactivity timeout in seconds for shell commands. Resets on each output event. */
+  'shell-inactivity-timeout-seconds'?: number;
+
+  // Load balancer advanced failover settings (Phase 3, Issue #489)
+  /** Minimum tokens per minute before triggering failover */
+  tpm_threshold?: number;
+  /** Maximum request duration in milliseconds before timeout */
+  timeout_ms?: number;
+  /** Enable circuit breaker pattern for failing backends */
+  circuit_breaker_enabled?: boolean;
+  /** Number of failures before opening circuit */
+  circuit_breaker_failure_threshold?: number;
+  /** Time window for counting failures in milliseconds */
+  circuit_breaker_failure_window_ms?: number;
+  /** Cooldown period before retrying after circuit opens in milliseconds */
+  circuit_breaker_recovery_timeout_ms?: number;
+
+  // Additional settings from registry
+  /** OpenAI stream options */
+  'stream-options'?: Record<string, unknown>;
+  /** Maximum number of turns allowed per prompt before stopping (default: -1 for unlimited) */
+  maxTurnsPerPrompt?: number;
+  /** Enable/disable all loop detection (default: true) */
+  loopDetectionEnabled?: boolean;
+  /** Number of identical tool calls before triggering loop detection (default: 50, -1 = unlimited) */
+  toolCallLoopThreshold?: number;
+  /** Number of content chunk repetitions before triggering loop detection (default: 50, -1 = unlimited) */
+  contentLoopThreshold?: number;
+  /** Control context dumping (now/status/on/error/off) */
+  dumpcontext?: 'now' | 'status' | 'on' | 'error' | 'off';
+  /** Dump API request body to ~/.llxprt/dumps/ on errors (enabled/disabled) */
+  dumponerror?: 'enabled' | 'disabled';
+  /** Emoji filter mode (allowed/auto/warn/error) */
+  emojifilter?: 'allowed' | 'auto' | 'warn' | 'error';
+
+  // Reasoning settings (nested under reasoning.* in registry)
+  /** Enable thinking/reasoning for models that support it */
+  'reasoning.enabled'?: boolean;
+  /** How much the model should think before responding */
+  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  /** Maximum token budget for reasoning */
+  'reasoning.maxTokens'?: number;
+  /** Token budget for reasoning (Anthropic-specific) */
+  'reasoning.budgetTokens'?: number;
+  /** Enable adaptive thinking for Anthropic Opus 4.6+ */
+  'reasoning.adaptiveThinking'?: boolean;
+  /** Show thinking blocks in UI output */
+  'reasoning.includeInResponse'?: boolean;
+  /** Keep thinking in conversation history */
+  'reasoning.includeInContext'?: boolean;
+  /** Remove thinking blocks from context (all/allButLast/none) */
+  'reasoning.stripFromContext'?: 'all' | 'allButLast' | 'none';
+  /** API format for reasoning (native/field) */
+  'reasoning.format'?: 'native' | 'field';
+
+  /** @plan PLAN-20260211-COMPRESSION.P12 - Compression strategy override */
+  'compression.strategy'?: string;
+  /** @plan PLAN-20260211-COMPRESSION.P12 - Compression profile name for LLM calls */
+  'compression.profile'?: string;
+
+  /**
+   * @plan PLAN-20260211-HIGHDENSITY.P15
+   * @requirement REQ-HD-009.6
+   */
+  'compression.density.readWritePruning'?: boolean;
+  'compression.density.fileDedupe'?: boolean;
+  'compression.density.recencyPruning'?: boolean;
+  'compression.density.recencyRetention'?: number;
+  'compression.density.compressHeadroom'?: number;
+}
+
+/**
+ * Sub-profile configuration for load balancing (NEW ARCHITECTURE)
+ * @plan PLAN-20251211issue486b
+ */
+export interface LoadBalancerSubProfileConfig {
+  name: string;
+  provider: string;
+  model?: string;
+  baseURL?: string;
+  apiKey?: string;
+}
+
+/**
+ * Load balancer configuration (NEW ARCHITECTURE)
+ * @plan PLAN-20251211issue486b
+ */
+export interface LoadBalancerConfig {
+  strategy: 'round-robin';
+  subProfiles: LoadBalancerSubProfileConfig[];
+}
+
+/**
+ * Standard profile configuration (single model)
+ */
+export interface StandardProfile {
+  /** Profile format version */
+  version: 1;
+  /** Profile type (optional for backward compatibility) */
+  type?: 'standard';
+  /** Provider name */
+  provider: string;
+  /** Model name */
+  model: string;
+  /** Model parameters */
+  modelParams: ModelParams;
+  /** Ephemeral settings */
+  ephemeralSettings: EphemeralSettings;
+  /** Load balancer configuration (NEW ARCHITECTURE - optional) */
+  loadBalancer?: LoadBalancerConfig;
+  /** OAuth bucket authentication configuration (optional) */
+  auth?: AuthConfig;
+}
+
+/**
+ * Load balancer profile configuration (multiple profiles)
+ */
+export interface LoadBalancerProfile {
+  /** Profile format version */
+  version: 1;
+  /** Profile type */
+  type: 'loadbalancer';
+  /** Load balancing policy */
+  policy: 'roundrobin' | 'failover';
+  /** List of profile names to load balance across */
+  profiles: string[];
+  /** Provider name (empty for load balancer) */
+  provider: string;
+  /** Model name (empty for load balancer) */
+  model: string;
+  /** Model parameters (empty for load balancer) */
+  modelParams: ModelParams;
+  /** Ephemeral settings (empty for load balancer) */
+  ephemeralSettings: EphemeralSettings;
+}
+
+/**
+ * Complete profile configuration (union type)
+ */
+export type Profile = StandardProfile | LoadBalancerProfile;
+
+/**
+ * Type guard to check if a profile is a load balancer profile
+ */
+export function isLoadBalancerProfile(
+  profile: Profile,
+): profile is LoadBalancerProfile {
+  return profile.type === 'loadbalancer';
+}
+
+/**
+ * Type guard to check if a profile is a standard profile
+ */
+export function isStandardProfile(
+  profile: Profile,
+): profile is StandardProfile {
+  return profile.type !== 'loadbalancer';
+}
+
+/**
+ * Type guard to check if a profile has auth configuration
+ * @plan PLAN-20251213issue490 Phase 1
+ */
+export function hasAuthConfig(profile: Profile): boolean {
+  return isStandardProfile(profile) && profile.auth !== undefined;
+}
+
+/**
+ * Type guard to check if a profile is OAuth-based
+ * @plan PLAN-20251213issue490 Phase 1
+ */
+export function isOAuthProfile(profile: Profile): boolean {
+  return isStandardProfile(profile) && profile.auth?.type === 'oauth';
+}
+```
+
+Exit status: 0
+
+## Dependency Blocker Verification
+
+```bash
+rg -n 'COMPRESSION_STRATEGIES|providerRuntimeContext|types/modelParams|SettingsService|ProfileManager|Storage' packages/core/src/settings packages/core/src/config packages/core/src/types --glob '*.ts'
+```
+
+```text
+packages/core/src/settings/SettingsService.ts:11:  type ISettingsService,
+packages/core/src/settings/SettingsService.ts:40:export class SettingsService extends EventEmitter implements ISettingsService {
+packages/core/src/settings/settingsRegistry.ts:5:import { COMPRESSION_STRATEGIES } from '../core/compression/types.js';
+packages/core/src/settings/settingsRegistry.ts:1093:    enumValues: [...COMPRESSION_STRATEGIES],
+packages/core/src/settings/settingsServiceInstance.ts:8: * Centralized SettingsService singleton instance
+packages/core/src/settings/settingsServiceInstance.ts:11:import type { SettingsService } from './SettingsService.js';
+packages/core/src/settings/settingsServiceInstance.ts:17:} from '../runtime/providerRuntimeContext.js';
+packages/core/src/settings/settingsServiceInstance.ts:19:let settingsServiceInstance: SettingsService | null = null;
+packages/core/src/settings/settingsServiceInstance.ts:22: * Get or create the global SettingsService singleton instance.
+packages/core/src/settings/settingsServiceInstance.ts:25:export function getSettingsService(): SettingsService {
+packages/core/src/settings/settingsServiceInstance.ts:33:    '[settings] No SettingsService registered in the active provider runtime context. Call activateIsolatedRuntimeContext() and registerSettingsService() before accessing settings (@plan:PLAN-20251023-STATELESS-HARDENING.P08, @requirement:REQ-SP4-004).',
+packages/core/src/settings/settingsServiceInstance.ts:38: * Register an externally created SettingsService with the active runtime context.
+packages/core/src/settings/settingsServiceInstance.ts:40:export function registerSettingsService(
+packages/core/src/settings/settingsServiceInstance.ts:41:  settingsService: SettingsService,
+packages/core/src/settings/settingsServiceInstance.ts:58:      metadata: { source: 'registerSettingsService' },
+packages/core/src/settings/settingsServiceInstance.ts:66:export function resetSettingsService(): void {
+packages/core/src/config/configTypes.ts:31:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/configTypes.ts:420:  settingsService?: SettingsService;
+packages/core/src/config/subagentManager.ts:12:import type { ProfileManager } from './profileManager.js';
+packages/core/src/config/subagentManager.ts:61: * Pattern: Follows ProfileManager design
+packages/core/src/config/subagentManager.ts:62: * Storage: JSON files in baseDir directory
+packages/core/src/config/subagentManager.ts:67:  private readonly profileManager: ProfileManager;
+packages/core/src/config/subagentManager.ts:73:   * @param profileManager ProfileManager instance for validation
+packages/core/src/config/subagentManager.ts:79:  constructor(baseDir: string, profileManager: ProfileManager) {
+packages/core/src/config/subagentManager.ts:621:   * Validate that a profile exists in ProfileManager
+packages/core/src/config/subagentManager.ts:639:    // Check if profile exists using the injected ProfileManager instance.
+packages/core/src/config/subagentManager.ts:644:      // If ProfileManager fails, we cannot validate
+packages/core/src/config/subagentManager.ts:694:      throw new Error('ProfileManager instance is required');
+packages/core/src/config/config.test.ts:32:import { getSettingsService } from '../settings/settingsServiceInstance.js';
+packages/core/src/config/config.test.ts:33:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/config.test.ts:144:  const mockSettingsService = {
+packages/core/src/config/config.test.ts:155:    getSettingsService: vi.fn(() => mockSettingsService),
+packages/core/src/config/config.test.ts:156:    resetSettingsService: vi.fn(),
+packages/core/src/config/config.test.ts:157:    registerSettingsService: vi.fn(),
+packages/core/src/config/config.test.ts:223:  const sharedSettingsService =
+packages/core/src/config/config.test.ts:224:    getSettingsService() as unknown as SettingsService;
+packages/core/src/config/config.test.ts:237:    settingsService: sharedSettingsService,
+packages/core/src/config/config.test.ts:910:  describe('Ephemeral Settings with SettingsService Integration', () => {
+packages/core/src/config/config.test.ts:911:    let mockSettingsService: ReturnType<typeof vi.fn>;
+packages/core/src/config/config.test.ts:914:      mockSettingsService = getSettingsService() as ReturnType<typeof vi.fn>;
+packages/core/src/config/config.test.ts:921:     * @given SettingsService has 'model' = 'gpt-4'
+packages/core/src/config/config.test.ts:923:     * @then Returns 'gpt-4' from SettingsService
+packages/core/src/config/config.test.ts:926:    it('should delegate getEphemeralSetting to SettingsService', () => {
+packages/core/src/config/config.test.ts:931:      mockSettingsService.get.mockReturnValue('gpt-4');
+packages/core/src/config/config.test.ts:935:      expect(mockSettingsService.get).toHaveBeenCalledWith('model');
+packages/core/src/config/config.test.ts:937:      expect(mockSettingsService.get).toHaveBeenCalledTimes(1);
+packages/core/src/config/config.test.ts:943:     * @given SettingsService is available
+packages/core/src/config/config.test.ts:945:     * @then SettingsService.set called with 'temperature', 0.8
+packages/core/src/config/config.test.ts:948:    it('should delegate setEphemeralSetting to SettingsService', () => {
+packages/core/src/config/config.test.ts:953:      expect(mockSettingsService.set).toHaveBeenCalledWith('temperature', 0.8);
+packages/core/src/config/config.test.ts:954:      expect(mockSettingsService.set).toHaveBeenCalledTimes(1);
+packages/core/src/config/config.test.ts:985:      mockSettingsService.get.mockReturnValue(true);
+packages/core/src/config/config.test.ts:992:      expect(mockSettingsService.set).toHaveBeenCalledWith('instant', true);
+packages/core/src/config/config.test.ts:993:      expect(mockSettingsService.get).toHaveBeenCalledWith('instant');
+packages/core/src/config/config.test.ts:1008:      mockSettingsService.get
+packages/core/src/config/config.test.ts:1026:      expect(mockSettingsService.set).toHaveBeenCalledTimes(3);
+packages/core/src/config/config.test.ts:1027:      expect(mockSettingsService.get).toHaveBeenCalledTimes(3);
+packages/core/src/config/config.test.ts:1033:     * @given SettingsService returns different types
+packages/core/src/config/config.test.ts:1042:      mockSettingsService.get.mockImplementation((key: string) => {
+packages/core/src/config/config.test.ts:1070:      expect(mockSettingsService.get).toHaveBeenCalledTimes(6);
+packages/core/src/config/config.test.ts:1077:      mockSettingsService.get.mockImplementation((key: string) => {
+packages/core/src/config/config.test.ts:1085:      expect(mockSettingsService.get).toHaveBeenCalledWith('context-limit');
+packages/core/src/config/config.test.ts:1086:      expect(mockSettingsService.set).toHaveBeenCalledWith(
+packages/core/src/config/config.test.ts:1097:     * @then All values properly delegated to SettingsService
+packages/core/src/config/config.test.ts:1113:        expect(mockSettingsService.set).toHaveBeenCalledWith(key, value);
+packages/core/src/config/config.test.ts:1116:      expect(mockSettingsService.set).toHaveBeenCalledTimes(6);
+packages/core/src/config/config.test.ts:1125:      expect(mockSettingsService.set).toHaveBeenCalledWith(
+packages/core/src/config/config.test.ts:1133:     * @scenario Return to SettingsService clear functionality
+packages/core/src/config/config.test.ts:1136:     * @then SettingsService clear is called
+packages/core/src/config/config.test.ts:1138:    it('should use SettingsService for clearing operations', () => {
+packages/core/src/config/config.test.ts:1140:      const settingsService = config.getSettingsService();
+packages/core/src/config/config.test.ts:1145:      expect(mockSettingsService.clear).toHaveBeenCalledTimes(1);
+packages/core/src/config/config.test.ts:1150:     * @scenario Config accesses SettingsService correctly
+packages/core/src/config/config.test.ts:1152:     * @when getSettingsService is called
+packages/core/src/config/config.test.ts:1155:    it('should provide access to SettingsService instance', () => {
+packages/core/src/config/config.test.ts:1158:      const settingsService1 = config.getSettingsService();
+packages/core/src/config/config.test.ts:1159:      const settingsService2 = config.getSettingsService();
+packages/core/src/config/config.test.ts:1162:      expect(settingsService1).toBe(mockSettingsService);
+packages/core/src/config/config.test.ts:1521:    const mockSettingsService = {
+packages/core/src/config/config.test.ts:1526:    } as unknown as SettingsService;
+packages/core/src/config/config.test.ts:1530:      settingsService: mockSettingsService,
+packages/core/src/config/config.test.ts:1534:    expect(mockSettingsService.get).toHaveBeenCalledWith('jitContextEnabled');
+packages/core/src/settings/__tests__/settingsRegistry.test.ts:22:import { COMPRESSION_STRATEGIES } from '../../core/compression/types.js';
+packages/core/src/settings/__tests__/settingsRegistry.test.ts:461:    it('returns spec with enumValues matching COMPRESSION_STRATEGIES', () => {
+packages/core/src/settings/__tests__/settingsRegistry.test.ts:464:      expect(spec?.enumValues).toStrictEqual([...COMPRESSION_STRATEGIES]);
+packages/core/src/settings/types.ts:118: * Comprehensive diagnostics information from SettingsService
+packages/core/src/settings/types.ts:133:export interface ISettingsService {
+packages/core/src/config/config.ephemeral.test.ts:10:  registerSettingsService,
+packages/core/src/config/config.ephemeral.test.ts:11:  resetSettingsService,
+packages/core/src/config/config.ephemeral.test.ts:13:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/config.ephemeral.test.ts:14:import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+packages/core/src/config/config.ephemeral.test.ts:20:    // Reset SettingsService singleton to ensure clean state between tests
+packages/core/src/config/config.ephemeral.test.ts:21:    resetSettingsService();
+packages/core/src/config/config.ephemeral.test.ts:22:    registerSettingsService(new SettingsService());
+packages/core/src/config/config.ephemeral.test.ts:157:      const settingsService = config.getSettingsService();
+packages/core/src/config/test/subagentManager.test.ts:14:import { ProfileManager } from '../profileManager.js';
+packages/core/src/config/test/subagentManager.test.ts:28:  let profileManager: ProfileManager;
+packages/core/src/config/test/subagentManager.test.ts:52:    profileManager = new ProfileManager(profilesDir);
+packages/core/src/config/profileManager.ts:9:import type { Profile, LoadBalancerProfile } from '../types/modelParams.js';
+packages/core/src/config/profileManager.ts:10:import { isLoadBalancerProfile } from '../types/modelParams.js';
+packages/core/src/config/profileManager.ts:11:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/profileManager.ts:23:export class ProfileManager {
+packages/core/src/config/profileManager.ts:260:   * Save current settings to a profile through SettingsService
+packages/core/src/config/profileManager.ts:266:   * Persist profile data through the injected SettingsService instead of the
+packages/core/src/config/profileManager.ts:272:    settingsService: SettingsService,
+packages/core/src/config/profileManager.ts:274:    // Use SettingsService to export current settings
+packages/core/src/config/profileManager.ts:277:      throw new Error('SettingsService does not support profile export');
+packages/core/src/config/profileManager.ts:281:    // Convert SettingsService format to Profile format
+packages/core/src/config/profileManager.ts:325:    // Update current profile name in SettingsService
+packages/core/src/config/profileManager.ts:336:   * Load a profile and apply through SettingsService
+packages/core/src/config/profileManager.ts:342:   * Apply profiles via the injected SettingsService rather than the singleton.
+packages/core/src/config/profileManager.ts:384:    settingsService: SettingsService,
+packages/core/src/config/profileManager.ts:399:    settingsService: SettingsService,
+packages/core/src/config/profileManager.ts:425:    settingsService: SettingsService,
+packages/core/src/config/profileManager.ts:436:      throw new Error('SettingsService does not support profile import');
+packages/core/src/config/configBaseCore.ts:50:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/configBaseCore.ts:51:import type { ProfileManager } from './profileManager.js';
+packages/core/src/config/configBaseCore.ts:53:import type { Storage } from './storage.js';
+packages/core/src/config/configBaseCore.ts:86:  protected readonly settingsService!: SettingsService;
+packages/core/src/config/configBaseCore.ts:159:  protected profileManager?: ProfileManager;
+packages/core/src/config/configBaseCore.ts:187:  readonly storage!: Storage;
+packages/core/src/config/configBaseCore.ts:263:  setProfileManager(manager: ProfileManager | undefined): void {
+packages/core/src/config/configBaseCore.ts:266:  getProfileManager(): ProfileManager | undefined {
+packages/core/src/config/configBaseCore.ts:681:  getSettingsService(): SettingsService {
+packages/core/src/config/storage.ts:17:export class Storage {
+packages/core/src/config/storage.ts:33:    return path.join(Storage.getGlobalLlxprtDir(), 'mcp-oauth-tokens.json');
+packages/core/src/config/storage.ts:37:    return path.join(Storage.getGlobalLlxprtDir(), 'settings.json');
+packages/core/src/config/storage.ts:41:    return path.join(Storage.getGlobalLlxprtDir(), 'installation_id');
+packages/core/src/config/storage.ts:45:    return path.join(Storage.getGlobalLlxprtDir(), PROVIDER_ACCOUNTS_FILENAME);
+packages/core/src/config/storage.ts:49:    return path.join(Storage.getGlobalLlxprtDir(), 'google_accounts.json');
+packages/core/src/config/storage.ts:53:    return path.join(Storage.getGlobalLlxprtDir(), 'commands');
+packages/core/src/config/storage.ts:57:    return path.join(Storage.getGlobalTempDir(), 'skills');
+packages/core/src/config/storage.ts:61:    return path.join(Storage.getGlobalLlxprtDir(), 'memory.md');
+packages/core/src/config/storage.ts:65:    return path.join(Storage.getGlobalLlxprtDir(), 'policies');
+packages/core/src/config/storage.ts:81:    return path.join(path.dirname(Storage.getSystemSettingsPath()), 'policies');
+packages/core/src/config/storage.ts:85:    return path.join(Storage.getGlobalLlxprtDir(), TMP_DIR_NAME);
+packages/core/src/config/storage.ts:94:    const tempDir = Storage.getGlobalTempDir();
+packages/core/src/config/storage.ts:103:    return path.join(Storage.getGlobalLlxprtDir(), OAUTH_FILE);
+packages/core/src/config/storage.ts:116:    const historyDir = path.join(Storage.getGlobalLlxprtDir(), 'history');
+packages/core/src/config/configConstructor.ts:42:import { Storage } from './storage.js';
+packages/core/src/config/configConstructor.ts:65:import { registerSettingsService } from '../settings/settingsServiceInstance.js';
+packages/core/src/config/configConstructor.ts:66:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/configConstructor.ts:67:import { peekActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+packages/core/src/config/configConstructor.ts:86:  settingsService: SettingsService;
+packages/core/src/config/configConstructor.ts:175:  storage: Storage;
+packages/core/src/config/configConstructor.ts:211:function applySettingsService(
+packages/core/src/config/configConstructor.ts:215:  const providedSettingsService = params.settingsService;
+packages/core/src/config/configConstructor.ts:216:  if (providedSettingsService) {
+packages/core/src/config/configConstructor.ts:217:    registerSettingsService(providedSettingsService);
+packages/core/src/config/configConstructor.ts:221:  if (providedSettingsService) {
+packages/core/src/config/configConstructor.ts:222:    config.settingsService = providedSettingsService;
+packages/core/src/config/configConstructor.ts:226:    config.settingsService = new SettingsService();
+packages/core/src/config/configConstructor.ts:365:  config.storage = new Storage(config.targetDir);
+packages/core/src/config/configConstructor.ts:453:  applySettingsService(config, params);
+packages/core/src/config/config-lsp-integration.test.ts:149:vi.mock('../runtime/providerRuntimeContext.js', () => ({
+packages/core/src/config/config-lsp-integration.test.ts:168:  getSettingsService: vi.fn().mockReturnValue({
+packages/core/src/config/config-lsp-integration.test.ts:176:  registerSettingsService: vi.fn(),
+packages/core/src/config/config.scheduler.test.ts:17:import type { ISettingsService } from '../settings/types.js';
+packages/core/src/config/config.scheduler.test.ts:37:    const mockSettingsService: ISettingsService = {
+packages/core/src/config/config.scheduler.test.ts:74:      settingsService: mockSettingsService,
+packages/core/src/config/config.ts:363:    // Delegate to SettingsService as source of truth
+packages/core/src/config/config.ts:364:    const settingsService = this.getSettingsService();
+packages/core/src/config/config.ts:389:    // Update SettingsService as source of truth
+packages/core/src/config/config.ts:390:    const settingsService = this.getSettingsService();
+packages/core/src/config/config.ts:687:      const settingsService = this.getSettingsService();
+packages/core/src/config/toolRegistryFactory.ts:41:import { ProfileManager } from './profileManager.js';
+packages/core/src/config/toolRegistryFactory.ts:63:  getProfileManager(): ProfileManager | undefined;
+packages/core/src/config/toolRegistryFactory.ts:64:  setProfileManager(pm: ProfileManager): void;
+packages/core/src/config/toolRegistryFactory.ts:74:  profileManager: ProfileManager | undefined,
+packages/core/src/config/toolRegistryFactory.ts:208:  profileManager: ProfileManager | undefined;
+packages/core/src/config/toolRegistryFactory.ts:211:  let profileManager = host.getProfileManager();
+packages/core/src/config/toolRegistryFactory.ts:214:    profileManager = new ProfileManager(profilesDir);
+packages/core/src/config/toolRegistryFactory.ts:215:    host.setProfileManager(profileManager);
+packages/core/src/config/toolRegistryFactory.ts:234:  profileManager: ProfileManager | undefined,
+packages/core/src/config/storage.test.ts:19:import { Storage } from './storage.js';
+packages/core/src/config/storage.test.ts:21:describe('Storage – getGlobalSettingsPath', () => {
+packages/core/src/config/storage.test.ts:24:    expect(Storage.getGlobalSettingsPath()).toBe(expected);
+packages/core/src/config/storage.test.ts:28:describe('Storage – additional helpers', () => {
+packages/core/src/config/storage.test.ts:30:  const storage = new Storage(projectRoot);
+packages/core/src/config/storage.test.ts:39:    expect(Storage.getUserCommandsDir()).toBe(expected);
+packages/core/src/config/storage.test.ts:58:    expect(Storage.getMcpOAuthTokensPath()).toBe(expected);
+packages/core/src/config/storage.test.ts:63:    expect(Storage.getGlobalMemoryFilePath()).toBe(expected);
+packages/core/src/config/storage.test.ts:119:    expect(Storage.getInstallationIdPath()).toBe(expected);
+packages/core/src/config/storage.test.ts:128:    expect(Storage.getProviderAccountsPath()).toBe(expected);
+packages/core/src/config/storage.test.ts:133:    expect(Storage.getOAuthCredsPath()).toBe(expected);
+packages/core/src/config/storage.test.ts:138:    expect(Storage.getGlobalTempDir()).toBe(expected);
+packages/core/src/config/profileManager.test.ts:8:import { ProfileManager } from './profileManager.js';
+packages/core/src/config/profileManager.test.ts:9:import type { ISettingsService } from '../settings/types.js';
+packages/core/src/config/profileManager.test.ts:10:import type { Profile, LoadBalancerProfile } from '../types/modelParams.js';
+packages/core/src/config/profileManager.test.ts:11:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/profileManager.test.ts:25:// Mock SettingsService
+packages/core/src/config/profileManager.test.ts:26:const createMockSettingsService = (): vi.Mocked<ISettingsService> => ({
+packages/core/src/config/profileManager.test.ts:40:describe('ProfileManager', () => {
+packages/core/src/config/profileManager.test.ts:41:  let profileManager: ProfileManager;
+packages/core/src/config/profileManager.test.ts:42:  let mockSettingsService: vi.Mocked<ISettingsService>;
+packages/core/src/config/profileManager.test.ts:66:    mockSettingsService = createMockSettingsService();
+packages/core/src/config/profileManager.test.ts:68:    profileManager = new ProfileManager();
+packages/core/src/config/profileManager.test.ts:70:    // No feature flags needed - SettingsService is always used
+packages/core/src/config/profileManager.test.ts:79:      const manager = new ProfileManager();
+packages/core/src/config/profileManager.test.ts:80:      expect(manager).toBeInstanceOf(ProfileManager);
+packages/core/src/config/profileManager.test.ts:145:  describe('save method with SettingsService', () => {
+packages/core/src/config/profileManager.test.ts:146:    it('should export from SettingsService and save profile', async () => {
+packages/core/src/config/profileManager.test.ts:161:      mockSettingsService.exportForProfile.mockResolvedValue(settingsData);
+packages/core/src/config/profileManager.test.ts:167:        mockSettingsService as unknown as SettingsService,
+packages/core/src/config/profileManager.test.ts:170:      expect(mockSettingsService.exportForProfile).toHaveBeenCalled();
+packages/core/src/config/profileManager.test.ts:171:      expect(mockSettingsService.setCurrentProfileName).toHaveBeenCalledWith(
+packages/core/src/config/profileManager.test.ts:177:    it('should work when SettingsService is always available', async () => {
+packages/core/src/config/profileManager.test.ts:178:      mockSettingsService.exportForProfile.mockResolvedValue({
+packages/core/src/config/profileManager.test.ts:197:          mockSettingsService as unknown as SettingsService,
+packages/core/src/config/profileManager.test.ts:205:      mockSettingsService.exportForProfile.mockResolvedValue({
+packages/core/src/config/profileManager.test.ts:225:        mockSettingsService as unknown as SettingsService,
+packages/core/src/config/profileManager.test.ts:242:      mockSettingsService.exportForProfile.mockResolvedValue({
+packages/core/src/config/profileManager.test.ts:259:        mockSettingsService as unknown as SettingsService,
+packages/core/src/config/profileManager.test.ts:271:  describe('load method with SettingsService', () => {
+packages/core/src/config/profileManager.test.ts:275:      mockSettingsService.importFromProfile.mockResolvedValue();
+packages/core/src/config/profileManager.test.ts:279:        mockSettingsService as unknown as SettingsService,
+packages/core/src/config/profileManager.test.ts:283:      expect(mockSettingsService.importFromProfile).toHaveBeenCalled();
+packages/core/src/config/profileManager.test.ts:284:      expect(mockSettingsService.setCurrentProfileName).toHaveBeenCalledWith(
+packages/core/src/config/profileManager.test.ts:289:    it('should pass provider and model from profile to SettingsService', async () => {
+packages/core/src/config/profileManager.test.ts:293:      mockSettingsService.importFromProfile.mockImplementation((data) => {
+packages/core/src/config/profileManager.test.ts:300:        mockSettingsService as unknown as SettingsService,
+packages/core/src/config/profileManager.test.ts:316:      mockSettingsService.importFromProfile.mockImplementation((data) => {
+packages/core/src/config/profileManager.test.ts:323:        mockSettingsService as unknown as SettingsService,
+packages/core/src/config/profileManager.test.ts:335:    it('should pass toolFormat from profile to SettingsService', async () => {
+packages/core/src/config/profileManager.test.ts:350:      mockSettingsService.importFromProfile.mockImplementation((data) => {
+packages/core/src/config/profileManager.test.ts:357:        mockSettingsService as unknown as SettingsService,
+packages/core/src/config/profileManager.test.ts:381:      mockSettingsService.importFromProfile.mockImplementation((data) => {
+packages/core/src/config/profileManager.test.ts:388:        mockSettingsService as unknown as SettingsService,
+packages/core/src/config/__tests__/config-terminal-background.test.ts:9:import { SettingsService } from '../../settings/SettingsService.js';
+packages/core/src/config/__tests__/config-terminal-background.test.ts:15:    const settingsService = new SettingsService();
+```
+
+Exit status: 0
+
+## Consumer Import Inventory
+
+```bash
+rg -n '@vybestack/llxprt-code-core/settings|@vybestack/llxprt-code-core/config/(storage|profileManager)|from ['\''\"'\''].*settings/|from ['\''\"'\''].*config/(storage|profileManager)' packages --glob '*.ts'; rg -n 'SettingsService|ProfileManager|Storage|settingsServiceInstance|@vybestack/llxprt-code-core/settings|@vybestack/llxprt-code-core/config/(storage|profileManager)' packages/lsp --glob '*.ts'
+```
+
+```text
+packages/core/index.ts:24:export { SettingsService } from './src/settings/SettingsService.js';
+packages/core/index.ts:34:} from './src/settings/types.js';
+packages/core/index.ts:35:export type { TelemetrySettings as SettingsTelemetrySettings } from './src/settings/types.js';
+packages/core/src/integration-tests/settings-remediation.test.ts:12:} from '../settings/settingsServiceInstance.js';
+packages/core/src/integration-tests/settings-remediation.test.ts:13:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/integration-tests/profile-integration.test.ts:8:import { ProfileManager } from '../config/profileManager.js';
+packages/core/src/integration-tests/profile-integration.test.ts:9:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/integration-tests/profile-integration.test.ts:11:import { getSettingsService } from '../settings/settingsServiceInstance.js';
+packages/providers/src/ProviderManager.test.ts:14:} from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/providers/src/ProviderManager.test.ts:15:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/test/settings/SettingsService.spec.ts:20:import { SettingsService } from '../../src/settings/SettingsService.js';
+packages/core/src/integration-tests/geminiChat-isolation.integration.test.ts:40:import { SettingsService } from '../settings/SettingsService.js';
+packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.reasoningSummary.test.ts:11:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/test/settings/model-diagnostics.test.ts:13:import { SettingsService } from '../../src/settings/SettingsService.js';
+packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.reasoningEffort.test.ts:8:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/integration-tests/provider-settings-integration.spec.ts:6:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/integration-tests/provider-settings-integration.spec.ts:8:import { getSettingsService } from '../settings/settingsServiceInstance.js';
+packages/providers/src/BaseProvider.test.ts:21:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/BaseProvider.test.ts:27:} from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/providers/src/openai-responses/__tests__/openaiResponses.stateless.test.ts:6:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/ProviderManager.gemini-switch.test.ts:16:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/runtime/providerRuntimeContext.test.ts:13:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/runtime/providerRuntimeContext.test.ts:24:} from '../settings/settingsServiceInstance.js';
+packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.textVerbosity.test.ts:10:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/gemini/GeminiProvider.mediaBlock.test.ts:54:  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
+packages/providers/src/integration/multi-provider.integration.test.ts:14:import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/providers/src/integration/multi-provider.integration.test.ts:16:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/providerConfigKeys.ts:1:import { SETTINGS_REGISTRY } from '@vybestack/llxprt-code-core/settings/settingsRegistry.js';
+packages/providers/src/BaseProvider.ts:33:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/BaseProvider.ts:34:import { getSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/core/src/runtime/RuntimeInvocationContext.ts:17:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/runtime/RuntimeInvocationContext.ts:27:import { separateSettings } from '../settings/settingsRegistry.js';
+packages/core/src/policy/config.ts:13:import { Storage } from '../config/storage.js';
+packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.promptCacheKey.test.ts:13:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/__tests__/LoadBalancingProvider.test.ts:22:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/core/logger.test.ts:23:import { Storage } from '../config/storage.js';
+packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.reasoningInclude.test.ts:26:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/gemini/__tests__/gemini.stateless.test.ts:6:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/policy/policy-updater.test.ts:13:import { Storage } from '../config/storage.js';
+packages/providers/src/gemini/__tests__/gemini.thinkingLevel.test.ts:7:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/BaseProviderNormalization.ts:8:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/runtime/providerRuntimeContext.ts:21:import { SettingsService } from '../settings/SettingsService.js';
+packages/providers/src/gemini/GeminiProvider.test.ts:45:  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
+packages/providers/src/ProviderManager.ts:38:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/gemini/__tests__/gemini.userMemory.test.ts:16:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/__tests__/LoggingProviderWrapper.apiTelemetry.test.ts:17:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/LoggingProviderWrapper.ts:46:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai-responses/OpenAIResponsesProvider.headers.test.ts:25:  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
+packages/core/src/core/geminiChat.thinking-toolcalls.test.ts:53:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/runtime/__tests__/RuntimeInvocationContext.separation.test.ts:20:import type { SettingsService } from '../../settings/SettingsService.js';
+packages/providers/src/openai/OpenAIProvider.modelParamsAndHeaders.test.ts:5:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/OpenAIProvider.modelParamsAndHeaders.test.ts:37:  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
+packages/providers/src/__tests__/LoadBalancingProvider.tpm.test.ts:18:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/policy/persistence.test.ts:22:import { Storage } from '../config/storage.js';
+packages/providers/src/__tests__/LoadBalancingProvider.failover.test.ts:17:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/__tests__/LoadBalancingProvider.metrics.test.ts:18:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/__tests__/baseProvider.stateless.test.ts:12:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/__tests__/ProviderManager.settingsSeparation.test.ts:14:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/__tests__/LoadBalancingProvider.timeout.test.ts:17:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/openai-oauth.spec.ts:23:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/openai-oauth.spec.ts:108:      '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js'
+packages/core/src/runtime/AgentRuntimeContext.stateless.test.ts:7:import { SettingsService } from '../settings/SettingsService.js';
+packages/providers/src/IProvider.ts:20:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai-vercel/OpenAIVercelProvider.issue1943.test.ts:15:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/getOpenAIProviderInfo.context.test.ts:2:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/providerManager.context.test.ts:9:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/__tests__/ProviderManager.guard.test.ts:3:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/runtime/contracts/RuntimeProviderChat.ts:21:import type { SettingsService } from '../../settings/SettingsService.js';
+packages/providers/src/__tests__/LoggingProviderWrapper.stateless.test.ts:9:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/__tests__/LoadBalancingProvider.circuitbreaker.test.ts:17:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/__tests__/BaseProvider.guard.test.ts:8:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai-vercel/OpenAIVercelProvider.test.ts:27:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/__tests__/ProviderManager.sandboxBaseUrl.test.ts:7:} from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/providers/src/__tests__/ProviderManager.sandboxBaseUrl.test.ts:8:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai-vercel/errorHandling.test.ts:32:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai-vercel/providerRegistry.test.ts:25:} from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/providers/src/openai-vercel/providerRegistry.test.ts:26:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/OpenAIProvider.emptyResponseRetry.test.ts:9:import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/providers/src/openai/OpenAIProvider.emptyResponseRetry.test.ts:11:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai-vercel/nonStreaming.test.ts:29:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai-vercel/OpenAIVercelProvider.shouldRetry.test.ts:21:  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
+packages/providers/src/openai/OpenAIProvider.toolFormatDetection.test.ts:19:  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
+packages/core/src/services/gitService.test.ts:9:import { Storage } from '../config/storage.js';
+packages/providers/src/openai-vercel/OpenAIVercelProvider.reasoning.test.ts:89:        mockSettings as unknown as import('@vybestack/llxprt-code-core/settings/SettingsService.js').SettingsService,
+packages/providers/src/openai-vercel/streaming.test.ts:28:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/OpenAIProvider.setModel.test.ts:6:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/runtime/AgentRuntimeLoader.test.ts:25:import { SettingsService } from '../settings/SettingsService.js';
+packages/providers/src/openai/OpenAIProvider.shouldRetry.test.ts:21:  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
+packages/providers/src/openai-vercel/OpenAIVercelProvider.caching.test.ts:23:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/runtime/createAgentRuntimeContext.ts:23:import { getSettingSpec } from '../settings/settingsRegistry.js';
+packages/providers/src/openai/OpenAIProvider.mediaBlock.test.ts:55:  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
+packages/core/src/code_assist/oauth-credential-storage.test.ts:20:import { Storage } from '../config/storage.js';
+packages/core/src/runtime/RuntimeInvocationContext.failfast.test.ts:10:import { SettingsService } from '../settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.test.ts:17:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/OpenAIRequestPreparation.issue1943.test.ts:14:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/OpenAIProvider.caching.test.ts:5:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/OpenAIProvider.caching.test.ts:41:  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
+packages/core/src/code_assist/oauth-credential-storage.ts:9:import { OAUTH_FILE, Storage } from '../config/storage.js';
+packages/providers/src/openai/__tests__/OpenAIProvider.e2e.test.ts:17:import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/providers/src/openai/__tests__/OpenAIProvider.e2e.test.ts:18:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.issue1150.streaming.test.ts:39:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.stateless.test.ts:7:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/core/subagent.test.ts:32:import { SettingsService } from '../settings/SettingsService.js';
+packages/providers/src/openai/__tests__/openai.localEndpoint.test.ts:11:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.ts:24:import { getSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/core/src/code_assist/oauth2.ts:28:import { Storage } from '../config/storage.js';
+packages/providers/src/openai/OpenAIProvider.integration.test.ts:12:import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/providers/src/openai/OpenAIProvider.integration.test.ts:13:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.issue1494.test.ts:17:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/__tests__/openai.stateless.test.ts:6:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.issue1150.shape.test.ts:40:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.dumpContext.test.ts:11:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/__tests__/openai.requiresAuth.test.ts:2:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/core/compression/__tests__/high-density-settings.test.ts:32:} from '../../../settings/settingsRegistry.js';
+packages/core/src/core/compression/__tests__/high-density-settings.test.ts:36:import { SettingsService } from '../../../settings/SettingsService.js';
+packages/providers/src/openai/OpenAIStreamProcessor.stopReason.test.ts:14:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/OpenAIProvider.issue1943.test.ts:16:import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.issue1150.test.ts:17:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/openai/OpenAIProvider.deepseekReasoning.test.ts:17:import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+packages/providers/src/openai/OpenAIProvider.deepseekReasoning.test.ts:19:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.mediaBlock.test.ts:14:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.thinking.test.ts:26:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.issue1150.redacted.test.ts:32:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.issue276.test.ts:24:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.issue1150-repro.test.ts:17:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/providers/src/anthropic/AnthropicProvider.issue1150.toolresult.test.ts:48:import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+packages/core/src/index.ts:12:export * from './config/profileManager.js';
+packages/core/src/index.ts:322:export { SettingsService } from './settings/SettingsService.js';
+packages/core/src/index.ts:327:} from './settings/settingsServiceInstance.js';
+packages/core/src/index.ts:337:} from './settings/types.js';
+packages/core/src/index.ts:338:export type { TelemetrySettings as SettingsTelemetrySettings } from './settings/types.js';
+packages/core/src/index.ts:425:export { Storage } from './config/storage.js';
+packages/core/src/index.ts:485:} from './settings/index.js';
+packages/core/src/skills/skillManager.test.ts:12:import { Storage } from '../config/storage.js';
+packages/core/src/skills/skillManager.ts:11:import { Storage } from '../config/storage.js';
+packages/core/src/services/gitService.ts:13:import type { Storage } from '../config/storage.js';
+packages/providers/src/anthropic/AnthropicProvider.toolFormatDetection.test.ts:35:  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
+packages/cli/src/config/cliEphemeralSettings.ts:7:import { parseEphemeralSettingValue } from '../settings/ephemeralSettings.js';
+packages/cli/src/config/cliEphemeralSettings.ts:8:import { parseModelParamValue } from '../settings/modelParamParser.js';
+packages/core/src/hooks/hookSystem.test.ts:17:import type { Storage } from '../config/storage.js';
+packages/core/src/hooks/trustedHooks.ts:9:import { Storage } from '../config/storage.js';
+packages/core/src/auth/precedence.adapter.test.ts:5:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/auth/precedence.adapter.test.ts:6:import { SettingsService as SettingsServiceImpl } from '../settings/SettingsService.js';
+packages/cli/test/auth/authRuntimeScope.test.ts:18:import { SettingsService } from '../../../core/src/settings/SettingsService.js';
+packages/core/src/core/__tests__/geminiChat.runtimeState.test.ts:40:import { SettingsService } from '../../settings/SettingsService.js';
+packages/core/src/core/__tests__/subagent.stateless.test.ts:27:import { SettingsService } from '../../settings/SettingsService.js';
+packages/core/src/auth/__tests__/authRuntimeScope.test.ts:7:import { SettingsService } from '../../settings/SettingsService.js';
+packages/core/src/auth/auth-precedence-resolver.ts:10:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/auth/precedence.test.ts:17:} from '../settings/settingsServiceInstance.js';
+packages/core/src/auth/precedence.test.ts:18:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/auth/invalidateProviderCache.test.ts:20:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/auth/invalidateProviderCache.test.ts:26:import { resetSettingsService } from '../settings/settingsServiceInstance.js';
+packages/core/src/core/logger.ts:12:import type { Storage } from '../config/storage.js';
+packages/core/src/core/geminiChat.issue1729.test.ts:7:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/auth/precedence.ts:18:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/core/prompts.ts:15:import { getSettingsService } from '../settings/settingsServiceInstance.js';
+packages/core/src/config/configTypes.ts:31:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/config.test.ts:32:import { getSettingsService } from '../settings/settingsServiceInstance.js';
+packages/core/src/config/config.test.ts:33:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/profileManager.test.ts:9:import type { ISettingsService } from '../settings/types.js';
+packages/core/src/config/profileManager.test.ts:11:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/core/subagentOrchestrator.test.ts:9:import type { ProfileManager } from '../config/profileManager.js';
+packages/core/src/config/__tests__/config-terminal-background.test.ts:9:import { SettingsService } from '../../settings/SettingsService.js';
+packages/core/src/config/config.ephemeral.test.ts:12:} from '../settings/settingsServiceInstance.js';
+packages/core/src/config/config.ephemeral.test.ts:13:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/core/geminiChat.runtime.test.ts:22:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/configConstructor.ts:65:import { registerSettingsService } from '../settings/settingsServiceInstance.js';
+packages/core/src/config/configConstructor.ts:66:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/config.scheduler.test.ts:17:import type { ISettingsService } from '../settings/types.js';
+packages/core/src/config/profileManager.ts:11:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/config/configBaseCore.ts:50:import type { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/models/registry.ts:9:import { Storage } from '../config/storage.js';
+packages/core/src/hooks/hookRegistry.test.ts:10:import type { Storage } from '../config/storage.js';
+packages/core/src/core/subagentOrchestrator.ts:12:import type { ProfileManager } from '../config/profileManager.js';
+packages/core/src/core/subagentOrchestrator.ts:40:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/test-utils/__tests__/providerCallOptions.test.ts:8:import { SettingsService } from '../../settings/SettingsService.js';
+packages/core/src/test-utils/runtime.ts:16:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/test-utils/providerCallOptions.ts:7:import { SettingsService } from '../settings/SettingsService.js';
+packages/core/src/test-utils/providerCallOptions.ts:8:import { SETTINGS_REGISTRY } from '../settings/settingsRegistry.js';
+packages/core/src/storage/SessionPersistenceService.ts:11:import type { Storage } from '../config/storage.js';
+packages/core/src/storage/SessionPersistenceService.test.ts:32:import { Storage } from '../config/storage.js';
+packages/core/src/mcp/file-token-store.ts:11:import { Storage } from '../config/storage.js';
+packages/core/src/tools/task.ts:28:import type { ProfileManager } from '../config/profileManager.js';
+packages/core/src/utils/installationManager.ts:10:import { Storage } from '../config/storage.js';
+packages/core/src/tools/memoryTool.ts:20:import { Storage } from '../config/storage.js';
+packages/core/src/tools/memoryTool.ts:30:import { getSettingsService } from '../settings/settingsServiceInstance.js';
+packages/core/src/utils/userAccountManager.ts:9:import { Storage } from '../config/storage.js';
+packages/core/src/utils/shell-utils.shellReplacement.test.ts:13:import { SettingsService } from '../settings/SettingsService.js';
+packages/cli/src/ui/commands/setCommand.ts:25:} from '../../settings/ephemeralSettings.js';
+```
+
+Exit status: 1
+
+## Root-Barrel Import Inventory
+
+```bash
+rg -n 'import.*\{[^}]*(SettingsService|ProfileManager|Storage|ModelParams|Profile|StandardProfile|LoadBalancerProfile|EphemeralSettings|SETTINGS_REGISTRY|getSettingsService|registerSettingsService|resetSettingsService)[^}]*\}.*from ['\''"'\'']@vybestack/llxprt-code-core['\''"'\'']' packages --glob '*.ts'
+```
+
+```text
+packages/cli/src/providers/providerManagerInstance.oauthRegistration.test.ts:15:import { SettingsService } from '@vybestack/llxprt-code-core';
+packages/cli/src/services/FileCommandLoader.ts:13:import { Storage, debugLogger } from '@vybestack/llxprt-code-core';
+packages/cli/src/providers/providerAliases.ts:12:import { Storage, debugLogger } from '@vybestack/llxprt-code-core';
+packages/cli/src/services/FileCommandLoader.test.ts:12:import { Storage } from '@vybestack/llxprt-code-core';
+packages/cli/src/auth/profile-utils.ts:12:import type { ProfileManager as ProfileManagerClass } from '@vybestack/llxprt-code-core';
+packages/providers/src/provider-manager-behavior.test.ts:48:import { SettingsService } from '@vybestack/llxprt-code-core';
+packages/providers/src/anthropic/AnthropicProvider.modelParams.test.ts:2:import { SettingsService } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/hooks/useShellHistory.ts:10:import { isNodeError, Storage, debugLogger } from '@vybestack/llxprt-code-core';
+packages/cli/src/utils/persistentState.ts:7:import { Storage, DebugLogger } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/hooks/useProfileManagement.ts:14:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/hooks/useProfileManagement.ts:16:import { ProfileManager, DebugLogger } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/commands/__tests__/profileCommand.failover.test.ts:17:import type { LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/hooks/useLogger.ts:8:import type { Storage } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/commands/test/subagentCommand.test.ts:58:import { SubagentManager, ProfileManager } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/loadbalancer.integration.test.ts:11:import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/commands/__tests__/profileCommand.lb.test.ts:14:import type { LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/test-utils.test.ts:10:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/profile-system.integration.test.ts:10:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/profile-system.integration.test.ts:11:import { ProfileManager } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/ephemeral-settings.integration.test.ts:14:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/commands/diagnosticsCommand.ts:19:import { DebugLogger, MCPOAuthTokenStorage } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/tools-governance.integration.test.ts:11:import { ProfileManager, SettingsService } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/commands/toolsCommand.test.ts:12:import { SettingsService } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/provider-switching.integration.test.ts:19:import type { SettingsService } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/profile-keyfile.integration.test.ts:11:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/profile-keyfile.integration.test.ts:12:import { ProfileManager } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/provider-multi-runtime.integration.test.ts:21:import { type Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/base-url-behavior.integration.test.ts:14:import type { Profile, SettingsService } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/cli-args.integration.test.ts:13:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/cli-args.integration.test.ts:14:import { ProfileManager } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/security.integration.test.ts:19:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/compression-settings-apply.integration.test.ts:8:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/test-utils.ts:11:import type { Config, Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/settingsResolver.ts:17:import type { Config, SettingsService } from '@vybestack/llxprt-code-core';
+packages/cli/src/config/paths.ts:8:import { Storage } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/profile-application/profileAccessors.ts:1:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/runtimeSettings.proactive-wiring.spec.ts:8:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/__tests__/profileApplication.test.ts:9:import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+packages/cli/src/config/sandboxProfiles.ts:9:import { Storage } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/__tests__/runtimeIsolation.test.ts:13:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/config/profileRuntimeApplication.ts:9:import { DebugLogger, type Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/__tests__/profileApplication.lb.test.ts:19:import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/__tests__/profileApplication.failover.test.ts:22:import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+```
+
+Exit status: 0
+
+## Dynamic Import And vi.mock Path Inventory
+
+```bash
+rg -n 'vi\.mock.*['\''"'\''].*settings/|vi\.mock.*['\''"'\''].*config/(storage|profileManager)|import\(['\''"'\'']@vybestack/llxprt-code-core['\''"'\'']\)\.then' packages --glob '*.ts'; rg -n 'import\(['\''"'\'']@vybestack/llxprt-code-core/settings/|import\(['\''"'\'']@vybestack/llxprt-code-core/config/(storage|profileManager)' packages --glob '*.ts'
+```
+
+```text
+packages/core/src/policy/policy-updater.test.ts:24:vi.mock('../config/storage.js');
+packages/core/src/policy/persistence.test.ts:26:vi.mock('../config/storage.js');
+packages/core/src/code_assist/oauth2.test.ts:59:vi.mock('../config/storage.js', () => ({
+packages/core/src/config/config.test.ts:143:vi.mock('../settings/settingsServiceInstance.js', () => {
+packages/core/src/mcp/file-token-store.test.ts:27:vi.mock('../config/storage.js', () => ({
+packages/core/src/lsp/__tests__/system-integration.test.ts:157:vi.mock('../../settings/settingsServiceInstance.js', () => ({
+packages/core/src/config/config-lsp-integration.test.ts:167:vi.mock('../settings/settingsServiceInstance.js', () => ({
+packages/core/src/core/prompts.coreMemory.test.ts:44:vi.mock('../settings/settingsServiceInstance.js', () => ({
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:158:vi.mock('../../settings/settingsServiceInstance.js', () => ({
+packages/core/src/integration-tests/provider-settings-integration.spec.ts:12:vi.mock('../settings/settingsServiceInstance.js');
+packages/core/src/integration-tests/profile-integration.test.ts:20:vi.mock('../settings/settingsServiceInstance.js');
+packages/core/src/tools/memoryTool.test.ts:42:vi.mock('../settings/settingsServiceInstance.js', () => ({
+packages/providers/src/openai-vercel/OpenAIVercelProvider.reasoning.test.ts:89:        mockSettings as unknown as import('@vybestack/llxprt-code-core/settings/SettingsService.js').SettingsService,
+```
+
+Exit status: 0
+
+## Core Internal ProfileManager Consumers
+
+```bash
+rg -n 'from ['\''"'\''].*\.\./config/profileManager|from ['\''"'\''].*\.\/profileManager|from ['\''"'\''].*config/profileManager\.js' packages/core/src --glob '*.ts'
+```
+
+```text
+packages/core/src/tools/task.ts:28:import type { ProfileManager } from '../config/profileManager.js';
+packages/core/src/index.ts:12:export * from './config/profileManager.js';
+packages/core/src/config/subagentManager.ts:12:import type { ProfileManager } from './profileManager.js';
+packages/core/src/config/toolRegistryFactory.ts:41:import { ProfileManager } from './profileManager.js';
+packages/core/src/config/profileManager.test.ts:8:import { ProfileManager } from './profileManager.js';
+packages/core/src/config/test/subagentManager.test.ts:14:import { ProfileManager } from '../profileManager.js';
+packages/core/src/config/configBaseCore.ts:51:import type { ProfileManager } from './profileManager.js';
+packages/core/src/core/subagentOrchestrator.ts:12:import type { ProfileManager } from '../config/profileManager.js';
+packages/core/src/integration-tests/profile-integration.test.ts:8:import { ProfileManager } from '../config/profileManager.js';
+packages/core/src/core/subagentOrchestrator.test.ts:9:import type { ProfileManager } from '../config/profileManager.js';
+```
+
+Exit status: 0
+
+## modelParams.ts Symbol List
+
+```bash
+echo '=== modelParams.ts Symbol List ==='; grep -n '^export ' packages/core/src/types/modelParams.ts; echo '=== End Symbol List ==='
+```
+
+```text
+=== modelParams.ts Symbol List ===
+13:export interface AuthConfig {
+22:export const AuthConfigSchema = z.discriminatedUnion('type', [
+37:export interface ModelParams {
+59:export interface EphemeralSettings {
+226:export interface LoadBalancerSubProfileConfig {
+238:export interface LoadBalancerConfig {
+246:export interface StandardProfile {
+268:export interface LoadBalancerProfile {
+290:export type Profile = StandardProfile | LoadBalancerProfile;
+295:export function isLoadBalancerProfile(
+304:export function isStandardProfile(
+314:export function hasAuthConfig(profile: Profile): boolean {
+322:export function isOAuthProfile(profile: Profile): boolean {
+=== End Symbol List ===
+```
+
+Exit status: 0
+
+## modelParams Type Consumer Inventory
+
+```bash
+rg -n 'from ['\''"'\'']@vybestack/llxprt-code-core/types/modelParams|from ['\''"'\''].*types/modelParams' packages --glob '*.ts'; rg -n 'import.*\{[^}]*(ModelParams|EphemeralSettings|Profile|StandardProfile|LoadBalancerProfile|isLoadBalancerProfile|isStandardProfile|AuthConfig|AuthConfigSchema|hasAuthConfig|isOAuthProfile)[^}]*\}.*from ['\''"'\'']@vybestack/llxprt-code-core['\''"'\'']' packages --glob '*.ts'
+```
+
+```text
+packages/providers/src/LoadBalancingProvider.ts:25:import type { Profile } from '@vybestack/llxprt-code-core/types/modelParams.js';
+packages/core/src/integration-tests/profile-integration.test.ts:10:import type { Profile } from '../types/modelParams.js';
+packages/core/src/index.ts:70:export * from './types/modelParams.js';
+packages/core/src/config/profileManager.test.ts:10:import type { Profile, LoadBalancerProfile } from '../types/modelParams.js';
+packages/core/src/config/profileManager.ts:9:import type { Profile, LoadBalancerProfile } from '../types/modelParams.js';
+packages/core/src/config/profileManager.ts:10:import { isLoadBalancerProfile } from '../types/modelParams.js';
+packages/core/src/core/subagentOrchestrator.ts:14:import type { Profile } from '../types/modelParams.js';
+packages/core/src/core/subagentOrchestrator.test.ts:11:import type { Profile } from '../types/modelParams.js';
+packages/cli/src/auth/profile-utils.ts:12:import type { ProfileManager as ProfileManagerClass } from '@vybestack/llxprt-code-core';
+packages/cli/src/config/profileRuntimeApplication.ts:9:import { DebugLogger, type Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/commands/test/subagentCommand.test.ts:58:import { SubagentManager, ProfileManager } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/commands/__tests__/profileCommand.failover.test.ts:17:import type { LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/commands/__tests__/profileCommand.lb.test.ts:14:import type { LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/loadbalancer.integration.test.ts:11:import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/test-utils.test.ts:10:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/profile-system.integration.test.ts:10:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/profile-system.integration.test.ts:11:import { ProfileManager } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/ephemeral-settings.integration.test.ts:14:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/base-url-behavior.integration.test.ts:14:import type { Profile, SettingsService } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/provider-multi-runtime.integration.test.ts:21:import { type Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/cli-args.integration.test.ts:13:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/cli-args.integration.test.ts:14:import { ProfileManager } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/tools-governance.integration.test.ts:11:import { ProfileManager, SettingsService } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/profile-keyfile.integration.test.ts:11:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/profile-keyfile.integration.test.ts:12:import { ProfileManager } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/test-utils.ts:11:import type { Config, Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/security.integration.test.ts:19:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/integration-tests/compression-settings-apply.integration.test.ts:8:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/profile-application/profileAccessors.ts:1:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/runtimeSettings.proactive-wiring.spec.ts:8:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/hooks/useProfileManagement.ts:14:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/ui/hooks/useProfileManagement.ts:16:import { ProfileManager, DebugLogger } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/__tests__/profileApplication.test.ts:9:import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/__tests__/runtimeIsolation.test.ts:13:import type { Profile } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/__tests__/profileApplication.lb.test.ts:19:import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+packages/cli/src/runtime/__tests__/profileApplication.failover.test.ts:22:import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+```
+
+Exit status: 0
+
+## Test Infrastructure Verification: core targeted
+
+```bash
+npm run test --workspace @vybestack/llxprt-code-core -- --run src/settings src/config/storage.test.ts src/config/profileManager.test.ts
+```
+
+```text
+
+> @vybestack/llxprt-code-core@0.10.0 test
+> vitest run --run src/settings src/config/storage.test.ts src/config/profileManager.test.ts
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt/branch-7/llxprt-code/packages/core
+      Coverage enabled with v8
+
+ ✓ src/config/storage.test.ts (17 tests) 3ms
+ ✓ src/config/profileManager.test.ts (33 tests) 13ms
+ ✓ src/settings/__tests__/settingsRegistry.test.ts (87 tests) 6ms
+
+ Test Files  3 passed (3)
+      Tests  137 passed (137)
+   Start at  22:50:54
+   Duration  1.18s (transform 119ms, setup 64ms, collect 174ms, tests 22ms, environment 0ms, prepare 94ms)
+
+JUNIT report written to /Users/acoliver/projects/llxprt/branch-7/llxprt-code/packages/core/junit.xml
+ % Coverage report from v8
+```
+
+Exit status: 0
+
+## Test Infrastructure Verification: providers targeted
+
+```bash
+npm run test --workspace @vybestack/llxprt-code-providers -- --run src/BaseProvider.test.ts src/providerConfigKeys.ts
+```
+
+```text
+
+> @vybestack/llxprt-code-providers@0.10.0 test
+> vitest run --run src/BaseProvider.test.ts src/providerConfigKeys.ts
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt/branch-7/llxprt-code/packages/providers
+      Coverage enabled with v8
+
+ ✓ src/BaseProvider.test.ts (22 tests) 8ms
+
+ Test Files  1 passed (1)
+      Tests  22 passed (22)
+   Start at  22:50:57
+   Duration  530ms (transform 97ms, setup 5ms, collect 137ms, tests 8ms, environment 0ms, prepare 30ms)
+
+JUNIT report written to /Users/acoliver/projects/llxprt/branch-7/llxprt-code/packages/providers/junit.xml
+ % Coverage report from v8
+```
+
+Exit status: 0
+
+## Package Convention Baseline: tsconfig/vitest
+
+```bash
+cat packages/providers/tsconfig.json | grep -A5 '"paths"'; cat packages/providers/vitest.config.ts | head -40; cat packages/cli/tsconfig.json | grep -A10 '"paths"'
+```
+
+```text
+    "paths": {
+      "@vybestack/llxprt-code-providers": ["./index.ts"],
+      "@vybestack/llxprt-code-providers/*": ["./src/*"],
+      "@vybestack/llxprt-code-core": ["../core/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"]
+    }
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P06
+ * @requirement:REQ-PKG-001
+ * @pseudocode lines 13-14
+ */
+
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vitest/config';
+
+const isWindows = process.platform === 'win32';
+const isMacCi = process.platform === 'darwin' && process.env.CI === 'true';
+const shouldUseForkPool = isWindows || isMacCi;
+
+const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
+const corePackagePrefix = '@vybestack/llxprt-code-core/';
+const providersEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
+const providersSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
+const coreEntry = fileURLToPath(new URL('../core/index.ts', import.meta.url));
+const coreSrcDir = fileURLToPath(new URL('../core/src/', import.meta.url));
+
+function resolveTsSource(baseDir: string, specifier: string): string {
+  const direct = baseDir + specifier;
+  if (direct.endsWith('.js')) {
+    const tsPath = direct.slice(0, -3) + '.ts';
+    if (existsSync(tsPath)) {
+      return tsPath;
+    }
+  }
+  return direct;
+}
+
+const workspaceAliasPlugin = {
+  name: 'llxprt-workspace-source-aliases',
+    "paths": {
+      "@vybestack/llxprt-code-core": ["../core/src/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
+      "@vybestack/llxprt-code-providers/*": ["../providers/src/*"]
+    }
+  },
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+```
+
+Exit status: 0
+
+## Root-Script Inventory
+
+```bash
+node -e "const p=require('./package.json'); const s={...p.scripts}; for (const k of Object.keys(s)) { if (k.includes('settings') || k.includes('schema') || k.includes('docs')) console.log(k, s[k]); }"
+```
+
+```text
+predocs:settings npm run build --workspace @vybestack/llxprt-code-core
+schema:settings tsx ./scripts/generate-settings-schema.ts
+docs:settings tsx ./scripts/generate-settings-doc.ts
+docs:keybindings tsx ./scripts/generate-keybindings-doc.ts
+```
+
+Exit status: 0
+
+## npm vs pnpm stance evidence
+
+```bash
+test -f package-lock.json && echo 'package-lock.json exists'
+test ! -f pnpm-lock.yaml && echo 'pnpm-lock.yaml absent (good)'
+npm run test -- --run
+```
+
+```text
+package-lock.json exists
+pnpm-lock.yaml absent (good)
+
+Root test command completed successfully with exit status 0. Summary from the completed run:
+- packages/core: Test Files 432 passed | 1 skipped (433); Tests 8005 passed | 30 skipped (8035)
+- packages/providers: Test Files 150 passed | 1 skipped (151); Tests 1913 passed | 14 skipped (1927)
+- packages/cli: Test Files 506 passed (506); Tests 5742 passed | 7 skipped (5749)
+- packages/a2a-server: Test Files 11 passed (11); Tests 100 passed (100)
+- packages/vscode-ide-companion: Test Files 4 passed (4); Tests 42 passed | 1 skipped (43)
+- packages/lsp: Test Files 11 passed (11); Tests 199 passed (199)
+
+npm emitted: npm warn Unknown cli config "--run". This will stop working in the next major version of npm.
+```
+
+Exit status: 0
+
+## Workspace test command paths: core settings
+
+```bash
+npm run test --workspace @vybestack/llxprt-code-core -- --run src/settings 2>&1 | tail -5; echo PIPESTATUS:${PIPESTATUS[*]}
+```
+
+```text
+Start at  22:55:50
+   Duration  1.23s (transform 71ms, setup 25ms, collect 80ms, tests 7ms, environment 0ms, prepare 32ms)
+
+JUNIT report written to /Users/acoliver/projects/llxprt/branch-7/llxprt-code/packages/core/junit.xml
+ % Coverage report from v8
+PIPESTATUS:0 0
+```
+
+Exit status: 0
+
+## Workspace test command paths: providers BaseProvider
+
+```bash
+npm run test --workspace @vybestack/llxprt-code-providers -- --run src/BaseProvider.test.ts 2>&1 | tail -5; echo PIPESTATUS:${PIPESTATUS[*]}
+```
+
+```text
+Start at  22:55:50
+   Duration  594ms (transform 108ms, setup 9ms, collect 146ms, tests 8ms, environment 0ms, prepare 60ms)
+
+JUNIT report written to /Users/acoliver/projects/llxprt/branch-7/llxprt-code/packages/providers/junit.xml
+ % Coverage report from v8
+PIPESTATUS:0 0
+```
+
+Exit status: 0
+
+## settings package nested test discovery planning scan
+
+```bash
+find packages/core/src/settings packages/core/src/config -path '*__tests__*' -o -name '*.test.ts' | sort
+```
+
+```text
+packages/core/src/config/__tests__
+packages/core/src/config/__tests__/config-terminal-background.test.ts
+packages/core/src/config/__tests__/config.previewFeatures.test.ts
+packages/core/src/config/__tests__/models.test.ts
+packages/core/src/config/config-lsp-integration.test.ts
+packages/core/src/config/config-session-adoption.test.ts
+packages/core/src/config/config.alwaysAllow.test.ts
+packages/core/src/config/config.ephemeral.test.ts
+packages/core/src/config/config.scheduler.test.ts
+packages/core/src/config/config.test.ts
+packages/core/src/config/endpoints.test.ts
+packages/core/src/config/flashFallback.test.ts
+packages/core/src/config/onAuthErrorHandler.test.ts
+packages/core/src/config/profileManager.test.ts
+packages/core/src/config/storage.test.ts
+packages/core/src/config/test/subagentManager.test.ts
+packages/core/src/settings/__tests__
+packages/core/src/settings/__tests__/settingsRegistry.test.ts
+```
+
+Exit status: 0
+
+## CLA tsconfig/vitest alias context
+
+```bash
+cat packages/cli/tsconfig.json | grep -A20 '"paths"'
+if test -f packages/cli/vitest.config.ts; then cat packages/cli/vitest.config.ts | head -80; else echo 'packages/cli/vitest.config.ts absent'; fi
+```
+
+```text
+"paths": {
+      "@vybestack/llxprt-code-core": ["../core/src/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
+      "@vybestack/llxprt-code-providers/*": ["../providers/src/*"]
+    }
+  },
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "src/**/*.json",
+    "./package.json",
+    "../providers/index.ts",
+    "../providers/src/**/*.ts",
+    "../providers/src/**/*.json"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/// <reference types="vitest" />
+import { existsSync } from 'node:fs';
+import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const inkStubPath = resolve(__dirname, './test-utils/ink-stub.ts');
+const inkTestingLibraryPath = resolve(
+  __dirname,
+  './test-utils/ink-testing-library.ts',
+);
+const inkTestingLibraryActualPath = resolve(
+  __dirname,
+  '../../node_modules/ink-testing-library/build/index.js',
+);
+const ajvCjsEntry = resolve(
+  __dirname,
+  '../../node_modules/ajv-formats/node_modules/ajv/dist/ajv.js',
+);
+const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
+const corePackagePrefix = '@vybestack/llxprt-code-core/';
+const providersEntry = resolve(__dirname, '../providers/index.ts');
+const providersSrcDir = resolve(__dirname, '../providers/src/') + '/';
+const coreEntry = resolve(__dirname, '../core/index.ts');
+const coreSrcDir = resolve(__dirname, '../core/src/') + '/';
+
+function resolveTsSource(baseDir: string, specifier: string): string {
+  const direct = baseDir + specifier;
+  if (direct.endsWith('.js')) {
+    const tsPath = direct.slice(0, -3) + '.ts';
+    if (existsSync(tsPath)) {
+      return tsPath;
+    }
+  }
+  return direct;
+}
+
+const workspaceAliasPlugin = {
+  name: 'llxprt-cli-workspace-source-aliases',
+  enforce: 'pre' as const,
+```
+
+Exit status: 0
+
+## Semantic Assessment
+
+- Branch prerequisite: PASS. The current branch output is `issue1588`.
+- Planning artifact prerequisite: PASS. The specification, phase file, template, and analysis artifacts are present under `project-plans/issue1588`.
+- Production code prerequisite: PASS. `git diff --name-only HEAD -- packages` and `git status --short -- packages` produced no package changes, so implementation has not begun under `packages/**`.
+- No `packages/storage`: PASS. Workspace inventory does not include `packages/storage/package.json`.
+- Current settings/config/profile sources: PASS. Source inventory records the existing files under `packages/core/src/settings` and `packages/core/src/config`.
+- Concrete dependency blockers: PASS. The blocker scan records existing references to `COMPRESSION_STRATEGIES`, `providerRuntimeContext`, `SettingsService`, `ProfileManager`, `Storage`, and `types/modelParams` in the current core sources.
+- Consumer import inventory: PASS. Deep imports, root-barrel imports, dynamic imports, and `packages/lsp` scan output are recorded.
+- Test command verification: PASS. Targeted core and providers workspace commands were run. Additional workspace-relative commands for `src/settings` and `src/BaseProvider.test.ts` were run.
+- npm vs pnpm stance: PASS. Root `package-lock.json` exists, `pnpm-lock.yaml` is absent, and root `npm run test -- --run` completed successfully.
+- Workspace-relative path stance: PASS. Commands use paths relative to the package workspace cwd, not root-absolute package paths.
+- Settings nested test discovery: PASS for preflight. Current moved tests are inventoried; later settings package test command must discover nested paths after extraction.
+- CLA tsconfig/vitest alias baseline: PASS. CLI tsconfig path aliases and vitest alias plugin context are recorded for P03b planning.
+- Compression strategy values: PASS. Literal current values are recorded from `packages/core/src/core/compression/types.ts` for future registry tests.
+- a2a-server direct settings imports: PASS. The scan records no direct imports of Storage, SettingsService, ProfileManager, service singleton APIs, or SETTINGS_REGISTRY from a2a-server source.
+
+## Blocking Issues Found
+
+- [x] No `packages/storage` exists; plan uses internal settings storage module.
+- [x] `settingsServiceInstance.ts` imports core runtime context; must be redesigned before moving.
+- [x] `ProfileManager` imports core profile types; profile types must move/split first.
+- [x] `settingsRegistry` imports core compression constant; registry must own values.
+- [x] CLI god-object decomposition prerequisite is not complete; CLI-specific schema/runtime logic remains CLI-owned unless plan is updated.
+- [x] `modelParams.ts` must be deleted entirely; all symbols move to settings; no partial-file shim.
+- [x] Core root barrel re-exports of moved symbols must be removed (not left as compatibility shims).
+- [x] Core internal ProfileManager consumers must be migrated.
+- [x] Downstream tsconfig/vitest alias patterns for settings must be established before cross-package imports work.
+- [x] `zod` is confirmed as a required production dependency for settings because `AuthConfigSchema` is exported from `modelParams.ts`.
+- [x] Root docs/schema scripts were inventoried.
+- [x] Settings package test command must discover tests in nested directories after extraction.
+- [x] CLI tsconfig/vitest path patterns recorded so P03b can add settings aliases.
+
+## Verification Gate
+
+- [x] All dependencies verified.
+- [x] Type definitions match plan assumptions or are explicitly captured in the output above.
+- [x] Call paths verified.
+- [x] Test infrastructure verified.
+- [x] Blockers have explicit phase resolution in the plan and are listed here.
+- [x] Root-barrel import inventory complete.
+- [x] modelParams type consumer inventory complete.
+- [x] Dynamic import/vi.mock path inventory complete, including deep dynamic imports.
+- [x] Core internal ProfileManager consumer inventory complete.
+- [x] tsconfig/vitest alias baseline recorded.
+- [x] Root docs/schema script inventory recorded.
+- [x] npm vs pnpm stance evidence recorded.
+- [x] Workspace test command paths verified.
+- [x] `packages/lsp` included in downstream import scan.
+
+## Phase Result
+
+PASS. Preflight confirms the plan assumptions required before implementation. No speculative implementation changes were made.

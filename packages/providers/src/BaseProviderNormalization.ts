@@ -5,7 +5,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { MissingProviderRuntimeError } from './errors.js';

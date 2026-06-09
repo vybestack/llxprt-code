@@ -9,8 +9,8 @@ import { Config } from './config.js';
 import {
   registerSettingsService,
   resetSettingsService,
-} from '../settings/settingsServiceInstance.js';
-import { SettingsService } from '../settings/SettingsService.js';
+} from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 describe('Config - Ephemeral Settings', () => {
@@ -179,7 +179,6 @@ describe('Config - Ephemeral Settings', () => {
       expect(allSettings).toStrictEqual({
         'todo-continuation': true,
         'custom-setting': 'test-value',
-        tools: {},
       });
 
       // And modifying the returned object doesn't affect the config

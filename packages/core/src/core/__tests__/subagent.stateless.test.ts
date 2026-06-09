@@ -24,7 +24,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SubAgentScope } from '../subagent.js';
 import { Config } from '../../config/config.js';
-import { SettingsService } from '../../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,

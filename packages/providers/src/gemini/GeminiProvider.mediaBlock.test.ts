@@ -50,12 +50,13 @@ const mockSettingsService = vi.hoisted(() => ({
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
 }));
 
-vi.mock(
-  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
-  () => ({
-    getSettingsService: vi.fn(() => mockSettingsService),
-  }),
-);
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: vi.fn(() => mockSettingsService),
+  SETTINGS_REGISTRY: [],
+}));
 
 describe('GeminiProvider - MediaBlock support', () => {
   const originalGeminiApiKey = process.env.GEMINI_API_KEY;

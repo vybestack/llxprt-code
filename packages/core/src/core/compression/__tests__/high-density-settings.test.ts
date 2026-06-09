@@ -29,11 +29,11 @@ import {
 import {
   SETTINGS_REGISTRY,
   type SettingSpec,
-} from '../../../settings/settingsRegistry.js';
+} from '@vybestack/llxprt-code-settings';
 import { createAgentRuntimeContext } from '../../../runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '../../../runtime/AgentRuntimeState.js';
 import type { AgentRuntimeContext } from '../../../runtime/AgentRuntimeContext.js';
-import { SettingsService } from '../../../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // ---------------------------------------------------------------------------
 // Test helpers

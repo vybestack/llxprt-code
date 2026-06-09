@@ -7,10 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import { createProviderManager } from './providerManagerInstance.js';
 import type { IProvider } from './index.js';
-import {
-  createProviderRuntimeContext,
-  SettingsService,
-} from '@vybestack/llxprt-code-core';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 function createManager() {
   const settingsService = new SettingsService();

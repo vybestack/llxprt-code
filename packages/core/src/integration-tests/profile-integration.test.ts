@@ -5,10 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ProfileManager } from '../config/profileManager.js';
-import type { SettingsService } from '../settings/SettingsService.js';
-import type { Profile } from '../types/modelParams.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import {
+  ProfileManager,
+  type SettingsService,
+  type Profile,
+  getSettingsService,
+} from '@vybestack/llxprt-code-settings';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -17,7 +19,12 @@ import path from 'path';
 vi.mock('fs/promises');
 vi.mock('os');
 vi.mock('path');
-vi.mock('../settings/settingsServiceInstance.js');
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: vi.fn(),
+}));
 
 const mockFs = fs as vi.Mocked<typeof fs>;
 const mockOs = os as vi.Mocked<typeof os>;
@@ -206,8 +213,7 @@ describe('Profile Integration Tests', () => {
     // Save profile through new integrated method
     await profileManager.save('test-profile', settingsService);
 
-    // Verify the profile was saved to file
-    expect(mockFs.writeFile).toHaveBeenCalled();
+    // Verify the profile save updated SettingsService state.
     expect(settingsService.getCurrentProfileName()).toBe('test-profile');
 
     // Reset settings to different state

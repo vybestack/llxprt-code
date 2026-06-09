@@ -9,7 +9,7 @@
  * These functions handle loading profiles and extracting OAuth bucket configurations.
  */
 
-import type { ProfileManager as ProfileManagerClass } from '@vybestack/llxprt-code-core';
+import type { ProfileManager as ProfileManagerClass } from '@vybestack/llxprt-code-settings';
 
 /**
  * Type alias for the ProfileManager constructor.
@@ -29,7 +29,7 @@ let profileManagerCtorPromise: Promise<ProfileManagerCtor> | undefined;
  * Caches the promise to avoid repeated imports.
  */
 async function getProfileManagerCtor(): Promise<ProfileManagerCtor> {
-  profileManagerCtorPromise ??= import('@vybestack/llxprt-code-core')
+  profileManagerCtorPromise ??= import('@vybestack/llxprt-code-settings')
     .then((mod) => mod.ProfileManager)
     .catch((error) => {
       profileManagerCtorPromise = undefined;

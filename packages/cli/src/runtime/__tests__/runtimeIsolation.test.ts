@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Profile } from '@vybestack/llxprt-code-core';
+import { SettingsService, type Profile } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   activateIsolatedRuntimeContext,
@@ -27,7 +27,10 @@ import {
   resetCliProviderInfrastructure,
   getCliStatelessHardeningOverride,
 } from '../runtimeSettings.js';
-import type { IsolatedRuntimeContextHandle } from '../runtimeContextFactory.js';
+import {
+  runWithRuntimeScope,
+  type IsolatedRuntimeContextHandle,
+} from '../runtimeContextFactory.js';
 import {
   cleanupTempDirectory,
   createTempDirectory,
@@ -485,6 +488,7 @@ async function bootstrapRuntimeFixture(options: {
     runtimeId: options.id,
     workspaceDir: tempDir,
     model: options.primaryModel,
+    settingsService: new SettingsService(),
     metadata: {
       profileName: options.profileName,
     },
@@ -617,13 +621,19 @@ async function runWithRuntime<T>(
   ) {
     await delay(options.delayBeforeActivationMs);
   }
-  await activateIsolatedRuntimeContext(fixture.handle, {
-    runtimeId: fixture.handle.runtimeId,
-    metadata: {
-      profileName: fixture.profileName,
-      source: `runtime-isolation-test:${fixture.id}`,
+  const metadata = {
+    profileName: fixture.profileName,
+    source: `runtime-isolation-test:${fixture.id}`,
+  };
+  return runWithRuntimeScope(
+    { runtimeId: fixture.handle.runtimeId, metadata },
+    async () => {
+      await activateIsolatedRuntimeContext(fixture.handle, {
+        runtimeId: fixture.handle.runtimeId,
+        metadata,
+      });
+      await barrier();
+      return action();
     },
-  });
-  await barrier();
-  return action();
+  );
 }

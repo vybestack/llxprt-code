@@ -10,10 +10,10 @@ import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
 import {
+  SettingsService,
   resetSettingsService,
   registerSettingsService,
-  SettingsService,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-settings';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';

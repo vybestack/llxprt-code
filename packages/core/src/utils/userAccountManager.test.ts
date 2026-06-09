@@ -11,6 +11,7 @@ import * as debugLoggerModule from './debugLogger.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 vi.mock('os', async (importOriginal) => {
   const os = await importOriginal<typeof import('os')>();
@@ -32,6 +33,9 @@ describe('UserAccountManager', () => {
     (os.homedir as Mock).mockReturnValue(tempHomeDir);
     accountsFile = () =>
       path.join(tempHomeDir, '.llxprt', 'provider_accounts.json');
+    vi.spyOn(Storage, 'getProviderAccountsPath').mockImplementation(() =>
+      accountsFile(),
+    );
     userAccountManager = new UserAccountManager();
   });
 

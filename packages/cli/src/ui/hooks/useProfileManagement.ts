@@ -11,9 +11,10 @@ import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import type { AppState } from '../reducers/appReducer.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { ProfileListItem } from '../components/ProfileListDialog.js';
-import { ProfileManager, DebugLogger } from '@vybestack/llxprt-code-core';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const debug = new DebugLogger('llxprt:ui:useProfileManagement');
 

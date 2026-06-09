@@ -35,7 +35,7 @@ import type {
   ProviderContext,
   ProviderComparison,
 } from './types.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   getActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
@@ -80,6 +80,12 @@ const PROVIDER_CAPABILITY_HINTS: Record<
 };
 
 const logger = new DebugLogger('llxprt:provider:manager');
+
+function asSettingsService(
+  settingsService: ProviderRuntimeContext['settingsService'],
+): SettingsService {
+  return settingsService as SettingsService;
+}
 
 interface ProviderManagerInit {
   runtime?: ProviderRuntimeContext;
@@ -165,7 +171,7 @@ export class ProviderManager implements IProviderManager {
     if (!init) {
       const resolved = ensureFallback();
       return {
-        settingsService: resolved.settingsService,
+        settingsService: asSettingsService(resolved.settingsService),
         config: resolved.config,
         runtime: resolved,
       };
@@ -181,7 +187,7 @@ export class ProviderManager implements IProviderManager {
     ) {
       const context = init;
       return {
-        settingsService: context.settingsService,
+        settingsService: asSettingsService(context.settingsService),
         config: context.config,
         runtime: context,
       };
@@ -190,13 +196,17 @@ export class ProviderManager implements IProviderManager {
     const initObj = init as ProviderManagerInit;
     const runtime = initObj.runtime;
     let settingsService =
-      initObj.settingsService ?? runtime?.settingsService ?? null;
+      initObj.settingsService ??
+      (runtime?.settingsService
+        ? asSettingsService(runtime.settingsService)
+        : null);
     let config: Config | undefined =
       initObj.config ?? runtime?.config ?? undefined;
 
     if (!settingsService || !config) {
       const resolved = ensureFallback();
-      settingsService = settingsService ?? resolved.settingsService;
+      settingsService =
+        settingsService ?? asSettingsService(resolved.settingsService);
       config = config ?? resolved.config;
       return {
         settingsService,
@@ -479,7 +489,7 @@ export class ProviderManager implements IProviderManager {
       });
     }
 
-    return { settingsService, config };
+    return { settingsService: settingsService as SettingsService, config };
   }
 
   /**
@@ -1662,7 +1672,7 @@ export class ProviderManager implements IProviderManager {
       config: resolvedConfig,
       metadata: statelessMetadata,
     };
-    this.settingsService = runtimeContext.settingsService;
+    this.settingsService = asSettingsService(runtimeContext.settingsService);
     this.config = resolvedConfig;
 
     for (const provider of this.providers.values()) {

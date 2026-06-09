@@ -13,8 +13,8 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
-  SettingsService,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 
 import { LoadedSettings } from './config/settings.js';
@@ -45,7 +45,7 @@ vi.mock('./utils/cleanup.js', () => ({
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
   return {
     ...actual,
     writeToStdout: vi.fn().mockReturnValue(true),

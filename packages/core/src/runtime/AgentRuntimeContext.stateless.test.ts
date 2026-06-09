@@ -4,7 +4,7 @@ import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import type { ToolRegistryView } from './AgentRuntimeContext.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const baseState = createAgentRuntimeState({
   runtimeId: 'stateless-runtime',

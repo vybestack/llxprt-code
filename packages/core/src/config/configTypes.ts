@@ -28,7 +28,7 @@ import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { ExtensionLoader } from '../utils/extensionLoader.js';
 import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
 import type { PolicyEngineConfig } from '../policy/types.js';
-import type { SettingsService } from '../settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { IdeClient } from '../ide/ide-client.js';
 import type { AnyToolInvocation } from '../tools/tools.js';

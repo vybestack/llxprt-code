@@ -13,7 +13,7 @@ import {
   setActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 interface ProviderRuntimeOptions {
   settingsService?: SettingsService;

@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ProviderManager } from './ProviderManager.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from './IProvider.js';
 import {
   createProviderRuntimeContext,

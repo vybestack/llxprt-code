@@ -12,7 +12,11 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import {
+  SettingsService,
+  registerSettingsService,
+  resetSettingsService,
+} from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
@@ -88,10 +92,12 @@ describe('OpenAIVercelProvider.getToolFormat() - override vs auto-detection (iss
       metadata: { source: 'test' },
     });
     setActiveProviderRuntimeContext(runtime);
+    registerSettingsService(settingsService);
   });
 
   afterEach(() => {
     clearActiveProviderRuntimeContext();
+    resetSettingsService();
   });
 
   it('returns "openai" override for a kimi model when provider toolFormat is set to "openai"', () => {

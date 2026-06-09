@@ -19,7 +19,7 @@ import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ContentGenerator } from './contentGenerator.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';

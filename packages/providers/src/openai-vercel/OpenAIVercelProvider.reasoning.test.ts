@@ -86,7 +86,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
     return {
       contents,
       settings:
-        mockSettings as unknown as import('@vybestack/llxprt-code-core/settings/SettingsService.js').SettingsService,
+        mockSettings as unknown as import('@vybestack/llxprt-code-settings').SettingsService,
       runtime:
         mockRuntime as unknown as import('@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js').ProviderRuntimeContext,
       resolved: {

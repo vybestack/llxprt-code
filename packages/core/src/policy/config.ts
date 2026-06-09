@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
 import toml from '@iarna/toml';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   type PolicyEngineConfig,
   PolicyDecision,

@@ -183,7 +183,7 @@ vi.mock('../providers/providerAliases.js', () => ({
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
 
   let activeContext: {
     settingsService: StubSettingsServiceInstance;

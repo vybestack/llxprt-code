@@ -25,7 +25,7 @@ import { UserAccountManager } from '../utils/userAccountManager.js';
 import readline from 'node:readline';
 import open from 'open';
 import { ClipboardService } from '../services/ClipboardService.js';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
 
 const userAccountManager = new UserAccountManager();

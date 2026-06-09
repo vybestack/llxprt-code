@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HookSystem } from './hookSystem.js';
 import { HookSystemNotInitializedError } from './errors.js';
 import type { Config } from '../config/config.js';
-import type { Storage } from '../config/storage.js';
+import type { Storage } from '@vybestack/llxprt-code-settings';
 
 // Mock DebugLogger
 const mockDebugLogger = vi.hoisted(() => ({

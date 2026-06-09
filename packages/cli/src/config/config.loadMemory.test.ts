@@ -10,10 +10,13 @@ import * as path from 'path';
 import * as os from 'os';
 import {
   DEFAULT_CONTEXT_FILENAME,
-  resetSettingsService,
   setLlxprtMdFilename,
-  type SettingsService,
 } from '@vybestack/llxprt-code-core';
+import {
+  registerSettingsService,
+  resetSettingsService,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
 import { loadCliConfig } from './config.js';
 import { type CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
@@ -28,8 +31,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
       let userMemory = params.userMemory;
       let llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
       const ephemerals: Record<string, unknown> = {};
-      const settingsServiceInstance =
-        new (actual.SettingsService as new () => SettingsService)();
+      const settingsServiceInstance = new SettingsService();
 
       return {
         getProvider: vi.fn(() => provider),
@@ -301,6 +303,7 @@ describe('loadCliConfig memory discovery', () => {
       process.env.USERPROFILE = originalUserProfile;
     }
     setLlxprtMdFilename(DEFAULT_CONTEXT_FILENAME);
+    registerSettingsService(new SettingsService());
     resetSettingsService();
     await fs.rm(tempRoot, { recursive: true, force: true });
   });

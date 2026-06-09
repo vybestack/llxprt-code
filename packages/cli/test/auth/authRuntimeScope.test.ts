@@ -15,7 +15,7 @@ import {
   peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../../../core/src/runtime/providerRuntimeContext.js';
-import { SettingsService } from '../../../core/src/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const baseConfig: AuthPrecedenceConfig = {
   envKeyNames: [],

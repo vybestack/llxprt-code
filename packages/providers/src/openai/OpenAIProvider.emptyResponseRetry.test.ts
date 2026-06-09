@@ -6,9 +6,9 @@ import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import type { IMessage } from '../IMessage.js';
 import type { ITool } from '../ITool.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '../IMessage.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 

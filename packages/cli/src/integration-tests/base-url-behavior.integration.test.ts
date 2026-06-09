@@ -11,15 +11,15 @@
  */
 
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
-import type { Profile, SettingsService } from '@vybestack/llxprt-code-core';
+import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   Config,
-  ProfileManager,
   createProviderRuntimeContext,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,

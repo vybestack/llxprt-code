@@ -24,9 +24,9 @@ import {
   parseEphemeralSettingValue,
 } from '../../settings/ephemeralSettings.js';
 import {
-  resolveAlias,
   getDirectSettingSpecs,
-} from '@vybestack/llxprt-code-core';
+  resolveAlias,
+} from '@vybestack/llxprt-code-settings';
 import {
   filterStrings,
   filterCompletions,

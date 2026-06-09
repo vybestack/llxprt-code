@@ -11,7 +11,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { SubagentManager } from '../subagentManager.js';
-import { ProfileManager } from '../profileManager.js';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '../config/types.js';
 
 /**

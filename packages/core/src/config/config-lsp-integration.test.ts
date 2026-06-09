@@ -147,6 +147,7 @@ vi.mock('../utils/extensionLoader.js', () => ({
 }));
 
 vi.mock('../runtime/providerRuntimeContext.js', () => ({
+  setProviderRuntimeStateFactory: vi.fn(),
   setActiveProviderRuntimeContext: vi.fn(),
   peekActiveProviderRuntimeContext: vi.fn().mockReturnValue(null),
   createProviderRuntimeContext: vi.fn().mockReturnValue({}),
@@ -164,7 +165,10 @@ vi.mock('../runtime/providerRuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('../settings/settingsServiceInstance.js', () => ({
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
   getSettingsService: vi.fn().mockReturnValue({
     get: vi.fn(),
     set: vi.fn(),

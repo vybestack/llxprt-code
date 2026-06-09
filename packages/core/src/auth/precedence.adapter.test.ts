@@ -2,8 +2,8 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import type { BaseProviderConfig } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import type { IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
-import type { SettingsService } from '../settings/SettingsService.js';
-import { SettingsService as SettingsServiceImpl } from '../settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SettingsService as SettingsServiceImpl } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   getActiveProviderRuntimeContext,

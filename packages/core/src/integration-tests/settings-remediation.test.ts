@@ -9,8 +9,8 @@ import { Config } from '../config/config.js';
 import {
   resetSettingsService,
   registerSettingsService,
-} from '../settings/settingsServiceInstance.js';
-import { SettingsService } from '../settings/SettingsService.js';
+} from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,

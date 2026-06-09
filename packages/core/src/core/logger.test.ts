@@ -20,7 +20,7 @@ import {
   encodeTagName,
   decodeTagName,
 } from './logger.js';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import type { Content } from '@google/genai';

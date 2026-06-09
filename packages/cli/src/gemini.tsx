@@ -81,11 +81,8 @@ import {
   FatalConfigError,
   JsonFormatter,
   OutputFormat,
-  uiTelemetryService,
-  // IDE connection logging removed - telemetry disabled in llxprt
-  SettingsService,
+  uiTelemetryService, // IDE connection logging removed - telemetry disabled in llxprt
   DebugLogger,
-  ProfileManager,
   parseAndFormatApiError,
   SessionRecordingService,
   RecordingIntegration,
@@ -112,6 +109,10 @@ import {
   shutdownTelemetry,
   isTelemetrySdkInitialized,
 } from '@vybestack/llxprt-code-core';
+import {
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
 import { theme } from './ui/colors.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';

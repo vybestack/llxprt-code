@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import type { HookConfig } from './types.js';
 import { getHookKey } from './types.js';
 import { DebugLogger } from '../debug/index.js';

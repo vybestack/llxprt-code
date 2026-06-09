@@ -15,12 +15,13 @@ vi.mock('openai', () => ({
   default: vi.fn(),
 }));
 
-vi.mock(
-  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
-  () => ({
-    getSettingsService: () => mockSettingsService,
-  }),
-);
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: () => mockSettingsService,
+  SETTINGS_REGISTRY: [],
+}));
 
 describe('OpenAIProvider tool format detection', () => {
   let provider: OpenAIProvider;

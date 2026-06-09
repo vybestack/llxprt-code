@@ -4,7 +4,7 @@ import {
   AuthPrecedenceResolver,
   type OAuthTokenRequestMetadata,
 } from '../precedence.js';
-import { SettingsService } from '../../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   peekActiveProviderRuntimeContext,

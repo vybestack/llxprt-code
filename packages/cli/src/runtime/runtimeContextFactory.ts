@@ -23,16 +23,19 @@ import * as path from 'node:path';
 import {
   Config,
   type KeyringTokenStore,
-  SettingsService,
   MessageBus,
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
   type ProviderRuntimeContext,
   flushRuntimeAuthScope,
   type RuntimeAuthScopeFlushResult,
-  ProfileManager,
   SubagentManager,
 } from '@vybestack/llxprt-code-core';
+import {
+  clearSettingsProviderRuntimeContext,
+  createSettingsProviderRuntimeContext,
+  resolveRuntimeSettingsService,
+} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
@@ -302,7 +305,7 @@ function buildActivateClosure(
     enterRuntimeScope(scope);
 
     await runWithRuntimeScope(scope, async () => {
-      const scopedRuntime = createProviderRuntimeContext({
+      const scopedRuntime = createSettingsProviderRuntimeContext({
         settingsService: resolvedSettingsService,
         config,
         runtimeId: state.currentRuntimeId,
@@ -373,7 +376,7 @@ function buildCleanupClosure(
       if (bindings) {
         await Promise.resolve(bindings.resetInfrastructure());
       }
-      clearActiveProviderRuntimeContext();
+      clearSettingsProviderRuntimeContext();
 
       const revocation: RuntimeAuthScopeFlushResult = flushRuntimeAuthScope(
         state.currentRuntimeId,
@@ -425,8 +428,7 @@ export function createIsolatedRuntimeContext(
   };
   const settingsService =
     options.config?.getSettingsService() ??
-    options.settingsService ??
-    new SettingsService();
+    resolveRuntimeSettingsService(options.settingsService);
 
   const config = resolveRuntimeConfig(options, runtimeId, settingsService);
   const resolvedSettingsService = config.getSettingsService();
@@ -439,7 +441,7 @@ export function createIsolatedRuntimeContext(
     options.oauthManager,
   );
 
-  const initialRuntimeContext = createProviderRuntimeContext({
+  const initialRuntimeContext = createSettingsProviderRuntimeContext({
     settingsService: resolvedSettingsService,
     config,
     runtimeId,

@@ -56,7 +56,10 @@ vi.mock('node:fs', () => ({
     access: vi.fn(),
   },
 }));
-vi.mock('../config/storage.js', () => ({
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
   Storage: {
     getOAuthCredsPath: vi.fn().mockReturnValue('/test/oauth/creds.json'),
     getMcpOAuthTokensPath: vi

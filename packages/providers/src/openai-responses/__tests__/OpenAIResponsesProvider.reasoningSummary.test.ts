@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,

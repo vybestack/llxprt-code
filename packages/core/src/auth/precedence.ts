@@ -15,7 +15,7 @@
  * 5. OAuth (if enabled)
  */
 
-import type { SettingsService } from '../settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 export interface AuthPrecedenceConfig {

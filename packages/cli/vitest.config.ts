@@ -26,10 +26,13 @@ const ajvCjsEntry = resolve(
 );
 const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
+const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
 const providersEntry = resolve(__dirname, '../providers/index.ts');
 const providersSrcDir = resolve(__dirname, '../providers/src/') + '/';
 const coreEntry = resolve(__dirname, '../core/index.ts');
 const coreSrcDir = resolve(__dirname, '../core/src/') + '/';
+const settingsEntry = resolve(__dirname, '../settings/index.ts');
+const settingsSrcDir = resolve(__dirname, '../settings/src/') + '/';
 
 function resolveTsSource(baseDir: string, specifier: string): string {
   const direct = baseDir + specifier;
@@ -67,6 +70,16 @@ const workspaceAliasPlugin = {
       return resolveTsSource(
         coreSrcDir,
         source.slice(corePackagePrefix.length),
+      );
+    }
+    // @plan PLAN-20260608-ISSUE1588.P03b — settings source alias
+    if (source === '@vybestack/llxprt-code-settings') {
+      return settingsEntry;
+    }
+    if (source.startsWith(settingsPackagePrefix)) {
+      return resolveTsSource(
+        settingsSrcDir,
+        source.slice(settingsPackagePrefix.length),
       );
     }
     if (source === 'ajv/dist/2020.js') {

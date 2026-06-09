@@ -17,13 +17,13 @@ import {
   type OAuthManager,
   type OAuthTokenRequestMetadata,
 } from './precedence.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
-import { resetSettingsService } from '../settings/settingsServiceInstance.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 
 const baseConfig: AuthPrecedenceConfig = {
   envKeyNames: [],

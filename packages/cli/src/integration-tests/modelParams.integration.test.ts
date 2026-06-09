@@ -11,11 +11,8 @@
  */
 
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
-import {
-  Config,
-  type SettingsService,
-  MessageBus,
-} from '@vybestack/llxprt-code-core';
+import { Config, MessageBus } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import type { OAuthManager } from '../auth/oauth-manager.js';

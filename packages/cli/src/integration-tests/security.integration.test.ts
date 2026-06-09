@@ -16,7 +16,7 @@ import {
   readSettingsFile,
   writeSettingsFile,
 } from './test-utils.js';
-import type { Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 import { Config } from '@vybestack/llxprt-code-core';
 import { loadSettings } from '../config/settings.js';
 

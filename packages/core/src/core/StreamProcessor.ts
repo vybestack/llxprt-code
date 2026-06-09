@@ -443,7 +443,8 @@ export class StreamProcessor {
         tools: requestPayload.tools as ProviderToolset | undefined,
         config: runtimeContext.config,
         runtime: runtimeContext,
-        settings: runtimeContext.settingsService,
+        settings:
+          runtimeContext.settingsService as GenerateChatOptions['settings'],
         metadata: {
           ...runtimeContext.metadata,
           abortSignal: params.config?.abortSignal,

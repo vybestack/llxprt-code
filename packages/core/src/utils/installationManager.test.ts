@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'crypto';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
@@ -49,6 +50,9 @@ describe('InstallationManager', () => {
       path.join(os.tmpdir(), 'llxprt-code-test-home-'),
     );
     (os.homedir as Mock).mockReturnValue(tempHomeDir);
+    vi.spyOn(Storage, 'getInstallationIdPath').mockImplementation(() =>
+      installationIdFile(),
+    );
     installationManager = new InstallationManager();
   });
 

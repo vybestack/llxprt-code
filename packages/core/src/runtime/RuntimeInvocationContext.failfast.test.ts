@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRuntimeInvocationContext } from './RuntimeInvocationContext.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 describe('RuntimeInvocationContext fail-fast requirements', () => {
   it('throws when runtimeId is missing', () => {

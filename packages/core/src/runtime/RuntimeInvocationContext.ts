@@ -14,7 +14,7 @@
  */
 
 import type { RedactionConfig } from '../config/config.js';
-import type { SettingsService } from '../settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
  * @requirement:REQ-DEP-001
@@ -24,7 +24,7 @@ import type { SettingsService } from '../settings/SettingsService.js';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { TelemetryContext as ProviderTelemetryContext } from './contracts/TelemetryContext.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
-import { separateSettings } from '../settings/settingsRegistry.js';
+import { separateSettings } from '@vybestack/llxprt-code-settings';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05

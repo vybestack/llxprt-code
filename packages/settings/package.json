@@ -1,0 +1,65 @@
+{
+  "name": "@vybestack/llxprt-code-settings",
+  "version": "0.10.0",
+  "description": "LLxprt Code Settings — settings, profiles, and storage type boundaries",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./settings/SettingsService.js": {
+      "types": "./dist/src/settings/SettingsService.d.ts",
+      "import": "./dist/src/settings/SettingsService.js"
+    },
+    "./settings/settingsServiceInstance.js": {
+      "types": "./dist/src/settings/settingsServiceInstance.d.ts",
+      "import": "./dist/src/settings/settingsServiceInstance.js"
+    },
+    "./settings/settingsRegistry.js": {
+      "types": "./dist/src/settings/settingsRegistry.d.ts",
+      "import": "./dist/src/settings/settingsRegistry.js"
+    },
+    "./profiles/ProfileManager.js": {
+      "types": "./dist/src/profiles/ProfileManager.d.ts",
+      "import": "./dist/src/profiles/ProfileManager.js"
+    },
+    "./profiles/types.js": {
+      "types": "./dist/src/profiles/types.d.ts",
+      "import": "./dist/src/profiles/types.js"
+    },
+    "./storage/Storage.js": {
+      "types": "./dist/src/storage/Storage.d.ts",
+      "import": "./dist/src/storage/Storage.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write ."
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "typescript": "^5.3.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

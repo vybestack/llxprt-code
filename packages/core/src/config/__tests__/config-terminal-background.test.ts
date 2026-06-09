@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Config } from '../config.js';
-import { SettingsService } from '../../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 describe('Config - Terminal Background', () => {
   let config: Config;

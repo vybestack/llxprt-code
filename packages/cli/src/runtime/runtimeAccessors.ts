@@ -26,14 +26,16 @@
 import {
   type Config,
   DebugLogger,
-  type SettingsService,
   type RuntimeProviderManager,
-  type ProfileManager,
-  createProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
-  getProviderConfigKeys,
   type HydratedModel,
 } from '@vybestack/llxprt-code-core';
+import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import type {
+  SettingsService,
+  ProfileManager,
+} from '@vybestack/llxprt-code-settings';
+import { getProviderConfigKeys } from '@vybestack/llxprt-code-settings';
 import { type OAuthManager } from '../auth/oauth-manager.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
@@ -107,7 +109,7 @@ export function getCliRuntimeContext() {
     // Fallback path for legacy compatibility (disabled under stateless hardening)
     const resolvedSettings =
       settingsService ?? entry.config.getSettingsService();
-    return createProviderRuntimeContext({
+    return createSettingsProviderRuntimeContext({
       settingsService: resolvedSettings,
       config: entry.config,
       runtimeId: identity.runtimeId,
@@ -151,7 +153,7 @@ export function getCliRuntimeServices(): CliRuntimeServices {
       }),
     );
   }
-  const settingsService = context.settingsService;
+  const settingsService = context.settingsService as SettingsService;
   const providerManager = entry.providerManager;
   if (!providerManager) {
     throw new Error(
@@ -269,7 +271,7 @@ export function ensureStatelessProviderReady(): void {
     );
   }
 
-  const runtimeContext = createProviderRuntimeContext({
+  const runtimeContext = createSettingsProviderRuntimeContext({
     settingsService: settingsService!,
     config: config!,
     runtimeId,

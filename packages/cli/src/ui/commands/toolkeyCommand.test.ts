@@ -23,7 +23,7 @@ const mockKeyStore = new Map<string, string>();
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
   return {
     ...original,
     ToolKeyStorage: class MockToolKeyStorage {

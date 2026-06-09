@@ -16,7 +16,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadBalancingProvider } from '@vybestack/llxprt-code-providers';
-import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+import type {
+  Profile,
+  LoadBalancerProfile,
+} from '@vybestack/llxprt-code-settings';
 
 type ProfileApplicationResult = {
   providerName: string;

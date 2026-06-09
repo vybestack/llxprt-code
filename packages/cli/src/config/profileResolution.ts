@@ -5,12 +5,9 @@
  */
 
 import process from 'node:process';
-import {
-  ProfileManager,
-  DebugLogger,
-  debugLogger,
-  type Profile,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-core';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { MergedSettings, Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { BootstrapProfileArgs } from './profileBootstrap.js';

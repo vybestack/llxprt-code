@@ -30,7 +30,7 @@ async function loadWithTempConfig(
   filename: string,
   config: Record<string, unknown>,
 ) {
-  const { Storage } = await import('@vybestack/llxprt-code-core');
+  const { Storage } = await import('@vybestack/llxprt-code-settings');
   const fakeLlxprtDir = path.join(tmpDir, '.llxprt');
   const fakeProvidersDir = path.join(fakeLlxprtDir, 'providers');
   fs.mkdirSync(fakeProvidersDir, { recursive: true });
@@ -561,7 +561,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   });
 
   it('user anthropic.config with different modelDefaults shadows the builtin', async () => {
-    const { Storage } = await import('@vybestack/llxprt-code-core');
+    const { Storage } = await import('@vybestack/llxprt-code-settings');
     const fakeLlxprtDir = path.join(tmpDir, '.llxprt');
     const fakeProvidersDir = path.join(fakeLlxprtDir, 'providers');
     fs.mkdirSync(fakeProvidersDir, { recursive: true });

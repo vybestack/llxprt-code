@@ -9,7 +9,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { SkillManager } from './skillManager.js';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { type GeminiCLIExtension } from '../config/config.js';
 import {
   loadSkillsFromDir,

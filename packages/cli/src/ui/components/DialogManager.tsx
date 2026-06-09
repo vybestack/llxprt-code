@@ -13,9 +13,9 @@ import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type {
   HydratedModel,
   Config,
-  Profile,
   SessionSummary,
 } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 import { getProjectHash, DebugLogger } from '@vybestack/llxprt-code-core';
 import { join } from 'node:path';
 import {

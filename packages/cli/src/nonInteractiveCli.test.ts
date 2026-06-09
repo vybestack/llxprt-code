@@ -32,7 +32,7 @@ import {
 vi.mock('./ui/hooks/atCommandProcessor.js');
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
   return {
     ...original,
     executeToolCall: vi.fn(),

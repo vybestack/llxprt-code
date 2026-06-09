@@ -12,7 +12,7 @@ import process from 'node:process';
 import * as fs from 'node:fs/promises';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import { getRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
 import { getFolderStructure } from '../utils/getFolderStructure.js';
 import { DebugLogger } from '../debug/index.js';
 import {
@@ -240,7 +240,7 @@ function resolveFolderStructureSettings(): {
   let includeFolderStructure = false;
   let enableToolPrompts = false;
   try {
-    const settingsService = getSettingsService();
+    const settingsService = getRuntimeSettingsService();
     const folderStructureSetting = settingsService.get(
       'include-folder-structure',
     ) as boolean | undefined;
@@ -347,7 +347,7 @@ function resolveProvider(provider?: string): string {
   let resolvedProvider = provider || 'gemini';
   if (!provider) {
     try {
-      const settingsService = getSettingsService();
+      const settingsService = getRuntimeSettingsService();
       const activeProvider = settingsService.get('activeProvider') as string;
       if (activeProvider) resolvedProvider = activeProvider;
     } catch {
@@ -365,7 +365,7 @@ function resolveAsyncSubagentSettings(
   let p = profileAsyncEnabled;
   if (a === undefined || p === undefined) {
     try {
-      const settingsService = getSettingsService();
+      const settingsService = getRuntimeSettingsService();
       if (a === undefined) {
         const globalSettings = settingsService.getAllGlobalSettings();
         const subagentsSettings = globalSettings['subagents'] as
@@ -510,7 +510,7 @@ async function resolveEffectiveMemories(
   let effectiveUserMemory = userMemory;
   let effectiveCoreMemory = loadedCoreMemory;
   try {
-    const settingsService = getSettingsService();
+    const settingsService = getRuntimeSettingsService();
     const allMemoriesAreCore = settingsService.get(
       'model.allMemoriesAreCore',
     ) as boolean | undefined;

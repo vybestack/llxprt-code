@@ -12,8 +12,6 @@
 
 import {
   type Config,
-  type SettingsService,
-  getSettingsService,
   DebugLogger,
   type MessageBus,
   type RuntimeContentGeneratorFactory,
@@ -21,7 +19,9 @@ import {
   type RuntimeProviderManager,
   type RuntimeTokenizer,
   type RuntimeTokenizerFactory,
+  type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
+import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   ProviderManager,
   FakeProvider,
@@ -75,12 +75,7 @@ interface ProviderManagerFactoryOptions {
   runtimeMessageBus?: MessageBus;
 }
 
-type RuntimeContextShape = {
-  settingsService: SettingsService;
-  config?: Config;
-  runtimeId?: string;
-  metadata?: Record<string, unknown>;
-};
+type RuntimeContextShape = ProviderRuntimeContext;
 
 interface OpenAIRegistrationContext {
   apiKey?: string;
@@ -377,11 +372,8 @@ function resolveAuthOnlyFlag(
  * Attempts to get authOnly from SettingsService, returning undefined on failure.
  */
 function tryGetSettingsServiceAuthOnly(): boolean | undefined {
-  if (typeof getSettingsService !== 'function') {
-    return undefined;
-  }
   try {
-    const settingsService = getSettingsService();
+    const settingsService = getRuntimeSettingsService();
     const serviceValue = settingsService.get('authOnly');
     if (serviceValue === undefined) {
       return undefined;

@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
 import * as path from 'node:path';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from './debugLogger.js';
 
 export class InstallationManager {

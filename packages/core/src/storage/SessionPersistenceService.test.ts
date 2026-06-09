@@ -29,7 +29,7 @@ import {
   SessionPersistenceService,
   type PersistedSession,
 } from './SessionPersistenceService.js';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 describe('SessionPersistenceService', () => {
   const mockProjectRoot = '/test/project';

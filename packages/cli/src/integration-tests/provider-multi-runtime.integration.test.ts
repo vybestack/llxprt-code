@@ -18,7 +18,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { type Profile } from '@vybestack/llxprt-code-core';
+import { type Profile } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   activateIsolatedRuntimeContext,

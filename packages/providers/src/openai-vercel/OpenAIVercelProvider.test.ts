@@ -24,7 +24,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { AuthenticationError } from './errors.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 
 /**

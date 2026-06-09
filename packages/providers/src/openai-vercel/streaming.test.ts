@@ -25,7 +25,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { GenerateChatOptions as ProviderCallOptions } from '../IProvider.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Mock the 'ai' module
 vi.mock('ai', () => ({

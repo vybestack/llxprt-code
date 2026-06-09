@@ -10,10 +10,8 @@ import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import type { CommandContext } from '../../commands/types.js';
-import type {
-  SubagentManager,
-  ProfileManager,
-} from '@vybestack/llxprt-code-core';
+import type { SubagentManager } from '@vybestack/llxprt-code-core';
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import {
   SubagentView,
   type SubagentManagerDialogProps,
