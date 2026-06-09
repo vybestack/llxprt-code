@@ -150,6 +150,25 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
       expect(result).toBe('gemini-flash');
     });
 
+    it('returns the first resolved sub-profile model as the default model', () => {
+      const resolvedSubProfile: ResolvedSubProfile = {
+        name: 'resolved-1',
+        providerName: 'anthropic',
+        model: 'claude-opus-4',
+        ephemeralSettings: {},
+        modelParams: {},
+      };
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'resolved-default-test',
+        strategy: 'round-robin',
+        subProfiles: [resolvedSubProfile],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+
+      expect(provider.getDefaultModel()).toBe('claude-opus-4');
+    });
+
     it('uses the first sub-profile model as runtime default for foreground load-balancer calls', () => {
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'glm',
