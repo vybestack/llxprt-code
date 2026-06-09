@@ -203,7 +203,7 @@ function useSessionBrowserHandler(
       for (const warning of resumeResult.warnings) {
         addItem({ type: 'info', text: `Warning: ${warning}` });
       }
-      await config.getGeminiClient().restoreHistory(resumeResult.history);
+      await config.getAgentClient().restoreHistory(resumeResult.history);
       const uiHistory = iContentToHistoryItems(resumeResult.history);
       commandContext.ui.clear();
       uiHistory.forEach((item, index) => {

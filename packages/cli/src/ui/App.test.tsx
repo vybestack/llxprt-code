@@ -17,6 +17,7 @@ import type {
   AccessibilitySettings,
   SandboxConfig,
   LLxprtClient,
+  AgentClient,
 } from '@vybestack/llxprt-code-core';
 import {
   Config as ServerConfig,
@@ -93,7 +94,7 @@ interface MockServerConfig {
   getAccessibility: Mock<() => AccessibilitySettings>;
   getProjectRoot: Mock<() => string | undefined>;
   getAllGeminiMdFilenames: Mock<() => string[]>;
-  getGeminiClient: Mock<() => GeminiClient | undefined>;
+  getAgentClient: Mock<() => AgentClient | undefined>;
   getUserTier: Mock<() => Promise<string | undefined>>;
   getIdeClient: Mock<() => { getCurrentIde: Mock<() => string | undefined> }>;
   getScreenReader: Mock<() => boolean>;
@@ -204,7 +205,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getAccessibility: vi.fn(() => opts.accessibility ?? {}),
         getProjectRoot: vi.fn(() => opts.targetDir),
         getEnablePromptCompletion: vi.fn(() => false),
-        getGeminiClient: vi.fn(() => ({
+        getAgentClient: vi.fn(() => ({
           getUserTier: vi.fn(),
         })),
         getCheckpointingEnabled: vi.fn(() => opts.checkpointing ?? true),
@@ -1324,7 +1325,7 @@ describe('App UI', () => {
         thought: null,
       });
 
-      mockConfig.getGeminiClient.mockReturnValue({
+      mockConfig.getAgentClient.mockReturnValue({
         isInitialized: vi.fn(() => false),
         getUserTier: vi.fn(),
       } as unknown as LLxprtClient);

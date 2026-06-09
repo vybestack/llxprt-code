@@ -7,7 +7,7 @@
 /**
  * ConversationManager - Gemini-specific conversation/history recording layer.
  *
- * This class wraps HistoryService with geminiChat-specific recording logic,
+ * This class wraps HistoryService with chatSession-specific recording logic,
  * handling Content→IContent conversion, thinking block attachment, usage
  * metadata injection, and model output consolidation.
  */
@@ -23,7 +23,7 @@ import type {
 } from '../services/history/IContent.js';
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
-import { isThoughtPart } from './geminiChatTypes.js';
+import { isThoughtPart } from './chatSessionTypes.js';
 import {
   extractCuratedHistory,
   hasTextContent,
@@ -40,7 +40,7 @@ function appendTextContentParts(lastContent: Content, content: Content): void {
 }
 
 /**
- * ConversationManager handles conversation history management for GeminiChat.
+ * ConversationManager handles conversation history management for ChatSession.
  * It provides methods for recording turns, converting Content to IContent,
  * and managing conversation state.
  */
@@ -111,9 +111,9 @@ export class ConversationManager {
   }
 
   /**
-   * Imports initial history during GeminiChat construction.
+   * Imports initial history during ChatSession construction.
    * Validates the history and converts each Content to IContent before adding.
-   * Called from GeminiChat constructor after ConversationManager is created.
+   * Called from ChatSession constructor after ConversationManager is created.
    */
   importInitialHistory(initialHistory: Content[], model: string): void {
     if (initialHistory.length === 0) {

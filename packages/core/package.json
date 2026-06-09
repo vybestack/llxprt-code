@@ -26,7 +26,7 @@
     "./config/storage.js": "./dist/src/config/storage.js",
     "./confirmation-bus/message-bus.js": "./dist/src/confirmation-bus/message-bus.js",
     "./core/contentGenerator.js": "./dist/src/core/contentGenerator.js",
-    "./core/geminiChat.js": "./dist/src/core/geminiChat.js",
+    "./core/chatSession.js": "./dist/src/core/chatSession.js",
     "./core/prompts.js": "./dist/src/core/prompts.js",
     "./debug/DebugLogger.js": "./dist/src/debug/DebugLogger.js",
     "./debug/index.js": "./dist/src/debug/index.js",

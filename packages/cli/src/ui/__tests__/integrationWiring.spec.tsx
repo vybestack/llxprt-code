@@ -525,7 +525,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       expect(sessionArg.name).toBe('session');
 
       // CLI flags (--continue, --list-sessions) are handled in config.ts
-      // and gemini.tsx before the REPL starts, so no conflict
+      // and cli.tsx before the REPL starts, so no conflict
     });
   });
 

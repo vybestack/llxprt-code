@@ -64,7 +64,7 @@ export async function createCodeAssistContentGenerator(
 export function getCodeAssistServer(
   config: Config,
 ): CodeAssistServer | undefined {
-  const server = config.getGeminiClient().getContentGenerator();
+  const server = config.getAgentClient().getContentGenerator();
 
   if (!(server instanceof CodeAssistServer)) {
     return undefined;

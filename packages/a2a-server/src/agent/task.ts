@@ -7,7 +7,7 @@
 /* eslint-disable max-lines -- Existing A2A task orchestration file exceeds the project line limit; MCP extraction only updates import boundaries. */
 
 import {
-  GeminiClient,
+  AgentClient,
   GeminiEventType,
   ToolConfirmationOutcome,
   ApprovalMode,
@@ -105,7 +105,7 @@ export class Task {
   contextId: string;
   scheduler: CoreToolScheduler | null;
   config: Config;
-  geminiClient: GeminiClient;
+  agentClient: AgentClient;
   pendingToolConfirmationDetails: Map<
     string,
     ToolCallConfirmationDetails | SerializableConfirmationDetails
@@ -151,7 +151,7 @@ export class Task {
       proxyUrl: this.config.getProxy(),
       sessionId: this.config.getSessionId(),
     });
-    this.geminiClient = new GeminiClient(this.config, runtimeState);
+    this.agentClient = new AgentClient(this.config, runtimeState);
     this.pendingToolConfirmationDetails = new Map();
     this.taskState = 'submitted';
     this.eventBus = eventBus;
@@ -284,7 +284,7 @@ export class Task {
     } = {
       coderAgent: coderAgentMessage,
       model: this.modelInfo?.model ?? this.config.getModel(),
-      userTier: this.geminiClient.getUserTier(),
+      userTier: this.agentClient.getUserTier(),
     };
 
     if (metadataError) {
@@ -587,7 +587,7 @@ export class Task {
         await processRestorableToolCalls(
           restorableRequests,
           gitService,
-          this.geminiClient,
+          this.agentClient,
         );
 
       if (errors.length > 0) {
@@ -732,7 +732,7 @@ export class Task {
       } else {
         parts = [response];
       }
-      void this.geminiClient.addHistory({
+      void this.agentClient.addHistory({
         role: 'user',
         parts,
       });
@@ -770,7 +770,7 @@ export class Task {
     };
     // Set task state to working as we are about to call LLM
     this.setTaskStateAndPublishUpdate('working', stateChange);
-    yield* this.geminiClient.sendMessageStream(
+    yield* this.agentClient.sendMessageStream(
       llmParts,
       aborted,
       completedToolCalls[0]?.request.prompt_id ?? '',
@@ -820,7 +820,7 @@ export class Task {
       };
       // Set task state to working as we are about to call LLM
       this.setTaskStateAndPublishUpdate('working', stateChange);
-      yield* this.geminiClient.sendMessageStream(
+      yield* this.agentClient.sendMessageStream(
         llmParts,
         aborted,
         this.currentPromptId,

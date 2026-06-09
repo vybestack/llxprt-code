@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GeminiChat } from '../geminiChat.js';
+import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '../../services/history/HistoryService.js';
 import type { IContent } from '../../services/history/IContent.js';
 import { createAgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
@@ -214,7 +214,12 @@ describe('Compression Boundary Logic (Issue #982)', () => {
         historyService.add(createToolResponseMessage(toolCallId));
       }
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Tool heavy</overall_goal></state_snapshot>';
@@ -247,7 +252,12 @@ describe('Compression Boundary Logic (Issue #982)', () => {
         historyService.add(createToolResponseMessage(toolCallId));
       }
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Boundary preserve</overall_goal></state_snapshot>';
@@ -308,7 +318,12 @@ describe('Compression Boundary Logic (Issue #982)', () => {
         historyService.add(createToolResponseMessage(toolCallId));
       }
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Continuous tools</overall_goal></state_snapshot>';
@@ -341,7 +356,12 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       const curated = historyService.getCurated();
       expect(curated.length).toBeGreaterThan(40);
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Long tool seq</overall_goal></state_snapshot>';
@@ -375,7 +395,12 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       const curated = historyService.getCurated();
       expect(curated.length).toBe(202);
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Issue 982</overall_goal></state_snapshot>';
@@ -402,7 +427,12 @@ describe('Compression Boundary Logic (Issue #982)', () => {
         historyService.add(createToolResponseMessage(id));
       }
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Edge case</overall_goal></state_snapshot>';

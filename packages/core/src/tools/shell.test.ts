@@ -90,7 +90,7 @@ describe('ShellTool', () => {
       getWorkspaceContext: vi
         .fn()
         .mockReturnValue(createMockWorkspaceContext('.')),
-      getGeminiClient: vi.fn(),
+      getAgentClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
       getAllowPtyThemeOverride: vi.fn().mockReturnValue(false),
@@ -530,7 +530,7 @@ describe('ShellTool', () => {
 
       expect(summarizer.summarizeToolOutput).toHaveBeenCalledWith(
         expect.any(String),
-        mockConfig.getGeminiClient(),
+        mockConfig.getAgentClient(),
         mockAbortSignal,
         1000,
       );
@@ -1027,7 +1027,7 @@ describe('Shell Tool Filtering Behavior', () => {
       getDebugMode: vi.fn().mockReturnValue(false),
       getSummarizeToolOutputConfig: vi.fn().mockReturnValue(null),
       getContentGeneratorConfig: vi.fn().mockReturnValue(null),
-      getGeminiClient: vi.fn().mockReturnValue(null),
+      getAgentClient: vi.fn().mockReturnValue(null),
       getWorkspaceContext: vi.fn().mockReturnValue({
         getWorkspaceDirectories: () => ['/test/dir'],
       }),

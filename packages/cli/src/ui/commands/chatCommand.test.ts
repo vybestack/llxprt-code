@@ -9,7 +9,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import type { CommandContext, SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import type { GeminiClient } from '@vybestack/llxprt-code-core';
+import type { AgentClient } from '@vybestack/llxprt-code-core';
 
 import * as fsPromises from 'fs/promises';
 import { chatCommand } from './chatCommand.js';
@@ -72,12 +72,12 @@ describe('chatCommand', () => {
       services: {
         config: {
           getProjectRoot: () => '/project/root',
-          getGeminiClient: () =>
+          getAgentClient: () =>
             ({
               getChat: mockGetChat,
               hasChatInitialized: vi.fn().mockReturnValue(true),
               getHistory: vi.fn().mockResolvedValue([]),
-            }) as unknown as GeminiClient,
+            }) as unknown as AgentClient,
           storage: {
             getProjectTempDir: () => '/project/root/.gemini/tmp/mockhash',
           },
@@ -532,10 +532,10 @@ describe('chatCommand', () => {
         services: {
           config: {
             getProjectRoot: () => '/project/root',
-            getGeminiClient: () =>
+            getAgentClient: () =>
               ({
                 hasChatInitialized: vi.fn().mockReturnValue(false),
-              }) as unknown as GeminiClient,
+              }) as unknown as AgentClient,
             getModel: () => 'test-model',
             storage: {
               getProjectTempDir: () => '/project/root/.gemini/tmp/mockhash',

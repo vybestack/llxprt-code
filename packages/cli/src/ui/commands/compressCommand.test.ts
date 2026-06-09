@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { GeminiClient } from '@vybestack/llxprt-code-core';
+import type { AgentClient } from '@vybestack/llxprt-code-core';
 import {
   CompressionStatus,
   PerformCompressionResult,
@@ -102,11 +102,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -144,11 +144,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -174,11 +174,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -192,10 +192,10 @@ describe('compressCommand', () => {
 
   it('shows unavailable-chat error when chat is not initialized', async () => {
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => false,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -221,11 +221,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -251,11 +251,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -280,11 +280,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -309,11 +309,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -342,11 +342,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -373,11 +373,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -406,11 +406,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -441,11 +441,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -475,11 +475,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
@@ -503,11 +503,11 @@ describe('compressCommand', () => {
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');

@@ -26,7 +26,7 @@ interface MockConfig {
   getQuestion: () => string | undefined;
   getDebugMode: () => boolean;
   getSessionId: () => string;
-  getGeminiClient: () => unknown;
+  getAgentClient: () => unknown;
   getWorkingDir: () => string;
   getIdeClient: () => unknown;
   getIdeMode: () => boolean;
@@ -51,7 +51,7 @@ function createMockConfig(): MockConfig {
     getQuestion: vi.fn(() => undefined),
     getDebugMode: vi.fn(() => false),
     getSessionId: vi.fn(() => 'test-session-id'),
-    getGeminiClient: vi.fn(() => ({
+    getAgentClient: vi.fn(() => ({
       getUserTier: vi.fn(),
       hasChatInitialized: vi.fn(() => false),
       getHistoryService: vi.fn(),

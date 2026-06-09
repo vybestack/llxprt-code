@@ -258,7 +258,7 @@ function useLayoutContext(p: AppLayoutParams) {
   useInitialPromptSubmit({
     initialPrompt,
     submitQuery,
-    geminiClientPresent: Boolean(config.getGeminiClient()),
+    agentClientPresent: Boolean(config.getAgentClient()),
     blockedByDialogs: {
       isAuthDialogOpen,
       isThemeDialogOpen,

@@ -328,7 +328,7 @@ function useInputStreamSetup(
   const bufferSetup = useInputBuffer(p, core);
   const { handleUserCancel } = bufferSetup;
   const geminiResult = useGeminiStream(
-    config.getGeminiClient(),
+    config.getAgentClient(),
     history,
     addItem,
     config,

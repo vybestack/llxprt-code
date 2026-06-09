@@ -23,7 +23,7 @@ describe('quit cleanup integration', () => {
     const mockWrite = vi.fn().mockReturnValue(true);
     vi.spyOn(process.stdout, 'write').mockImplementation(mockWrite);
 
-    // Simulate the pattern used in gemini.tsx - register mouse cleanup
+    // Simulate the pattern used in cli.tsx - register mouse cleanup
     const disableMouseEvents = vi.fn(() => {
       process.stdout.write('\x1b[?1000l\x1b[?1002l\x1b[?1006l');
     });

@@ -34,7 +34,7 @@ export abstract class ExtensionLoader {
    * Fully initializes all active extensions.
    *
    * Called within `Config.initialize`, which must already have an
-   * McpClientManager, PromptRegistry, and GeminiChat set up.
+   * McpClientManager, PromptRegistry, and ChatSession set up.
    */
   async start(config: Config): Promise<void> {
     this.isStarting = true;
@@ -129,9 +129,9 @@ export abstract class ExtensionLoader {
     extension: GeminiCLIExtension,
   ): Promise<void> {
     if (extension.excludeTools && extension.excludeTools.length > 0) {
-      const geminiClient = this.config?.getGeminiClient();
-      if (geminiClient?.isInitialized() === true) {
-        await geminiClient.setTools();
+      const agentClient = this.config?.getAgentClient();
+      if (agentClient?.isInitialized() === true) {
+        await agentClient.setTools();
       }
     }
   }

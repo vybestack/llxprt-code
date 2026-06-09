@@ -64,7 +64,7 @@ describe('ShellTool multibyte handling', () => {
       getDebugMode: vi.fn().mockReturnValue(false),
       getTargetDir: vi.fn().mockReturnValue('/work'),
       getSummarizeToolOutputConfig: vi.fn().mockReturnValue(undefined),
-      getGeminiClient: vi.fn(),
+      getAgentClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
       getAllowPtyThemeOverride: vi.fn().mockReturnValue(false),

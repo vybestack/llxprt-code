@@ -6,7 +6,7 @@
 
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
-  GeminiClient,
+  AgentClient,
   createRuntimeStateFromConfig,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
@@ -16,7 +16,7 @@ import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 
 const logger = new DebugLogger('llxprt:subagent:auto-prompt');
 
-export function createDetachedGeminiClient(config: Config): GeminiClient {
+export function createDetachedAgentClient(config: Config): AgentClient {
   const baseRuntimeId =
     typeof config.getSessionId === 'function'
       ? config.getSessionId()
@@ -24,7 +24,7 @@ export function createDetachedGeminiClient(config: Config): GeminiClient {
   const runtimeState = createRuntimeStateFromConfig(config, {
     runtimeId: `${baseRuntimeId ?? 'llxprt-session'}#subagent-auto#${Date.now().toString(36)}`,
   });
-  const client = new GeminiClient(config, runtimeState);
+  const client = new AgentClient(config, runtimeState);
   if (typeof client.clearTools === 'function') {
     client.clearTools();
   }
@@ -53,14 +53,14 @@ export async function generateAutoPrompt(
     typeof config.getProvider === 'function'
       ? config.getProvider()?.toLowerCase()
       : undefined;
-  const configuredClient = config.getGeminiClient() as
-    | GeminiClient
+  const configuredClient = config.getAgentClient() as
+    | AgentClient
     | null
     | undefined;
   const useDetachedClient =
     configuredClient == null || providerName === 'gemini';
   const cleanupDetached = useDetachedClient
-    ? createDetachedGeminiClient(config)
+    ? createDetachedAgentClient(config)
     : undefined;
   const client = cleanupDetached ?? configuredClient;
   const useRuntimeScope = !useDetachedClient;
@@ -72,7 +72,7 @@ export async function generateAutoPrompt(
   }
 
   const requestFromClient = async (
-    targetClient: GeminiClient,
+    targetClient: AgentClient,
     options?: { useRuntimeScope?: boolean },
   ): Promise<{ text?: string }> => {
     const executeRequest = () =>

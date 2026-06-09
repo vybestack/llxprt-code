@@ -64,7 +64,7 @@ describe('EditTool - Issue 473 Tab Characters Bug', () => {
       getEphemeralSetting: vi.fn(() => 'auto'),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       getToolRegistry: () => ({}) as any,
-      getGeminiClient: vi.fn(),
+      getAgentClient: vi.fn(),
     } as unknown as Config;
 
     tool = new EditTool(mockConfig);

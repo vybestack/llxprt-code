@@ -811,7 +811,7 @@ export class HistoryService
 
   /**
    * Get curated history (only valid, meaningful content)
-   * Matches the behavior of extractCuratedHistory in geminiChat.ts:
+   * Matches the behavior of extractCuratedHistory in chatSession.ts:
    * - Always includes user/human messages
    * - Always includes tool messages
    * - Only includes AI messages if they are valid (have content)

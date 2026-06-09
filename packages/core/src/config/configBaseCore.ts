@@ -16,7 +16,7 @@ import type {
   ContentGenerator,
   ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
-import type { GeminiClient } from '../core/client.js';
+import type { AgentClient } from '../core/client.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
@@ -116,7 +116,7 @@ export abstract class ConfigBaseCore {
   protected readonly accessibility!: AccessibilitySettings;
   protected telemetrySettings!: TelemetrySettings;
   protected readonly usageStatisticsEnabled!: boolean;
-  protected geminiClient!: GeminiClient;
+  protected agentClient!: AgentClient;
   protected runtimeState!: AgentRuntimeState;
   protected readonly fileFiltering!: {
     respectGitIgnore: boolean;
@@ -491,8 +491,8 @@ export abstract class ConfigBaseCore {
   getMaxConversationsStored(): number {
     return this.telemetrySettings.maxConversationsStored ?? 1000;
   }
-  getGeminiClient(): GeminiClient {
-    return this.geminiClient;
+  getAgentClient(): AgentClient {
+    return this.agentClient;
   }
   getGeminiDir(): string {
     return path.join(this.targetDir, LLXPRT_DIR);

@@ -14,7 +14,7 @@ import type {
 } from '../index.js';
 import {
   EditTool,
-  GeminiClient,
+  AgentClient,
   ToolConfirmationOutcome,
   ToolErrorType,
   ToolRegistry,
@@ -394,7 +394,7 @@ describe('loggers', () => {
     const cfg1 = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
-      getGeminiClient: () => mockGeminiClient,
+      getAgentClient: () => mockAgentClient,
     } as Config;
     const cfg2 = {
       getSessionId: () => 'test-session-id',
@@ -431,11 +431,11 @@ describe('loggers', () => {
     const runtimeState = createRuntimeStateFromConfig(cfg2, {
       runtimeId: 'telemetry-runtime',
     });
-    const mockGeminiClient = new GeminiClient(cfg2, runtimeState);
+    const mockAgentClient = new AgentClient(cfg2, runtimeState);
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
-      getGeminiClient: () => mockGeminiClient,
+      getAgentClient: () => mockAgentClient,
       getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
