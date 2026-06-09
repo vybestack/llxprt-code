@@ -59,7 +59,7 @@ let activeContext: ProviderRuntimeContext | null = null;
  * @pseudocode lines 122-133
  */
 export interface ProviderRuntimeContextInit {
-  settingsService?: RuntimeSettingsState;
+  settingsService?: RuntimeSettingsState | null;
   config?: Config;
   runtimeId?: string;
   metadata?: Record<string, unknown>;
