@@ -7,14 +7,14 @@
   "type": "module",
   "workspaces": [
     "packages/mcp",
+    "packages/telemetry",
     "packages/core",
     "packages/providers",
     "packages/cli",
     "packages/a2a-server",
     "packages/test-utils",
     "packages/vscode-ide-companion",
-    "packages/lsp",
-    "packages/telemetry"
+    "packages/lsp"
   ],
   "private": "true",
   "repository": {
