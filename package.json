@@ -6,6 +6,7 @@
   },
   "type": "module",
   "workspaces": [
+    "packages/telemetry",
     "packages/mcp",
     "packages/core",
     "packages/providers",
