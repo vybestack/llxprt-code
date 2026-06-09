@@ -17,16 +17,16 @@ import {
   activateSettingsRuntimeContext,
   deactivateSettingsRuntimeContext,
 } from '../../runtime/settingsRuntimeAdapter.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
+  SettingsService,
   getSettingsService,
+  getSettingsService as getSettingsServicePkg,
   resetSettingsService,
 } from '@vybestack/llxprt-code-settings';
 import {
   peekActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
 } from '../../runtime/providerRuntimeContext.js';
-import { getSettingsService as getSettingsServicePkg } from '@vybestack/llxprt-code-settings';
 
 describe('Settings Runtime Adapter — vertical-slice integration', () => {
   beforeEach(() => {

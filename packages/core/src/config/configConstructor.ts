@@ -211,6 +211,22 @@ export interface ConfigConstructorTarget {
   getProxy(): string | undefined;
 }
 
+function isSettingsService(value: unknown): value is SettingsService {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return [
+    'clear',
+    'updateSettings',
+    'switchProvider',
+    'on',
+    'off',
+    'getCurrentProfileName',
+  ].every((methodName) => typeof candidate[methodName] === 'function');
+}
+
 function applySettingsService(
   config: ConfigConstructorTarget,
   params: ConfigParameters,
@@ -219,8 +235,8 @@ function applySettingsService(
   const existingContext = peekActiveProviderRuntimeContext();
   if (providedSettingsService) {
     config.settingsService = providedSettingsService;
-  } else if (existingContext?.settingsService) {
-    config.settingsService = existingContext.settingsService as SettingsService;
+  } else if (isSettingsService(existingContext?.settingsService)) {
+    config.settingsService = existingContext.settingsService;
   } else {
     config.settingsService = createRuntimeSettingsService();
   }

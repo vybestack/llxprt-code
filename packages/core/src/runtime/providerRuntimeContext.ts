@@ -85,13 +85,22 @@ export function createProviderRuntimeContext(
   const settingsService =
     init.settingsService ?? defaultRuntimeStateFactory?.();
   if (!settingsService) {
+    const missingReasons = [];
+    if (init.settingsService === undefined) {
+      missingReasons.push('init.settingsService is not provided');
+    }
+    if (defaultRuntimeStateFactory === null) {
+      missingReasons.push(
+        'defaultRuntimeStateFactory is not set via setProviderRuntimeStateFactory()',
+      );
+    }
     throw new MissingRuntimeProviderError({
       providerKey: 'provider-runtime',
       missingFields: ['settings'],
       requirement: 'REQ-SP4-004',
       stage: 'createProviderRuntimeContext',
       metadata: {
-        hint: 'Provide settingsService or initialise the settings runtime adapter before creating provider runtime contexts.',
+        hint: `${missingReasons.join('; ')}. Provide settingsService or initialise the settings runtime adapter before creating provider runtime contexts.`,
       },
       message:
         'MissingProviderRuntimeError(provider-runtime): provider runtime context creation requires settings (REQ-SP4-004).',

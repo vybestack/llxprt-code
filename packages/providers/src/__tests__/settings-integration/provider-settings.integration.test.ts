@@ -35,11 +35,8 @@ import {
   getSettingsService as getSettingsServiceFromPkg,
 } from '@vybestack/llxprt-code-settings';
 
-// Production imports — these mirror what BaseProvider.ts currently imports.
-// After P08, BaseProvider should import from @vybestack/llxprt-code-settings instead.
 import { BaseProvider } from '../../BaseProvider.js';
 import type { BaseProviderConfig } from '../../BaseProvider.js';
-import { resetSettingsService as resetCoreSettingsService } from '@vybestack/llxprt-code-settings';
 
 /**
  * Minimal concrete provider for testing BaseProvider settings behavior.
@@ -78,9 +75,7 @@ class TestProvider extends BaseProvider {
 
 describe('Provider vertical-slice — settings-package sentinel integration', () => {
   beforeEach(() => {
-    // Reset both singleton instances to avoid cross-test contamination
     resetSettingsService();
-    resetCoreSettingsService();
   });
 
   it('fails: BaseProvider reads model from settings-package sentinel when registered', () => {

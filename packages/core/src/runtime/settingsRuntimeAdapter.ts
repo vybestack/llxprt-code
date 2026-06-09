@@ -89,9 +89,7 @@ export function setSettingsProviderRuntimeContext(
 ): void {
   setActiveProviderRuntimeContext(context);
   if (context?.settingsService) {
-    registerSettingsService(
-      context.settingsService as Parameters<typeof registerSettingsService>[0],
-    );
+    registerSettingsService(context.settingsService as SettingsService);
   }
 }
 

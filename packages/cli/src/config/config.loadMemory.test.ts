@@ -13,7 +13,6 @@ import {
   setLlxprtMdFilename,
 } from '@vybestack/llxprt-code-core';
 import {
-  registerSettingsService,
   resetSettingsService,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
@@ -113,6 +112,10 @@ const createMockSettingsService = () => {
     },
     get(key: string) {
       return globalStore.get(key);
+    },
+    clear() {
+      globalStore.clear();
+      providerStore.clear();
     },
   };
 };
@@ -303,7 +306,6 @@ describe('loadCliConfig memory discovery', () => {
       process.env.USERPROFILE = originalUserProfile;
     }
     setLlxprtMdFilename(DEFAULT_CONTEXT_FILENAME);
-    registerSettingsService(new SettingsService());
     resetSettingsService();
     await fs.rm(tempRoot, { recursive: true, force: true });
   });

@@ -40,7 +40,7 @@ vi.mock('@vybestack/llxprt-code-providers', async () => {
 
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-settings')
+    typeof import('@vybestack/llxprt-code-core')
   >('@vybestack/llxprt-code-core');
   return {
     ...actual,

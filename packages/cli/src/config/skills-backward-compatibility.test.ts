@@ -24,7 +24,7 @@ vi.mock('./trustedFolders.js', async (importOriginal) => {
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...actual,
     loadServerHierarchicalMemory: vi.fn(),
