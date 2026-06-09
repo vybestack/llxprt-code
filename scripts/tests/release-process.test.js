@@ -154,8 +154,9 @@ describe('.github/workflows/release.yml', () => {
 describe('scripts/build_sandbox.js', () => {
   const buildSandbox = readRootFile('scripts/build_sandbox.js');
 
-  it('packs providers alongside core and CLI', () => {
+  it('packs MCP and providers alongside core and CLI', () => {
     expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code');
+    expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code-mcp');
     expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code-core');
     expect(buildSandbox).toContain(
       'npm pack -w @vybestack/llxprt-code-providers',
@@ -171,7 +172,10 @@ describe('scripts/build_sandbox.js', () => {
 describe('Dockerfile', () => {
   const dockerfile = readRootFile('Dockerfile');
 
-  it('copies providers tarball after core and before CLI', () => {
+  it('copies MCP, core, providers, and CLI tarballs in dependency order', () => {
+    const mcpCopy = dockerfile.indexOf(
+      'COPY --chown=node:node packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz',
+    );
     const coreCopy = dockerfile.indexOf(
       'COPY --chown=node:node packages/core/dist/vybestack-llxprt-code-core-*.tgz',
     );
@@ -182,7 +186,8 @@ describe('Dockerfile', () => {
       'COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz',
     );
 
-    expect(coreCopy).toBeGreaterThan(0);
+    expect(mcpCopy).toBeGreaterThan(0);
+    expect(coreCopy).toBeGreaterThan(mcpCopy);
     expect(providersCopy).toBeGreaterThan(coreCopy);
     expect(cliCopy).toBeGreaterThan(providersCopy);
   });
@@ -193,6 +198,7 @@ describe('Dockerfile', () => {
       dockerfile.indexOf('npm cache clean --force'),
     );
 
+    expect(installCommand).toContain('vybestack-llxprt-code-mcp-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-core-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-providers-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-*.tgz');
