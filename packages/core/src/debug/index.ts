@@ -1,8 +1,9 @@
 /**
- * @plan PLAN-20250120-DEBUGLOGGING.P03
- * @requirement REQ-001
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Compatibility shim: re-exports all debug types and classes from
+ * the @vybestack/llxprt-code-telemetry package.
  */
-export * from './types.js';
-export * from './DebugLogger.js';
-export * from './ConfigurationManager.js';
-export * from './FileOutput.js';
+export * from '@vybestack/llxprt-code-telemetry/debug/index.js';

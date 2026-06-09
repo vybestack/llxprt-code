@@ -1,9 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import { randomUUID } from 'crypto';
-
-export const sessionId = randomUUID();
+export { sessionId } from '@vybestack/llxprt-code-telemetry/utils/session.js';

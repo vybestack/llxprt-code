@@ -2,19 +2,24 @@
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
- *
- * Compatibility shim: re-exports telemetry types and functions from
- * the @vybestack/llxprt-code-telemetry package. Avoids re-exporting
- * names that collide with core's own types (e.g., ToolCall, HookEventName).
  */
+
+export enum TelemetryTarget {
+  GCP = 'gcp',
+  LOCAL = 'local',
+}
+
+const DEFAULT_TELEMETRY_TARGET = TelemetryTarget.LOCAL;
+const DEFAULT_OTLP_ENDPOINT = 'http://localhost:4317';
+
+export { DEFAULT_TELEMETRY_TARGET, DEFAULT_OTLP_ENDPOINT };
 export {
-  TelemetryTarget,
-  DEFAULT_TELEMETRY_TARGET,
-  DEFAULT_OTLP_ENDPOINT,
   initializeTelemetry,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
   flushTelemetry,
+} from './sdk.js';
+export {
   logCliConfiguration,
   logUserPrompt,
   logToolCall,
@@ -40,6 +45,8 @@ export {
   logExtensionUninstall,
   logExtensionEnable,
   logExtensionDisable,
+} from './loggers.js';
+export {
   StartSessionEvent,
   EndSessionEvent,
   UserPromptEvent,
@@ -70,8 +77,20 @@ export {
   ExtensionDisableEvent,
   IdeConnectionType,
   IdeConnectionEvent,
+} from './types.js';
+export type {
+  TelemetryEvent,
+  ProviderCapabilities,
+  ProviderContext,
+  ToolCall,
+  ProviderPerformanceMetrics,
+} from './types.js';
+export {
   ToolCallDecision,
   getDecisionFromOutcome,
+} from './tool-call-decision.js';
+export {
+  FileOperation as FileOperationMetric,
   initializeMetrics,
   recordToolCallMetrics,
   recordTokenUsageMetrics,
@@ -80,20 +99,23 @@ export {
   recordFileOperationMetric,
   recordModelRoutingMetrics,
   getMeter,
-  SpanStatusCode,
-  ValueType,
-  SemanticAttributes,
-} from '@vybestack/llxprt-code-telemetry/telemetry/index.js';
-
+} from './metrics.js';
+export { SpanStatusCode, ValueType } from '@opentelemetry/api';
+export { SemanticAttributes } from '@opentelemetry/semantic-conventions';
+export * from './uiTelemetry.js';
+export { ToolConfirmationOutcome } from '../internal/interfaces.js';
 export type {
-  TelemetryEvent,
-  ProviderCapabilities,
-  ProviderContext,
-  ProviderPerformanceMetrics,
   TelemetryConfig,
   SessionConfig,
   TelemetryPromptConfig,
+  ToolLoggingConfig as ToolLoggingConfigInterface,
+  DiffStat,
+  ToolCallRequest,
+  ToolCallError,
+  ToolCallResponse,
   CompletedToolCallShape,
-} from '@vybestack/llxprt-code-telemetry/telemetry/index.js';
-
-export * from './uiTelemetry.js';
+  HookInput,
+  HookConfig,
+  HookExecutionResult,
+} from '../internal/interfaces.js';
+export { HookEventName } from '../internal/interfaces.js';

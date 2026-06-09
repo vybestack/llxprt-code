@@ -38,7 +38,7 @@ import {
   EVENT_EXTENSION_UNINSTALL,
   EVENT_EXTENSION_ENABLE,
   EVENT_EXTENSION_DISABLE,
-} from './constants.js';
+} from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
 import {
   logApiRequest,
   logApiResponse,
@@ -54,8 +54,8 @@ import {
   logExtensionUninstall,
   logExtensionEnable,
   logExtensionDisable,
-} from './loggers.js';
-import { ToolCallDecision } from './tool-call-decision.js';
+} from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
+import { ToolCallDecision } from '@vybestack/llxprt-code-telemetry/telemetry/tool-call-decision.js';
 import {
   ApiRequestEvent,
   ApiResponseEvent,
@@ -72,12 +72,12 @@ import {
   ExtensionEnableEvent,
   ExtensionDisableEvent,
   FileOperation,
-} from './types.js';
-import * as metrics from './metrics.js';
-import * as sdk from './sdk.js';
+} from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
+import * as metrics from '@vybestack/llxprt-code-telemetry/telemetry/metrics.js';
+import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 import type { GenerateContentResponseUsageMetadata } from '@google/genai';
-import * as uiTelemetry from './uiTelemetry.js';
+import * as uiTelemetry from '@vybestack/llxprt-code-telemetry/telemetry/uiTelemetry.js';
 import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { CallableTool } from '../tools/tool.js';
 
