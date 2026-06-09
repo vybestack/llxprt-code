@@ -12,7 +12,8 @@
     "packages/a2a-server",
     "packages/test-utils",
     "packages/vscode-ide-companion",
-    "packages/lsp"
+    "packages/lsp",
+    "packages/mcp"
   ],
   "private": "true",
   "repository": {

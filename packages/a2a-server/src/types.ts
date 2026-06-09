@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  MCPServerStatus,
-  ToolConfirmationOutcome,
-} from '@vybestack/llxprt-code-core';
+import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
+import type { MCPServerStatus } from '@vybestack/llxprt-code-mcp';
 import type { TaskState } from '@a2a-js/sdk';
 
 // Interfaces and enums for the CoderAgent protocol.

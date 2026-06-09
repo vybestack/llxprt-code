@@ -10,8 +10,20 @@ import type { Config } from '../config/config.js';
 import { type CompletedToolCall } from '../core/coreToolScheduler.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import { ToolConfirmationOutcome } from '../tools/tools.js';
-import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import type { IContent } from '../services/history/IContent.js';
+
+interface McpToolTelemetryShape {
+  serverName: unknown;
+  serverToolName: unknown;
+}
+
+function isMcpToolTelemetryShape(tool: unknown): tool is McpToolTelemetryShape {
+  if (typeof tool !== 'object' || tool === null) {
+    return false;
+  }
+  return 'serverName' in tool && 'serverToolName' in tool;
+}
+
 export interface ProviderCapabilities {
   supportsStreaming: boolean;
   supportsTools: boolean;
@@ -193,10 +205,7 @@ export class ToolCallEvent {
     this.error = call.response.error?.message;
     this.error_type = call.response.errorType;
     this.prompt_id = call.request.prompt_id;
-    this.tool_type =
-      typeof call.tool !== 'undefined' && call.tool instanceof DiscoveredMCPTool
-        ? 'mcp'
-        : 'native';
+    this.tool_type = isMcpToolTelemetryShape(call.tool) ? 'mcp' : 'native';
     this.agent_id = call.request.agentId ?? DEFAULT_AGENT_ID;
 
     const resultDisplay = call.response.resultDisplay;

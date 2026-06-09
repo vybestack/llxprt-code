@@ -9,7 +9,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ConfigParameters } from '../config/config.js';
 import { Config, ApprovalMode } from '../config/config.js';
 import { ToolRegistry, DiscoveredTool } from './tool-registry.js';
-import { DiscoveredMCPTool, generateMcpToolName } from './mcp-tool.js';
+import {
+  DiscoveredMCPTool,
+  generateMcpToolName,
+} from '@vybestack/llxprt-code-mcp';
 import type { FunctionDeclaration, CallableTool } from '@google/genai';
 import { spawn } from 'node:child_process';
 import { IdeClient } from '../ide/ide-client.js';

@@ -9,8 +9,10 @@
     "baseUrl": ".",
     "rootDir": "..",
     "paths": {
-      "@vybestack/llxprt-code-core": ["../core/src/index.ts"],
+      "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
+      "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"],
       "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
       "@vybestack/llxprt-code-providers/*": ["../providers/src/*"]
     }
@@ -24,13 +26,18 @@
     "./package.json",
     "../providers/index.ts",
     "../providers/src/**/*.ts",
-    "../providers/src/**/*.json"
+    "../providers/src/**/*.json",
+    "../mcp/index.ts",
+    "../mcp/src/**/*.ts",
+    "../mcp/src/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "../providers/src/**/*.test.ts",
     "../providers/src/**/*.spec.ts",
+    "../mcp/src/**/*.test.ts",
+    "../mcp/src/**/*.spec.ts",
 
     // TODO(5691): Fix type errors and remove excludes.
     "src/config/config.integration.test.ts",

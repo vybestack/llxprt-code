@@ -14,14 +14,16 @@ import type {
   Todo,
 } from '@vybestack/llxprt-code-core';
 import {
+  addMCPStatusChangeListener,
+  removeMCPStatusChangeListener,
+} from '@vybestack/llxprt-code-mcp';
+import {
   GitService,
   IdeClient,
   Logger,
   ProfileManager,
   Storage,
   SubagentManager,
-  addMCPStatusChangeListener,
-  removeMCPStatusChangeListener,
 } from '@vybestack/llxprt-code-core';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';

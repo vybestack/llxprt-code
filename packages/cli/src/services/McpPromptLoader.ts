@@ -6,11 +6,12 @@
 
 /* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
-import type { Config, DiscoveredMCPPrompt } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
   getErrorMessage,
   getMCPServerPrompts,
 } from '@vybestack/llxprt-code-core';
+import type { DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
 import type {
   CommandContext,
   SlashCommand,
