@@ -17,6 +17,7 @@ import type {
   AccessibilitySettings,
   SandboxConfig,
   LLxprtClient,
+  AgentClient,
 } from '@vybestack/llxprt-code-core';
 import {
   Config as ServerConfig,

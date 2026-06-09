@@ -94,7 +94,7 @@ const editCorrectionWithInstructionCache = new LruCache<
  * @param new_string The original replacement string.
  * @param error The error that occurred during the initial edit.
  * @param current_content The current content of the file.
- * @param agentClient The Gemini client to use for the LLM call.
+ * @param agentClient The agent client to use for the LLM call.
  * @param abortSignal An abort signal to cancel the operation.
  * @returns A new search and replace pair.
  */

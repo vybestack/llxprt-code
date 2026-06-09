@@ -390,6 +390,11 @@ describe('Provider-Agnostic Naming Regression', () => {
         description: 'createGeminiChat() (should be createChatSession())',
       },
       {
+        token: 'addShellCommandToGeminiHistory',
+        description:
+          'addShellCommandToGeminiHistory (should be addShellCommandToAgentHistory)',
+      },
+      {
         token: 'mockGeminiClient',
         description: 'mockGeminiClient (should be mockAgentClient)',
       },

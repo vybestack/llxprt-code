@@ -63,7 +63,7 @@ interface ShellExecutionParams {
   resolve: (value: void | PromiseLike<void>) => void;
 }
 
-function addShellCommandToGeminiHistory(
+function addShellCommandToAgentHistory(
   agentClient: AgentClient | undefined,
   rawQuery: string,
   resultText: string,
@@ -337,7 +337,7 @@ function handleShellResult(
     userMessageTimestamp,
   );
 
-  addShellCommandToGeminiHistory(agentClient, rawQuery, finalOutput);
+  addShellCommandToAgentHistory(agentClient, rawQuery, finalOutput);
 }
 
 function handleShellError(
