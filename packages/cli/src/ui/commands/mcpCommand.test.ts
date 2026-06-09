@@ -15,7 +15,7 @@ import {
   getMCPServerStatus,
   getMCPDiscoveryState,
   DiscoveredMCPTool,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
 import type { CallableTool } from '@google/genai';
 import { Type } from '@google/genai';
@@ -25,9 +25,9 @@ vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-mcp')>();
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),
@@ -1170,7 +1170,7 @@ describe('mcpCommand', () => {
       // Mock the reloadCommands function
       context.ui.reloadCommands = vi.fn();
 
-      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-core');
+      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
 
       const authCommand = mcpCommand.subCommands?.find(
         (cmd) => cmd.name === 'auth',
@@ -1209,7 +1209,7 @@ describe('mcpCommand', () => {
         },
       });
 
-      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-core');
+      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
       (
         MCPOAuthProvider.authenticate as ReturnType<typeof vi.fn>
       ).mockRejectedValue(new Error('Auth failed'));

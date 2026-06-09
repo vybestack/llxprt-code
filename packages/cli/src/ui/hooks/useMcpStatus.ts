@@ -5,10 +5,10 @@
  */
 
 import { useEffect, useState } from 'react';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   type Config,
   coreEvents,
-  MCPDiscoveryState,
   CoreEvent,
 } from '@vybestack/llxprt-code-core';
 

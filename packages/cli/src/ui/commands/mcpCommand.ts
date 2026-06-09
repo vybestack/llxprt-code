@@ -16,11 +16,11 @@ import { CommandKind } from './types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import type {
   Config,
-  DiscoveredMCPPrompt,
   AnyDeclarativeTool,
   MCPServerConfig,
   DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
+import { getErrorMessage } from '@vybestack/llxprt-code-core';
 import {
   DiscoveredMCPTool,
   getMCPDiscoveryState,
@@ -28,8 +28,9 @@ import {
   MCPDiscoveryState,
   MCPServerStatus,
   mcpServerRequiresOAuth,
-  getErrorMessage,
-} from '@vybestack/llxprt-code-core';
+  type DiscoveredMCPPrompt,
+} from '@vybestack/llxprt-code-mcp';
+
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
@@ -675,7 +676,7 @@ async function performMcpOAuth(
       Date.now(),
     );
 
-    const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-core');
+    const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
 
     let oauthConfig = server.oauth;
     oauthConfig ??= { enabled: false };

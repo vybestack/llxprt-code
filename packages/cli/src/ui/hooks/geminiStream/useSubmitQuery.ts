@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect } from 'react';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   type Config,
   type AgentClient,
@@ -21,7 +22,6 @@ import {
   type ThinkingBlock,
   type ThoughtSummary,
   type ToolCallRequestInfo,
-  MCPDiscoveryState,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
 import {

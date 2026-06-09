@@ -78,7 +78,7 @@ import * as sdk from './sdk.js';
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 import type { GenerateContentResponseUsageMetadata } from '@google/genai';
 import * as uiTelemetry from './uiTelemetry.js';
-import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
+import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { CallableTool } from '../tools/tool.js';
 
 // Mock ClearcutLogger to avoid import errors

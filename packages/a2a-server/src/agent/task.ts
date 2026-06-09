@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Existing A2A task orchestration file exceeds the project line limit; MCP extraction only updates import boundaries. */
+
 import {
   AgentClient,
   GeminiEventType,
   ToolConfirmationOutcome,
   ApprovalMode,
-  getAllMCPServerStatuses,
-  MCPServerStatus,
   isNodeError,
   createAgentRuntimeState,
   DEFAULT_GUI_EDITOR,
@@ -31,6 +31,10 @@ import type {
   AnsiOutput,
   CoreToolScheduler,
 } from '@vybestack/llxprt-code-core';
+import {
+  getAllMCPServerStatuses,
+  MCPServerStatus,
+} from '@vybestack/llxprt-code-mcp';
 import type { RequestContext } from '@a2a-js/sdk/server';
 import { type ExecutionEventBus } from '@a2a-js/sdk/server';
 import type {
@@ -74,7 +78,6 @@ import {
   createTextMessage,
   createDataMessage,
 } from './task-support.js';
-
 type SchedulerConfig = Config & {
   getOrCreateScheduler(
     sessionId: string,
@@ -97,7 +100,6 @@ function getEventTraceId(event: ServerGeminiStreamEvent): string | undefined {
     ? event.traceId
     : undefined;
 }
-
 export class Task {
   id: string;
   contextId: string;
@@ -116,7 +118,6 @@ export class Task {
   promptCount = 0;
   autoExecute: boolean;
 
-  // For tool waiting logic
   private pendingToolCalls: Map<string, string> = new Map(); //toolCallId --> status
   private toolCompletionPromise?: Promise<void>;
   private toolCompletionNotifier?: {

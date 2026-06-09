@@ -94,7 +94,7 @@ export {
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { coreEvents, CoreEvent } from '../utils/events.js';
-import { McpClientManager } from '../tools/mcp-client-manager.js';
+import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { getCoreVersion } from '../utils/version.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';

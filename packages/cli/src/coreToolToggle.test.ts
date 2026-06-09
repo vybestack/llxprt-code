@@ -19,11 +19,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type {
-  Config,
-  DiscoveredTool,
-  DiscoveredMCPTool,
-} from '@vybestack/llxprt-code-core';
+import type { Config, DiscoveredTool } from '@vybestack/llxprt-code-core';
+import type { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import { generateDynamicToolSettings } from './utils/dynamicSettings.js';
 
 // Mock the settings utilities
