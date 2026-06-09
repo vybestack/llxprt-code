@@ -86,7 +86,7 @@ export function createProviderRuntimeContext(
     init.settingsService ?? defaultRuntimeStateFactory?.();
   if (!settingsService) {
     const missingReasons = [];
-    if (init.settingsService === undefined) {
+    if (init.settingsService === undefined || init.settingsService === null) {
       missingReasons.push('init.settingsService is not provided');
     }
     if (defaultRuntimeStateFactory === null) {
