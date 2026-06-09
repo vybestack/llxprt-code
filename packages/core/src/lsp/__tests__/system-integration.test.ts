@@ -117,7 +117,7 @@ vi.mock('../../services/gitService.js', () => ({
   })),
 }));
 
-vi.mock('../../tools/mcp-client-manager.js', () => ({
+vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn().mockImplementation(() => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
     getMcpInstructions: vi.fn().mockReturnValue(''),
@@ -200,7 +200,11 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   })),
 }));
 
-vi.mock('../../tools/mcp-tool.js', () => ({
+vi.mock('@vybestack/llxprt-code-mcp', () => ({
+  McpClientManager: vi.fn().mockImplementation(() => ({
+    startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
+    getMcpInstructions: vi.fn().mockReturnValue(''),
+  })),
   DiscoveredMCPTool: vi
     .fn()
     .mockImplementation(

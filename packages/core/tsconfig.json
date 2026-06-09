@@ -8,7 +8,8 @@
     "types": ["node", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
-      "@vybestack/llxprt-code-core": ["./index.ts"]
+      "@vybestack/llxprt-code-core": ["./index.ts"],
+      "@vybestack/llxprt-code-core/*": ["./src/*"]
     }
   },
   "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],

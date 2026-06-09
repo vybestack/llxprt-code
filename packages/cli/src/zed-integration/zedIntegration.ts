@@ -6,6 +6,7 @@
 
 /* eslint-disable complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
+import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import {
   type Config,
   type ContentGeneratorConfig,
@@ -22,7 +23,6 @@ import {
   getErrorMessage,
   isWithinRoot,
   getErrorStatus,
-  DiscoveredMCPTool,
   DebugLogger,
   getFunctionCalls,
   getResponseTextFromParts,

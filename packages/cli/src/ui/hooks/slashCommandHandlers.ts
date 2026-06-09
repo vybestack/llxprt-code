@@ -10,10 +10,10 @@ import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
 } from '@vybestack/llxprt-code-core';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   getProjectHash,
   logSlashCommand,
-  MCPDiscoveryState,
   SlashCommandEvent,
   ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';

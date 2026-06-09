@@ -20,7 +20,7 @@ import type { SkillDefinition } from '../skills/skillManager.js';
  * instead of providers package.
  */
 import type { BucketFailureReason } from '../runtime/contracts/BucketFailureReason.js';
-import type { MCPOAuthConfig } from '../mcp/oauth-provider.js';
+import type { MCPOAuthConfig } from '@vybestack/llxprt-code-mcp';
 import type { OutputFormat } from '../utils/output-format.js';
 import type { FileFilteringOptions } from './constants.js';
 import type { EventEmitter } from 'node:events';

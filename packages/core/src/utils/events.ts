@@ -5,7 +5,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import type { McpClient } from '../tools/mcp-client.js';
+import type { McpClient } from '@vybestack/llxprt-code-mcp';
 
 /**
  * Defines the severity level for user-facing feedback.

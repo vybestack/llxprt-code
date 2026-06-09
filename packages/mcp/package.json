@@ -1,0 +1,45 @@
+{
+  "name": "@vybestack/llxprt-code-mcp",
+  "version": "0.10.0",
+  "description": "LLxprt Code MCP — Model Context Protocol client, OAuth, and token storage",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
+  "type": "module",
+  "main": "dist/mcp/index.js",
+  "types": "dist/mcp/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/mcp/index.d.ts",
+      "import": "./dist/mcp/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@google/genai": "1.30.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "google-auth-library": "^9.11.0",
+    "shell-quote": "^1.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "@vybestack/llxprt-code-core": "file:../core",
+    "typescript": "^5.3.3",
+    "vitest": "^3.1.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

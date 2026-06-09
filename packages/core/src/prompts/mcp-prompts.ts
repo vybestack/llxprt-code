@@ -5,7 +5,7 @@
  */
 
 import type { Config } from '../config/config.js';
-import { type DiscoveredMCPPrompt } from '../tools/mcp-client.js';
+import { type DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
 
 export function getMCPServerPrompts(
   config: Config,

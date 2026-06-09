@@ -42,6 +42,7 @@ run(`npm version ${versionCommand} --no-git-tag-version --allow-same-version`);
 // Define the actual workspaces in our monorepo (not external dependencies)
 const actualWorkspaces = [
   '@vybestack/llxprt-code',
+  '@vybestack/llxprt-code-mcp',
   '@vybestack/llxprt-code-core',
   '@vybestack/llxprt-code-providers',
   '@vybestack/llxprt-code-test-utils',

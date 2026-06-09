@@ -5,6 +5,8 @@
     "paths": {
       "@vybestack/llxprt-code-core": ["../core/dist/index.d.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/dist/src/*"],
+      "@vybestack/llxprt-code-mcp": ["../mcp/dist/mcp/index.d.ts"],
+      "@vybestack/llxprt-code-mcp/*": ["../mcp/dist/mcp/src/*"],
       "@vybestack/llxprt-code-providers": ["../providers/dist/index.d.ts"],
       "@vybestack/llxprt-code-providers/*": ["../providers/dist/src/*"]
     }

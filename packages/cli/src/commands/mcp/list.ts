@@ -9,11 +9,8 @@ import type { CommandModule } from 'yargs';
 import { loadSettings } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
-import {
-  MCPServerStatus,
-  createTransport,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-core';
+import { createTransport, MCPServerStatus } from '@vybestack/llxprt-code-mcp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ExtensionStorage, loadExtensions } from '../../config/extension.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
