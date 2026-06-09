@@ -17,11 +17,12 @@ import {
 import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
   AuthPrecedenceResolver,
   type AuthPrecedenceConfig,
   type OAuthManager,
-} from '@vybestack/llxprt-code-core/auth/precedence.js';
+} from '@vybestack/llxprt-code-auth';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
 import {
@@ -148,11 +149,12 @@ export abstract class BaseProvider implements IProvider {
       providerId: this.name,
     };
 
-    this.authResolver = new AuthPrecedenceResolver(
-      precedenceConfig,
-      config.oauthManager,
-      fallbackSettingsService,
-    );
+    // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor (unified with C-CB-06/C-CB-09)
+    // SettingsService satisfies ISettingsService by structural typing
+    this.authResolver = new AuthPrecedenceResolver(precedenceConfig, {
+      oauthManager: config.oauthManager,
+      settingsService: fallbackSettingsService,
+    });
   }
 
   /**

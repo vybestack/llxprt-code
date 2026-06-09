@@ -12,12 +12,12 @@ import {
   isTokenExpired,
   hasValidRefreshToken,
 } from '../oauth-provider-base.js';
-import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
+import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
 import {
   OAuthError,
   OAuthErrorType,
   OAuthErrorFactory,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
 import { GeminiOAuthProvider } from '../gemini-oauth-provider.js';
 
 // ---------------------------------------------------------------------------

@@ -6,11 +6,12 @@
 
 import * as crypto from 'node:crypto';
 import type * as net from 'node:net';
-import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
 import {
   encodeFrame,
   sanitizeTokenForProxy,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
 import { RefreshCoordinator } from './refresh-coordinator.js';
 
 export interface OAuthFlowInterface {

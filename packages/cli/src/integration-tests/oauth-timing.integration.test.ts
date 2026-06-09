@@ -239,8 +239,10 @@ describe('OAuth Timing Integration Tests', () => {
           oauthProvider: 'gemini',
           providerId: 'gemini',
         },
-        oauthManager as CoreOAuthManager,
-        settingsService,
+        {
+          oauthManager: oauthManager as CoreOAuthManager,
+          settingsService,
+        },
       );
 
       // Clear all auth sources
@@ -271,8 +273,10 @@ describe('OAuth Timing Integration Tests', () => {
           oauthProvider: 'gemini',
           providerId: 'gemini',
         },
-        oauthManager as CoreOAuthManager,
-        settingsService,
+        {
+          oauthManager: oauthManager as CoreOAuthManager,
+          settingsService,
+        },
       );
 
       // Clear all auth sources
@@ -317,8 +321,10 @@ describe('OAuth Timing Integration Tests', () => {
           supportsOAuth: true,
           oauthProvider: 'anthropic',
         },
-        oauthManager as CoreOAuthManager,
-        settingsService,
+        {
+          oauthManager: oauthManager as CoreOAuthManager,
+          settingsService,
+        },
       );
 
       const token = await resolver.resolveAuthentication({
@@ -348,8 +354,10 @@ describe('OAuth Timing Integration Tests', () => {
           supportsOAuth: true,
           oauthProvider: 'gemini',
         },
-        oauthManager as CoreOAuthManager,
-        settingsService,
+        {
+          oauthManager: oauthManager as CoreOAuthManager,
+          settingsService,
+        },
       );
 
       const token = await resolver.resolveAuthentication({
@@ -375,6 +383,7 @@ describe('OAuth Timing Integration Tests', () => {
         // Mock OAuth to return token if called
         oauthSpies.getToken.mockResolvedValue('should-not-be-used');
 
+        // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor
         const resolver = new AuthPrecedenceResolver(
           {
             apiKey: undefined,
@@ -383,8 +392,10 @@ describe('OAuth Timing Integration Tests', () => {
             supportsOAuth: true,
             oauthProvider: 'anthropic',
           },
-          oauthManager as CoreOAuthManager,
-          settingsService,
+          {
+            oauthManager: oauthManager as CoreOAuthManager,
+            settingsService,
+          },
         );
 
         const token = await resolver.resolveAuthentication({
@@ -404,7 +415,7 @@ describe('OAuth Timing Integration Tests', () => {
 
   describe('OAuth Disabled State', () => {
     it('should NOT trigger OAuth when OAuth is disabled', async () => {
-      // Set up resolver with OAuth DISABLED
+      // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor
       const resolver = new AuthPrecedenceResolver(
         {
           apiKey: undefined,
@@ -413,8 +424,10 @@ describe('OAuth Timing Integration Tests', () => {
           supportsOAuth: true,
           oauthProvider: 'gemini',
         },
-        oauthManager as CoreOAuthManager,
-        settingsService,
+        {
+          oauthManager: oauthManager as CoreOAuthManager,
+          settingsService,
+        },
       );
 
       // Clear all auth sources
@@ -452,8 +465,10 @@ describe('OAuth Timing Integration Tests', () => {
           oauthProvider: 'gemini',
           providerId: 'gemini',
         },
-        oauthManager as CoreOAuthManager,
-        settingsService,
+        {
+          oauthManager: oauthManager as CoreOAuthManager,
+          settingsService,
+        },
       );
 
       const token = await resolver.resolveAuthentication({
@@ -522,6 +537,7 @@ describe('OAuth Timing Integration Tests', () => {
       });
 
       // Test Gemini provider
+      // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor
       const geminiResolver = new AuthPrecedenceResolver(
         {
           apiKey: undefined,
@@ -531,8 +547,10 @@ describe('OAuth Timing Integration Tests', () => {
           oauthProvider: 'gemini',
           providerId: 'gemini',
         },
-        oauthManager as CoreOAuthManager,
-        settingsService,
+        {
+          oauthManager: oauthManager as CoreOAuthManager,
+          settingsService,
+        },
       );
 
       const geminiToken = await geminiResolver.resolveAuthentication({
@@ -545,6 +563,7 @@ describe('OAuth Timing Integration Tests', () => {
       vi.clearAllMocks();
 
       // Test Anthropic provider
+      // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor
       const anthropicResolver = new AuthPrecedenceResolver(
         {
           apiKey: undefined,
@@ -554,8 +573,10 @@ describe('OAuth Timing Integration Tests', () => {
           oauthProvider: 'anthropic',
           providerId: 'anthropic',
         },
-        oauthManager as CoreOAuthManager,
-        settingsService,
+        {
+          oauthManager: oauthManager as CoreOAuthManager,
+          settingsService,
+        },
       );
 
       const anthropicToken = await anthropicResolver.resolveAuthentication({
@@ -577,8 +598,10 @@ describe('OAuth Timing Integration Tests', () => {
           supportsOAuth: true,
           oauthProvider: 'gemini',
         },
-        oauthManager as CoreOAuthManager,
-        settingsService,
+        {
+          oauthManager: oauthManager as CoreOAuthManager,
+          settingsService,
+        },
       );
 
       // Simulate multiple config-time operations
@@ -602,8 +625,10 @@ describe('OAuth Timing Integration Tests', () => {
           oauthProvider: 'gemini',
           providerId: 'gemini',
         },
-        oauthManager as CoreOAuthManager,
-        settingsService,
+        {
+          oauthManager: oauthManager as CoreOAuthManager,
+          settingsService,
+        },
       );
 
       // Mock OAuth

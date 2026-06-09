@@ -28,6 +28,17 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
+    // Mock shouldLaunchBrowser to return true for tests
+    shouldLaunchBrowser: vi.fn().mockReturnValue(true),
+    // Mock openBrowserSecurely to prevent actual browser opening
+    openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+vi.mock('@vybestack/llxprt-code-auth', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-auth');
+  return {
+    ...actual,
     QwenDeviceFlow: vi.fn().mockImplementation(() => ({
       initiateDeviceFlow: vi.fn().mockResolvedValue({
         device_code: 'mock-device-code',
@@ -44,10 +55,6 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
         scope: 'openid profile email model.completion',
       }),
     })),
-    // Mock shouldLaunchBrowser to return true for tests
-    shouldLaunchBrowser: vi.fn().mockReturnValue(true),
-    // Mock openBrowserSecurely to prevent actual browser opening
-    openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
   };
 });
 

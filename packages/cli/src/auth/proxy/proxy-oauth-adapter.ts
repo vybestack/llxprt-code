@@ -5,10 +5,11 @@
  * @pseudocode analysis/pseudocode/009-proxy-oauth-adapter.md
  */
 
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
   type ProxySocketClient,
   type OAuthToken,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
 
 type FlowType = 'pkce_redirect' | 'device_code' | 'browser_redirect';
 

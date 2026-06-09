@@ -10,8 +10,9 @@ import type {
   NormalizedGenerateChatOptions,
 } from './BaseProvider.js';
 import { BaseProvider } from './BaseProvider.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-core/auth/precedence.js';
-import { type OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core/auth/precedence.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import type { OAuthManager } from '@vybestack/llxprt-code-auth';
+import { type OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import type { IModel } from './IModel.js';
 import type {
   IContent,

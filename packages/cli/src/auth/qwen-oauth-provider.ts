@@ -14,15 +14,17 @@ import type {
   OAuthToken,
   DeviceFlowConfig,
   TokenStore,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
 import {
   QwenDeviceFlow,
-  openBrowserSecurely,
-  shouldLaunchBrowser,
   OAuthError,
   OAuthErrorFactory,
   GracefulErrorHandler,
   RetryHandler,
+} from '@vybestack/llxprt-code-auth';
+import {
+  openBrowserSecurely,
+  shouldLaunchBrowser,
   DebugLogger,
   debugLogger,
 } from '@vybestack/llxprt-code-core';

@@ -23,7 +23,8 @@ import {
 } from '@google/genai';
 import { isRetryableError, retryWithBackoff } from '../utils/retry.js';
 import { prependAsyncGenerator } from '../utils/asyncIterator.js';
-import { flushRuntimeAuthScope } from '../auth/precedence.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import type { AgentRuntimeContext } from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';

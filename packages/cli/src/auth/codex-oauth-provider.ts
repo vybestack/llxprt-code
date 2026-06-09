@@ -5,19 +5,21 @@
  */
 
 import {
-  DebugLogger,
   CodexDeviceFlow,
   CodexOAuthTokenSchema,
-  CODEX_CONFIG,
-  openBrowserSecurely,
-  shouldLaunchBrowser,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
 import type {
   CodexOAuthToken,
   OAuthToken,
   TokenStore,
+} from '@vybestack/llxprt-code-auth';
+import {
+  DebugLogger,
+  openBrowserSecurely,
+  shouldLaunchBrowser,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
+import { CODEX_CONFIG } from '@vybestack/llxprt-code-auth';
 import type { OAuthProvider } from './types.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 import type { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';

@@ -9,16 +9,18 @@
  */
 
 import type { OAuthProvider } from './types.js';
-import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
+import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
 import {
   AnthropicDeviceFlow,
-  openBrowserSecurely,
-  shouldLaunchBrowser,
   OAuthError,
   OAuthErrorFactory,
   OAuthErrorType,
   GracefulErrorHandler,
   RetryHandler,
+} from '@vybestack/llxprt-code-auth';
+import {
+  openBrowserSecurely,
+  shouldLaunchBrowser,
   DebugLogger,
   debugLogger,
 } from '@vybestack/llxprt-code-core';

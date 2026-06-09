@@ -8,9 +8,11 @@
     "types": ["node", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
+      "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
       "@vybestack/llxprt-code-core": ["./index.ts"]
     }
   },
   "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"],
+  "references": [{ "path": "../auth" }]
 }

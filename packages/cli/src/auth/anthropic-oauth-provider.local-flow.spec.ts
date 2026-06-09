@@ -13,6 +13,7 @@ vi.mock('./local-oauth-callback.js', () => ({
 }));
 
 import * as coreModule from '@vybestack/llxprt-code-core';
+import { OAuthError, OAuthErrorType } from '@vybestack/llxprt-code-auth';
 import type {
   DeviceCodeResponse,
   OAuthToken,
@@ -230,7 +231,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
     const firstAttempt = provider.initiateAuth().then(
       () => 'resolved',
       (error: unknown) =>
-        error instanceof coreModule.OAuthError ? error.type : String(error),
+        error instanceof OAuthError ? error.type : String(error),
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -246,7 +247,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
           setTimeout(() => resolve('timed-out'), 50),
         ),
       ]),
-    ).resolves.toBe(coreModule.OAuthErrorType.USER_CANCELLED);
+    ).resolves.toBe(OAuthErrorType.USER_CANCELLED);
   });
 
   it('does not wait for manual entry after callback token exchange fails', async () => {
@@ -267,8 +268,8 @@ describe('AnthropicOAuthProvider local callback flow', () => {
         exchangeCodeForToken: (authCode: string) => Promise<OAuthToken>;
       }
     ).exchangeCodeForToken = vi.fn(async () => {
-      throw new coreModule.OAuthError(
-        coreModule.OAuthErrorType.INVALID_CREDENTIALS,
+      throw new OAuthError(
+        OAuthErrorType.INVALID_CREDENTIALS,
         'anthropic',
         'token exchange failed',
       );
@@ -277,7 +278,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
     const result = provider.initiateAuth().then(
       () => 'resolved',
       (error: unknown) =>
-        error instanceof coreModule.OAuthError ? error.message : String(error),
+        error instanceof OAuthError ? error.message : String(error),
     );
 
     await expect(

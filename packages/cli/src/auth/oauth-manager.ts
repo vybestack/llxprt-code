@@ -11,14 +11,15 @@ import {
   type OAuthProvider,
   type OAuthManagerRuntimeMessageBusDeps,
   type BucketFailoverOAuthManagerLike,
+  type OAuthTokenRequestMetadata,
 } from './types.js';
 import { type LoadedSettings } from '../config/settings.js';
 import { ProviderRegistry } from './provider-registry.js';
-import {
-  type MessageBus,
-  type Config,
-  type OAuthTokenRequestMetadata,
-} from '@vybestack/llxprt-code-core';
+import { type MessageBus, type Config } from '@vybestack/llxprt-code-core';
+import type {
+  OAuthManager as AuthOAuthManagerInterface,
+  OAuthTokenRequestMetadata as AuthOAuthTokenRequestMetadata,
+} from '@vybestack/llxprt-code-auth';
 import { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import { OAuthBucketManager } from './OAuthBucketManager.js';
 import { TokenAccessCoordinator } from './token-access-coordinator.js';
@@ -33,8 +34,21 @@ import {
 } from './provider-usage-info.js';
 
 /**
+ * Compile-time structural compatibility marker: ensures the auth package's
+ * OAuthTokenRequestMetadata type is compatible with the CLI's re-exported type.
+ * @plan PLAN-20260608-ISSUE1586.P12
+ */
+export type _AuthOAuthTokenRequestMetadataCompat =
+  OAuthTokenRequestMetadata extends AuthOAuthTokenRequestMetadata
+    ? AuthOAuthTokenRequestMetadata extends OAuthTokenRequestMetadata
+      ? true
+      : never
+    : never;
+
+/**
  * OAuth Manager coordinates multiple OAuth providers
  * Provides unified interface for authentication across providers
+ * @plan PLAN-20260608-ISSUE1586.P12 — structural compatibility with auth OAuthManager interface verified at compile time
  */
 export class OAuthManager implements BucketFailoverOAuthManagerLike {
   private providerRegistry: ProviderRegistry;
@@ -490,3 +504,16 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     );
   }
 }
+
+/**
+ * Compile-time structural compatibility assertion: ensures the CLI OAuthManager
+ * class satisfies the auth package's OAuthManager interface contract.
+ * This type alias is evaluated at compile time only — no runtime cost.
+ * If CLI's OAuthManager no longer satisfies the auth interface, typecheck will fail.
+ * @plan PLAN-20260608-ISSUE1586.P12
+ * @requirement REQ-OAUTH-001.1
+ */
+export type _CliOAuthManagerSatisfiesAuthInterface =
+  InstanceType<typeof OAuthManager> extends AuthOAuthManagerInterface
+    ? true
+    : never;

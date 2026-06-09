@@ -30,8 +30,9 @@ import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
 import { BaseProvider, type BaseProviderConfig } from '../BaseProvider.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
-import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-core/auth/types.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-core/auth/precedence.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth';
+import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import {
   getErrorStatus,
   isNetworkTransientError,

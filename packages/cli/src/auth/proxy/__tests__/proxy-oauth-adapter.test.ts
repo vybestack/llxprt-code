@@ -6,7 +6,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import type { ProxySocketClient } from '@vybestack/llxprt-code-core';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import type { ProxySocketClient } from '@vybestack/llxprt-code-auth';
 import { ProxyOAuthAdapter } from '../proxy-oauth-adapter.js';
 
 describe('ProxyOAuthAdapter', () => {

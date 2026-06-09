@@ -32,7 +32,8 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { type OAuthManager } from '@vybestack/llxprt-code-core/auth/precedence.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import { ToolFormatter } from '@vybestack/llxprt-code-core/tools/ToolFormatter.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import { type TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';

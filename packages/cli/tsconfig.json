@@ -9,6 +9,7 @@
     "baseUrl": ".",
     "rootDir": "..",
     "paths": {
+      "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
       "@vybestack/llxprt-code-core": ["../core/src/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
@@ -24,13 +25,17 @@
     "./package.json",
     "../providers/index.ts",
     "../providers/src/**/*.ts",
-    "../providers/src/**/*.json"
+    "../providers/src/**/*.json",
+    "../auth/src/index.ts",
+    "../auth/src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "../providers/src/**/*.test.ts",
     "../providers/src/**/*.spec.ts",
+    "../auth/src/**/*.test.ts",
+    "../auth/src/**/*.spec.ts",
 
     // TODO(5691): Fix type errors and remove excludes.
     "src/config/config.integration.test.ts",
