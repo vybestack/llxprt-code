@@ -24,7 +24,7 @@
     "./config/configTypes.js": "./dist/src/config/configTypes.js",
     "./config/models.js": "./dist/src/config/models.js",
     "./core/contentGenerator.js": "./dist/src/core/contentGenerator.js",
-    "./core/geminiChat.js": "./dist/src/core/geminiChat.js",
+    "./core/chatSession.js": "./dist/src/core/chatSession.js",
     "./core/prompts.js": "./dist/src/core/prompts.js",
     "./debug/DebugLogger.js": "./dist/src/debug/DebugLogger.js",
     "./debug/index.js": "./dist/src/debug/index.js",

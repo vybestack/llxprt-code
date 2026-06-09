@@ -129,7 +129,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     const contentGeneratorConfig =
       runtimeTask.config.getContentGeneratorConfig();
     if (contentGeneratorConfig) {
-      await runtimeTask.geminiClient.initialize(contentGeneratorConfig);
+      await runtimeTask.agentClient.initialize(contentGeneratorConfig);
     }
 
     const wrapper = new TaskWrapper(runtimeTask, agentSettings);
@@ -156,7 +156,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     const contentGeneratorConfig2 =
       runtimeTask.config.getContentGeneratorConfig();
     if (contentGeneratorConfig2) {
-      await runtimeTask.geminiClient.initialize(contentGeneratorConfig2);
+      await runtimeTask.agentClient.initialize(contentGeneratorConfig2);
     }
 
     const wrapper = new TaskWrapper(runtimeTask, agentSettings);

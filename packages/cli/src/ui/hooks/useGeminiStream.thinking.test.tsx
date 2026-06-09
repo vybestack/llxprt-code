@@ -113,7 +113,7 @@ const mockSendMessageStream = vi
   .mockReturnValue((async function* () {})());
 const mockStartChat = vi.fn();
 
-const MockedGeminiClientClass = vi.hoisted(() =>
+const MockedAgentClientClass = vi.hoisted(() =>
   vi.fn().mockImplementation(function (this: any, _config: any) {
     this.startChat = mockStartChat;
     this.sendMessageStream = mockSendMessageStream;
@@ -132,7 +132,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   return {
     ...actualCoreModule,
     GitService: vi.fn(),
-    GeminiClient: MockedGeminiClientClass,
+    AgentClient: MockedAgentClientClass,
     parseAndFormatApiError: mockParseAndFormatApiError,
   };
 });
@@ -221,8 +221,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
     mockAddItem = vi.fn();
 
-    const mockGetGeminiClient = vi.fn().mockImplementation(() => {
-      const clientInstance = new MockedGeminiClientClass(mockConfig);
+    const mockGetAgentClient = vi.fn().mockImplementation(() => {
+      const clientInstance = new MockedAgentClientClass(mockConfig);
       return clientInstance;
     });
 
@@ -257,7 +257,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
-      getGeminiClient: mockGetGeminiClient,
+      getAgentClient: mockGetAgentClient,
       getMcpClientManager: vi.fn(() => undefined),
       getMcpServers: vi.fn(() => undefined),
       getUsageStatisticsEnabled: () => true,
@@ -315,7 +315,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
   const renderTestHook = (
     initialToolCalls: TrackedToolCall[] = [],
-    geminiClient?: any,
+    agentClient?: any,
   ) => {
     let currentToolCalls = initialToolCalls;
     const setToolCalls = (newToolCalls: TrackedToolCall[]) => {
@@ -329,7 +329,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       mockCancelAllToolCalls,
     ]);
 
-    const client = geminiClient ?? mockConfig.getGeminiClient();
+    const client = agentClient ?? mockConfig.getAgentClient();
 
     const { result, rerender } = renderHook(
       (props: {
@@ -680,7 +680,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
     const { result } = renderHook(() =>
       useGeminiStream(
-        mockConfig.getGeminiClient(),
+        mockConfig.getAgentClient(),
         [],
         mockAddItem,
         mockConfig,
@@ -822,7 +822,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
     const { result } = renderHook(() =>
       useGeminiStream(
-        mockConfig.getGeminiClient(),
+        mockConfig.getAgentClient(),
         [],
         mockAddItem,
         mockConfig,

@@ -118,7 +118,7 @@ describe('mcpCommand', () => {
       getResourceRegistry: vi.fn().mockReturnValue({
         getAllResources: vi.fn().mockReturnValue([]),
       }),
-      getGeminiClient: vi.fn().mockReturnValue(null),
+      getAgentClient: vi.fn().mockReturnValue(null),
     };
 
     mockContext = createMockCommandContext({
@@ -1145,7 +1145,7 @@ describe('mcpCommand', () => {
       const mockMcpClientManager = {
         restartServer: vi.fn(),
       };
-      const mockGeminiClient = {
+      const mockAgentClient = {
         setTools: vi.fn(),
       };
 
@@ -1160,7 +1160,7 @@ describe('mcpCommand', () => {
             }),
             getToolRegistry: vi.fn().mockReturnValue({}),
             getMcpClientManager: vi.fn().mockReturnValue(mockMcpClientManager),
-            getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
+            getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
             getPromptRegistry: vi.fn().mockReturnValue({
               removePromptsByServer: vi.fn(),
             }),
@@ -1186,7 +1186,7 @@ describe('mcpCommand', () => {
       expect(mockMcpClientManager.restartServer).toHaveBeenCalledWith(
         'test-server',
       );
-      expect(mockGeminiClient.setTools).toHaveBeenCalled();
+      expect(mockAgentClient.setTools).toHaveBeenCalled();
       expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
 
       expect(isMessageAction(result)).toBe(true);
@@ -1261,7 +1261,7 @@ describe('mcpCommand', () => {
         discoverAllTools: vi.fn(),
         getAllTools: vi.fn().mockReturnValue([]),
       };
-      const mockGeminiClient = {
+      const mockAgentClient = {
         setTools: vi.fn(),
       };
 
@@ -1271,7 +1271,7 @@ describe('mcpCommand', () => {
             getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
             getBlockedMcpServers: vi.fn().mockReturnValue([]),
             getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
-            getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
+            getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
             getPromptRegistry: vi.fn().mockReturnValue({
               getPromptsByServer: vi.fn().mockReturnValue([]),
             }),
@@ -1296,7 +1296,7 @@ describe('mcpCommand', () => {
         expect.any(Number),
       );
       expect(mockToolRegistry.discoverAllTools).toHaveBeenCalled();
-      expect(mockGeminiClient.setTools).toHaveBeenCalled();
+      expect(mockAgentClient.setTools).toHaveBeenCalled();
       expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
 
       expect(isMessageAction(result)).toBe(true);

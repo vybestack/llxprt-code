@@ -15,7 +15,7 @@ const mockOpenDiff = vi.hoisted(() => vi.fn());
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 
 vi.mock('../core/client.js', () => ({
-  GeminiClient: vi.fn().mockImplementation(() => ({
+  AgentClient: vi.fn().mockImplementation(() => ({
     generateJson: mockGenerateJson,
   })),
 }));
@@ -60,7 +60,7 @@ describe('EditTool', () => {
   let tempDir: string;
   let rootDir: string;
   let mockConfig: Config;
-  let geminiClient: any;
+  let agentClient: any;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -68,12 +68,12 @@ describe('EditTool', () => {
     rootDir = path.join(tempDir, 'root');
     fs.mkdirSync(rootDir);
 
-    geminiClient = {
+    agentClient = {
       generateJson: mockGenerateJson, // mockGenerateJson is already defined and hoisted
     };
 
     mockConfig = {
-      getGeminiClient: vi.fn().mockReturnValue(geminiClient),
+      getAgentClient: vi.fn().mockReturnValue(agentClient),
       getTargetDir: () => rootDir,
       getApprovalMode: vi.fn(),
       setApprovalMode: vi.fn(),

@@ -58,13 +58,13 @@ interface HistoryServiceStub {
   getTotalTokens: ReturnType<typeof vi.fn>;
 }
 
-interface GeminiClientStub {
+interface AgentClientStub {
   hasChatInitialized: ReturnType<typeof vi.fn>;
   getHistoryService: ReturnType<typeof vi.fn>;
 }
 
 interface ConfigStub {
-  getGeminiClient: ReturnType<typeof vi.fn>;
+  getAgentClient: ReturnType<typeof vi.fn>;
 }
 
 interface RuntimeApiStub {
@@ -78,15 +78,15 @@ const makeHistoryService = (totalTokens: number): HistoryServiceStub => ({
   getTotalTokens: vi.fn().mockReturnValue(totalTokens),
 });
 
-const makeGeminiClient = (
+const makeAgentClient = (
   historyService: HistoryServiceStub,
-): GeminiClientStub => ({
+): AgentClientStub => ({
   hasChatInitialized: vi.fn().mockReturnValue(true),
   getHistoryService: vi.fn().mockReturnValue(historyService),
 });
 
-const makeConfig = (geminiClient: GeminiClientStub): ConfigStub => ({
-  getGeminiClient: vi.fn().mockReturnValue(geminiClient),
+const makeConfig = (agentClient: AgentClientStub): ConfigStub => ({
+  getAgentClient: vi.fn().mockReturnValue(agentClient),
 });
 
 const makeRuntimeApi = (
@@ -109,8 +109,8 @@ describe('useTokenMetricsTracking', () => {
 
   it('publishes initial token metrics and telemetry on mount', () => {
     const historyService = makeHistoryService(13);
-    const geminiClient = makeGeminiClient(historyService);
-    const config = makeConfig(geminiClient);
+    const agentClient = makeAgentClient(historyService);
+    const config = makeConfig(agentClient);
 
     const usage: TokenUsage = {
       input: 1,
@@ -158,8 +158,8 @@ describe('useTokenMetricsTracking', () => {
 
   it('subscribes to history service updates and updates history token count', () => {
     const historyService = makeHistoryService(88);
-    const geminiClient = makeGeminiClient(historyService);
-    const config = makeConfig(geminiClient);
+    const agentClient = makeAgentClient(historyService);
+    const config = makeConfig(agentClient);
 
     const runtimeApi = makeRuntimeApi(
       { tokensPerMinute: 10, throttleWaitTimeMs: 20 },
@@ -207,11 +207,11 @@ describe('useTokenMetricsTracking', () => {
     const historyServiceB = makeHistoryService(9);
 
     let activeHistoryService: HistoryServiceStub = historyServiceA;
-    const geminiClient: GeminiClientStub = {
+    const agentClient: AgentClientStub = {
       hasChatInitialized: vi.fn().mockReturnValue(true),
       getHistoryService: vi.fn().mockImplementation(() => activeHistoryService),
     };
-    const config = makeConfig(geminiClient);
+    const config = makeConfig(agentClient);
 
     const runtimeApi = makeRuntimeApi(
       { tokensPerMinute: 3, throttleWaitTimeMs: 4 },
@@ -264,8 +264,8 @@ describe('useTokenMetricsTracking', () => {
 
   it('does not republish token metrics when snapshot is unchanged across polling', () => {
     const historyService = makeHistoryService(5);
-    const geminiClient = makeGeminiClient(historyService);
-    const config = makeConfig(geminiClient);
+    const agentClient = makeAgentClient(historyService);
+    const config = makeConfig(agentClient);
 
     const runtimeApi = makeRuntimeApi(
       { tokensPerMinute: 12, throttleWaitTimeMs: 34 },
@@ -299,11 +299,11 @@ describe('useTokenMetricsTracking', () => {
     const historyServiceB = makeHistoryService(20);
 
     let activeHistoryService: HistoryServiceStub = historyServiceA;
-    const geminiClient: GeminiClientStub = {
+    const agentClient: AgentClientStub = {
       hasChatInitialized: vi.fn().mockReturnValue(true),
       getHistoryService: vi.fn().mockImplementation(() => activeHistoryService),
     };
-    const config = makeConfig(geminiClient);
+    const config = makeConfig(agentClient);
 
     const runtimeApi = makeRuntimeApi(
       { tokensPerMinute: 1, throttleWaitTimeMs: 2 },

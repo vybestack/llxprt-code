@@ -18,7 +18,7 @@ import type {
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
   Config,
-  GeminiClient,
+  AgentClient,
   EditorType,
   AnyToolInvocation,
 } from '@vybestack/llxprt-code-core';
@@ -124,7 +124,7 @@ const mockSendMessageStream = vi
   .mockReturnValue((async function* () {})());
 const mockStartChat = vi.fn();
 
-const MockedGeminiClientClass = vi.hoisted(() =>
+const MockedAgentClientClass = vi.hoisted(() =>
   vi.fn().mockImplementation(function (this: any, _config: any) {
     this.startChat = mockStartChat;
     this.sendMessageStream = mockSendMessageStream;
@@ -169,8 +169,8 @@ describe('useGeminiStream subagent isolation', () => {
       vertexai: false,
     };
 
-    const mockGetGeminiClient = vi.fn().mockImplementation(() => {
-      const clientInstance = new MockedGeminiClientClass(mockConfig);
+    const mockGetAgentClient = vi.fn().mockImplementation(() => {
+      const clientInstance = new MockedAgentClientClass(mockConfig);
       return clientInstance;
     });
 
@@ -198,7 +198,7 @@ describe('useGeminiStream subagent isolation', () => {
       ),
       getProjectRoot: vi.fn(() => '/tmp/project'),
       getCheckpointingEnabled: vi.fn(() => false),
-      getGeminiClient: mockGetGeminiClient,
+      getAgentClient: mockGetAgentClient,
       getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       addHistory: vi.fn(),
@@ -234,14 +234,14 @@ describe('useGeminiStream subagent isolation', () => {
 
     mockStartChat.mockClear().mockResolvedValue({
       sendMessageStream: mockSendMessageStream,
-    } as unknown as GeminiClient);
+    } as unknown as AgentClient);
     mockSendMessageStream
       .mockClear()
       .mockReturnValue((async function* () {})());
   });
 
   it('subagent completions should not reach Gemini submission pipeline', async () => {
-    const client = new MockedGeminiClientClass(mockConfig);
+    const client = new MockedAgentClientClass(mockConfig);
 
     let capturedOnComplete:
       | ((

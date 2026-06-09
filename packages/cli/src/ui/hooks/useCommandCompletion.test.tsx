@@ -207,7 +207,7 @@ describe('useCommandCompletion', () => {
   const mockCommandContext = {} as CommandContext;
   const mockConfig = {
     getEnablePromptCompletion: () => false,
-    getGeminiClient: vi.fn(),
+    getAgentClient: vi.fn(),
     getWorkspaceContext: () => ({
       getDirectories: () => [],
     }),

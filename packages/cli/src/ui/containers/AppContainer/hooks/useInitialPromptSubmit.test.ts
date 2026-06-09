@@ -38,7 +38,7 @@ describe('useInitialPromptSubmit', () => {
       useInitialPromptSubmit({
         initialPrompt: 'hello',
         submitQuery,
-        geminiClientPresent: true,
+        agentClientPresent: true,
         blockedByDialogs: blockedByDialogsClosed,
         startupGuardsInitialized: true,
       }),
@@ -58,7 +58,7 @@ describe('useInitialPromptSubmit', () => {
       useInitialPromptSubmit({
         initialPrompt: 'hello',
         submitQuery,
-        geminiClientPresent: true,
+        agentClientPresent: true,
         blockedByDialogs: blockedByDialogsClosed,
         startupGuardsInitialized: false,
       }),
@@ -79,7 +79,7 @@ describe('useInitialPromptSubmit', () => {
         useInitialPromptSubmit({
           initialPrompt: 'hello',
           submitQuery,
-          geminiClientPresent: true,
+          agentClientPresent: true,
           blockedByDialogs: blockedByDialogsClosed,
           startupGuardsInitialized,
         }),
@@ -109,7 +109,7 @@ describe('useInitialPromptSubmit', () => {
       useInitialPromptSubmit({
         initialPrompt: 'hello',
         submitQuery,
-        geminiClientPresent: true,
+        agentClientPresent: true,
         blockedByDialogs: {
           ...blockedByDialogsClosed,
           isWelcomeDialogOpen: true,
@@ -133,7 +133,7 @@ describe('useInitialPromptSubmit', () => {
         useInitialPromptSubmit({
           initialPrompt: 'hello',
           submitQuery,
-          geminiClientPresent: true,
+          agentClientPresent: true,
           blockedByDialogs: blockedByDialogsClosed,
           startupGuardsInitialized,
         }),
@@ -166,7 +166,7 @@ describe('useInitialPromptSubmit', () => {
         useInitialPromptSubmit({
           initialPrompt: 'hello',
           submitQuery,
-          geminiClientPresent: true,
+          agentClientPresent: true,
           blockedByDialogs: {
             ...blockedByDialogsClosed,
             isFolderTrustDialogOpen,
@@ -205,7 +205,7 @@ describe('useInitialPromptSubmit', () => {
       useInitialPromptSubmit({
         initialPrompt: 'hello',
         submitQuery,
-        geminiClientPresent: false,
+        agentClientPresent: false,
         blockedByDialogs: blockedByDialogsClosed,
         startupGuardsInitialized: true,
       }),
@@ -225,7 +225,7 @@ describe('useInitialPromptSubmit', () => {
       useInitialPromptSubmit({
         initialPrompt: undefined,
         submitQuery,
-        geminiClientPresent: true,
+        agentClientPresent: true,
         blockedByDialogs: blockedByDialogsClosed,
         startupGuardsInitialized: true,
       }),
@@ -245,7 +245,7 @@ describe('useInitialPromptSubmit', () => {
       useInitialPromptSubmit({
         initialPrompt: 'hello',
         submitQuery,
-        geminiClientPresent: true,
+        agentClientPresent: true,
         blockedByDialogs: {
           ...blockedByDialogsClosed,
           isFolderTrustDialogOpen: true,
@@ -275,7 +275,7 @@ describe('useInitialPromptSubmit', () => {
         useInitialPromptSubmit({
           initialPrompt: 'hello',
           submitQuery,
-          geminiClientPresent: true,
+          agentClientPresent: true,
           blockedByDialogs: {
             ...blockedByDialogsClosed,
             isFolderTrustDialogOpen,
@@ -323,7 +323,7 @@ describe('useInitialPromptSubmit', () => {
         useInitialPromptSubmit({
           initialPrompt: 'hello',
           submitQuery,
-          geminiClientPresent: true,
+          agentClientPresent: true,
           blockedByDialogs: {
             ...blockedByDialogsClosed,
             isFolderTrustDialogOpen,

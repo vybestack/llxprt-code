@@ -16,7 +16,7 @@ import {
 } from './checkpointUtils.js';
 import type { ToolCallRequestInfo } from '../core/turn.js';
 import type { GitService } from '../services/gitService.js';
-import type { GeminiClient } from '../core/client.js';
+import type { AgentClient } from '../core/client.js';
 import type { Content } from '@google/genai';
 
 describe('checkpointUtils', () => {
@@ -216,14 +216,14 @@ describe('checkpointUtils', () => {
   describe('processRestorableToolCalls', () => {
     it('returns empty maps for empty input', async () => {
       const mockGitService = {} as GitService;
-      const mockGeminiClient = {
+      const mockAgentClient = {
         getHistory: vi.fn().mockResolvedValue([]),
-      } as unknown as GeminiClient;
+      } as unknown as AgentClient;
 
       const result = await processRestorableToolCalls(
         [],
         mockGitService,
-        mockGeminiClient,
+        mockAgentClient,
       );
 
       expect(result.checkpointsToWrite.size).toBe(0);
@@ -247,14 +247,14 @@ describe('checkpointUtils', () => {
         getCurrentCommitHash: vi.fn().mockResolvedValue(undefined),
       } as unknown as GitService;
 
-      const mockGeminiClient = {
+      const mockAgentClient = {
         getHistory: vi.fn().mockResolvedValue([]),
-      } as unknown as GeminiClient;
+      } as unknown as AgentClient;
 
       const result = await processRestorableToolCalls(
         toolCalls,
         mockGitService,
-        mockGeminiClient,
+        mockAgentClient,
       );
 
       expect(result.errors.length).toBeGreaterThan(0);
@@ -282,14 +282,14 @@ describe('checkpointUtils', () => {
         getCurrentCommitHash: vi.fn(),
       } as unknown as GitService;
 
-      const mockGeminiClient = {
+      const mockAgentClient = {
         getHistory: vi.fn().mockResolvedValue(mockClientHistory),
-      } as unknown as GeminiClient;
+      } as unknown as AgentClient;
 
       const result = await processRestorableToolCalls(
         toolCalls,
         mockGitService,
-        mockGeminiClient,
+        mockAgentClient,
         { customHistory: 'data' },
       );
 
@@ -325,14 +325,14 @@ describe('checkpointUtils', () => {
         getCurrentCommitHash: vi.fn().mockResolvedValue('fallback-hash'),
       } as unknown as GitService;
 
-      const mockGeminiClient = {
+      const mockAgentClient = {
         getHistory: vi.fn().mockResolvedValue([]),
-      } as unknown as GeminiClient;
+      } as unknown as AgentClient;
 
       const result = await processRestorableToolCalls(
         toolCalls,
         mockGitService,
-        mockGeminiClient,
+        mockAgentClient,
       );
 
       expect(result.checkpointsToWrite.size).toBe(1);
@@ -361,14 +361,14 @@ describe('checkpointUtils', () => {
         createFileSnapshot: vi.fn().mockResolvedValue('hash'),
       } as unknown as GitService;
 
-      const mockGeminiClient = {
+      const mockAgentClient = {
         getHistory: vi.fn().mockResolvedValue([]),
-      } as unknown as GeminiClient;
+      } as unknown as AgentClient;
 
       const result = await processRestorableToolCalls(
         toolCalls,
         mockGitService,
-        mockGeminiClient,
+        mockAgentClient,
       );
 
       expect(result.checkpointsToWrite.size).toBe(0);

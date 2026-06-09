@@ -397,7 +397,7 @@ import type { Config, IContent } from '@vybestack/llxprt-code-core';
 
 // Type for the mock config
 interface MockConfig {
-  getGeminiClient: () => {
+  getAgentClient: () => {
     getUserTier: () => Promise<undefined>;
     hasChatInitialized?: () => boolean;
   };
@@ -433,7 +433,7 @@ interface MockConfig {
  */
 function createMockConfig(overrides: Partial<MockConfig> = {}): MockConfig {
   return {
-    getGeminiClient: () => ({
+    getAgentClient: () => ({
       getUserTier: vi.fn().mockResolvedValue(undefined),
       hasChatInitialized: () => false,
     }),

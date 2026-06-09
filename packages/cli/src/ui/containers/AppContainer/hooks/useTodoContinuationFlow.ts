@@ -71,9 +71,9 @@ export function useTodoContinuationFlow({
    * Wire up task-list continuation detection to trigger continuation prompts
    * when streams complete without tool calls and active tasks exist.
    */
-  const geminiClientForContinuation = config.getGeminiClient();
+  const agentClientForContinuation = config.getAgentClient();
   const todoContinuation = useTodoContinuation(
-    geminiClientForContinuation,
+    agentClientForContinuation,
     config,
     streamingState === StreamingState.Responding ||
       streamingState === StreamingState.WaitingForConfirmation,

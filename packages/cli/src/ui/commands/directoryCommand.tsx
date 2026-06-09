@@ -169,7 +169,7 @@ export const directoryCommand: SlashCommand = {
         await refreshMemoryAfterAdd(context, config, added, errors);
 
         if (added.length > 0) {
-          await config.getGeminiClient().addDirectoryContext();
+          await config.getAgentClient().addDirectoryContext();
           addItem(
             {
               type: MessageType.INFO,

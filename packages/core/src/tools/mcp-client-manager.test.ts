@@ -52,7 +52,7 @@ describe('McpClientManager', () => {
       getExtensionEvents: () => undefined,
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
-      getGeminiClient: () => ({
+      getAgentClient: () => ({
         isInitialized: () => false,
       }),
       refreshMcpContext: vi.fn(),
@@ -96,7 +96,7 @@ describe('McpClientManager', () => {
       getExtensionEvents: () => undefined,
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
-      getGeminiClient: () => ({
+      getAgentClient: () => ({
         isInitialized: () => false,
       }),
       refreshMcpContext,
@@ -141,7 +141,7 @@ describe('McpClientManager', () => {
       getExtensionEvents: () => undefined,
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
-      getGeminiClient: () => ({
+      getAgentClient: () => ({
         isInitialized: () => false,
       }),
     } as unknown as Config;
@@ -155,7 +155,7 @@ describe('McpClientManager', () => {
     expect(mockedMcpClient.discover).not.toHaveBeenCalled();
   });
 
-  it('should not hang when geminiClient is not yet initialized during discovery', async () => {
+  it('should not hang when agentClient is not yet initialized during discovery', async () => {
     const mockedMcpClient = {
       connect: vi.fn(),
       discover: vi.fn(),
@@ -166,9 +166,9 @@ describe('McpClientManager', () => {
     vi.mocked(McpClient).mockReturnValue(
       mockedMcpClient as unknown as McpClient,
     );
-    // Simulate the real initialization order: geminiClient is created AFTER
+    // Simulate the real initialization order: agentClient is created AFTER
     // Promise.all([startConfiguredMcpServers(), extensionLoader.start()]),
-    // so getGeminiClient() returns undefined during MCP discovery.
+    // so getAgentClient() returns undefined during MCP discovery.
     const mockConfig = {
       isTrustedFolder: () => true,
       getMcpServers: () => ({
@@ -183,7 +183,7 @@ describe('McpClientManager', () => {
       getExtensionEvents: () => undefined,
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
-      getGeminiClient: () => undefined,
+      getAgentClient: () => undefined,
       refreshMcpContext: vi.fn(),
     } as unknown as Config;
     const manager = new McpClientManager(
@@ -240,7 +240,7 @@ describe('McpClientManager', () => {
         getExtensionEvents: () => undefined,
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
-        getGeminiClient: () => ({
+        getAgentClient: () => ({
           isInitialized: () => false,
         }),
         refreshMcpContext: vi.fn(),
@@ -294,7 +294,7 @@ describe('McpClientManager', () => {
         getExtensionEvents: () => undefined,
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
-        getGeminiClient: () => ({
+        getAgentClient: () => ({
           isInitialized: () => false,
         }),
         refreshMcpContext: vi.fn(),
@@ -353,7 +353,7 @@ describe('McpClientManager', () => {
         getExtensionEvents: () => undefined,
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
-        getGeminiClient: () => ({
+        getAgentClient: () => ({
           isInitialized: () => false,
         }),
         refreshMcpContext: vi.fn(),
@@ -405,7 +405,7 @@ describe('McpClientManager', () => {
         getExtensionEvents: () => undefined,
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
-        getGeminiClient: () => ({
+        getAgentClient: () => ({
           isInitialized: () => false,
         }),
         refreshMcpContext: vi.fn(),
@@ -496,7 +496,7 @@ describe('McpClientManager', () => {
         getExtensionEvents: () => undefined,
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
-        getGeminiClient: () => ({
+        getAgentClient: () => ({
           isInitialized: () => false,
         }),
         refreshMcpContext: vi.fn(),

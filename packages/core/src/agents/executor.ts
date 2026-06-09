@@ -9,10 +9,10 @@
 import type { Config } from '../config/config.js';
 import { reportError } from '../utils/errorReporting.js';
 import {
-  GeminiChat,
+  ChatSession,
   StreamEventType,
   type StreamEvent,
-} from '../core/geminiChat.js';
+} from '../core/chatSession.js';
 import { Type } from '@google/genai';
 import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { type ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
@@ -252,7 +252,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
   /** Runs the agent loop until termination, returning the reason and result. */
   private async runAgentLoop(
-    chat: GeminiChat,
+    chat: ChatSession,
     tools: FunctionDeclaration[],
     initialMessage: Content,
     signal: AbortSignal,
@@ -296,7 +296,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
   /** Single iteration of the agent loop. */
   private async runAgentLoopIteration(
-    chat: GeminiChat,
+    chat: ChatSession,
     tools: FunctionDeclaration[],
     signal: AbortSignal,
     startTime: number,
@@ -349,7 +349,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   /** Body of the agent loop iteration (after termination checks). */
   // eslint-disable-next-line max-lines-per-function -- Agent iteration orchestration coordinates model calls, recovery handling, and tool dispatch in one control-flow boundary.
   private async runAgentLoopIterationBody(
-    chat: GeminiChat,
+    chat: ChatSession,
     tools: FunctionDeclaration[],
     signal: AbortSignal,
     startTime: number,
@@ -671,7 +671,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
    * @returns The model's response, including any tool calls or text.
    */
   private async callModel(
-    chat: GeminiChat,
+    chat: ChatSession,
     message: Content,
     tools: FunctionDeclaration[],
     signal: AbortSignal,
@@ -796,8 +796,8 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     }
   }
 
-  /** Initializes a `GeminiChat` instance for the agent run. */
-  private async createChatObject(inputs: AgentInputs): Promise<GeminiChat> {
+  /** Initializes a `ChatSession` instance for the agent run. */
+  private async createChatObject(inputs: AgentInputs): Promise<ChatSession> {
     const { promptConfig, modelConfig } = this.definition;
 
     if (!promptConfig.systemPrompt && !promptConfig.initialMessages) {
@@ -822,7 +822,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       );
       const runtimeBundle = await this.buildRuntimeBundle();
 
-      return new GeminiChat(
+      return new ChatSession(
         runtimeBundle.runtimeContext,
         runtimeBundle.contentGenerator,
         generationConfig,
@@ -860,7 +860,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     return generationConfig;
   }
 
-  /** Builds the runtime bundle for the GeminiChat instance. */
+  /** Builds the runtime bundle for the ChatSession instance. */
   private async buildRuntimeBundle() {
     const settings = this.resolveSettingsSnapshot();
     const runtimeState = createAgentRuntimeStateFromConfig(this.runtimeContext);
@@ -931,7 +931,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       return (
         this.runtimeContext
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
-          .getGeminiClient?.()
+          .getAgentClient?.()
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
           ?.getContentGenerator()
       );

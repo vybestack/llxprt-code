@@ -44,12 +44,12 @@ const MAX_MCP_RESOURCES_TO_SHOW = 10;
 
 type RuntimeConfigWithOptionalServices = Omit<
   Config,
-  | 'getGeminiClient'
+  | 'getAgentClient'
   | 'getMcpClientManager'
   | 'getResourceRegistry'
   | 'getToolRegistry'
 > & {
-  getGeminiClient?: () => ReturnType<Config['getGeminiClient']> | undefined;
+  getAgentClient?: () => ReturnType<Config['getAgentClient']> | undefined;
   getMcpClientManager?: () =>
     | ReturnType<Config['getMcpClientManager']>
     | undefined;
@@ -707,9 +707,9 @@ async function performMcpOAuth(
       );
       await mcpClientManager.restartServer(serverName);
     }
-    const geminiClient = runtimeConfig.getGeminiClient?.();
-    if (geminiClient) {
-      await geminiClient.setTools();
+    const agentClient = runtimeConfig.getAgentClient?.();
+    if (agentClient) {
+      await agentClient.setTools();
     }
 
     context.ui.reloadCommands();
@@ -836,9 +836,9 @@ const refreshCommand: SlashCommand = {
     await toolRegistry.discoverAllTools();
 
     // Update the client with the new tools
-    const geminiClient = runtimeConfig.getGeminiClient?.();
-    if (geminiClient) {
-      await geminiClient.setTools();
+    const agentClient = runtimeConfig.getAgentClient?.();
+    if (agentClient) {
+      await agentClient.setTools();
     }
 
     // Reload the slash commands to reflect the changes.
