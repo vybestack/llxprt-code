@@ -87,7 +87,7 @@ function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
 interface ToolCallCheckpoint {
   history?: Parameters<NonNullable<LoadHistory>>[0];
   clientHistory?: Parameters<
-    ReturnType<Config['getGeminiClient']>['setHistory']
+    ReturnType<Config['getAgentClient']>['setHistory']
   >[0];
   commitHash?: string;
   toolCall: { name: string; args: Record<string, unknown> };
@@ -110,7 +110,7 @@ async function applyCheckpointRestoration(
   }
 
   if (Array.isArray(toolCallData.clientHistory)) {
-    await config.getGeminiClient().setHistory(toolCallData.clientHistory);
+    await config.getAgentClient().setHistory(toolCallData.clientHistory);
   }
 
   if (

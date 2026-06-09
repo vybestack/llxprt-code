@@ -539,7 +539,7 @@ export function resolveRuntimeStateFromFlags(
  */
 export interface BootstrapResult {
   adapter: AgentRuntimeAdapter;
-  client: unknown; // GeminiClient - will be typed properly in future phases
+  client: unknown; // AgentClient - will be typed properly in future phases
 }
 
 /**
@@ -565,7 +565,7 @@ export async function bootstrapForegroundAgent(
   // Phase C: Create adapter
   const adapter = new AgentRuntimeAdapter(runtimeState, config);
 
-  // Phase D & E: Create history service and GeminiClient (stub for now)
+  // Phase D & E: Create history service and AgentClient (stub for now)
   const client = {}; // Stub - will be implemented in future phases
 
   return { adapter, client };

@@ -37,8 +37,10 @@ type LspServerConfig = {
 type LspBootstrapConfig = {
   servers?: LspServerConfig[];
   diagnosticsTimeoutMs?: number;
+  firstTouchTimeoutMs?: number;
   navigationTimeoutMs?: number;
   navigationTools?: boolean;
+  requestTimeoutMs?: number;
 };
 
 type LspBootstrap = {
@@ -124,6 +126,22 @@ const validateServers = (
   });
 };
 
+const validateOptionalPositiveTimeout = (
+  value: unknown,
+  fieldName: string,
+): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === 'number') {
+    if (!(Number.isFinite(value) && value > 0)) {
+      fatal(`${fieldName} must be a finite positive number`);
+    }
+    return value;
+  }
+  return fatal(`${fieldName} must be a number`);
+};
+
 const validateConfig = (configInput: unknown): LspBootstrapConfig => {
   if (configInput === undefined) {
     return { ...defaultBootstrapConfig };
@@ -135,26 +153,28 @@ const validateConfig = (configInput: unknown): LspBootstrapConfig => {
 
   const configRecord = configInput as Record<string, unknown>;
 
-  const diagnosticsTimeoutMs = configRecord.diagnosticsTimeoutMs;
-  if (
-    diagnosticsTimeoutMs !== undefined &&
-    typeof diagnosticsTimeoutMs !== 'number'
-  ) {
-    fatal('LSP_BOOTSTRAP.config.diagnosticsTimeoutMs must be a number');
-  }
-
-  const navigationTimeoutMs = configRecord.navigationTimeoutMs;
-  if (
-    navigationTimeoutMs !== undefined &&
-    typeof navigationTimeoutMs !== 'number'
-  ) {
-    fatal('LSP_BOOTSTRAP.config.navigationTimeoutMs must be a number');
-  }
+  const diagnosticsTimeoutMs = validateOptionalPositiveTimeout(
+    configRecord.diagnosticsTimeoutMs,
+    'LSP_BOOTSTRAP.config.diagnosticsTimeoutMs',
+  );
+  const navigationTimeoutMs = validateOptionalPositiveTimeout(
+    configRecord.navigationTimeoutMs,
+    'LSP_BOOTSTRAP.config.navigationTimeoutMs',
+  );
+  const firstTouchTimeoutMs = validateOptionalPositiveTimeout(
+    configRecord.firstTouchTimeoutMs,
+    'LSP_BOOTSTRAP.config.firstTouchTimeoutMs',
+  );
 
   const navigationTools = configRecord.navigationTools;
   if (navigationTools !== undefined && typeof navigationTools !== 'boolean') {
     fatal('LSP_BOOTSTRAP.config.navigationTools must be a boolean');
   }
+
+  const requestTimeoutMs = validateOptionalPositiveTimeout(
+    configRecord.requestTimeoutMs,
+    'LSP_BOOTSTRAP.config.requestTimeoutMs',
+  );
 
   const servers = validateServers(configRecord.servers);
 
@@ -162,8 +182,10 @@ const validateConfig = (configInput: unknown): LspBootstrapConfig => {
     ...(typeof diagnosticsTimeoutMs === 'number'
       ? { diagnosticsTimeoutMs }
       : {}),
+    ...(typeof firstTouchTimeoutMs === 'number' ? { firstTouchTimeoutMs } : {}),
     ...(typeof navigationTimeoutMs === 'number' ? { navigationTimeoutMs } : {}),
     ...(typeof navigationTools === 'boolean' ? { navigationTools } : {}),
+    ...(typeof requestTimeoutMs === 'number' ? { requestTimeoutMs } : {}),
     ...(servers ? { servers } : {}),
   };
 };

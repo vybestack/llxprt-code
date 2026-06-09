@@ -21,8 +21,8 @@ import type {
   FinishReason,
 } from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
-import type { GeminiChat } from './geminiChat.js';
-import { InvalidStreamError, StreamEventType } from './geminiChat.js';
+import type { ChatSession } from './chatSession.js';
+import { InvalidStreamError, StreamEventType } from './chatSession.js';
 
 const mockSendMessageStream = vi.fn();
 const mockGetHistory = vi.fn();
@@ -104,7 +104,7 @@ describe('Turn', () => {
       getConfig: () => undefined,
     };
     turn = new Turn(
-      mockChatInstance as unknown as GeminiChat,
+      mockChatInstance as unknown as ChatSession,
       'prompt-id-1',
       DEFAULT_AGENT_ID,
       'test',
@@ -288,7 +288,7 @@ describe('Turn', () => {
           }),
         };
         turn = new Turn(
-          mockChatInstance as unknown as GeminiChat,
+          mockChatInstance as unknown as ChatSession,
           'prompt-id-1',
           DEFAULT_AGENT_ID,
           'test',
@@ -881,7 +881,7 @@ describe('Turn', () => {
           }),
         };
         turn = new Turn(
-          mockChatInstance as unknown as GeminiChat,
+          mockChatInstance as unknown as ChatSession,
           'prompt-id-1',
           DEFAULT_AGENT_ID,
           'test',
@@ -966,7 +966,7 @@ describe('Turn', () => {
           }),
         };
         turn = new Turn(
-          mockChatInstance as unknown as GeminiChat,
+          mockChatInstance as unknown as ChatSession,
           'prompt-id-1',
           DEFAULT_AGENT_ID,
           'test',
@@ -1673,7 +1673,7 @@ describe('Turn', () => {
       } as unknown as MockedChatInstance;
 
       turn = new Turn(
-        mockChatInstance as unknown as GeminiChat,
+        mockChatInstance as unknown as ChatSession,
         'prompt-id-1',
         DEFAULT_AGENT_ID,
         'test',
@@ -1742,7 +1742,7 @@ describe('Turn', () => {
       } as unknown as MockedChatInstance;
 
       turn = new Turn(
-        mockChatInstance as unknown as GeminiChat,
+        mockChatInstance as unknown as ChatSession,
         'prompt-id-1',
         DEFAULT_AGENT_ID,
         'test',
@@ -1791,7 +1791,7 @@ describe('Turn', () => {
       } as unknown as MockedChatInstance;
 
       turn = new Turn(
-        mockChatInstance as unknown as GeminiChat,
+        mockChatInstance as unknown as ChatSession,
         'prompt-id-1',
         DEFAULT_AGENT_ID,
         'test',
@@ -1866,7 +1866,7 @@ describe('Turn', () => {
       } as unknown as MockedChatInstance;
 
       turn = new Turn(
-        mockChatInstance as unknown as GeminiChat,
+        mockChatInstance as unknown as ChatSession,
         'prompt-id-1',
         DEFAULT_AGENT_ID,
         'test',
@@ -1931,7 +1931,7 @@ describe('Turn', () => {
       } as unknown as MockedChatInstance;
 
       turn = new Turn(
-        mockChatInstance as unknown as GeminiChat,
+        mockChatInstance as unknown as ChatSession,
         'prompt-id-1',
         DEFAULT_AGENT_ID,
         'test',

@@ -12,6 +12,8 @@
       "@vybestack/llxprt-code-providers/*": ["./src/*"],
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
+      "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"],
       "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
       "@vybestack/llxprt-code-settings/*": ["../settings/src/*"]
     }
@@ -21,6 +23,8 @@
     "src/**/*.ts",
     "src/**/*.json",
     "../core/src/types/wasm.d.ts",
+    "../mcp/index.ts",
+    "../mcp/src/**/*.ts",
     "../settings/index.ts",
     "../settings/src/**/*.ts"
   ],
@@ -29,6 +33,8 @@
     "dist",
     "**/*.test.ts",
     "**/*.spec.ts",
+    "../mcp/src/**/*.test.ts",
+    "../mcp/src/**/*.spec.ts",
     "../settings/src/**/*.test.ts",
     "../settings/src/**/*.spec.ts"
   ]

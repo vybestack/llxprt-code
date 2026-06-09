@@ -73,7 +73,7 @@ export * from './commands/types.js';
 export * from './core/client.js';
 export * from './core/baseLlmClient.js';
 export * from './core/contentGenerator.js';
-export * from './core/geminiChat.js';
+export * from './core/chatSession.js';
 export * from './core/logger.js';
 export * from './core/prompts.js';
 export * from './core/tokenLimits.js';
@@ -184,6 +184,32 @@ export {
   PARTIAL_FRAME_TIMEOUT_MS,
 } from './auth/proxy/framing.js';
 export { sanitizeTokenForProxy } from './auth/token-sanitization.js';
+export {
+  SecureStore,
+  SecureStoreError,
+  createDefaultKeyringAdapter,
+} from './storage/secure-store.js';
+export type {
+  KeyringAdapter,
+  SecureStoreOptions,
+} from './storage/secure-store.js';
+export {
+  ProviderKeyStorage,
+  getProviderKeyStorage,
+  resetProviderKeyStorage,
+} from './storage/provider-key-storage.js';
+export {
+  ToolKeyStorage,
+  getToolKeyStorage,
+  isValidToolKeyName,
+  getSupportedToolNames,
+  getToolKeyEntry,
+  maskKeyForDisplay,
+} from './tools/tool-key-storage.js';
+export { TodoStore } from './tools/todo-store.js';
+export { todoEvents } from './tools/todo-events.js';
+export type { Todo, Subtask, TodoToolCall } from './tools/todo-schemas.js';
+export type { TodoUpdateEvent } from './tools/todo-events.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
@@ -215,6 +241,8 @@ export * from './tools/tool-registry.js';
 export * from './tools/tool-context.js';
 export * from './tools/tool-names.js';
 
+export * from './todo/todoFormatter.js';
+
 // Export prompt logic
 export * from './prompts/mcp-prompts.js';
 
@@ -241,53 +269,43 @@ export * from './tools/google-web-search.js';
 export * from './tools/exa-web-search.js';
 export * from './tools/codesearch.js';
 export * from './tools/read-many-files.js';
-export * from './tools/mcp-client.js';
-export * from './tools/mcp-tool.js';
-export * from './tools/todo-read.js';
-export * from './tools/todo-write.js';
-export * from './tools/todo-pause.js';
-export * from './tools/todo-schemas.js';
-export * from './tools/todo-store.js';
-export * from './tools/todo-events.js';
-export * from './tools/list-subagents.js';
-export * from './tools/task.js';
-export * from './tools/tool-key-storage.js';
+// MCP client/tool — re-exported from @vybestack/llxprt-code-mcp
 export {
-  ProviderKeyStorage,
-  getProviderKeyStorage,
-  resetProviderKeyStorage,
-  validateKeyName,
-  KEY_NAME_REGEX,
-} from './storage/provider-key-storage.js';
-export {
-  SecureStore,
-  SecureStoreError,
-  createDefaultKeyringAdapter,
-  type KeyringAdapter,
-  type SecureStoreErrorCode,
-  type SecureStoreOptions,
-} from './storage/secure-store.js';
-export * from './todo/todoFormatter.js';
+  DiscoveredMCPTool,
+  MCPServerStatus,
+  MCPDiscoveryState,
+  McpClient,
+  getAllMCPServerStatuses,
+  getMCPDiscoveryState,
+  getMCPServerStatus,
+  updateMCPServerStatus,
+  addMCPStatusChangeListener,
+  removeMCPStatusChangeListener,
+  createTransport,
+  mcpServerRequiresOAuth,
+  populateMcpServerCommand,
+  hasNetworkTransport,
+  MCP_DEFAULT_TIMEOUT_MSEC,
+  McpClientManager,
 
-// MCP OAuth
-export { MCPOAuthProvider } from './mcp/oauth-provider.js';
-export { MCPOAuthTokenStorage } from './mcp/oauth-token-storage.js';
+  // MCP OAuth — also re-exported from @vybestack/llxprt-code-mcp
+  MCPOAuthProvider,
+  MCPOAuthTokenStorage,
+  BaseTokenStore,
+  FileTokenStore,
+  OAuthUtils,
+} from '@vybestack/llxprt-code-mcp';
+
 export type {
   MCPOAuthToken,
   MCPOAuthCredentials,
-} from './mcp/oauth-token-storage.js';
-export { BaseTokenStore } from './mcp/token-store.js';
-export type {
+  MCPOAuthConfig,
+  DiscoveredMCPPrompt,
   MCPOAuthToken as MCPOAuthTokenInterface,
   MCPOAuthCredentials as MCPOAuthCredentialsInterface,
-} from './mcp/token-store.js';
-export { FileTokenStore } from './mcp/file-token-store.js';
-export type { MCPOAuthConfig } from './mcp/oauth-provider.js';
-export type {
   OAuthAuthorizationServerMetadata,
   OAuthProtectedResourceMetadata,
-} from './mcp/oauth-utils.js';
-export { OAuthUtils } from './mcp/oauth-utils.js';
+} from '@vybestack/llxprt-code-mcp';
 
 // Export telemetry functions
 export * from './telemetry/index.js';
@@ -408,9 +426,7 @@ export {
   type GeminiCLIExtension,
 } from './utils/extensionLoader.js';
 
-// Export MCP Client Manager
-export { McpClientManager } from './tools/mcp-client-manager.js';
-export { McpClient } from './tools/mcp-client.js';
+// Export MCP Client Manager — re-exported from @vybestack/llxprt-code-mcp (also available above)
 
 // Export models (legacy constants)
 export * from './config/models.js';

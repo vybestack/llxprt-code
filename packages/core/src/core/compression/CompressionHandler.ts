@@ -45,7 +45,7 @@ import {
 } from './compressionBudgeting.js';
 
 /**
- * CompressionHandler orchestrates all compression logic for GeminiChat.
+ * CompressionHandler orchestrates all compression logic for ChatSession.
  * Manages compression state, retry/fallback logic, and density optimization.
  *
  * @plan PLAN-20260220-DECOMPOSE.P03

@@ -44,7 +44,7 @@ describe('restoreCommand', () => {
         getProjectTempCheckpointsDir: vi.fn().mockReturnValue(checkpointsDir),
         getProjectTempDir: vi.fn().mockReturnValue(geminiTempDir),
       },
-      getGeminiClient: vi.fn().mockReturnValue({
+      getAgentClient: vi.fn().mockReturnValue({
         setHistory: mockSetHistory,
       }),
     } as unknown as Config;

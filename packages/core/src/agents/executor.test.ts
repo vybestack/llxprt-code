@@ -18,10 +18,10 @@ import { ToolRegistry } from '../tools/tool-registry.js';
 import { LSTool } from '../tools/ls.js';
 import { ReadFileTool } from '../tools/read-file.js';
 import {
-  GeminiChat,
+  ChatSession,
   StreamEventType,
   type StreamEvent,
-} from '../core/geminiChat.js';
+} from '../core/chatSession.js';
 import {
   type FunctionCall,
   type Part,
@@ -41,11 +41,12 @@ const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
   mockExecuteToolCall: vi.fn(),
 }));
 
-vi.mock('../core/geminiChat.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../core/geminiChat.js')>();
+vi.mock('../core/chatSession.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../core/chatSession.js')>();
   return {
     ...actual,
-    GeminiChat: vi.fn().mockImplementation(() => ({
+    ChatSession: vi.fn().mockImplementation(() => ({
       sendMessageStream: mockSendMessageStream,
     })),
   };
@@ -57,7 +58,7 @@ vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
 
 vi.mock('../utils/environmentContext.js');
 
-const MockedGeminiChat = vi.mocked(GeminiChat);
+const MockedChatSession = vi.mocked(ChatSession);
 const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
 
 // Constants for testing
@@ -207,11 +208,11 @@ describe('AgentExecutor', () => {
     mockSendMessageStream.mockReset();
     mockExecuteToolCall.mockReset();
 
-    MockedGeminiChat.mockImplementation(
+    MockedChatSession.mockImplementation(
       () =>
         ({
           sendMessageStream: mockSendMessageStream,
-        }) as unknown as GeminiChat,
+        }) as unknown as ChatSession,
     );
 
     vi.useFakeTimers();
@@ -335,7 +336,7 @@ describe('AgentExecutor', () => {
 
       expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
 
-      const chatConstructorArgs = MockedGeminiChat.mock.calls[0];
+      const chatConstructorArgs = MockedChatSession.mock.calls[0];
       const chatConfig = chatConstructorArgs[2]; // generationConfig is the 3rd argument (index 2)
       expect(chatConfig?.systemInstruction).toContain(
         `MUST call the \`${TASK_COMPLETE_TOOL_NAME}\` tool`,

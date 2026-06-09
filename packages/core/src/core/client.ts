@@ -25,7 +25,7 @@ import {
   buildToolDeclarationsFromView,
   getEnabledToolNamesForPrompt,
 } from './clientToolGovernance.js';
-import type { GeminiChat } from './geminiChat.js';
+import type { ChatSession } from './chatSession.js';
 import { DebugLogger } from '../debug/index.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 
@@ -69,8 +69,8 @@ import {
   type MessageStreamDeps,
 } from './MessageStreamOrchestrator.js';
 
-export class GeminiClient {
-  private chat?: GeminiChat;
+export class AgentClient {
+  private chat?: ChatSession;
   private contentGenerator?: ContentGenerator;
   private embeddingModel: string;
   private logger: DebugLogger;
@@ -337,7 +337,7 @@ export class GeminiClient {
     }
   }
 
-  getChat(): GeminiChat {
+  getChat(): ChatSession {
     if (!this.chat) {
       throw new Error('Chat not initialized');
     }
@@ -503,7 +503,7 @@ export class GeminiClient {
 
   /**
    * Updates the UI telemetry service with the current prompt token count from chat.
-   * This decouples GeminiChat from directly knowing about uiTelemetryService.
+   * This decouples ChatSession from directly knowing about uiTelemetryService.
    */
   private updateTelemetryTokenCount(): void {
     if (this.chat) {
@@ -638,7 +638,7 @@ export class GeminiClient {
     return this.getChat().generateDirectMessage(params, promptId);
   }
 
-  async startChat(extraHistory?: Content[]): Promise<GeminiChat> {
+  async startChat(extraHistory?: Content[]): Promise<ChatSession> {
     this.ideContextTracker.resetContext();
     await this.lazyInitialize();
 

@@ -18,7 +18,7 @@ describe('usePrivacySettings', () => {
   it('should throw error when content generator is not a CodeAssistServer', async () => {
     // Mock config to return undefined content generator
     const testConfig = {
-      getGeminiClient: vi.fn().mockReturnValue({
+      getAgentClient: vi.fn().mockReturnValue({
         getContentGenerator: vi.fn().mockReturnValue(undefined),
       }),
     } as unknown as Config;
@@ -40,7 +40,7 @@ describe('usePrivacySettings', () => {
     } as unknown as CodeAssistServer;
 
     const testConfig = {
-      getGeminiClient: vi.fn().mockReturnValue({
+      getAgentClient: vi.fn().mockReturnValue({
         getContentGenerator: vi.fn().mockReturnValue(mockCodeAssistServer),
       }),
     } as unknown as Config;
@@ -63,7 +63,7 @@ describe('usePrivacySettings', () => {
     } as unknown as CodeAssistServer;
 
     const testConfig = {
-      getGeminiClient: vi.fn().mockReturnValue({
+      getAgentClient: vi.fn().mockReturnValue({
         getContentGenerator: vi.fn().mockReturnValue(mockCodeAssistServer),
       }),
     } as unknown as Config;
@@ -92,7 +92,7 @@ describe('usePrivacySettings', () => {
     } as unknown as CodeAssistServer;
 
     const testConfig = {
-      getGeminiClient: vi.fn().mockReturnValue({
+      getAgentClient: vi.fn().mockReturnValue({
         getContentGenerator: vi.fn().mockReturnValue(mockCodeAssistServer),
       }),
     } as unknown as Config;

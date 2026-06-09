@@ -8,7 +8,7 @@ import { useMemo, useRef } from 'react';
 import {
   type Config,
   type EditorType,
-  type GeminiClient,
+  type AgentClient,
   type MessageBus,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
@@ -32,7 +32,7 @@ import {
 } from './useGeminiStreamLifecycle.js';
 
 export interface GeminiStreamOrchestrationDeps {
-  geminiClient: GeminiClient;
+  agentClient: AgentClient;
   addItem: UseHistoryManagerReturn['addItem'];
   config: Config;
   settings: LoadedSettings;
@@ -115,7 +115,7 @@ export function useGeminiStreamOrchestration(
     st.isResponding,
     st.turnCancelledRef,
     st.submitQueryRef,
-    args.geminiClient,
+    args.agentClient,
     scheduler.markToolsAsSubmitted,
     args.performMemoryRefresh,
     args.onTodoPause,
@@ -144,7 +144,7 @@ function useToolSchedulerState(
     args.onEditorOpen,
     args.runtimeMessageBus,
     args.addItem,
-    args.geminiClient,
+    args.agentClient,
   );
   const [
     toolCalls,
@@ -173,7 +173,7 @@ function useShell(
     setIsResponding: st.setIsResponding,
     onDebugMessage: args.onDebugMessage,
     config: args.config,
-    geminiClient: args.geminiClient,
+    agentClient: args.agentClient,
     setShellInputFocused: args.setShellInputFocused,
     terminalWidth: args.terminalWidth,
     terminalHeight: args.terminalHeight,
@@ -253,7 +253,7 @@ function buildSubmitQueryDeps({
 }: BuildSubmitQueryDepsArgs): UseSubmitQueryDeps {
   return {
     config: args.config,
-    geminiClient: args.geminiClient,
+    agentClient: args.agentClient,
     addItem: args.addItem,
     settings: args.settings,
     onDebugMessage: args.onDebugMessage,

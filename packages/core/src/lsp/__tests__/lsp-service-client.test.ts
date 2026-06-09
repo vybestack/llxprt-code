@@ -242,4 +242,147 @@ describe('LspServiceClient unit contract', () => {
       ),
     ).resolves.toStrictEqual([]);
   });
+
+  it('serializes requestTimeout into LSP_BOOTSTRAP config as requestTimeoutMs', async () => {
+    const configWithTimeout: LspConfig = {
+      servers: [{ id: 'ts', command: 'typescript-language-server' }],
+      requestTimeout: 5000,
+    };
+    const client = makeClient(configWithTimeout);
+    await client.start();
+
+    // Find the LSP subprocess spawn call (not the 'which' call)
+    // spawn is called with (command, args, options) — env is at index 2
+    const lspSpawnCalls = spawnMock.mock.calls.filter(
+      (call) => call[0] !== 'which',
+    );
+    expect(lspSpawnCalls.length).toBeGreaterThan(0);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
+    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const env = spawnOptions.env as Record<string, unknown> | undefined;
+    const bootstrapRaw = env?.LSP_BOOTSTRAP;
+    expect(typeof bootstrapRaw).toBe('string');
+
+    const bootstrap = JSON.parse(bootstrapRaw as string) as {
+      config: { requestTimeoutMs?: number };
+    };
+    expect(bootstrap.config.requestTimeoutMs).toBe(5000);
+  });
+
+  it('omits requestTimeoutMs from LSP_BOOTSTRAP when requestTimeout is not set', async () => {
+    const client = makeClient(liveConfig);
+    await client.start();
+
+    // Find the LSP subprocess spawn call (not the 'which' call)
+    const lspSpawnCalls = spawnMock.mock.calls.filter(
+      (call) => call[0] !== 'which',
+    );
+    expect(lspSpawnCalls.length).toBeGreaterThan(0);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
+    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const env = spawnOptions.env as Record<string, unknown> | undefined;
+    const bootstrapRaw = env?.LSP_BOOTSTRAP;
+    expect(typeof bootstrapRaw).toBe('string');
+
+    const bootstrap = JSON.parse(bootstrapRaw as string) as {
+      config: Record<string, unknown>;
+    };
+    expect(bootstrap.config.requestTimeoutMs).toBeUndefined();
+  });
+
+  it('serializes firstTouchTimeout into LSP_BOOTSTRAP config as firstTouchTimeoutMs', async () => {
+    const configWithFirstTouch: LspConfig = {
+      servers: [{ id: 'ts', command: 'typescript-language-server' }],
+      firstTouchTimeout: 15000,
+    };
+    const client = makeClient(configWithFirstTouch);
+    await client.start();
+
+    const lspSpawnCalls = spawnMock.mock.calls.filter(
+      (call) => call[0] !== 'which',
+    );
+    expect(lspSpawnCalls.length).toBeGreaterThan(0);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
+    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const env = spawnOptions.env as Record<string, unknown> | undefined;
+    const bootstrapRaw = env?.LSP_BOOTSTRAP;
+    expect(typeof bootstrapRaw).toBe('string');
+
+    const bootstrap = JSON.parse(bootstrapRaw as string) as {
+      config: { firstTouchTimeoutMs?: number; requestTimeoutMs?: number };
+    };
+    expect(bootstrap.config.firstTouchTimeoutMs).toBe(15000);
+  });
+
+  it('omits firstTouchTimeoutMs from LSP_BOOTSTRAP when firstTouchTimeout is not set', async () => {
+    const client = makeClient(liveConfig);
+    await client.start();
+
+    const lspSpawnCalls = spawnMock.mock.calls.filter(
+      (call) => call[0] !== 'which',
+    );
+    expect(lspSpawnCalls.length).toBeGreaterThan(0);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
+    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const env = spawnOptions.env as Record<string, unknown> | undefined;
+    const bootstrapRaw = env?.LSP_BOOTSTRAP;
+    expect(typeof bootstrapRaw).toBe('string');
+
+    const bootstrap = JSON.parse(bootstrapRaw as string) as {
+      config: Record<string, unknown>;
+    };
+    expect(bootstrap.config.firstTouchTimeoutMs).toBeUndefined();
+  });
+
+  it('serializes navigationTimeout independently from diagnosticTimeout', async () => {
+    const configWithTimeouts: LspConfig = {
+      servers: [{ id: 'ts', command: 'typescript-language-server' }],
+      diagnosticTimeout: 1111,
+      navigationTimeout: 2222,
+    };
+    const client = makeClient(configWithTimeouts);
+    await client.start();
+
+    const lspSpawnCalls = spawnMock.mock.calls.filter(
+      (call) => call[0] !== 'which',
+    );
+    expect(lspSpawnCalls.length).toBeGreaterThan(0);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
+    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const env = spawnOptions.env as Record<string, unknown> | undefined;
+    const bootstrapRaw = env?.LSP_BOOTSTRAP;
+    expect(typeof bootstrapRaw).toBe('string');
+
+    const bootstrap = JSON.parse(bootstrapRaw as string) as {
+      config: { diagnosticsTimeoutMs?: number; navigationTimeoutMs?: number };
+    };
+    expect(bootstrap.config.diagnosticsTimeoutMs).toBe(1111);
+    expect(bootstrap.config.navigationTimeoutMs).toBe(2222);
+  });
+
+  it('serializes both firstTouchTimeout and requestTimeout when both are set', async () => {
+    const configWithBoth: LspConfig = {
+      servers: [{ id: 'ts', command: 'typescript-language-server' }],
+      firstTouchTimeout: 8000,
+      requestTimeout: 3000,
+    };
+    const client = makeClient(configWithBoth);
+    await client.start();
+
+    const lspSpawnCalls = spawnMock.mock.calls.filter(
+      (call) => call[0] !== 'which',
+    );
+    expect(lspSpawnCalls.length).toBeGreaterThan(0);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
+    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const env = spawnOptions.env as Record<string, unknown> | undefined;
+    const bootstrapRaw = env?.LSP_BOOTSTRAP;
+    expect(typeof bootstrapRaw).toBe('string');
+
+    const bootstrap = JSON.parse(bootstrapRaw as string) as {
+      config: { firstTouchTimeoutMs?: number; requestTimeoutMs?: number };
+    };
+    expect(bootstrap.config.firstTouchTimeoutMs).toBe(8000);
+    expect(bootstrap.config.requestTimeoutMs).toBe(3000);
+  });
 });

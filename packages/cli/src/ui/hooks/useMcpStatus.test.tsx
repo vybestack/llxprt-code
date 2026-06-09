@@ -8,8 +8,8 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { act } from 'react';
 import { render } from '../../test-utils/render.js';
 import { useMcpStatus } from './useMcpStatus.js';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
-  MCPDiscoveryState,
   type Config,
   CoreEvent,
   coreEvents,

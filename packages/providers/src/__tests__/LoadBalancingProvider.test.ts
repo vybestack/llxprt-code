@@ -17,7 +17,7 @@
 /* eslint-disable max-lines -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { IProvider } from '../IProvider.js';
+import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -147,7 +147,68 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
       expect(typeof provider.getDefaultModel).toBe('function');
 
       const result = provider.getDefaultModel();
-      expect(typeof result).toBe('string');
+      expect(result).toBe('gemini-flash');
+    });
+
+    it('returns the first resolved sub-profile model as the default model', () => {
+      const resolvedSubProfile: ResolvedSubProfile = {
+        name: 'resolved-1',
+        providerName: 'anthropic',
+        model: 'claude-opus-4',
+        ephemeralSettings: {},
+        modelParams: {},
+      };
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'resolved-default-test',
+        strategy: 'round-robin',
+        subProfiles: [resolvedSubProfile],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+
+      expect(provider.getDefaultModel()).toBe('claude-opus-4');
+    });
+
+    it('uses the first sub-profile model as runtime default for foreground load-balancer calls', () => {
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'glm',
+        strategy: 'round-robin',
+        subProfiles: [
+          {
+            name: 'anthropic-fast',
+            providerName: 'anthropic',
+            modelId: 'claude-sonnet-4',
+          },
+        ],
+      };
+      const configWithoutGlobalModel = createRuntimeConfigStub(
+        settingsService,
+        {
+          getModel: () => undefined,
+        },
+      );
+      const localProviderManager = new ProviderManager({
+        settingsService,
+        config: configWithoutGlobalModel,
+      });
+      const provider = new LoadBalancingProvider(
+        lbConfig,
+        localProviderManager,
+      );
+      localProviderManager.registerProvider(provider);
+      settingsService.set('activeProvider', 'anthropic');
+
+      const normalized = localProviderManager.normalizeRuntimeInputs(
+        {
+          contents: [],
+          settings: settingsService,
+          config: configWithoutGlobalModel,
+          resolved: { authToken: 'token' },
+        } satisfies GenerateChatOptions,
+        'load-balancer',
+      );
+
+      expect(normalized.resolved?.model).toBe('claude-sonnet-4');
     });
 
     it('should have getServerTools method that returns an array', () => {

@@ -73,7 +73,7 @@ describe('Provider-Gemini Switching', () => {
 
     const config = {
       refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getGeminiClient: vi.fn().mockReturnValue(null),
+      getAgentClient: vi.fn().mockReturnValue(null),
       getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     } as unknown as Config;
 
@@ -89,7 +89,7 @@ describe('Provider-Gemini Switching', () => {
     manager.setActiveProvider('test-provider');
     expect(manager.hasActiveProvider()).toBe(true);
 
-    const mockGeminiClient = {
+    const mockAgentClient = {
       chat: {
         contentGenerator: null,
       },
@@ -97,13 +97,13 @@ describe('Provider-Gemini Switching', () => {
 
     const config = {
       refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
+      getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
       getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     } as unknown as Config;
 
     await config.refreshAuth('gemini-api-key');
     expect(config.refreshAuth).toHaveBeenCalledWith('gemini-api-key');
-    expect(mockGeminiClient.chat.contentGenerator).toBeNull();
+    expect(mockAgentClient.chat.contentGenerator).toBeNull();
   });
 
   it('falls back to Gemini when clearing the active provider', async () => {
@@ -118,7 +118,7 @@ describe('Provider-Gemini Switching', () => {
 
     const config = {
       refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getGeminiClient: vi.fn().mockReturnValue({
+      getAgentClient: vi.fn().mockReturnValue({
         chat: {
           contentGenerator: null,
         },

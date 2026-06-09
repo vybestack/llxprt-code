@@ -275,7 +275,7 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
 
       await todoStore.writeTodos(projectTasks);
 
-      // Simulate the full pipeline from client.ts -> geminiChat.ts -> compression
+      // Simulate the full pipeline from client.ts -> chatSession.ts -> compression
 
       // Step 1: Client creates the provider callback
       const activeTodosProvider = async (): Promise<string | undefined> => {

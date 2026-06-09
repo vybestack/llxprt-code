@@ -91,6 +91,7 @@ execSync('node scripts/bind-release-deps.js --backup', { stdio: 'inherit' });
 
 const cliPackageDir = join('packages', 'cli');
 const corePackageDir = join('packages', 'core');
+const mcpPackageDir = join('packages', 'mcp');
 const providersPackageDir = join('packages', 'providers');
 
 try {
@@ -103,6 +104,15 @@ try {
     {
       stdio: 'ignore',
     },
+  );
+
+  console.log('packing @vybestack/llxprt-code-mcp ...');
+  rmSync(join(mcpPackageDir, 'dist', 'vybestack-llxprt-code-mcp-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist`,
+    { stdio: 'ignore' },
   );
 
   console.log('packing @vybestack/llxprt-code-core ...');
@@ -135,6 +145,14 @@ const packageVersion = JSON.parse(
 
 chmodSync(
   join(cliPackageDir, 'dist', `vybestack-llxprt-code-${packageVersion}.tgz`),
+  0o755,
+);
+chmodSync(
+  join(
+    mcpPackageDir,
+    'dist',
+    `vybestack-llxprt-code-mcp-${packageVersion}.tgz`,
+  ),
   0o755,
 );
 chmodSync(

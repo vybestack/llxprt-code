@@ -450,7 +450,7 @@ async function processOneTurn(
     !context.streamJsonOutput &&
     context.config.getEphemeralSetting('reasoning.includeInResponse') !== false;
   const responseIterator = context.config
-    .getGeminiClient()
+    .getAgentClient()
     .sendMessageStream(
       currentMessages,
       context.abortController.signal,

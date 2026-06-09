@@ -15,7 +15,7 @@ import {
   getMCPServerStatus,
   getMCPDiscoveryState,
   DiscoveredMCPTool,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
 import type { CallableTool } from '@google/genai';
 import { Type } from '@google/genai';
@@ -25,9 +25,9 @@ vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-mcp')>();
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),
@@ -118,7 +118,7 @@ describe('mcpCommand', () => {
       getResourceRegistry: vi.fn().mockReturnValue({
         getAllResources: vi.fn().mockReturnValue([]),
       }),
-      getGeminiClient: vi.fn().mockReturnValue(null),
+      getAgentClient: vi.fn().mockReturnValue(null),
     };
 
     mockContext = createMockCommandContext({
@@ -1145,7 +1145,7 @@ describe('mcpCommand', () => {
       const mockMcpClientManager = {
         restartServer: vi.fn(),
       };
-      const mockGeminiClient = {
+      const mockAgentClient = {
         setTools: vi.fn(),
       };
 
@@ -1160,7 +1160,7 @@ describe('mcpCommand', () => {
             }),
             getToolRegistry: vi.fn().mockReturnValue({}),
             getMcpClientManager: vi.fn().mockReturnValue(mockMcpClientManager),
-            getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
+            getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
             getPromptRegistry: vi.fn().mockReturnValue({
               removePromptsByServer: vi.fn(),
             }),
@@ -1170,7 +1170,7 @@ describe('mcpCommand', () => {
       // Mock the reloadCommands function
       context.ui.reloadCommands = vi.fn();
 
-      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-core');
+      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
 
       const authCommand = mcpCommand.subCommands?.find(
         (cmd) => cmd.name === 'auth',
@@ -1186,7 +1186,7 @@ describe('mcpCommand', () => {
       expect(mockMcpClientManager.restartServer).toHaveBeenCalledWith(
         'test-server',
       );
-      expect(mockGeminiClient.setTools).toHaveBeenCalled();
+      expect(mockAgentClient.setTools).toHaveBeenCalled();
       expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
 
       expect(isMessageAction(result)).toBe(true);
@@ -1209,7 +1209,7 @@ describe('mcpCommand', () => {
         },
       });
 
-      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-core');
+      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
       (
         MCPOAuthProvider.authenticate as ReturnType<typeof vi.fn>
       ).mockRejectedValue(new Error('Auth failed'));
@@ -1261,7 +1261,7 @@ describe('mcpCommand', () => {
         discoverAllTools: vi.fn(),
         getAllTools: vi.fn().mockReturnValue([]),
       };
-      const mockGeminiClient = {
+      const mockAgentClient = {
         setTools: vi.fn(),
       };
 
@@ -1271,7 +1271,7 @@ describe('mcpCommand', () => {
             getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
             getBlockedMcpServers: vi.fn().mockReturnValue([]),
             getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
-            getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
+            getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
             getPromptRegistry: vi.fn().mockReturnValue({
               getPromptsByServer: vi.fn().mockReturnValue([]),
             }),
@@ -1296,7 +1296,7 @@ describe('mcpCommand', () => {
         expect.any(Number),
       );
       expect(mockToolRegistry.discoverAllTools).toHaveBeenCalled();
-      expect(mockGeminiClient.setTools).toHaveBeenCalled();
+      expect(mockAgentClient.setTools).toHaveBeenCalled();
       expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
 
       expect(isMessageAction(result)).toBe(true);

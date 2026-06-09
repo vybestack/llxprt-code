@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GeminiChat } from '../geminiChat.js';
+import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '../../services/history/HistoryService.js';
 import type { IContent } from '../../services/history/IContent.js';
 import { createAgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
@@ -168,7 +168,12 @@ describe('Sandwich Compression (Issue #1011)', () => {
       const messageCountBefore = historyService.getCurated().length;
       expect(messageCountBefore).toBe(20);
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
@@ -216,7 +221,12 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       const messageCountBefore = historyService.getCurated().length;
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const mockProvider = buildMockProvider('should-not-be-used');
       vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
@@ -243,7 +253,12 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       historyService.add(createUserMessage('End'));
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Tool boundary test</overall_goal></state_snapshot>';
@@ -293,7 +308,12 @@ describe('Sandwich Compression (Issue #1011)', () => {
         historyService.add(createAiTextMessage(`AI response ${i}`));
       }
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
@@ -326,7 +346,12 @@ describe('Sandwich Compression (Issue #1011)', () => {
         historyService.add(createAiTextMessage(`AI ${i}`));
       }
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Summary</overall_goal></state_snapshot>';

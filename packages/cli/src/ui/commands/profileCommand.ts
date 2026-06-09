@@ -36,9 +36,9 @@ type ProfileConfigService = Partial<
     'getProviderManager' | 'setProvider'
   >
 > & {
-  getGeminiClient?: () =>
+  getAgentClient?: () =>
     | (ReturnType<
-        NonNullable<CommandContext['services']['config']>['getGeminiClient']
+        NonNullable<CommandContext['services']['config']>['getAgentClient']
       > & { setTools?: () => void | Promise<void> })
     | undefined;
 };
@@ -659,13 +659,10 @@ function logActiveProviderName(providerManager: {
 async function refreshGeminiTools(
   configService: ProfileConfigService,
 ): Promise<void> {
-  const geminiClient = configService.getGeminiClient?.();
-  if (
-    geminiClient !== undefined &&
-    typeof geminiClient.setTools === 'function'
-  ) {
+  const agentClient = configService.getAgentClient?.();
+  if (agentClient !== undefined && typeof agentClient.setTools === 'function') {
     try {
-      await geminiClient.setTools();
+      await agentClient.setTools();
     } catch (error) {
       logger.warn(
         () =>

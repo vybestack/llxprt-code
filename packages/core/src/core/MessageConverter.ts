@@ -31,7 +31,7 @@ import {
   type ThoughtPart,
   isThoughtPart,
   type UsageMetadataWithCache,
-} from './geminiChatTypes.js';
+} from './chatSessionTypes.js';
 import { getResponseTextFromParts } from '../utils/generateContentResponseUtilities.js';
 
 const logger = new DebugLogger('llxprt:core:message-converter');

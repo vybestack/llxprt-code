@@ -9,7 +9,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Config } from '../config/config.js';
 import type { SubagentManager } from '../config/subagentManager.js';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import {
+  isLoadBalancerProfile,
+  type Profile,
+  type ProfileManager,
+} from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '../config/types.js';
 import { SubAgentScope } from './subagent.js';
 import type {
@@ -49,6 +53,10 @@ type RuntimeLoader = (
 ) => Promise<AgentRuntimeLoaderResult>;
 
 type ScopeFactory = typeof SubAgentScope.create;
+
+type RuntimeProfileResolution = {
+  effectiveProfile: Profile;
+};
 
 const createAbortError = (message: string): Error => {
   const error = new Error(message);
@@ -183,12 +191,17 @@ export class SubagentOrchestrator {
       signal,
       'Subagent launch aborted while loading profile.',
     );
+    const runtimeProfile = await this.resolveRuntimeProfile(profile);
+    this.throwIfAborted(
+      signal,
+      'Subagent launch aborted while resolving runtime profile.',
+    );
 
     const promptConfig = this.buildPromptConfig(
       subagent.systemPrompt,
       request.behaviourPrompts,
     );
-    const modelConfig = this.buildModelConfig(profile);
+    const modelConfig = this.buildModelConfig(runtimeProfile.effectiveProfile);
     const runConfig = this.buildRunConfig(profile, request.runConfig);
     this.throwIfAborted(
       signal,
@@ -197,7 +210,7 @@ export class SubagentOrchestrator {
 
     const agentRuntimeId = this.createRuntimeId(subagent.name);
     const runtimeResult = await this.createRuntimeBundle(
-      { subagent, profile, modelConfig, agentRuntimeId },
+      { subagent, runtimeProfile, modelConfig, agentRuntimeId },
       signal,
     );
     this.throwIfAborted(
@@ -331,6 +344,31 @@ export class SubagentOrchestrator {
     }
 
     return runConfig;
+  }
+
+  private async resolveRuntimeProfile(
+    profile: Profile,
+  ): Promise<RuntimeProfileResolution> {
+    if (!isLoadBalancerProfile(profile)) {
+      return { effectiveProfile: profile };
+    }
+
+    const firstProfileName = profile.profiles[0];
+    if (!firstProfileName) {
+      throw new Error(
+        'Load balancer subagent profile must reference a profile.',
+      );
+    }
+
+    const effectiveProfile =
+      await this.options.profileManager.loadProfile(firstProfileName);
+    if (isLoadBalancerProfile(effectiveProfile)) {
+      throw new Error(
+        `Load balancer subagent profile cannot use nested load balancer profile '${firstProfileName}'.`,
+      );
+    }
+
+    return { effectiveProfile };
   }
 
   private baseSessionId(): string {
@@ -689,25 +727,30 @@ export class SubagentOrchestrator {
   private async createRuntimeBundle(
     params: {
       subagent: SubagentConfig;
-      profile: Profile;
+      runtimeProfile: RuntimeProfileResolution;
       modelConfig: ModelConfig;
       agentRuntimeId: string;
     },
     signal?: AbortSignal,
   ): Promise<AgentRuntimeLoaderResult> {
-    const { profile, modelConfig, agentRuntimeId, subagent } = params;
+    const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
+    const { effectiveProfile } = runtimeProfile;
 
     this.throwIfAborted(
       signal,
       'Subagent launch aborted before runtime state.',
     );
     const runtimeState = this.createRuntimeState(
-      profile,
+      effectiveProfile,
       modelConfig,
       agentRuntimeId,
     );
     const settingsService = createRuntimeSettingsService();
-    this.populateSettingsService(settingsService, profile, subagent.profile);
+    this.populateSettingsService(
+      settingsService,
+      effectiveProfile,
+      subagent.profile,
+    );
 
     const providerRuntime: ProviderRuntimeContext =
       createSettingsProviderRuntimeContext({
@@ -720,9 +763,9 @@ export class SubagentOrchestrator {
         },
       });
 
-    const settingsSnapshot = this.createSettingsSnapshot(profile);
+    const settingsSnapshot = this.createSettingsSnapshot(effectiveProfile);
     const contentGeneratorConfig = this.buildContentGeneratorConfig(
-      profile,
+      effectiveProfile,
       modelConfig,
     );
     const providerManager =

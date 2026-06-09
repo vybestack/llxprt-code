@@ -9,7 +9,7 @@ import {
   type Config,
   type CompletedToolCall,
   type EditorType,
-  type GeminiClient,
+  type AgentClient,
   type MessageBus,
   type ToolCallRequestInfo,
   debugLogger,
@@ -76,7 +76,7 @@ export function useToolSchedulerSetup(
   onEditorOpen: () => void,
   runtimeMessageBus: MessageBus | undefined,
   addItem: UseHistoryManagerReturn['addItem'],
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
 ) {
   const handleCompletedToolsRef = useRef<
     (tools: TrackedToolCall[]) => Promise<void>
@@ -89,7 +89,7 @@ export function useToolSchedulerSetup(
         void processPrimaryCompletion(
           completedToolCallsFromScheduler,
           addItem,
-          geminiClient,
+          agentClient,
           config,
           handleCompletedToolsRef.current,
         );
@@ -115,7 +115,7 @@ export function useToolSchedulerSetup(
 async function processPrimaryCompletion(
   completedToolCallsFromScheduler: TrackedToolCall[],
   addItem: UseHistoryManagerReturn['addItem'],
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   config: Config,
   handleCompletedTools: (tools: TrackedToolCall[]) => Promise<void>,
 ): Promise<void> {
@@ -125,8 +125,8 @@ async function processPrimaryCompletion(
   );
   try {
     const currentModel =
-      geminiClient.getCurrentSequenceModel() ?? config.getModel();
-    geminiClient
+      agentClient.getCurrentSequenceModel() ?? config.getModel();
+    agentClient
       .getChat()
       .recordCompletedToolCalls(
         currentModel,
@@ -161,7 +161,7 @@ export function useShellCommandSetup({
   setIsResponding,
   onDebugMessage,
   config,
-  geminiClient,
+  agentClient,
   setShellInputFocused,
   terminalWidth,
   terminalHeight,
@@ -174,7 +174,7 @@ export function useShellCommandSetup({
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>;
   onDebugMessage: (message: string) => void;
   config: Config;
-  geminiClient: GeminiClient;
+  agentClient: AgentClient;
   setShellInputFocused: (value: boolean) => void;
   terminalWidth?: number;
   terminalHeight?: number;
@@ -194,7 +194,7 @@ export function useShellCommandSetup({
     onExec,
     onDebugMessage,
     config,
-    geminiClient,
+    agentClient,
     setShellInputFocused,
     terminalWidth,
     terminalHeight,

@@ -32,7 +32,7 @@ vi.mock('../../../utils/iContentToHistoryItems.js', () => ({
 interface ConfigStub {
   getLlxprtMdFileCount: ReturnType<typeof vi.fn>;
   getCoreMemoryFileCount: ReturnType<typeof vi.fn>;
-  getGeminiClient: ReturnType<typeof vi.fn>;
+  getAgentClient: ReturnType<typeof vi.fn>;
 }
 
 const makeConfig = (
@@ -41,7 +41,7 @@ const makeConfig = (
 ): ConfigStub => ({
   getLlxprtMdFileCount: vi.fn().mockReturnValue(llxprtMdFileCount),
   getCoreMemoryFileCount: vi.fn().mockReturnValue(coreMemoryFileCount),
-  getGeminiClient: vi.fn().mockReturnValue(null),
+  getAgentClient: vi.fn().mockReturnValue(null),
 });
 
 describe('useSessionInitialization', () => {

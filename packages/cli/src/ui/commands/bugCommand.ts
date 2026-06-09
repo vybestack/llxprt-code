@@ -69,7 +69,7 @@ async function appendHistoryExport(
   info: string,
 ): Promise<string> {
   const { config } = context.services;
-  const client = config?.getGeminiClient();
+  const client = config?.getAgentClient();
   if (client?.hasChatInitialized() !== true) {
     return info;
   }

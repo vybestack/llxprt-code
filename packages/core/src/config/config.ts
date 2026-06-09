@@ -14,7 +14,7 @@ import type { ToolRegistry } from '../tools/tool-registry.js';
 import { ActivateSkillTool } from '../tools/activate-skill.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
-import { GeminiClient } from '../core/client.js';
+import { AgentClient } from '../core/client.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import { HookSystem } from '../hooks/hookSystem.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
@@ -94,7 +94,7 @@ export {
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { coreEvents, CoreEvent } from '../utils/events.js';
-import { McpClientManager } from '../tools/mcp-client-manager.js';
+import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { getCoreVersion } from '../utils/version.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
@@ -159,7 +159,7 @@ export class Config extends ConfigBase {
       }
     }
 
-    // Register extension-contributed subagents (after skill discovery, before GeminiClient creation)
+    // Register extension-contributed subagents (after skill discovery, before AgentClient creation)
     const subagentMgr = this.getSubagentManager();
     if (subagentMgr) {
       subagentMgr.clearExtensionSubagents();
@@ -177,7 +177,7 @@ export class Config extends ConfigBase {
       }
     }
 
-    // Register settings-defined subagents (after extension subagents, before GeminiClient creation)
+    // Register settings-defined subagents (after extension subagents, before AgentClient creation)
     if (subagentMgr) {
       const allSettings = this.settingsService.getAllGlobalSettings();
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
@@ -193,9 +193,9 @@ export class Config extends ConfigBase {
       }
     }
 
-    // Create GeminiClient instance immediately without authentication
-    // This ensures geminiClient is available for providers on startup
-    this.geminiClient = new GeminiClient(this, this.runtimeState);
+    // Create AgentClient instance immediately without authentication
+    // This ensures agentClient is available for providers on startup
+    this.agentClient = new AgentClient(this, this.runtimeState);
 
     if (this.getJitContextEnabled()) {
       this.contextManager = new ContextManager(this);
@@ -232,13 +232,13 @@ export class Config extends ConfigBase {
     history: Content[];
     historyService: HistoryService | null;
   }> {
-    const previousGeminiClient = this.geminiClient;
+    const previousAgentClient = this.agentClient;
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!previousGeminiClient?.isInitialized()) {
+    if (!previousAgentClient?.isInitialized()) {
       return { history: [], historyService: null };
     }
-    const existingHistory = await previousGeminiClient.getHistory();
-    const existingHistoryService = previousGeminiClient.getHistoryService();
+    const existingHistory = await previousAgentClient.getHistory();
+    const existingHistoryService = previousAgentClient.getHistoryService();
     logger.debug('Retrieved existing state', {
       historyLength: existingHistory.length,
       hasHistoryService: !!existingHistoryService,
@@ -271,7 +271,7 @@ export class Config extends ConfigBase {
 
   private transferHistoryToNewClient(
     logger: DebugLogger,
-    newGeminiClient: GeminiClient,
+    newAgentClient: AgentClient,
     existingHistory: Content[],
     existingHistoryService: HistoryService | null,
     newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
@@ -280,7 +280,7 @@ export class Config extends ConfigBase {
       logger.debug('Storing existing HistoryService for reuse', {
         historyLength: existingHistory.length,
       });
-      newGeminiClient.storeHistoryServiceForReuse(existingHistoryService);
+      newAgentClient.storeHistoryServiceForReuse(existingHistoryService);
     }
     if (existingHistory.length === 0) {
       return;
@@ -297,7 +297,7 @@ export class Config extends ConfigBase {
     const historyToStore = fromGenaiToVertex
       ? Config.stripThoughtSignatures(existingHistory)
       : existingHistory;
-    newGeminiClient.storeHistoryForLaterUse(historyToStore);
+    newAgentClient.storeHistoryForLaterUse(historyToStore);
     logger.debug('History stored in new client', {
       storedHistoryLength: historyToStore.length,
     });
@@ -307,45 +307,45 @@ export class Config extends ConfigBase {
     const logger = new DebugLogger(
       'llxprt:config:initializeContentGeneratorConfig',
     );
-    const previousGeminiClient = this.geminiClient;
+    const previousAgentClient = this.agentClient;
     const { history: existingHistory, historyService: existingHistoryService } =
       await this.extractExistingState(logger);
 
     const newContentGeneratorConfig = this.buildNewContentGeneratorConfig();
-    const newGeminiClient = new GeminiClient(this, this.runtimeState);
+    const newAgentClient = new AgentClient(this, this.runtimeState);
 
     this.transferHistoryToNewClient(
       logger,
-      newGeminiClient,
+      newAgentClient,
       existingHistory,
       existingHistoryService,
       newContentGeneratorConfig,
     );
 
-    await newGeminiClient.initialize(newContentGeneratorConfig);
+    await newAgentClient.initialize(newContentGeneratorConfig);
     logger.debug('New client initialized');
 
     this.contentGeneratorConfig = newContentGeneratorConfig;
     if (
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      previousGeminiClient != null &&
-      typeof previousGeminiClient.dispose === 'function'
+      previousAgentClient != null &&
+      typeof previousAgentClient.dispose === 'function'
     ) {
       try {
-        previousGeminiClient.dispose();
+        previousAgentClient.dispose();
       } catch (error) {
         logger.warn(
           () =>
-            `Failed to dispose previous GeminiClient: ${
+            `Failed to dispose previous AgentClient: ${
               error instanceof Error ? error.message : String(error)
             }`,
         );
       }
     }
-    this.geminiClient = newGeminiClient;
+    this.agentClient = newAgentClient;
 
-    const newHistory = await this.geminiClient.getHistory();
-    const newHistoryService = this.geminiClient.getHistoryService();
+    const newHistory = await this.agentClient.getHistory();
+    const newHistoryService = this.agentClient.getHistoryService();
     if (newHistoryService && this.tokenizerFactory) {
       newHistoryService.setTokenizerFactory(this.tokenizerFactory);
     }
@@ -427,9 +427,9 @@ export class Config extends ConfigBase {
   async refreshMcpContext(): Promise<void> {
     await this.refreshMemory();
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (this.geminiClient?.isInitialized()) {
-      await this.geminiClient.setTools();
-      await this.geminiClient.updateSystemInstruction();
+    if (this.agentClient?.isInitialized()) {
+      await this.agentClient.setTools();
+      await this.agentClient.updateSystemInstruction();
     }
   }
 
@@ -853,7 +853,7 @@ export class Config extends ConfigBase {
 
   async dispose(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    this.geminiClient?.dispose();
+    this.agentClient?.dispose();
     if (this.mcpClientManager) {
       await this.mcpClientManager.stop();
     }

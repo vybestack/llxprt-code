@@ -13,7 +13,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StreamProcessor } from './StreamProcessor.js';
-import { EmptyStreamError } from './geminiChatTypes.js';
+import { EmptyStreamError } from './chatSessionTypes.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { GenerateContentResponse } from '@google/genai';
 import type { Content, SendMessageParameters } from '@google/genai';

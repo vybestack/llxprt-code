@@ -5,12 +5,12 @@
  */
 
 import { type Credentials } from 'google-auth-library';
-import { KeychainTokenStorage } from '../mcp/token-storage/keychain-token-storage.js';
+import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
 import { OAUTH_FILE, Storage } from '@vybestack/llxprt-code-settings';
 import type {
   OAuthCredentials,
   TokenStorage,
-} from '../mcp/token-storage/types.js';
+} from '@vybestack/llxprt-code-mcp';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { promises as fs } from 'node:fs';

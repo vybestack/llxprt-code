@@ -20,7 +20,7 @@ import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
 import type {
   Config,
-  GeminiClient,
+  AgentClient,
   GitService,
 } from '@vybestack/llxprt-code-core';
 import type { TrackedToolCall } from '../../useReactToolScheduler.js';
@@ -115,7 +115,7 @@ function makeGitService(
   };
 }
 
-function makeGeminiClient(): { getHistory: ReturnType<typeof vi.fn> } {
+function makeAgentClient(): { getHistory: ReturnType<typeof vi.fn> } {
   return {
     getHistory: vi.fn().mockResolvedValue([]),
   };
@@ -128,7 +128,7 @@ const mockHistory: HistoryItem[] = [];
 describe('createToolCheckpoint', () => {
   it('writes checkpoint file with correct structure on happy path', async () => {
     const gitService = makeGitService('snap456');
-    const geminiClient = makeGeminiClient();
+    const agentClient = makeAgentClient();
     const fsOps = makeFsOps();
     const onDebugMessage = vi.fn();
 
@@ -136,7 +136,7 @@ describe('createToolCheckpoint', () => {
       makeRestorableTool('c1', 'replace', '/project/src/foo.ts'),
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      geminiClient as unknown as GeminiClient,
+      agentClient as unknown as AgentClient,
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -159,7 +159,7 @@ describe('createToolCheckpoint', () => {
     gitService.createFileSnapshot.mockRejectedValue(
       new Error('snapshot failed'),
     );
-    const geminiClient = makeGeminiClient();
+    const agentClient = makeAgentClient();
     const fsOps = makeFsOps();
     const onDebugMessage = vi.fn();
 
@@ -167,7 +167,7 @@ describe('createToolCheckpoint', () => {
       makeRestorableTool('c1', 'write_file', '/project/file.ts'),
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      geminiClient as unknown as GeminiClient,
+      agentClient as unknown as AgentClient,
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -186,7 +186,7 @@ describe('createToolCheckpoint', () => {
     const gitService = makeGitService();
     gitService.createFileSnapshot.mockRejectedValue(new Error('no snapshot'));
     gitService.getCurrentCommitHash.mockResolvedValue(null);
-    const geminiClient = makeGeminiClient();
+    const agentClient = makeAgentClient();
     const fsOps = makeFsOps();
     const onDebugMessage = vi.fn();
 
@@ -194,7 +194,7 @@ describe('createToolCheckpoint', () => {
       makeRestorableTool('c1', 'replace', '/project/file.ts'),
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      geminiClient as unknown as GeminiClient,
+      agentClient as unknown as AgentClient,
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -220,7 +220,7 @@ describe('createToolCheckpoint', () => {
       toolWithNoPath,
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      makeGeminiClient() as unknown as GeminiClient,
+      makeAgentClient() as unknown as AgentClient,
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -248,7 +248,7 @@ describe('useCheckpointPersistence', () => {
   it('writes checkpoint file for each restorable tool on happy path', async () => {
     const config = makeConfig(true);
     const gitService = makeGitService();
-    const geminiClient = makeGeminiClient();
+    const agentClient = makeAgentClient();
     const fsOps = makeFsOps();
     const onDebugMessage = vi.fn();
     const tools = [
@@ -263,7 +263,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          geminiClient as unknown as GeminiClient,
+          agentClient as unknown as AgentClient,
           (config as any).storage,
           onDebugMessage,
           fsOps,
@@ -288,7 +288,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeGeminiClient() as unknown as GeminiClient,
+          makeAgentClient() as unknown as AgentClient,
           (config as any).storage,
           vi.fn(),
           fsOps,
@@ -313,7 +313,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeGeminiClient() as unknown as GeminiClient,
+          makeAgentClient() as unknown as AgentClient,
           (config as any).storage,
           vi.fn(),
           fsOps,
@@ -338,7 +338,7 @@ describe('useCheckpointPersistence', () => {
           config,
           undefined, // no gitService
           mockHistory,
-          makeGeminiClient() as unknown as GeminiClient,
+          makeAgentClient() as unknown as AgentClient,
           (config as any).storage,
           onDebugMessage,
           fsOps,
@@ -356,7 +356,7 @@ describe('useCheckpointPersistence', () => {
   it('swallows EEXIST on mkdir and continues to write checkpoint', async () => {
     const config = makeConfig(true);
     const gitService = makeGitService();
-    const geminiClient = makeGeminiClient();
+    const agentClient = makeAgentClient();
     const eexistError = Object.assign(new Error('EEXIST'), { code: 'EEXIST' });
     const fsOps = makeFsOps({
       mkdir: vi.fn().mockRejectedValue(eexistError),
@@ -370,7 +370,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          geminiClient as unknown as GeminiClient,
+          agentClient as unknown as AgentClient,
           (config as any).storage,
           onDebugMessage,
           fsOps,
@@ -400,7 +400,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeGeminiClient() as unknown as GeminiClient,
+          makeAgentClient() as unknown as AgentClient,
           (config as any).storage,
           onDebugMessage,
           fsOps,
@@ -418,7 +418,7 @@ describe('useCheckpointPersistence', () => {
   it('continues to next tool when writeFile throws', async () => {
     const config = makeConfig(true);
     const gitService = makeGitService();
-    const geminiClient = makeGeminiClient();
+    const agentClient = makeAgentClient();
     const writeError = new Error('disk full');
     const fsOps = makeFsOps({
       writeFile: vi.fn().mockRejectedValue(writeError),
@@ -436,7 +436,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          geminiClient as unknown as GeminiClient,
+          agentClient as unknown as AgentClient,
           (config as any).storage,
           onDebugMessage,
           fsOps,
@@ -468,7 +468,7 @@ describe('useCheckpointPersistence', () => {
           config,
           makeGitService() as unknown as GitService,
           mockHistory,
-          makeGeminiClient() as unknown as GeminiClient,
+          makeAgentClient() as unknown as AgentClient,
           (config as any).storage,
           vi.fn(),
           fsOps,
@@ -484,7 +484,7 @@ describe('useCheckpointPersistence', () => {
   it('does not re-checkpoint the same tool on subsequent effect runs', async () => {
     const config = makeConfig(true);
     const gitService = makeGitService();
-    const geminiClient = makeGeminiClient();
+    const agentClient = makeAgentClient();
     const fsOps = makeFsOps();
     const onDebugMessage = vi.fn();
     const tools = [makeRestorableTool('r1', 'replace', '/project/a.ts')];
@@ -496,7 +496,7 @@ describe('useCheckpointPersistence', () => {
         config,
         gitService as unknown as GitService,
         mockHistory,
-        geminiClient as unknown as GeminiClient,
+        agentClient as unknown as AgentClient,
         (config as any).storage,
         onDebugMessage,
         fsOps,
@@ -522,7 +522,7 @@ describe('useCheckpointPersistence', () => {
   it('re-checkpoints a tool if it leaves and re-enters the tool list', async () => {
     const config = makeConfig(true);
     const gitService = makeGitService();
-    const geminiClient = makeGeminiClient();
+    const agentClient = makeAgentClient();
     const fsOps = makeFsOps();
     const onDebugMessage = vi.fn();
     const tool = makeRestorableTool('r1', 'replace', '/project/a.ts');
@@ -534,7 +534,7 @@ describe('useCheckpointPersistence', () => {
         config,
         gitService as unknown as GitService,
         mockHistory,
-        geminiClient as unknown as GeminiClient,
+        agentClient as unknown as AgentClient,
         (config as any).storage,
         onDebugMessage,
         fsOps,

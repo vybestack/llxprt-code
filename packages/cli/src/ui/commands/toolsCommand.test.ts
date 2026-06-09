@@ -108,7 +108,7 @@ describe('toolsCommand', () => {
           getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({}),
-          getGeminiClient: () => ({ setTools: setToolsSpy }),
+          getAgentClient: () => ({ setTools: setToolsSpy }),
         },
       },
       ui: { addItem: vi.fn() },

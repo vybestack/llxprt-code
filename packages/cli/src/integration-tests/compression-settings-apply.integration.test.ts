@@ -77,7 +77,7 @@ describe('Compression Settings Apply Integration Tests', () => {
       expect(config.getEphemeralSetting('compression-threshold')).toBe(0.7);
       expect(config.getEphemeralSetting('context-limit')).toBe(100000);
 
-      // Verify settings are accessible when needed by geminiChat
+      // Verify settings are accessible when needed by chatSession
       const compressionThreshold = config.getEphemeralSetting(
         'compression-threshold',
       );
