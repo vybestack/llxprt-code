@@ -7,6 +7,7 @@
   "type": "module",
   "workspaces": [
     "packages/settings",
+    "packages/telemetry",
     "packages/mcp",
     "packages/core",
     "packages/providers",
