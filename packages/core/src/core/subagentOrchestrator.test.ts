@@ -976,6 +976,11 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(loaderArgs.profile.settings.tools?.allowed).toStrictEqual([
       'read_file',
     ]);
+    const modelConfig = scopeFactory.mock.calls[0][3];
+    expect(modelConfig.model).toBe('claude-sonnet-4');
+    expect(modelConfig.temp).toBe(0.2);
+    expect(modelConfig.top_p).toBe(0.8);
+
     expect(loaderArgs.profile.contentGeneratorConfig.model).toBe(
       'claude-sonnet-4',
     );
@@ -991,5 +996,101 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       'claude-sonnet-4',
     );
     expect(settingsService.getProviderSettings('').model).toBeUndefined();
+  });
+
+  it('rejects load balancer subagent profiles without referenced profiles', async () => {
+    const emptyLoadBalancerSubagent: SubagentConfig = {
+      name: 'empty-lb-helper',
+      profile: 'empty-lb',
+      systemPrompt: 'Do not launch.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const emptyLoadBalancerProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: [],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(emptyLoadBalancerSubagent);
+    const loadProfile = vi.fn().mockResolvedValue(emptyLoadBalancerProfile);
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await expect(
+      orchestrator.launch({ name: emptyLoadBalancerSubagent.name }),
+    ).rejects.toThrow(/must reference a profile/);
+    expect(runtimeLoader).not.toHaveBeenCalled();
+    expect(scopeFactory).not.toHaveBeenCalled();
+  });
+
+  it('rejects nested load balancer profiles for subagent runtime resolution', async () => {
+    const nestedLoadBalancerSubagent: SubagentConfig = {
+      name: 'nested-lb-helper',
+      profile: 'outer-lb',
+      systemPrompt: 'Do not launch.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const outerLoadBalancerProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['inner-lb'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+    const innerLoadBalancerProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['anthropic-fast'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(nestedLoadBalancerSubagent);
+    const loadProfile = vi.fn(async (profileName: string) => {
+      if (profileName === 'outer-lb') {
+        return outerLoadBalancerProfile;
+      }
+      if (profileName === 'inner-lb') {
+        return innerLoadBalancerProfile;
+      }
+      throw new Error(`unexpected profile ${profileName}`);
+    });
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await expect(
+      orchestrator.launch({ name: nestedLoadBalancerSubagent.name }),
+    ).rejects.toThrow(/cannot use nested load balancer profile 'inner-lb'/);
+    expect(runtimeLoader).not.toHaveBeenCalled();
+    expect(scopeFactory).not.toHaveBeenCalled();
   });
 });
