@@ -50,6 +50,8 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 USER node
 
 # Copy packages with proper ownership
+COPY --chown=node:node packages/settings/dist/vybestack-llxprt-code-settings-*.tgz /tmp/
+
 COPY --chown=node:node packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz /tmp/
 COPY --chown=node:node packages/core/dist/vybestack-llxprt-code-core-*.tgz /tmp/
 COPY --chown=node:node packages/providers/dist/vybestack-llxprt-code-providers-*.tgz /tmp/
@@ -59,6 +61,7 @@ COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz /tmp/
 # Install all local tarballs in one transaction so unpublished package versions
 # satisfy each other without falling back to the npm registry.
 RUN npm install -g \
+      /tmp/vybestack-llxprt-code-settings-*.tgz \
       /tmp/vybestack-llxprt-code-mcp-*.tgz \
       /tmp/vybestack-llxprt-code-core-*.tgz \
       /tmp/vybestack-llxprt-code-providers-*.tgz \
