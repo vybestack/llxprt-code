@@ -11,6 +11,10 @@
 - `task-max-async` setting to limit concurrent async tasks (default: 5)
 - Auto-trigger notifications when async tasks complete
 
+### Migration
+
+- Direct consumers constructing `AuthPrecedenceResolver` and expecting it to resolve named auth keys must pass `providerKeyStorage` in the constructor options or use core's `createAuthPrecedenceResolver()` factory. The CLI profile flow already resolves named keys to concrete provider API keys before provider construction.
+
 ### Removed
 
 - Removed `--experimental-ui` flag and `@vybestack/llxprt-ui` (OpenTUI) package. The Ink-based terminal UI is now the sole UI. Development will focus on improving the existing Ink UI.

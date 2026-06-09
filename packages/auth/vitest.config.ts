@@ -37,7 +37,6 @@ export default defineConfig({
     teardownTimeout: 120000,
     silent: true,
     setupFiles: ['./test-setup.ts'],
-    dangerouslyIgnoreUnhandledErrors: isWindows,
     pool: shouldUseForkPool ? 'forks' : undefined,
     poolOptions: shouldUseForkPool
       ? {

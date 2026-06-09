@@ -195,20 +195,22 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
         return originalFetch(input);
       }) as typeof fetch;
 
-      const token = await flow.exchangeCodeForToken(
-        'test-auth-code',
-        redirectUri,
-        state,
-      );
+      try {
+        const token = await flow.exchangeCodeForToken(
+          'test-auth-code',
+          redirectUri,
+          state,
+        );
 
-      // Assert returned data
-      expect(token.access_token).toBe('test-access-token');
-      expect(token.account_id).toBe('account-123');
-      expect(token.token_type).toBe('Bearer');
-      expect(token.refresh_token).toBe('test-refresh-token');
-      expect(token.expiry).toBeGreaterThan(Math.floor(Date.now() / 1000));
-
-      global.fetch = originalFetch;
+        // Assert returned data
+        expect(token.access_token).toBe('test-access-token');
+        expect(token.account_id).toBe('account-123');
+        expect(token.token_type).toBe('Bearer');
+        expect(token.refresh_token).toBe('test-refresh-token');
+        expect(token.expiry).toBeGreaterThan(Math.floor(Date.now() / 1000));
+      } finally {
+        global.fetch = originalFetch;
+      }
     });
 
     it('refreshToken returns new token via server', async () => {
@@ -240,13 +242,15 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
         return originalFetch(input);
       }) as typeof fetch;
 
-      const token = await flow.refreshToken('old-refresh-token');
+      try {
+        const token = await flow.refreshToken('old-refresh-token');
 
-      expect(token.access_token).toBe('refreshed-access-token');
-      expect(token.account_id).toBe('account-456');
-      expect(token.refresh_token).toBe('new-refresh-token');
-
-      global.fetch = originalFetch;
+        expect(token.access_token).toBe('refreshed-access-token');
+        expect(token.account_id).toBe('account-456');
+        expect(token.refresh_token).toBe('new-refresh-token');
+      } finally {
+        global.fetch = originalFetch;
+      }
     });
   });
 

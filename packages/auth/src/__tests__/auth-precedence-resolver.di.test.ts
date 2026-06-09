@@ -8,7 +8,7 @@
  *
  * AuthPrecedenceResolver DI behavioral tests.
  * Uses in-memory ISettingsService and DI doubles.
- * Assertions on resolution results and observable cache behavior, not call counts.
+ * Assertions focus on resolution results and observable cache behavior.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

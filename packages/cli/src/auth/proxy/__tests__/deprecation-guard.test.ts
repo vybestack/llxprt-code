@@ -22,6 +22,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'node:child_process';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
@@ -248,20 +249,26 @@ describe('Deprecation Guards (P36)', () => {
     it('KeyringTokenStore class should still be exported from core for factory use', () => {
       // After auth extraction (PLAN-20260608-ISSUE1586), KeyringTokenStore is
       // defined in @vybestack/llxprt-code-auth and re-exported from core's barrel.
-      // Verify it is present in core's index.ts re-export block.
-      const matches = grepFiles(
-        'KeyringTokenStore',
-        '*.ts',
-        path.resolve(packagesRoot, 'core/src'),
-        ['node_modules', 'dist', '__tests__'],
-      );
+      const indexPath = path.resolve(packagesRoot, 'core/src/index.ts');
+      const indexContent = fs.readFileSync(indexPath, 'utf8');
 
-      // Should find the re-export in index.ts and/or the factory in auth-factories.ts
-      const classOrReExport = matches.filter((m) =>
-        m.includes('KeyringTokenStore'),
+      const lines = indexContent.split('\n');
+      const authExportEnd = lines.findIndex((line: string) =>
+        line.includes("} from '@vybestack/llxprt-code-auth';"),
       );
+      let authExportStart = -1;
+      for (let index = authExportEnd; index >= 0; index--) {
+        if (lines[index].trim() === 'export {') {
+          authExportStart = index;
+          break;
+        }
+      }
+      const authExportBlock = lines
+        .slice(authExportStart, authExportEnd + 1)
+        .join('\n');
 
-      expect(classOrReExport.length).toBeGreaterThan(0);
+      expect(authExportStart).toBeGreaterThanOrEqual(0);
+      expect(authExportBlock).toContain('KeyringTokenStore');
     });
 
     it('getProviderKeyStorage should still be exported from core for factory use', () => {

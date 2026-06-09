@@ -33,7 +33,6 @@ const SRC_DIR = path.resolve(THIS_DIR, '..'); // packages/auth/src
 const AUTH_DIR = path.resolve(SRC_DIR, '..'); // packages/auth
 const PACKAGES_DIR = path.resolve(AUTH_DIR, '..'); // packages
 const CORE_DIR = path.join(PACKAGES_DIR, 'core');
-const _CLI_DIR = path.join(PACKAGES_DIR, 'cli');
 const ROOT_DIR = path.resolve(PACKAGES_DIR, '..');
 
 /** Canonical import specifiers forbidden in auth production code. */
@@ -270,9 +269,7 @@ describe('Auth package dependency isolation', () => {
    * in P09+, this test becomes the enforcement mechanism.
    */
   it('production code has no forbidden @vybestack/* imports', () => {
-    const prodFiles = collectTsFiles(SRC_DIR, true).filter(
-      (f) => !f.includes('__tests__'),
-    );
+    const prodFiles = collectTsFiles(SRC_DIR, true);
 
     const violations: string[] = [];
 
@@ -297,9 +294,7 @@ describe('Auth package dependency isolation', () => {
    * that reach outside the auth package boundary.
    */
   it('production code has no relative-path escapes', () => {
-    const prodFiles = collectTsFiles(SRC_DIR, true).filter(
-      (f) => !f.includes('__tests__'),
-    );
+    const prodFiles = collectTsFiles(SRC_DIR, true);
 
     const violations: string[] = [];
 

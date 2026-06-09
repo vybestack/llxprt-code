@@ -5,7 +5,7 @@
 
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,11 +15,6 @@
  * These tests verify that core's concrete implementations (SecureStore,
  * SettingsService, DebugLogger) structurally satisfy the DI interface
  * shapes defined in @vybestack/llxprt-code-auth.
- *
- * **P07 Expectation: These tests are EXPECTED TO FAIL until P08 wires
- * the core→auth dependency.** Until P08 adds @vybestack/llxprt-code-auth
- * as a dependency of core's package.json and configures the type path alias
- * for test resolution, the import statements below will fail to resolve.
  *
  * These are type-level structural compatibility checks — they verify that
  * TypeScript structural typing allows core classes to satisfy auth DI

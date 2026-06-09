@@ -80,6 +80,15 @@ export class AuthPrecedenceResolver {
   private logger: IDebugLogger;
   private getActiveRuntimeContextFn?: GetActiveRuntimeContext;
 
+  /**
+   * Constructs an AuthPrecedenceResolver.
+   *
+   * If callers expect resolveAuthentication() to resolve named auth keys itself,
+   * providerKeyStorage must be injected. CLI profile handling normally resolves
+   * named keys to concrete provider apiKey values before provider construction;
+   * direct consumers should pass providerKeyStorage or use core's
+   * createAuthPrecedenceResolver() factory.
+   */
   constructor(
     config: AuthPrecedenceConfig,
     options?: {
@@ -610,7 +619,10 @@ export class AuthPrecedenceResolver {
     }
     const storage = this.providerKeyStorage;
     if (!storage) {
-      throw new Error('Provider key storage not available');
+      throw new Error(
+        'Provider key storage is required to resolve named auth keys. ' +
+          'Pass providerKeyStorage to AuthPrecedenceResolver or use createAuthPrecedenceResolver() from core.',
+      );
     }
     const key = this.normalizeAuthValue(await storage.getKey(trimmedName));
     if (key === undefined) {

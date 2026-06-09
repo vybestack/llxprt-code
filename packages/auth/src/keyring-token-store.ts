@@ -85,7 +85,6 @@ export class KeyringTokenStore implements TokenStore {
     secureStore?: ISecureStore;
     logger?: IDebugLogger;
     lockDir?: string;
-    keySuffix?: string;
   }) {
     if (!options?.secureStore) {
       throw new Error(

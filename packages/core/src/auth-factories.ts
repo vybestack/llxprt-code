@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * @plan:PLAN-20260608-ISSUE1586.P17
  * @requirement:REQ-AUTH-001.4
  *
@@ -41,6 +47,8 @@ const AUTH_SECURE_STORE_SERVICE = 'llxprt-code-oauth';
  */
 export function createKeyringTokenStore(): KeyringTokenStore {
   const secureStore = new SecureStore(AUTH_SECURE_STORE_SERVICE, {
+    // Preserve existing OAuth behavior: SecureStore fallback files are encrypted
+    // at rest, and Linux keeps an encrypted fallback after successful keyring writes.
     fallbackPolicy: 'allow',
   });
   const logger = new DebugLogger('llxprt:auth:keyring');

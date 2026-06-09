@@ -15,7 +15,7 @@ import type { IProviderRuntimeContext } from '../interfaces/runtime-context.js';
 function createSettingsService(authKey: string): ISettingsService {
   return {
     get: (key) => (key === 'auth-key' ? authKey : undefined),
-    getProviderSettings: () => undefined,
+    getProviderSettings: (_providerName) => ({}),
     on: () => {},
     off: () => {},
   };

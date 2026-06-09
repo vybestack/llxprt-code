@@ -131,13 +131,14 @@ describe('Core auth-factories integration', () => {
         refresh_token: 'test-refresh-token',
       };
 
-      await store.saveToken('p17-test-provider', testToken);
-      const loaded = await store.getToken('p17-test-provider');
-      expect(loaded).toBeDefined();
-      expect(loaded?.access_token).toBe('test-access-token-p17');
-
-      // Cleanup
-      await store.removeToken('p17-test-provider');
+      try {
+        await store.saveToken('p17-test-provider', testToken);
+        const loaded = await store.getToken('p17-test-provider');
+        expect(loaded).toBeDefined();
+        expect(loaded?.access_token).toBe('test-access-token-p17');
+      } finally {
+        await store.removeToken('p17-test-provider');
+      }
     });
 
     it('createAuthPrecedenceResolver returns an AuthPrecedenceResolver that resolves auth', async () => {

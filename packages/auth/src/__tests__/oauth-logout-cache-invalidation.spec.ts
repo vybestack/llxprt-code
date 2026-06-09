@@ -30,8 +30,12 @@ function createStubSettingsService(
     get: vi.fn((key: string) => store.get(key)),
     getProviderSettings: vi.fn(() => ({})),
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!listeners.has(event)) listeners.set(event, new Set());
-      listeners.get(event)!.add(handler);
+      let eventListeners = listeners.get(event);
+      if (eventListeners === undefined) {
+        eventListeners = new Set();
+        listeners.set(event, eventListeners);
+      }
+      eventListeners.add(handler);
     }),
     off: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       listeners.get(event)?.delete(handler);

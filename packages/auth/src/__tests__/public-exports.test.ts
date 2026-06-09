@@ -10,8 +10,8 @@
  * Verifies that key public exports are available from the auth package
  * using canonical import/re-export patterns.
  *
- * NOTE: Core factory exports (createKeyringTokenStore, createAuthPrecedenceResolver)
- * are deferred until P17 and must NOT be implemented in P10.
+ * Core factory exports (createKeyringTokenStore, createAuthPrecedenceResolver)
+ * stay in @vybestack/llxprt-code-core and must not be exported from auth.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -292,30 +292,15 @@ describe('Auth package public export tests', () => {
     });
   });
 
-  describe('P17 deferred factory exports', () => {
-    it('createKeyringTokenStore is NOT exported from auth (deferred to P17)', () => {
-      // Factory functions are deferred to P17. The named import above would fail
-      // at compile time if they were exported. Since we import { KeyringTokenStore }
-      // but NOT { createKeyringTokenStore }, the compile-time check is implicit.
-      // Verify the import we DID make doesn't accidentally include factory helpers.
-      // We check via the imported bindings — if createKeyringTokenStore was
-      // exported, it would need to be in our import statement.
-      // This test confirms the current state: factory exports are absent.
-      const exportedNames = Object.keys(
-        // Use dynamic import result shape check at type level
-        // The static import above proves these are NOT available at compile time.
-        { AuthPrecedenceResolver, KeyringTokenStore, flushRuntimeAuthScope },
-      );
-      expect(exportedNames).not.toContain('createKeyringTokenStore');
+  describe('factory export boundaries', () => {
+    it('createKeyringTokenStore is NOT exported from auth', async () => {
+      const mod = await import('../index.js');
+      expect(Object.keys(mod)).not.toContain('createKeyringTokenStore');
     });
 
-    it('createAuthPrecedenceResolver is NOT exported from auth (deferred to P17)', () => {
-      const exportedNames = Object.keys({
-        AuthPrecedenceResolver,
-        KeyringTokenStore,
-        flushRuntimeAuthScope,
-      });
-      expect(exportedNames).not.toContain('createAuthPrecedenceResolver');
+    it('createAuthPrecedenceResolver is NOT exported from auth', async () => {
+      const mod = await import('../index.js');
+      expect(Object.keys(mod)).not.toContain('createAuthPrecedenceResolver');
     });
   });
 });

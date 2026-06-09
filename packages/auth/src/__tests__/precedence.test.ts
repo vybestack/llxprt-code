@@ -15,7 +15,7 @@ function createSettingsService(): ISettingsService {
   const values = new Map<string, unknown>();
   return {
     get: (key) => values.get(key),
-    getProviderSettings: () => undefined,
+    getProviderSettings: (_providerName) => ({}),
     on: () => {},
     off: () => {},
   };
