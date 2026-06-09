@@ -9,7 +9,7 @@ import type { GenerateContentResponse } from '@google/genai';
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
-} from '../geminiChat.js';
+} from '../chatSession.js';
 
 describe('AgentExecutionStoppedError', () => {
   it('should store reason and systemMessage', () => {

@@ -117,6 +117,170 @@ describe('main bootstrap parsing', () => {
     );
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
+
+  it('requestTimeoutMs validation rejects non-number', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { requestTimeoutMs: 'slow' },
+    });
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+    const mod = await loadMain();
+
+    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+      'LSP_BOOTSTRAP.config.requestTimeoutMs must be a number',
+    );
+    expect(stderrSpy).toHaveBeenCalledWith(
+      'LSP_BOOTSTRAP.config.requestTimeoutMs must be a number\n',
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('requestTimeoutMs validation accepts number', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { requestTimeoutMs: 5000 },
+    });
+
+    const mod = await loadMain();
+    const result = mod.parseBootstrapFromEnv() as BootstrapResult;
+
+    expect(result.config.requestTimeoutMs).toBe(5000);
+  });
+
+  it('requestTimeoutMs validation rejects zero', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { requestTimeoutMs: 0 },
+    });
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+    const mod = await loadMain();
+
+    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+      'LSP_BOOTSTRAP.config.requestTimeoutMs must be a finite positive number',
+    );
+    expect(stderrSpy).toHaveBeenCalledWith(
+      'LSP_BOOTSTRAP.config.requestTimeoutMs must be a finite positive number\n',
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('requestTimeoutMs validation rejects negative', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { requestTimeoutMs: -100 },
+    });
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+    const mod = await loadMain();
+
+    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+      'LSP_BOOTSTRAP.config.requestTimeoutMs must be a finite positive number',
+    );
+    expect(stderrSpy).toHaveBeenCalledWith(
+      'LSP_BOOTSTRAP.config.requestTimeoutMs must be a finite positive number\n',
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('requestTimeoutMs validation rejects NaN', async () => {
+    // JSON.stringify turns NaN into null, and JSON.parse turns it back to null
+    // in the env var. We need to set the raw env with a non-standard NaN value
+    // that JSON.parse will parse as a non-number.
+    process.env.LSP_BOOTSTRAP =
+      '{"workspaceRoot":"/tmp/ws","config":{"requestTimeoutMs":"NaN"}}';
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+    const mod = await loadMain();
+
+    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+      'LSP_BOOTSTRAP.config.requestTimeoutMs must be a number',
+    );
+    expect(stderrSpy).toHaveBeenCalledWith(
+      'LSP_BOOTSTRAP.config.requestTimeoutMs must be a number\n',
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('requestTimeoutMs validation rejects Infinity', async () => {
+    // JSON.stringify turns Infinity into null, so test with a string value
+    // that will be parsed as a non-number type.
+    process.env.LSP_BOOTSTRAP =
+      '{"workspaceRoot":"/tmp/ws","config":{"requestTimeoutMs":"Infinity"}}';
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+    const mod = await loadMain();
+
+    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+      'LSP_BOOTSTRAP.config.requestTimeoutMs must be a number',
+    );
+    expect(stderrSpy).toHaveBeenCalledWith(
+      'LSP_BOOTSTRAP.config.requestTimeoutMs must be a number\n',
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('firstTouchTimeoutMs validation rejects non-number', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { firstTouchTimeoutMs: 'fast' },
+    });
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+    const mod = await loadMain();
+
+    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+      'LSP_BOOTSTRAP.config.firstTouchTimeoutMs must be a number',
+    );
+    expect(stderrSpy).toHaveBeenCalledWith(
+      'LSP_BOOTSTRAP.config.firstTouchTimeoutMs must be a number\n',
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('firstTouchTimeoutMs validation accepts number', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { firstTouchTimeoutMs: 15000 },
+    });
+
+    const mod = await loadMain();
+    const result = mod.parseBootstrapFromEnv() as BootstrapResult;
+
+    expect(result.config.firstTouchTimeoutMs).toBe(15000);
+  });
+
+  it('omits firstTouchTimeoutMs from config when not provided', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { diagnosticsTimeoutMs: 1000 },
+    });
+
+    const mod = await loadMain();
+    const result = mod.parseBootstrapFromEnv() as BootstrapResult;
+
+    expect(result.config.firstTouchTimeoutMs).toBeUndefined();
+    expect(result.config.diagnosticsTimeoutMs).toBe(1000);
+  });
 });
 
 describe('main channel wiring', () => {

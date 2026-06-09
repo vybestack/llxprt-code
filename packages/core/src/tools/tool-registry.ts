@@ -18,13 +18,23 @@ import { type ToolContext } from './tool-context.js';
 import type { Config } from '../config/config.js';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
-import { DiscoveredMCPTool } from './mcp-tool.js';
 import { parse } from 'shell-quote';
 import { ToolErrorType } from './tool-error.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { DebugLogger } from '../debug/index.js';
 import { normalizeToolName } from './toolNameUtils.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+interface McpToolLike {
+  serverName: string;
+  serverToolName: string;
+  getFullyQualifiedName?: () => string;
+}
+
+function isMcpTool(
+  tool: AnyDeclarativeTool,
+): tool is AnyDeclarativeTool & McpToolLike {
+  return 'serverName' in tool && 'serverToolName' in tool;
+}
 
 export const DISCOVERED_TOOL_PREFIX = 'discovered_tool_';
 
@@ -362,7 +372,7 @@ export class ToolRegistry {
    */
   sortTools(): void {
     const getPriority = (tool: AnyDeclarativeTool): number => {
-      if (tool instanceof DiscoveredMCPTool) return 2;
+      if (isMcpTool(tool)) return 2;
       if (tool instanceof DiscoveredTool) return 1;
       return 0; // Built-in
     };
@@ -379,8 +389,8 @@ export class ToolRegistry {
         }
 
         if (priorityA === 2) {
-          const serverA = (toolA as DiscoveredMCPTool).serverName;
-          const serverB = (toolB as DiscoveredMCPTool).serverName;
+          const serverA = isMcpTool(toolA) ? toolA.serverName : '';
+          const serverB = isMcpTool(toolB) ? toolB.serverName : '';
           return serverA.localeCompare(serverB);
         }
 
@@ -396,9 +406,7 @@ export class ToolRegistry {
   private buildCoreToolsMap(): Map<string, AnyDeclarativeTool> {
     const coreTools = new Map<string, AnyDeclarativeTool>();
     for (const [name, tool] of this.tools.entries()) {
-      if (
-        !(tool instanceof DiscoveredTool || tool instanceof DiscoveredMCPTool)
-      ) {
+      if (!(tool instanceof DiscoveredTool || isMcpTool(tool))) {
         coreTools.set(name, tool);
       }
     }
@@ -411,7 +419,7 @@ export class ToolRegistry {
    */
   removeMcpToolsByServer(serverName: string): void {
     for (const [name, tool] of this.tools.entries()) {
-      if (tool instanceof DiscoveredMCPTool && tool.serverName === serverName) {
+      if (isMcpTool(tool) && tool.serverName === serverName) {
         this.tools.delete(name);
       }
     }
@@ -715,8 +723,7 @@ export class ToolRegistry {
   getToolsByServer(serverName: string): AnyDeclarativeTool[] {
     const serverTools: AnyDeclarativeTool[] = [];
     for (const tool of this.tools.values()) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if ((tool as DiscoveredMCPTool)?.serverName === serverName) {
+      if (isMcpTool(tool) && tool.serverName === serverName) {
         serverTools.push(tool);
       }
     }
@@ -744,7 +751,8 @@ export class ToolRegistry {
     if (!tool && name.includes('__')) {
       for (const t of this.tools.values()) {
         if (
-          t instanceof DiscoveredMCPTool &&
+          isMcpTool(t) &&
+          typeof t.getFullyQualifiedName === 'function' &&
           t.getFullyQualifiedName() === name
         ) {
           tool = t;
@@ -784,7 +792,7 @@ export class ToolRegistry {
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string tool name should fall through to original name
     const normalizedName = normalizeToolName(tool.name) || tool.name;
 
-    if (targetMap.has(normalizedName) && !(tool instanceof DiscoveredMCPTool)) {
+    if (targetMap.has(normalizedName) && !isMcpTool(tool)) {
       // For non-MCP tools, log warning and overwrite
       // For MCP tools, we assume they already have unique names from generateMcpToolName(serverName, toolName)
       // so we simply overwrite (this should not happen in normal operation)

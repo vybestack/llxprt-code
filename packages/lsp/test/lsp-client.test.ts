@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as fc from 'fast-check';
 import { fileURLToPath } from 'node:url';
 
-import { createLspClient } from '../src/service/lsp-client';
+import {
+  createLspClient,
+  LspRequestTimeoutError,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+} from '../src/service/lsp-client';
 import type { LspServerConfig } from '../src/types';
 
 const WORKSPACE_ROOT = '/workspace';
@@ -471,5 +475,371 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
     expect(diagnostics.length).toBe(2);
     expect(diagnostics[0]?.message ?? '').toContain('\u30a8\u30e9\u30fc');
     expect(diagnostics[1]?.message ?? '').toContain('\u8b66\u544a');
+  });
+  describe('LspClient request timeout', () => {
+    it('rejects with LspRequestTimeoutError when request exceeds configured requestTimeoutMs', async () => {
+      const client = createLspClient(
+        createConfig(['--delay-request-method', 'textDocument/hover']),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 200 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/timeout-test.ts', 'const x = 1;');
+
+      await expect(
+        client.hover('/workspace/src/timeout-test.ts', 0, 0),
+      ).rejects.toThrow(LspRequestTimeoutError);
+    });
+
+    it('LspRequestTimeoutError includes method name and timeout duration', async () => {
+      const client = createLspClient(
+        createConfig(['--delay-request-method', 'textDocument/hover']),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 150 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/timeout-msg.ts', 'const x = 1;');
+
+      try {
+        await client.hover('/workspace/src/timeout-msg.ts', 0, 0);
+        expect.unreachable('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(LspRequestTimeoutError);
+        const timeoutError = error as LspRequestTimeoutError;
+        expect(timeoutError.method).toBe('textDocument/hover');
+        expect(timeoutError.timeoutMs).toBe(150);
+        expect(timeoutError.message).toContain('textDocument/hover');
+        expect(timeoutError.message).toContain('150');
+        expect(timeoutError.name).toBe('LspRequestTimeoutError');
+      }
+    });
+
+    it('timeout does not mark client as broken', async () => {
+      const client = createLspClient(
+        createConfig(['--delay-request-method', 'textDocument/hover']),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 200 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/timeout-alive.ts', 'const x = 1;');
+
+      await expect(
+        client.hover('/workspace/src/timeout-alive.ts', 0, 0),
+      ).rejects.toThrow(LspRequestTimeoutError);
+
+      expect(client.isAlive()).toBe(true);
+    });
+
+    it('a later normal request can still complete after an earlier timeout', async () => {
+      const client = createLspClient(
+        createConfig(['--delay-request-method', 'textDocument/hover']),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 200 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile(
+        '/workspace/src/timeout-recover.ts',
+        'const x = 1;',
+      );
+
+      // First request times out (hover is delayed)
+      await expect(
+        client.hover('/workspace/src/timeout-recover.ts', 0, 0),
+      ).rejects.toThrow(LspRequestTimeoutError);
+
+      // Second request uses documentSymbols which is NOT delayed
+      const symbols = await client.documentSymbols(
+        '/workspace/src/timeout-recover.ts',
+      );
+      expect(Array.isArray(symbols)).toBe(true);
+      expect(client.isAlive()).toBe(true);
+    });
+
+    it('uses DEFAULT_REQUEST_TIMEOUT_MS (30s) when no requestTimeoutMs is configured', () => {
+      expect(DEFAULT_REQUEST_TIMEOUT_MS).toBe(30_000);
+    });
+
+    it('default constructor uses DEFAULT_REQUEST_TIMEOUT_MS', async () => {
+      const client = createLspClient(createConfig(), WORKSPACE_ROOT);
+      createdClients.push(client);
+
+      // We can verify indirectly: initialize must still succeed
+      // because the 30s default is long enough for the fake server
+      await client.initialize();
+      expect(client.isAlive()).toBe(true);
+    });
+  });
+
+  describe('LspClient request abort', () => {
+    it('rejects with abort error when in-flight request is aborted', async () => {
+      const client = createLspClient(
+        createConfig(['--delay-request-method', 'textDocument/hover']),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 30_000 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/abort-test.ts', 'const x = 1;');
+
+      const controller = new AbortController();
+      const hoverPromise = client.hover('/workspace/src/abort-test.ts', 0, 0, {
+        abortSignal: controller.signal,
+      });
+
+      controller.abort(new Error('User cancelled'));
+
+      await expect(hoverPromise).rejects.toThrow('User cancelled');
+    });
+
+    it('abort does not mark client as broken', async () => {
+      const client = createLspClient(
+        createConfig(['--delay-request-method', 'textDocument/hover']),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 30_000 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/abort-alive.ts', 'const x = 1;');
+
+      const controller = new AbortController();
+      const hoverPromise = client.hover('/workspace/src/abort-alive.ts', 0, 0, {
+        abortSignal: controller.signal,
+      });
+
+      controller.abort();
+
+      await expect(hoverPromise).rejects.toThrow();
+      expect(client.isAlive()).toBe(true);
+    });
+
+    it('rejects immediately when already-aborted signal is passed', async () => {
+      const client = createLspClient(createConfig(), WORKSPACE_ROOT, {
+        requestTimeoutMs: 30_000,
+      });
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/pre-abort.ts', 'const x = 1;');
+
+      const controller = new AbortController();
+      controller.abort(new Error('Already aborted'));
+
+      await expect(
+        client.hover('/workspace/src/pre-abort.ts', 0, 0, {
+          abortSignal: controller.signal,
+        }),
+      ).rejects.toThrow('Already aborted');
+
+      expect(client.isAlive()).toBe(true);
+    });
+
+    it('pre-aborted signal does not prevent subsequent requests from succeeding', async () => {
+      const client = createLspClient(
+        createConfig(['--delay-request-method', 'textDocument/hover']),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 30_000 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile(
+        '/workspace/src/pre-abort-chain.ts',
+        'const x = 1;',
+      );
+
+      const controller = new AbortController();
+      controller.abort(new Error('Pre-cancelled'));
+
+      // Already-aborted hover should reject without sending
+      await expect(
+        client.hover('/workspace/src/pre-abort-chain.ts', 0, 0, {
+          abortSignal: controller.signal,
+        }),
+      ).rejects.toThrow('Pre-cancelled');
+
+      // documentSymbols is NOT delayed and should complete normally,
+      // proving no pending entry was leaked from the pre-aborted call
+      const symbols = await client.documentSymbols(
+        '/workspace/src/pre-abort-chain.ts',
+      );
+      expect(Array.isArray(symbols)).toBe(true);
+      expect(client.isAlive()).toBe(true);
+    });
+  });
+  describe('LspClient write failure cleanup', () => {
+    it('request to crashed server cleans up pending/timer/listener and does not mark broken for timeout', async () => {
+      // Use --crash-on-method to make the server crash when it receives a
+      // specific request method. This exercises sendRequest's write-phase
+      // failure path directly (the write succeeds, but the process exits
+      // before the response arrives). The client should clean up the pending
+      // entry, timer, and abort listener via markBroken — without the request
+      // timeout/abort itself ever calling markBroken.
+      const client = createLspClient(
+        createConfig(['--crash-on-method', 'textDocument/hover']),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 3000 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/crash-req.ts', 'const x = 1;');
+
+      // The server crashes when it receives hover, so the write succeeds but
+      // the response never arrives. markBroken rejects the pending promise.
+      // The test verifies that the timeout timer and abort listener registered
+      // in Phase 2 are cleaned up by markBroken (not a leaked timer).
+      await expect(
+        client.hover('/workspace/src/crash-req.ts', 0, 0),
+      ).rejects.toThrow();
+
+      // markBroken was triggered by the process exit, not by timeout/abort
+      expect(client.isAlive()).toBe(false);
+    });
+
+    it('request with abort signal to crashed server cleans up abort listener', async () => {
+      const client = createLspClient(
+        createConfig(['--crash-on-method', 'textDocument/hover']),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 3000 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/abort-req.ts', 'const x = 1;');
+
+      const controller = new AbortController();
+
+      // Request with abort signal — server crashes on hover, markBroken
+      // rejects the pending and should clean up the abort listener.
+      await expect(
+        client.hover('/workspace/src/abort-req.ts', 0, 0, {
+          abortSignal: controller.signal,
+        }),
+      ).rejects.toThrow();
+
+      expect(client.isAlive()).toBe(false);
+
+      // Aborting after the fact should be a no-op (no double-reject,
+      // no unhandled rejection) because the listener was removed.
+      controller.abort();
+    });
+
+    it('request to crashed server clears timeout timer without unhandled rejection', async () => {
+      const client = createLspClient(
+        createConfig(['--crash-on-method', 'textDocument/hover']),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 200 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/timer-req.ts', 'const x = 1;');
+
+      let unhandledRejection = false;
+      const handler = (): void => {
+        unhandledRejection = true;
+      };
+      process.on('unhandledRejection', handler);
+
+      try {
+        await expect(
+          client.hover('/workspace/src/timer-req.ts', 0, 0),
+        ).rejects.toThrow();
+
+        // Wait beyond requestTimeoutMs to ensure any leaked timer would fire
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      } finally {
+        process.off('unhandledRejection', handler);
+      }
+
+      // No unhandled rejection from a leaked timer
+      expect(unhandledRejection).toBe(false);
+    });
+  });
+
+  describe('LspClient late response after timeout/abort', () => {
+    it('late response arriving after timeout does not break subsequent requests', async () => {
+      // Use both --delay-request-method and --delay-respond-ms so the server
+      // delays the hover response by 500ms (which will arrive after the 200ms
+      // timeout). The late response should be silently dropped and not affect
+      // subsequent requests.
+      const client = createLspClient(
+        createConfig([
+          '--delay-request-method',
+          'textDocument/hover',
+          '--delay-respond-ms',
+          '500',
+        ]),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 200 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/late-resp.ts', 'const x = 1;');
+
+      // Hover times out after 200ms; the server will send a late response
+      // at ~500ms that should be ignored.
+      await expect(
+        client.hover('/workspace/src/late-resp.ts', 0, 0),
+      ).rejects.toThrow(LspRequestTimeoutError);
+
+      // Wait for the late response to actually arrive
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // A subsequent request should work fine despite the late response
+      const symbols = await client.documentSymbols(
+        '/workspace/src/late-resp.ts',
+      );
+      expect(Array.isArray(symbols)).toBe(true);
+      expect(client.isAlive()).toBe(true);
+    });
+
+    it('late response arriving after abort does not break subsequent requests', async () => {
+      const client = createLspClient(
+        createConfig([
+          '--delay-request-method',
+          'textDocument/hover',
+          '--delay-respond-ms',
+          '500',
+        ]),
+        WORKSPACE_ROOT,
+        { requestTimeoutMs: 30_000 },
+      );
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/late-abort.ts', 'const x = 1;');
+
+      const controller = new AbortController();
+      const hoverPromise = client.hover('/workspace/src/late-abort.ts', 0, 0, {
+        abortSignal: controller.signal,
+      });
+
+      // Abort immediately — server will send late response at ~500ms
+      controller.abort(new Error('Cancelled'));
+
+      await expect(hoverPromise).rejects.toThrow('Cancelled');
+
+      // Wait for the late response to arrive
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Subsequent non-delayed request should still work
+      const symbols = await client.documentSymbols(
+        '/workspace/src/late-abort.ts',
+      );
+      expect(Array.isArray(symbols)).toBe(true);
+      expect(client.isAlive()).toBe(true);
+    });
   });
 });

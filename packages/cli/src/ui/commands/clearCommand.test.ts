@@ -27,7 +27,7 @@ vi.mock('../../runtime/runtimeSettings.js', () => ({
   getCliRuntimeServices: vi.fn(),
 }));
 
-import type { Config, GeminiClient } from '@vybestack/llxprt-code-core';
+import type { Config, AgentClient } from '@vybestack/llxprt-code-core';
 import {
   uiTelemetryService,
   triggerSessionEndHook,
@@ -54,13 +54,13 @@ describe('clearCommand', () => {
     mockContext = createMockCommandContext({
       services: {
         config: {
-          getGeminiClient: () =>
+          getAgentClient: () =>
             ({
               resetChat: mockResetChat,
               getChat: () => ({
                 getChatRecordingService: mockGetChatRecordingService,
               }),
-            }) as unknown as GeminiClient,
+            }) as unknown as AgentClient,
           setSessionId: vi.fn(),
         },
       },
@@ -105,10 +105,10 @@ describe('clearCommand', () => {
     const runtimeResetChat = vi.fn().mockResolvedValue(undefined);
     vi.mocked(getCliRuntimeServices).mockReturnValue({
       config: {
-        getGeminiClient: () =>
+        getAgentClient: () =>
           ({
             resetChat: runtimeResetChat,
-          }) as unknown as GeminiClient,
+          }) as unknown as AgentClient,
       } as Config,
       settingsService: {} as unknown,
       providerManager: {} as unknown,

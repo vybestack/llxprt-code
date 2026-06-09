@@ -6,7 +6,7 @@
  * @plan PLAN-20251213issue490
  * Phase 7: Bucket Failover Integration
  *
- * Integrates bucket failover logic into GeminiChat provider execution flow
+ * Integrates bucket failover logic into ChatSession provider execution flow
  */
 
 /* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */

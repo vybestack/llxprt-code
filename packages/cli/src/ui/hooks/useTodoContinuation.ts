@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { Config, GeminiClient, Todo } from '@vybestack/llxprt-code-core';
+import type { Config, AgentClient, Todo } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { useTodoContext } from '../contexts/TodoContext.js';
 
@@ -109,7 +109,7 @@ function generatePrompt(todo: Todo, config: Config): string {
 }
 
 function sendContinuationPrompt(
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   taskDescription: string,
   continuationPrompt: string,
   onDebugMessage: (message: string) => void,
@@ -130,7 +130,7 @@ function sendContinuationPrompt(
   }));
 
   (
-    geminiClient.sendMessageStream as unknown as (
+    agentClient.sendMessageStream as unknown as (
       message: string,
       options?: { ephemeral: boolean },
     ) => Promise<void>
@@ -158,7 +158,7 @@ function processContinuation(
   isResponding: boolean,
   continuationState: ContinuationState,
   continuationInProgressRef: React.MutableRefObject<boolean>,
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   onDebugMessage: (message: string) => void,
   setContinuationState: React.Dispatch<React.SetStateAction<ContinuationState>>,
 ): void {
@@ -190,7 +190,7 @@ function processContinuation(
 
   const continuationPrompt = generatePrompt(activeTodo, config);
   sendContinuationPrompt(
-    geminiClient,
+    agentClient,
     activeTodo.content,
     continuationPrompt,
     onDebugMessage,
@@ -205,7 +205,7 @@ function processContinuation(
  * [REQ-001] Task Continuation Detection, [REQ-002] Continuation Prompting
  */
 export const useTodoContinuation = (
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   config: Config,
   isResponding: boolean,
   onDebugMessage: (message: string) => void,
@@ -228,7 +228,7 @@ export const useTodoContinuation = (
         isResponding,
         continuationState,
         continuationInProgressRef,
-        geminiClient,
+        agentClient,
         onDebugMessage,
         setContinuationState,
       );
@@ -238,7 +238,7 @@ export const useTodoContinuation = (
       todoContext,
       continuationState,
       isResponding,
-      geminiClient,
+      agentClient,
       onDebugMessage,
     ],
   );

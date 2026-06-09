@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Turn } from './turn.js';
-import type { GeminiChat } from './geminiChat.js';
+import type { ChatSession } from './chatSession.js';
 import type { FunctionCall } from '@google/genai';
 import { GeminiEventType } from './turn.js';
 
 describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => {
-  let mockGeminiChat: GeminiChat;
+  let mockChatSession: ChatSession;
 
   beforeEach(() => {
-    // Create a more realistic mock for GeminiChat
-    mockGeminiChat = {
+    // Create a more realistic mock for ChatSession
+    mockChatSession = {
       sendPromise: Promise.resolve(),
       compressionPromise: Promise.resolve(),
       logger: {
@@ -37,20 +37,20 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       getSafetySettings: vi.fn().mockReturnValue([]),
       setSafetySettings: vi.fn(),
       // Add any other required properties...
-    } as unknown as GeminiChat;
+    } as unknown as ChatSession;
   });
 
   describe('Tool Name Normalization Integration', () => {
     it('should handle Turn construction with different prompt IDs', () => {
       // Test basic Turn construction
-      const turnWithId = new Turn(mockGeminiChat, 'different-prompt-id');
+      const turnWithId = new Turn(mockChatSession, 'different-prompt-id');
       expect(turnWithId).toBeInstanceOf(Turn);
     });
 
     it('should handle Turn with agent ID', () => {
       // Test Turn construction with agent ID
       const turnWithAgent = new Turn(
-        mockGeminiChat,
+        mockChatSession,
         'test-prompt',
         'agent-123',
       );

@@ -30,7 +30,9 @@ export interface LspConfig {
   maxProjectDiagnosticsFiles?: number;
   diagnosticTimeout?: number;
   firstTouchTimeout?: number;
+  navigationTimeout?: number;
   navigationTools?: boolean;
+  requestTimeout?: number;
 }
 
 export interface Diagnostic {

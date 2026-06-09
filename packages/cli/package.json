@@ -46,6 +46,8 @@
     "@types/update-notifier": "^6.0.8",
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
+    "@vybestack/llxprt-code-mcp": "file:../mcp",
+    "@vybestack/llxprt-code-providers": "file:../providers",
     "ansi-regex": "^6.2.2",
     "chalk": "^5.3.0",
     "cli-spinners": "2.9.2",
@@ -81,8 +83,7 @@
     "update-notifier": "^7.3.1",
     "wrap-ansi": "9.0.2",
     "yargs": "^17.7.2",
-    "zod": "^3.23.8",
-    "@vybestack/llxprt-code-providers": "file:../providers"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@babel/runtime": "^7.27.6",

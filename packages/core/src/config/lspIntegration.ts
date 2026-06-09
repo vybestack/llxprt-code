@@ -299,7 +299,7 @@ async function registerDiscoveredTools(
   registry: ToolRegistry,
   host: LspHost,
 ): Promise<void> {
-  const { DiscoveredMCPTool } = await import('../tools/mcp-tool.js');
+  const { DiscoveredMCPTool } = await import('@vybestack/llxprt-code-mcp');
 
   for (const toolDef of toolDefs) {
     const callableTool = new LspNavigationCallableTool(client, toolDef);

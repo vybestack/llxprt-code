@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Existing A2A task orchestration file exceeds the project line limit; MCP extraction only updates import boundaries. */
+
 import {
-  GeminiClient,
+  AgentClient,
   GeminiEventType,
   ToolConfirmationOutcome,
   ApprovalMode,
-  getAllMCPServerStatuses,
-  MCPServerStatus,
   isNodeError,
   createAgentRuntimeState,
   DEFAULT_GUI_EDITOR,
@@ -31,6 +31,10 @@ import type {
   AnsiOutput,
   CoreToolScheduler,
 } from '@vybestack/llxprt-code-core';
+import {
+  getAllMCPServerStatuses,
+  MCPServerStatus,
+} from '@vybestack/llxprt-code-mcp';
 import type { RequestContext } from '@a2a-js/sdk/server';
 import { type ExecutionEventBus } from '@a2a-js/sdk/server';
 import type {
@@ -74,7 +78,6 @@ import {
   createTextMessage,
   createDataMessage,
 } from './task-support.js';
-
 type SchedulerConfig = Config & {
   getOrCreateScheduler(
     sessionId: string,
@@ -97,13 +100,12 @@ function getEventTraceId(event: ServerGeminiStreamEvent): string | undefined {
     ? event.traceId
     : undefined;
 }
-
 export class Task {
   id: string;
   contextId: string;
   scheduler: CoreToolScheduler | null;
   config: Config;
-  geminiClient: GeminiClient;
+  agentClient: AgentClient;
   pendingToolConfirmationDetails: Map<
     string,
     ToolCallConfirmationDetails | SerializableConfirmationDetails
@@ -116,7 +118,6 @@ export class Task {
   promptCount = 0;
   autoExecute: boolean;
 
-  // For tool waiting logic
   private pendingToolCalls: Map<string, string> = new Map(); //toolCallId --> status
   private toolCompletionPromise?: Promise<void>;
   private toolCompletionNotifier?: {
@@ -150,7 +151,7 @@ export class Task {
       proxyUrl: this.config.getProxy(),
       sessionId: this.config.getSessionId(),
     });
-    this.geminiClient = new GeminiClient(this.config, runtimeState);
+    this.agentClient = new AgentClient(this.config, runtimeState);
     this.pendingToolConfirmationDetails = new Map();
     this.taskState = 'submitted';
     this.eventBus = eventBus;
@@ -283,7 +284,7 @@ export class Task {
     } = {
       coderAgent: coderAgentMessage,
       model: this.modelInfo?.model ?? this.config.getModel(),
-      userTier: this.geminiClient.getUserTier(),
+      userTier: this.agentClient.getUserTier(),
     };
 
     if (metadataError) {
@@ -586,7 +587,7 @@ export class Task {
         await processRestorableToolCalls(
           restorableRequests,
           gitService,
-          this.geminiClient,
+          this.agentClient,
         );
 
       if (errors.length > 0) {
@@ -731,7 +732,7 @@ export class Task {
       } else {
         parts = [response];
       }
-      void this.geminiClient.addHistory({
+      void this.agentClient.addHistory({
         role: 'user',
         parts,
       });
@@ -769,7 +770,7 @@ export class Task {
     };
     // Set task state to working as we are about to call LLM
     this.setTaskStateAndPublishUpdate('working', stateChange);
-    yield* this.geminiClient.sendMessageStream(
+    yield* this.agentClient.sendMessageStream(
       llmParts,
       aborted,
       completedToolCalls[0]?.request.prompt_id ?? '',
@@ -819,7 +820,7 @@ export class Task {
       };
       // Set task state to working as we are about to call LLM
       this.setTaskStateAndPublishUpdate('working', stateChange);
-      yield* this.geminiClient.sendMessageStream(
+      yield* this.agentClient.sendMessageStream(
         llmParts,
         aborted,
         this.currentPromptId,

@@ -14,7 +14,7 @@ import {
 import { useCallback, useState } from 'react';
 import {
   type Config,
-  type GeminiClient,
+  type AgentClient,
   isBinary,
   type ShellExecutionResult,
   ShellExecutionService,
@@ -44,7 +44,7 @@ interface ShellExecutionParams {
   userMessageTimestamp: number;
   pwdFilePath: string | undefined;
   config: Config;
-  geminiClient: GeminiClient | undefined;
+  agentClient: AgentClient | undefined;
   rawQuery: string;
   abortSignal: AbortSignal;
   onDebugMessage: (message: string) => void;
@@ -63,8 +63,8 @@ interface ShellExecutionParams {
   resolve: (value: void | PromiseLike<void>) => void;
 }
 
-function addShellCommandToGeminiHistory(
-  geminiClient: GeminiClient | undefined,
+function addShellCommandToAgentHistory(
+  agentClient: AgentClient | undefined,
   rawQuery: string,
   resultText: string,
 ) {
@@ -73,9 +73,9 @@ function addShellCommandToGeminiHistory(
       ? resultText.substring(0, MAX_OUTPUT_LENGTH) + '\n... (truncated)'
       : resultText;
 
-  if (geminiClient) {
+  if (agentClient) {
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    geminiClient.addHistory({
+    agentClient.addHistory({
       role: 'user',
       parts: [
         {
@@ -304,7 +304,7 @@ function handleShellResult(
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
-  geminiClient: GeminiClient | undefined,
+  agentClient: AgentClient | undefined,
   rawQuery: string,
 ) {
   setPendingHistoryItem(null);
@@ -337,7 +337,7 @@ function handleShellResult(
     userMessageTimestamp,
   );
 
-  addShellCommandToGeminiHistory(geminiClient, rawQuery, finalOutput);
+  addShellCommandToAgentHistory(agentClient, rawQuery, finalOutput);
 }
 
 function handleShellError(
@@ -427,7 +427,7 @@ function handleExecutionResult(
         params.userMessageTimestamp,
         params.addItemToHistory,
         params.setPendingHistoryItem,
-        params.geminiClient,
+        params.agentClient,
         params.rawQuery,
       );
     })
@@ -577,7 +577,7 @@ export const useShellCommandProcessor = (
   onExec: (command: Promise<void>) => void | Promise<void>,
   onDebugMessage: (message: string) => void,
   config: Config,
-  geminiClient: GeminiClient | undefined,
+  agentClient: AgentClient | undefined,
   setShellInputFocused: (value: boolean) => void,
   terminalWidth?: number,
   terminalHeight?: number,
@@ -614,7 +614,7 @@ export const useShellCommandProcessor = (
           userMessageTimestamp,
           pwdFilePath,
           config,
-          geminiClient,
+          agentClient,
           rawQuery,
           abortSignal,
           onDebugMessage,
@@ -639,7 +639,7 @@ export const useShellCommandProcessor = (
       addItemToHistory,
       setPendingHistoryItem,
       onExec,
-      geminiClient,
+      agentClient,
       setShellInputFocused,
       terminalWidth,
       terminalHeight,

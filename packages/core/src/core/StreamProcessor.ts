@@ -8,7 +8,7 @@
 
 /**
  * StreamProcessor - Handles API stream requests and response processing.
- * Extracted from geminiChat.ts Phase 05.
+ * Extracted from chatSession.ts Phase 05.
  * These are the core streaming methods that make API calls and process responses.
  */
 
@@ -51,7 +51,7 @@ import {
   isSchemaDepthError,
   isThoughtPart,
   type UsageMetadataWithCache,
-} from './geminiChatTypes.js';
+} from './chatSessionTypes.js';
 import type { ResponseOutcome } from '../utils/generateContentResponseUtilities.js';
 import { analyzeResponseOutcome } from '../utils/generateContentResponseUtilities.js';
 import { hasCycleInSchema } from '../tools/tools.js';
@@ -59,11 +59,11 @@ import { isStructuredError } from '../utils/quotaErrorDetection.js';
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
-} from './geminiChat.js';
+} from './chatSession.js';
 
 /**
  * StreamProcessor handles making API calls and processing streaming responses.
- * Extracted from GeminiChat to isolate streaming concerns.
+ * Extracted from ChatSession to isolate streaming concerns.
  */
 
 type ToolGroupArray = Array<{
@@ -1079,7 +1079,7 @@ export class StreamProcessor {
 
   /**
    * Enrich schema depth errors with diagnostic information.
-   * Adapted from maybeIncludeSchemaDepthContext in geminiChat.ts.
+   * Adapted from maybeIncludeSchemaDepthContext in chatSession.ts.
    */
   _enrichSchemaDepthError(error: unknown): void {
     // Check for potentially problematic cyclic tools with cyclic schemas

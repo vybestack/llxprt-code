@@ -7,7 +7,7 @@
 import { type ToolResult } from '../tools/tools.js';
 import type { GenerateContentResponse } from '@google/genai';
 import { type Content, type GenerateContentConfig } from '@google/genai';
-import type { GeminiClient } from '../core/client.js';
+import type { AgentClient } from '../core/client.js';
 import { DEFAULT_GEMINI_FLASH_LITE_MODEL } from '../config/models.js';
 import { getResponseText } from './generateContentResponseUtilities.js';
 import { partToString } from './partUtils.js';
@@ -21,7 +21,7 @@ import { debugLogger } from './debugLogger.js';
  */
 export type Summarizer = (
   result: ToolResult,
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   abortSignal: AbortSignal,
 ) => Promise<string>;
 
@@ -29,13 +29,13 @@ export type Summarizer = (
  * The default summarizer for tool results.
  *
  * @param result The result of the tool execution.
- * @param geminiClient The Gemini client to use for summarization.
+ * @param agentClient The agent client to use for summarization.
  * @param abortSignal The abort signal to use for summarization.
  * @returns The summary of the result.
  */
 export const defaultSummarizer: Summarizer = (
   result: ToolResult,
-  _geminiClient: GeminiClient,
+  _agentClient: AgentClient,
   _abortSignal: AbortSignal,
 ) => Promise.resolve(JSON.stringify(result.llmContent));
 
@@ -53,16 +53,16 @@ Text to summarize:
 Return the summary string which should first contain an overall summarization of text followed by the full stack trace of errors and warnings in the tool output.
 `;
 
-export const llmSummarizer: Summarizer = (result, geminiClient, abortSignal) =>
+export const llmSummarizer: Summarizer = (result, agentClient, abortSignal) =>
   summarizeToolOutput(
     partToString(result.llmContent),
-    geminiClient,
+    agentClient,
     abortSignal,
   );
 
 export async function summarizeToolOutput(
   textToSummarize: string,
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   abortSignal: AbortSignal,
   maxOutputTokens: number = 2000,
 ): Promise<string> {
@@ -81,7 +81,7 @@ export async function summarizeToolOutput(
     maxOutputTokens,
   };
   try {
-    const parsedResponse = (await geminiClient.generateContent(
+    const parsedResponse = (await agentClient.generateContent(
       contents,
       toolOutputSummarizerConfig,
       abortSignal,

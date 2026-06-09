@@ -72,6 +72,7 @@ export interface TaskToolParams {
   context_vars?: Record<string, unknown>;
   contextVars?: Record<string, unknown>;
   timeout_seconds?: number;
+  grace_period_seconds?: number;
   async?: boolean;
 }
 
@@ -265,6 +266,14 @@ class TaskToolInvocation extends BaseToolInvocation<
     if (timeoutMs !== undefined) {
       launchRequest.runConfig = {
         max_time_minutes: timeoutMs / 60_000,
+      };
+    }
+
+    if (this.params.grace_period_seconds !== undefined) {
+      launchRequest.runConfig = {
+        max_time_minutes:
+          launchRequest.runConfig?.max_time_minutes ?? Number.POSITIVE_INFINITY,
+        grace_period_seconds: this.params.grace_period_seconds,
       };
     }
 
@@ -1379,6 +1388,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
             type: 'number',
             description:
               'Optional timeout in seconds for the task execution (-1 for unlimited).',
+          },
+          grace_period_seconds: {
+            type: 'number',
+            description:
+              'Optional grace period in seconds for recovery after a termination condition (TIMEOUT, MAX_TURNS, or protocol violation). Falls back to 60s if not specified or invalid.',
           },
           async: {
             type: 'boolean',

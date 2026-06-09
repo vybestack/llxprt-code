@@ -22,7 +22,7 @@ import type { ToolRegistry } from './tool-registry.js';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { GeminiClient } from '../core/client.js';
+import { AgentClient } from '../core/client.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { ToolErrorType } from './tool-error.js';
@@ -33,7 +33,7 @@ const rootDir = path.resolve(os.tmpdir(), 'gemini-cli-test-root');
 // --- MOCKS ---
 vi.mock('../core/client.js');
 
-let mockGeminiClientInstance: Mocked<GeminiClient>;
+let mockAgentClientInstance: Mocked<AgentClient>;
 
 // Mock Config
 const fsService = new StandardFileSystemService();
@@ -41,7 +41,7 @@ const mockConfigInternal = {
   getTargetDir: () => rootDir,
   getApprovalMode: vi.fn(() => ApprovalMode.DEFAULT),
   setApprovalMode: vi.fn(),
-  getGeminiClient: vi.fn(), // Initialize as a plain mock function
+  getAgentClient: vi.fn(), // Initialize as a plain mock function
   getFileSystemService: () => fsService,
   getIdeClient: vi.fn(),
   getIdeMode: vi.fn(() => false),
@@ -87,17 +87,15 @@ describe('WriteFileTool', () => {
       fs.mkdirSync(rootDir, { recursive: true });
     }
 
-    // Setup GeminiClient mock
-    mockGeminiClientInstance = new (vi.mocked(GeminiClient))(
+    // Setup AgentClient mock
+    mockAgentClientInstance = new (vi.mocked(AgentClient))(
       mockConfig,
       {} as AgentRuntimeState,
-    ) as Mocked<GeminiClient>;
-    vi.mocked(GeminiClient).mockImplementation(() => mockGeminiClientInstance);
+    ) as Mocked<AgentClient>;
+    vi.mocked(AgentClient).mockImplementation(() => mockAgentClientInstance);
 
-    // Now that mockGeminiClientInstance is initialized, set the mock implementation for getGeminiClient
-    mockConfigInternal.getGeminiClient.mockReturnValue(
-      mockGeminiClientInstance,
-    );
+    // Now that mockAgentClientInstance is initialized, set the mock implementation for getAgentClient
+    mockConfigInternal.getAgentClient.mockReturnValue(mockAgentClientInstance);
     mockConfigInternal.getIdeClient.mockReturnValue({
       openDiff: vi.fn(),
       closeDiff: vi.fn(),

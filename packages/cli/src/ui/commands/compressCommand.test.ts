@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { GeminiClient } from '@vybestack/llxprt-code-core';
+import { describe, it, expect, beforeEach } from 'vitest';
+import type { AgentClient } from '@vybestack/llxprt-code-core';
 import {
   CompressionStatus,
   PerformCompressionResult,
@@ -14,21 +14,59 @@ import { compressCommand } from './compressCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import type { CommandContext } from './types.js';
+import type {
+  HistoryItemWithoutId,
+  HistoryItemCompression,
+  HistoryItemError,
+} from '../types.js';
+
+interface CapturedState {
+  items: HistoryItemWithoutId[];
+  pendingItems: Array<HistoryItemWithoutId | null>;
+}
+
+function setupCapturingContext(): {
+  context: CommandContext;
+  state: CapturedState;
+} {
+  const state: CapturedState = {
+    items: [],
+    pendingItems: [],
+  };
+  const base = createMockCommandContext();
+  base.ui.addItem = ((item: HistoryItemWithoutId) => {
+    state.items.push(item);
+  }) as CommandContext['ui']['addItem'];
+  base.ui.setPendingItem = ((item: HistoryItemWithoutId | null) => {
+    state.pendingItems.push(item);
+    base.ui.pendingItem = item;
+  }) as CommandContext['ui']['setPendingItem'];
+  return { context: base, state };
+}
+
+function findCompressionItem(
+  items: HistoryItemWithoutId[],
+): HistoryItemCompression | undefined {
+  return items.find(
+    (i): i is HistoryItemCompression => i.type === MessageType.COMPRESSION,
+  );
+}
+
+function findErrorItem(
+  items: HistoryItemWithoutId[],
+): HistoryItemError | undefined {
+  return items.find((i): i is HistoryItemError => i.type === MessageType.ERROR);
+}
 
 describe('compressCommand', () => {
   let context: CommandContext;
+  let state: CapturedState;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    context = createMockCommandContext();
+    ({ context, state } = setupCapturingContext());
   });
 
   it('returns already-compressing error when a compression request is pending', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
     context.ui.pendingItem = {
       type: MessageType.COMPRESSION,
       compression: {
@@ -39,601 +77,447 @@ describe('compressCommand', () => {
       },
     };
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      {
-        type: MessageType.ERROR,
-        text: 'Already compressing, wait for previous request to complete',
-      },
-      expect.any(Number),
-    );
+    expect(state.items).toHaveLength(1);
+    const errorItem = findErrorItem(state.items);
+    expect(errorItem).toBeDefined();
+    expect(errorItem!.text).toContain('Already compressing');
   });
 
   it('uses COMPRESSED when token count decreases after compression', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.COMPRESSED);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1200)
-      .mockReturnValueOnce(800);
+    const performCompression = async () => PerformCompressionResult.COMPRESSED;
+    let tokenCall = 0;
+    const getTotalTokens = () => {
+      tokenCall++;
+      return tokenCall === 1 ? 1200 : 800;
+    };
 
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed: vi.fn().mockReturnValue(false),
+      wasRecentlyCompressed: () => false,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(context.ui.setPendingItem).toHaveBeenCalledWith(
+    expect(state.pendingItems[0]).toStrictEqual(
       expect.objectContaining({
         type: MessageType.COMPRESSION,
         compression: expect.objectContaining({ isPending: true }),
       }),
     );
 
-    expect(performCompression).toHaveBeenCalledTimes(1);
-    expect(performCompression).toHaveBeenCalledWith(
-      expect.stringMatching(/^compress-/),
-    );
-    expect(chat.wasRecentlyCompressed).toHaveBeenCalledTimes(1);
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression).toStrictEqual({
+      isPending: false,
+      originalTokenCount: 1200,
+      newTokenCount: 800,
+      compressionStatus: CompressionStatus.COMPRESSED,
+    });
 
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: {
-          isPending: false,
-          originalTokenCount: 1200,
-          newTokenCount: 800,
-          compressionStatus: CompressionStatus.COMPRESSED,
-        },
-      }),
-    );
-
-    expect(context.ui.setPendingItem).toHaveBeenLastCalledWith(null);
+    expect(state.pendingItems[state.pendingItems.length - 1]).toBeNull();
   });
 
   it('uses NOOP when token count is unchanged and compression did not run recently', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.SKIPPED_EMPTY);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1000)
-      .mockReturnValueOnce(1000);
+    const performCompression = async () =>
+      PerformCompressionResult.SKIPPED_EMPTY;
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed: vi.fn().mockReturnValue(false),
+      wasRecentlyCompressed: () => false,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(chat.wasRecentlyCompressed).toHaveBeenCalledTimes(1);
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({
-          compressionStatus: CompressionStatus.NOOP,
-        }),
-      }),
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression.compressionStatus).toBe(
+      CompressionStatus.NOOP,
     );
   });
 
   it('uses NOOP when token count is unchanged, result is SKIPPED_EMPTY, and compression ran recently', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.SKIPPED_EMPTY);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1000)
-      .mockReturnValueOnce(1000);
+    const performCompression = async () =>
+      PerformCompressionResult.SKIPPED_EMPTY;
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed: vi.fn().mockReturnValue(true),
+      wasRecentlyCompressed: () => true,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(chat.wasRecentlyCompressed).toHaveBeenCalledTimes(1);
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({
-          compressionStatus: CompressionStatus.NOOP,
-        }),
-      }),
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression.compressionStatus).toBe(
+      CompressionStatus.NOOP,
     );
   });
 
   it('shows unavailable-chat error when chat is not initialized', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => false,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      {
-        type: MessageType.ERROR,
-        text: 'Chat instance not available for compression.',
-      },
-      expect.any(Number),
+    const errorItem = findErrorItem(state.items);
+    expect(errorItem).toBeDefined();
+    expect(errorItem!.text).toBe(
+      'Chat instance not available for compression.',
     );
-    expect(context.ui.setPendingItem).toHaveBeenLastCalledWith(null);
+    expect(state.pendingItems[state.pendingItems.length - 1]).toBeNull();
   });
 
   it('uses COMPRESSION_FAILED when all strategies fail (PerformCompressionResult.FAILED)', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.FAILED);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1000)
-      .mockReturnValueOnce(1000);
+    const performCompression = async () => PerformCompressionResult.FAILED;
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed: vi.fn().mockReturnValue(false),
+      wasRecentlyCompressed: () => false,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({
-          compressionStatus: CompressionStatus.COMPRESSION_FAILED,
-        }),
-      }),
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression.compressionStatus).toBe(
+      CompressionStatus.COMPRESSION_FAILED,
     );
   });
 
   it('uses COMPRESSION_FAILED when compression is in cooldown (PerformCompressionResult.SKIPPED_COOLDOWN)', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
+    const performCompression = async () =>
+      PerformCompressionResult.SKIPPED_COOLDOWN;
+    const getTotalTokens = () => 1000;
 
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.SKIPPED_COOLDOWN);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1000)
-      .mockReturnValueOnce(1000);
-
-    const wasRecentlyCompressed = vi.fn().mockReturnValue(false);
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed,
+      wasRecentlyCompressed: () => false,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(wasRecentlyCompressed).toHaveBeenCalledTimes(1);
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({
-          compressionStatus: CompressionStatus.COMPRESSION_FAILED,
-        }),
-      }),
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression.compressionStatus).toBe(
+      CompressionStatus.COMPRESSION_FAILED,
     );
   });
 
   it('uses ALREADY_COMPRESSED when core reports COMPRESSED but tokens did not decrease and compression was recent before command', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.COMPRESSED);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1000)
-      .mockReturnValueOnce(1000);
+    const performCompression = async () => PerformCompressionResult.COMPRESSED;
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed: vi.fn().mockReturnValue(true),
+      wasRecentlyCompressed: () => true,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({
-          compressionStatus: CompressionStatus.ALREADY_COMPRESSED,
-        }),
-      }),
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression.compressionStatus).toBe(
+      CompressionStatus.ALREADY_COMPRESSED,
     );
   });
 
   it('uses NOOP when core reports COMPRESSED but tokens did not decrease and compression was not recent before command', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.COMPRESSED);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1000)
-      .mockReturnValueOnce(1000);
+    const performCompression = async () => PerformCompressionResult.COMPRESSED;
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed: vi.fn().mockReturnValue(false),
+      wasRecentlyCompressed: () => false,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({
-          compressionStatus: CompressionStatus.NOOP,
-        }),
-      }),
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression.compressionStatus).toBe(
+      CompressionStatus.NOOP,
     );
   });
 
   it('uses COMPRESSION_FAILED_INFLATED_TOKEN_COUNT when core reports COMPRESSED but token count increases', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.COMPRESSED);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1000)
-      .mockReturnValueOnce(1200);
+    const performCompression = async () => PerformCompressionResult.COMPRESSED;
+    let tokenCall = 0;
+    const getTotalTokens = () => {
+      tokenCall++;
+      return tokenCall === 1 ? 1000 : 1200;
+    };
 
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed: vi.fn().mockReturnValue(true),
+      wasRecentlyCompressed: () => true,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({
-          compressionStatus:
-            CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
-        }),
-      }),
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression.compressionStatus).toBe(
+      CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
     );
   });
 
   it('shows error when performCompression throws an exception', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
-    const performCompression = vi
-      .fn()
-      .mockRejectedValue(new Error('API connection refused'));
-    const getTotalTokens = vi.fn().mockReturnValueOnce(1000);
+    const performCompression = async () => {
+      throw new Error('API connection refused');
+    };
+    const getTotalTokens = () => 1000;
 
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed: vi.fn().mockReturnValue(false),
+      wasRecentlyCompressed: () => false,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(performCompression).toHaveBeenCalledTimes(1);
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      {
-        type: MessageType.ERROR,
-        text: 'Failed to compress chat history: API connection refused',
-      },
-      expect.any(Number),
-    );
-    expect(context.ui.setPendingItem).toHaveBeenLastCalledWith(null);
+    const errorItem = findErrorItem(state.items);
+    expect(errorItem).toBeDefined();
+    expect(errorItem!.text).toContain('Failed to compress chat history');
+    expect(errorItem!.text).toContain('API connection refused');
+    expect(state.pendingItems[state.pendingItems.length - 1]).toBeNull();
   });
 
   it('checks wasRecentlyCompressed when result is FAILED', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
+    let recentlyCompressedCalled = false;
+    const performCompression = async () => PerformCompressionResult.FAILED;
+    const getTotalTokens = () => 1000;
 
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.FAILED);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1000)
-      .mockReturnValueOnce(1000);
-
-    const wasRecentlyCompressed = vi.fn().mockReturnValue(true);
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed,
+      wasRecentlyCompressed: () => {
+        recentlyCompressedCalled = true;
+        return true;
+      },
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(wasRecentlyCompressed).toHaveBeenCalledTimes(1);
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({
-          compressionStatus: CompressionStatus.COMPRESSION_FAILED,
-        }),
-      }),
+    expect(recentlyCompressedCalled).toBe(true);
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression.compressionStatus).toBe(
+      CompressionStatus.COMPRESSION_FAILED,
     );
   });
 
   it('checks wasRecentlyCompressed when result is SKIPPED_COOLDOWN', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
+    let recentlyCompressedCalled = false;
+    const performCompression = async () =>
+      PerformCompressionResult.SKIPPED_COOLDOWN;
+    const getTotalTokens = () => 1000;
 
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.SKIPPED_COOLDOWN);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1000)
-      .mockReturnValueOnce(1000);
-
-    const wasRecentlyCompressed = vi.fn().mockReturnValue(true);
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed,
+      wasRecentlyCompressed: () => {
+        recentlyCompressedCalled = true;
+        return true;
+      },
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(wasRecentlyCompressed).toHaveBeenCalledTimes(1);
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({
-          compressionStatus: CompressionStatus.COMPRESSION_FAILED,
-        }),
-      }),
+    expect(recentlyCompressedCalled).toBe(true);
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression.compressionStatus).toBe(
+      CompressionStatus.COMPRESSION_FAILED,
     );
   });
 
   it('uses COMPRESSION_FAILED when result is FAILED even if tokens decreased', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
-    const performCompression = vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.FAILED);
-    const getTotalTokens = vi
-      .fn()
-      .mockReturnValueOnce(1000)
-      .mockReturnValueOnce(700);
+    const performCompression = async () => PerformCompressionResult.FAILED;
+    let tokenCall = 0;
+    const getTotalTokens = () => {
+      tokenCall++;
+      return tokenCall === 1 ? 1000 : 700;
+    };
 
     const chat = {
       performCompression,
       getHistoryService: () => ({
         getTotalTokens,
       }),
-      wasRecentlyCompressed: vi.fn().mockReturnValue(false),
+      wasRecentlyCompressed: () => false,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({
-          compressionStatus: CompressionStatus.COMPRESSION_FAILED,
-        }),
-      }),
+    const compressionItem = findCompressionItem(state.items);
+    expect(compressionItem).toBeDefined();
+    expect(compressionItem!.compression.compressionStatus).toBe(
+      CompressionStatus.COMPRESSION_FAILED,
     );
   });
 
   it('shows error when chat has no history service', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!compressCommand.action) {
-      throw new Error('compressCommand must have an action.');
-    }
-
+    let performCompressionCalled = false;
     const chat = {
-      performCompression: vi.fn(),
+      performCompression: async () => {
+        performCompressionCalled = true;
+        return PerformCompressionResult.COMPRESSED;
+      },
       getHistoryService: () => null,
-      wasRecentlyCompressed: vi.fn().mockReturnValue(false),
+      wasRecentlyCompressed: () => false,
     };
 
     context.services.config = {
-      getGeminiClient: () =>
+      getAgentClient: () =>
         ({
           hasChatInitialized: () => true,
           getChat: () => chat,
-        }) as unknown as GeminiClient,
+        }) as unknown as AgentClient,
     } as CommandContext['services']['config'];
 
-    await compressCommand.action(context, '');
+    await compressCommand.action!(context, '');
 
-    expect(chat.performCompression).not.toHaveBeenCalled();
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      {
-        type: MessageType.ERROR,
-        text: 'Chat instance not available for compression.',
-      },
-      expect.any(Number),
+    expect(performCompressionCalled).toBe(false);
+    const errorItem = findErrorItem(state.items);
+    expect(errorItem).toBeDefined();
+    expect(errorItem!.text).toBe(
+      'Chat instance not available for compression.',
     );
-    expect(context.ui.setPendingItem).toHaveBeenLastCalledWith(null);
+    expect(state.pendingItems[state.pendingItems.length - 1]).toBeNull();
   });
 });

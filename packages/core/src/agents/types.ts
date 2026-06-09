@@ -17,6 +17,7 @@ import { type z } from 'zod';
  */
 export enum AgentTerminateMode {
   ERROR = 'ERROR',
+  ERROR_NO_COMPLETE_TASK_CALL = 'ERROR_NO_COMPLETE_TASK_CALL',
   TIMEOUT = 'TIMEOUT',
   GOAL = 'GOAL',
   MAX_TURNS = 'MAX_TURNS',
@@ -40,10 +41,18 @@ export type AgentInputs = Record<string, unknown>;
 /**
  * Structured events emitted during subagent execution for user observability.
  */
+export type SubagentActivityEventType =
+  | 'TOOL_CALL_START'
+  | 'TOOL_CALL_END'
+  | 'THOUGHT_CHUNK'
+  | 'ERROR'
+  | 'RECOVERY_ATTEMPT'
+  | 'RECOVERY_OUTCOME';
+
 export interface SubagentActivityEvent {
   isSubagentActivityEvent: true;
   agentName: string;
-  type: 'TOOL_CALL_START' | 'TOOL_CALL_END' | 'THOUGHT_CHUNK' | 'ERROR';
+  type: SubagentActivityEventType;
   data: Record<string, unknown>;
 }
 
@@ -165,4 +174,6 @@ export interface RunConfig {
   max_time_minutes: number;
   /** The maximum number of conversational turns. */
   max_turns?: number;
+  /** Maximum time in seconds allowed for a recovery turn after a termination condition. */
+  grace_period_seconds?: number;
 }

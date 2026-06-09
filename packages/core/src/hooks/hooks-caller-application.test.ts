@@ -12,9 +12,9 @@
  *
  * P20 made trigger functions return typed results. But callers still use
  * `void` prefix and IGNORE results:
- * - `geminiChat.ts:1337` — `void triggerBeforeToolSelectionHook(...)`
- * - `geminiChat.ts:1381` — `void triggerBeforeModelHook(...)`
- * - `geminiChat.ts:1418` — `void triggerAfterModelHook(...)`
+ * - `chatSession.ts:1337` — `void triggerBeforeToolSelectionHook(...)`
+ * - `chatSession.ts:1381` — `void triggerBeforeModelHook(...)`
+ * - `chatSession.ts:1418` — `void triggerAfterModelHook(...)`
  * - `coreToolScheduler.ts:1727` — `void triggerBeforeToolHook(...)`
  * - `coreToolScheduler.ts:1777` — `void triggerAfterToolHook(...)`
  *
@@ -460,22 +460,22 @@ describe('Hook Caller Application', () => {
   });
 
   /**
-   * Test 5: geminiChat skips model call when BeforeModel hook blocks
+   * Test 5: chatSession skips model call when BeforeModel hook blocks
    * @requirement:HOOK-036
    *
    * Expected behavior: When BeforeModel hook returns isBlockingDecision() === true,
    * the LLM API should NOT be called.
    *
-   * This test MUST FAIL because geminiChat uses:
+   * This test MUST FAIL because chatSession uses:
    *   `void triggerBeforeModelHook(configForHooks, requestForHook);`
    *
-   * We verify by checking the source code pattern - geminiChat must NOT use `void`
+   * We verify by checking the source code pattern - chatSession must NOT use `void`
    * prefix when calling triggerBeforeModelHook. This is a static analysis test.
    */
-  describe('geminiChat skips model call when BeforeModel hook blocks', () => {
-    it('geminiChat should await triggerBeforeModelHook (currently uses void)', async () => {
+  describe('chatSession skips model call when BeforeModel hook blocks', () => {
+    it('chatSession should await triggerBeforeModelHook (currently uses void)', async () => {
       // This test verifies the CALLER behavior by checking the source code pattern.
-      // The geminiChat.ts currently has:
+      // The chatSession.ts currently has:
       //   void triggerBeforeModelHook(configForHooks, requestForHook);
       //
       // This MUST be changed to:
@@ -484,12 +484,12 @@ describe('Hook Caller Application', () => {
 
       // Read the source code and verify the pattern
       const fs = await import('node:fs/promises');
-      const geminiChatPath = new URL('../core/geminiChat.ts', import.meta.url)
+      const chatSessionPath = new URL('../core/chatSession.ts', import.meta.url)
         .pathname;
-      const sourceCode = await fs.readFile(geminiChatPath, 'utf-8');
+      const sourceCode = await fs.readFile(chatSessionPath, 'utf-8');
 
-      // The test FAILS if geminiChat uses `void` prefix (ignores result)
-      // The test PASSES when geminiChat awaits and uses the result
+      // The test FAILS if chatSession uses `void` prefix (ignores result)
+      // The test PASSES when chatSession awaits and uses the result
       const usesVoidPrefix = sourceCode.includes(
         'void triggerBeforeModelHook(',
       );
@@ -501,7 +501,7 @@ describe('Hook Caller Application', () => {
   });
 
   /**
-   * Test 6: geminiChat uses synthetic response from hook
+   * Test 6: chatSession uses synthetic response from hook
    * @requirement:HOOK-036
    *
    * Expected behavior: When BeforeModel hook blocks with llm_response,
@@ -510,8 +510,8 @@ describe('Hook Caller Application', () => {
    * This test MUST FAIL because the hook result is ignored by the caller.
    * We verify by checking that the source code handles getSyntheticResponse().
    */
-  describe('geminiChat uses synthetic response from hook', () => {
-    it('geminiChat should use getSyntheticResponse from hook (currently ignores)', async () => {
+  describe('chatSession uses synthetic response from hook', () => {
+    it('chatSession should use getSyntheticResponse from hook (currently ignores)', async () => {
       // This test verifies the CALLER behavior by checking the source code.
       // The hook handling code should have:
       //   const hookResult = await triggerBeforeModelHook(...);
@@ -539,19 +539,19 @@ describe('Hook Caller Application', () => {
   });
 
   /**
-   * Test 7: geminiChat applies tool restrictions
+   * Test 7: chatSession applies tool restrictions
    * @requirement:HOOK-055
    *
    * Expected behavior: When BeforeToolSelection hook returns allowedFunctionNames,
    * only those tools should be available for the model to call.
    *
-   * This test MUST FAIL because geminiChat uses:
+   * This test MUST FAIL because chatSession uses:
    *   `void triggerBeforeToolSelectionHook(configForHooks, toolsFromConfig);`
    */
-  describe('geminiChat applies tool restrictions', () => {
-    it('geminiChat should await triggerBeforeToolSelectionHook (currently uses void)', async () => {
+  describe('chatSession applies tool restrictions', () => {
+    it('chatSession should await triggerBeforeToolSelectionHook (currently uses void)', async () => {
       // This test verifies the CALLER behavior by checking the source code pattern.
-      // The geminiChat.ts currently has:
+      // The chatSession.ts currently has:
       //   void triggerBeforeToolSelectionHook(configForHooks, toolsFromConfig);
       //
       // This MUST be changed to:
@@ -559,12 +559,12 @@ describe('Hook Caller Application', () => {
       //   if (hookResult) { tools = hookResult.applyToolConfigModifications(tools); }
 
       const fs = await import('node:fs/promises');
-      const geminiChatPath = new URL('../core/geminiChat.ts', import.meta.url)
+      const chatSessionPath = new URL('../core/chatSession.ts', import.meta.url)
         .pathname;
-      const sourceCode = await fs.readFile(geminiChatPath, 'utf-8');
+      const sourceCode = await fs.readFile(chatSessionPath, 'utf-8');
 
-      // The test FAILS if geminiChat uses `void` prefix (ignores result)
-      // The test PASSES when geminiChat awaits and uses the result
+      // The test FAILS if chatSession uses `void` prefix (ignores result)
+      // The test PASSES when chatSession awaits and uses the result
       const usesVoidPrefix = sourceCode.includes(
         'void triggerBeforeToolSelectionHook(',
       );
@@ -576,19 +576,19 @@ describe('Hook Caller Application', () => {
   });
 
   /**
-   * Test 8: geminiChat stops agent loop on continue:false
+   * Test 8: chatSession stops agent loop on continue:false
    * @requirement:HOOK-040,HOOK-048
    *
    * Expected behavior: When AfterModel hook returns continue: false,
    * the agent loop should terminate without additional model calls.
    *
-   * This test MUST FAIL because geminiChat uses:
+   * This test MUST FAIL because chatSession uses:
    *   `void triggerAfterModelHook(configForHooks, lastResponse);`
    */
-  describe('geminiChat stops agent loop on continue:false', () => {
-    it('geminiChat should await triggerAfterModelHook (currently uses void)', async () => {
+  describe('chatSession stops agent loop on continue:false', () => {
+    it('chatSession should await triggerAfterModelHook (currently uses void)', async () => {
       // This test verifies the CALLER behavior by checking the source code pattern.
-      // The geminiChat.ts currently has:
+      // The chatSession.ts currently has:
       //   void triggerAfterModelHook(configForHooks, lastResponse);
       //
       // This MUST be changed to:
@@ -596,12 +596,12 @@ describe('Hook Caller Application', () => {
       //   if (hookResult?.shouldStopExecution()) { break; }
 
       const fs = await import('node:fs/promises');
-      const geminiChatPath = new URL('../core/geminiChat.ts', import.meta.url)
+      const chatSessionPath = new URL('../core/chatSession.ts', import.meta.url)
         .pathname;
-      const sourceCode = await fs.readFile(geminiChatPath, 'utf-8');
+      const sourceCode = await fs.readFile(chatSessionPath, 'utf-8');
 
-      // The test FAILS if geminiChat uses `void` prefix (ignores result)
-      // The test PASSES when geminiChat awaits and checks shouldStopExecution
+      // The test FAILS if chatSession uses `void` prefix (ignores result)
+      // The test PASSES when chatSession awaits and checks shouldStopExecution
       const usesVoidPrefix = sourceCode.includes('void triggerAfterModelHook(');
 
       // This assertion will FAIL with current code (uses void)
@@ -611,13 +611,13 @@ describe('Hook Caller Application', () => {
   });
 
   /**
-   * Test 9: geminiChat applies request modifications from BeforeModel hook
+   * Test 9: chatSession applies request modifications from BeforeModel hook
    * @requirement:HOOK-036
    *
    * Expected behavior: When BeforeModel hook returns llm_request modifications,
    * those modifications should be applied to the request before calling the API.
    *
-   * This test MUST FAIL because geminiChat:
+   * This test MUST FAIL because chatSession:
    * 1. Calls triggerBeforeModelHook and gets a result
    * 2. Checks for getSyntheticResponse() and isBlockingDecision()
    * 3. But does NOT call applyLLMRequestModifications() to modify the request
@@ -625,8 +625,8 @@ describe('Hook Caller Application', () => {
    * The fix requires adding a call to applyLLMRequestModifications() when
    * the hook doesn't block or return a synthetic response.
    */
-  describe('geminiChat applies request modifications from BeforeModel hook', () => {
-    it('geminiChat should call applyLLMRequestModifications (currently does not)', async () => {
+  describe('chatSession applies request modifications from BeforeModel hook', () => {
+    it('chatSession should call applyLLMRequestModifications (currently does not)', async () => {
       // This test verifies that the hook handler calls applyLLMRequestModifications
       // after getting a BeforeModel hook result (when not blocking/synthetic).
       // After decomposition, this logic lives in DirectMessageProcessor.ts
@@ -651,14 +651,14 @@ describe('Hook Caller Application', () => {
   });
 
   /**
-   * Test 10: geminiChat surfaces systemMessage from BeforeModel hook when stopping
+   * Test 10: chatSession surfaces systemMessage from BeforeModel hook when stopping
    * @requirement:HOOK-036
    *
    * Expected behavior: When BeforeModel hook returns both reason and systemMessage,
    * the systemMessage should be included in the AgentExecutionStoppedError.
    */
-  describe('geminiChat surfaces systemMessage from BeforeModel hook when stopping', () => {
-    it('geminiChat should pass systemMessage to AgentExecutionStoppedError', async () => {
+  describe('chatSession surfaces systemMessage from BeforeModel hook when stopping', () => {
+    it('chatSession should pass systemMessage to AgentExecutionStoppedError', async () => {
       // This test verifies that stream handling passes systemMessage from hook
       // output to AgentExecutionStoppedError when a BeforeModel hook stops execution.
       //
@@ -680,7 +680,7 @@ describe('Hook Caller Application', () => {
       ).pathname;
       const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
 
-      // Check that AgentExecutionStoppedError exists (constructor lives in geminiChat.ts)
+      // Check that AgentExecutionStoppedError exists (constructor lives in chatSession.ts)
       const hasStoppedErrorReference = sourceCode.includes(
         'AgentExecutionStoppedError',
       );
@@ -696,14 +696,14 @@ describe('Hook Caller Application', () => {
   });
 
   /**
-   * Test 11: geminiChat surfaces systemMessage from AfterModel hook when stopping
+   * Test 11: chatSession surfaces systemMessage from AfterModel hook when stopping
    * @requirement:HOOK-040,HOOK-048
    *
    * Expected behavior: When AfterModel hook returns both reason and systemMessage,
    * the systemMessage should be included in the AgentExecutionStoppedError.
    */
-  describe('geminiChat surfaces systemMessage from AfterModel hook when stopping', () => {
-    it('geminiChat should pass systemMessage to AgentExecutionStoppedError from AfterModel', async () => {
+  describe('chatSession surfaces systemMessage from AfterModel hook when stopping', () => {
+    it('chatSession should pass systemMessage to AgentExecutionStoppedError from AfterModel', async () => {
       // This test verifies that stream handling passes systemMessage from
       // AfterModel hook output to AgentExecutionStoppedError when execution is stopped.
       // After decomposition, this logic lives in StreamProcessor.ts.
@@ -724,14 +724,14 @@ describe('Hook Caller Application', () => {
   });
 
   /**
-   * Test 12: geminiChat surfaces systemMessage from AfterModel hook when blocking
+   * Test 12: chatSession surfaces systemMessage from AfterModel hook when blocking
    * @requirement:HOOK-040,HOOK-048
    *
    * Expected behavior: When AfterModel hook returns a blocking decision with systemMessage,
    * the systemMessage should be included in the AgentExecutionBlockedError.
    */
-  describe('geminiChat surfaces systemMessage from AfterModel hook when blocking', () => {
-    it('geminiChat should pass systemMessage to AgentExecutionBlockedError', async () => {
+  describe('chatSession surfaces systemMessage from AfterModel hook when blocking', () => {
+    it('chatSession should pass systemMessage to AgentExecutionBlockedError', async () => {
       // This test verifies that stream handling passes systemMessage from hook
       // output to AgentExecutionBlockedError when execution is blocked.
       //

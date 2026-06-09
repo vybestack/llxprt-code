@@ -16,7 +16,7 @@ import {
 // Follow-up (#1569): Remove when getCodeAssistServer is exported from core
 function getCodeAssistServer(config: Config): CodeAssistServer | undefined {
   const contentGenerator: unknown = config
-    .getGeminiClient()
+    .getAgentClient()
     .getContentGenerator();
 
   // Check if it's a CodeAssistServer

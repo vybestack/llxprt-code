@@ -12,16 +12,16 @@
  */
 
 import { useCallback, useEffect } from 'react';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   type Config,
-  type GeminiClient,
+  type AgentClient,
   type MessageSenderType,
   type RecordingIntegration,
   type ServerGeminiStreamEvent,
   type ThinkingBlock,
   type ThoughtSummary,
   type ToolCallRequestInfo,
-  MCPDiscoveryState,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
 import {
@@ -39,7 +39,7 @@ import { StreamProcessingStatus, type QueuedSubmission } from './types.js';
 
 export interface UseSubmitQueryDeps {
   config: Config;
-  geminiClient: GeminiClient;
+  agentClient: AgentClient;
   addItem: (
     item: Omit<HistoryItem, 'id'>,
     timestamp?: number,
@@ -378,9 +378,10 @@ function isMcpDiscoveryBlocking(
 
   const mcpManager = config.getMcpClientManager();
   const discoveryState = mcpManager?.getDiscoveryState();
-  const configuredMcpServers = mcpManager
-    ? Object.keys(config.getMcpServers() ?? {}).length
-    : 0;
+  const configuredMcpServers =
+    mcpManager !== undefined
+      ? Object.keys(config.getMcpServers() ?? {}).length
+      : 0;
 
   return (
     configuredMcpServers > 0 && discoveryState !== MCPDiscoveryState.COMPLETED
@@ -430,7 +431,7 @@ async function executeStream(
   queryToSend: PartListUnion,
   turn: TurnInit,
 ): Promise<void> {
-  const stream = deps.geminiClient.sendMessageStream(
+  const stream = deps.agentClient.sendMessageStream(
     queryToSend,
     turn.abortSignal,
     turn.promptId,

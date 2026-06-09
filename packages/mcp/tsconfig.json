@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/mcp.tsbuildinfo",
+    "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
+    "composite": false,
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
+      "@vybestack/llxprt-code-mcp": ["./index.ts"],
+      "@vybestack/llxprt-code-core": ["../core/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"]
+    }
+  },
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.json",
+    "../core/src/types/wasm.d.ts"
+  ],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}

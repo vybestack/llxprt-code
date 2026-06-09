@@ -62,17 +62,17 @@ interface PromptSuggestionParams {
   lastRequestedTextRef: MutableRefObject<string>;
 }
 
-type GeminiClient = ReturnType<Config['getGeminiClient']>;
+type AgentClient = ReturnType<Config['getAgentClient']>;
 
 function shouldSkipPromptCompletion(
   trimmedText: string,
   isPromptCompletionEnabled: boolean,
-  geminiClient: GeminiClient | undefined,
+  agentClient: AgentClient | undefined,
 ): boolean {
   return (
     // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     trimmedText.length < PROMPT_COMPLETION_MIN_LENGTH ||
-    !geminiClient ||
+    !agentClient ||
     isSlashCommand(trimmedText) ||
     trimmedText.includes('@') ||
     !isPromptCompletionEnabled
@@ -119,13 +119,13 @@ function deriveSuggestionText(
 }
 
 async function requestPromptSuggestion(
-  geminiClient: NonNullable<GeminiClient>,
+  agentClient: NonNullable<AgentClient>,
   trimmedText: string,
   signal: AbortSignal,
 ): Promise<string> {
   const { contents, generationConfig } =
     buildPromptCompletionRequest(trimmedText);
-  const response = await geminiClient.generateContent(
+  const response = await agentClient.generateContent(
     contents,
     generationConfig,
     signal,
@@ -207,7 +207,7 @@ function usePromptSuggestionGenerator({
 }: PromptSuggestionParams) {
   return useCallback(async () => {
     const trimmedText = buffer.text.trim();
-    const geminiClient = config?.getGeminiClient();
+    const agentClient = config?.getAgentClient();
 
     if (trimmedText === lastRequestedTextRef.current) return;
     abortControllerRef.current?.abort();
@@ -216,7 +216,7 @@ function usePromptSuggestionGenerator({
       shouldSkipPromptCompletion(
         trimmedText,
         isPromptCompletionEnabled,
-        geminiClient,
+        agentClient,
       )
     ) {
       clearGhostText();
@@ -224,7 +224,7 @@ function usePromptSuggestionGenerator({
       return;
     }
 
-    if (!geminiClient) return;
+    if (!agentClient) return;
 
     lastRequestedTextRef.current = trimmedText;
     setIsLoadingGhostText(true);
@@ -233,7 +233,7 @@ function usePromptSuggestionGenerator({
 
     try {
       const suggestionText = await requestPromptSuggestion(
-        geminiClient,
+        agentClient,
         trimmedText,
         signal,
       );

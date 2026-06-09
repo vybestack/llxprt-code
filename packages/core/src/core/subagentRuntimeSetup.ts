@@ -27,7 +27,7 @@ import {
   type GenerateContentConfig,
   Type,
 } from '@google/genai';
-import { GeminiChat } from './geminiChat.js';
+import { ChatSession } from './chatSession.js';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
@@ -492,7 +492,7 @@ export interface CreateChatObjectParams {
 
 export async function createChatObject(
   params: CreateChatObjectParams,
-): Promise<GeminiChat | null> {
+): Promise<ChatSession | null> {
   const { promptConfig, modelConfig, outputConfig, toolConfig } = params;
   const { runtimeContext, contentGenerator, environmentContextLoader } = params;
   const { foregroundConfig: config, context } = params;
@@ -603,7 +603,7 @@ function instantiateChat(
   runtimeContext: AgentRuntimeContext,
   contentGenerator: ContentGenerator,
   _logger: { debug: (fn: () => string) => void },
-): GeminiChat | null {
+): ChatSession | null {
   try {
     const generationConfig: GenerateContentConfig & {
       systemInstruction?: string | Content;
@@ -617,7 +617,7 @@ function instantiateChat(
           : undefined,
     };
 
-    return new GeminiChat(
+    return new ChatSession(
       runtimeContext,
       contentGenerator,
       generationConfig,
@@ -630,7 +630,7 @@ function instantiateChat(
       startHistory,
       'startChat',
     );
-    const missingChatObject: GeminiChat | null = null;
+    const missingChatObject: ChatSession | null = null;
     return missingChatObject;
   }
 }

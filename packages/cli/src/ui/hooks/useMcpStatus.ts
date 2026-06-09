@@ -5,10 +5,10 @@
  */
 
 import { useEffect, useState } from 'react';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   type Config,
   coreEvents,
-  MCPDiscoveryState,
   CoreEvent,
 } from '@vybestack/llxprt-code-core';
 
@@ -26,7 +26,7 @@ export function useMcpStatus(config: Config) {
   useEffect(() => {
     const onChange = () => {
       const manager = config.getMcpClientManager();
-      if (manager) {
+      if (manager !== undefined) {
         setDiscoveryState(manager.getDiscoveryState());
         setMcpServerCount(manager.getMcpServerCount());
       } else {

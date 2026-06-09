@@ -169,7 +169,7 @@ describe('Runtime State Regression Guards', () => {
   describe('Config Isolation', () => {
     it('should enforce that provider/model/auth come from runtime state, not Config', () => {
       // This is a documentation test - the actual enforcement is in
-      // GeminiClient and GeminiChat constructors which require runtime state
+      // AgentClient and ChatSession constructors which require runtime state
 
       const state = createAgentRuntimeState({
         runtimeId: 'test-runtime',
@@ -187,11 +187,11 @@ describe('Runtime State Regression Guards', () => {
     });
 
     it('should prevent Config from being passed without runtime state', () => {
-      // This is enforced by TypeScript types in GeminiClient/GeminiChat constructors
+      // This is enforced by TypeScript types in AgentClient/ChatSession constructors
       // Both now require runtime state as a parameter
 
       // Test would be:
-      // expect(() => new GeminiClient(config, undefined)).toThrow()
+      // expect(() => new AgentClient(config, undefined)).toThrow()
       // But TypeScript prevents this at compile time
 
       // This test documents the requirement

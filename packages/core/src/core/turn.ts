@@ -36,12 +36,12 @@ import {
   toFriendlyError,
 } from '../utils/errors.js';
 import { normalizeToolName } from '../tools/toolNameUtils.js';
-import type { GeminiChat } from './geminiChat.js';
+import type { ChatSession } from './chatSession.js';
 import {
   InvalidStreamError,
   StreamEventType,
   type StreamEvent,
-} from './geminiChat.js';
+} from './chatSession.js';
 import { DebugLogger } from '../debug/index.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
 import { UserTierId } from '../code_assist/types.js';
@@ -343,7 +343,7 @@ export class Turn {
   private logger: DebugLogger;
 
   constructor(
-    private readonly chat: GeminiChat,
+    private readonly chat: ChatSession,
     private readonly prompt_id: string,
     private readonly agentId: string = DEFAULT_AGENT_ID,
     private readonly providerName: string = 'backend',

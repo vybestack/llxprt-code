@@ -59,7 +59,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   let mockShutdownTelemetry: Mock;
   let mockIsTelemetrySdkInitialized: Mock;
   let processStdoutSpy: MockInstance;
-  let mockGeminiClient: {
+  let mockAgentClient: {
     sendMessageStream: Mock;
   };
   beforeEach(async () => {
@@ -85,13 +85,13 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       getFunctionDeclarations: vi.fn().mockReturnValue([]),
     } as unknown as ToolRegistry;
 
-    mockGeminiClient = {
+    mockAgentClient = {
       sendMessageStream: vi.fn(),
     };
 
     mockConfig = {
       initialize: vi.fn().mockResolvedValue(undefined),
-      getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
+      getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
       getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
       getMaxSessionTurns: vi.fn().mockReturnValue(10),
       getIdeMode: vi.fn().mockReturnValue(false),
@@ -170,7 +170,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     const events: ServerGeminiStreamEvent[] = [
       { type: GeminiEventType.Content, value: 'Summary complete.' },
     ];
-    mockGeminiClient.sendMessageStream.mockReturnValue(
+    mockAgentClient.sendMessageStream.mockReturnValue(
       createStreamFromEvents(events),
     );
 
@@ -183,7 +183,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     // 5. Assert that sendMessageStream was called with the PROCESSED parts, not the raw input
-    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
       processedParts,
       expect.any(AbortSignal),
       'prompt-id-7',
@@ -207,7 +207,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     const events: ServerGeminiStreamEvent[] = [
       { type: GeminiEventType.Content, value: 'Response from command' },
     ];
-    mockGeminiClient.sendMessageStream.mockReturnValue(
+    mockAgentClient.sendMessageStream.mockReturnValue(
       createStreamFromEvents(events),
     );
 
@@ -219,7 +219,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     // Ensure the prompt sent to the model is from the command, not the raw input
-    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
       [{ text: 'Prompt from command' }],
       expect.any(AbortSignal),
       'prompt-id-slash',
@@ -258,7 +258,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     const events: ServerGeminiStreamEvent[] = [
       { type: GeminiEventType.Content, value: 'Response to unknown' },
     ];
-    mockGeminiClient.sendMessageStream.mockReturnValue(
+    mockAgentClient.sendMessageStream.mockReturnValue(
       createStreamFromEvents(events),
     );
 
@@ -270,7 +270,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     // Ensure the raw input is sent to the model
-    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
       [{ text: '/unknowncommand' }],
       expect.any(AbortSignal),
       'prompt-id-unknown',
@@ -316,7 +316,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     const events: ServerGeminiStreamEvent[] = [
       { type: GeminiEventType.Content, value: 'Acknowledged' },
     ];
-    mockGeminiClient.sendMessageStream.mockReturnValue(
+    mockAgentClient.sendMessageStream.mockReturnValue(
       createStreamFromEvents(events),
     );
 
@@ -374,7 +374,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       } as unknown as ServerGeminiStreamEvent,
     ];
 
-    mockGeminiClient.sendMessageStream
+    mockAgentClient.sendMessageStream
       .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
       .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
 
@@ -421,7 +421,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       },
     } as unknown as ServerGeminiStreamEvent;
 
-    mockGeminiClient.sendMessageStream.mockReturnValueOnce(
+    mockAgentClient.sendMessageStream.mockReturnValueOnce(
       createStreamFromEvents([
         thoughtEvent1,
         thoughtEvent2,
@@ -476,7 +476,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       },
     } as unknown as ServerGeminiStreamEvent;
 
-    mockGeminiClient.sendMessageStream.mockReturnValueOnce(
+    mockAgentClient.sendMessageStream.mockReturnValueOnce(
       createStreamFromEvents([
         thoughtEvent1,
         thoughtEvent2,
@@ -525,7 +525,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       },
       { type: GeminiEventType.Content, value: 'Here is my answer' },
     ];
-    mockGeminiClient.sendMessageStream.mockReturnValue(
+    mockAgentClient.sendMessageStream.mockReturnValue(
       createStreamFromEvents(events),
     );
 
@@ -569,7 +569,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       },
       { type: GeminiEventType.Content, value: 'Here is my answer' },
     ];
-    mockGeminiClient.sendMessageStream.mockReturnValue(
+    mockAgentClient.sendMessageStream.mockReturnValue(
       createStreamFromEvents(events),
     );
 
@@ -606,7 +606,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       },
       { type: GeminiEventType.Content, value: 'Here is my answer' },
     ];
-    mockGeminiClient.sendMessageStream.mockReturnValue(
+    mockAgentClient.sendMessageStream.mockReturnValue(
       createStreamFromEvents(events),
     );
 

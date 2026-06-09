@@ -45,11 +45,11 @@ import {
   isSchemaDepthError,
   INVALID_CONTENT_RETRY_OPTIONS,
   type UsageMetadataWithCache,
-} from './geminiChatTypes.js';
+} from './chatSessionTypes.js';
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
-} from './geminiChat.js';
+} from './chatSession.js';
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import { hasCycleInSchema } from '../tools/tools.js';
 

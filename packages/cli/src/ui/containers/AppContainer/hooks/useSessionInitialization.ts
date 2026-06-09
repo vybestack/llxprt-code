@@ -81,9 +81,9 @@ async function runSessionStartHook(
 
     const additionalContext = sessionStartOutput.getAdditionalContext();
     if (additionalContext && !isAbortSignalAborted(signal)) {
-      const geminiClient = config.getGeminiClient();
+      const agentClient = config.getAgentClient();
       try {
-        await geminiClient.addHistory({
+        await agentClient.addHistory({
           role: 'user',
           parts: [{ text: additionalContext }],
         });

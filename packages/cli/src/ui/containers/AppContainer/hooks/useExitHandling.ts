@@ -77,7 +77,7 @@ function useQuitEffect(
             // Note: We don't call runExitCleanup() here because it includes
             // instance.waitUntilExit() which would deadlock. The cleanup is
             // triggered by process.exit() which fires SIGTERM/exit handlers.
-            // The mouse events cleanup is registered in gemini.tsx and will
+            // The mouse events cleanup is registered in cli.tsx and will
             // run via the process exit handlers. (fixes #959)
             process.exit(0);
           });

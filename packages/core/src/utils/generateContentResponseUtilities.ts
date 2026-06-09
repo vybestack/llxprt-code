@@ -20,7 +20,7 @@ import {
   type ToolCallResponseInfo,
 } from '../index.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
-import { isThoughtPart } from '../core/geminiChatTypes.js';
+import { isThoughtPart } from '../core/chatSessionTypes.js';
 import { DebugLogger } from '../debug/index.js';
 
 /**
@@ -87,7 +87,7 @@ export function getResponseTextFromParts(parts: Part[]): string | undefined {
   // Filter out thought parts - thinking content should only go through Thought events,
   // not be duplicated in Content events. Model context path handles thinking separately
   // via IContent blocks and reasoning ephemerals. Uses canonical isThoughtPart
-  // from geminiChatTypes for consistent filtering. (fixes #721, #1730)
+  // from chatSessionTypes for consistent filtering. (fixes #721, #1730)
   const textSegments = parts
     .filter((part) => !isThoughtPart(part))
     .map((part) => part.text)

@@ -10,7 +10,7 @@
  * @pseudocode:analysis/pseudocode/04-model-hook-pipeline.md
  *
  * Lifecycle hook trigger functions (SessionStart, SessionEnd, BeforeAgent, AfterAgent)
- * These functions follow the same pattern as geminiChatHookTriggers.ts
+ * These functions follow the same pattern as coreToolHookTriggers.ts
  */
 
 import type { Config } from '../config/config.js';

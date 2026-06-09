@@ -248,7 +248,7 @@ describe('useSlashCommandProcessor', () => {
       setUserMemory: vi.fn(),
       getApprovalMode: vi.fn().mockReturnValue('default'),
       setApprovalMode: vi.fn(),
-      getGeminiClient: vi.fn().mockReturnValue(undefined),
+      getAgentClient: vi.fn().mockReturnValue(undefined),
       storage: undefined,
     } as unknown as Config;
 
