@@ -11,7 +11,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { resolve, join, relative } from 'path';
-import { execSync } from 'child_process';
 
 // ---- Configuration ----
 
@@ -24,7 +23,7 @@ const A2A_DIR = resolve(PACKAGES_DIR, 'a2a-server');
 const PROVIDERS_DIR = resolve(PACKAGES_DIR, 'providers');
 
 // Paths to exclude from scans (generated, build artifacts, test output, etc.)
-const EXCLUDE_PATTERNS = [
+const EXCLUDE_TOKENS = [
   '/dist/',
   '/coverage/',
   '/node_modules/',
@@ -37,7 +36,10 @@ const EXCLUDE_PATTERNS = [
 // Legitimate Gemini provider-specific paths/names that MUST NOT trigger failures.
 // These use "gemini" for genuine Gemini-provider reasons, not for
 // provider-agnostic agent/chat concepts.
-const ALLOWED_GEMINI_PATTERNS: Array<{ pattern: string; reason: string }> = [
+const ALLOWED_GEMINI_PATTERNS: ReadonlyArray<{
+  pattern: string;
+  reason: string;
+}> = [
   // Provider-specific auth and config
   { pattern: 'gemini-oauth-provider', reason: 'Gemini OAuth provider' },
   { pattern: 'gemini.config', reason: 'Gemini provider config alias' },
@@ -73,14 +75,21 @@ const ALLOWED_GEMINI_PATTERNS: Array<{ pattern: string; reason: string }> = [
   },
 ];
 
+const SKIP_DIR_NAMES = new Set([
+  'dist',
+  'coverage',
+  'node_modules',
+  'tmp',
+  'project-plans',
+]);
+
 // ---- Helpers ----
 
 function isExcludedPath(filePath: string): boolean {
-  return EXCLUDE_PATTERNS.some((pat) => filePath.includes(pat));
+  return EXCLUDE_TOKENS.some((tok) => filePath.includes(tok));
 }
 
 function isAllowedGeminiName(name: string, filePath: string): boolean {
-  // Allow if the name/directory is in the allowed patterns
   for (const ap of ALLOWED_GEMINI_PATTERNS) {
     if (name.includes(ap.pattern) || filePath.includes(ap.pattern)) {
       return true;
@@ -92,14 +101,83 @@ function isAllowedGeminiName(name: string, filePath: string): boolean {
 /**
  * Strip JS/TS comments and string literals to avoid false positives
  * from commented-out code or documentation strings.
+ * Uses string scanning instead of regex to satisfy sonarjs/regular-expr.
  */
 function stripCommentsAndStrings(code: string): string {
-  return code
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/.*/g, '')
-    .replace(/'[^']*'/g, '""')
-    .replace(/"[^"]*"/g, '""')
-    .replace(/`[^`]*`/g, '""');
+  const lines = code.split('\n');
+  const result: string[] = [];
+  let inBlock = false;
+  for (const line of lines) {
+    let processed = line;
+    if (inBlock) {
+      const endIdx = processed.indexOf('*/');
+      if (endIdx === -1) {
+        continue;
+      }
+      processed = processed.slice(endIdx + 2);
+      inBlock = false;
+    }
+    // Remove remaining block comments on the same line
+    let safety = 0;
+    while (processed.includes('/*') && safety < 20) {
+      const startIdx = processed.indexOf('/*');
+      const endIdx = processed.indexOf('*/', startIdx + 2);
+      if (endIdx === -1) {
+        processed = processed.slice(0, startIdx);
+        inBlock = true;
+        break;
+      }
+      processed = processed.slice(0, startIdx) + processed.slice(endIdx + 2);
+      safety++;
+    }
+    // Remove line comments
+    const lineCommentIdx = processed.indexOf('//');
+    if (lineCommentIdx !== -1) {
+      processed = processed.slice(0, lineCommentIdx);
+    }
+    result.push(processed);
+  }
+  return result.join('\n');
+}
+
+/** Directories to skip by name during walk. */
+function isSkippedDir(name: string): boolean {
+  return SKIP_DIR_NAMES.has(name);
+}
+
+/** Check if a file entry is a .ts/.tsx source file we care about. */
+function isSourceFileEntry(name: string, fullPath: string): boolean {
+  return (
+    (name.endsWith('.ts') || name.endsWith('.tsx')) &&
+    !isExcludedPath(fullPath) &&
+    !fullPath.includes('providerAgnosticNaming.test.ts')
+  );
+}
+
+/**
+ * Handle a directory entry: recurse if it is a non-skipped directory,
+ * or collect if it is a source file.
+ */
+function processEntry(
+  entry: string,
+  full: string,
+  results: string[],
+  walk: (d: string) => void,
+): void {
+  let st: ReturnType<typeof statSync>;
+  try {
+    st = statSync(full);
+  } catch {
+    // stat failed — skip entry
+    return;
+  }
+  if (st.isDirectory()) {
+    if (!isSkippedDir(entry)) {
+      walk(full);
+    }
+  } else if (isSourceFileEntry(entry, full)) {
+    results.push(full);
+  }
 }
 
 /**
@@ -117,31 +195,8 @@ function collectSourceFiles(rootDir: string): string[] {
     for (const entry of entries) {
       const full = join(dir, entry);
       const rel = relative(rootDir, full);
-      if (isExcludedPath('/' + rel + '/')) continue;
-      let st: ReturnType<typeof statSync>;
-      try {
-        st = statSync(full);
-      } catch {
-        continue;
-      }
-      if (st.isDirectory()) {
-        if (
-          entry === 'dist' ||
-          entry === 'coverage' ||
-          entry === 'node_modules' ||
-          entry === 'tmp' ||
-          entry === 'project-plans'
-        ) {
-          continue;
-        }
-        walk(full);
-      } else if (entry.endsWith('.ts') || entry.endsWith('.tsx')) {
-        if (
-          !isExcludedPath(full) &&
-          !full.includes('providerAgnosticNaming.test.ts')
-        ) {
-          results.push(full);
-        }
+      if (!isExcludedPath('/' + rel + '/')) {
+        processEntry(entry, full, results, walk);
       }
     }
   }
@@ -150,13 +205,11 @@ function collectSourceFiles(rootDir: string): string[] {
 }
 
 /**
- * Search file contents for a regex pattern, excluding lines that are
- * inside allowed Gemini-specific contexts.
+ * Search file contents for a simple string token (avoids regex lint issues).
  */
-function searchInFiles(
+function searchTokenInFiles(
   files: string[],
-  pattern: RegExp,
-  label: string,
+  token: string,
 ): Array<{ file: string; line: number; text: string }> {
   const hits: Array<{ file: string; line: number; text: string }> = [];
   for (const filePath of files) {
@@ -169,13 +222,22 @@ function searchInFiles(
     const lines = content.split('\n');
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (pattern.test(line)) {
+      if (line.includes(token)) {
         const relPath = relative(PACKAGES_DIR, filePath);
         hits.push({ file: relPath, line: i + 1, text: line.trim() });
       }
     }
   }
   return hits;
+}
+
+/**
+ * Filter hits to only include real violations (not allowed Gemini names).
+ */
+function filterViolations(
+  hits: Array<{ file: string; line: number; text: string }>,
+): Array<{ file: string; line: number; text: string }> {
+  return hits.filter((h) => !isAllowedGeminiName(h.text, h.file));
 }
 
 // ---- Test Suite ----
@@ -208,7 +270,7 @@ describe('Provider-Agnostic Naming Regression', () => {
     it('packages/core/package.json must not expose ./core/geminiChat.js', () => {
       const pkgPath = resolve(CORE_DIR, 'package.json');
       const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-      const exports = pkg.exports || {};
+      const exports = pkg.exports ?? {};
       const hasOldExport = './core/geminiChat.js' in exports;
       expect(hasOldExport).toBe(false);
     });
@@ -216,154 +278,139 @@ describe('Provider-Agnostic Naming Regression', () => {
 
   describe('Old import paths must not remain in source/test files', () => {
     // These import paths reference the old module names, not legitimate Gemini provider paths.
-    // We specifically target import/from declarations to avoid false positives from
-    // documentation or plan files.
+    // Uses string token checks instead of regex to satisfy sonarjs rules.
 
-    const oldImportPathPatterns: Array<{
-      pattern: RegExp;
+    const oldImportPathChecks: ReadonlyArray<{
+      token: string;
       description: string;
     }> = [
       {
-        pattern: /from\s+['"].*\/geminiChat\.js['"]/,
+        token: "from './geminiChat.js'",
         description:
           "import from './geminiChat.js' (should be './chatSession.js')",
       },
       {
-        pattern: /from\s+['"].*\/geminiChatTypes\.js['"]/,
+        token: 'geminiChat.js',
+        description:
+          'import referencing geminiChat.js (should be chatSessionTypes.js)',
+      },
+      {
+        token: 'geminiChatTypes.js',
         description:
           "import from './geminiChatTypes.js' (should be './chatSessionTypes.js')",
       },
       {
-        pattern: /from\s+['"]\.\.?\/gemini\.js['"]/,
+        token: "from './gemini.js'",
         description: "CLI import from '../gemini.js' (should be '../cli.js')",
       },
       {
-        pattern: /from\s+['"]\.\.?\/gemini\.tsx['"]/,
+        token: "from '../gemini.js'",
+        description: "CLI import from '../gemini.js' (should be '../cli.js')",
+      },
+      {
+        token: "from './gemini.tsx'",
+        description: "CLI import from '../gemini.tsx' (should be '../cli.tsx')",
+      },
+      {
+        token: "from '../gemini.tsx'",
         description: "CLI import from '../gemini.tsx' (should be '../cli.tsx')",
       },
     ];
 
-    for (const { pattern, description } of oldImportPathPatterns) {
+    for (const { token, description } of oldImportPathChecks) {
       it(`must not contain ${description}`, () => {
-        const hits = searchInFiles(allFiles, pattern, description);
-        expect(hits).toEqual([]);
+        const hits = searchTokenInFiles(allFiles, token);
+        expect(hits).toStrictEqual([]);
       });
     }
   });
 
   describe('Old class/type names must not remain as provider-agnostic exports', () => {
-    const oldClassPatterns: Array<{
-      pattern: RegExp;
+    const oldClassChecks: ReadonlyArray<{
+      token: string;
       description: string;
     }> = [
       {
-        // Match: "class GeminiChat " or "export.*GeminiChat" but NOT "class MockGeminiChat"
-        // We want to find "GeminiChat" as a type/class name, not as part of
-        // a larger provider-specific identifier like "ServerGeminiChatCompressedEvent"
-        // However, the plan scope says "GeminiChat" as a standalone old name must go.
-        // This regex catches: import { GeminiChat }, : GeminiChat, class GeminiChat, etc.
-        pattern:
-          /(?:\b)(?:import\s+(?:type\s+)?\{[^}]*)\bGeminiChat\b(?:[^}]*\})|\bclass\s+GeminiChat\b|\bexport\s+.*\bGeminiChat\b|\bGeminiChat\b(?=\s*[,;}\)\s])/,
+        token: 'GeminiChat',
         description: 'GeminiChat class/type name (should be ChatSession)',
       },
       {
-        pattern:
-          /(?:\b)(?:import\s+(?:type\s+)?\{[^}]*)\bGeminiClient\b(?:[^}]*\})|\bclass\s+GeminiClient\b|\bexport\s+.*\bGeminiClient\b|\bGeminiClient\b(?=\s*[,;}\)\s])/,
+        token: 'GeminiClient',
         description: 'GeminiClient class/type name (should be AgentClient)',
       },
     ];
 
-    for (const { pattern, description } of oldClassPatterns) {
+    for (const { token, description } of oldClassChecks) {
       it(`must not contain ${description}`, () => {
-        const hits = searchInFiles(allFiles, pattern, description);
-        // Filter out allowed patterns
-        const violations = hits.filter(
-          (h) => !isAllowedGeminiName(h.text, h.file),
-        );
-        expect(violations).toEqual([]);
+        const hits = searchTokenInFiles(allFiles, token);
+        const violations = filterViolations(hits);
+        expect(violations).toStrictEqual([]);
       });
     }
   });
 
   describe('Old accessor/field/variable names must not remain', () => {
-    const oldNamePatterns: Array<{
-      pattern: RegExp;
+    const oldNameChecks: ReadonlyArray<{
+      token: string;
       description: string;
     }> = [
       {
-        // getGeminiClient() method/accessor
-        pattern: /\bgetGeminiClient\s*\(/,
+        token: 'getGeminiClient',
         description: 'getGeminiClient() accessor (should be getAgentClient())',
       },
       {
-        // geminiClient as a field/property/parameter (but not string literals)
-        // Match: .geminiClient, this.geminiClient, { geminiClient, geminiClient:, geminiClient =
-        pattern: /(?:\.|this\.|\{\s*|\,\s*)geminiClient\b/,
+        token: 'geminiClient',
         description: 'geminiClient field/property (should be agentClient)',
       },
       {
-        // createGeminiChatRuntime function
-        pattern: /\bcreateGeminiChatRuntime\b/,
+        token: 'createGeminiChatRuntime',
         description:
           'createGeminiChatRuntime (should be createChatSessionRuntime)',
       },
       {
-        // GeminiChatConfigShape type
-        pattern: /\bGeminiChatConfigShape\b/,
+        token: 'GeminiChatConfigShape',
         description: 'GeminiChatConfigShape (should be ChatSessionConfigShape)',
       },
       {
-        // GeminiChatRuntimeOptions type
-        pattern: /\bGeminiChatRuntimeOptions\b/,
+        token: 'GeminiChatRuntimeOptions',
         description:
           'GeminiChatRuntimeOptions (should be ChatSessionRuntimeOptions)',
       },
       {
-        // GeminiChatRuntimeResult type
-        pattern: /\bGeminiChatRuntimeResult\b/,
+        token: 'GeminiChatRuntimeResult',
         description:
           'GeminiChatRuntimeResult (should be ChatSessionRuntimeResult)',
       },
       {
-        // getRuntimeGeminiClient helper
-        pattern: /\bgetRuntimeGeminiClient\b/,
+        token: 'getRuntimeGeminiClient',
         description: 'getRuntimeGeminiClient (should be getRuntimeAgentClient)',
       },
       {
-        // createGeminiChat() function in providers test
-        pattern: /\bcreateGeminiChat\b/,
+        token: 'createGeminiChat',
         description: 'createGeminiChat() (should be createChatSession())',
       },
       {
-        // mockGeminiClient / MockGeminiClient local mock variable
-        pattern: /\bmockGeminiClient\b/i,
+        token: 'mockGeminiClient',
         description: 'mockGeminiClient (should be mockAgentClient)',
       },
       {
-        // makeGeminiClient helper
-        pattern: /\bmakeGeminiClient\b/,
+        token: 'makeGeminiClient',
         description: 'makeGeminiClient (should be makeAgentClient)',
       },
       {
-        // previousGeminiClient local variable
-        pattern: /\bpreviousGeminiClient\b/,
+        token: 'previousGeminiClient',
         description: 'previousGeminiClient (should be previousAgentClient)',
       },
       {
-        // newGeminiClient local variable
-        pattern: /\bnewGeminiClient\b/,
+        token: 'newGeminiClient',
         description: 'newGeminiClient (should be newAgentClient)',
       },
     ];
 
-    for (const { pattern, description } of oldNamePatterns) {
+    for (const { token, description } of oldNameChecks) {
       it(`must not contain ${description}`, () => {
-        const hits = searchInFiles(allFiles, pattern, description);
-        if (hits.length > 0) {
-          // Still report but let the assertion produce the failure
-          // with details of where the old names are found.
-        }
-        expect(hits).toEqual([]);
+        const hits = searchTokenInFiles(allFiles, token);
+        expect(hits).toStrictEqual([]);
       });
     }
   });
@@ -376,48 +423,28 @@ describe('Provider-Agnostic Naming Regression', () => {
     );
 
     it('must not contain GeminiClient type references inside geminiStream/', () => {
-      const hits = searchInFiles(
-        geminiStreamFiles,
-        /\bGeminiClient\b/,
-        'GeminiClient in geminiStream',
-      );
-      expect(hits).toEqual([]);
+      const hits = searchTokenInFiles(geminiStreamFiles, 'GeminiClient');
+      expect(hits).toStrictEqual([]);
     });
 
     it('must not contain geminiClient field/param references inside geminiStream/', () => {
-      const hits = searchInFiles(
-        geminiStreamFiles,
-        /(?:\.|this\.|\{\s*|\,\s*)geminiClient\b/,
-        'geminiClient in geminiStream',
-      );
-      expect(hits).toEqual([]);
+      const hits = searchTokenInFiles(geminiStreamFiles, 'geminiClient');
+      expect(hits).toStrictEqual([]);
     });
 
     it('must not contain getGeminiClient accessor inside geminiStream/', () => {
-      const hits = searchInFiles(
-        geminiStreamFiles,
-        /\bgetGeminiClient\s*\(/,
-        'getGeminiClient in geminiStream',
-      );
-      expect(hits).toEqual([]);
+      const hits = searchTokenInFiles(geminiStreamFiles, 'getGeminiClient');
+      expect(hits).toStrictEqual([]);
     });
 
     it('must not contain mockGeminiClient inside geminiStream/', () => {
-      const hits = searchInFiles(
-        geminiStreamFiles,
-        /\bmockGeminiClient\b/i,
-        'mockGeminiClient in geminiStream',
-      );
-      expect(hits).toEqual([]);
+      const hits = searchTokenInFiles(geminiStreamFiles, 'mockGeminiClient');
+      expect(hits).toStrictEqual([]);
     });
 
     it('must not contain makeGeminiClient inside geminiStream/', () => {
-      const hits = searchInFiles(
-        geminiStreamFiles,
-        /\bmakeGeminiClient\b/,
-        'makeGeminiClient in geminiStream',
-      );
-      expect(hits).toEqual([]);
+      const hits = searchTokenInFiles(geminiStreamFiles, 'makeGeminiClient');
+      expect(hits).toStrictEqual([]);
     });
   });
 
@@ -444,22 +471,22 @@ describe('Provider-Agnostic Naming Regression', () => {
       const filePath = resolve(CORE_DIR, 'src/config/configBaseCore.ts');
       const content = readFileSync(filePath, 'utf-8');
       const codeOnly = stripCommentsAndStrings(content);
-      expect(codeOnly).not.toMatch(/\bgetGeminiClient\b/);
+      expect(codeOnly.includes('getGeminiClient')).toBe(false);
     });
 
     it('configBaseCore must not have geminiClient field', () => {
       const filePath = resolve(CORE_DIR, 'src/config/configBaseCore.ts');
       const content = readFileSync(filePath, 'utf-8');
       const codeOnly = stripCommentsAndStrings(content);
-      expect(codeOnly).not.toMatch(/\bgeminiClient\b/);
+      expect(codeOnly.includes('geminiClient')).toBe(false);
     });
 
     it('config.ts must not have getGeminiClient() accessor or geminiClient field', () => {
       const filePath = resolve(CORE_DIR, 'src/config/config.ts');
       const content = readFileSync(filePath, 'utf-8');
       const codeOnly = stripCommentsAndStrings(content);
-      expect(codeOnly).not.toMatch(/\bgetGeminiClient\b/);
-      expect(codeOnly).not.toMatch(/\bgeminiClient\b/);
+      expect(codeOnly.includes('getGeminiClient')).toBe(false);
+      expect(codeOnly.includes('geminiClient')).toBe(false);
     });
   });
 });
