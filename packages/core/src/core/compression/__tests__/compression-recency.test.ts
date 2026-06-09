@@ -13,9 +13,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as compressionFactory from '../compressionStrategyFactory.js';
-import { GeminiChat } from '../../geminiChat.js';
+import { ChatSession } from '../../chatSession.js';
 import { PerformCompressionResult } from '../../turn.js';
-import { createGeminiChatRuntime } from '../../../test-utils/runtime.js';
+import { createChatSessionRuntime } from '../../../test-utils/runtime.js';
 import { createAgentRuntimeState } from '../../../runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '../../../runtime/createAgentRuntimeContext.js';
 import {
@@ -42,10 +42,10 @@ function makeHttpError(status: number): Error {
   return err;
 }
 
-function makeGeminiChat(
-  runtimeSetup: ReturnType<typeof createGeminiChatRuntime>,
+function makeChatSession(
+  runtimeSetup: ReturnType<typeof createChatSessionRuntime>,
   providerRuntimeSnapshot: ProviderRuntimeContext,
-): GeminiChat {
+): ChatSession {
   const runtimeState = createAgentRuntimeState({
     runtimeId: runtimeSetup.runtime.runtimeId,
     provider: runtimeSetup.provider.name,
@@ -98,16 +98,16 @@ function makeGeminiChat(
     embedContent: vi.fn(),
   };
 
-  return new GeminiChat(view, mockContentGenerator, {}, []);
+  return new ChatSession(view, mockContentGenerator, {}, []);
 }
 
 describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
-  let runtimeSetup: ReturnType<typeof createGeminiChatRuntime>;
+  let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   let providerRuntimeSnapshot: ProviderRuntimeContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    runtimeSetup = createGeminiChatRuntime();
+    runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
@@ -120,12 +120,12 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
   });
 
   it('returns false before any compression has run', () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
     expect(chat.wasRecentlyCompressed()).toBe(false);
   });
 
   it('returns true after a successful compression', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
       () => ({
@@ -150,7 +150,7 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
 
   it('returns false after the recency window expires', async () => {
     vi.useFakeTimers();
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
       () => ({
@@ -179,7 +179,7 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
   });
 
   it('returns false when both primary and fallback compression fail', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
       () => ({
@@ -200,7 +200,7 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
   });
 
   it('returns true when fallback succeeds after primary transient failure', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     const primaryCompress = vi.fn().mockRejectedValue(makeHttpError(500));
     const fallbackCompress = vi.fn().mockResolvedValue({
@@ -243,12 +243,12 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
 });
 
 describe('CompressionHandler performCompression result (issue #1792)', () => {
-  let runtimeSetup: ReturnType<typeof createGeminiChatRuntime>;
+  let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   let providerRuntimeSnapshot: ProviderRuntimeContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    runtimeSetup = createGeminiChatRuntime();
+    runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
@@ -257,7 +257,7 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   });
 
   it('clears cached prompt token baseline after successful compression rewrite', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     (
       chat as unknown as {
@@ -299,7 +299,7 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   });
 
   it('returns COMPRESSED when primary strategy succeeds', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
       () => ({
@@ -323,7 +323,7 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   });
 
   it('returns COMPRESSED when fallback succeeds after primary failure', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
       (name) => {
@@ -357,7 +357,7 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   });
 
   it('returns FAILED when both primary and fallback strategies fail', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
       () => ({
@@ -373,7 +373,7 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   });
 
   it('returns SKIPPED_COOLDOWN when compression is in cooldown', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
       () => ({
@@ -395,7 +395,7 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   });
 
   it('returns SKIPPED_EMPTY when history is empty', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     // Override getCurated to return empty history
     vi.spyOn(chat['historyService'], 'getCurated').mockReturnValue([]);
@@ -405,7 +405,7 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   });
 
   it('updates wasRecentlyCompressed only on COMPRESSED result', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
       () => ({

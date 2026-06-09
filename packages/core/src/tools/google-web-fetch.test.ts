@@ -13,7 +13,7 @@ import { ToolErrorType } from './tool-error.js';
 import * as fetchUtils from '../utils/fetch.js';
 
 const mockGenerateContent = vi.fn();
-const mockGetGeminiClient = vi.fn(() => ({
+const mockGetAgentClient = vi.fn(() => ({
   generateContent: mockGenerateContent,
 }));
 
@@ -119,7 +119,7 @@ describe('GoogleWebFetchTool', () => {
       getApprovalMode: vi.fn(),
       setApprovalMode: vi.fn(),
       getProxy: vi.fn(),
-      getGeminiClient: mockGetGeminiClient,
+      getAgentClient: mockGetAgentClient,
       getContentGeneratorConfig: vi.fn().mockReturnValue({
         providerManager: null,
       }),

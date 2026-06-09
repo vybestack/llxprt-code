@@ -9,7 +9,7 @@ import { useEffect, useRef } from 'react';
 interface UseInitialPromptSubmitParams {
   initialPrompt: string | undefined;
   submitQuery: (query: string) => Promise<void>;
-  geminiClientPresent: boolean;
+  agentClientPresent: boolean;
   blockedByDialogs: {
     isAuthDialogOpen: boolean;
     isThemeDialogOpen: boolean;
@@ -27,7 +27,7 @@ interface UseInitialPromptSubmitParams {
 export function useInitialPromptSubmit({
   initialPrompt,
   submitQuery,
-  geminiClientPresent,
+  agentClientPresent,
   blockedByDialogs,
   startupGuardsInitialized,
 }: UseInitialPromptSubmitParams): void {
@@ -55,7 +55,7 @@ export function useInitialPromptSubmit({
       isDialogOpen ||
       isConfigDialogOpen ||
       isSpecialDialogOpen ||
-      !geminiClientPresent
+      !agentClientPresent
     ) {
       return;
     }
@@ -76,7 +76,7 @@ export function useInitialPromptSubmit({
   }, [
     initialPrompt,
     submitQuery,
-    geminiClientPresent,
+    agentClientPresent,
     blockedByDialogs.isAuthDialogOpen,
     blockedByDialogs.isThemeDialogOpen,
     blockedByDialogs.isEditorDialogOpen,

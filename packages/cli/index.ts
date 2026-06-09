@@ -8,7 +8,7 @@
 
 // Note: Using --no-deprecation in shebang to suppress deprecation warnings from dependencies
 
-import { main } from './src/gemini.js';
+import { main } from './src/cli.js';
 import { FatalError, writeToStderr } from '@vybestack/llxprt-code-core';
 import { runExitCleanup } from './src/utils/cleanup.js';
 

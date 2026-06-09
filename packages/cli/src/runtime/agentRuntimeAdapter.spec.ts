@@ -820,7 +820,7 @@ describe('CLI Bootstrap Functions - bootstrapForegroundAgent', () => {
     expect(state.provider).toBe('gemini');
   });
 
-  it('should pass runtime state to GeminiClient', async () => {
+  it('should pass runtime state to AgentClient', async () => {
     // @plan PLAN-20251027-STATELESS5.P07
     // @requirement REQ-STAT5-002.2
     // @pseudocode cli-runtime-adapter.md lines 124-129

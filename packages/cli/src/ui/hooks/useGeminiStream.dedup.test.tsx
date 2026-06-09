@@ -18,7 +18,7 @@ import { act } from 'react';
 import { useGeminiStream } from './geminiStream/index.js';
 import type {
   Config,
-  GeminiClient,
+  AgentClient,
   ToolCallRequestInfo,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
@@ -97,7 +97,7 @@ vi.mock('./toolMapping.js', () => ({
 }));
 
 describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () => {
-  let mockGeminiClient: GeminiClient;
+  let mockAgentClient: AgentClient;
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
   let mockAddItem: UseHistoryManagerReturn['addItem'];
@@ -135,7 +135,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
       getContentGeneratorConfig: () => ({
         model: 'test-model',
       }),
-      getGeminiClient: () => mockGeminiClient,
+      getAgentClient: () => mockAgentClient,
       getMcpClientManager: () => undefined,
       getMcpServers: () => undefined,
       getSettingsService: () => undefined,
@@ -179,7 +179,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
       };
     };
 
-    mockGeminiClient = {
+    mockAgentClient = {
       sendMessageStream: vi.fn(() => createDuplicateToolCallStream()),
       getChat: vi.fn(() => ({
         recordCompletedToolCalls: vi.fn(),
@@ -187,7 +187,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
       getCurrentSequenceModel: vi.fn(() => 'test-model'),
       addHistory: vi.fn(),
       getHistory: vi.fn(() => []),
-    } as unknown as GeminiClient;
+    } as unknown as AgentClient;
 
     mockSettings = {
       merged: {},
@@ -224,7 +224,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
   it('should deduplicate tool call requests with the same callId', async () => {
     const { result } = renderHook(() =>
       useGeminiStream(
-        mockGeminiClient,
+        mockAgentClient,
         mockHistory,
         mockAddItem,
         mockConfig,
@@ -288,12 +288,12 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
     };
 
     (
-      mockGeminiClient.sendMessageStream as ReturnType<typeof vi.fn>
+      mockAgentClient.sendMessageStream as ReturnType<typeof vi.fn>
     ).mockReturnValue(createTwoDifferentToolCallsStream());
 
     const { result } = renderHook(() =>
       useGeminiStream(
-        mockGeminiClient,
+        mockAgentClient,
         mockHistory,
         mockAddItem,
         mockConfig,

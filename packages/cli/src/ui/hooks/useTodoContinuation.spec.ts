@@ -19,7 +19,7 @@ import { useTodoContinuation } from './useTodoContinuation.js';
 import { useTodoContext } from '../contexts/TodoContext.js';
 import {
   Config,
-  GeminiClient,
+  AgentClient,
   ApprovalMode,
   type Todo,
 } from '@vybestack/llxprt-code-core';
@@ -31,7 +31,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   return {
     ...actual,
     Config: vi.fn(),
-    GeminiClient: vi.fn(),
+    AgentClient: vi.fn(),
   };
 });
 
@@ -48,7 +48,7 @@ interface MockConfig {
   getApprovalMode: Mock<() => ApprovalMode>;
 }
 
-interface MockGeminiClient {
+interface MockAgentClient {
   sendMessageStream: Mock<
     (message: string, options?: { ephemeral: boolean }) => Promise<void>
   >;
@@ -56,7 +56,7 @@ interface MockGeminiClient {
 
 describe('useTodoContinuation - Behavioral Tests', () => {
   let mockConfig: MockConfig;
-  let mockGeminiClient: MockGeminiClient;
+  let mockAgentClient: MockAgentClient;
   let mockTodoContext: MockTodoContext;
   let mockOnDebugMessage: Mock<(message: string) => void>;
 
@@ -82,13 +82,13 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       () => mockConfig as unknown as Config,
     );
 
-    // Mock GeminiClient
-    mockGeminiClient = {
+    // Mock AgentClient
+    mockAgentClient = {
       sendMessageStream: vi.fn().mockResolvedValue(undefined),
     };
     (
-      GeminiClient as unknown as MockedFunction<() => GeminiClient>
-    ).mockImplementation(() => mockGeminiClient as unknown as GeminiClient);
+      AgentClient as unknown as MockedFunction<() => AgentClient>
+    ).mockImplementation(() => mockAgentClient as unknown as AgentClient);
 
     // Mock TodoContext
     mockTodoContext = {
@@ -121,7 +121,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false, // not responding
           mockOnDebugMessage,
@@ -134,7 +134,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: Continuation should be triggered
-      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+      expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Complete feature implementation'),
         { ephemeral: true },
       );
@@ -149,7 +149,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -162,7 +162,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: No continuation should be triggered
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      expect(mockAgentClient.sendMessageStream).not.toHaveBeenCalled();
     });
 
     it('@requirement REQ-001.2 continues when tool calls were present and todos remain active', () => {
@@ -174,7 +174,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -187,7 +187,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: Continuation should still trigger
-      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(1);
+      expect(mockAgentClient.sendMessageStream).toHaveBeenCalledTimes(1);
     });
 
     it('@requirement REQ-001.4 should NOT trigger when todo-continuation setting is disabled', () => {
@@ -199,7 +199,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -212,7 +212,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: No continuation should be triggered
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      expect(mockAgentClient.sendMessageStream).not.toHaveBeenCalled();
     });
 
     it('@requirement REQ-001.3 should NOT trigger when AI is currently responding', () => {
@@ -224,7 +224,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           true, // currently responding
           mockOnDebugMessage,
@@ -237,7 +237,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: No continuation should be triggered
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      expect(mockAgentClient.sendMessageStream).not.toHaveBeenCalled();
     });
   });
 
@@ -255,7 +255,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -268,7 +268,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: Should send prompt with in_progress task (most relevant)
-      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+      expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Fix critical bug'),
         { ephemeral: true },
       );
@@ -286,7 +286,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -299,7 +299,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: Should use YOLO-specific prompt
-      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+      expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         expect.stringMatching(/(continue|proceed).*without.*confirmation/i),
         { ephemeral: true },
@@ -315,7 +315,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -328,7 +328,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: Should send with ephemeral flag
-      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+      expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.any(String),
         { ephemeral: true },
       );
@@ -339,7 +339,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     it('@requirement REQ-003.1 should respond to todo state changes', () => {
       const { result, rerender } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -357,7 +357,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         result.current.handleStreamCompleted(false);
       });
 
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      expect(mockAgentClient.sendMessageStream).not.toHaveBeenCalled();
 
       // When: Todos are updated with active task
       mockTodoContext.todos = [
@@ -370,7 +370,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         result.current.handleStreamCompleted(false);
       });
 
-      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+      expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('New active task'),
         { ephemeral: true },
       );
@@ -379,7 +379,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     it('@requirement REQ-003.2 should handle todo_pause events', () => {
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -404,7 +404,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     it('@requirement REQ-004.1 should track continuation state', () => {
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -441,7 +441,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -473,7 +473,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -488,7 +488,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: Should not trigger multiple continuations simultaneously
-      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(1);
+      expect(mockAgentClient.sendMessageStream).toHaveBeenCalledTimes(1);
     });
 
     it('@requirement REQ-005.2 should handle changing settings mid-stream', () => {
@@ -500,7 +500,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result, rerender } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -518,7 +518,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         result.current.handleStreamCompleted(false);
       });
 
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      expect(mockAgentClient.sendMessageStream).not.toHaveBeenCalled();
     });
 
     it('@requirement REQ-005.3 should handle malformed todos gracefully', () => {
@@ -540,7 +540,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -558,7 +558,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       }).not.toThrow();
 
       // Should skip malformed todos (no message sent)
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      expect(mockAgentClient.sendMessageStream).not.toHaveBeenCalled();
     });
 
     it('@requirement REQ-005.4 should prevent continuation loops', () => {
@@ -570,7 +570,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -583,14 +583,14 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       const firstCallCount =
-        mockGeminiClient.sendMessageStream.mock.calls.length;
+        mockAgentClient.sendMessageStream.mock.calls.length;
 
       act(() => {
         result.current.handleStreamCompleted(false);
       });
 
       // Then: Should not trigger additional continuations if already active
-      expect(mockGeminiClient.sendMessageStream.mock.calls.length).toBe(
+      expect(mockAgentClient.sendMessageStream.mock.calls.length).toBe(
         firstCallCount,
       );
     });
@@ -604,7 +604,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -617,7 +617,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: Should use default behavior (disabled)
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      expect(mockAgentClient.sendMessageStream).not.toHaveBeenCalled();
     });
 
     it('@requirement REQ-006.2 should prioritize in_progress todos over pending ones', () => {
@@ -633,7 +633,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -646,7 +646,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       });
 
       // Then: Should select in_progress task
-      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+      expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Active task'),
         { ephemeral: true },
       );
@@ -662,7 +662,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -677,7 +677,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         result.current.handleStreamCompleted(false);
       });
 
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      expect(mockAgentClient.sendMessageStream).not.toHaveBeenCalled();
     });
 
     it('@requirement REQ-007.2 should persist pause state across multiple stream completions', () => {
@@ -688,7 +688,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -705,7 +705,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         result.current.handleStreamCompleted(false);
       });
 
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      expect(mockAgentClient.sendMessageStream).not.toHaveBeenCalled();
     });
 
     it('@requirement REQ-007.3 should resume continuation after clearPause is called', () => {
@@ -716,7 +716,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -731,7 +731,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         result.current.handleStreamCompleted(false);
       });
 
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      expect(mockAgentClient.sendMessageStream).not.toHaveBeenCalled();
 
       act(() => {
         result.current.clearPause();
@@ -741,7 +741,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         result.current.handleStreamCompleted(false);
       });
 
-      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+      expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Active task'),
         { ephemeral: true },
       );
@@ -750,7 +750,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     it('@requirement REQ-007.4 should expose clearPause function', () => {
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockGeminiClient as unknown as GeminiClient,
+          mockAgentClient as unknown as AgentClient,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,

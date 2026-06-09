@@ -12,17 +12,17 @@ interface MockHistoryService {
   addAll: ReturnType<typeof vi.fn>;
 }
 
-interface MockGeminiClient {
+interface MockAgentClient {
   resetChat: ReturnType<typeof vi.fn>;
   getHistoryService: () => MockHistoryService | null;
 }
 
 interface MockConfig {
-  getGeminiClient: () => MockGeminiClient | undefined;
+  getAgentClient: () => MockAgentClient | undefined;
 }
 
 describe('Session Restore Chat Initialization', () => {
-  let mockGeminiClient: MockGeminiClient;
+  let mockAgentClient: MockAgentClient;
   let mockConfig: MockConfig;
   let mockHistoryService: MockHistoryService;
 
@@ -35,56 +35,56 @@ describe('Session Restore Chat Initialization', () => {
       addAll: vi.fn(),
     };
 
-    mockGeminiClient = {
+    mockAgentClient = {
       resetChat: vi.fn().mockResolvedValue(undefined),
       getHistoryService: () => mockHistoryService,
     };
 
     mockConfig = {
-      getGeminiClient: () => mockGeminiClient,
+      getAgentClient: () => mockAgentClient,
     };
   });
 
   describe('chat initialization when restoring session', () => {
     it('calls resetChat to ensure historyService is available', async () => {
-      expect(mockGeminiClient.resetChat).not.toHaveBeenCalled();
+      expect(mockAgentClient.resetChat).not.toHaveBeenCalled();
 
-      const geminiClient = mockConfig.getGeminiClient();
+      const agentClient = mockConfig.getAgentClient();
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (geminiClient) {
-        await geminiClient.resetChat();
+      if (agentClient) {
+        await agentClient.resetChat();
       }
 
-      expect(mockGeminiClient.resetChat).toHaveBeenCalled();
-      expect(geminiClient?.getHistoryService()).toBeDefined();
+      expect(mockAgentClient.resetChat).toHaveBeenCalled();
+      expect(agentClient?.getHistoryService()).toBeDefined();
     });
 
     it('handles resetChat errors gracefully without throwing', async () => {
-      mockGeminiClient.resetChat.mockRejectedValue(
+      mockAgentClient.resetChat.mockRejectedValue(
         new Error('Failed to initialize chat'),
       );
 
-      const geminiClient = mockConfig.getGeminiClient();
+      const agentClient = mockConfig.getAgentClient();
 
       expect(async () => {
-        if (geminiClient) {
-          await geminiClient.resetChat().catch(() => {});
+        if (agentClient) {
+          await agentClient.resetChat().catch(() => {});
         }
       }).not.toThrow();
 
-      expect(mockGeminiClient.resetChat).toHaveBeenCalled();
+      expect(mockAgentClient.resetChat).toHaveBeenCalled();
     });
 
-    it('does not throw when geminiClient is undefined', () => {
+    it('does not throw when agentClient is undefined', () => {
       mockConfig = {
-        getGeminiClient: () => undefined,
+        getAgentClient: () => undefined,
       };
 
-      const geminiClient = mockConfig.getGeminiClient();
+      const agentClient = mockConfig.getAgentClient();
 
       expect(() => {
-        if (geminiClient) {
-          geminiClient.resetChat();
+        if (agentClient) {
+          agentClient.resetChat();
         }
       }).not.toThrow();
     });
@@ -101,12 +101,12 @@ describe('Session Restore Chat Initialization', () => {
         },
       ];
 
-      const geminiClient = mockConfig.getGeminiClient();
+      const agentClient = mockConfig.getAgentClient();
 
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (geminiClient) {
-        await geminiClient.resetChat();
-        const historyService = geminiClient.getHistoryService();
+      if (agentClient) {
+        await agentClient.resetChat();
+        const historyService = agentClient.getHistoryService();
         if (historyService) {
           historyService.addAll(restoredSessionHistory);
         }
@@ -118,7 +118,7 @@ describe('Session Restore Chat Initialization', () => {
     });
 
     it('continues session restore even if resetChat fails', async () => {
-      mockGeminiClient.resetChat.mockRejectedValue(
+      mockAgentClient.resetChat.mockRejectedValue(
         new Error('Chat init failed'),
       );
 
@@ -133,18 +133,18 @@ describe('Session Restore Chat Initialization', () => {
         },
       ];
 
-      const geminiClient = mockConfig.getGeminiClient();
+      const agentClient = mockConfig.getAgentClient();
 
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (geminiClient) {
-        await geminiClient.resetChat().catch(() => {});
-        const historyService = geminiClient.getHistoryService();
+      if (agentClient) {
+        await agentClient.resetChat().catch(() => {});
+        const historyService = agentClient.getHistoryService();
         if (historyService) {
           historyService.addAll(restoredSessionHistory);
         }
       }
 
-      expect(mockGeminiClient.resetChat).toHaveBeenCalled();
+      expect(mockAgentClient.resetChat).toHaveBeenCalled();
       expect(mockHistoryService.addAll).toHaveBeenCalledWith(
         restoredSessionHistory,
       );

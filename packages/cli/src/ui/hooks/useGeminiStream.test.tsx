@@ -50,7 +50,7 @@ const mockSendMessageStream = vi
   .mockReturnValue((async function* () {})());
 const mockStartChat = vi.fn();
 
-const MockedGeminiClientClass = vi.hoisted(() =>
+const MockedAgentClientClass = vi.hoisted(() =>
   vi.fn().mockImplementation(function (this: any, _config: any) {
     // _config
     this.startChat = mockStartChat;
@@ -72,7 +72,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   return {
     ...actualCoreModule,
     GitService: vi.fn(),
-    GeminiClient: MockedGeminiClientClass,
+    AgentClient: MockedAgentClientClass,
     UserPromptEvent: MockedUserPromptEvent,
     parseAndFormatApiError: mockParseAndFormatApiError,
     tokenLimit: vi.fn().mockReturnValue(100), // Mock tokenLimit
@@ -160,11 +160,11 @@ describe('useGeminiStream', () => {
     vi.clearAllMocks(); // Clear mocks before each test
 
     mockAddItem = vi.fn();
-    // Define the mock for getGeminiClient
-    const _mockGetGeminiClient = vi.fn().mockImplementation(() => {
-      // MockedGeminiClientClass is defined in the module scope by the previous change.
+    // Define the mock for getAgentClient
+    const _mockGetAgentClient = vi.fn().mockImplementation(() => {
+      // MockedAgentClientClass is defined in the module scope by the previous change.
       // It will use the mockStartChat and mockSendMessageStream that are managed within beforeEach.
-      const clientInstance = new MockedGeminiClientClass(mockConfig);
+      const clientInstance = new MockedAgentClientClass(mockConfig);
       return clientInstance;
     });
 
@@ -232,11 +232,11 @@ describe('useGeminiStream', () => {
       mockCancelAllToolCalls,
     ]);
 
-    // Reset mocks for GeminiClient instance methods (startChat and sendMessageStream)
-    // The GeminiClient constructor itself is mocked at the module level.
+    // Reset mocks for AgentClient instance methods (startChat and sendMessageStream)
+    // The AgentClient constructor itself is mocked at the module level.
     mockStartChat.mockClear().mockResolvedValue({
       sendMessageStream: mockSendMessageStream,
-    } as unknown as any); // GeminiChat -> any
+    } as unknown as any); // ChatSession -> any
     mockSendMessageStream
       .mockClear()
       .mockReturnValue((async function* () {})());
@@ -254,9 +254,9 @@ describe('useGeminiStream', () => {
 
   const renderTestHook = (
     initialToolCalls: TrackedToolCall[] = [],
-    geminiClient?: any,
+    agentClient?: any,
   ) => {
-    const client = geminiClient ?? mockConfig.getGeminiClient();
+    const client = agentClient ?? mockConfig.getAgentClient();
 
     const initialProps = {
       client,
@@ -424,7 +424,7 @@ describe('useGeminiStream', () => {
 
     return renderHook(() =>
       useGeminiStream(
-        new MockedGeminiClientClass(mockConfig),
+        new MockedAgentClientClass(mockConfig),
         [],
         mockAddItem,
         mockConfig,
@@ -565,7 +565,7 @@ describe('useGeminiStream', () => {
 
     renderHook(() =>
       useGeminiStream(
-        new MockedGeminiClientClass(mockConfig),
+        new MockedAgentClientClass(mockConfig),
         [],
         mockAddItem,
         mockConfig,
@@ -662,7 +662,7 @@ describe('useGeminiStream', () => {
 
     renderHook(() =>
       useGeminiStream(
-        new MockedGeminiClientClass(mockConfig),
+        new MockedAgentClientClass(mockConfig),
         [],
         mockAddItem,
         mockConfig,
@@ -735,7 +735,7 @@ describe('useGeminiStream', () => {
         } as unknown as AnyToolInvocation,
       } as TrackedCancelledToolCall,
     ];
-    const client = new MockedGeminiClientClass(mockConfig);
+    const client = new MockedAgentClientClass(mockConfig);
 
     // Capture the onComplete callback
     let capturedOnComplete:
@@ -847,7 +847,7 @@ describe('useGeminiStream', () => {
       responseSubmittedToGemini: false,
     };
     const allCancelledTools = [cancelledToolCall1, cancelledToolCall2];
-    const client = new MockedGeminiClientClass(mockConfig);
+    const client = new MockedAgentClientClass(mockConfig);
 
     let capturedOnComplete:
       | ((completedTools: TrackedToolCall[]) => Promise<void>)
@@ -973,7 +973,7 @@ describe('useGeminiStream', () => {
 
     const { result, rerender } = renderHook(() =>
       useGeminiStream(
-        new MockedGeminiClientClass(mockConfig),
+        new MockedAgentClientClass(mockConfig),
         [],
         mockAddItem,
         mockConfig,
@@ -1106,7 +1106,7 @@ describe('useGeminiStream', () => {
 
       const { result } = renderHook(() =>
         useGeminiStream(
-          mockConfig.getGeminiClient(),
+          mockConfig.getAgentClient(),
           [],
           mockAddItem,
           mockConfig,
@@ -1148,7 +1148,7 @@ describe('useGeminiStream', () => {
 
       const { result } = renderHook(() =>
         useGeminiStream(
-          mockConfig.getGeminiClient(),
+          mockConfig.getAgentClient(),
           [],
           mockAddItem,
           mockConfig,
@@ -1482,7 +1482,7 @@ describe('useGeminiStream', () => {
     it('should not call handleSlashCommand is shell mode is active', async () => {
       const { result } = renderHook(() =>
         useGeminiStream(
-          new MockedGeminiClientClass(mockConfig),
+          new MockedAgentClientClass(mockConfig),
           [],
           mockAddItem,
           mockConfig,
@@ -1555,7 +1555,7 @@ describe('useGeminiStream', () => {
 
       renderHook(() =>
         useGeminiStream(
-          new MockedGeminiClientClass(mockConfig),
+          new MockedAgentClientClass(mockConfig),
           [],
           mockAddItem,
           mockConfig,
@@ -1606,7 +1606,7 @@ describe('useGeminiStream', () => {
 
       const { result } = renderHook(() =>
         useGeminiStream(
-          new MockedGeminiClientClass(testConfig),
+          new MockedAgentClientClass(testConfig),
           [],
           mockAddItem,
           testConfig,
@@ -1930,7 +1930,7 @@ describe('useGeminiStream', () => {
 
       const { result } = renderHook(() =>
         useGeminiStream(
-          new MockedGeminiClientClass(mockConfig),
+          new MockedAgentClientClass(mockConfig),
           [],
           mockAddItem,
           mockConfig,
@@ -2038,7 +2038,7 @@ describe('useGeminiStream', () => {
 
       const { result } = renderHook(() =>
         useGeminiStream(
-          new MockedGeminiClientClass(mockConfig),
+          new MockedAgentClientClass(mockConfig),
           [],
           mockAddItem,
           mockConfig,
@@ -2208,7 +2208,7 @@ describe('useGeminiStream', () => {
 
     const { result } = renderHook(() =>
       useGeminiStream(
-        new MockedGeminiClientClass(mockConfig),
+        new MockedAgentClientClass(mockConfig),
         [],
         mockAddItem,
         mockConfig,
@@ -2274,7 +2274,7 @@ describe('useGeminiStream', () => {
 
     const { result } = renderHook(() =>
       useGeminiStream(
-        mockConfig.getGeminiClient(),
+        mockConfig.getAgentClient(),
         [],
         mockAddItem,
         mockConfig,
@@ -2344,7 +2344,7 @@ describe('useGeminiStream', () => {
 
       const { result } = renderHook(() =>
         useGeminiStream(
-          new MockedGeminiClientClass(mockConfig),
+          new MockedAgentClientClass(mockConfig),
           [],
           mockAddItem,
           mockConfig,
@@ -2424,7 +2424,7 @@ describe('useGeminiStream', () => {
 
       const { result, rerender } = renderHook(() =>
         useGeminiStream(
-          mockConfig.getGeminiClient(),
+          mockConfig.getAgentClient(),
           [],
           mockAddItem,
           mockConfig,
@@ -2506,7 +2506,7 @@ describe('useGeminiStream', () => {
 
       const { result } = renderHook(() =>
         useGeminiStream(
-          mockConfig.getGeminiClient(),
+          mockConfig.getAgentClient(),
           [],
           mockAddItem,
           mockConfig,
@@ -2556,7 +2556,7 @@ describe('useGeminiStream', () => {
 
       const { result } = renderHook(() =>
         useGeminiStream(
-          new MockedGeminiClientClass(mockConfig),
+          new MockedAgentClientClass(mockConfig),
           [],
           mockAddItem,
           mockConfig,
@@ -2613,7 +2613,7 @@ describe('useGeminiStream', () => {
 
       const { result } = renderHook(() =>
         useGeminiStream(
-          new MockedGeminiClientClass(mockConfig),
+          new MockedAgentClientClass(mockConfig),
           [],
           mockAddItem,
           mockConfig,
@@ -2665,8 +2665,8 @@ describe('useGeminiStream', () => {
       const mockLoopDetectionService = {
         disableForSession: vi.fn(),
       };
-      mockConfig.getGeminiClient = vi.fn().mockReturnValue({
-        ...new MockedGeminiClientClass(mockConfig),
+      mockConfig.getAgentClient = vi.fn().mockReturnValue({
+        ...new MockedAgentClientClass(mockConfig),
         getLoopDetectionService: () => mockLoopDetectionService,
       });
     });
@@ -2703,10 +2703,10 @@ describe('useGeminiStream', () => {
         disableForSession: vi.fn(),
       };
       const mockClient = {
-        ...new MockedGeminiClientClass(mockConfig),
+        ...new MockedAgentClientClass(mockConfig),
         getLoopDetectionService: () => mockLoopDetectionService,
       };
-      mockConfig.getGeminiClient = vi.fn().mockReturnValue(mockClient);
+      mockConfig.getAgentClient = vi.fn().mockReturnValue(mockClient);
 
       // Mock for the initial request
       mockSendMessageStream.mockReturnValueOnce(
@@ -2783,10 +2783,10 @@ describe('useGeminiStream', () => {
         disableForSession: vi.fn(),
       };
       const mockClient = {
-        ...new MockedGeminiClientClass(mockConfig),
+        ...new MockedAgentClientClass(mockConfig),
         getLoopDetectionService: () => mockLoopDetectionService,
       };
-      mockConfig.getGeminiClient = vi.fn().mockReturnValue(mockClient);
+      mockConfig.getAgentClient = vi.fn().mockReturnValue(mockClient);
 
       mockSendMessageStream.mockReturnValue(
         (async function* () {
@@ -3107,7 +3107,7 @@ describe('useGeminiStream', () => {
         .fn()
         .mockReturnValue(contentGeneratorConfig);
 
-      const client = new MockedGeminiClientClass(mcpMockConfig);
+      const client = new MockedAgentClientClass(mcpMockConfig);
 
       const initialProps = {
         client,
@@ -3242,7 +3242,7 @@ describe('useGeminiStream', () => {
         .fn()
         .mockReturnValue(contentGeneratorConfig);
 
-      const client = new MockedGeminiClientClass(noMcpConfig);
+      const client = new MockedAgentClientClass(noMcpConfig);
 
       const initialProps = {
         client,

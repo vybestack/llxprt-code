@@ -16,7 +16,7 @@
  */
 
 import { useRef, useCallback, useEffect } from 'react';
-import type { GeminiClient } from '@vybestack/llxprt-code-core';
+import type { AgentClient } from '@vybestack/llxprt-code-core';
 import { DEFAULT_AGENT_ID, DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Part, PartListUnion } from '@google/genai';
 import type {
@@ -102,7 +102,7 @@ export function buildToolResponses(
  */
 export function recordCancelledToolHistory(
   tools: Array<TrackedCompletedToolCall | TrackedCancelledToolCall>,
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   markToolsAsSubmitted: (callIds: string[]) => void,
 ): void {
   const allParts = tools.flatMap((tc) => tc.response.responseParts);
@@ -110,10 +110,10 @@ export function recordCancelledToolHistory(
     splitPartsByRole(allParts);
 
   if (functionCalls.length > 0) {
-    void geminiClient.addHistory({ role: 'model', parts: functionCalls });
+    void agentClient.addHistory({ role: 'model', parts: functionCalls });
   }
   if (functionResponses.length > 0 || otherParts.length > 0) {
-    void geminiClient.addHistory({
+    void agentClient.addHistory({
       role: 'user',
       parts: [...functionResponses, ...otherParts],
     });
@@ -168,7 +168,7 @@ async function _executeCompletedTools(
   completedToolCallsFromScheduler: TrackedToolCall[],
   turnCancelledRef: React.MutableRefObject<boolean>,
   submitQueryRef: SubmitQueryRef,
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   markToolsAsSubmitted: (callIds: string[]) => void,
   performMemoryRefresh: () => Promise<void>,
   onTodoPause: (() => void) | undefined,
@@ -186,7 +186,7 @@ async function _executeCompletedTools(
     if (completedWithResponses.length > 0) {
       recordCancelledToolHistory(
         completedWithResponses,
-        geminiClient,
+        agentClient,
         markToolsAsSubmitted,
       );
     }
@@ -224,7 +224,7 @@ async function _executeCompletedTools(
   if (geminiTools.length === 0) return;
 
   if (geminiTools.every((tc) => tc.status === 'cancelled')) {
-    recordCancelledToolHistory(geminiTools, geminiClient, markToolsAsSubmitted);
+    recordCancelledToolHistory(geminiTools, agentClient, markToolsAsSubmitted);
     return;
   }
 
@@ -265,7 +265,7 @@ export interface UseToolCompletionHandlerReturn {
  * @param isResponding - Whether the Gemini stream is currently active.
  * @param turnCancelledRef - Ref that is true when the user has cancelled the turn.
  * @param submitQueryRef - Ref holding the latest submitQuery callback (avoids circular deps).
- * @param geminiClient - Gemini API client for adding history.
+ * @param agentClient - Gemini API client for adding history.
  * @param markToolsAsSubmitted - Scheduler function to finalize tool call IDs.
  * @param performMemoryRefresh - Callback to refresh in-memory data after save_memory.
  * @param onTodoPause - Optional callback when todo_pause tool succeeds.
@@ -274,7 +274,7 @@ export function useToolCompletionHandler(
   isResponding: boolean,
   turnCancelledRef: React.MutableRefObject<boolean>,
   submitQueryRef: SubmitQueryRef,
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   markToolsAsSubmitted: (callIds: string[]) => void,
   performMemoryRefresh: () => Promise<void>,
   onTodoPause?: () => void,
@@ -308,7 +308,7 @@ export function useToolCompletionHandler(
         completedToolCallsFromScheduler,
         turnCancelledRef,
         submitQueryRef,
-        geminiClient,
+        agentClient,
         markToolsAsSubmitted,
         performMemoryRefresh,
         onTodoPause,
@@ -319,7 +319,7 @@ export function useToolCompletionHandler(
       isResponding,
       turnCancelledRef,
       submitQueryRef,
-      geminiClient,
+      agentClient,
       markToolsAsSubmitted,
       performMemoryRefresh,
       onTodoPause,

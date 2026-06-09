@@ -413,9 +413,9 @@ describe('Task', () => {
         mockConfig as Config,
         mockEventBus,
       );
-      // Avoid real GeminiClient initialization path in unit test.
+      // Avoid real AgentClient initialization path in unit test.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (task as any).geminiClient = {
+      (task as any).agentClient = {
         sendMessageStream: sendMessageStreamMock,
         getUserTier: vi.fn(),
       };

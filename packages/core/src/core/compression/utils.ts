@@ -11,7 +11,7 @@
  * Shared utility functions for adjusting compression/truncation boundaries
  * to avoid splitting tool call/response pairs in conversation history.
  *
- * Extracted from GeminiChat as pure standalone functions with no class or
+ * Extracted from ChatSession as pure standalone functions with no class or
  * logging dependencies.
  */
 

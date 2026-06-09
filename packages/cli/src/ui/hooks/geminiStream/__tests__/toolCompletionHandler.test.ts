@@ -23,7 +23,7 @@ import type React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Part } from '@google/genai';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
-import type { GeminiClient } from '@vybestack/llxprt-code-core';
+import type { AgentClient } from '@vybestack/llxprt-code-core';
 import type {
   TrackedToolCall,
   TrackedCompletedToolCall,
@@ -262,14 +262,14 @@ describe('buildToolResponses', () => {
 describe('recordCancelledToolHistory', () => {
   let mockAddHistory: ReturnType<typeof vi.fn>;
   let mockMarkToolsAsSubmitted: ReturnType<typeof vi.fn>;
-  let mockGeminiClient: GeminiClient;
+  let mockAgentClient: AgentClient;
 
   beforeEach(() => {
     mockAddHistory = vi.fn();
     mockMarkToolsAsSubmitted = vi.fn();
-    mockGeminiClient = {
+    mockAgentClient = {
       addHistory: mockAddHistory,
-    } as unknown as GeminiClient;
+    } as unknown as AgentClient;
   });
 
   it('adds functionCalls with model role and functionResponses with user role', () => {
@@ -279,7 +279,7 @@ describe('recordCancelledToolHistory', () => {
     });
     recordCancelledToolHistory(
       [tool],
-      mockGeminiClient,
+      mockAgentClient,
       mockMarkToolsAsSubmitted,
     );
 
@@ -300,7 +300,7 @@ describe('recordCancelledToolHistory', () => {
     });
     recordCancelledToolHistory(
       [tool],
-      mockGeminiClient,
+      mockAgentClient,
       mockMarkToolsAsSubmitted,
     );
 
@@ -315,7 +315,7 @@ describe('recordCancelledToolHistory', () => {
     });
     recordCancelledToolHistory(
       [tool],
-      mockGeminiClient,
+      mockAgentClient,
       mockMarkToolsAsSubmitted,
     );
 
@@ -334,7 +334,7 @@ describe('recordCancelledToolHistory', () => {
     });
     recordCancelledToolHistory(
       [tool1, tool2],
-      mockGeminiClient,
+      mockAgentClient,
       mockMarkToolsAsSubmitted,
     );
 
@@ -347,7 +347,7 @@ describe('recordCancelledToolHistory', () => {
     const tool = makeCompletedTool({ callId: 'call-1', responseParts: [] });
     recordCancelledToolHistory(
       [tool],
-      mockGeminiClient,
+      mockAgentClient,
       mockMarkToolsAsSubmitted,
     );
     // No history calls when no parts
@@ -364,14 +364,14 @@ describe('recordCancelledToolHistory', () => {
 describe('recordCancelledToolHistory (all-cancelled branch)', () => {
   let mockAddHistory: ReturnType<typeof vi.fn>;
   let mockMarkToolsAsSubmitted: ReturnType<typeof vi.fn>;
-  let mockGeminiClient: GeminiClient;
+  let mockAgentClient: AgentClient;
 
   beforeEach(() => {
     mockAddHistory = vi.fn();
     mockMarkToolsAsSubmitted = vi.fn();
-    mockGeminiClient = {
+    mockAgentClient = {
       addHistory: mockAddHistory,
-    } as unknown as GeminiClient;
+    } as unknown as AgentClient;
   });
 
   it('adds functionCalls with model role and responses with user role', () => {
@@ -381,7 +381,7 @@ describe('recordCancelledToolHistory (all-cancelled branch)', () => {
     });
     recordCancelledToolHistory(
       [tool],
-      mockGeminiClient,
+      mockAgentClient,
       mockMarkToolsAsSubmitted,
     );
 
@@ -402,7 +402,7 @@ describe('recordCancelledToolHistory (all-cancelled branch)', () => {
     });
     recordCancelledToolHistory(
       [tool],
-      mockGeminiClient,
+      mockAgentClient,
       mockMarkToolsAsSubmitted,
     );
 
@@ -417,7 +417,7 @@ describe('recordCancelledToolHistory (all-cancelled branch)', () => {
     });
     recordCancelledToolHistory(
       [tool],
-      mockGeminiClient,
+      mockAgentClient,
       mockMarkToolsAsSubmitted,
     );
 
@@ -435,7 +435,7 @@ describe('recordCancelledToolHistory (all-cancelled branch)', () => {
     });
     recordCancelledToolHistory(
       [tool],
-      mockGeminiClient,
+      mockAgentClient,
       mockMarkToolsAsSubmitted,
     );
     // Only addHistory and markToolsAsSubmitted are called, no external side effects
@@ -535,14 +535,14 @@ describe('processMemoryToolResults', () => {
 describe('call-order invariants', () => {
   let mockAddHistory: ReturnType<typeof vi.fn>;
   let mockMarkToolsAsSubmitted: ReturnType<typeof vi.fn>;
-  let mockGeminiClient: GeminiClient;
+  let mockAgentClient: AgentClient;
 
   beforeEach(() => {
     mockAddHistory = vi.fn();
     mockMarkToolsAsSubmitted = vi.fn();
-    mockGeminiClient = {
+    mockAgentClient = {
       addHistory: mockAddHistory,
-    } as unknown as GeminiClient;
+    } as unknown as AgentClient;
   });
 
   it('external tools are marked even when primaryTools is empty (branch 3→4)', () => {
@@ -581,7 +581,7 @@ describe('call-order invariants', () => {
     });
     recordCancelledToolHistory(
       [tool],
-      mockGeminiClient,
+      mockAgentClient,
       mockMarkToolsAsSubmitted,
     );
     expect(callOrder).toContain('mark');

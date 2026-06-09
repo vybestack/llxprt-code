@@ -7,7 +7,7 @@
 import {
   CompressionStatus,
   PerformCompressionResult,
-  type GeminiChat,
+  type ChatSession,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItemCompression } from '../types.js';
 import { MessageType } from '../types.js';
@@ -55,7 +55,7 @@ function makePendingCompression(): HistoryItemCompression {
 }
 
 async function executeCompression(
-  chat: GeminiChat,
+  chat: ChatSession,
   promptId: string,
 ): Promise<HistoryItemCompression> {
   const historyService = chat.getHistoryService();
@@ -102,8 +102,8 @@ export const compressCommand: SlashCommand = {
     try {
       ui.setPendingItem(makePendingCompression());
       const promptId = `compress-${Date.now()}`;
-      const geminiClient = context.services.config?.getGeminiClient();
-      if (geminiClient == null || geminiClient.hasChatInitialized() !== true) {
+      const agentClient = context.services.config?.getAgentClient();
+      if (agentClient == null || agentClient.hasChatInitialized() !== true) {
         ui.addItem(
           {
             type: MessageType.ERROR,
@@ -113,7 +113,7 @@ export const compressCommand: SlashCommand = {
         );
         return;
       }
-      const chat = geminiClient.getChat();
+      const chat = agentClient.getChat();
       const historyService = chat.getHistoryService();
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard for test mocks that return null
       if (!historyService) {

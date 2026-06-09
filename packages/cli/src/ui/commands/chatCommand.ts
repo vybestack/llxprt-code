@@ -164,7 +164,7 @@ const saveCommand: SlashCommand = {
       }
     }
 
-    const client = config?.getGeminiClient();
+    const client = config?.getAgentClient();
     // Check if chat is initialized before accessing it
     if (client?.hasChatInitialized() !== true) {
       return {
@@ -398,7 +398,7 @@ const clearCommand: SlashCommand = {
   description: 'Clear the current conversation history',
   kind: CommandKind.BUILT_IN,
   action: async (context): Promise<MessageActionReturn | void> => {
-    const client = context.services.config?.getGeminiClient();
+    const client = context.services.config?.getAgentClient();
     // Check if chat is initialized before clearing
     if (client?.hasChatInitialized() !== true) {
       return {
@@ -438,7 +438,7 @@ const restoreHistory = async (
   context: CommandContext,
   turns: number,
 ): Promise<SlashCommandActionReturn> => {
-  const client = context.services.config?.getGeminiClient();
+  const client = context.services.config?.getAgentClient();
   if (client?.hasChatInitialized() !== true) {
     return {
       type: 'message',
@@ -532,7 +532,7 @@ const debugCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: async (context): Promise<SlashCommandActionReturn> => {
     const { config } = context.services;
-    const client = config?.getGeminiClient();
+    const client = config?.getAgentClient();
 
     const debugInfo: string[] = [];
 
