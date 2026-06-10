@@ -5,7 +5,7 @@
  */
 
 import * as path from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-storage';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 export const SETTINGS_DIRECTORY_NAME = '.llxprt';
 export const USER_SETTINGS_PATH = Storage.getGlobalSettingsPath();

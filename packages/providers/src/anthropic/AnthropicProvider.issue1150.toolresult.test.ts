@@ -45,7 +45,7 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,

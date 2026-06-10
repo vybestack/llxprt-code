@@ -14,8 +14,8 @@ import type {
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-settings';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type OpenAI from 'openai';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 

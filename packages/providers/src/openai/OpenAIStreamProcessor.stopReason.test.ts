@@ -11,7 +11,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { ChatSession } from '@vybestack/llxprt-code-core/core/chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import {
   createProviderRuntimeContext,

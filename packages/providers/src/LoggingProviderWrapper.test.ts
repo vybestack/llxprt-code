@@ -24,9 +24,9 @@ import type {
   ProviderToolset,
 } from './IProvider.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService as SettingsServiceImpl } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService as SettingsServiceImpl } from '@vybestack/llxprt-code-settings';
 import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 // P06: intentional core deep import — verifies shim re-exports storage symbols correctly
 import { getConversationFileWriter as getFromCore } from '@vybestack/llxprt-code-core/storage/ConversationFileWriter.js';

@@ -21,6 +21,7 @@ const shouldUseForkPool = isWindows || isMacCi;
 const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
 const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
+const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
 const providersEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
 const providersSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
 const coreEntry = fileURLToPath(new URL('../core/index.ts', import.meta.url));
@@ -45,6 +46,12 @@ const storageExportToSource: Record<string, string> = {
   'storage/sessionTypes': 'session/sessionTypes',
   'storage/ConversationFileWriter': 'conversation/ConversationFileWriter',
 };
+const settingsEntry = fileURLToPath(
+  new URL('../settings/index.ts', import.meta.url),
+);
+const settingsSrcDir = fileURLToPath(
+  new URL('../settings/src/', import.meta.url),
+);
 
 function resolveTsSource(baseDir: string, specifier: string): string {
   const direct = baseDir + specifier;
@@ -96,6 +103,16 @@ const workspaceAliasPlugin = {
       return resolveTsSource(
         storageSrcDir,
         source.slice(storagePackagePrefix.length),
+      );
+    }
+    // @plan PLAN-20260608-ISSUE1588.P03b — settings source alias
+    if (source === '@vybestack/llxprt-code-settings') {
+      return settingsEntry;
+    }
+    if (source.startsWith(settingsPackagePrefix)) {
+      return resolveTsSource(
+        settingsSrcDir,
+        source.slice(settingsPackagePrefix.length),
       );
     }
     if (source === 'ajv') {
@@ -155,6 +172,7 @@ export default defineConfig({
           '@vybestack/llxprt-code-core',
           '@vybestack/llxprt-code-storage',
           '@vybestack/llxprt-code-providers',
+          '@vybestack/llxprt-code-settings',
           'ajv',
         ],
       },

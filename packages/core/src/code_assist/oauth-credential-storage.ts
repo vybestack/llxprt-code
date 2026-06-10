@@ -6,7 +6,7 @@
 
 import { type Credentials } from 'google-auth-library';
 import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { OAUTH_FILE, Storage } from '../config/storage.js';
+import { OAUTH_FILE, Storage } from '@vybestack/llxprt-code-settings';
 import type {
   OAuthCredentials,
   TokenStorage,

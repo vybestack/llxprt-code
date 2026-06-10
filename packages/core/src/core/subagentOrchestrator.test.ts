@@ -8,9 +8,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { SubagentManager } from '../config/subagentManager.js';
-import type { ProfileManager } from '../config/profileManager.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '../config/types.js';
-import type { Profile } from '../types/modelParams.js';
 import type { Config } from '../config/config.js';
 import type { SubAgentScope } from './subagent.js';
 import { type SubAgentScope as SubAgentScopeInstance } from './subagent.js';

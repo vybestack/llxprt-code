@@ -8,7 +8,7 @@ import {
   type GeminiCLIExtension,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
-import { Storage } from '@vybestack/llxprt-code-storage';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

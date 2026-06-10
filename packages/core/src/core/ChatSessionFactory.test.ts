@@ -40,6 +40,7 @@ vi.mock('../runtime/AgentRuntimeLoader.js', () => ({
 }));
 
 vi.mock('../runtime/providerRuntimeContext.js', () => ({
+  setProviderRuntimeStateFactory: vi.fn(),
   createProviderRuntimeContext: vi.fn().mockReturnValue({}),
 }));
 

@@ -21,6 +21,7 @@
 
 import { vi } from 'vitest';
 import type * as Core from '@vybestack/llxprt-code-core';
+import type * as SettingsPackage from '@vybestack/llxprt-code-settings';
 import type * as Providers from '@vybestack/llxprt-code-providers';
 
 // Hoisted mocks used by module factories
@@ -44,6 +45,15 @@ vi.mock('@vybestack/llxprt-code-providers', async () => {
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual<typeof Core>(
     '@vybestack/llxprt-code-core',
+  );
+  return {
+    ...actual,
+  };
+});
+
+vi.mock('@vybestack/llxprt-code-settings', async () => {
+  const actual = await vi.importActual<typeof SettingsPackage>(
+    '@vybestack/llxprt-code-settings',
   );
   return {
     ...actual,

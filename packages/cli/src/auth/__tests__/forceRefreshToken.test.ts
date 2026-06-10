@@ -198,7 +198,7 @@ vi.mock('../../runtime/runtimeSettings.js', () => ({
 // Mock @vybestack/llxprt-code-core ProfileManager
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
   return {
     ...actual,
     ProfileManager: class MockProfileManager {

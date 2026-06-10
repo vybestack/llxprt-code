@@ -10,11 +10,17 @@
     "paths": {
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
-      "@vybestack/llxprt-code-mcp": ["../mcp/dist/mcp/index.d.ts"],
-      "@vybestack/llxprt-code-mcp/*": ["../mcp/dist/mcp/src/*"]
+      "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
+      "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"]
     }
   },
-  "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.json",
+    "../mcp/index.ts",
+    "../mcp/src/**/*.ts"
+  ],
   "exclude": [
     "node_modules",
     "dist",

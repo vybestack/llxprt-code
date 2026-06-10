@@ -20,19 +20,6 @@ export {
 } from './src/utils/secure-browser-launcher.js';
 export { IDE_DEFINITIONS, detectIdeFromEnv } from './src/ide/detect-ide.js';
 
-// Re-export settings system for explicit access
-export { SettingsService } from './src/settings/SettingsService.js';
-export type {
-  ISettingsService,
-  GlobalSettings,
-  SettingsChangeEvent,
-  ProviderSettings,
-  UISettings,
-  AdvancedSettings,
-  EventListener,
-  EventUnsubscribe,
-} from './src/settings/types.js';
-export type { TelemetrySettings as SettingsTelemetrySettings } from './src/settings/types.js';
 // IDE connection telemetry exports removed - telemetry disabled in llxprt
 export {
   IdeConnectionEvent,

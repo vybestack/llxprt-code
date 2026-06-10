@@ -8,10 +8,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { createProviderManager } from './providerManagerInstance.js';
 import type { IProvider, IModel } from './index.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import {
-  SettingsService,
-  createProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 function createManager() {
   const settingsService = new SettingsService();

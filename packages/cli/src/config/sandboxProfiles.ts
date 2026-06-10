@@ -6,7 +6,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-storage';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 export type SandboxProfileEngine =
   | 'auto'

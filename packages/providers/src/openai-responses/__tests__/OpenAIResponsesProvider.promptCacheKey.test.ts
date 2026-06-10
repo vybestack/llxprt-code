@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,

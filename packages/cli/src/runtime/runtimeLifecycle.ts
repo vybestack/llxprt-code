@@ -25,13 +25,17 @@
 import {
   type Config,
   DebugLogger,
-  type SettingsService,
-  type ProfileManager,
   type MessageBus,
   type RuntimeProviderManager,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
+import {
+  createSettingsProviderRuntimeContext,
+  setSettingsProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import type {
+  SettingsService,
+  ProfileManager,
+} from '@vybestack/llxprt-code-settings';
 import { type OAuthManager } from '../auth/oauth-manager.js';
 import {
   configureProviderRuntimeFactories,
@@ -153,7 +157,8 @@ export function setCliRuntimeContext(
   const runtimeId =
     options.runtimeId ?? `cli-runtime-${process.pid.toString(16)}`;
   const metadata = { source: 'cli-runtime', ...(options.metadata ?? {}) };
-  const nextContext = createProviderRuntimeContext({
+  enterRuntimeScope({ runtimeId, metadata });
+  const nextContext = createSettingsProviderRuntimeContext({
     settingsService,
     config,
     runtimeId,
@@ -166,7 +171,7 @@ export function setCliRuntimeContext(
         : '';
     return `[cli-runtime] Registering runtime context ${runtimeId}${providerLabel}`;
   });
-  setActiveProviderRuntimeContext(nextContext);
+  setSettingsProviderRuntimeContext(nextContext);
 
   upsertRuntimeEntry(runtimeId, {
     settingsService,

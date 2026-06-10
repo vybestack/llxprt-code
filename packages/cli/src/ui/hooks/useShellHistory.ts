@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { isNodeError, debugLogger } from '@vybestack/llxprt-code-core';
-import { Storage } from '@vybestack/llxprt-code-storage';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 const MAX_HISTORY_LENGTH = 100;
 

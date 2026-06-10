@@ -317,6 +317,14 @@ jobs:
           fi
           npx @vscode/vsce publish --packagePath "${VSIX_PATH}" --skip-duplicate
 
+      - name: Publish @vybestack/llxprt-code-settings
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        run: npm publish --workspace=@vybestack/llxprt-code-settings --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Publish @vybestack/llxprt-code-telemetry
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        run: npm publish --workspace=@vybestack/llxprt-code-telemetry --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
       - name: Publish @vybestack/llxprt-code-mcp
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-mcp --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
@@ -353,9 +361,12 @@ jobs:
       - name: Prepare sandbox package tarballs
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         run: |
-          mkdir -p packages/cli/dist packages/mcp/dist packages/core/dist packages/providers/dist
-          rm -f packages/cli/dist/vybestack-llxprt-code-*.tgz packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz packages/core/dist/vybestack-llxprt-code-core-*.tgz packages/providers/dist/vybestack-llxprt-code-providers-*.tgz
+          mkdir -p packages/cli/dist packages/settings/dist packages/telemetry/dist packages/mcp/dist packages/core/dist packages/providers/dist
+          rm -f packages/cli/dist/vybestack-llxprt-code-*.tgz packages/settings/dist/vybestack-llxprt-code-settings-*.tgz packages/telemetry/dist/vybestack-llxprt-code-telemetry-*.tgz packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz packages/core/dist/vybestack-llxprt-code-core-*.tgz packages/providers/dist/vybestack-llxprt-code-providers-*.tgz
           npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
+          npm pack -w @vybestack/llxprt-code-settings --pack-destination ./packages/settings/dist
+          npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist
+
           npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist
           npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist
           npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist

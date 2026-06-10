@@ -10,8 +10,8 @@ import toml from '@iarna/toml';
 import { glob } from 'glob';
 import { z } from 'zod';
 import type { Config } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '@vybestack/llxprt-code-core';
-import { Storage } from '@vybestack/llxprt-code-storage';
 import type { ICommandLoader } from './types.js';
 import type {
   CommandContext,

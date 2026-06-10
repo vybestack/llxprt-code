@@ -13,7 +13,6 @@
     "@vybestack/llxprt-code-storage": "file:../storage"
   },
   "devDependencies": {
-    "@vybestack/llxprt-code-core": "file:../core",
     "@lydell/node-pty": "1.1.0",
     "strip-ansi": "^7.1.0",
     "typescript": "^5.3.3",

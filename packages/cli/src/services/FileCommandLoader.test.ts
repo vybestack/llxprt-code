@@ -8,8 +8,8 @@
 
 import * as glob from 'glob';
 import * as path from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-storage';
 import type { Config } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import mock from 'mock-fs';
 import { FileCommandLoader } from './FileCommandLoader.js';
 import { assert, vi } from 'vitest';
@@ -60,19 +60,12 @@ vi.mock('./prompt-processors/atFileProcessor.js', () => ({
     process: mockAtFileProcess,
   })),
 }));
-vi.mock('@vybestack/llxprt-code-storage', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-storage')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
   return {
     ...original,
     Storage: original.Storage,
-  };
-});
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...original,
     isCommandAllowed: vi.fn(),
     ShellExecutionService: {
       execute: vi.fn(),

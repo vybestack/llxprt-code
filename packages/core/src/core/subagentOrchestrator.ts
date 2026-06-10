@@ -9,10 +9,12 @@
 import { randomUUID } from 'node:crypto';
 import type { Config } from '../config/config.js';
 import type { SubagentManager } from '../config/subagentManager.js';
-import type { ProfileManager } from '../config/profileManager.js';
+import {
+  isLoadBalancerProfile,
+  type Profile,
+  type ProfileManager,
+} from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '../config/types.js';
-import type { Profile } from '../types/modelParams.js';
-import { isLoadBalancerProfile } from '../types/modelParams.js';
 import { SubAgentScope } from './subagent.js';
 import type {
   ModelConfig,
@@ -28,17 +30,18 @@ import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '../runtime/AgentRuntimeState.js';
+import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import {
-  createProviderRuntimeContext,
-  type ProviderRuntimeContext,
-} from '../runtime/providerRuntimeContext.js';
+  createRuntimeSettingsService,
+  createSettingsProviderRuntimeContext,
+} from '../runtime/settingsRuntimeAdapter.js';
 import {
   loadAgentRuntime,
   type AgentRuntimeLoaderOptions,
   type AgentRuntimeLoaderResult,
 } from '../runtime/AgentRuntimeLoader.js';
 import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
@@ -742,7 +745,7 @@ export class SubagentOrchestrator {
       modelConfig,
       agentRuntimeId,
     );
-    const settingsService = new SettingsService();
+    const settingsService = createRuntimeSettingsService();
     this.populateSettingsService(
       settingsService,
       effectiveProfile,
@@ -750,7 +753,7 @@ export class SubagentOrchestrator {
     );
 
     const providerRuntime: ProviderRuntimeContext =
-      createProviderRuntimeContext({
+      createSettingsProviderRuntimeContext({
         settingsService,
         config: this.options.foregroundConfig,
         runtimeId: agentRuntimeId,

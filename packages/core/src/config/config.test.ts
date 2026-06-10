@@ -29,8 +29,8 @@ import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import { AgentClient } from '../core/client.js';
 import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
-import type { SettingsService } from '../settings/SettingsService.js';
+import { getSettingsService } from '@vybestack/llxprt-code-settings';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../test-utils/config.js';
 
 import { ShellTool } from '../tools/shell.js';
@@ -140,7 +140,10 @@ vi.mock('../services/gitService.js', () => {
   return { GitService: GitServiceMock };
 });
 
-vi.mock('../settings/settingsServiceInstance.js', () => {
+vi.mock('@vybestack/llxprt-code-settings', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-settings')
+  >('@vybestack/llxprt-code-settings');
   const mockSettingsService = {
     get: vi.fn(),
     set: vi.fn(),
@@ -152,6 +155,7 @@ vi.mock('../settings/settingsServiceInstance.js', () => {
     getAllGlobalSettings: vi.fn(() => ({})),
   };
   return {
+    ...actual,
     getSettingsService: vi.fn(() => mockSettingsService),
     resetSettingsService: vi.fn(),
     registerSettingsService: vi.fn(),

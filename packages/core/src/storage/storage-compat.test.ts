@@ -7,7 +7,9 @@ import * as core from '@vybestack/llxprt-code-core';
 import * as storage from '@vybestack/llxprt-code-storage';
 
 // Deep shim imports (core deep paths)
-import * as configStorageShim from '@vybestack/llxprt-code-core/config/storage.js';
+// NOTE: config/storage.js (Storage) was extracted to @vybestack/llxprt-code-settings
+// by issue #1588 and is no longer re-exported from core. The remaining six moved
+// symbols below still resolve through core shims.
 import * as fileSystemServiceShim from '@vybestack/llxprt-code-core/services/fileSystemService.js';
 import * as fileDiscoveryServiceShim from '@vybestack/llxprt-code-core/services/fileDiscoveryService.js';
 import * as secureStoreShim from '@vybestack/llxprt-code-core/storage/secure-store.js';
@@ -16,7 +18,6 @@ import * as sessionTypesShim from '@vybestack/llxprt-code-core/storage/sessionTy
 import * as conversationFileWriterShim from '@vybestack/llxprt-code-core/storage/ConversationFileWriter.js';
 
 // Deep storage imports
-import * as configStoragePkg from '@vybestack/llxprt-code-storage/config/storage.js';
 import * as fileSystemServicePkg from '@vybestack/llxprt-code-storage/services/fileSystemService.js';
 import * as fileDiscoveryServicePkg from '@vybestack/llxprt-code-storage/services/fileDiscoveryService.js';
 import * as secureStorePkg from '@vybestack/llxprt-code-storage/storage/secure-store.js';
@@ -29,11 +30,6 @@ import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-st
 
 describe('Core compatibility shims', () => {
   describe('root core exports expose moved symbols', () => {
-    it('exposes Storage from core root', () => {
-      expect(core.Storage).toBeDefined();
-      expect(typeof core.Storage).toBe('function');
-    });
-
     it('exposes SecureStore from core root', () => {
       expect(core.SecureStore).toBeDefined();
       expect(typeof core.SecureStore).toBe('function');
@@ -61,28 +57,13 @@ describe('Core compatibility shims', () => {
       expect(core.SESSION_FILE_PREFIX).toBeDefined();
     });
 
-    it('exposes PROVIDER_ACCOUNTS_FILENAME from core root', () => {
-      expect(core.PROVIDER_ACCOUNTS_FILENAME).toBeDefined();
-      expect(typeof core.PROVIDER_ACCOUNTS_FILENAME).toBe('string');
-    });
-
-    it('exposes OAUTH_FILE from core root', () => {
-      expect(core.OAUTH_FILE).toBeDefined();
-      expect(typeof core.OAUTH_FILE).toBe('string');
-    });
-
     it('exposes FileSystemService from core root as runtime value', () => {
       expect(core.FileSystemService).toBeDefined();
       expect(typeof core.FileSystemService).toBe('function');
     });
   });
 
-  describe('deep shim imports resolve for all seven paths', () => {
-    it('config/storage.js shim re-exports from storage', () => {
-      expect(configStorageShim.Storage).toBe(configStoragePkg.Storage);
-      expect(configStorageShim.LLXPRT_DIR).toBe(configStoragePkg.LLXPRT_DIR);
-    });
-
+  describe('deep shim imports resolve for the six core-shim paths', () => {
     it('services/fileSystemService.js shim re-exports from storage', () => {
       expect(fileSystemServiceShim.FileSystemService).toBe(
         fileSystemServicePkg.FileSystemService,
@@ -143,20 +124,6 @@ describe('Core compatibility shims', () => {
   });
 
   describe('root export identity (core root === storage root)', () => {
-    it('Storage identity', () => {
-      expect(core.Storage).toBe(storage.Storage);
-    });
-
-    it('PROVIDER_ACCOUNTS_FILENAME identity', () => {
-      expect(core.PROVIDER_ACCOUNTS_FILENAME).toBe(
-        storage.PROVIDER_ACCOUNTS_FILENAME,
-      );
-    });
-
-    it('OAUTH_FILE identity', () => {
-      expect(core.OAUTH_FILE).toBe(storage.OAUTH_FILE);
-    });
-
     it('FileSystemService identity', () => {
       expect(core.FileSystemService).toBe(storage.FileSystemService);
     });
@@ -181,10 +148,6 @@ describe('Core compatibility shims', () => {
 
     it('SESSION_FILE_PREFIX identity', () => {
       expect(core.SESSION_FILE_PREFIX).toBe(storage.SESSION_FILE_PREFIX);
-    });
-
-    it('LLXPRT_DIR identity', () => {
-      expect(core.LLXPRT_DIR).toBe(storage.LLXPRT_DIR);
     });
   });
 

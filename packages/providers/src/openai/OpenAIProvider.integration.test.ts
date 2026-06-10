@@ -9,8 +9,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-settings';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;

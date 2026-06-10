@@ -9,8 +9,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import stripJsonComments from 'strip-json-comments';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '@vybestack/llxprt-code-core';
-import { Storage } from '@vybestack/llxprt-code-storage';
 import { fileURLToPath } from 'url';
 
 const SUPPORTED_EXTENSIONS = new Set(['.config', '.json']);
