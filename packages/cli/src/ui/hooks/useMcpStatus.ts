@@ -26,7 +26,7 @@ export function useMcpStatus(config: Config) {
   useEffect(() => {
     const onChange = () => {
       const manager = config.getMcpClientManager();
-      if (manager) {
+      if (manager !== undefined) {
         setDiscoveryState(manager.getDiscoveryState());
         setMcpServerCount(manager.getMcpServerCount());
       } else {

@@ -19,7 +19,8 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { NotYetImplemented } from '@vybestack/llxprt-code-core/utils/errors.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime as createProviderWithRuntimeHelper } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-core/auth/precedence.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Skip OAuth tests in CI as they require browser interaction

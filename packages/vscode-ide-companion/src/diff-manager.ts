@@ -141,7 +141,7 @@ export class DiffManager {
       }
     }
 
-    if (uriToClose) {
+    if (uriToClose !== undefined) {
       const rightDoc = await vscode.workspace.openTextDocument(uriToClose);
       const modifiedContent = rightDoc.getText();
       await this.closeDiffEditor(uriToClose);
@@ -215,7 +215,7 @@ export class DiffManager {
 
   private async onActiveEditorChange(editor: vscode.TextEditor | undefined) {
     let isVisible = false;
-    if (editor) {
+    if (editor !== undefined) {
       isVisible = this.diffDocuments.has(editor.document.uri.toString());
       if (!isVisible) {
         isVisible = Array.from(this.diffDocuments.values()).some(

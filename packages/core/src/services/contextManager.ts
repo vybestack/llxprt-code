@@ -60,10 +60,9 @@ export class ContextManager {
       this.config.getWorkingDir(),
     );
     const mcpInstructions =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getMcpInstructions returns string, empty string should fall through
-      this.config.getMcpClientManager()?.getMcpInstructions() || '';
+      this.config.getMcpClientManager()?.getMcpInstructions() ?? '';
     this.environmentMemory = [envMemory, mcpInstructions.trimStart()]
-      .filter(Boolean)
+      .filter((memory) => memory !== '')
       .join('\n\n');
   }
 

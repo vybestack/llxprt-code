@@ -8,6 +8,7 @@
     "types": ["node", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
+      "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
       "@vybestack/llxprt-code-core": ["./index.ts"],
       "@vybestack/llxprt-code-core/*": ["./src/*"],
       "@vybestack/llxprt-code-mcp": ["../mcp/dist/mcp/index.d.ts"],
@@ -31,5 +32,5 @@
     "../settings/src/**/*.test.ts",
     "../settings/src/**/*.spec.ts"
   ],
-  "references": [{ "path": "../settings" }]
+  "references": [{ "path": "../auth" }, { "path": "../settings" }]
 }

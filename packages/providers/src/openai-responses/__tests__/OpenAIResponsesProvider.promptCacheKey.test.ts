@@ -22,7 +22,8 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import type { CodexOAuthToken } from '@vybestack/llxprt-code-core/auth/types.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import type { CodexOAuthToken } from '@vybestack/llxprt-code-auth';
 
 function buildCodexCallOptions(
   provider: OpenAIResponsesProvider,

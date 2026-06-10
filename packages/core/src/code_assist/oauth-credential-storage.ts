@@ -45,17 +45,15 @@ export class OAuthCredentialStorage {
     try {
       const credentials = await this.storage.getCredentials(MAIN_ACCOUNT_KEY);
 
-      if (credentials?.token) {
+      if (credentials?.token !== undefined) {
         const { accessToken, refreshToken, expiresAt, tokenType, scope } =
           credentials.token;
         // Convert from OAuthCredentials format to Google Credentials format
         const googleCreds: Credentials = {
           access_token: accessToken,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string refresh_token means "not provided"
-          refresh_token: refreshToken || undefined,
-          token_type: tokenType || undefined,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string scope means "not provided"
-          scope: scope || undefined,
+          refresh_token: refreshToken === '' ? undefined : refreshToken,
+          token_type: tokenType === '' ? undefined : tokenType,
+          scope: scope === '' ? undefined : scope,
         };
 
         if (expiresAt !== undefined) {
