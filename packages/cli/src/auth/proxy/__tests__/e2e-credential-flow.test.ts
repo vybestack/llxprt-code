@@ -33,8 +33,8 @@ import {
   ProxyProviderKeyStorage,
   ProxySocketClient,
   ProxyTokenStore,
-  KeyringTokenStore,
 } from '@vybestack/llxprt-code-core';
+import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
 import { ProactiveScheduler } from '../proactive-scheduler.js';
 import {

@@ -378,9 +378,10 @@ function isMcpDiscoveryBlocking(
 
   const mcpManager = config.getMcpClientManager();
   const discoveryState = mcpManager?.getDiscoveryState();
-  const configuredMcpServers = mcpManager
-    ? Object.keys(config.getMcpServers() ?? {}).length
-    : 0;
+  const configuredMcpServers =
+    mcpManager !== undefined
+      ? Object.keys(config.getMcpServers() ?? {}).length
+      : 0;
 
   return (
     configuredMcpServers > 0 && discoveryState !== MCPDiscoveryState.COMPLETED

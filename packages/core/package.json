@@ -15,8 +15,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./auth/precedence.js": "./dist/src/auth/precedence.js",
-    "./auth/types.js": "./dist/src/auth/types.js",
     "./code_assist/codeAssist.js": "./dist/src/code_assist/codeAssist.js",
     "./config/config.js": "./dist/src/config/config.js",
     "./config/configBaseCore.js": "./dist/src/config/configBaseCore.js",
@@ -50,6 +48,7 @@
     "./services/history/HistoryService.js": "./dist/src/services/history/HistoryService.js",
     "./services/history/IContent.js": "./dist/src/services/history/IContent.js",
     "./storage/ConversationFileWriter.js": "./dist/src/storage/ConversationFileWriter.js",
+    "./storage/provider-key-storage.js": "./dist/src/storage/provider-key-storage.js",
     "./storage/secure-store.js": "./dist/src/storage/secure-store.js",
     "./telemetry/loggers.js": "./dist/src/telemetry/loggers.js",
     "./telemetry/types.js": "./dist/src/telemetry/types.js",
@@ -97,6 +96,7 @@
     "dist"
   ],
   "dependencies": {
+    "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",

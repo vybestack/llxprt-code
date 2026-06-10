@@ -129,9 +129,7 @@ describe('FileCommandLoader', () => {
       '',
     );
     expect(result?.type).toBe('submit_prompt');
-    type SubmitPromptAction = Extract<typeof result, { type: 'submit_prompt' }>;
-    const submitResult = result as SubmitPromptAction;
-    expect(submitResult.content).toBe('This is a test prompt');
+    expect(result.content).toBe('This is a test prompt');
   });
 
   // Symlink creation on Windows requires special permissions that are not
@@ -282,12 +280,7 @@ describe('FileCommandLoader', () => {
       '',
     );
     expect(userResult?.type).toBe('submit_prompt');
-    type SubmitPromptAction2 = Extract<
-      typeof userResult,
-      { type: 'submit_prompt' }
-    >;
-    const submitResult = userResult as SubmitPromptAction2;
-    expect(submitResult.content).toBe('User prompt');
+    expect(userResult.content).toBe('User prompt');
     const projectResult = await commands[1].action?.(
       createMockCommandContext({
         invocation: {

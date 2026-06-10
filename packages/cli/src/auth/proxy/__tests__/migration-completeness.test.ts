@@ -21,10 +21,8 @@ import {
   createProviderKeyStorage,
   resetFactorySingletons,
 } from '../credential-store-factory.js';
-import {
-  KeyringTokenStore,
-  mergeRefreshedToken,
-} from '@vybestack/llxprt-code-core';
+import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
+import { mergeRefreshedToken } from '@vybestack/llxprt-code-core';
 
 describe('Migration Completeness (P35)', () => {
   beforeEach(() => {

@@ -8,6 +8,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ignore, { type Ignore } from 'ignore';
 
+const createIgnore = ignore as unknown as () => Ignore;
+
 export interface GitIgnoreFilter {
   isIgnored(filePath: string): boolean;
   getPatterns(): string[];
@@ -24,7 +26,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
     private readonly extraPatterns?: string[],
   ) {
     this.projectRoot = path.resolve(projectRoot);
-    this.processedExtraPatterns = ignore();
+    this.processedExtraPatterns = createIgnore();
     if (this.extraPatterns) {
       // extraPatterns are assumed to be from project root (like .geminiignore)
       this.processedExtraPatterns.add(
@@ -39,7 +41,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
       content = fs.readFileSync(patternsFilePath, 'utf-8');
     } catch {
       // File not readable; return empty ignore.
-      return ignore();
+      return createIgnore();
     }
 
     // .git/info/exclude file patterns are relative to project root and not file directory
@@ -55,7 +57,9 @@ export class GitIgnoreParser implements GitIgnoreFilter {
           .join(path.posix.sep);
 
     const rawPatterns = content.split('\n');
-    return ignore().add(this.processPatterns(rawPatterns, relativeBaseDir));
+    return createIgnore().add(
+      this.processPatterns(rawPatterns, relativeBaseDir),
+    );
   }
 
   private processPatterns(
@@ -152,7 +156,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
         return false;
       }
 
-      const ig = ignore();
+      const ig = createIgnore();
 
       // Always ignore .git directory
       ig.add('.git');
@@ -167,7 +171,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
         );
         this.globalPatterns = fs.existsSync(excludeFile)
           ? this.loadPatternsForFile(excludeFile)
-          : ignore();
+          : createIgnore();
       }
       ig.add(this.globalPatterns);
 
@@ -185,7 +189,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
         const relativeDir = path.relative(this.projectRoot, dir);
         if (relativeDir) {
           const normalizedRelativeDir = relativeDir.replace(/\\/g, '/');
-          const igPlusExtras = ignore()
+          const igPlusExtras = createIgnore()
             .add(ig)
             .add(this.processedExtraPatterns);
           // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
@@ -212,7 +216,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
             this.cache.set(dir, patterns);
             ig.add(patterns);
           } else {
-            this.cache.set(dir, ignore()); // Cache miss
+            this.cache.set(dir, createIgnore()); // Cache miss
           }
         }
       }

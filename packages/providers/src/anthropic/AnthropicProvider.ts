@@ -18,7 +18,8 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import { type OAuthManager } from '@vybestack/llxprt-code-core/auth/precedence.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import type { DumpMode } from '../utils/dumpContext.js';
