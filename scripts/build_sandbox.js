@@ -90,6 +90,7 @@ console.log('Binding release dependencies for sandbox tarballs...');
 execSync('node scripts/bind-release-deps.js --backup', { stdio: 'inherit' });
 
 const cliPackageDir = join('packages', 'cli');
+const authPackageDir = join('packages', 'auth');
 const corePackageDir = join('packages', 'core');
 const mcpPackageDir = join('packages', 'mcp');
 const providersPackageDir = join('packages', 'providers');
@@ -105,6 +106,15 @@ try {
     {
       stdio: 'ignore',
     },
+  );
+
+  console.log('packing @vybestack/llxprt-code-auth ...');
+  rmSync(join(authPackageDir, 'dist', 'vybestack-llxprt-code-auth-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-auth --pack-destination ./packages/auth/dist`,
+    { stdio: 'ignore' },
   );
 
   console.log('packing @vybestack/llxprt-code-telemetry ...');
@@ -156,6 +166,14 @@ const packageVersion = JSON.parse(
 
 chmodSync(
   join(cliPackageDir, 'dist', `vybestack-llxprt-code-${packageVersion}.tgz`),
+  0o755,
+);
+chmodSync(
+  join(
+    authPackageDir,
+    'dist',
+    `vybestack-llxprt-code-auth-${packageVersion}.tgz`,
+  ),
   0o755,
 );
 chmodSync(
