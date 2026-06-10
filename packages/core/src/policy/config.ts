@@ -9,7 +9,7 @@
 import * as path from 'node:path';
 import fs from 'node:fs/promises';
 import toml from '@iarna/toml';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   ADMIN_POLICY_TIER,
   DEFAULT_CORE_POLICIES_DIR,

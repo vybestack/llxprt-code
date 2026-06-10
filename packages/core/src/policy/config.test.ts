@@ -440,7 +440,9 @@ describe('policy config', () => {
       './config.js'
     );
     // Re-mock Storage after resetModules because it was reloaded
-    const { Storage: FreshStorage } = await import('../config/storage.js');
+    const { Storage: FreshStorage } = await import(
+      '@vybestack/llxprt-code-settings'
+    );
     vi.spyOn(FreshStorage, 'getUserPoliciesDir').mockReturnValue(
       '/non/existent/user/policies',
     );

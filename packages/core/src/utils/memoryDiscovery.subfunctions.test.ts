@@ -22,6 +22,7 @@ import {
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { LLXPRT_DIR } from './paths.js';
 import type { GeminiCLIExtension } from '../config/config.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
@@ -70,6 +71,9 @@ describe('memoryDiscovery subfunctions', () => {
     cwd = await createEmptyDir(path.join(projectRoot, 'src'));
     homedir = await createEmptyDir(path.join(testRootDir, 'userhome'));
     vi.mocked(os.homedir).mockReturnValue(homedir);
+    vi.spyOn(Storage, 'getGlobalLlxprtDir').mockImplementation(() =>
+      path.join(homedir, LLXPRT_DIR),
+    );
   });
 
   afterEach(async () => {

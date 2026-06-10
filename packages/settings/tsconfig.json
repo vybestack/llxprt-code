@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/settings.tsbuildinfo",
+    "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
+    "composite": true,
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-settings": ["./index.ts"],
+      "@vybestack/llxprt-code-settings/*": ["./src/*"]
+    }
+  },
+  "include": ["index.ts", "src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

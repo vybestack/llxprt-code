@@ -15,3 +15,5 @@ export * from './AgentRuntimeState.js';
 export * from './AgentRuntimeLoader.js';
 export * from './contracts/index.js';
 export * from './errors/index.js';
+// @plan PLAN-20260608-ISSUE1588.P03b — compile-only adapter stubs for P04b integration tests
+export * from './settingsRuntimeAdapter.js';

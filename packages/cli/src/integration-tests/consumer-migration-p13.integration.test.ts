@@ -41,10 +41,10 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 import {
   Config,
-  SettingsService,
   MessageBus,
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderManager } from '../providers/providerManagerInstance.js';
 import {
   setCliRuntimeContext,

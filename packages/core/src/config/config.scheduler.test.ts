@@ -14,7 +14,7 @@ import {
   vi,
 } from 'vitest';
 import { Config } from './config.js';
-import type { ISettingsService } from '../settings/types.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { clearAllSchedulers } from './schedulerSingleton.js';
 
@@ -34,7 +34,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
 
   beforeEach(async () => {
     // Create a minimal Config instance for testing
-    const mockSettingsService: ISettingsService = {
+    const mockSettingsService = {
       get: vi.fn(),
       set: vi.fn(),
       getAllGlobalSettings: vi.fn(() => ({})),
@@ -63,7 +63,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
       }),
       emit: vi.fn(),
       onSettingsChanged: vi.fn().mockReturnValue(() => {}),
-    };
+    } as unknown as SettingsService;
 
     const configParams = {
       sessionId: testSessionId,

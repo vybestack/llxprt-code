@@ -10,7 +10,9 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { resetSettingsService } from '@vybestack/llxprt-code-settings';
+import type { Config } from '../config/config.js';
 import {
   clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,
@@ -18,11 +20,6 @@ import {
   peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from './providerRuntimeContext.js';
-import {
-  getSettingsService,
-  resetSettingsService,
-} from '../settings/settingsServiceInstance.js';
-import type { Config } from '../config/config.js';
 
 describe('providerRuntimeContext', () => {
   beforeEach(() => {
@@ -56,10 +53,9 @@ describe('providerRuntimeContext', () => {
     expect(active).toBe(context);
     expect(active.settingsService).toBe(injectedSettings);
     expect(active.config).toBe(mockConfig);
-    expect(getSettingsService()).toBe(injectedSettings);
   });
 
-  it('clears the active runtime context when the settings singleton resets', () => {
+  it('core resetSettingsService does NOT clear provider runtime context (P06 single-owner)', () => {
     const injectedSettings = new SettingsService();
 
     setActiveProviderRuntimeContext(
@@ -69,13 +65,19 @@ describe('providerRuntimeContext', () => {
     expect(getActiveProviderRuntimeContext().settingsService).toBe(
       injectedSettings,
     );
-    expect(getSettingsService()).toBe(injectedSettings);
 
+    // P06 single-owner: settings reset only clears the settings singleton,
+    // NOT the provider runtime context. Only settingsRuntimeAdapter bridges both.
     resetSettingsService();
 
-    expect(peekActiveProviderRuntimeContext()).toBeNull();
-    expect(() => getActiveProviderRuntimeContext()).toThrow(
-      /MissingProviderRuntimeError\(provider-runtime\)/,
+    // Provider runtime context is still active — core reset doesn't touch it
+    expect(peekActiveProviderRuntimeContext()).not.toBeNull();
+    expect(peekActiveProviderRuntimeContext()?.settingsService).toBe(
+      injectedSettings,
     );
+
+    // Explicitly clear runtime context for test isolation
+    clearActiveProviderRuntimeContext();
+    expect(peekActiveProviderRuntimeContext()).toBeNull();
   });
 });

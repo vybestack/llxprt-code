@@ -18,7 +18,7 @@
 
 import type { Config } from '../../config/config.js';
 import type { IContent } from '../../services/history/IContent.js';
-import type { SettingsService } from '../../settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '../RuntimeInvocationContext.js';
 import type { TelemetryContext } from './TelemetryContext.js';

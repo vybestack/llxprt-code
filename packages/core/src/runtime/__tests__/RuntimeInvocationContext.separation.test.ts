@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRuntimeInvocationContext } from '../RuntimeInvocationContext.js';
 import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
-import type { SettingsService } from '../../settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 describe('RuntimeInvocationContext Settings Separation', () => {
   function createMockSettings(): SettingsService {

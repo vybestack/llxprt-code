@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SettingsService } from '../settings/SettingsService.js';
-import { SETTINGS_REGISTRY } from '../settings/settingsRegistry.js';
+import {
+  SettingsService,
+  SETTINGS_REGISTRY,
+} from '@vybestack/llxprt-code-settings';
 const PROVIDER_CONFIG_KEYS = new Set(
   SETTINGS_REGISTRY.filter((entry) => entry.category === 'provider-config').map(
     (entry) => entry.key,

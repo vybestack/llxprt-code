@@ -22,6 +22,7 @@ import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
@@ -91,7 +92,7 @@ vi.mock('read-package-up', () => ({
 
 const runtimeSettingsState = vi.hoisted(() => ({
   context: null as {
-    settingsService: ServerConfig.SettingsService;
+    settingsService: SettingsService;
     config: ServerConfig.Config | null;
     runtimeId: string;
     metadata?: Record<string, unknown>;
@@ -127,7 +128,7 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
     setCliRuntimeContext: vi.fn(
       (
-        settingsService: ServerConfig.SettingsService,
+        settingsService: SettingsService,
         config?: ServerConfig.Config,
         options: {
           metadata?: Record<string, unknown>;
@@ -161,8 +162,7 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     getCliRuntimeServices: vi.fn(() => ({
       config: runtimeSettingsState.context?.config ?? null,
       settingsService:
-        runtimeSettingsState.context?.settingsService ??
-        new ServerConfig.SettingsService(),
+        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
       providerManager: getProviderManager(),
     })),
     getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),

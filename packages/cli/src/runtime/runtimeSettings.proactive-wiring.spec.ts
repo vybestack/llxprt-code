@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 
 /**
  * Tests for Issue 1151: Proactive failover handler wiring in applyProfileSnapshot

@@ -12,10 +12,8 @@ import {
   CommandKind,
 } from './types.js';
 import { MessageType } from '../types.js';
-import type {
-  AnyDeclarativeTool,
-  SettingsService,
-} from '@vybestack/llxprt-code-core';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { type CommandArgumentSchema } from './schema/types.js';
 
 const toolsSchema: CommandArgumentSchema = [
