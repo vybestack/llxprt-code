@@ -1,11 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { homedir } from 'os';
-import {
-  FatalConfigError,
-  getErrorMessage,
-  Storage,
-} from '@vybestack/llxprt-code-core';
+import { FatalConfigError, getErrorMessage } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import stripJsonComments from 'strip-json-comments';
 import { DefaultLight } from '../ui/themes/default-light.js';
 import { DefaultDark } from '../ui/themes/default.js';

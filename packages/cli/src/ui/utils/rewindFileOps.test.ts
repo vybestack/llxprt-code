@@ -14,7 +14,7 @@ import type {
   ConversationRecord,
   BaseMessageRecord,
   ToolCallRecord,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-storage';
 import { coreEvents } from '@vybestack/llxprt-code-core';
 import fs from 'node:fs/promises';
 import path from 'node:path';

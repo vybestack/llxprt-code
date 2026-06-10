@@ -18,11 +18,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import type {
-  TokenStore,
-  ProviderKeyStorage,
-  OAuthToken,
-} from '@vybestack/llxprt-code-core';
+import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-core';
+import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import {
   FrameDecoder,
   encodeFrame,

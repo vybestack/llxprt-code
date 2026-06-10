@@ -14,7 +14,8 @@ import { StreamingState } from '../types.js';
 import { UpdateNotification } from './UpdateNotification.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
 import type { HistoryItem } from '../types.js';
-import { Storage, debugLogger } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-storage';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';

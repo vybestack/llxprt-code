@@ -20,13 +20,13 @@
  */
 
 import {
-  getProviderKeyStorage,
   KeyringTokenStore,
   AnthropicDeviceFlow,
   CodexDeviceFlow,
   QwenDeviceFlow,
   type OAuthToken,
 } from '@vybestack/llxprt-code-core';
+import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import path from 'node:path';
 import {
   CredentialProxyServer,

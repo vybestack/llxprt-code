@@ -28,6 +28,7 @@
     "dist"
   ],
   "dependencies": {
+    "@vybestack/llxprt-code-storage": "file:../storage",
     "@google/genai": "1.30.0",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "google-auth-library": "^9.11.0",

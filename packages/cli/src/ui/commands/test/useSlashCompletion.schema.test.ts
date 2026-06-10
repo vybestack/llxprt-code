@@ -31,7 +31,7 @@ import { useTextBuffer } from '../../components/shared/text-buffer.js';
 import type { CommandContext, SlashCommand } from '../types.js';
 import { CommandKind } from '../types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { FileDiscoveryService } from '@vybestack/llxprt-code-core';
+import { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 
 const mockCommandContext = {} as CommandContext;
 

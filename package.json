@@ -8,6 +8,7 @@
   "workspaces": [
     "packages/mcp",
     "packages/core",
+    "packages/storage",
     "packages/providers",
     "packages/cli",
     "packages/a2a-server",

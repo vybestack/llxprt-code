@@ -42,6 +42,8 @@
     "./runtime/providerRuntimeContext.js": "./dist/src/runtime/providerRuntimeContext.js",
     "./runtime/runtimeAdapters.js": "./dist/src/runtime/runtimeAdapters.js",
     "./runtime/RuntimeInvocationContext.js": "./dist/src/runtime/RuntimeInvocationContext.js",
+    "./services/fileSystemService.js": "./dist/src/services/fileSystemService.js",
+    "./services/fileDiscoveryService.js": "./dist/src/services/fileDiscoveryService.js",
     "./services/history/ContentConverters.js": "./dist/src/services/history/ContentConverters.js",
     "./services/history/HistoryService.js": "./dist/src/services/history/HistoryService.js",
     "./services/history/IContent.js": "./dist/src/services/history/IContent.js",
@@ -49,6 +51,8 @@
     "./settings/SettingsService.js": "./dist/src/settings/SettingsService.js",
     "./settings/settingsServiceInstance.js": "./dist/src/settings/settingsServiceInstance.js",
     "./storage/ConversationFileWriter.js": "./dist/src/storage/ConversationFileWriter.js",
+    "./storage/provider-key-storage.js": "./dist/src/storage/provider-key-storage.js",
+    "./storage/sessionTypes.js": "./dist/src/storage/sessionTypes.js",
     "./storage/secure-store.js": "./dist/src/storage/secure-store.js",
     "./telemetry/loggers.js": "./dist/src/telemetry/loggers.js",
     "./telemetry/types.js": "./dist/src/telemetry/types.js",
@@ -90,6 +94,7 @@
     "dist"
   ],
   "dependencies": {
+    "@vybestack/llxprt-code-storage": "file:../storage",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@anthropic-ai/sdk": "^0.55.1",
     "@ast-grep/lang-c": "^0.0.5",
@@ -130,7 +135,6 @@
     "cheerio": "^1.1.2",
     "debug": "^4.3.4",
     "diff": "^8.0.3",
-    "env-paths": "^4.0.0",
     "execa": "^9.6.0",
     "fast-glob": "^3.3.3",
     "fast-levenshtein": "^2.0.6",
@@ -168,7 +172,6 @@
     "@lydell/node-pty-linux-x64": "1.1.0",
     "@lydell/node-pty-win32-arm64": "1.1.0",
     "@lydell/node-pty-win32-x64": "1.1.0",
-    "@napi-rs/keyring": "^1.2.0",
     "node-pty": "^1.0.0"
   },
   "devDependencies": {

@@ -13,9 +13,9 @@ import { MessageType } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import {
   getErrorMessage,
-  type FileDiscoveryService,
   type LoadServerHierarchicalMemoryResponse,
 } from '@vybestack/llxprt-code-core';
+import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {

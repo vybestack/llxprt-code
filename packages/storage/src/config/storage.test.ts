@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as os from 'os';
 import * as path from 'node:path';
 
@@ -16,7 +16,39 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-import { Storage } from './storage.js';
+import {
+  Storage,
+  LLXPRT_DIR,
+  PROVIDER_ACCOUNTS_FILENAME,
+  OAUTH_FILE,
+} from './storage.js';
+
+// ---------------------------------------------------------------------------
+// P02b RED gate – path / storage constant assertions
+// These must fail against the P02a stub (empty-string constants) and pass
+// once real values are provided in the implementation phase.
+// ---------------------------------------------------------------------------
+
+describe('Path / storage constants', () => {
+  it('LLXPRT_DIR is ".llxprt"', () => {
+    expect(LLXPRT_DIR).toBe('.llxprt');
+  });
+
+  it('PROVIDER_ACCOUNTS_FILENAME is "provider_accounts.json"', () => {
+    expect(PROVIDER_ACCOUNTS_FILENAME).toBe('provider_accounts.json');
+  });
+
+  it('OAUTH_FILE is "oauth_creds.json"', () => {
+    expect(OAUTH_FILE).toBe('oauth_creds.json');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Storage method behavioral tests
+// Constructor is deferred into beforeEach / inside individual tests so that
+// the "not implemented" throw does not crash the entire suite at module
+// evaluation time.
+// ---------------------------------------------------------------------------
 
 describe('Storage – getGlobalSettingsPath', () => {
   it('returns path to ~/.llxprt/settings.json', () => {
@@ -27,7 +59,11 @@ describe('Storage – getGlobalSettingsPath', () => {
 
 describe('Storage – additional helpers', () => {
   const projectRoot = '/tmp/project';
-  const storage = new Storage(projectRoot);
+  let storage: Storage;
+
+  beforeEach(() => {
+    storage = new Storage(projectRoot);
+  });
 
   it('getWorkspaceSettingsPath returns project/.llxprt/settings.json', () => {
     const expected = path.join(projectRoot, '.llxprt', 'settings.json');
@@ -79,19 +115,25 @@ describe('Storage – additional helpers', () => {
   });
 
   it('getProjectTempDir returns hashed temp dir', () => {
-    const hash = storage['getFilePathHash'](projectRoot);
+    const hash = (
+      storage as unknown as { getFilePathHash: (p: string) => string }
+    ).getFilePathHash(projectRoot);
     const expected = path.join(os.homedir(), '.llxprt', 'tmp', hash);
     expect(storage.getProjectTempDir()).toBe(expected);
   });
 
   it('getHistoryDir returns hashed history dir', () => {
-    const hash = storage['getFilePathHash'](projectRoot);
+    const hash = (
+      storage as unknown as { getFilePathHash: (p: string) => string }
+    ).getFilePathHash(projectRoot);
     const expected = path.join(os.homedir(), '.llxprt', 'history', hash);
     expect(storage.getHistoryDir()).toBe(expected);
   });
 
   it('getHistoryFilePath returns shell_history in project temp dir', () => {
-    const hash = storage['getFilePathHash'](projectRoot);
+    const hash = (
+      storage as unknown as { getFilePathHash: (p: string) => string }
+    ).getFilePathHash(projectRoot);
     const expected = path.join(
       os.homedir(),
       '.llxprt',
@@ -103,7 +145,9 @@ describe('Storage – additional helpers', () => {
   });
 
   it('getProjectTempCheckpointsDir returns checkpoints in project temp dir', () => {
-    const hash = storage['getFilePathHash'](projectRoot);
+    const hash = (
+      storage as unknown as { getFilePathHash: (p: string) => string }
+    ).getFilePathHash(projectRoot);
     const expected = path.join(
       os.homedir(),
       '.llxprt',

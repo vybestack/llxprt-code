@@ -8,7 +8,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
-import { Storage } from '@vybestack/llxprt-code-core/config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-storage/config/storage.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import {
   BaseTokenStore,

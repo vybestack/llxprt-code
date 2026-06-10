@@ -25,9 +25,11 @@ import {
   SettingsService,
   ProfileManager,
   type Profile,
+} from '@vybestack/llxprt-code-core';
+import {
   SecureStore,
   type KeyringAdapter,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-storage';
 import {
   createTempDirectory,
   cleanupTempDirectory,

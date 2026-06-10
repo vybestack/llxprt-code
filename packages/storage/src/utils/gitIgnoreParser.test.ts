@@ -1,0 +1,355 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { GitIgnoreParser } from './gitIgnoreParser.js';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
+
+describe('GitIgnoreParser', () => {
+  let parser: GitIgnoreParser;
+  let projectRoot: string;
+
+  async function createTestFile(filePath: string, content = '') {
+    const fullPath = path.join(projectRoot, filePath);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, content);
+  }
+
+  async function setupGitRepo() {
+    await fs.mkdir(path.join(projectRoot, '.git'), { recursive: true });
+  }
+
+  beforeEach(async () => {
+    projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'gitignore-test-'));
+    parser = new GitIgnoreParser(projectRoot);
+  });
+
+  afterEach(async () => {
+    await fs.rm(projectRoot, { recursive: true, force: true });
+  });
+
+  describe('initialization', () => {
+    it('should initialize without errors when no .gitignore exists', async () => {
+      await setupGitRepo();
+      expect(() => parser.isIgnored('test.txt')).not.toThrow();
+    });
+
+    it('should load .gitignore patterns when file exists', async () => {
+      await setupGitRepo();
+      const gitignoreContent = `
+# Comment
+node_modules/
+*.log
+/dist
+.env
+`;
+      await createTestFile('.gitignore', gitignoreContent);
+
+      // Trigger lazy loading by calling isIgnored
+      expect(parser.isIgnored(path.join('node_modules', 'some-lib'))).toBe(
+        true,
+      );
+      expect(parser.isIgnored(path.join('src', 'app.log'))).toBe(true);
+      expect(parser.isIgnored(path.join('dist', 'index.js'))).toBe(true);
+      expect(parser.isIgnored('.env')).toBe(true);
+    });
+
+    it('should handle git exclude file', async () => {
+      await setupGitRepo();
+      await createTestFile(
+        path.join('.git', 'info', 'exclude'),
+        'temp/\n*.tmp',
+      );
+
+      // Trigger lazy loading and verify behavior
+      expect(parser.isIgnored(path.join('temp', 'file.txt'))).toBe(true);
+      expect(parser.isIgnored(path.join('src', 'file.tmp'))).toBe(true);
+    });
+
+    it('should handle custom patterns file name', async () => {
+      // No .git directory for this test - create parser with patterns from .llxprtignore
+      await createTestFile('.llxprtignore', 'temp/\n*.tmp');
+
+      // The new API doesn't have loadPatterns(), but we can test with extraPatterns
+      parser = new GitIgnoreParser(projectRoot, ['temp/', '*.tmp']);
+      expect(parser.isIgnored(path.join('temp', 'file.txt'))).toBe(true);
+      expect(parser.isIgnored(path.join('src', 'file.tmp'))).toBe(true);
+    });
+
+    it('should initialize without errors when no .llxprtignore exists', async () => {
+      parser = new GitIgnoreParser(projectRoot);
+      expect(() => parser.isIgnored('test.txt')).not.toThrow();
+    });
+  });
+
+  describe('isIgnored', () => {
+    beforeEach(async () => {
+      await setupGitRepo();
+      const gitignoreContent = `
+node_modules/
+*.log
+/dist
+/.env
+src/*.tmp
+!src/important.tmp
+`;
+      await createTestFile('.gitignore', gitignoreContent);
+    });
+
+    it('should always ignore .git directory', () => {
+      expect(parser.isIgnored('.git')).toBe(true);
+      expect(parser.isIgnored(path.join('.git', 'config'))).toBe(true);
+      expect(parser.isIgnored(path.join(projectRoot, '.git', 'HEAD'))).toBe(
+        true,
+      );
+    });
+
+    it('should ignore files matching patterns', () => {
+      expect(
+        parser.isIgnored(path.join('node_modules', 'package', 'index.js')),
+      ).toBe(true);
+      expect(parser.isIgnored('app.log')).toBe(true);
+      expect(parser.isIgnored(path.join('logs', 'app.log'))).toBe(true);
+      expect(parser.isIgnored(path.join('dist', 'bundle.js'))).toBe(true);
+      expect(parser.isIgnored('.env')).toBe(true);
+      expect(parser.isIgnored(path.join('config', '.env'))).toBe(false); // .env is anchored to root
+    });
+
+    it('should ignore files with path-specific patterns', () => {
+      expect(parser.isIgnored(path.join('src', 'temp.tmp'))).toBe(true);
+      expect(parser.isIgnored(path.join('other', 'temp.tmp'))).toBe(false);
+    });
+
+    it('should handle negation patterns', () => {
+      expect(parser.isIgnored(path.join('src', 'important.tmp'))).toBe(false);
+    });
+
+    it('should not ignore files that do not match patterns', () => {
+      expect(parser.isIgnored(path.join('src', 'index.ts'))).toBe(false);
+      expect(parser.isIgnored('README.md')).toBe(false);
+    });
+
+    it('should handle absolute paths correctly', () => {
+      const absolutePath = path.join(projectRoot, 'node_modules', 'lib');
+      expect(parser.isIgnored(absolutePath)).toBe(true);
+    });
+
+    it('should handle paths outside project root by not ignoring them', () => {
+      const outsidePath = path.resolve(projectRoot, '..', 'other', 'file.txt');
+      expect(parser.isIgnored(outsidePath)).toBe(false);
+    });
+
+    it('should handle relative paths correctly', () => {
+      expect(parser.isIgnored(path.join('node_modules', 'some-package'))).toBe(
+        true,
+      );
+      expect(
+        parser.isIgnored(path.join('..', 'some', 'other', 'file.txt')),
+      ).toBe(false);
+    });
+
+    it('should normalize path separators on Windows', () => {
+      expect(parser.isIgnored(path.join('node_modules', 'package'))).toBe(true);
+      expect(parser.isIgnored(path.join('src', 'temp.tmp'))).toBe(true);
+    });
+
+    it('should handle root path "/" without throwing error', () => {
+      expect(() => parser.isIgnored('/')).not.toThrow();
+      expect(parser.isIgnored('/')).toBe(false);
+    });
+
+    it('should handle absolute-like paths without throwing error', () => {
+      expect(() => parser.isIgnored('/some/path')).not.toThrow();
+      expect(parser.isIgnored('/some/path')).toBe(false);
+    });
+
+    it('should handle paths that start with forward slash', () => {
+      expect(() => parser.isIgnored('/node_modules')).not.toThrow();
+      expect(parser.isIgnored('/node_modules')).toBe(false);
+    });
+
+    it('should handle backslash-prefixed files without crashing', () => {
+      expect(() => parser.isIgnored('\\backslash-file-test.txt')).not.toThrow();
+      expect(parser.isIgnored('\\backslash-file-test.txt')).toBe(false);
+    });
+
+    it('should handle files with absolute-like names', () => {
+      expect(() => parser.isIgnored('/backslash-file-test.txt')).not.toThrow();
+      expect(parser.isIgnored('/backslash-file-test.txt')).toBe(false);
+    });
+  });
+
+  describe('nested .gitignore files', () => {
+    beforeEach(async () => {
+      await setupGitRepo();
+      // Root .gitignore
+      await createTestFile('.gitignore', 'root-ignored.txt');
+      // Nested .gitignore 1
+      await createTestFile('a/.gitignore', '/b\nc');
+      // Nested .gitignore 2
+      await createTestFile('a/d/.gitignore', 'e.txt\nf/g');
+    });
+
+    it('should handle nested .gitignore files correctly', async () => {
+      // From root .gitignore
+      expect(parser.isIgnored('root-ignored.txt')).toBe(true);
+      expect(parser.isIgnored('a/root-ignored.txt')).toBe(true);
+
+      // From a/.gitignore: /b
+      expect(parser.isIgnored('a/b')).toBe(true);
+      expect(parser.isIgnored('b')).toBe(false);
+      expect(parser.isIgnored('a/x/b')).toBe(false);
+
+      // From a/.gitignore: c
+      expect(parser.isIgnored('a/c')).toBe(true);
+      expect(parser.isIgnored('a/x/y/c')).toBe(true);
+      expect(parser.isIgnored('c')).toBe(false);
+
+      // From a/d/.gitignore: e.txt
+      expect(parser.isIgnored('a/d/e.txt')).toBe(true);
+      expect(parser.isIgnored('a/d/x/e.txt')).toBe(true);
+      expect(parser.isIgnored('a/e.txt')).toBe(false);
+
+      // From a/d/.gitignore: f/g
+      expect(parser.isIgnored('a/d/f/g')).toBe(true);
+      expect(parser.isIgnored('a/f/g')).toBe(false);
+    });
+
+    it('should correctly handle patterns from nested gitignore files', () => {
+      // Test the actual behavior rather than internal pattern representation
+      // From root .gitignore
+      expect(parser.isIgnored('root-ignored.txt')).toBe(true);
+      expect(parser.isIgnored('a/root-ignored.txt')).toBe(true);
+
+      // From a/.gitignore: /b becomes /a/b
+      expect(parser.isIgnored('a/b')).toBe(true);
+
+      // From a/.gitignore: c becomes /a/**/c
+      expect(parser.isIgnored('a/c')).toBe(true);
+      expect(parser.isIgnored('a/x/y/c')).toBe(true);
+
+      // From a/d/.gitignore: e.txt becomes /a/d/**/e.txt
+      expect(parser.isIgnored('a/d/e.txt')).toBe(true);
+      expect(parser.isIgnored('a/d/x/e.txt')).toBe(true);
+
+      // From a/d/.gitignore: f/g becomes /a/d/f/g
+      expect(parser.isIgnored('a/d/f/g')).toBe(true);
+    });
+  });
+
+  describe('precedence rules', () => {
+    it('should prioritize root .gitignore over .git/info/exclude', async () => {
+      await setupGitRepo();
+      // Exclude all .log files
+      await createTestFile(path.join('.git', 'info', 'exclude'), '*.log');
+      // But make an exception in the root .gitignore
+      await createTestFile('.gitignore', '!important.log');
+
+      expect(parser.isIgnored('some.log')).toBe(true);
+      expect(parser.isIgnored('important.log')).toBe(false);
+      expect(parser.isIgnored(path.join('subdir', 'some.log'))).toBe(true);
+      expect(parser.isIgnored(path.join('subdir', 'important.log'))).toBe(
+        false,
+      );
+    });
+  });
+
+  describe('pattern behavior', () => {
+    it('should handle patterns and negation correctly', async () => {
+      await setupGitRepo();
+      const gitignoreContent = '*.log\n!important.log';
+      await createTestFile('.gitignore', gitignoreContent);
+
+      // Test the actual behavior instead of checking internal patterns
+      expect(parser.isIgnored('test.log')).toBe(true);
+      expect(parser.isIgnored('important.log')).toBe(false);
+    });
+  });
+
+  describe('Escaped Characters', () => {
+    beforeEach(async () => {
+      await setupGitRepo();
+    });
+
+    it('should correctly handle escaped characters in .gitignore', async () => {
+      await createTestFile('.gitignore', '\\#foo\n\\!bar');
+      // Create files with special characters in names
+      await createTestFile('bla/#foo', 'content');
+      await createTestFile('bla/!bar', 'content');
+
+      // Need to reload patterns after creating .gitignore
+
+      // These should be ignored based on the escaped patterns
+      expect(parser.isIgnored('bla/#foo')).toBe(true);
+      expect(parser.isIgnored('bla/!bar')).toBe(true);
+    });
+  });
+
+  describe('Trailing Spaces', () => {
+    beforeEach(async () => {
+      await setupGitRepo();
+    });
+
+    it('should correctly handle significant trailing spaces', async () => {
+      await createTestFile('.gitignore', 'foo\\ \nbar ');
+      await createTestFile('foo ', 'content');
+      await createTestFile('bar', 'content');
+      await createTestFile('bar ', 'content');
+
+      // Need to reload patterns after creating .gitignore
+
+      // 'foo\ ' should match 'foo '
+      expect(parser.isIgnored('foo ')).toBe(true);
+
+      // 'bar ' should be trimmed to 'bar'
+      expect(parser.isIgnored('bar')).toBe(true);
+      expect(parser.isIgnored('bar ')).toBe(false);
+    });
+  });
+
+  describe('Extra Patterns', () => {
+    beforeEach(async () => {
+      await setupGitRepo();
+    });
+
+    it('should apply extraPatterns with higher precedence than .gitignore', async () => {
+      await createTestFile('.gitignore', '*.txt');
+
+      const extraPatterns = ['!important.txt', 'temp/'];
+      parser = new GitIgnoreParser(projectRoot, extraPatterns);
+      // Need to load patterns for isIgnored to work
+
+      expect(parser.isIgnored('file.txt')).toBe(true);
+      expect(parser.isIgnored('important.txt')).toBe(false); // Un-ignored by extraPatterns
+      expect(parser.isIgnored('temp/file.js')).toBe(true); // Ignored by extraPatterns
+    });
+
+    it('should handle extraPatterns that unignore directories', async () => {
+      await createTestFile('.gitignore', '/foo/\n/a/*/c/');
+
+      const extraPatterns = ['!foo/', '!a/*/c/'];
+      parser = new GitIgnoreParser(projectRoot, extraPatterns);
+      // Need to load patterns for isIgnored to work
+
+      expect(parser.isIgnored('foo/bar/file.txt')).toBe(false);
+      expect(parser.isIgnored('a/b/c/file.txt')).toBe(false);
+    });
+
+    it('should handle extraPatterns that unignore directories with nested gitignore', async () => {
+      await createTestFile('.gitignore', '/foo/');
+      await createTestFile('foo/bar/.gitignore', 'file.txt');
+
+      const extraPatterns = ['!foo/'];
+      parser = new GitIgnoreParser(projectRoot, extraPatterns);
+      // Need to load patterns for isIgnored to work
+
+      expect(parser.isIgnored('foo/bar/file.txt')).toBe(true);
+      expect(parser.isIgnored('foo/bar/file2.txt')).toBe(false);
+    });
+  });
+});

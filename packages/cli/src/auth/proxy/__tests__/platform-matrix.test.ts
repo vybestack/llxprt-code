@@ -20,10 +20,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import type {
-  OAuthToken,
-  ProviderKeyStorage,
-} from '@vybestack/llxprt-code-core';
+import type { OAuthToken } from '@vybestack/llxprt-code-core';
+import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import { ProxySocketClient } from '@vybestack/llxprt-code-core';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
 

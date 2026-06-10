@@ -196,6 +196,7 @@ export {
 export type {
   KeyringAdapter,
   SecureStoreOptions,
+  SecureStoreErrorCode,
 } from './storage/secure-store.js';
 export {
   ProviderKeyStorage,
@@ -440,7 +441,11 @@ export type { DebugSettings, DebugOutputConfig } from './debug/index.js';
 export type { LogEntry as DebugLogEntry } from './debug/index.js';
 
 // Export Storage
-export { Storage } from './config/storage.js';
+export {
+  Storage,
+  PROVIDER_ACCOUNTS_FILENAME,
+  OAUTH_FILE,
+} from './config/storage.js';
 
 // Export Extension Loader
 export {

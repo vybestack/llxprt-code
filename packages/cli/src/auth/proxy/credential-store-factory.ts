@@ -18,17 +18,15 @@
  * @requirement R2.3, R2.4, R9.5
  */
 
-import type {
-  ProviderKeyStorage,
-  TokenStore,
-} from '@vybestack/llxprt-code-core';
+import type { TokenStore } from '@vybestack/llxprt-code-core';
 import {
-  getProviderKeyStorage,
   KeyringTokenStore,
   ProxyProviderKeyStorage,
   ProxySocketClient,
   ProxyTokenStore,
 } from '@vybestack/llxprt-code-core';
+import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
+import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 
 let proxyTokenStore: ProxyTokenStore | undefined;
 let directTokenStore: KeyringTokenStore | undefined;
