@@ -12,7 +12,7 @@
 const mockGenerateJson = vi.hoisted(() => vi.fn());
 const mockOpenDiff = vi.hoisted(() => vi.fn());
 
-import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { IDEConnectionStatus } from '@vybestack/llxprt-code-ide-integration';
 
 vi.mock('../core/client.js', () => ({
   AgentClient: vi.fn().mockImplementation(() => ({

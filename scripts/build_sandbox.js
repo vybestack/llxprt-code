@@ -94,6 +94,7 @@ const authPackageDir = join('packages', 'auth');
 const settingsPackageDir = join('packages', 'settings');
 const corePackageDir = join('packages', 'core');
 const mcpPackageDir = join('packages', 'mcp');
+const ideIntegrationPackageDir = join('packages', 'ide-integration');
 const providersPackageDir = join('packages', 'providers');
 const telemetryPackageDir = join('packages', 'telemetry');
 
@@ -144,6 +145,22 @@ try {
   });
   execSync(
     `npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-ide-integration ...');
+  rmSync(
+    join(
+      ideIntegrationPackageDir,
+      'dist',
+      'vybestack-llxprt-code-ide-integration-*.tgz',
+    ),
+    {
+      force: true,
+    },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-ide-integration --pack-destination ./packages/ide-integration/dist`,
     { stdio: 'ignore' },
   );
 
@@ -209,6 +226,14 @@ chmodSync(
     mcpPackageDir,
     'dist',
     `vybestack-llxprt-code-mcp-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    ideIntegrationPackageDir,
+    'dist',
+    `vybestack-llxprt-code-ide-integration-${packageVersion}.tgz`,
   ),
   0o755,
 );

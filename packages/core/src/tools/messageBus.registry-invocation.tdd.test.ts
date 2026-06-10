@@ -11,7 +11,7 @@ import {
   ApprovalMode,
 } from '../config/config.js';
 import { ToolRegistry } from './tool-registry.js';
-import { IdeClient } from '../ide/ide-client.js';
+import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,

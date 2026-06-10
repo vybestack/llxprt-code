@@ -46,6 +46,7 @@
     "@types/update-notifier": "^6.0.8",
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
+    "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-providers": "file:../providers",
     "@vybestack/llxprt-code-settings": "file:../settings",

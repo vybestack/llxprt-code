@@ -13,6 +13,8 @@
       "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-ide-integration": ["../ide-integration/index.ts"],
+      "@vybestack/llxprt-code-ide-integration/*": ["../ide-integration/src/*"],
       "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
       "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"],
       "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
@@ -37,7 +39,9 @@
     "../mcp/src/**/*.ts",
     "../mcp/src/**/*.d.ts",
     "../settings/index.ts",
-    "../settings/src/**/*.ts"
+    "../settings/src/**/*.ts",
+    "../ide-integration/index.ts",
+    "../ide-integration/src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
@@ -50,6 +54,8 @@
     "../mcp/src/**/*.spec.ts",
     "../settings/src/**/*.test.ts",
     "../settings/src/**/*.spec.ts",
+    "../ide-integration/src/**/*.test.ts",
+    "../ide-integration/src/**/*.spec.ts",
 
     // TODO(5691): Fix type errors and remove excludes.
     "src/config/config.integration.test.ts",
@@ -124,5 +130,9 @@
     "src/validateNonInterActiveAuth.test.ts",
     "src/services/prompt-processors/shellProcessor.test.ts"
   ],
-  "references": [{ "path": "../core" }, { "path": "../settings" }]
+  "references": [
+    { "path": "../core" },
+    { "path": "../settings" },
+    { "path": "../ide-integration" }
+  ]
 }

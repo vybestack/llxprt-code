@@ -30,7 +30,7 @@ import {
 } from '../telemetry/metrics.js';
 import { getSpecificMimeType } from '../utils/fileUtils.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
-import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { IDEConnectionStatus } from '@vybestack/llxprt-code-ide-integration';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
 

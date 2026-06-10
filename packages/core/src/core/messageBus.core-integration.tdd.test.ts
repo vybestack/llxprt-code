@@ -12,7 +12,7 @@ import {
   type ConfigParameters,
   ToolRegistry,
 } from '../index.js';
-import { IdeClient } from '../ide/ide-client.js';
+import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { PolicyDecision } from '../policy/types.js';
 import {
   createProviderRuntimeContext,

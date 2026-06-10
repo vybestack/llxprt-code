@@ -10,6 +10,7 @@
     "packages/settings",
     "packages/telemetry",
     "packages/mcp",
+    "packages/ide-integration",
     "packages/core",
     "packages/providers",
     "packages/cli",

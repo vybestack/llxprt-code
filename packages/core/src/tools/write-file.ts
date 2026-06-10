@@ -35,7 +35,7 @@ import {
   recordFileOperationMetric,
   FileOperation,
 } from '../telemetry/metrics.js';
-import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { IDEConnectionStatus } from '@vybestack/llxprt-code-ide-integration';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { debugLogger } from '../utils/debugLogger.js';

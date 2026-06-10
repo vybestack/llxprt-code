@@ -29,7 +29,7 @@ import { makeRelative, shortenPath } from '../utils/paths.js';
 import type { Config } from '../config/config.js';
 import { ApprovalMode } from '../config/config.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS, getDiffStat } from './diffOptions.js';
-import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { IDEConnectionStatus } from '@vybestack/llxprt-code-ide-integration';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { APPLY_PATCH_TOOL } from './tool-names.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';

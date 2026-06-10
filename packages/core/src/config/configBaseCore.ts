@@ -51,7 +51,7 @@ import {
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
 import type { RuntimeTokenizerFactory } from '../runtime/contracts/RuntimeTokenizerFactory.js';
-import type { IdeClient } from '../ide/ide-client.js';
+import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import type {
   ProfileManager,
   SettingsService,

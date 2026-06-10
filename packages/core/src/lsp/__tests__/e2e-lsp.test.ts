@@ -14,12 +14,12 @@ import { fileURLToPath } from 'node:url';
 
 import type { ConfigParameters } from '../../config/config.js';
 import { Config } from '../../config/config.js';
-import type { LspConfig } from '../types.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import { initializeTestConfig } from '../../test-utils/config.js';
 
-import type { Diagnostic } from '../types.js';
-import * as lspServiceClientModule from '../lsp-service-client.js';
-import { LspServiceClient } from '../lsp-service-client.js';
+import type { Diagnostic } from '@vybestack/llxprt-code-ide-integration';
+import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
+import { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 
 vi.mock('../../tools/tool-registry', () => {
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
@@ -97,14 +97,21 @@ vi.mock('../../telemetry/index.js', () => ({
   StartSessionEvent: vi.fn(),
 }));
 
-vi.mock('../../ide/ide-client.js', () => ({
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-    }),
-  },
-}));
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    },
+  };
+});
 
 vi.mock('../../services/fileDiscoveryService.js', () => ({
   FileDiscoveryService: vi.fn().mockImplementation(() => ({

@@ -9,8 +9,8 @@ import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { CallableTool, Tool, Part, FunctionCall } from '@google/genai';
 import type { Config } from './config.js';
 import { debugLogger } from '../utils/debugLogger.js';
-import type { LspConfig } from '../lsp/types.js';
-import type { LspServiceClient } from '../lsp/lsp-service-client.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
+import type { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Readable, Writable } from 'node:stream';
@@ -44,7 +44,9 @@ export async function initializeLsp(
   }
 
   try {
-    const { LspServiceClient } = await import('../lsp/lsp-service-client.js');
+    const { LspServiceClient } = await import(
+      '@vybestack/llxprt-code-ide-integration'
+    );
     state.lspServiceClient = new LspServiceClient(
       state.lspConfig,
       host.getTargetDir(),

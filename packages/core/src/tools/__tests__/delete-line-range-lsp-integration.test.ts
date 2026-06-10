@@ -16,7 +16,7 @@ import { StandardFileSystemService } from '../../services/fileSystemService.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
-import type { Diagnostic } from '../../lsp/types.js';
+import type { Diagnostic } from '@vybestack/llxprt-code-ide-integration';
 
 /**
  * Phase 31 TEST - DeleteLineRange Tool LSP Integration

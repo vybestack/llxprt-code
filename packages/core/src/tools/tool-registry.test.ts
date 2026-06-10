@@ -15,7 +15,7 @@ import {
 } from '@vybestack/llxprt-code-mcp';
 import type { FunctionDeclaration, CallableTool } from '@google/genai';
 import { spawn } from 'node:child_process';
-import { IdeClient } from '../ide/ide-client.js';
+import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import fs from 'node:fs';
 import { MockTool } from '../test-utils/tools.js';
 

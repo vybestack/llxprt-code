@@ -33,7 +33,7 @@ import {
   type ModifiableDeclarativeTool,
   type ModifyContext,
 } from './modifiable-tool.js';
-import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { IDEConnectionStatus } from '@vybestack/llxprt-code-ide-integration';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
 import { EDIT_TOOL_NAME } from './tool-names.js';

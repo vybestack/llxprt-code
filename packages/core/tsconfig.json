@@ -11,6 +11,8 @@
       "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
       "@vybestack/llxprt-code-core": ["./index.ts"],
       "@vybestack/llxprt-code-core/*": ["./src/*"],
+      "@vybestack/llxprt-code-ide-integration": ["../ide-integration/index.ts"],
+      "@vybestack/llxprt-code-ide-integration/*": ["../ide-integration/src/*"],
       "@vybestack/llxprt-code-mcp": ["../mcp/dist/mcp/index.d.ts"],
       "@vybestack/llxprt-code-mcp/*": ["../mcp/dist/mcp/src/*"],
       "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
@@ -22,7 +24,9 @@
     "src/**/*.ts",
     "src/**/*.json",
     "../settings/index.ts",
-    "../settings/src/**/*.ts"
+    "../settings/src/**/*.ts",
+    "../ide-integration/index.ts",
+    "../ide-integration/src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
@@ -30,7 +34,13 @@
     "**/*.test.ts",
     "**/*.spec.ts",
     "../settings/src/**/*.test.ts",
-    "../settings/src/**/*.spec.ts"
+    "../settings/src/**/*.spec.ts",
+    "../ide-integration/src/**/*.test.ts",
+    "../ide-integration/src/**/*.spec.ts"
   ],
-  "references": [{ "path": "../auth" }, { "path": "../settings" }]
+  "references": [
+    { "path": "../auth" },
+    { "path": "../settings" },
+    { "path": "../ide-integration" }
+  ]
 }

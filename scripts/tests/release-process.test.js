@@ -66,6 +66,7 @@ describe('release package derivation', () => {
       '@vybestack/llxprt-code-settings',
       '@vybestack/llxprt-code-telemetry',
       '@vybestack/llxprt-code-mcp',
+      '@vybestack/llxprt-code-ide-integration',
       '@vybestack/llxprt-code-core',
       '@vybestack/llxprt-code-providers',
       '@vybestack/llxprt-code',

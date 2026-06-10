@@ -11,6 +11,7 @@ import { defineConfig } from 'vitest/config';
 const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
 const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
+const ideIntegrationPackagePrefix = '@vybestack/llxprt-code-ide-integration/';
 const providersEntry = fileURLToPath(
   new URL('../providers/index.ts', import.meta.url),
 );
@@ -24,6 +25,12 @@ const settingsEntry = fileURLToPath(
 );
 const settingsSrcDir = fileURLToPath(
   new URL('../settings/src/', import.meta.url),
+);
+const ideIntegrationEntry = fileURLToPath(
+  new URL('../ide-integration/index.ts', import.meta.url),
+);
+const ideIntegrationSrcDir = fileURLToPath(
+  new URL('../ide-integration/src/', import.meta.url),
 );
 const ajvCjsEntry = fileURLToPath(
   new URL(
@@ -94,6 +101,15 @@ const workspaceDependencyAliasPlugin = {
         source.slice(settingsPackagePrefix.length),
       );
     }
+    if (source === '@vybestack/llxprt-code-ide-integration') {
+      return ideIntegrationEntry;
+    }
+    if (source.startsWith(ideIntegrationPackagePrefix)) {
+      return resolveTsSource(
+        ideIntegrationSrcDir,
+        source.slice(ideIntegrationPackagePrefix.length),
+      );
+    }
     if (source === 'ajv') {
       return ajvCjsEntry;
     }
@@ -152,6 +168,7 @@ export default defineConfig({
         inline: [
           '@vybestack/llxprt-code-providers',
           '@vybestack/llxprt-code-settings',
+          '@vybestack/llxprt-code-ide-integration',
           'ajv',
           'fdir',
         ],

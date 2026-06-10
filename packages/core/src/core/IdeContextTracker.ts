@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ideContext, type IdeContext, type File } from '../ide/ideContext.js';
+import {
+  ideContext,
+  type IdeContext,
+  type File,
+} from '@vybestack/llxprt-code-ide-integration';
 import { DebugLogger } from '../debug/index.js';
 import type { Config } from '../config/config.js';
 

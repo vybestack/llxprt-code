@@ -17,7 +17,7 @@ import type * as Diff from 'diff';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
-import type { Diagnostic } from '../../lsp/types.js';
+import type { Diagnostic } from '@vybestack/llxprt-code-ide-integration';
 
 /**
  * Mock LSP service client for testing

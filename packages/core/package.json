@@ -97,6 +97,7 @@
   ],
   "dependencies": {
     "@vybestack/llxprt-code-auth": "file:../auth",
+    "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",

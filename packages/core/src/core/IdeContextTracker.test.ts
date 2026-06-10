@@ -6,16 +6,23 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IdeContextTracker } from './IdeContextTracker.js';
-import type { IdeContext } from '../ide/ideContext.js';
+import type { IdeContext } from '@vybestack/llxprt-code-ide-integration';
 
-// Mock the ideContext module
-vi.mock('../ide/ideContext.js', () => ({
-  ideContext: {
-    getIdeContext: vi.fn(),
-  },
-}));
+// Mock the ideContext singleton from the ide-integration package
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    ideContext: {
+      getIdeContext: vi.fn(),
+    },
+  };
+});
 
-import { ideContext } from '../ide/ideContext.js';
+import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 
 function makeConfig(debugMode = false): { getDebugMode: () => boolean } {
   return { getDebugMode: () => debugMode };
