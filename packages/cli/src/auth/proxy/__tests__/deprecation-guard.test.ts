@@ -265,7 +265,8 @@ describe('Deprecation Guards (P36)', () => {
     });
 
     it('getProviderKeyStorage should still be exported from core for factory use', () => {
-      // The function must still be exported from core (via re-export shim) for the factory to use
+      // The function must still be exported from core (via re-export shim) for the factory to use.
+      // The shim is a pure re-export, so the symbol appears exactly once.
       const matches = grepFiles(
         'getProviderKeyStorage',
         'provider-key-storage.ts',
@@ -273,7 +274,21 @@ describe('Deprecation Guards (P36)', () => {
         ['node_modules', 'dist', '__tests__'],
       );
 
-      expect(matches.length).toBeGreaterThanOrEqual(1);
+      expect(matches.length).toBe(1);
+
+      // And that single occurrence must be part of a re-export from the storage
+      // package — proving the symbol is genuinely re-exported, not merely
+      // referenced by a comment or local helper.
+      const reexport = grepFiles(
+        'provider-key-storage.js',
+        'provider-key-storage.ts',
+        path.resolve(packagesRoot, 'core/src'),
+        ['node_modules', 'dist', '__tests__'],
+      );
+
+      expect(
+        reexport.some((m) => m.includes('@vybestack/llxprt-code-storage')),
+      ).toBe(true);
     });
   });
 });

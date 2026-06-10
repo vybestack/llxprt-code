@@ -227,17 +227,20 @@ export class GitIgnoreParser implements GitIgnoreFilter {
     }
   }
 
+  /**
+   * Returns the explicitly added ("extra") ignore patterns.
+   *
+   * NOTE: Despite the generic name, this does NOT return globally loaded
+   * patterns. The underlying `ignore` library does not expose its compiled
+   * patterns, so global patterns cannot be enumerated here. Only the
+   * `extraPatterns` supplied to the constructor are returned.
+   */
   getPatterns(): string[] {
-    // Return patterns from all cached ignore instances
     const allPatterns: string[] = [];
 
-    // Add global patterns
-    if (this.globalPatterns) {
-      // Note: ignore library doesn't expose patterns directly
-      // This is a placeholder implementation
-    }
+    // Global patterns cannot be enumerated: the `ignore` library does not
+    // expose its compiled pattern set. Intentionally omitted.
 
-    // Add extra patterns
     if (this.extraPatterns) {
       allPatterns.push(...this.extraPatterns);
     }

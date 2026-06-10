@@ -14,7 +14,13 @@
  */
 
 import { createRequire } from 'node:module';
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  readdirSync,
+  mkdirSync,
+} from 'node:fs';
 import { join, relative, resolve, extname } from 'node:path';
 
 const require = createRequire(import.meta.url);
@@ -450,7 +456,6 @@ function main() {
   // Write JSON
   if (outputJson) {
     const jsonDir = resolve(outputJson, '..');
-    const { mkdirSync } = require('node:fs');
     mkdirSync(jsonDir, { recursive: true });
     writeFileSync(outputJson, JSON.stringify(result, null, 2) + '\n');
     console.log(`\nJSON output written to: ${outputJson}`);
@@ -459,7 +464,6 @@ function main() {
   // Write text
   if (outputText) {
     const txtDir = resolve(outputText, '..');
-    const { mkdirSync } = require('node:fs');
     mkdirSync(txtDir, { recursive: true });
     const lines = [];
     lines.push(`P00a Import Inventory — ${result.generatedAt}`);

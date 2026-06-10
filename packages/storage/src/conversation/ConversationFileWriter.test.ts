@@ -230,6 +230,29 @@ describe('ConversationFileWriter — Singleton Reuse', () => {
     const second = getConversationFileWriter(tmpDir);
     expect(first).not.toBe(second);
   });
+
+  it('first-call logPath wins: later calls reuse the original path', async () => {
+    const dirA = await createTempDir('cfw-firstwins-A-');
+    const dirB = await createTempDir('cfw-firstwins-B-');
+
+    const first = getConversationFileWriter(dirA);
+    // Subsequent call with a DIFFERENT path must return the same instance and
+    // ignore dirB entirely.
+    const second = getConversationFileWriter(dirB);
+    expect(second).toBe(first);
+
+    // Prove dirA wins by observing where output is actually written.
+    second.writeEntry({ type: 'probe' });
+
+    const today = new Date().toISOString().split('T')[0];
+    const expectedFile = path.join(dirA, `conversation-${today}.jsonl`);
+    const content = await fsp.readFile(expectedFile, 'utf-8');
+    expect(content).toContain('"type":"probe"');
+
+    // dirB must remain empty — its path was ignored.
+    const dirBEntries = await fsp.readdir(dirB);
+    expect(dirBEntries).toHaveLength(0);
+  });
 });
 
 // ─── Zero-Arg Backward Compat (Scenario 5) ──────────────────────────────────

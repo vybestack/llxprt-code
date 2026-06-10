@@ -15,14 +15,38 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./config/storage.js": "./dist/src/config/storage.js",
-    "./services/fileSystemService.js": "./dist/src/services/fileSystemService.js",
-    "./services/fileDiscoveryService.js": "./dist/src/services/fileDiscoveryService.js",
-    "./storage/secure-store.js": "./dist/src/secure-store/secure-store.js",
-    "./storage/provider-key-storage.js": "./dist/src/secure-store/provider-key-storage.js",
-    "./storage/sessionTypes.js": "./dist/src/session/sessionTypes.js",
-    "./storage/ConversationFileWriter.js": "./dist/src/conversation/ConversationFileWriter.js",
-    "./testing": "./dist/src/testing.js"
+    "./config/storage.js": {
+      "types": "./dist/src/config/storage.d.ts",
+      "import": "./dist/src/config/storage.js"
+    },
+    "./services/fileSystemService.js": {
+      "types": "./dist/src/services/fileSystemService.d.ts",
+      "import": "./dist/src/services/fileSystemService.js"
+    },
+    "./services/fileDiscoveryService.js": {
+      "types": "./dist/src/services/fileDiscoveryService.d.ts",
+      "import": "./dist/src/services/fileDiscoveryService.js"
+    },
+    "./storage/secure-store.js": {
+      "types": "./dist/src/secure-store/secure-store.d.ts",
+      "import": "./dist/src/secure-store/secure-store.js"
+    },
+    "./storage/provider-key-storage.js": {
+      "types": "./dist/src/secure-store/provider-key-storage.d.ts",
+      "import": "./dist/src/secure-store/provider-key-storage.js"
+    },
+    "./storage/sessionTypes.js": {
+      "types": "./dist/src/session/sessionTypes.d.ts",
+      "import": "./dist/src/session/sessionTypes.js"
+    },
+    "./storage/ConversationFileWriter.js": {
+      "types": "./dist/src/conversation/ConversationFileWriter.d.ts",
+      "import": "./dist/src/conversation/ConversationFileWriter.js"
+    },
+    "./testing": {
+      "types": "./dist/src/testing.d.ts",
+      "import": "./dist/src/testing.js"
+    }
   },
   "scripts": {
     "build": "node ../../scripts/build_package.js",

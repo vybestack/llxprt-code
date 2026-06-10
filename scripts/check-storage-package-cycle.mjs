@@ -115,11 +115,13 @@ function detectCycles(pkgs, storagePkgName, productionOnly) {
     if (name === storagePkgName) continue;
     const deps = getDeps(pkg, productionOnly);
     if (deps.includes(storagePkgName)) {
-      // Check if storage transitively depends on this package
+      // Check if storage transitively depends on this package, tracking the
+      // full path so the reported cycle shows the real dependency chain.
       const visited2 = new Set();
-      function dfs2(pName) {
+      function dfs2(pName, trail) {
         if (pName === name) {
-          cycles.push([storagePkgName, '...', name, storagePkgName]);
+          // trail already begins with storagePkgName and ends with `name`.
+          cycles.push([...trail, storagePkgName]);
           return;
         }
         if (visited2.has(pName)) return;
@@ -128,12 +130,12 @@ function detectCycles(pkgs, storagePkgName, productionOnly) {
         const p = pkgs[pName];
         if (!p) return;
         for (const d of getDeps(p, productionOnly)) {
-          dfs2(d);
+          dfs2(d, [...trail, d]);
         }
       }
       for (const d of storageDeps) {
         visited2.clear();
-        dfs2(d);
+        dfs2(d, [storagePkgName, d]);
       }
     }
   }

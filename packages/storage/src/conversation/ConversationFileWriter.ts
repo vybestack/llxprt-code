@@ -83,6 +83,15 @@ export class ConversationFileWriter {
 // Singleton instance
 let fileWriter: ConversationFileWriter | null = null;
 
+/**
+ * Returns the process-wide ConversationFileWriter singleton.
+ *
+ * First-call-wins: the `logPath` provided on the first invocation determines
+ * the writer's output directory for the lifetime of the process. Subsequent
+ * calls return the same instance and IGNORE any `logPath` argument. To target
+ * a different path (e.g. in tests), call
+ * {@link resetConversationFileWriterForTesting} first.
+ */
 export function getConversationFileWriter(
   logPath?: string,
 ): ConversationFileWriter {

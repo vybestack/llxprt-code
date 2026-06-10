@@ -230,6 +230,11 @@ function analyzeFile(filePath, movedSymbols, fromPackage, deepPaths) {
           const specifier = node.arguments[0].text;
           if (isFromPackage(specifier)) {
             const line = getLine(node.getStart());
+            // LIMITATION: we only scan the immediate parent node for symbol
+            // identifiers. Moved symbols bound through intermediate variable
+            // assignments or deep destructuring across statements may not be
+            // detected. This is acceptable for a boundary guard where false
+            // negatives are tolerable but false positives are not.
             const parent = node.parent;
             if (parent) {
               const ids = new Set();
