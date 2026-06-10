@@ -91,6 +91,7 @@ execSync('node scripts/bind-release-deps.js --backup', { stdio: 'inherit' });
 
 const cliPackageDir = join('packages', 'cli');
 const authPackageDir = join('packages', 'auth');
+const settingsPackageDir = join('packages', 'settings');
 const corePackageDir = join('packages', 'core');
 const mcpPackageDir = join('packages', 'mcp');
 const providersPackageDir = join('packages', 'providers');
@@ -114,6 +115,16 @@ try {
   });
   execSync(
     `npm pack -w @vybestack/llxprt-code-auth --pack-destination ./packages/auth/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-settings ...');
+  rmSync(
+    join(settingsPackageDir, 'dist', 'vybestack-llxprt-code-settings-*.tgz'),
+    { force: true },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-settings --pack-destination ./packages/settings/dist`,
     { stdio: 'ignore' },
   );
 
@@ -164,6 +175,14 @@ const packageVersion = JSON.parse(
   readFileSync(join(process.cwd(), 'package.json'), 'utf-8'),
 ).version;
 
+chmodSync(
+  join(
+    settingsPackageDir,
+    'dist',
+    `vybestack-llxprt-code-settings-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
 chmodSync(
   join(cliPackageDir, 'dist', `vybestack-llxprt-code-${packageVersion}.tgz`),
   0o755,

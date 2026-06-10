@@ -16,11 +16,8 @@
  * with no coupling to OAuthManager internals.
  */
 
-import {
-  DebugLogger,
-  getSettingsService,
-  type Config,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
+import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import type { TokenStore } from './types.js';
 import type { LoadedSettings } from '../config/settings.js';
 import { isAuthOnlyEnabled } from './auth-utils.js';
@@ -240,7 +237,7 @@ export async function getHigherPriorityAuth(
 
   const merged = settings.merged;
   try {
-    const settingsService = getSettingsService();
+    const settingsService = getRuntimeSettingsService();
     const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
     if (authOnly) {
       return null;

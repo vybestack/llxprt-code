@@ -17,12 +17,13 @@ const mockSettingsService = vi.hoisted(() => ({
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
 }));
 
-vi.mock(
-  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
-  () => ({
-    getSettingsService: () => mockSettingsService,
-  }),
-);
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: () => mockSettingsService,
+  SETTINGS_REGISTRY: [],
+}));
 
 describe('OpenAIProvider.shouldRetryResponse', () => {
   let provider: OpenAIProvider;

@@ -13,11 +13,11 @@ import {
   ApprovalMode,
   todoEvents,
   createRuntimeStateFromConfig,
-  SettingsService,
   type TodoUpdateEvent,
   type Turn,
   type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { PartListUnion } from '@google/genai';
 import {
   createTempDirectory,

@@ -27,14 +27,15 @@ import {
 import { getProviderKeyStorage } from '@vybestack/llxprt-code-core/storage/provider-key-storage.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
-import {
-  peekActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
-import { getSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  createSettingsProviderRuntimeContext,
+  resolveRuntimeSettingsService,
+  setSettingsProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { MissingProviderRuntimeError } from './errors.js';
 import {
   assertProviderRuntimeContext,
@@ -134,16 +135,8 @@ export abstract class BaseProvider implements IProvider {
     this.providerConfig = providerConfig;
     this.defaultConfig = globalConfig;
 
-    let fallbackSettingsService: SettingsService;
-    if (settingsService) {
-      fallbackSettingsService = settingsService;
-    } else {
-      try {
-        fallbackSettingsService = getSettingsService();
-      } catch {
-        fallbackSettingsService = new SettingsService();
-      }
-    }
+    const fallbackSettingsService =
+      resolveRuntimeSettingsService(settingsService);
 
     this.defaultSettingsService = fallbackSettingsService;
 
@@ -691,26 +684,26 @@ export abstract class BaseProvider implements IProvider {
       mergedMetadata.source = 'BaseProvider.generateChatCompletion';
     }
 
-    const runtimeContext: ProviderRuntimeContext = normalized.runtime
-      ? {
-          ...normalized.runtime,
-          settingsService: normalized.settings,
-          config: normalized.config ?? normalized.runtime.config,
-          metadata: mergedMetadata,
-        }
-      : {
-          settingsService: normalized.settings,
-          config: normalized.config ?? previousContext?.config,
-          runtimeId:
-            previousContext?.runtimeId ?? 'base-provider.normalized-call',
-          metadata: mergedMetadata,
-        };
+    const runtimeContext: ProviderRuntimeContext =
+      createSettingsProviderRuntimeContext({
+        ...(normalized.runtime ?? {}),
+        settingsService: normalized.settings,
+        config:
+          normalized.config ??
+          normalized.runtime?.config ??
+          previousContext?.config,
+        runtimeId:
+          normalized.runtime?.runtimeId ??
+          previousContext?.runtimeId ??
+          'base-provider.normalized-call',
+        metadata: mergedMetadata,
+      });
 
     return async function* (
       this: BaseProvider,
     ): AsyncIterableIterator<IContent> {
       if (needsContextSwap === true) {
-        setActiveProviderRuntimeContext(runtimeContext);
+        setSettingsProviderRuntimeContext(runtimeContext);
       }
 
       try {
@@ -720,7 +713,7 @@ export abstract class BaseProvider implements IProvider {
         }
       } finally {
         if (needsContextSwap === true) {
-          setActiveProviderRuntimeContext(previousContext ?? null);
+          setSettingsProviderRuntimeContext(previousContext ?? null);
         }
         normalized.resolved.authToken = '';
         this.authResolver.setSettingsService(this.defaultSettingsService);

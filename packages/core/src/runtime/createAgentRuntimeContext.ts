@@ -20,7 +20,7 @@ import type {
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 import { tokenLimit } from '../core/tokenLimits.js';
 /** @plan PLAN-20260211-COMPRESSION.P12 */
-import { getSettingSpec } from '../settings/settingsRegistry.js';
+import { getSettingSpec } from '@vybestack/llxprt-code-settings';
 
 const EPHEMERAL_DEFAULTS = {
   compressionThreshold: 0.85,

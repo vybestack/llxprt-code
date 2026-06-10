@@ -13,8 +13,8 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
-  SettingsService,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 
 import { LoadedSettings } from './config/settings.js';

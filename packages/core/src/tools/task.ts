@@ -25,7 +25,7 @@ import {
 } from '../core/subagentTypes.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { SubagentManager } from '../config/subagentManager.js';
-import type { ProfileManager } from '../config/profileManager.js';
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { ToolErrorType } from './tool-error.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import type { ToolRegistry } from './tool-registry.js';

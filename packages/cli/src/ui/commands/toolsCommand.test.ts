@@ -9,7 +9,7 @@ import { toolsCommand } from './toolsCommand.ts';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import type { Tool } from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const mockTools = [
   {

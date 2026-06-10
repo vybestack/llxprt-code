@@ -9,7 +9,7 @@
 import * as glob from 'glob';
 import * as path from 'node:path';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { Storage } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import mock from 'mock-fs';
 import { FileCommandLoader } from './FileCommandLoader.js';
 import { assert, vi } from 'vitest';
@@ -62,7 +62,7 @@ vi.mock('./prompt-processors/atFileProcessor.js', () => ({
 }));
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
   return {
     ...original,
     Storage: original.Storage,

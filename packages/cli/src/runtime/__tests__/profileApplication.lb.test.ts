@@ -21,7 +21,10 @@ import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { LoadBalancingProvider } from '@vybestack/llxprt-code-providers';
-import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+import type {
+  Profile,
+  LoadBalancerProfile,
+} from '@vybestack/llxprt-code-settings';
 
 type ProfileApplicationResult = {
   providerName: string;

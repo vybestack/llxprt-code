@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type {
   LoadBalancerProfile,
   StandardProfile,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-settings';
 
 /**
  * Tests for Issue 1250: Proactive failover handler wiring for LoadBalancer sub-profiles

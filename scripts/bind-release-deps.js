@@ -163,14 +163,17 @@ export function bindReleaseDeps({ dryRun = false, backup = false } = {}) {
       continue;
     }
 
-    const changed = [
+    let changed = false;
+    for (const depField of [
       'dependencies',
       'devDependencies',
       'peerDependencies',
       'optionalDependencies',
-    ].some((depField) =>
-      rewriteDeps(pkg[depField], workspaceInfo, npmReleasePackageSet),
-    );
+    ]) {
+      changed =
+        rewriteDeps(pkg[depField], workspaceInfo, npmReleasePackageSet) ||
+        changed;
+    }
 
     if (!changed) {
       continue;

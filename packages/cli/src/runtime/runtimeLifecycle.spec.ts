@@ -24,10 +24,10 @@ import {
 } from './runtimeLifecycle.js';
 import type {
   Config,
-  SettingsService,
   RuntimeProviderManager,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '../auth/oauth-manager.js';
 import { getCliProviderManager } from './runtimeAccessors.js';

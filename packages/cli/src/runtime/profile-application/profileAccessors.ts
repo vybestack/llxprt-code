@@ -1,4 +1,4 @@
-import type { Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 
 type PersistedProfileView = Omit<
   Partial<Profile>,

@@ -22,7 +22,6 @@ import {
 import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
-import { getSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -415,15 +414,12 @@ export class AnthropicProvider extends BaseProvider {
     // @plan PLAN-20251023-STATELESS-HARDENING.P08: Don't reference deprecated instance fields
     // Tools format should be derived from runtime context only
     try {
-      const settingsService = getSettingsService();
+      const settingsService = this.resolveSettingsService();
 
-      // First check SettingsService for toolFormat override in provider settings
-      // Note: This is synchronous access to cached settings, not async
-      const currentSettings = settingsService['settings'];
+      // First check SettingsService for toolFormat override in provider settings.
+      const providerSettings = settingsService.getProviderSettings(this.name);
 
-      const providerSettings = currentSettings?.providers?.[this.name];
-
-      const toolFormatOverride = providerSettings?.toolFormat as
+      const toolFormatOverride = providerSettings.toolFormat as
         | ToolFormat
         | 'auto'
         | undefined;

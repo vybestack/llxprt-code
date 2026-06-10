@@ -9,7 +9,6 @@ export * from './safety/index.js';
 
 // Export config
 export * from './config/config.js';
-export * from './config/profileManager.js';
 export * from './config/subagentManager.js';
 export * from './config/schedulerSingleton.js';
 export * from './policy/index.js';
@@ -65,9 +64,6 @@ export { AsyncTaskReminderService } from './services/asyncTaskReminderService.js
 export { AsyncTaskAutoTrigger } from './services/asyncTaskAutoTrigger.js';
 // Export SubagentTerminateMode for OutputObject types
 export { SubagentTerminateMode } from './core/subagentTypes.js';
-
-// Export types
-export * from './types/modelParams.js';
 
 // Export Commands logic
 export * from './commands/extensions.js';
@@ -358,25 +354,6 @@ export * from './parsers/TextToolCallParser.js';
 export * from './tools/IToolFormatter.js';
 export * from './tools/ToolFormatter.js';
 
-// Export settings system
-export { SettingsService } from './settings/SettingsService.js';
-export {
-  getSettingsService,
-  resetSettingsService,
-  registerSettingsService,
-} from './settings/settingsServiceInstance.js';
-export type {
-  ISettingsService,
-  GlobalSettings,
-  SettingsChangeEvent,
-  ProviderSettings,
-  UISettings,
-  AdvancedSettings,
-  EventListener,
-  EventUnsubscribe,
-} from './settings/types.js';
-export type { TelemetrySettings as SettingsTelemetrySettings } from './settings/types.js';
-
 export {
   createProviderRuntimeContext,
   getActiveProviderRuntimeContext,
@@ -461,9 +438,6 @@ export {
 export type { DebugSettings, DebugOutputConfig } from './debug/index.js';
 export type { LogEntry as DebugLogEntry } from './debug/index.js';
 
-// Export Storage
-export { Storage } from './config/storage.js';
-
 // Export Extension Loader
 export {
   ExtensionLoader,
@@ -497,27 +471,3 @@ export {
 // @plan PLAN-20260211-SESSIONRECORDING.P03
 // Export session recording module
 export * from './recording/index.js';
-
-export {
-  type SettingCategory,
-  type SettingSpec,
-  type ValidationResult,
-  type SeparatedSettings,
-  type DirectSettingSpec,
-  SETTINGS_REGISTRY,
-  separateSettings,
-  getSettingSpec,
-  resolveAlias,
-  validateSetting,
-  normalizeSetting,
-  parseSetting,
-  getProfilePersistableKeys,
-  getSettingHelp,
-  getCompletionOptions,
-  getAllSettingKeys,
-  getValidationHelp,
-  getAutocompleteSuggestions,
-  getProtectedSettingKeys,
-  getProviderConfigKeys,
-  getDirectSettingSpecs,
-} from './settings/index.js';
