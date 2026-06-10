@@ -37,13 +37,16 @@ import { MockTool } from '../test-utils/mock-tool.js';
 import { MockModifiableTool } from '../test-utils/tools.js';
 import type { Part, PartListUnion } from '@google/genai';
 import { type Content } from '@google/genai';
-import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
+import type {
+  ContextAwareTool,
+  ToolContext,
+} from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '../policy/types.js';
 import {
   MessageBusType,
   type ToolConfirmationResponse,
 } from '../confirmation-bus/types.js';
-import { ToolErrorType } from '../tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 import type { ToolCallBlock } from '../services/history/IContent.js';

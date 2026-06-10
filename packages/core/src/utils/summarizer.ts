@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type ToolResult } from '../tools/tools.js';
+import { type ToolResult } from '@vybestack/llxprt-code-tools';
 import type { GenerateContentResponse } from '@google/genai';
 import { type Content, type GenerateContentConfig } from '@google/genai';
 import type { GeminiClient } from '../core/client.js';

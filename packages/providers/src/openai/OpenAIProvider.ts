@@ -25,7 +25,7 @@ import type OpenAI from 'openai';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 import { type IProviderConfig } from '../types/IProviderConfig.js';
-import { type ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 
 import {
   BaseProvider,
@@ -33,7 +33,7 @@ import {
 } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type OAuthManager } from '@vybestack/llxprt-code-core/auth/precedence.js';
-import { ToolFormatter } from '@vybestack/llxprt-code-core/tools/ToolFormatter.js';
+import { ToolFormatter } from '@vybestack/llxprt-code-tools/ToolFormatter.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import { type TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type IModel } from '../IModel.js';

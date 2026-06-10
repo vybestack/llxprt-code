@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { normalizeToolName, toSnakeCase } from '../tools/toolNameUtils.js';
+import { normalizeToolName, toSnakeCase } from '@vybestack/llxprt-code-tools';
 
 function isStringArray(value: unknown): value is string[] {
   return (

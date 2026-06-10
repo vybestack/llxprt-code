@@ -10,6 +10,8 @@ import { defineConfig } from 'vitest/config';
 
 const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
+const toolsPackagePrefix = '@vybestack/llxprt-code-tools/';
+
 const providersEntry = fileURLToPath(
   new URL('../providers/index.ts', import.meta.url),
 );
@@ -17,6 +19,9 @@ const providersSrcDir = fileURLToPath(
   new URL('../providers/src/', import.meta.url),
 );
 const coreEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
+const toolsEntry = fileURLToPath(new URL('../tools/index.ts', import.meta.url));
+const toolsSrcDir = fileURLToPath(new URL('../tools/src/', import.meta.url));
+
 const coreSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
 const ajvCjsEntry = fileURLToPath(
   new URL(
@@ -78,6 +83,16 @@ const workspaceDependencyAliasPlugin = {
         source.slice(corePackagePrefix.length),
       );
     }
+    if (source === '@vybestack/llxprt-code-tools') {
+      return toolsEntry;
+    }
+    if (source.startsWith(toolsPackagePrefix)) {
+      return resolveTsSource(
+        toolsSrcDir,
+        source.slice(toolsPackagePrefix.length),
+      );
+    }
+
     if (source === 'ajv') {
       return ajvCjsEntry;
     }

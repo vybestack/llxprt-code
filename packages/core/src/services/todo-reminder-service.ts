@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Todo } from '../tools/todo-schemas.js';
+import { type Todo } from '@vybestack/llxprt-code-tools';
 
 export interface TodoStateChange {
   previousTodos: Todo[];

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ToolConfirmationOutcome } from '../tools/tools.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 export enum ToolCallDecision {
   ACCEPT = 'accept',

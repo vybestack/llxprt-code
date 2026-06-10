@@ -38,7 +38,8 @@ import type { Config, MCPServerConfig } from '../config/config.js';
 import { AuthProviderType } from '../config/config.js';
 import { GoogleCredentialProvider } from '../mcp/google-auth-provider.js';
 import { ServiceAccountImpersonationProvider } from '../mcp/sa-impersonation-provider.js';
-import { DiscoveredMCPTool } from './mcp-tool.js';
+import { DiscoveredMCPTool } from '@vybestack/llxprt-code-tools';
+import { CoreMcpToolServiceAdapter } from '../tools-adapters/CoreMcpToolServiceAdapter.js';
 
 import type { CallableTool, FunctionCall, Part, Tool } from '@google/genai';
 import { basename } from 'node:path';
@@ -59,7 +60,7 @@ import type {
   Unsubscribe,
   WorkspaceContext,
 } from '../utils/workspaceContext.js';
-import type { ToolRegistry } from './tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { DebugLogger } from '../debug/index.js';
 import { coreEvents } from '../utils/events.js';
@@ -1174,10 +1175,14 @@ export async function discoverTools(
           mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
         );
         debug.log(`Created McpCallableTool for ${toolDef.name}`);
+        const mcpToolService = new CoreMcpToolServiceAdapter(
+          mcpCallableTool,
+          () => cliConfig.isTrustedFolder(),
+        );
 
         discoveredTools.push(
           new DiscoveredMCPTool(
-            mcpCallableTool,
+            mcpToolService,
             mcpServerName,
             toolDef.name,
             toolDef.description ?? '',
@@ -1185,7 +1190,6 @@ export async function discoverTools(
             toolDef.inputSchema ?? { type: 'object', properties: {} },
             mcpServerConfig.trust,
             undefined,
-            cliConfig,
           ),
         );
       } catch (error) {

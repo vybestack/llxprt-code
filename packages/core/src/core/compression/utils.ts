@@ -39,7 +39,7 @@ import type { RuntimeProvider as IProvider } from '../../runtime/contracts/Runti
  * media classification owned by core while supporting provider-injected
  * MediaBlock flows.
  */
-import { classifyMediaBlock } from '../../tools/mediaUtils.js';
+import { classifyMediaBlock } from '@vybestack/llxprt-code-tools';
 import type { CompressionContext } from './types.js';
 
 /**

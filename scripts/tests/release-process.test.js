@@ -62,11 +62,26 @@ function npmReleasePackages() {
 describe('release package derivation', () => {
   it('derives npm-published packages from workspace package metadata', () => {
     expect(npmReleasePackages()).toEqual([
+      '@vybestack/llxprt-code-tools',
       '@vybestack/llxprt-code-core',
+      '@vybestack/llxprt-code-lsp',
       '@vybestack/llxprt-code-providers',
       '@vybestack/llxprt-code',
-      '@vybestack/llxprt-code-lsp',
     ]);
+  });
+
+  it('includes @vybestack/llxprt-code-tools as a publishable package in correct order', () => {
+    const packages = npmReleasePackages();
+    const toolsIndex = packages.indexOf('@vybestack/llxprt-code-tools');
+    const coreIndex = packages.indexOf('@vybestack/llxprt-code-core');
+    const providersIndex = packages.indexOf('@vybestack/llxprt-code-providers');
+    const cliIndex = packages.indexOf('@vybestack/llxprt-code');
+    expect(toolsIndex).toBeGreaterThan(-1);
+    // Tools must come before core, providers, and CLI in publish order because
+    // those packages depend on the tools package tarball/version.
+    expect(toolsIndex).toBeLessThan(coreIndex);
+    expect(toolsIndex).toBeLessThan(providersIndex);
+    expect(toolsIndex).toBeLessThan(cliIndex);
   });
 
   it('keeps VS Code extension versioned but outside npm package publishing', () => {
@@ -89,6 +104,10 @@ describe('scripts/version.js', () => {
       );
     }
   });
+
+  it('includes @vybestack/llxprt-code-tools in versioning', () => {
+    expect(versionJs).toContain('@vybestack/llxprt-code-tools');
+  });
 });
 
 describe('.github/workflows/release.yml', () => {
@@ -100,6 +119,31 @@ describe('.github/workflows/release.yml', () => {
         `npm publish --workspace=${packageName}`,
       );
     }
+  });
+
+  it('publishes tools before core, providers, and CLI', () => {
+    const toolsIndex = releaseYml.indexOf(
+      'npm publish --workspace=@vybestack/llxprt-code-tools',
+    );
+    const providersIndex = releaseYml.indexOf(
+      'npm publish --workspace=@vybestack/llxprt-code-providers',
+    );
+    const cliIndex = releaseYml.indexOf(
+      'npm publish --workspace=@vybestack/llxprt-code ',
+    );
+
+    expect(
+      toolsIndex,
+      'release.yml should publish @vybestack/llxprt-code-tools',
+    ).toBeGreaterThan(0);
+    expect(
+      providersIndex,
+      'release.yml should publish @vybestack/llxprt-code-providers',
+    ).toBeGreaterThan(toolsIndex);
+    expect(
+      cliIndex,
+      'release.yml should publish @vybestack/llxprt-code after tools',
+    ).toBeGreaterThan(toolsIndex);
   });
 
   it('publishes providers after core but before CLI', () => {
@@ -143,6 +187,11 @@ describe('.github/workflows/release.yml', () => {
     expect(bindStep).not.toContain('is_dry_run');
   });
 
+  it('prepares tools tarballs for sandbox images', () => {
+    expect(releaseYml).toContain('packages/tools/dist');
+    expect(releaseYml).toContain('npm pack -w @vybestack/llxprt-code-tools');
+  });
+
   it('prepares providers tarballs for sandbox images', () => {
     expect(releaseYml).toContain('packages/providers/dist');
     expect(releaseYml).toContain(
@@ -154,7 +203,8 @@ describe('.github/workflows/release.yml', () => {
 describe('scripts/build_sandbox.js', () => {
   const buildSandbox = readRootFile('scripts/build_sandbox.js');
 
-  it('packs providers alongside core and CLI', () => {
+  it('packs tools alongside core, providers, and CLI', () => {
+    expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code-tools');
     expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code');
     expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code-core');
     expect(buildSandbox).toContain(
@@ -168,12 +218,39 @@ describe('scripts/build_sandbox.js', () => {
   });
 });
 
+describe('.github/workflows/build-sandbox.yml', () => {
+  const buildSandboxYml = readRootFile('.github/workflows/build-sandbox.yml');
+
+  it('packs sandbox tarballs in tools, core, providers, CLI order', () => {
+    const toolsPack = buildSandboxYml.indexOf(
+      'npm pack -w @vybestack/llxprt-code-tools',
+    );
+    const corePack = buildSandboxYml.indexOf(
+      'npm pack -w @vybestack/llxprt-code-core',
+    );
+    const providersPack = buildSandboxYml.indexOf(
+      'npm pack -w @vybestack/llxprt-code-providers',
+    );
+    const cliPack = buildSandboxYml.indexOf(
+      'npm pack -w @vybestack/llxprt-code --pack-destination',
+    );
+
+    expect(toolsPack).toBeGreaterThan(0);
+    expect(corePack).toBeGreaterThan(toolsPack);
+    expect(providersPack).toBeGreaterThan(corePack);
+    expect(cliPack).toBeGreaterThan(providersPack);
+  });
+});
+
 describe('Dockerfile', () => {
   const dockerfile = readRootFile('Dockerfile');
 
-  it('copies providers tarball after core and before CLI', () => {
+  it('copies tools tarball before core, providers, and CLI', () => {
     const coreCopy = dockerfile.indexOf(
       'COPY --chown=node:node packages/core/dist/vybestack-llxprt-code-core-*.tgz',
+    );
+    const toolsCopy = dockerfile.indexOf(
+      'COPY --chown=node:node packages/tools/dist/vybestack-llxprt-code-tools-*.tgz',
     );
     const providersCopy = dockerfile.indexOf(
       'COPY --chown=node:node packages/providers/dist/vybestack-llxprt-code-providers-*.tgz',
@@ -182,8 +259,18 @@ describe('Dockerfile', () => {
       'COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz',
     );
 
+    expect(toolsCopy, 'Dockerfile should COPY tools tarball').toBeGreaterThan(
+      0,
+    );
     expect(coreCopy).toBeGreaterThan(0);
-    expect(providersCopy).toBeGreaterThan(coreCopy);
+    expect(
+      toolsCopy,
+      'tools should come before core in Dockerfile COPY order',
+    ).toBeLessThan(coreCopy);
+    expect(
+      providersCopy,
+      'providers should come after core in Dockerfile COPY order',
+    ).toBeGreaterThan(coreCopy);
     expect(cliCopy).toBeGreaterThan(providersCopy);
   });
 
@@ -193,12 +280,28 @@ describe('Dockerfile', () => {
       dockerfile.indexOf('npm cache clean --force'),
     );
 
+    expect(installCommand).toContain('vybestack-llxprt-code-tools-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-core-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-providers-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-*.tgz');
     expect(installCommand).not.toContain(
       '&& \
     npm install -g',
+    );
+  });
+
+  it('copies core tarball, tools tarball, providers tarball, and CLI tarball', () => {
+    expect(dockerfile).toContain(
+      'COPY --chown=node:node packages/core/dist/vybestack-llxprt-code-core-*.tgz',
+    );
+    expect(dockerfile).toContain(
+      'COPY --chown=node:node packages/tools/dist/vybestack-llxprt-code-tools-*.tgz',
+    );
+    expect(dockerfile).toContain(
+      'COPY --chown=node:node packages/providers/dist/vybestack-llxprt-code-providers-*.tgz',
+    );
+    expect(dockerfile).toContain(
+      'COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz',
     );
   });
 });
@@ -212,20 +315,37 @@ describe('scripts/bind-release-deps.js', () => {
     expect(bindModule.deriveNpmReleasePackages()).toEqual(npmReleasePackages());
   });
 
+  it('derives npm release packages in canonical publish order', async () => {
+    const bindModule = await import(
+      path.join(ROOT, 'scripts/bind-release-deps.js')
+    );
+
+    expect(bindModule.deriveNpmReleasePackages()).toEqual([
+      '@vybestack/llxprt-code-tools',
+      '@vybestack/llxprt-code-core',
+      '@vybestack/llxprt-code-lsp',
+      '@vybestack/llxprt-code-providers',
+      '@vybestack/llxprt-code',
+    ]);
+  });
+
   it('rewrites publishable workspace file dependencies to exact versions', async () => {
     const bindModule = await import(
       path.join(ROOT, 'scripts/bind-release-deps.js')
     );
     const workspaceInfo = new Map([
       ['@vybestack/llxprt-code-core', { version: '1.2.3' }],
+      ['@vybestack/llxprt-code-tools', { version: '1.2.3' }],
       ['@vybestack/llxprt-code-providers', { version: '1.2.3' }],
     ]);
     const releasePackages = new Set([
       '@vybestack/llxprt-code-core',
+      '@vybestack/llxprt-code-tools',
       '@vybestack/llxprt-code-providers',
     ]);
     const deps = {
       '@vybestack/llxprt-code-core': 'file:../core',
+      '@vybestack/llxprt-code-tools': 'file:../tools',
       '@vybestack/llxprt-code-providers': 'file:../providers',
       '@vybestack/llxprt-code-test-utils': 'file:../test-utils',
       chalk: '^5.3.0',
@@ -236,6 +356,7 @@ describe('scripts/bind-release-deps.js', () => {
     );
     expect(deps).toEqual({
       '@vybestack/llxprt-code-core': '1.2.3',
+      '@vybestack/llxprt-code-tools': '1.2.3',
       '@vybestack/llxprt-code-providers': '1.2.3',
       '@vybestack/llxprt-code-test-utils': 'file:../test-utils',
       chalk: '^5.3.0',

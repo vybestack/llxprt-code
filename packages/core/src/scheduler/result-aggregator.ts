@@ -17,8 +17,8 @@
  */
 
 import type { ToolCallResponseInfo } from '../core/turn.js';
-import type { ToolResult } from '../tools/tools.js';
-import { ToolErrorType } from '../tools/tool-error.js';
+import type { ToolResult } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import {
   convertToFunctionResponse,

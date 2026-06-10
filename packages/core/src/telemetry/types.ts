@@ -9,8 +9,8 @@ import type { GenerateContentResponseUsageMetadata } from '@google/genai';
 import type { Config } from '../config/config.js';
 import { type CompletedToolCall } from '../core/coreToolScheduler.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
-import { ToolConfirmationOutcome } from '../tools/tools.js';
-import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { DiscoveredMCPTool } from '@vybestack/llxprt-code-tools';
 import type { IContent } from '../services/history/IContent.js';
 export interface ProviderCapabilities {
   supportsStreaming: boolean;

@@ -21,7 +21,7 @@ import { triggerToolNotificationHook } from '../core/coreToolHookTriggers.js';
 import { NotificationType } from './types.js';
 import type { Config } from '../config/config.js';
 import type { HookSystem } from './hookSystem.js';
-import type { ToolCallConfirmationDetails } from '../tools/tools.js';
+import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
 
 describe('Notification Hook (ToolPermission)', () => {
   let mockConfig: Config;

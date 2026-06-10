@@ -38,7 +38,7 @@ import {
 } from '../runtime/AgentRuntimeLoader.js';
 import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { debugLogger } from '../utils/debugLogger.js';

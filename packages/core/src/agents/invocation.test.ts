@@ -14,7 +14,7 @@ import type {
 } from './types.js';
 import { AgentTerminateMode } from './types.js';
 import { makeFakeConfig } from '../test-utils/config.js';
-import { ToolErrorType } from '../tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { type z } from 'zod';

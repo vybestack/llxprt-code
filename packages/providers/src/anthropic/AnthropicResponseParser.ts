@@ -14,8 +14,8 @@ import type {
   ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderToolset } from '../IProvider.js';
-import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
-import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 import { coerceParametersToSchema } from '@vybestack/llxprt-code-core/utils/parameterCoercion.js';
 
 export type ResponseParserOptions = {

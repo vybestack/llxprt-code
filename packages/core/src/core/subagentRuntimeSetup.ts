@@ -35,7 +35,7 @@ import type {
   ToolMetadata,
 } from '../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from './contentGenerator.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from './prompts.js';

@@ -9,7 +9,7 @@ import {
   getFileDiffFromResultDisplay,
   computeAddedAndRemovedLines,
 } from './fileDiffUtils.js';
-import type { FileDiff, ToolResultDisplay } from '../tools/tools.js';
+import type { FileDiff, ToolResultDisplay } from '@vybestack/llxprt-code-tools';
 
 describe('fileDiffUtils', () => {
   describe('getFileDiffFromResultDisplay', () => {

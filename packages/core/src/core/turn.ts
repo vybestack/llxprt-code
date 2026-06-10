@@ -21,8 +21,8 @@ import {
   type ToolCallConfirmationDetails,
   type ToolResult,
   type ToolResultDisplay,
-} from '../tools/tools.js';
-import type { ToolErrorType } from '../tools/tool-error.js';
+} from '@vybestack/llxprt-code-tools';
+import type { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import {
   getResponseText,
   getFunctionCalls,
@@ -35,7 +35,7 @@ import {
   UnauthorizedError,
   toFriendlyError,
 } from '../utils/errors.js';
-import { normalizeToolName } from '../tools/toolNameUtils.js';
+import { normalizeToolName } from '@vybestack/llxprt-code-tools';
 import type { GeminiChat } from './geminiChat.js';
 import {
   InvalidStreamError,

@@ -25,10 +25,10 @@ import type {
   AgentRuntimeContext,
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
-import { ToolErrorType } from '../tools/tool-error.js';
-import { type ToolResultDisplay } from '../tools/tools.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { type ToolResultDisplay } from '@vybestack/llxprt-code-tools';
 import { type CompletedToolCall } from './coreToolScheduler.js';
-import { TodoStore } from '../tools/todo-store.js';
+import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
 import { debugLogger } from '../utils/debugLogger.js';
 import { SubagentTerminateMode, type OutputObject } from './subagentTypes.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';

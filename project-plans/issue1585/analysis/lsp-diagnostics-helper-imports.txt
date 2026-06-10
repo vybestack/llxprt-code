@@ -1,0 +1,2 @@
+7:import path from 'path';
+8:import type { Config } from '../config/config.js';

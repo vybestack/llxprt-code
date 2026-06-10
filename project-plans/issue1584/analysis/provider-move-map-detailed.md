@@ -323,7 +323,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 201 | `packages/core/src/providers/openai-vercel/index.ts` | `packages/providers/src/openai-vercel/index.ts` | Rule 4 | B (barrel export) |
 | 202 | `packages/core/src/providers/openai-vercel/messageConversion.ts` | `packages/providers/src/openai-vercel/messageConversion.ts` | Rule 4 | B |
 | 203 | `packages/core/src/providers/openai-vercel/schemaConverter.ts` | `packages/providers/src/openai-vercel/schemaConverter.ts` | Rule 4 | B |
-| 204 | `packages/core/src/providers/openai-vercel/toolIdUtils.ts` | `packages/core/src/tools/toolIdNormalization.ts` | Rule 4 | B |
+| 204 | `packages/core/src/providers/openai-vercel/toolIdUtils.ts` | `packages/tools/src/formatters/toolIdNormalization.ts` | Rule 4 | B |
 | 205 | `packages/core/src/providers/openai-vercel/errorHandling.test.ts` | `packages/providers/src/openai-vercel/errorHandling.test.ts` | Rule 4 | B |
 | 206 | `packages/core/src/providers/openai-vercel/messageConversion.test.ts` | `packages/providers/src/openai-vercel/messageConversion.test.ts` | Rule 4 | B |
 | 207 | `packages/core/src/providers/openai-vercel/modelListing.test.ts` | `packages/providers/src/openai-vercel/modelListing.test.ts` | Rule 4 | B |
@@ -335,7 +335,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 213 | `packages/core/src/providers/openai-vercel/providerRegistry.test.ts` | `packages/providers/src/openai-vercel/providerRegistry.test.ts` | Rule 4 | B |
 | 214 | `packages/core/src/providers/openai-vercel/schemaConverter.issue1844.test.ts` | `packages/providers/src/openai-vercel/schemaConverter.issue1844.test.ts` | Rule 4 | B |
 | 215 | `packages/core/src/providers/openai-vercel/streaming.test.ts` | `packages/providers/src/openai-vercel/streaming.test.ts` | Rule 4 | B |
-| 216 | `packages/core/src/providers/openai-vercel/toolIdUtils.test.ts` | `packages/core/src/tools/toolIdNormalization.test.ts` | Rule 4 | B |
+| 216 | `packages/core/src/providers/openai-vercel/toolIdUtils.test.ts` | `packages/core/src/runtime/contracts/toolIdNormalization-contract.test.ts` | Rule 4 | B |
 | 217 | `packages/core/src/providers/openai-vercel/__tests__/schemaConverter.parameterFallback.test.ts` | `packages/providers/src/openai-vercel/__tests__/schemaConverter.parameterFallback.test.ts` | Rule 1 | B |
 
 ### synthetic/ (Rule 4)
@@ -379,8 +379,8 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 242 | `packages/core/src/providers/utils/thinkingExtraction.test.ts` | `packages/providers/src/utils/thinkingExtraction.test.ts` | Rule 13 | B |
 | 243 | `packages/core/src/providers/utils/toolFormatDetection.ts` | `packages/providers/src/utils/toolFormatDetection.ts` | Rule 13 | B |
 | 244 | `packages/core/src/providers/utils/toolFormatDetection.test.ts` | `packages/providers/src/utils/toolFormatDetection.test.ts` | Rule 13 | B |
-| 245 | `packages/core/src/providers/utils/toolIdNormalization.ts` | `packages/core/src/tools/toolIdNormalization.ts` | Rule 13 (EXPLICIT EXCEPTION) | E (Core-owned — currently imported by `core/src/tools/ToolIdStrategy.ts`. Must move to providers, then core imports from providers or copies to core utility) |
-| 246 | `packages/core/src/providers/utils/toolIdNormalization.test.ts` | `packages/core/src/tools/toolIdNormalization.test.ts` | Rule 13 (EXPLICIT EXCEPTION) | E |
+| 245 | `packages/core/src/providers/utils/toolIdNormalization.ts` | `packages/tools/src/formatters/toolIdNormalization.ts` | Rule 13 (EXPLICIT EXCEPTION) | E (Core-owned — currently imported by `core/src/tools/ToolIdStrategy.ts`. Must move to providers, then core imports from providers or copies to core utility) |
+| 246 | `packages/core/src/providers/utils/toolIdNormalization.test.ts` | `packages/core/src/runtime/contracts/toolIdNormalization-contract.test.ts` | Rule 13 (EXPLICIT EXCEPTION) | E |
 | 247 | `packages/core/src/providers/utils/toolNameNormalization.ts` | `packages/providers/src/utils/toolNameNormalization.ts` | Rule 13 | B |
 | 248 | `packages/core/src/providers/utils/toolNameNormalization.test.ts` | `packages/providers/src/utils/toolNameNormalization.test.ts` | Rule 13 | B |
 | 249 | `packages/core/src/providers/utils/toolResponsePayload.ts` | `packages/providers/src/utils/toolResponsePayload.ts` | Rule 13 | B |
@@ -397,7 +397,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | **B** | Provider orchestration (`ProviderManager`, concrete providers) | 4 core files | Core uses `IProviderManager` structural interface only. CLI/runtime constructs concrete `ProviderManager`. |
 | **C** | Provider content generation (`ProviderContentGenerator`) | 1 core file | Core defines `ContentGenerator` interface; provider package exports implementation. CLI injects. |
 | **D** | Provider tokenizers | 1 core file (`HistoryService`) | Core defines `RuntimeTokenizer` contract; provider package implements concrete tokenizers. CLI injects. |
-| **E** | Tool ID normalization (core-owned, currently in providers) | 1 core file (`ToolIdStrategy`) | Move `toolIdNormalization` to core utility path, OR core imports from providers. P03/P05 decision: copy to `packages/core/src/tools/toolIdNormalization.ts`. |
+| **E** | Tool ID normalization (core-owned, currently in providers) | 1 core file (`ToolIdStrategy`) | Issue1585 follow-up decision: shared tool ID normalization now lives in `packages/tools/src/formatters/toolIdNormalization.ts` so providers and core consume the lower-level tools package instead of keeping this utility in core or importing providers from core. |
 | **F** | Provider runtime errors (`MissingProviderRuntimeError` and others) | 1 core file (`providerRuntimeContext`) | Split: `MissingProviderRuntimeError` → core-owned runtime error. Provider-specific errors → providers package. |
 | **G** | Provider telemetry types (`ProviderTelemetryContext`) | 1 core file (`telemetry/types.ts`) | Core defines `TelemetryContext` structural type. Provider package maps to it. |
 | **H** | Provider config types (`IProviderConfig`, `BucketFailureReason`, `providerConfigKeys`) | 3 core config files | Core defines serializable config shapes. Provider package owns `IProviderConfig`. |

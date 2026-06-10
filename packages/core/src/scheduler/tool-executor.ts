@@ -16,7 +16,7 @@
  */
 
 import type { ScheduledToolCall } from './types.js';
-import type { ToolResult } from '../tools/tools.js';
+import type { ToolResult } from '@vybestack/llxprt-code-tools';
 import type { Config } from '../config/config.js';
 import {
   triggerBeforeToolHook,

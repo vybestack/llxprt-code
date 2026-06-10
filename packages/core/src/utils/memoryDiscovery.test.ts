@@ -13,7 +13,7 @@ import { loadServerHierarchicalMemory } from './memoryDiscovery.js';
 import {
   setLlxprtMdFilename,
   DEFAULT_CONTEXT_FILENAME,
-} from '../tools/memoryTool.js';
+} from '@vybestack/llxprt-code-tools';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { LLXPRT_DIR } from './paths.js';
 import type { GeminiCLIExtension } from '../config/config.js';

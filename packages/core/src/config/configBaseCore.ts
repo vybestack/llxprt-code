@@ -19,9 +19,9 @@ import type {
 import type { GeminiClient } from '../core/client.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { McpClientManager } from '../tools/mcp-client-manager.js';
-import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '../tools/memoryTool.js';
+import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '@vybestack/llxprt-code-tools';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
 import type { HookSystem } from '../hooks/hookSystem.js';

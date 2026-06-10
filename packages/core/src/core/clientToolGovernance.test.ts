@@ -13,7 +13,7 @@ import {
   shouldIncludeSubagentDelegationForConfig,
 } from './clientToolGovernance.js';
 import type { Config } from '../config/config.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ToolRegistryView } from '../runtime/AgentRuntimeContext.js';
 import type { SubagentManager } from '../config/subagentManager.js';
 

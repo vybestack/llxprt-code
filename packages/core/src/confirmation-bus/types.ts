@@ -2,7 +2,7 @@ import type { FunctionCall } from '@google/genai';
 import type {
   ToolConfirmationOutcome,
   ToolConfirmationPayload,
-} from '../tools/tool-confirmation-types.js';
+} from '@vybestack/llxprt-code-tools';
 import type { ToolCall } from '../scheduler/types.js';
 
 export enum MessageBusType {

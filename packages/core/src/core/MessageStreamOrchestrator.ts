@@ -22,7 +22,7 @@ import type { AgentHookManager } from './AgentHookManager.js';
 import type { AfterAgentHookOutput } from '../hooks/types.js';
 import { estimateTextOnlyLength, extractPromptText } from './clientHelpers.js';
 import { tokenLimit } from './tokenLimits.js';
-import type { Todo } from '../tools/todo-schemas.js';
+import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
 

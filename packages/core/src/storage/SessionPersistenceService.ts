@@ -13,7 +13,7 @@ import { DebugLogger } from '../debug/index.js';
 import {
   type ToolResultDisplay,
   type ToolCallConfirmationDetails,
-} from '../tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 
 const logger = new DebugLogger('llxprt:session:persistence');
 

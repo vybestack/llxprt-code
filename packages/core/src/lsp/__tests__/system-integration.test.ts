@@ -17,10 +17,12 @@ import { Config } from '../../config/config.js';
 import type { LspConfig } from '../types.js';
 import { initializeTestConfig } from '../../test-utils/config.js';
 
-import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '../../tools/memoryTool.js';
+import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import * as lspServiceClientModule from '../lsp-service-client.js';
 
-vi.mock('../../tools/tool-registry', () => {
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
     const tools: Array<{
       serverName?: string;
@@ -49,26 +51,32 @@ vi.mock('../../tools/tool-registry', () => {
       }),
     };
   });
-  return { ToolRegistry: ToolRegistryMock };
+  return {
+    ...actual,
+    ToolRegistry: ToolRegistryMock,
+    MemoryTool: vi.fn(),
+    setLlxprtMdFilename: vi.fn(),
+    getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
+    DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
+    LLXPRT_CONFIG_DIR: '.llxprt',
+    DiscoveredMCPTool: vi
+      .fn()
+      .mockImplementation(
+        (
+          _mcpToolService: unknown,
+          serverName: string,
+          serverToolName: string,
+          _description: string,
+          _inputSchema: unknown,
+        ) => ({
+          serverName,
+          serverToolName,
+          name: `${serverName}__${serverToolName}`,
+          displayName: `${serverName}__${serverToolName}`,
+        }),
+      ),
+  };
 });
-
-vi.mock('../../tools/ls');
-vi.mock('../../tools/read-file');
-vi.mock('../../tools/grep');
-vi.mock('../../tools/glob');
-vi.mock('../../tools/edit');
-vi.mock('../../tools/shell');
-vi.mock('../../tools/write-file');
-vi.mock('../../tools/google-web-fetch');
-vi.mock('../../tools/read-many-files');
-vi.mock('../../tools/memoryTool', () => ({
-  MemoryTool: vi.fn(),
-  setLlxprtMdFilename: vi.fn(),
-  getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
-  DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
-  LLXPRT_CONFIG_DIR: '.llxprt',
-}));
-
 vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../core/contentGenerator.js')>();
@@ -198,24 +206,6 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
     }),
     close: vi.fn().mockResolvedValue(undefined),
   })),
-}));
-
-vi.mock('../../tools/mcp-tool.js', () => ({
-  DiscoveredMCPTool: vi
-    .fn()
-    .mockImplementation(
-      (
-        _callableTool: unknown,
-        serverName: string,
-        serverToolName: string,
-        _description: string,
-        _inputSchema: unknown,
-      ) => ({
-        serverName,
-        serverToolName,
-        name: `${serverName}__${serverToolName}`,
-      }),
-    ),
 }));
 
 vi.mock('../../utils/memoryDiscovery.js', () => ({
@@ -433,30 +423,26 @@ describe('LSP system integration (P35)', () => {
 
   it('edit and write tools keep LSP integration call sites', () => {
     const editPath = fileURLToPath(
-      new URL('../../tools/edit.ts', import.meta.url),
-    );
-    const writePath = fileURLToPath(
-      new URL('../../tools/write-file.ts', import.meta.url),
+      new URL('../../../../tools/src/tools/edit.ts', import.meta.url),
     );
     const helperPath = fileURLToPath(
-      new URL('../../tools/lsp-diagnostics-helper.ts', import.meta.url),
+      new URL(
+        '../../../../tools/src/utils/lsp-diagnostics-helper.ts',
+        import.meta.url,
+      ),
     );
 
     const editSource = readFileSync(editPath, 'utf8');
-    const writeSource = readFileSync(writePath, 'utf8');
     const helperSource = readFileSync(helperPath, 'utf8');
 
     // edit.ts uses the shared helper via import
     expect(editSource).toContain('collectLspDiagnosticsBlock');
 
-    // write-file.ts still has direct LSP calls for multi-file diagnostics
-    expect(writeSource).toContain('getLspServiceClient');
-    expect(writeSource).toContain('checkFile');
-    expect(writeSource).toContain('getAllDiagnostics');
-
-    // The shared helper contains the actual LSP integration calls
-    expect(helperSource).toContain('getLspServiceClient');
-    expect(helperSource).toContain('checkFile');
+    // The moved tools-package path keeps the legacy LSP client bridge
+    // and the shared helper contains the current diagnostics integration.
+    expect(editSource).toContain('getLspServiceClient');
+    expect(editSource).toContain('checkFile');
+    expect(helperSource).toContain('waitForDiagnostics');
   });
 
   it('still allows setting memory filename helper through mocks', () => {

@@ -46,7 +46,7 @@ import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeP
 import { initializeTestConfig } from '../test-utils/config.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import { ToolRegistry } from '../tools/tool-registry.js';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import type {
   Content,
@@ -57,7 +57,7 @@ import type {
   Part,
 } from '@google/genai';
 import { Type } from '@google/genai';
-import { ToolErrorType } from '../tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type { HistoryService } from '../services/history/HistoryService.js';
 const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
@@ -67,9 +67,14 @@ const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
   return { mockReadTodos, TodoStoreMock };
 });
 
-vi.mock('../tools/todo-store.js', () => ({
-  TodoStore: TodoStoreMock,
-}));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: TodoStoreMock,
+  };
+});
 
 vi.mock('./geminiChat.js');
 vi.mock('./contentGenerator.js', async (importOriginal) => {

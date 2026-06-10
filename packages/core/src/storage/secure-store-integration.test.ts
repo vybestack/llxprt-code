@@ -27,7 +27,7 @@ import {
   SecureStoreError,
   type KeyringAdapter,
 } from './secure-store.js';
-import { maskKeyForDisplay } from '../tools/tool-key-storage.js';
+import { maskKeyForDisplay } from '@vybestack/llxprt-code-tools';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 

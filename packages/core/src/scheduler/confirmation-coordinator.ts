@@ -24,9 +24,9 @@ import {
   type ToolConfirmationResponse,
   type SerializableConfirmationDetails,
 } from '../confirmation-bus/types.js';
-import { ToolConfirmationOutcome } from '../tools/tools.js';
-import type { ToolCallConfirmationDetails } from '../tools/tools.js';
-import type { ToolConfirmationPayload } from '../tools/tool-confirmation-types.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
+import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
 import type { ToolCallResponseInfo } from '../core/turn.js';
 import { PolicyDecision } from '../policy/types.js';
 import {
@@ -39,7 +39,7 @@ import {
   isModifiableDeclarativeTool,
   modifyWithEditor,
   type ModifyContext,
-} from '../tools/modifiable-tool.js';
+} from '@vybestack/llxprt-code-tools';
 import { doesToolInvocationMatch } from '../utils/tool-utils.js';
 import { DebugLogger } from '../debug/index.js';
 import type { WaitingToolCall, ToolCall, ValidatingToolCall } from './types.js';

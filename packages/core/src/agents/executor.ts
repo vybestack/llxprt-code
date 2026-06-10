@@ -26,8 +26,10 @@ import type {
   Schema,
 } from '@google/genai';
 import { executeToolCall } from '../core/nonInteractiveToolExecutor.js';
-import { ToolRegistry } from '../tools/tool-registry.js';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import { CoreMessageBusAdapter } from '../tools-adapters/CoreMessageBusAdapter.js';
+import { CoreToolRegistryHostAdapter } from '../tools-adapters/CoreToolRegistryHostAdapter.js';
 
 import { type ToolCallRequestInfo } from '../core/turn.js';
 import type {
@@ -101,7 +103,10 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
      * @requirement REQ-D01-001.2
      * @pseudocode lines 56-72
      */
-    const agentToolRegistry = new ToolRegistry(runtimeContext, messageBus);
+    const agentToolRegistry = new ToolRegistry(
+      new CoreToolRegistryHostAdapter(runtimeContext),
+      new CoreMessageBusAdapter(messageBus),
+    );
     const parentToolRegistry = runtimeContext.getToolRegistry();
 
     if (definition.toolConfig) {

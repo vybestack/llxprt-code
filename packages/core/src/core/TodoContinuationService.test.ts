@@ -13,7 +13,7 @@ import {
 import { GeminiEventType } from './turn.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import type { Config } from '../config/config.js';
-import type { Todo } from '../tools/todo-schemas.js';
+import type { Todo } from '@vybestack/llxprt-code-tools';
 
 // Mock TodoStore so readTodoSnapshot doesn't hit the filesystem
 const { todoStoreReadMock, mockTodoStoreConstructor } = vi.hoisted(() => {
@@ -27,9 +27,14 @@ const { todoStoreReadMock, mockTodoStoreConstructor } = vi.hoisted(() => {
   };
 });
 
-vi.mock('../tools/todo-store.js', () => ({
-  TodoStore: mockTodoStoreConstructor,
-}));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
 
 vi.mock('../services/todo-reminder-service.js', () => ({
   TodoReminderService: vi.fn().mockImplementation(() => ({

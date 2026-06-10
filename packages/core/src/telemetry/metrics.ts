@@ -23,7 +23,7 @@ import {
   METRIC_FILE_OPERATION_COUNT,
 } from './constants.js';
 import type { Config } from '../config/config.js';
-import { type DiffStat } from '../tools/tools.js';
+import { type DiffStat } from '@vybestack/llxprt-code-tools';
 
 export enum FileOperation {
   CREATE = 'create',

@@ -8,7 +8,7 @@ import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.
 import type { RuntimeProviderManager as IRuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import type { Config } from '../config/config.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   logApiRequest,
   logApiResponse,

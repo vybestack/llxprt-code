@@ -53,7 +53,7 @@ import {
 } from './geminiChatTypes.js';
 import type { ResponseOutcome } from '../utils/generateContentResponseUtilities.js';
 import { analyzeResponseOutcome } from '../utils/generateContentResponseUtilities.js';
-import { hasCycleInSchema } from '../tools/tools.js';
+import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
 import {
   AgentExecutionStoppedError,

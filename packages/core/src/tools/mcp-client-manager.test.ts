@@ -9,7 +9,7 @@ import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
 import type { Config } from '../config/config.js';
-import type { ToolRegistry } from './tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';

@@ -11,6 +11,7 @@ import { handleAtCommand } from './atCommandProcessor.js';
 import {
   type Config,
   FileDiscoveryService,
+  CoreToolHostAdapter,
   GlobTool,
   type MessageBus,
   ReadManyFilesTool,
@@ -133,9 +134,10 @@ describe('handleAtCommand', () => {
       removeAllListeners: vi.fn(),
       listenerCount: vi.fn().mockReturnValue(0),
     } as unknown as MessageBus;
+    const toolHost = new CoreToolHostAdapter(mockConfig);
     const registry = new ToolRegistry(mockConfig, mockMessageBus);
-    registry.registerTool(new ReadManyFilesTool(mockConfig, mockMessageBus));
-    registry.registerTool(new GlobTool(mockConfig, mockMessageBus));
+    registry.registerTool(new ReadManyFilesTool(toolHost));
+    registry.registerTool(new GlobTool(toolHost));
     getToolRegistry.mockReturnValue(registry);
   });
 

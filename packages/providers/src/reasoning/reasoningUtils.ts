@@ -10,8 +10,8 @@ import type {
   ThinkingBlock,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
-import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';

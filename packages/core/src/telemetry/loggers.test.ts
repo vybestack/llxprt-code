@@ -78,8 +78,7 @@ import * as sdk from './sdk.js';
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 import type { GenerateContentResponseUsageMetadata } from '@google/genai';
 import * as uiTelemetry from './uiTelemetry.js';
-import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
-import type { CallableTool } from '../tools/tool.js';
+import { DiscoveredMCPTool } from '@vybestack/llxprt-code-tools';
 
 // Mock ClearcutLogger to avoid import errors
 const mockClearcutLogger = {
@@ -831,7 +830,7 @@ describe('loggers', () => {
 
     it('should log a tool call with mcp_server_name for MCP tools', () => {
       const mockMcpTool = new DiscoveredMCPTool(
-        {} as CallableTool,
+        {} as never,
         'mock_mcp_server',
         'mock_mcp_tool',
         'tool description',

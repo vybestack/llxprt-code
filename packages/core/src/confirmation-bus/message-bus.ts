@@ -12,7 +12,7 @@ import {
 import {
   ToolConfirmationOutcome,
   type ToolConfirmationPayload,
-} from '../tools/tool-confirmation-types.js';
+} from '@vybestack/llxprt-code-tools';
 import { debugLogger } from '../utils/debugLogger.js';
 
 type MessageHandler<T extends MessageBusMessage = MessageBusMessage> = (

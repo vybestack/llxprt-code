@@ -47,7 +47,7 @@ interface AnthropicMessage {
 }
 
 // Mock the ToolFormatter
-vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
     toProviderFormat: vi.fn((tools: ITool[], format: string) => {
       if (format === 'anthropic') {

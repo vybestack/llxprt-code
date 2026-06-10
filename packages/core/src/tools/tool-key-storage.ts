@@ -21,6 +21,10 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
+  getSupportedToolNames,
+  isValidToolKeyName,
+} from '@vybestack/llxprt-code-tools';
+import {
   SecureStore,
   SecureStoreError,
   type KeyringAdapter,
@@ -65,53 +69,6 @@ const DEFAULT_TOOLS_DIR = (): string => {
   // Last resort: hardcoded POSIX path (should never reach here in real environments)
   return '/tmp/llxprt-tools-fallback';
 };
-
-// ─── Registry Types & Data ───────────────────────────────────────────────────
-
-export interface ToolKeyRegistryEntry {
-  toolKeyName: string;
-  displayName: string;
-  urlParamName: string;
-  description: string;
-}
-
-export const TOOL_KEY_REGISTRY = new Map<string, ToolKeyRegistryEntry>([
-  [
-    'exa',
-    {
-      toolKeyName: 'exa',
-      displayName: 'Exa Search',
-      urlParamName: 'exaApiKey',
-      description: 'API key for Exa web and code search',
-    },
-  ],
-]);
-
-// ─── Registry Helpers ────────────────────────────────────────────────────────
-
-export function isValidToolKeyName(toolName: string): boolean {
-  return TOOL_KEY_REGISTRY.has(toolName);
-}
-
-export function getToolKeyEntry(
-  toolName: string,
-): ToolKeyRegistryEntry | undefined {
-  return TOOL_KEY_REGISTRY.get(toolName);
-}
-
-export function getSupportedToolNames(): string[] {
-  return Array.from(TOOL_KEY_REGISTRY.keys());
-}
-
-// ─── Display Helpers ─────────────────────────────────────────────────────────
-
-export function maskKeyForDisplay(key: string): string {
-  if (key.length <= 8) return '*'.repeat(key.length);
-  const first2 = key.substring(0, 2);
-  const last2 = key.substring(key.length - 2);
-  const middle = '*'.repeat(key.length - 4);
-  return `${first2}${middle}${last2}`;
-}
 
 // ─── Module-level Lazy Singleton ─────────────────────────────────────────────
 
