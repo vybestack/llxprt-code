@@ -5,12 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import {
-  Config,
-  SettingsService,
-  coreEvents,
-  DebugLogger,
-} from '@vybestack/llxprt-code-core';
+import { Config, coreEvents, DebugLogger } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../integration-tests/test-utils.js';
 
 import type { LoadedSettings } from '../config/settings.js';

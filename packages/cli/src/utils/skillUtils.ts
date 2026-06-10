@@ -9,10 +9,10 @@
 import { SettingScope } from '../config/settings.js';
 import type { SkillActionResult } from './skillSettings.js';
 import {
-  Storage,
   loadSkillsFromDir,
   type SkillDefinition,
 } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { cloneFromGit } from '../config/extensions/github.js';
 import extract from 'extract-zip';
 import * as fs from 'node:fs/promises';

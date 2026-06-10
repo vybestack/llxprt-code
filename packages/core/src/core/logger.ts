@@ -9,7 +9,7 @@ import { promises as fs } from 'node:fs';
 import { type Content, type Part } from '@google/genai';
 import { ensureLlxprtDirExists } from '../utils/paths.js';
 import type { EmojiFilter } from '../filters/EmojiFilter.js';
-import type { Storage } from '../config/storage.js';
+import type { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
 
 const LOG_FILE_NAME = 'logs.json';

@@ -30,6 +30,7 @@
   "dependencies": {
     "@google/genai": "1.30.0",
     "@modelcontextprotocol/sdk": "^1.25.2",
+    "@vybestack/llxprt-code-settings": "file:../settings",
     "google-auth-library": "^9.11.0",
     "shell-quote": "^1.8.3"
   },

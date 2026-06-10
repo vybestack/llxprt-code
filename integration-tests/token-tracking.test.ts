@@ -12,7 +12,7 @@ import { LoggingProviderWrapper } from '@vybestack/llxprt-code-providers/Logging
 import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-settings/settings/settingsServiceInstance.js';
 
 // Mock the telemetry service to capture logs
 vi.mock('../packages/core/src/telemetry/TelemetryService', () => {

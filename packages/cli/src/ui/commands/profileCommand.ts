@@ -25,10 +25,8 @@ import {
   type CompleterFn,
 } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import {
-  DebugLogger,
-  getProtectedSettingKeys,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { getProtectedSettingKeys } from '@vybestack/llxprt-code-settings';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import { createTokenStore } from '../../auth/proxy/credential-store-factory.js';
 

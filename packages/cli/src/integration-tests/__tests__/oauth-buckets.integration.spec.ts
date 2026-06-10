@@ -21,8 +21,8 @@ import {
   SecureStore,
   type KeyringAdapter,
   type OAuthToken,
-  type StandardProfile,
 } from '@vybestack/llxprt-code-core';
+import type { StandardProfile } from '@vybestack/llxprt-code-settings';
 import { OAuthManager } from '../../auth/oauth-manager.js';
 import type { OAuthProvider } from '../../auth/types.js';
 import {

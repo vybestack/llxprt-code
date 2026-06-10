@@ -19,9 +19,9 @@ import { configureCliStatelessHardening } from './statelessHardening.js';
 import { setCliRuntimeContext } from './runtimeLifecycle.js';
 import type {
   Config,
-  SettingsService,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 
 import {

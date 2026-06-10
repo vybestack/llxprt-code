@@ -10,7 +10,7 @@ import { createPolicyUpdater } from './config.js';
 import { PolicyEngine } from './policy-engine.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import toml from '@iarna/toml';
 import { ShellToolInvocation } from '../tools/shell.js';
 import { type Config } from '../config/config.js';
@@ -21,7 +21,12 @@ import {
 import * as shellUtils from '../utils/shell-utils.js';
 
 vi.mock('node:fs/promises');
-vi.mock('../config/storage.js');
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: vi.fn(),
+}));
 vi.mock('../utils/shell-utils.js', () => ({
   getCommandRoots: vi.fn(),
   stripShellWrapper: vi.fn(),

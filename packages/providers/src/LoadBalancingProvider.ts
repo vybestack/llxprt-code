@@ -22,7 +22,7 @@ import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderManager } from './ProviderManager.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Profile } from '@vybestack/llxprt-code-core/types/modelParams.js';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 import { LoadBalancerFailoverError } from './errors.js';
 import {
   isNetworkTransientError,

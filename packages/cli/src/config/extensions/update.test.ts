@@ -65,7 +65,7 @@ const mockLogExtensionUninstall = vi.hoisted(() => vi.fn());
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
   return {
     ...actual,
     logExtensionInstallEvent: mockLogExtensionInstallEvent,

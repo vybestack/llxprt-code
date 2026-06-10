@@ -8,7 +8,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+import type {
+  Profile,
+  LoadBalancerProfile,
+} from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,

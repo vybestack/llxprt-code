@@ -1,9 +1,6 @@
-import {
-  type Profile,
-  type ModelParams,
-  DebugLogger,
-  isLoadBalancerProfile,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
+import type { Profile, ModelParams } from '@vybestack/llxprt-code-settings';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';

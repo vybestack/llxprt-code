@@ -17,7 +17,7 @@ import {
 import { OAuthCredentialStorage } from './oauth-credential-storage.js';
 import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
 import type { OAuthCredentials } from '@vybestack/llxprt-code-mcp';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { coreEvents } from '../utils/events.js';
 
 import * as path from 'node:path';

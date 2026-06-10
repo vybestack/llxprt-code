@@ -38,7 +38,7 @@ import { DirectWebFetchTool } from '../tools/direct-web-fetch.js';
 import { TaskTool } from '../tools/task.js';
 import { ListSubagentsTool } from '../tools/list-subagents.js';
 import { CheckAsyncTasksTool } from '../tools/check-async-tasks.js';
-import { ProfileManager } from './profileManager.js';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentManager } from './subagentManager.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';

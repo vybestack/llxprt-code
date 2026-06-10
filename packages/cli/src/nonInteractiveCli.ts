@@ -17,13 +17,14 @@ import {
   uiTelemetryService,
   coreEvents,
   CoreEvent,
-  setActiveProviderRuntimeContext,
   type UserFeedbackPayload,
   type EmojiFilterMode,
   type MessageBus,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { type Part } from '@google/genai';
+import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+
 import readline from 'node:readline';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
 import type { LoadedSettings } from './config/settings.js';
@@ -283,12 +284,14 @@ export async function runNonInteractive(
         process.exit(0);
       }
     });
-    setActiveProviderRuntimeContext({
-      settingsService: config.getSettingsService(),
-      config,
-      runtimeId: config.getSessionId(),
-      metadata: { source: 'nonInteractiveCli' },
-    });
+    activateSettingsRuntimeContext(
+      config.getSettingsService(),
+      config.getSessionId(),
+      {
+        config,
+        metadata: { source: 'nonInteractiveCli' },
+      },
+    );
     emitStreamInit(streamFormatter, config);
     stdinCancellation.setup();
     const query = await resolveNonInteractiveQuery(

@@ -11,9 +11,9 @@ import {
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 const resolveDefaultModel = (): string =>

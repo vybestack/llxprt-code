@@ -21,10 +21,9 @@ import {
   GitService,
   IdeClient,
   Logger,
-  ProfileManager,
-  Storage,
   SubagentManager,
 } from '@vybestack/llxprt-code-core';
+import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { Message, HistoryItemWithoutId } from '../types.js';

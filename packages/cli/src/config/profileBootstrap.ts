@@ -11,10 +11,11 @@
  */
 
 import {
-  SettingsService,
   MessageBus,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
+import { resolveRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createProviderManager } from '../providers/providerManagerInstance.js';
 import { registerCliProviderInfrastructure } from '../runtime/runtimeLifecycle.js';
@@ -373,10 +374,7 @@ export async function prepareRuntimeForProfile(
 ): Promise<BootstrapRuntimeState> {
   const runtimeInit = parsed.runtimeMetadata;
   const providedService = runtimeInit.settingsService;
-  const settingsService =
-    providedService instanceof SettingsService
-      ? providedService
-      : new SettingsService();
+  const settingsService = resolveRuntimeSettingsService(providedService);
 
   const runtimeId = runtimeInit.runtimeId ?? DEFAULT_RUNTIME_ID;
   const metadata = {
@@ -405,12 +403,7 @@ export async function prepareRuntimeForProfile(
       : new MessageBus());
 
   const { manager: providerManager, oauthManager } = createProviderManager(
-    {
-      settingsService: runtime.settingsService,
-      config: runtime.config,
-      runtimeId: runtime.runtimeId,
-      metadata: runtime.metadata,
-    },
+    runtime,
     {
       config: runtime.config,
       runtimeMessageBus,

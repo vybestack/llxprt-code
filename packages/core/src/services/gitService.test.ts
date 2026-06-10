@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GitService } from './gitService.js';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -112,6 +112,9 @@ describe('GitService', () => {
       commit: 'initial',
     });
     storage = new Storage(projectRoot);
+    vi.spyOn(storage, 'getHistoryDir').mockImplementation(() =>
+      path.join(homedir, LLXPRT_DIR, 'history', hash),
+    );
   });
 
   afterEach(async () => {

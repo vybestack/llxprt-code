@@ -17,7 +17,7 @@
 import { type IModel } from './IModel.js';
 import { type ITool } from './ITool.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';

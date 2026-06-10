@@ -14,8 +14,8 @@ import {
   getSettingsService,
   registerSettingsService,
   resetSettingsService,
-} from '../settings/settingsServiceInstance.js';
-import { SettingsService } from '../settings/SettingsService.js';
+} from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,
@@ -69,6 +69,12 @@ describe('AuthPrecedenceResolver', () => {
     // Reset settings service to ensure clean state
     resetSettingsService();
     registerSettingsService(new SettingsService());
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: getSettingsService(),
+        runtimeId: 'auth-precedence-test',
+      }),
+    );
   });
 
   afterEach(() => {

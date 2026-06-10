@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import type { Storage } from '@vybestack/llxprt-code-core';
+import type { Storage } from '@vybestack/llxprt-code-settings';
 import { sessionId, Logger } from '@vybestack/llxprt-code-core';
 
 /**

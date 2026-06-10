@@ -10,14 +10,25 @@
     "paths": {
       "@vybestack/llxprt-code-mcp": ["./index.ts"],
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
-      "@vybestack/llxprt-code-core/*": ["../core/src/*"]
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
+      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"]
     }
   },
   "include": [
     "index.ts",
     "src/**/*.ts",
     "src/**/*.json",
-    "../core/src/types/wasm.d.ts"
+    "../core/src/types/wasm.d.ts",
+    "../settings/index.ts",
+    "../settings/src/**/*.ts"
   ],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "../settings/src/**/*.test.ts",
+    "../settings/src/**/*.spec.ts"
+  ]
 }
