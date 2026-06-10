@@ -858,7 +858,7 @@ export class Config extends ConfigBase {
   async dispose(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     this.agentClient?.dispose();
-    if (this.mcpClientManager) {
+    if (this.mcpClientManager !== undefined) {
       await this.mcpClientManager.stop();
     }
   }

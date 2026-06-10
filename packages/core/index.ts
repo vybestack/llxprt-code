@@ -11,9 +11,6 @@ export {
   DEFAULT_GEMINI_FLASH_LITE_MODEL,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
 } from './src/config/models.js';
-export { QwenDeviceFlow } from './src/auth/qwen-device-flow.js';
-export type { DeviceFlowConfig } from './src/auth/qwen-device-flow.js';
-export { KeyringTokenStore } from './src/auth/keyring-token-store.js';
 export {
   openBrowserSecurely,
   shouldLaunchBrowser,

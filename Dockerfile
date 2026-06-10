@@ -51,6 +51,7 @@ USER node
 
 # Copy packages with proper ownership
 COPY --chown=node:node packages/tools/dist/vybestack-llxprt-code-tools-*.tgz /tmp/
+COPY --chown=node:node packages/auth/dist/vybestack-llxprt-code-auth-*.tgz /tmp/
 COPY --chown=node:node packages/settings/dist/vybestack-llxprt-code-settings-*.tgz /tmp/
 COPY --chown=node:node packages/telemetry/dist/vybestack-llxprt-code-telemetry-*.tgz /tmp/
 COPY --chown=node:node packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz /tmp/
@@ -63,6 +64,7 @@ COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz /tmp/
 # satisfy each other without falling back to the npm registry.
 RUN npm install -g \
       /tmp/vybestack-llxprt-code-tools-*.tgz \
+      /tmp/vybestack-llxprt-code-auth-*.tgz \
       /tmp/vybestack-llxprt-code-settings-*.tgz \
       /tmp/vybestack-llxprt-code-telemetry-*.tgz \
       /tmp/vybestack-llxprt-code-mcp-*.tgz \

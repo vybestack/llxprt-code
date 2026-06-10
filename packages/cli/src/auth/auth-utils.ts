@@ -9,7 +9,7 @@
  * These are pure functions used across multiple OAuth-related modules.
  */
 
-import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 
 /**
  * Checks if the 'authOnly' setting is enabled.
