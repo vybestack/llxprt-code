@@ -11,7 +11,11 @@ import type { HistoryService } from '../../services/history/HistoryService.js';
 import type { IContent } from '../../services/history/IContent.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
-import type { CompressionContext, DensityConfig } from './types.js';
+import type {
+  CompressionContext,
+  CompressionProviderResult,
+  DensityConfig,
+} from './types.js';
 import {
   shouldRetryCompressionError,
   isTransientCompressionError,
@@ -75,7 +79,9 @@ export class CompressionHandler {
     private readonly runtimeContext: AgentRuntimeContext,
     private readonly historyService: HistoryService,
     private readonly generationConfig: GenerateContentConfig,
-    private readonly providerResolver: (contextLabel: string) => IProvider,
+    private readonly providerResolver: (
+      compressionProfileName: string | undefined,
+    ) => CompressionProviderResult | Promise<CompressionProviderResult>,
     private readonly hookTrigger: (
       context: CompressionContext,
     ) => Promise<void>,
@@ -800,7 +806,7 @@ export class CompressionHandler {
       currentTokenCount: this.historyService.getTotalTokens(),
       logger: this.logger,
       resolveProvider: (profileName?) =>
-        this.providerResolver(profileName ?? 'compression'),
+        Promise.resolve(this.providerResolver(profileName)),
       promptResolver,
       promptBaseDir,
       promptContext: {

@@ -23,8 +23,12 @@
 import { readFileSync } from 'node:fs';
 import type { IContent, UsageStats } from '../../services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
+import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
+import type { RuntimeGenerateChatOptions } from '../../runtime/contracts/RuntimeProviderChat.js';
+import type { Config } from '../../config/config.js';
 import type {
   CompressionContext,
+  CompressionProviderResult,
   CompressionResult,
   CompressionResultMetadata,
   CompressionStrategy,
@@ -57,6 +61,22 @@ const LAST_PROMPT_CONTEXT_MAX_LENGTH = 200;
 // MiddleOutStrategy
 // ---------------------------------------------------------------------------
 
+function destructureProviderResult(result: CompressionProviderResult): {
+  provider: IProvider;
+  resolvedRuntime: ProviderRuntimeContext;
+  resolvedConfig?: Config;
+  resolvedOptions?: RuntimeGenerateChatOptions['resolved'];
+  invocation?: RuntimeGenerateChatOptions['invocation'];
+} {
+  return {
+    provider: result.provider,
+    resolvedRuntime: result.runtime,
+    resolvedConfig: result.config,
+    resolvedOptions: result.resolved,
+    invocation: result.invocation,
+  };
+}
+
 export class MiddleOutStrategy implements CompressionStrategy {
   readonly name = 'middle-out' as const;
   readonly requiresLLM = true;
@@ -66,6 +86,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     defaultThreshold: 0.85,
   };
 
+  // eslint-disable-next-line max-lines-per-function -- Strategy orchestration remains linear for readability.
   async compress(context: CompressionContext): Promise<CompressionResult> {
     const { history } = context;
 
@@ -100,7 +121,15 @@ export class MiddleOutStrategy implements CompressionStrategy {
     // Resolve the provider (compression profile may be undefined)
     const compressionProfile =
       context.runtimeContext.ephemerals.compressionProfile();
-    const provider = context.resolveProvider(compressionProfile);
+    const {
+      provider,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
+    } = destructureProviderResult(
+      await context.resolveProvider(compressionProfile),
+    );
 
     // Build the LLM request — sanitize tool blocks to text so the compression
     // call doesn't trip Anthropic's strict tool_use/tool_result pairing
@@ -127,7 +156,11 @@ export class MiddleOutStrategy implements CompressionStrategy {
     const { text: summary, usage: capturedUsage } = await this.callProvider(
       provider,
       compressionRequest,
-      context.config,
+      context,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
     );
 
     if (!summary.trim()) {
@@ -140,7 +173,11 @@ export class MiddleOutStrategy implements CompressionStrategy {
       finalSummary = await runVerificationPass(
         provider,
         summary,
-        context.config,
+        context,
+        resolvedRuntime,
+        resolvedConfig,
+        resolvedOptions,
+        invocation,
       );
     }
 
@@ -233,13 +270,27 @@ export class MiddleOutStrategy implements CompressionStrategy {
   private async callProvider(
     provider: IProvider,
     request: IContent[],
-    config?: CompressionContext['config'],
+    context: CompressionContext,
+    resolvedRuntime: ProviderRuntimeContext,
+    resolvedConfig: Config | undefined,
+    resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
+    invocation: RuntimeGenerateChatOptions['invocation'] | undefined,
   ): Promise<{ text: string; usage?: UsageStats }> {
+    const providerRuntime = resolvedRuntime;
     try {
       const stream = provider.generateChatCompletion({
         contents: request,
         tools: undefined,
-        config,
+        config: resolvedConfig ?? context.config ?? providerRuntime.config,
+        runtime: providerRuntime,
+        invocation,
+
+        settings: providerRuntime.settingsService,
+        resolved: resolvedOptions,
+        metadata: {
+          ...(providerRuntime.metadata ?? {}),
+          source: 'MiddleOutStrategy.callProvider',
+        },
       });
 
       let summary = '';

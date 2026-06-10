@@ -15,7 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { IContent, MediaBlock } from '../../services/history/IContent.js';
-import type { CompressionContext } from './types.js';
+import type { CompressionContext, CompressionProviderResult } from './types.js';
 import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
@@ -152,6 +152,17 @@ const noopLogger = {
   log: () => {},
 } as unknown as Logger;
 
+const testProviderRuntime = {
+  settingsService: {
+    get: () => undefined,
+    set: () => {},
+    getProviderSettings: () => ({}),
+  },
+  config: undefined,
+  runtimeId: 'test-provider-runtime',
+  metadata: { source: 'test' },
+};
+
 // ---------------------------------------------------------------------------
 // Build a CompressionContext for testing
 // ---------------------------------------------------------------------------
@@ -161,14 +172,26 @@ function buildContext(
     history: IContent[];
     preserveThreshold: number;
     compressionProfile: string;
-    resolveProvider: (profileName?: string) => IProvider;
+    resolveProvider: (profileName?: string) => CompressionProviderResult;
     model: string;
     provider: string;
     currentTokenCount: number;
   }> = {},
 ): CompressionContext {
   const defaultProvider = createFakeProvider('default-provider');
-  const resolveProvider = overrides.resolveProvider ?? (() => defaultProvider);
+  const contextProviderRuntime = {
+    settingsService: {
+      get: () => undefined,
+      set: () => {},
+      getProviderSettings: () => ({}),
+    },
+    config: undefined,
+    runtimeId: 'test-provider-runtime',
+    metadata: { source: 'test' },
+  };
+  const resolveProvider =
+    overrides.resolveProvider ??
+    (() => ({ provider: defaultProvider, runtime: contextProviderRuntime }));
 
   const runtimeState: AgentRuntimeState = {
     runtimeId: 'test-runtime',
@@ -198,6 +221,7 @@ function buildContext(
         adaptiveThinking: () => undefined,
       },
     },
+    providerRuntime: contextProviderRuntime,
   } as unknown as AgentRuntimeContext;
 
   const promptResolver = {
@@ -370,7 +394,7 @@ describe('OneShotStrategy', () => {
         compressionProfile: 'my-flash-profile',
         resolveProvider: (p) => {
           capturedProfile = p;
-          return profileProvider;
+          return { provider: profileProvider, runtime: testProviderRuntime };
         },
       });
 
@@ -389,7 +413,7 @@ describe('OneShotStrategy', () => {
         history,
         resolveProvider: (p) => {
           capturedProfile = p;
-          return defaultProvider;
+          return { provider: defaultProvider, runtime: testProviderRuntime };
         },
       });
 
@@ -470,7 +494,10 @@ describe('OneShotStrategy', () => {
 
       const ctx = buildContext({
         history,
-        resolveProvider: () => emptyProvider,
+        resolveProvider: () => ({
+          provider: emptyProvider,
+          runtime: testProviderRuntime,
+        }),
       });
 
       const strategy = new OneShotStrategy();
@@ -483,7 +510,10 @@ describe('OneShotStrategy', () => {
 
       const ctx = buildContext({
         history,
-        resolveProvider: () => throwingProvider,
+        resolveProvider: () => ({
+          provider: throwingProvider,
+          runtime: testProviderRuntime,
+        }),
       });
 
       const strategy = new OneShotStrategy();
@@ -526,7 +556,10 @@ describe('OneShotStrategy', () => {
       const history = generateHistory(20);
       const ctx = buildContext({
         history,
-        resolveProvider: () => emptyProvider,
+        resolveProvider: () => ({
+          provider: emptyProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new OneShotStrategy();
 
@@ -549,7 +582,10 @@ describe('OneShotStrategy', () => {
       const history = generateHistory(20);
       const ctx = buildContext({
         history,
-        resolveProvider: () => whitespaceProvider,
+        resolveProvider: () => ({
+          provider: whitespaceProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new OneShotStrategy();
 
@@ -625,7 +661,10 @@ describe('OneShotStrategy', () => {
 
       const ctx = buildContext({
         history,
-        resolveProvider: () => captureProvider,
+        resolveProvider: () => ({
+          provider: captureProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new OneShotStrategy();
       const result = await strategy.compress(ctx);
@@ -706,7 +745,10 @@ describe('OneShotStrategy', () => {
 
       const ctx = buildContext({
         history,
-        resolveProvider: () => captureProvider,
+        resolveProvider: () => ({
+          provider: captureProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new OneShotStrategy();
       const result = await strategy.compress(ctx);

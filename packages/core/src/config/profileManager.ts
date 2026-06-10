@@ -6,7 +6,11 @@
 
 /* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
 
-import type { Profile, LoadBalancerProfile } from '../types/modelParams.js';
+import type {
+  Profile,
+  LoadBalancerProfile,
+  StandardProfile,
+} from '../types/modelParams.js';
 import { isLoadBalancerProfile } from '../types/modelParams.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import fs from 'fs/promises';
@@ -425,9 +429,20 @@ export class ProfileManager {
     settingsService: SettingsService,
   ): Promise<void> {
     const profile = await this.loadProfile(profileName);
+    if (isLoadBalancerProfile(profile)) {
+      throw new Error(
+        `LoadBalancer profile '${profileName}' cannot be loaded directly into SettingsService`,
+      );
+    }
+    await this.applyLoadedProfile(profileName, profile, settingsService);
+  }
 
+  async applyLoadedProfile(
+    profileName: string,
+    profile: StandardProfile,
+    settingsService: SettingsService,
+  ): Promise<void> {
     const settingsData = this.convertProfileToSettingsData(profile);
-
     if (typeof settingsService.setCurrentProfileName === 'function') {
       settingsService.setCurrentProfileName(profileName);
     }
@@ -436,7 +451,6 @@ export class ProfileManager {
       throw new Error('SettingsService does not support profile import');
     }
     await settingsService.importFromProfile(settingsData);
-
     this.applyToolSettings(settingsData, settingsService);
     this.applyReasoningSettings(profile, settingsService);
   }
