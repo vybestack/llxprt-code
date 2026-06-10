@@ -48,6 +48,7 @@
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-providers": "file:../providers",
+    "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "ansi-regex": "^6.2.2",
     "chalk": "^5.3.0",
     "cli-spinners": "2.9.2",

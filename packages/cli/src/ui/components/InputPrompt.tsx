@@ -1227,7 +1227,7 @@ const useClipboardPasteHandler = (buffer: TextBuffer, config: Config) =>
 
       try {
         const text = await clipboardy.read();
-        if (text) {
+        if (text !== '') {
           const [row, col] = buffer.cursor;
           const offset = logicalPosToOffset(buffer.lines, row, col);
           buffer.replaceRangeByOffset(offset, offset, text);

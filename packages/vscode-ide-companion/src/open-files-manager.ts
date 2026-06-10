@@ -22,7 +22,7 @@ export class OpenFilesManager {
   constructor(private readonly context: vscode.ExtensionContext) {
     const editorWatcher = vscode.window.onDidChangeActiveTextEditor(
       (editor) => {
-        if (editor && this.isFileUri(editor.document.uri)) {
+        if (editor !== undefined && this.isFileUri(editor.document.uri)) {
           this.addOrMoveToFront(editor);
           this.fireWithDebounce();
         }
@@ -77,11 +77,12 @@ export class OpenFilesManager {
     );
 
     // Just add current active file on start-up.
+    const activeTextEditor = vscode.window.activeTextEditor;
     if (
-      vscode.window.activeTextEditor &&
-      this.isFileUri(vscode.window.activeTextEditor.document.uri)
+      activeTextEditor !== undefined &&
+      this.isFileUri(activeTextEditor.document.uri)
     ) {
-      this.addOrMoveToFront(vscode.window.activeTextEditor);
+      this.addOrMoveToFront(activeTextEditor);
     }
   }
 
@@ -148,9 +149,13 @@ export class OpenFilesManager {
       character: editor.selection.active.character + 1,
     };
 
+    const selectionText = editor.document.getText(editor.selection);
     let selectedText: string | undefined =
-      editor.document.getText(editor.selection) || undefined;
-    if (selectedText && selectedText.length > MAX_SELECTED_TEXT_LENGTH) {
+      selectionText === '' ? undefined : selectionText;
+    if (
+      selectedText !== undefined &&
+      selectedText.length > MAX_SELECTED_TEXT_LENGTH
+    ) {
       selectedText = selectedText.substring(0, MAX_SELECTED_TEXT_LENGTH);
     }
     file.selectedText = selectedText;
