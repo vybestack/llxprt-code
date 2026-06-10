@@ -52,6 +52,7 @@ USER node
 # Copy packages with proper ownership
 COPY --chown=node:node packages/settings/dist/vybestack-llxprt-code-settings-*.tgz /tmp/
 COPY --chown=node:node packages/telemetry/dist/vybestack-llxprt-code-telemetry-*.tgz /tmp/
+COPY --chown=node:node packages/policy/dist/vybestack-llxprt-code-policy-*.tgz /tmp/
 COPY --chown=node:node packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz /tmp/
 COPY --chown=node:node packages/core/dist/vybestack-llxprt-code-core-*.tgz /tmp/
 COPY --chown=node:node packages/providers/dist/vybestack-llxprt-code-providers-*.tgz /tmp/
@@ -63,6 +64,7 @@ COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz /tmp/
 RUN npm install -g \
       /tmp/vybestack-llxprt-code-settings-*.tgz \
       /tmp/vybestack-llxprt-code-telemetry-*.tgz \
+      /tmp/vybestack-llxprt-code-policy-*.tgz \
       /tmp/vybestack-llxprt-code-mcp-*.tgz \
       /tmp/vybestack-llxprt-code-core-*.tgz \
       /tmp/vybestack-llxprt-code-providers-*.tgz \
