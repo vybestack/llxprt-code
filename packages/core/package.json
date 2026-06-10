@@ -44,15 +44,33 @@
     "./runtime/settingsRuntimeAdapter.js": "./dist/src/runtime/settingsRuntimeAdapter.js",
     "./runtime/runtimeAdapters.js": "./dist/src/runtime/runtimeAdapters.js",
     "./runtime/RuntimeInvocationContext.js": "./dist/src/runtime/RuntimeInvocationContext.js",
-    "./services/fileSystemService.js": "./dist/src/services/fileSystemService.js",
-    "./services/fileDiscoveryService.js": "./dist/src/services/fileDiscoveryService.js",
+    "./services/fileSystemService.js": {
+      "types": "./dist/src/services/fileSystemService.d.ts",
+      "import": "./dist/src/services/fileSystemService.js"
+    },
+    "./services/fileDiscoveryService.js": {
+      "types": "./dist/src/services/fileDiscoveryService.d.ts",
+      "import": "./dist/src/services/fileDiscoveryService.js"
+    },
     "./services/history/ContentConverters.js": "./dist/src/services/history/ContentConverters.js",
     "./services/history/HistoryService.js": "./dist/src/services/history/HistoryService.js",
     "./services/history/IContent.js": "./dist/src/services/history/IContent.js",
-    "./storage/ConversationFileWriter.js": "./dist/src/storage/ConversationFileWriter.js",
-    "./storage/provider-key-storage.js": "./dist/src/storage/provider-key-storage.js",
-    "./storage/sessionTypes.js": "./dist/src/storage/sessionTypes.js",
-    "./storage/secure-store.js": "./dist/src/storage/secure-store.js",
+    "./storage/ConversationFileWriter.js": {
+      "types": "./dist/src/storage/ConversationFileWriter.d.ts",
+      "import": "./dist/src/storage/ConversationFileWriter.js"
+    },
+    "./storage/provider-key-storage.js": {
+      "types": "./dist/src/storage/provider-key-storage.d.ts",
+      "import": "./dist/src/storage/provider-key-storage.js"
+    },
+    "./storage/sessionTypes.js": {
+      "types": "./dist/src/storage/sessionTypes.d.ts",
+      "import": "./dist/src/storage/sessionTypes.js"
+    },
+    "./storage/secure-store.js": {
+      "types": "./dist/src/storage/secure-store.d.ts",
+      "import": "./dist/src/storage/secure-store.js"
+    },
     "./telemetry/loggers.js": "./dist/src/telemetry/loggers.js",
     "./telemetry/types.js": "./dist/src/telemetry/types.js",
     "./telemetry/index.js": "./dist/src/telemetry/index.js",
