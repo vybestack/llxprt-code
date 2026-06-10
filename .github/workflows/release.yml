@@ -607,15 +607,3 @@ jobs:
             --label "ci/cd"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-md
-          fi
-
-      - name: Create Issue on Failure
-        if: failure()
-        run: |
-          gh issue create \
-            --title "Release Failed for ${{ steps.version.outputs.RELEASE_TAG || 'N/A' }} on $(date +'%Y-%m-%d')" \
-            --body "The release workflow failed. See the full run for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --label "ci/cd"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

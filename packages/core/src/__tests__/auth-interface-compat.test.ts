@@ -26,7 +26,7 @@ import type { ISecureStore } from '@vybestack/llxprt-code-auth';
 import type { ISettingsService } from '@vybestack/llxprt-code-auth';
 import type { IDebugLogger } from '@vybestack/llxprt-code-auth';
 import { SecureStore } from '../storage/secure-store.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
 /**

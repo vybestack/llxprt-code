@@ -30,7 +30,7 @@ import type {
   ISecureStore,
   IDebugLogger,
 } from '@vybestack/llxprt-code-auth';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SecureStore } from '../storage/secure-store.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 

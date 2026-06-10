@@ -31,7 +31,7 @@ import {
   type AuthPrecedenceConfig,
   type ISettingsService,
 } from '@vybestack/llxprt-code-auth';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const PROVIDERS_SRC_DIR = path.resolve(__dirname, '..');
 
