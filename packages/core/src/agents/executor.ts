@@ -4,17 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Existing executor is above the project line budget; this change keeps recovery logic localized. */
+
 import type { Config } from '../config/config.js';
 import { reportError } from '../utils/errorReporting.js';
 import {
-  GeminiChat,
+  ChatSession,
   StreamEventType,
   type StreamEvent,
-} from '../core/geminiChat.js';
+} from '../core/chatSession.js';
 import { Type } from '@google/genai';
 import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { type ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
-import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { createSettingsProviderRuntimeContext } from '../runtime/settingsRuntimeAdapter.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type {
   Content,
@@ -45,8 +47,41 @@ import {
   applyTemplateToInitialMessages,
 } from './executor-prompt-builder.js';
 import { checkAgentTermination } from './executor-termination.js';
+import {
+  type RecoveryState,
+  type RecoveryActive,
+  resolveGracePeriodSeconds,
+  isRecoverableTermination,
+  enterRecovery,
+  recoveryFailureResult,
+  markRecoveryResponseUsed,
+} from './recovery.js';
 import { templateString } from './utils.js';
 import { parseThought } from '../utils/thoughtUtils.js';
+
+/** Result type for a single agent loop iteration. */
+type AgentLoopIterationResult =
+  | {
+      kind: 'continue';
+      recoveryState: RecoveryState;
+      currentMessage: Content;
+      recoveryModelResponseUsed: boolean | undefined;
+      turnCounter: number;
+      finalResult: string | null;
+    }
+  | {
+      kind: 'done';
+      result: {
+        terminateReason: AgentTerminateMode;
+        finalResult: string | null;
+      };
+    };
+
+type ToolExecutionResult = {
+  responseParts: Part[];
+  partialResult: string | null;
+};
+
 import { type z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { debugLogger } from '../utils/debugLogger.js';
@@ -222,7 +257,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
   /** Runs the agent loop until termination, returning the reason and result. */
   private async runAgentLoop(
-    chat: GeminiChat,
+    chat: ChatSession,
     tools: FunctionDeclaration[],
     initialMessage: Content,
     signal: AbortSignal,
@@ -233,64 +268,406 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     finalResult: string | null;
   }> {
     let finalResult: string | null = null;
-    let currentMessage = initialMessage;
+    let currentMessage: Content = initialMessage;
+    let recoveryState: RecoveryState = { phase: 'none' };
+    let recoveryModelResponseUsed = false;
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries.
     while (true) {
-      const reason = this.checkTermination(startTime, turnCounter);
-      if (reason !== null) {
-        return { terminateReason: reason, finalResult };
+      const outcome = await this.runAgentLoopIteration(
+        chat,
+        tools,
+        signal,
+        startTime,
+        turnCounter,
+        finalResult,
+        currentMessage,
+        recoveryState,
+        recoveryModelResponseUsed,
+      );
+      if (outcome.kind === 'continue') {
+        recoveryState = outcome.recoveryState;
+        currentMessage = outcome.currentMessage;
+        if (outcome.recoveryModelResponseUsed !== undefined) {
+          recoveryModelResponseUsed = outcome.recoveryModelResponseUsed;
+        }
+        turnCounter = outcome.turnCounter;
+        finalResult = outcome.finalResult;
+      } else {
+        return outcome.result;
       }
-      if (signal.aborted) {
+    }
+  }
+
+  /** Single iteration of the agent loop. */
+  private async runAgentLoopIteration(
+    chat: ChatSession,
+    tools: FunctionDeclaration[],
+    signal: AbortSignal,
+    startTime: number,
+    turnCounter: number,
+    finalResult: string | null,
+    currentMessage: Content,
+    recoveryState: RecoveryState,
+    recoveryModelResponseUsed: boolean,
+  ): Promise<AgentLoopIterationResult> {
+    const recoveryDeadlineMs =
+      recoveryState.phase === 'active' ? recoveryState.deadlineMs : undefined;
+    const reason = this.checkTermination(
+      startTime,
+      turnCounter,
+      recoveryDeadlineMs,
+    );
+
+    if (reason !== null) {
+      const termOutcome = this.handleTerminationReason(
+        reason,
+        recoveryState,
+        finalResult,
+      );
+      if (termOutcome.handled) {
         return {
-          terminateReason: AgentTerminateMode.ABORTED,
+          kind: 'continue',
+          recoveryState: termOutcome.newState,
+          currentMessage: termOutcome.currentMessage,
+          recoveryModelResponseUsed: undefined,
+          turnCounter,
           finalResult,
         };
       }
+      return { kind: 'done', result: termOutcome.result };
+    }
 
-      const promptId = `${this.runtimeContext.getSessionId()}#${this.agentId}#${turnCounter}`;
-      turnCounter += 1;
-      const { functionCalls } = await this.callModel(
+    return this.runAgentLoopIterationBody(
+      chat,
+      tools,
+      signal,
+      startTime,
+      turnCounter,
+      finalResult,
+      currentMessage,
+      recoveryState,
+      recoveryModelResponseUsed,
+    );
+  }
+
+  /** Body of the agent loop iteration (after termination checks). */
+  // eslint-disable-next-line max-lines-per-function -- Agent iteration orchestration coordinates model calls, recovery handling, and tool dispatch in one control-flow boundary.
+  private async runAgentLoopIterationBody(
+    chat: ChatSession,
+    tools: FunctionDeclaration[],
+    signal: AbortSignal,
+    startTime: number,
+    turnCounter: number,
+    finalResult: string | null,
+    currentMessage: Content,
+    recoveryState: RecoveryState,
+    recoveryModelResponseUsed: boolean,
+  ): Promise<AgentLoopIterationResult> {
+    if (signal.aborted) {
+      return {
+        kind: 'done',
+        result: { terminateReason: AgentTerminateMode.ABORTED, finalResult },
+      };
+    }
+
+    const recoveryAbort =
+      recoveryState.phase === 'active' && !recoveryModelResponseUsed
+        ? this.createRecoveryAbortController(recoveryState.deadlineMs, signal)
+        : undefined;
+
+    const promptId = `${this.runtimeContext.getSessionId()}#${this.agentId}#${turnCounter}`;
+    const nextTurnCounter = turnCounter + 1;
+
+    let functionCalls: FunctionCall[];
+    try {
+      const modelResult = await this.callModel(
         chat,
         currentMessage,
         tools,
-        signal,
+        recoveryAbort?.signal ?? signal,
         promptId,
       );
-
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
-      if (signal.aborted) {
+      functionCalls = modelResult.functionCalls;
+    } catch (error) {
+      if (recoveryState.phase === 'active') {
+        // If the parent signal was aborted, terminate as ABORTED rather than
+        // emitting a misleading recovery-timeout outcome.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- signal.aborted can be true even though the outer already-gated check passed; the catch path is reached from callModel which can throw on abort.
+        if (signal.aborted) {
+          return {
+            kind: 'done',
+            result: {
+              terminateReason: AgentTerminateMode.ABORTED,
+              finalResult,
+            },
+          };
+        }
+        this.emitRecoveryOutcome(
+          recoveryState.originalReason,
+          'failure',
+          recoveryState.originalReason,
+          recoveryState.gracePeriodSeconds,
+        );
         return {
-          terminateReason: AgentTerminateMode.ABORTED,
-          finalResult,
+          kind: 'done',
+          result: {
+            terminateReason: recoveryState.originalReason,
+            finalResult: finalResult ?? 'Recovery turn timed out.',
+          },
         };
       }
-
-      if (functionCalls.length === 0) {
-        finalResult = `Agent stopped calling tools but did not call '${TASK_COMPLETE_TOOL_NAME}' to finalize the session.`;
-        this.emitActivity('ERROR', {
-          error: finalResult,
-          context: 'protocol_violation',
-        });
-        return {
-          terminateReason: AgentTerminateMode.ERROR,
-          finalResult,
-        };
-      }
-
-      const { nextMessage, submittedOutput, taskCompleted } =
-        await this.processFunctionCalls(functionCalls, signal, promptId);
-
-      if (taskCompleted) {
-        finalResult = submittedOutput ?? 'Task completed successfully.';
-        return {
-          terminateReason: AgentTerminateMode.GOAL,
-          finalResult,
-        };
-      }
-
-      currentMessage = nextMessage;
+      throw error;
+    } finally {
+      recoveryAbort?.abort();
     }
+
+    const newRecoveryModelResponseUsed = markRecoveryResponseUsed(
+      recoveryState,
+      recoveryModelResponseUsed,
+    );
+
+    if (this.isAborted(signal)) {
+      return {
+        kind: 'done',
+        result: { terminateReason: AgentTerminateMode.ABORTED, finalResult },
+      };
+    }
+
+    const checkResult = this.checkRecoveryToolCalls(
+      recoveryState,
+      newRecoveryModelResponseUsed,
+      functionCalls,
+      finalResult,
+    );
+
+    if (checkResult) {
+      return { kind: 'done', result: checkResult };
+    }
+
+    if (functionCalls.length === 0) {
+      const enterResult = this.handleProtocolViolation(
+        recoveryState,
+        finalResult,
+      );
+      if (enterResult.entered) {
+        return {
+          kind: 'continue',
+          recoveryState: enterResult.state,
+          currentMessage: enterResult.warningMessage,
+          recoveryModelResponseUsed: false,
+          turnCounter: nextTurnCounter,
+          finalResult,
+        };
+      }
+      const activeGrace =
+        recoveryState.phase === 'active' ? recoveryState.gracePeriodSeconds : 0;
+      this.emitRecoveryOutcome(
+        enterResult.result.terminateReason,
+        'failure',
+        enterResult.result.terminateReason,
+        activeGrace,
+      );
+      return { kind: 'done', result: enterResult.result };
+    }
+
+    const { nextMessage, submittedOutput, taskCompleted, partialResult } =
+      await this.processFunctionCalls(functionCalls, signal, promptId);
+
+    if (taskCompleted) {
+      if (recoveryState.phase === 'active') {
+        this.emitRecoveryOutcome(
+          recoveryState.originalReason,
+          'success',
+          AgentTerminateMode.GOAL,
+          recoveryState.gracePeriodSeconds,
+        );
+      }
+      finalResult = submittedOutput ?? 'Task completed successfully.';
+      return {
+        kind: 'done',
+        result: { terminateReason: AgentTerminateMode.GOAL, finalResult },
+      };
+    }
+
+    if (recoveryState.phase === 'active' && newRecoveryModelResponseUsed) {
+      const fail = recoveryFailureResult(
+        recoveryState.originalReason,
+        finalResult,
+      );
+      this.emitRecoveryOutcome(
+        recoveryState.originalReason,
+        'failure',
+        fail.terminateReason,
+        recoveryState.gracePeriodSeconds,
+      );
+      return { kind: 'done', result: fail };
+    }
+
+    const nextFinalResult = partialResult ?? finalResult;
+
+    return {
+      kind: 'continue',
+      recoveryState,
+      currentMessage: nextMessage,
+      recoveryModelResponseUsed: newRecoveryModelResponseUsed,
+      turnCounter: nextTurnCounter,
+      finalResult: nextFinalResult,
+    };
+  }
+
+  /** Check tool calls during recovery: non-complete_task = recovery failure. */
+  private checkRecoveryToolCalls(
+    recoveryState: RecoveryState,
+    recoveryModelResponseUsed: boolean,
+    functionCalls: FunctionCall[],
+    finalResult: string | null,
+  ): { terminateReason: AgentTerminateMode; finalResult: string } | null {
+    if (recoveryState.phase !== 'active' || !recoveryModelResponseUsed) {
+      return null;
+    }
+    const hasCompleteTask = functionCalls.some(
+      (fc) => fc.name === TASK_COMPLETE_TOOL_NAME,
+    );
+    if (!hasCompleteTask) {
+      this.emitRecoveryOutcome(
+        recoveryState.originalReason,
+        'failure',
+        recoveryState.originalReason,
+        recoveryState.gracePeriodSeconds,
+      );
+      return recoveryFailureResult(recoveryState.originalReason, finalResult);
+    }
+
+    // Recovery response must be exactly one complete_task call.
+    // If complete_task is accompanied by other tools, fail recovery immediately
+    // and do not execute any of the tool calls.
+    if (functionCalls.length > 1) {
+      this.emitRecoveryOutcome(
+        recoveryState.originalReason,
+        'failure',
+        recoveryState.originalReason,
+        recoveryState.gracePeriodSeconds,
+      );
+      return recoveryFailureResult(recoveryState.originalReason, finalResult);
+    }
+
+    return null;
+  }
+
+  /** Handle termination-reason checks: enter recovery or return immediately. */
+  private handleTerminationReason(
+    reason: AgentTerminateMode,
+    recoveryState: RecoveryState,
+    finalResult: string | null,
+  ):
+    | { handled: true; newState: RecoveryActive; currentMessage: Content }
+    | {
+        handled: false;
+        result: {
+          terminateReason: AgentTerminateMode;
+          finalResult: string | null;
+        };
+      } {
+    if (isRecoverableTermination(reason) && recoveryState.phase === 'none') {
+      const gracePeriodSeconds = resolveGracePeriodSeconds(
+        this.definition.runConfig.grace_period_seconds,
+      );
+      const { state, warningMessage } = enterRecovery(
+        reason,
+        gracePeriodSeconds,
+        (type, data) => this.emitActivity(type, data),
+      );
+      return { handled: true, newState: state, currentMessage: warningMessage };
+    }
+
+    if (recoveryState.phase === 'active') {
+      const fail = recoveryFailureResult(
+        recoveryState.originalReason,
+        finalResult,
+      );
+      this.emitRecoveryOutcome(
+        recoveryState.originalReason,
+        'failure',
+        fail.terminateReason,
+        recoveryState.gracePeriodSeconds,
+      );
+      return { handled: false, result: fail };
+    }
+
+    return { handled: false, result: { terminateReason: reason, finalResult } };
+  }
+
+  /** Handle the protocol-violation path (model stopped calling tools). */
+  private handleProtocolViolation(
+    recoveryState: RecoveryState,
+    finalResult: string | null,
+  ):
+    | { entered: true; state: RecoveryActive; warningMessage: Content }
+    | {
+        entered: false;
+        result: { terminateReason: AgentTerminateMode; finalResult: string };
+      } {
+    if (recoveryState.phase === 'none') {
+      const gracePeriodSeconds = resolveGracePeriodSeconds(
+        this.definition.runConfig.grace_period_seconds,
+      );
+      const { state, warningMessage } = enterRecovery(
+        AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
+        gracePeriodSeconds,
+        (type, data) => this.emitActivity(type, data),
+      );
+      return { entered: true, state, warningMessage };
+    }
+
+    // Already in recovery: the one recovery model response didn't call
+    // complete_task, so this empty response confirms recovery failure.
+    const fail = recoveryFailureResult(
+      recoveryState.originalReason,
+      finalResult,
+    );
+    return { entered: false, result: fail };
+  }
+
+  private isAborted(signal: AbortSignal): boolean {
+    return signal.aborted;
+  }
+
+  /** Create an AbortController that fires when the recovery deadline passes. */
+  private createRecoveryAbortController(
+    deadlineMs: number,
+    parentSignal: AbortSignal,
+  ): AbortController {
+    const controller = new AbortController();
+    const remaining = deadlineMs - Date.now();
+    const timer = setTimeout(() => controller.abort(), Math.max(0, remaining));
+    const onParentAbort = () => controller.abort();
+    parentSignal.addEventListener('abort', onParentAbort, { once: true });
+    // Clean up both when our controller fires
+    controller.signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        parentSignal.removeEventListener('abort', onParentAbort);
+      },
+      { once: true },
+    );
+    return controller;
+  }
+
+  /** Emit a RECOVERY_OUTCOME telemetry event. */
+  private emitRecoveryOutcome(
+    originalReason: AgentTerminateMode,
+    outcome: 'success' | 'failure',
+    terminateReason: AgentTerminateMode,
+    gracePeriodSeconds: number,
+  ): void {
+    this.emitActivity('RECOVERY_OUTCOME', {
+      originalReason,
+      outcome,
+      terminateReason,
+      gracePeriodSeconds,
+    });
   }
 
   /**
@@ -299,7 +676,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
    * @returns The model's response, including any tool calls or text.
    */
   private async callModel(
-    chat: GeminiChat,
+    chat: ChatSession,
     message: Content,
     tools: FunctionDeclaration[],
     signal: AbortSignal,
@@ -424,8 +801,8 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     }
   }
 
-  /** Initializes a `GeminiChat` instance for the agent run. */
-  private async createChatObject(inputs: AgentInputs): Promise<GeminiChat> {
+  /** Initializes a `ChatSession` instance for the agent run. */
+  private async createChatObject(inputs: AgentInputs): Promise<ChatSession> {
     const { promptConfig, modelConfig } = this.definition;
 
     if (!promptConfig.systemPrompt && !promptConfig.initialMessages) {
@@ -450,7 +827,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       );
       const runtimeBundle = await this.buildRuntimeBundle();
 
-      return new GeminiChat(
+      return new ChatSession(
         runtimeBundle.runtimeContext,
         runtimeBundle.contentGenerator,
         generationConfig,
@@ -488,12 +865,12 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     return generationConfig;
   }
 
-  /** Builds the runtime bundle for the GeminiChat instance. */
+  /** Builds the runtime bundle for the ChatSession instance. */
   private async buildRuntimeBundle() {
     const settings = this.resolveSettingsSnapshot();
     const runtimeState = createAgentRuntimeStateFromConfig(this.runtimeContext);
 
-    const providerRuntime = createProviderRuntimeContext({
+    const providerRuntime = createSettingsProviderRuntimeContext({
       settingsService: this.runtimeContext.getSettingsService(),
       config: this.runtimeContext,
       runtimeId: runtimeState.runtimeId,
@@ -559,7 +936,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       return (
         this.runtimeContext
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
-          .getGeminiClient?.()
+          .getAgentClient?.()
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
           ?.getContentGenerator()
       );
@@ -581,6 +958,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     nextMessage: Content;
     submittedOutput: string | null;
     taskCompleted: boolean;
+    partialResult: string | null;
   }> {
     const allowedToolNames = new Set(this.toolRegistry.getAllToolNames());
     allowedToolNames.add(TASK_COMPLETE_TOOL_NAME);
@@ -588,7 +966,8 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     let submittedOutput: string | null = null;
     let taskCompleted = false;
 
-    const toolExecutionPromises: Array<Promise<Part[] | void>> = [];
+    const toolExecutionPromises: Array<Promise<ToolExecutionResult | void>> =
+      [];
     const syncResponseParts: Part[] = [];
 
     // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
@@ -822,7 +1201,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     args: Record<string, unknown>,
     signal: AbortSignal,
     promptId: string,
-  ): Promise<Part[] | void> {
+  ): Promise<ToolExecutionResult | void> {
     const requestInfo: ToolCallRequestInfo = {
       callId,
       name: functionCall.name as string,
@@ -853,7 +1232,13 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         });
       }
 
-      return toolResponse.responseParts;
+      return {
+        responseParts: toolResponse.responseParts,
+        partialResult:
+          typeof toolResponse.resultDisplay === 'string'
+            ? toolResponse.resultDisplay
+            : null,
+      };
     })();
   }
 
@@ -861,20 +1246,25 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   private async assembleToolResponses(
     functionCalls: FunctionCall[],
     syncResponseParts: Part[],
-    toolExecutionPromises: Array<Promise<Part[] | void>>,
+    toolExecutionPromises: Array<Promise<ToolExecutionResult | void>>,
     submittedOutput: string | null,
     taskCompleted: boolean,
   ): Promise<{
     nextMessage: Content;
     submittedOutput: string | null;
     taskCompleted: boolean;
+    partialResult: string | null;
   }> {
     const asyncResults = await Promise.all(toolExecutionPromises);
 
     const toolResponseParts: Part[] = [...syncResponseParts];
+    let partialResult: string | null = null;
     for (const result of asyncResults) {
       if (result) {
-        toolResponseParts.push(...result);
+        toolResponseParts.push(...result.responseParts);
+        if (result.partialResult !== null) {
+          partialResult = result.partialResult;
+        }
       }
     }
 
@@ -892,6 +1282,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       nextMessage: { role: 'user', parts: toolResponseParts },
       submittedOutput,
       taskCompleted,
+      partialResult,
     };
   }
 
@@ -982,16 +1373,22 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   /**
    * Checks if the agent should terminate due to exceeding configured limits.
    *
+   * @param startTime The timestamp (ms) when execution started.
+   * @param turnCounter The current turn number.
+   * @param recoveryDeadlineMs If in a recovery turn, the absolute deadline (ms)
+   *   that overrides normal max_time_minutes. Pass `undefined` when not recovering.
    * @returns The reason for termination, or `null` if execution can continue.
    */
   private checkTermination(
     startTime: number,
     turnCounter: number,
+    recoveryDeadlineMs?: number,
   ): AgentTerminateMode | null {
     return checkAgentTermination(
       this.definition.runConfig,
       startTime,
       turnCounter,
+      recoveryDeadlineMs,
     );
   }
 

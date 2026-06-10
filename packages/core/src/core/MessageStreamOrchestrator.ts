@@ -13,7 +13,7 @@ import {
   type ServerGeminiFinishedOutcome,
 } from './turn.js';
 import type { Config } from '../config/config.js';
-import type { GeminiChat } from './geminiChat.js';
+import type { ChatSession } from './chatSession.js';
 import type { DebugLogger } from '../debug/index.js';
 import type { LoopDetectionService } from '../services/loopDetectionService.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
@@ -28,7 +28,7 @@ import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
 
 export interface MessageStreamDeps {
   config: Config;
-  getChat: () => GeminiChat;
+  getChat: () => ChatSession;
   logger: DebugLogger;
   loopDetector: LoopDetectionService;
   todoContinuationService: TodoContinuationService;
@@ -39,9 +39,9 @@ export interface MessageStreamDeps {
   getSessionTurnCount: () => number;
   incrementSessionTurnCount: () => void;
   lazyInitialize: () => Promise<void>;
-  startChat: (extraHistory?: Content[]) => Promise<GeminiChat>;
+  startChat: (extraHistory?: Content[]) => Promise<ChatSession>;
   getPreviousHistory: () => Content[] | undefined;
-  setChat: (chat: GeminiChat) => void;
+  setChat: (chat: ChatSession) => void;
   hasChat: () => boolean;
   complexityAnalyzer: ComplexityAnalyzer;
   getLastPromptId: () => string | undefined;
@@ -98,9 +98,7 @@ export class MessageStreamOrchestrator {
     isInvalidStreamRetry: boolean,
     is413Retry: boolean = false,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
-    this.deps.logger.debug(
-      () => 'DEBUG: GeminiClient.sendMessageStream called',
-    );
+    this.deps.logger.debug(() => 'DEBUG: AgentClient.sendMessageStream called');
 
     await this.deps.lazyInitialize();
     await this._ensureChatInitialized();

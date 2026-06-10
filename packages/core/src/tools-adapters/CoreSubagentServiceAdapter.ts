@@ -14,7 +14,7 @@ import {
   type SubagentResult,
 } from '@vybestack/llxprt-code-tools';
 import type { SubagentManager } from '../config/subagentManager.js';
-import type { ProfileManager } from '../config/profileManager.js';
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig as CoreSubagentConfig } from '../config/types.js';
 import type { Config } from '../config/config.js';
 import {

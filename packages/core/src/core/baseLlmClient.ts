@@ -104,7 +104,7 @@ function extractJsonFromMarkdown(text: string): string {
  * Key features:
  * - Multi-provider support (Anthropic, OpenAI, Gemini, Vertex AI)
  * - Stateless operations (no conversation history)
- * - Clean separation from GeminiClient
+ * - Clean separation from AgentClient
  * - Dependency injection for testing
  */
 export class BaseLLMClient {

@@ -235,11 +235,6 @@ export type {
 } from './tools/modifiable-tool.js';
 
 export {
-  DiscoveredMCPTool,
-  generateMcpToolName,
-  generateValidName,
-} from './tools/mcp-tool.js';
-export {
   ShellTool,
   ShellToolInvocation,
   OUTPUT_UPDATE_INTERVAL_MS,

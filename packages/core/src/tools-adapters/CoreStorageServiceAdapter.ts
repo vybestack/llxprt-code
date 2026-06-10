@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs/promises';
 import type { IStorageService } from '@vybestack/llxprt-code-tools';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 export class CoreStorageServiceAdapter implements IStorageService {
   getLLXPRTDir(): string {

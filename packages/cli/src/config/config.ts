@@ -10,10 +10,10 @@ import process from 'node:process';
 import {
   type Config,
   type GeminiCLIExtension,
-  type SettingsService,
   type SandboxConfig,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import { type MergedSettings, type Settings } from './settings.js';
 import { loadSandboxConfig } from './sandboxConfig.js';

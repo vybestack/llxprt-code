@@ -87,7 +87,7 @@ vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
 });
 
 vi.mock('../../core/client.js', () => ({
-  GeminiClient: vi.fn().mockImplementation(() => ({
+  AgentClient: vi.fn().mockImplementation(() => ({
     initialize: vi.fn().mockResolvedValue(undefined),
     isInitialized: vi.fn().mockReturnValue(false),
     getHistory: vi.fn().mockReturnValue([]),
@@ -125,11 +125,26 @@ vi.mock('../../services/gitService.js', () => ({
   })),
 }));
 
-vi.mock('../../tools/mcp-client-manager.js', () => ({
+vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn().mockImplementation(() => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
     getMcpInstructions: vi.fn().mockReturnValue(''),
   })),
+  DiscoveredMCPTool: vi
+    .fn()
+    .mockImplementation(
+      (
+        _callableTool: unknown,
+        serverName: string,
+        serverToolName: string,
+        _description: string,
+        _inputSchema: unknown,
+      ) => ({
+        serverName,
+        serverToolName,
+        name: `${serverName}__${serverToolName}`,
+      }),
+    ),
 }));
 
 vi.mock('../../utils/extensionLoader.js', () => ({
@@ -140,6 +155,7 @@ vi.mock('../../utils/extensionLoader.js', () => ({
 }));
 
 vi.mock('../../runtime/providerRuntimeContext.js', () => ({
+  setProviderRuntimeStateFactory: vi.fn(),
   setActiveProviderRuntimeContext: vi.fn(),
   peekActiveProviderRuntimeContext: vi.fn().mockReturnValue(null),
   createProviderRuntimeContext: vi.fn().mockReturnValue({}),
@@ -162,7 +178,7 @@ vi.mock('../../runtime/providerRuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('../../settings/settingsServiceInstance.js', () => ({
+vi.mock('../@vybestack/llxprt-code-settings', () => ({
   getSettingsService: vi.fn().mockReturnValue({
     get: vi.fn(),
     set: vi.fn(),

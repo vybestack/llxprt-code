@@ -13,7 +13,7 @@ import {
   setActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 interface ProviderRuntimeOptions {
   settingsService?: SettingsService;
@@ -222,7 +222,7 @@ function requireVi() {
 }
 /* eslint-enable @typescript-eslint/consistent-type-imports */
 
-interface GeminiChatConfigShape {
+interface ChatSessionConfigShape {
   getSessionId: () => string;
   getTelemetryLogPromptsEnabled: () => boolean;
   getUsageStatisticsEnabled: () => boolean;
@@ -243,16 +243,16 @@ interface GeminiChatConfigShape {
   getSettingsService: ReturnType<ReturnType<typeof requireVi>['fn']>;
 }
 
-interface GeminiChatRuntimeOptions {
+interface ChatSessionRuntimeOptions {
   provider?: IProvider;
   providerManager?: Pick<RuntimeProviderManager, 'getActiveProvider'>;
   settingsService?: SettingsService;
   runtimeId?: string;
   metadata?: Record<string, unknown>;
-  configOverrides?: Partial<GeminiChatConfigShape>;
+  configOverrides?: Partial<ChatSessionConfigShape>;
 }
 
-interface GeminiChatRuntimeResult {
+interface ChatSessionRuntimeResult {
   config: Config;
   provider: IProvider;
   providerManager: Pick<RuntimeProviderManager, 'getActiveProvider'>;
@@ -276,20 +276,20 @@ function createDefaultProvider(): IProvider {
 }
 
 /**
- * Creates a Config stub and associated runtime wiring for GeminiChat tests.
+ * Creates a Config stub and associated runtime wiring for ChatSession tests.
  * The returned config exposes the minimal surface required by the class while
  * guaranteeing that runtime-aware helpers (e.g. getSettingsService) exist.
  */
-export function createGeminiChatRuntime(
-  options: GeminiChatRuntimeOptions = {},
-): GeminiChatRuntimeResult {
+export function createChatSessionRuntime(
+  options: ChatSessionRuntimeOptions = {},
+): ChatSessionRuntimeResult {
   const vi = requireVi();
   const settingsService = options.settingsService ?? new SettingsService();
   const runtime = createProviderRuntimeContext({
     settingsService,
-    runtimeId: options.runtimeId ?? 'test.geminiChat.runtime',
+    runtimeId: options.runtimeId ?? 'test.chatSession.runtime',
     metadata: {
-      source: 'test-utils#createGeminiChatRuntime',
+      source: 'test-utils#createChatSessionRuntime',
       ...(options.metadata ?? {}),
     },
   });
@@ -309,7 +309,7 @@ export function createGeminiChatRuntime(
     }
   });
 
-  const baseConfig: GeminiChatConfigShape = {
+  const baseConfig: ChatSessionConfigShape = {
     getSessionId: () => 'test-session-id',
     getTelemetryLogPromptsEnabled: () => true,
     getUsageStatisticsEnabled: () => true,
@@ -333,7 +333,7 @@ export function createGeminiChatRuntime(
   const config = {
     ...baseConfig,
     ...(options.configOverrides ?? {}),
-  } as GeminiChatConfigShape;
+  } as ChatSessionConfigShape;
 
   Object.assign(runtime, { config: config as unknown as Config });
 

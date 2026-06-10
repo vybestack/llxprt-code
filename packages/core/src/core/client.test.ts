@@ -9,7 +9,7 @@
 /**
  * @plan PLAN-20251027-STATELESS5.P09
  * Note: Legacy tests updated with plan markers. Runtime state integration tests
- * are in __tests__/geminiClient.runtimeState.test.ts
+ * are in __tests__/agentClient.runtimeState.test.ts
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -50,7 +50,7 @@ import type {
 import { GoogleGenAI } from '@google/genai';
 import {
   findCompressSplitPoint,
-  GeminiClient,
+  AgentClient,
   isThinkingSupported,
 } from './client.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
@@ -60,7 +60,7 @@ import type {
 } from './contentGenerator.js';
 
 import type { ConfigParameters } from '../config/config.js';
-import type { GeminiChat } from './geminiChat.js';
+import type { ChatSession } from './chatSession.js';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { GeminiEventType, Turn } from './turn.js';
@@ -310,7 +310,7 @@ describe('findCompressSplitPoint', () => {
 });
 
 describe('Gemini Client (client.ts)', () => {
-  let client: GeminiClient;
+  let client: AgentClient;
   let mockConfig: Config;
   beforeEach(async () => {
     vi.resetAllMocks();
@@ -380,7 +380,7 @@ describe('Gemini Client (client.ts)', () => {
       ],
     } as unknown as GenerateContentResponse);
 
-    // Because the GeminiClient constructor kicks off an async process (startChat)
+    // Because the AgentClient constructor kicks off an async process (startChat)
     // that depends on a fully-formed Config object, we need to mock the
     // entire implementation of Config for these tests.
     const mockToolRegistry = {
@@ -425,7 +425,7 @@ describe('Gemini Client (client.ts)', () => {
       getWorkspaceContext: vi.fn().mockReturnValue({
         getDirectories: vi.fn().mockReturnValue(['/test/dir']),
       }),
-      getGeminiClient: vi.fn(),
+      getAgentClient: vi.fn(),
       setFallbackMode: vi.fn(),
       getProvider: vi.fn().mockReturnValue('gemini'),
       getComplexityAnalyzerSettings: vi.fn().mockReturnValue({
@@ -456,11 +456,11 @@ describe('Gemini Client (client.ts)', () => {
       model: 'test-model',
       sessionId: 'test-session-id',
     });
-    client = new GeminiClient(mockConfig, runtimeState);
+    client = new AgentClient(mockConfig, runtimeState);
     await client.initialize(contentGeneratorConfig);
 
     // Update the mock to return the client
-    mockConfigObject.getGeminiClient.mockReturnValue(client);
+    mockConfigObject.getAgentClient.mockReturnValue(client);
 
     // Add missing methods to the client instance for tests
     client.getHistory = vi.fn().mockReturnValue([]);
@@ -489,10 +489,10 @@ describe('Gemini Client (client.ts)', () => {
 
   // NOTE: The following tests for startChat were removed due to persistent issues with
   // the @google/genai mock. Specifically, the mockChatCreateFn (representing instance.chats.create)
-  // was not being detected as called by the GeminiClient instance.
+  // was not being detected as called by the AgentClient instance.
   // This likely points to a subtle issue in how the GoogleGenerativeAI class constructor
   // and its instance methods are mocked and then used by the class under test.
-  // For future debugging, ensure that the `this.client` in `GeminiClient` (which is an
+  // For future debugging, ensure that the `this.client` in `AgentClient` (which is an
   // instance of the mocked GoogleGenerativeAI) correctly has its `chats.create` method
   // pointing to `mockChatCreateFn`.
   // it('startChat should call getCoreSystemPrompt with userMemory and pass to chats.create', async () => { ... });
@@ -502,7 +502,7 @@ describe('Gemini Client (client.ts)', () => {
   // the @google/genai mock, similar to the startChat tests. The mockGenerateContentFn
   // (representing instance.models.generateContent) was not being detected as called, or the mock
   // was not preventing an actual API call (leading to API key errors).
-  // For future debugging, ensure `this.client.models.generateContent` in `GeminiClient` correctly
+  // For future debugging, ensure `this.client.models.generateContent` in `AgentClient` correctly
   // uses the `mockGenerateContentFn`.
   // it('generateJson should call getCoreSystemPrompt with userMemory and pass to generateContent', async () => { ... });
   // it('generateJson should call getCoreSystemPrompt with empty string if userMemory is empty', async () => { ... });
@@ -609,7 +609,7 @@ describe('Gemini Client (client.ts)', () => {
         getHistoryService,
       };
 
-      client['chat'] = mockChat as unknown as GeminiChat;
+      client['chat'] = mockChat as unknown as ChatSession;
       client['contentGenerator'] = {
         countTokens: vi.fn(),
       } as unknown as ContentGenerator;
@@ -667,7 +667,7 @@ describe('Gemini Client (client.ts)', () => {
         getHistoryService,
       };
 
-      client['chat'] = mockChat as unknown as GeminiChat;
+      client['chat'] = mockChat as unknown as ChatSession;
       client['contentGenerator'] = {
         countTokens: vi.fn(),
       } as unknown as ContentGenerator;
@@ -713,7 +713,7 @@ describe('Gemini Client (client.ts)', () => {
         getHistoryService,
       };
 
-      client['chat'] = mockChat as unknown as GeminiChat;
+      client['chat'] = mockChat as unknown as ChatSession;
       client['contentGenerator'] = {
         countTokens: vi.fn(),
       } as unknown as ContentGenerator;
@@ -769,7 +769,7 @@ sub memory
         getHistoryService,
       };
 
-      client['chat'] = mockChat as unknown as GeminiChat;
+      client['chat'] = mockChat as unknown as ChatSession;
       client['contentGenerator'] = {
         countTokens: vi.fn(),
       } as unknown as ContentGenerator;
@@ -941,10 +941,10 @@ sub memory
 
   describe('addHistory', () => {
     it('should call chat.addHistory with the provided content', async () => {
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const newContent = {
         role: 'user',
@@ -965,7 +965,7 @@ sub memory
       );
 
       // Mock addHistory to update the state
-      const mockChat = client['chat'] as GeminiChat;
+      const mockChat = client['chat'] as ChatSession;
       mockChat.addHistory.mockImplementation((content: Content) => {
         historyState.push(content);
         return Promise.resolve();
@@ -1004,7 +1004,7 @@ sub memory
           clearHistory: vi.fn(),
           sendMessageStream: vi.fn(),
         };
-        client['chat'] = newMockChat as GeminiChat;
+        client['chat'] = newMockChat as ChatSession;
       });
 
       // 2. Call resetChat.
@@ -1120,12 +1120,12 @@ sub memory
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -1219,12 +1219,12 @@ sub memory
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -1269,12 +1269,12 @@ sub memory
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -1311,12 +1311,12 @@ sub memory
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -1359,12 +1359,12 @@ sub memory
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -1413,12 +1413,12 @@ sub memory
       );
 
       // Mock the chat to return the lastPromptTokenCount
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -1477,12 +1477,12 @@ sub memory
       );
 
       // Mock the chat to return the lastPromptTokenCount
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -1525,11 +1525,11 @@ sub memory
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
 
       const lastPromptTokenCount = 10000;
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
         getHistory: vi.fn().mockReturnValue([]),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       // Simulate a PDF file with large base64 data (11MB when encoded)
       // In the old implementation, this would incorrectly estimate ~2.7M tokens
@@ -1588,12 +1588,12 @@ sub memory
         .mockReturnValueOnce(mockStream1)
         .mockReturnValueOnce(mockStream2);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const initialRequest = [{ text: 'Hi' }];
       const promptId = 'prompt-id-invalid-stream';
@@ -1638,12 +1638,12 @@ sub memory
 
       mockTurnRunFn.mockReturnValueOnce(mockStream1);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const initialRequest = [{ text: 'Hi' }];
       const promptId = 'prompt-id-invalid-stream';
@@ -1682,12 +1682,12 @@ sub memory
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -1740,12 +1740,12 @@ sub memory
         })(),
       );
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const initialRequest = [{ text: 'Hi' }];
       const promptId = 'prompt-id-infinite-invalid-stream';
@@ -1787,12 +1787,12 @@ sub memory
         .mockReturnValueOnce(mockStream1)
         .mockReturnValueOnce(mockStream2);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       // Include functionResponse parts to test tool name extraction
       const initialRequest = [
@@ -1859,12 +1859,12 @@ sub memory
 
       mockTurnRunFn.mockReturnValueOnce(mockStream1);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const initialRequest = [{ text: 'Hi' }];
       const promptId = 'prompt-id-413-no-retry';
@@ -1904,12 +1904,12 @@ sub memory
         })(),
       );
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const initialRequest = [{ text: 'Hi' }];
       const promptId = 'prompt-id-413-infinite';
@@ -1969,12 +1969,12 @@ sub memory
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -2034,12 +2034,12 @@ sub memory
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -2082,12 +2082,12 @@ sub memory
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -2123,12 +2123,12 @@ sub memory
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -2164,7 +2164,7 @@ sub memory
         vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
         mockTurnRunFn.mockReturnValue(mockStream);
 
-        const mockChat: Partial<GeminiChat> = {
+        const mockChat: Partial<ChatSession> = {
           addHistory: vi.fn(),
           setHistory: vi.fn(),
           sendMessage: vi.fn().mockResolvedValue({ text: 'summary' }),
@@ -2176,7 +2176,7 @@ sub memory
             ]),
           getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         };
-        client['chat'] = mockChat as GeminiChat;
+        client['chat'] = mockChat as ChatSession;
 
         // Override the client.getHistory mock to return non-empty history for delta tests
         (client.getHistory as ReturnType<typeof vi.fn>).mockResolvedValue([
@@ -2418,7 +2418,7 @@ sub memory
     });
 
     describe('IDE context with pending tool calls', () => {
-      let mockChat: Partial<GeminiChat>;
+      let mockChat: Partial<ChatSession>;
 
       beforeEach(() => {
         const mockStream = (async function* () {
@@ -2433,7 +2433,7 @@ sub memory
           sendMessage: vi.fn().mockResolvedValue({ text: 'summary' }),
           getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         };
-        client['chat'] = mockChat as GeminiChat;
+        client['chat'] = mockChat as ChatSession;
 
         const mockGenerator: Partial<ContentGenerator> = {
           countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -2770,7 +2770,7 @@ sub memory
       const mockChat = {
         setHistory: vi.fn(),
       };
-      client['chat'] = mockChat as unknown as GeminiChat;
+      client['chat'] = mockChat as unknown as ChatSession;
 
       const historyWithThoughts: Content[] = [
         {
@@ -2812,7 +2812,7 @@ sub memory
       const mockChat = {
         setHistory: vi.fn(),
       };
-      client['chat'] = mockChat as unknown as GeminiChat;
+      client['chat'] = mockChat as unknown as ChatSession;
 
       const historyWithThoughts: Content[] = [
         {
@@ -2858,7 +2858,7 @@ sub memory
       const mockChat = {
         setHistory: vi.fn(),
       };
-      client['chat'] = mockChat as unknown as GeminiChat;
+      client['chat'] = mockChat as unknown as ChatSession;
       vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
 
       const history: Content[] = [
@@ -2882,7 +2882,7 @@ sub memory
       const mockChat = {
         setHistory: vi.fn(),
       };
-      client['chat'] = mockChat as unknown as GeminiChat;
+      client['chat'] = mockChat as unknown as ChatSession;
       vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
 
       const history: Content[] = [
@@ -2918,7 +2918,7 @@ sub memory
         getHistoryService,
       };
 
-      client['chat'] = mockChat as unknown as GeminiChat;
+      client['chat'] = mockChat as unknown as ChatSession;
       client['contentGenerator'] = {
         countTokens: vi.fn(),
       } as unknown as ContentGenerator;
@@ -2964,7 +2964,7 @@ sub memory
         getHistoryService,
       };
 
-      client['chat'] = mockChat as unknown as GeminiChat;
+      client['chat'] = mockChat as unknown as ChatSession;
       client['contentGenerator'] = {
         countTokens: vi.fn(),
       } as unknown as ContentGenerator;
@@ -3024,12 +3024,12 @@ sub memory
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
@@ -3091,12 +3091,12 @@ sub memory
         return mockStream;
       });
 
-      const mockChat: Partial<GeminiChat> = {
+      const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
-      client['chat'] = mockChat as GeminiChat;
+      client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),

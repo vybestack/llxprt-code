@@ -31,7 +31,7 @@ describe('copyCommand', () => {
     mockContext = createMockCommandContext({
       services: {
         config: {
-          getGeminiClient: () => ({
+          getAgentClient: () => ({
             getChat: mockGetChat,
             hasChatInitialized: vi.fn().mockReturnValue(true),
             getHistory: vi.fn().mockResolvedValue([]),
@@ -53,7 +53,7 @@ describe('copyCommand', () => {
     mockContext = createMockCommandContext({
       services: {
         config: {
-          getGeminiClient: () => ({
+          getAgentClient: () => ({
             getChat: mockGetChat,
             hasChatInitialized: vi.fn().mockReturnValue(false),
             getHistory: vi.fn().mockResolvedValue([]),

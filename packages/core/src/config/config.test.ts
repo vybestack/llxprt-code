@@ -26,11 +26,11 @@ import {
 } from '../telemetry/index.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
-import { GeminiClient } from '../core/client.js';
+import { AgentClient } from '../core/client.js';
 import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
-import type { SettingsService } from '../settings/SettingsService.js';
+import { getSettingsService } from '@vybestack/llxprt-code-settings';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../test-utils/config.js';
 
 import { ShellTool, ReadFileTool } from '@vybestack/llxprt-code-tools';
@@ -90,7 +90,7 @@ vi.mock('../core/contentGenerator.js', async (importOriginal) => {
 });
 
 vi.mock('../core/client.js', () => ({
-  GeminiClient: vi.fn().mockImplementation(() => ({
+  AgentClient: vi.fn().mockImplementation(() => ({
     initialize: vi.fn().mockResolvedValue(undefined),
     isInitialized: vi.fn().mockReturnValue(false),
     getHistory: vi.fn().mockReturnValue([]),
@@ -142,7 +142,10 @@ vi.mock('../services/gitService.js', () => {
   return { GitService: GitServiceMock };
 });
 
-vi.mock('../settings/settingsServiceInstance.js', () => {
+vi.mock('@vybestack/llxprt-code-settings', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-settings')
+  >('@vybestack/llxprt-code-settings');
   const mockSettingsService = {
     get: vi.fn(),
     set: vi.fn(),
@@ -154,6 +157,7 @@ vi.mock('../settings/settingsServiceInstance.js', () => {
     getAllGlobalSettings: vi.fn(() => ({})),
   };
   return {
+    ...actual,
     getSettingsService: vi.fn(() => mockSettingsService),
     resetSettingsService: vi.fn(),
     registerSettingsService: vi.fn(),
@@ -304,7 +308,7 @@ describe('Server Config (config.ts)', () => {
   describe('refreshAuth', () => {
     it('should refresh auth and update config', async () => {
       const config = new Config(baseParams);
-      // Initialize config to create GeminiClient instance
+      // Initialize config to create AgentClient instance
       await initializeTestConfig(config);
 
       const newModel = 'gemini-flash';
@@ -328,7 +332,7 @@ describe('Server Config (config.ts)', () => {
       );
       expect(config.getContentGeneratorConfig()?.model).toBe(newModel);
       expect(config.getModel()).toBe(newModel); // getModel() should return the updated model
-      expect(GeminiClient).toHaveBeenCalledWith(
+      expect(AgentClient).toHaveBeenCalledWith(
         config,
         expect.objectContaining({
           provider: expect.any(String),
@@ -372,9 +376,9 @@ describe('Server Config (config.ts)', () => {
 
       // Set the existing client
       (
-        config as unknown as { geminiClient: typeof mockExistingClient }
-      ).geminiClient = mockExistingClient;
-      (GeminiClient as Mock).mockImplementation(() => mockNewClient);
+        config as unknown as { agentClient: typeof mockExistingClient }
+      ).agentClient = mockExistingClient;
+      (AgentClient as Mock).mockImplementation(() => mockNewClient);
 
       await config.refreshAuth();
 
@@ -382,7 +386,7 @@ describe('Server Config (config.ts)', () => {
       expect(mockExistingClient.getHistory).toHaveBeenCalled();
 
       // Verify that new client was created and initialized
-      expect(GeminiClient).toHaveBeenCalledWith(
+      expect(AgentClient).toHaveBeenCalledWith(
         config,
         expect.objectContaining({
           provider: expect.any(String),
@@ -417,13 +421,13 @@ describe('Server Config (config.ts)', () => {
       };
 
       // No existing client
-      (config as unknown as { geminiClient: null }).geminiClient = null;
-      (GeminiClient as Mock).mockImplementation(() => mockNewClient);
+      (config as unknown as { agentClient: null }).agentClient = null;
+      (AgentClient as Mock).mockImplementation(() => mockNewClient);
 
       await config.refreshAuth();
 
       // Verify that new client was created and initialized
-      expect(GeminiClient).toHaveBeenCalledWith(
+      expect(AgentClient).toHaveBeenCalledWith(
         config,
         expect.objectContaining({
           provider: expect.any(String),
@@ -469,9 +473,9 @@ describe('Server Config (config.ts)', () => {
       };
 
       (
-        config as unknown as { geminiClient: typeof mockExistingClient }
-      ).geminiClient = mockExistingClient;
-      (GeminiClient as Mock).mockImplementation(() => mockNewClient);
+        config as unknown as { agentClient: typeof mockExistingClient }
+      ).agentClient = mockExistingClient;
+      (AgentClient as Mock).mockImplementation(() => mockNewClient);
 
       await config.refreshAuth();
 
@@ -519,9 +523,9 @@ describe('Server Config (config.ts)', () => {
       };
 
       (
-        config as unknown as { geminiClient: typeof mockExistingClient }
-      ).geminiClient = mockExistingClient;
-      (GeminiClient as Mock).mockImplementation(() => mockNewClient);
+        config as unknown as { agentClient: typeof mockExistingClient }
+      ).agentClient = mockExistingClient;
+      (AgentClient as Mock).mockImplementation(() => mockNewClient);
 
       await config.refreshAuth();
 
@@ -573,7 +577,7 @@ describe('Server Config (config.ts)', () => {
         storeHistoryServiceForReuse: vi.fn(),
       };
 
-      (GeminiClient as Mock).mockImplementation(() => mockNewClient);
+      (AgentClient as Mock).mockImplementation(() => mockNewClient);
 
       // Call initializeContentGeneratorConfig - this should NOT trigger OAuth
       await config.initializeContentGeneratorConfig();
@@ -613,8 +617,8 @@ describe('Server Config (config.ts)', () => {
       };
 
       (
-        config as unknown as { geminiClient: typeof mockExistingClient }
-      ).geminiClient = mockExistingClient;
+        config as unknown as { agentClient: typeof mockExistingClient }
+      ).agentClient = mockExistingClient;
 
       const mockContentConfig = {
         model: 'gemini-pro',
@@ -633,7 +637,7 @@ describe('Server Config (config.ts)', () => {
         storeHistoryServiceForReuse: vi.fn(),
       };
 
-      (GeminiClient as Mock).mockImplementation(() => mockNewClient);
+      (AgentClient as Mock).mockImplementation(() => mockNewClient);
 
       // Refresh auth
       await config.refreshAuth();
@@ -681,9 +685,9 @@ describe('Server Config (config.ts)', () => {
       };
 
       (
-        config as unknown as { geminiClient: typeof mockExistingClient }
-      ).geminiClient = mockExistingClient;
-      (GeminiClient as Mock).mockImplementation(() => mockNewClient);
+        config as unknown as { agentClient: typeof mockExistingClient }
+      ).agentClient = mockExistingClient;
+      (AgentClient as Mock).mockImplementation(() => mockNewClient);
 
       await config.refreshAuth();
 

@@ -91,7 +91,7 @@ class TestConfig extends ConfigBaseCore {
     (this as unknown as Record<string, unknown>).skillManager = {};
     (this as unknown as Record<string, unknown>).settingsService = {};
     (this as unknown as Record<string, unknown>).fileSystemService = {};
-    (this as unknown as Record<string, unknown>).geminiClient = {};
+    (this as unknown as Record<string, unknown>).agentClient = {};
     (this as unknown as Record<string, unknown>).runtimeState = {};
     (this as unknown as Record<string, unknown>).outputFormat = {};
   }

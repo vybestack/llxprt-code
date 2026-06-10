@@ -21,8 +21,8 @@ vi.mock('../utils/environmentContext.js', () => ({
   getEnvironmentContext: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('./geminiChat.js', () => ({
-  GeminiChat: vi.fn().mockImplementation(() => ({
+vi.mock('./chatSession.js', () => ({
+  ChatSession: vi.fn().mockImplementation(() => ({
     setActiveTodosProvider: vi.fn(),
     getHistoryService: vi.fn().mockReturnValue(null),
   })),
@@ -40,6 +40,7 @@ vi.mock('../runtime/AgentRuntimeLoader.js', () => ({
 }));
 
 vi.mock('../runtime/providerRuntimeContext.js', () => ({
+  setProviderRuntimeStateFactory: vi.fn(),
   createProviderRuntimeContext: vi.fn().mockReturnValue({}),
 }));
 
@@ -75,7 +76,7 @@ import {
 import { getCoreSystemPromptAsync } from './prompts.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
-import { GeminiChat } from './geminiChat.js';
+import { ChatSession } from './chatSession.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { Config } from '../config/config.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -426,7 +427,7 @@ describe('createChatSession', () => {
       toolRegistry: undefined,
     });
 
-    expect(GeminiChat).toHaveBeenCalledWith(
+    expect(ChatSession).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       expect.objectContaining({
@@ -452,7 +453,7 @@ describe('createChatSession', () => {
       toolRegistry: undefined,
     });
 
-    expect(GeminiChat).toHaveBeenCalledWith(
+    expect(ChatSession).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       expect.not.objectContaining({ thinkingConfig: expect.anything() }),
@@ -468,8 +469,8 @@ describe('createChatSession', () => {
       setActiveTodosProvider: vi.fn(),
       getHistoryService: vi.fn().mockReturnValue(null),
     };
-    vi.mocked(GeminiChat).mockImplementationOnce(
-      () => mockChat as unknown as GeminiChat,
+    vi.mocked(ChatSession).mockImplementationOnce(
+      () => mockChat as unknown as ChatSession,
     );
 
     await createChatSession({

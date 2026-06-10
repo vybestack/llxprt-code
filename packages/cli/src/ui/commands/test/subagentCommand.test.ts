@@ -55,7 +55,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import type { Logger, SessionMetrics } from '@vybestack/llxprt-code-core';
-import { SubagentManager, ProfileManager } from '@vybestack/llxprt-code-core';
+import { SubagentManager } from '@vybestack/llxprt-code-core';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentView } from '../../components/SubagentManagement/types.js';
 import { MessageType } from '../../types.js';
 import { FunctionCallingConfigMode } from '@google/genai';
@@ -232,7 +233,7 @@ const ensureDialog = (
  * @requirement:REQ-004, REQ-005, REQ-006, REQ-007, REQ-014
  *
  * Tests verify command interactions with SubagentManager
- * Mock GeminiClient, use real file system
+ * Mock AgentClient, use real file system
  */
 describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () => {
   let context: CommandContext;
@@ -624,7 +625,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
   let subagentManager: SubagentManager;
   let profileManager: ProfileManager;
   let tempDir: string;
-  let mockGeminiClient: {
+  let mockAgentClient: {
     generateDirectMessage: ReturnType<typeof vi.fn>;
   };
 
@@ -653,8 +654,8 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
       subagentManager,
     });
 
-    // Mock GeminiClient
-    mockGeminiClient = {
+    // Mock AgentClient
+    mockAgentClient = {
       generateDirectMessage: vi.fn().mockResolvedValue({
         text: 'Auto generated prompt',
       }),
@@ -663,7 +664,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     // Add to context in a way that avoids TypeScript errors
     (context as unknown as { services: { config: unknown } }).services.config =
       {
-        getGeminiClient: vi.fn(() => mockGeminiClient),
+        getAgentClient: vi.fn(() => mockAgentClient),
       };
   });
 
@@ -674,7 +675,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
   it('should generate system prompt using LLM', async () => {
     // Mock LLM response
-    mockGeminiClient.generateDirectMessage.mockResolvedValue({
+    mockAgentClient.generateDirectMessage.mockResolvedValue({
       text: 'You are an expert Python debugger specializing in finding and fixing bugs.',
     });
 
@@ -683,8 +684,8 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     const result = await findSubCommand('save').action!(context, args);
 
     // Verify LLM was called
-    expect(mockGeminiClient.generateDirectMessage).toHaveBeenCalledTimes(1);
-    const callArgs = mockGeminiClient.generateDirectMessage.mock.calls[0][0];
+    expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledTimes(1);
+    const callArgs = mockAgentClient.generateDirectMessage.mock.calls[0][0];
     expect(callArgs.message).toMatch(/expert Python debugger/);
     expect(callArgs.message).toMatch(/system prompt/i);
     expect(callArgs.config).toStrictEqual({
@@ -715,7 +716,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
   it('should handle LLM generation failure', async () => {
     // Mock LLM error
-    mockGeminiClient.generateDirectMessage.mockRejectedValue(
+    mockAgentClient.generateDirectMessage.mockRejectedValue(
       new Error('Network error'),
     );
 
@@ -730,7 +731,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     }
     expect(result.messageType).toBe('error');
     expect(result.content).toMatch(/Network error/);
-    expect(mockGeminiClient.generateDirectMessage).toHaveBeenCalledWith(
+    expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         config: {
           toolConfig: {
@@ -747,7 +748,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
   it('should handle empty LLM response', async () => {
     // Mock empty response
-    mockGeminiClient.generateDirectMessage.mockResolvedValue({
+    mockAgentClient.generateDirectMessage.mockResolvedValue({
       text: '',
     });
 
@@ -762,7 +763,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     }
     expect(result.messageType).toBe('error');
     expect(result.content).toMatch(/empty.*response|manual mode/i);
-    expect(mockGeminiClient.generateDirectMessage).toHaveBeenCalledWith(
+    expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         config: {
           toolConfig: {
@@ -783,7 +784,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     (context as unknown as { services: { config: unknown } }).services.config =
       {
-        getGeminiClient: vi.fn(() => null),
+        getAgentClient: vi.fn(() => null),
         getProvider: vi.fn(() => 'gemini'),
       };
 
@@ -816,7 +817,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
   });
 
   it('should use correct prompt template for LLM', async () => {
-    mockGeminiClient.generateDirectMessage.mockResolvedValue({
+    mockAgentClient.generateDirectMessage.mockResolvedValue({
       text: 'Generated prompt',
     });
 
@@ -824,7 +825,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     const args = `testagent testprofile auto "${description}"`;
     await findSubCommand('save').action!(context, args);
 
-    const callArgs = mockGeminiClient.generateDirectMessage.mock.calls[0][0];
+    const callArgs = mockAgentClient.generateDirectMessage.mock.calls[0][0];
 
     // Verify prompt includes description
     expect(callArgs.message).toContain(description);

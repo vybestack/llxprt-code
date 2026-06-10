@@ -608,7 +608,7 @@ describe('CoreToolScheduler', () => {
       getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
       getUseSmartEdit: () => false,
       getUseModelRouter: () => false,
-      getGeminiClient: () => null,
+      getAgentClient: () => null,
       getModel: () => DEFAULT_GEMINI_MODEL,
     } as unknown as Config;
 
@@ -724,7 +724,7 @@ describe('CoreToolScheduler', () => {
       getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
       getToolRegistry: () => mockToolRegistry,
       getUseModelRouter: () => false,
-      getGeminiClient: () => null,
+      getAgentClient: () => null,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
       getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
@@ -1529,7 +1529,7 @@ describe('CoreToolScheduler with payload', () => {
       getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
       getUseSmartEdit: () => false,
       getUseModelRouter: () => false,
-      getGeminiClient: () => null,
+      getAgentClient: () => null,
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({

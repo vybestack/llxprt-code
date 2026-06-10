@@ -11,9 +11,9 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
 describe('Config Regression Guards', () => {
-  describe('GeminiChat', () => {
+  describe('ChatSession', () => {
     it('should only import Config as a type (not for runtime use)', () => {
-      const filePath = resolve(__dirname, '../geminiChat.ts');
+      const filePath = resolve(__dirname, '../chatSession.ts');
       const content = readFileSync(filePath, 'utf-8');
 
       // Config should only be imported as a type (type-only import)
@@ -43,7 +43,7 @@ describe('Config Regression Guards', () => {
     });
 
     it('should not use Config static methods for provider/model/auth', () => {
-      const filePath = resolve(__dirname, '../geminiChat.ts');
+      const filePath = resolve(__dirname, '../chatSession.ts');
       const content = readFileSync(filePath, 'utf-8');
 
       // Remove comments and strings to avoid false positives
@@ -69,7 +69,7 @@ describe('Config Regression Guards', () => {
     });
 
     it('should use runtime context for provider information', () => {
-      const filePath = resolve(__dirname, '../geminiChat.ts');
+      const filePath = resolve(__dirname, '../chatSession.ts');
       const content = readFileSync(filePath, 'utf-8');
 
       // Ensure runtime runtime adapters are the source of truth
@@ -125,10 +125,10 @@ describe('Config Regression Guards', () => {
 
     it('should use AgentRuntimeState as the single source of truth', () => {
       // Runtime state flow must be:
-      // AgentRuntimeState (core) → ProviderRuntimeContext → GeminiClient/Chat
+      // AgentRuntimeState (core) → ProviderRuntimeContext → AgentClient/Chat
       //
       // NOT:
-      // Config → GeminiClient/Chat
+      // Config → AgentClient/Chat
 
       expect(true).toBe(true); // Architectural documentation test
     });

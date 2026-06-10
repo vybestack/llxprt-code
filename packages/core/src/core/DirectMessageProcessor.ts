@@ -31,7 +31,7 @@ import {
   convertIContentToResponse,
   aggregateTextWithSpacing,
 } from './MessageConverter.js';
-import { isSchemaDepthError } from './geminiChatTypes.js';
+import { isSchemaDepthError } from './chatSessionTypes.js';
 import {
   nextStreamEventWithIdleTimeout,
   resolveStreamIdleTimeoutMs,
@@ -50,7 +50,7 @@ import type { Config } from '../config/config.js';
 
 /**
  * Handles non-streaming direct message generation.
- * Extracted from GeminiChat to separate concerns.
+ * Extracted from ChatSession to separate concerns.
  */
 export class DirectMessageProcessor {
   private logger = new DebugLogger('llxprt:direct-message-processor');
@@ -329,7 +329,8 @@ export class DirectMessageProcessor {
       invocation: {
         signal: timeoutSignal,
       } as unknown as GenerateChatOptions['invocation'],
-      settings: runtimeContext.settingsService,
+      settings:
+        runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       userMemory: runtimeContext.config?.getUserMemory?.(),

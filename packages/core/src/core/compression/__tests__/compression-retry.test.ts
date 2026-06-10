@@ -27,8 +27,8 @@ import {
 } from '../types.js';
 import { PerformCompressionResult } from '../../turn.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
-import { GeminiChat } from '../../geminiChat.js';
-import { createGeminiChatRuntime } from '../../../test-utils/runtime.js';
+import { ChatSession } from '../../chatSession.js';
+import { createChatSessionRuntime } from '../../../test-utils/runtime.js';
 import { createAgentRuntimeState } from '../../../runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '../../../runtime/createAgentRuntimeContext.js';
 import {
@@ -344,17 +344,17 @@ describe('Property-based: error classification @plan PLAN-20260218-COMPRESSION-R
 });
 
 // ---------------------------------------------------------------------------
-// GeminiChat integration tests for retry/fallback/cooldown
+// ChatSession integration tests for retry/fallback/cooldown
 // ---------------------------------------------------------------------------
 
 /**
- * Creates a minimal GeminiChat instance for compression behavior testing.
+ * Creates a minimal ChatSession instance for compression behavior testing.
  * Uses vi.spyOn on getCompressionStrategy to control compression outcomes.
  */
-function makeGeminiChat(
-  runtimeSetup: ReturnType<typeof createGeminiChatRuntime>,
+function makeChatSession(
+  runtimeSetup: ReturnType<typeof createChatSessionRuntime>,
   providerRuntimeSnapshot: ProviderRuntimeContext,
-): GeminiChat {
+): ChatSession {
   const runtimeState = createAgentRuntimeState({
     runtimeId: runtimeSetup.runtime.runtimeId,
     provider: runtimeSetup.provider.name,
@@ -407,20 +407,20 @@ function makeGeminiChat(
     embedContent: vi.fn(),
   };
 
-  return new GeminiChat(view, mockContentGenerator, {}, []);
+  return new ChatSession(view, mockContentGenerator, {}, []);
 }
 
 // ---------------------------------------------------------------------------
 // Phase 2: Retry behavior in performCompression
 // ---------------------------------------------------------------------------
 
-describe('GeminiChat compression retry behavior @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
-  let runtimeSetup: ReturnType<typeof createGeminiChatRuntime>;
+describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
+  let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   let providerRuntimeSnapshot: ProviderRuntimeContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    runtimeSetup = createGeminiChatRuntime();
+    runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
@@ -437,7 +437,7 @@ describe('GeminiChat compression retry behavior @plan PLAN-20260218-COMPRESSION-
    * performCompression retries on transient errors
    */
   it('retries a transient error and eventually succeeds', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let callCount = 0;
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
@@ -472,7 +472,7 @@ describe('GeminiChat compression retry behavior @plan PLAN-20260218-COMPRESSION-
    * performCompression fails fast on permanent errors (no retry)
    */
   it('does not retry permanent errors', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let callCount = 0;
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
@@ -501,13 +501,13 @@ describe('GeminiChat compression retry behavior @plan PLAN-20260218-COMPRESSION-
 // Phase 3: Fallback compression strategy
 // ---------------------------------------------------------------------------
 
-describe('GeminiChat compression fallback @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
-  let runtimeSetup: ReturnType<typeof createGeminiChatRuntime>;
+describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
+  let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   let providerRuntimeSnapshot: ProviderRuntimeContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    runtimeSetup = createGeminiChatRuntime();
+    runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
@@ -524,7 +524,7 @@ describe('GeminiChat compression fallback @plan PLAN-20260218-COMPRESSION-RETRY.
    * Falls back to TopDownTruncation when primary strategy fails
    */
   it('uses fallback strategy when primary strategy fails after retries', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let fallbackCalled = false;
     let primaryCallCount = 0;
@@ -571,7 +571,7 @@ describe('GeminiChat compression fallback @plan PLAN-20260218-COMPRESSION-RETRY.
    * When fallback also fails, logs error and continues without throwing
    */
   it('does not throw when fallback also fails', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
       () => ({
@@ -593,14 +593,14 @@ describe('GeminiChat compression fallback @plan PLAN-20260218-COMPRESSION-RETRY.
 // Phase 4: Failure tracking and cooldown
 // ---------------------------------------------------------------------------
 
-describe('GeminiChat compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
-  let runtimeSetup: ReturnType<typeof createGeminiChatRuntime>;
+describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
+  let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   let providerRuntimeSnapshot: ProviderRuntimeContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    runtimeSetup = createGeminiChatRuntime();
+    runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
@@ -618,7 +618,7 @@ describe('GeminiChat compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY.
    * After 3 failures within 60 seconds, compression is skipped
    */
   it('skips compression after 3 consecutive failures within cooldown period', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let compressionAttempts = 0;
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
@@ -651,7 +651,7 @@ describe('GeminiChat compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY.
    * Cooldown expires after 60 seconds
    */
   it('cooldown expires after 60 seconds allowing compression to resume', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let compressionAttempts = 0;
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
@@ -686,7 +686,7 @@ describe('GeminiChat compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY.
    * Cooldown resets on successful compression
    */
   it('resets failure count after successful compression', async () => {
-    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let shouldFail = true;
     let compressionAttempts = 0;
@@ -744,12 +744,12 @@ describe('GeminiChat compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY.
 // ---------------------------------------------------------------------------
 
 describe('Hard-limit compression behavior (Issue #1791)', () => {
-  let runtimeSetup: ReturnType<typeof createGeminiChatRuntime>;
+  let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   let providerRuntimeSnapshot: ProviderRuntimeContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    runtimeSetup = createGeminiChatRuntime();
+    runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
@@ -762,14 +762,14 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
   });
 
   /**
-   * Helper: build a GeminiChat with mocked history for enforceContextWindow tests.
+   * Helper: build a ChatSession with mocked history for enforceContextWindow tests.
    * The token counts are controlled so projected > marginAdjustedLimit.
    */
   function makeChatForEnforceContextWindow(overrides?: {
     totalTokens?: number;
     contextLimit?: number;
     maxOutputTokens?: number;
-  }): GeminiChat {
+  }): ChatSession {
     const totalTokens = overrides?.totalTokens ?? 100000;
     const contextLimit = overrides?.contextLimit ?? 200000;
     const maxOutputTokens = overrides?.maxOutputTokens ?? 65_536;
@@ -830,7 +830,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       embedContent: vi.fn(),
     };
 
-    return new GeminiChat(view, mockContentGenerator, { maxOutputTokens }, []);
+    return new ChatSession(view, mockContentGenerator, { maxOutputTokens }, []);
   }
 
   /**

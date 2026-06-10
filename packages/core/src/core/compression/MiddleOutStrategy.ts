@@ -17,7 +17,7 @@
  * conversation history and compresses the middle section via an LLM call.
  *
  * Extracted from the sandwich compression logic previously embedded in
- * GeminiChat (getCompressionSplit, directCompressionCall, applyCompression).
+ * ChatSession (getCompressionSplit, directCompressionCall, applyCompression).
  */
 
 import { readFileSync } from 'node:fs';

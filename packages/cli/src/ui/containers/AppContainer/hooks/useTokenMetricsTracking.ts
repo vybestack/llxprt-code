@@ -50,26 +50,26 @@ type RuntimeHistoryService = Parameters<
   RecordingIntegration['onHistoryServiceReplaced']
 >[0];
 
-interface RuntimeGeminiClientBoundary {
+interface RuntimeAgentClientBoundary {
   hasChatInitialized?: () => boolean;
   getHistoryService?: () => RuntimeHistoryService | null | undefined;
 }
 
 interface RuntimeConfigBoundary {
-  getGeminiClient?: () => RuntimeGeminiClientBoundary | null | undefined;
+  getAgentClient?: () => RuntimeAgentClientBoundary | null | undefined;
 }
 
 function getInitializedHistoryService(
   config: Config,
 ): RuntimeHistoryService | null {
   const runtimeConfig = config as RuntimeConfigBoundary;
-  const geminiClient = runtimeConfig.getGeminiClient?.();
+  const agentClient = runtimeConfig.getAgentClient?.();
 
-  if (geminiClient?.hasChatInitialized?.() !== true) {
+  if (agentClient?.hasChatInitialized?.() !== true) {
     return null;
   }
 
-  return geminiClient.getHistoryService?.() ?? null;
+  return agentClient.getHistoryService?.() ?? null;
 }
 
 function useHistoryTokenListener(
@@ -153,7 +153,7 @@ function useHistoryTokenListener(
  * Subscribe RecordingIntegration to HistoryService events when the
  * HistoryService becomes available. Re-subscribes when the HistoryService
  * instance changes (e.g. after compression creates a new instance, or
- * after provider switch triggers GeminiClient.startChat()).
+ * after provider switch triggers AgentClient.startChat()).
  */
 function useRecordingSubscription(
   config: Config,

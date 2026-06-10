@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SettingsService } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';

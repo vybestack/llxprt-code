@@ -8,7 +8,7 @@
  * @plan PLAN-20260211-COMPRESSION.P13
  * @requirement REQ-CS-006.1, REQ-CS-006.2, REQ-CS-006.3, REQ-CS-006.4
  *
- * Dispatcher integration tests: verify that performCompression() in GeminiChat
+ * Dispatcher integration tests: verify that performCompression() in ChatSession
  * delegates to the correct compression strategy based on the
  * `compressionStrategy` ephemeral setting.
  *
@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GeminiChat } from '../geminiChat.js';
+import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '../../services/history/HistoryService.js';
 import type { IContent } from '../../services/history/IContent.js';
 import { createAgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
@@ -164,7 +164,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
       populateHistory(historyService);
       const messageCountBefore = historyService.getCurated().length;
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       // top-down-truncation needs currentTokenCount above the target threshold
       // to actually truncate. Mock getTotalTokens to simulate token pressure.
@@ -210,7 +215,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       populateHistory(historyService);
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
@@ -250,7 +260,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       populateHistory(historyService);
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Default strategy</overall_goal></state_snapshot>';
@@ -282,7 +297,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       populateHistory(historyService);
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Ordered result</overall_goal></state_snapshot>';
@@ -328,7 +348,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       populateHistory(historyService);
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       // Make the provider throw an error to simulate strategy failure
       const mockProvider = {
@@ -364,7 +389,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       populateHistory(historyService);
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       // Simulate a provider that returns an invalid generator
       const mockProvider = {
@@ -403,7 +433,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       populateHistory(historyService);
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const summaryText =
         '<state_snapshot><overall_goal>Success</overall_goal></state_snapshot>';
@@ -479,7 +514,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
         compressionStrategy: 'middle-out',
       });
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
       vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
         mockProvider as never,
       );
@@ -516,7 +556,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
         compressionStrategy: 'middle-out',
       });
 
-      const chat = new GeminiChat(
+      const chat = new ChatSession(
         runtimeContext,
         localContentGenerator,
         {},
@@ -551,7 +591,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
         compressionStrategy: 'middle-out',
       });
 
-      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const result = await chat.performCompression('test-prompt-id');
 

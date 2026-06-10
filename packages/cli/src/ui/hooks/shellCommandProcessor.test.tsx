@@ -51,7 +51,7 @@ import {
 } from './shellCommandProcessor.js';
 import {
   type Config,
-  type GeminiClient,
+  type AgentClient,
   type ShellExecutionResult,
   type ShellOutputEvent,
 } from '@vybestack/llxprt-code-core';
@@ -69,7 +69,7 @@ describe('useShellCommandProcessor', () => {
   let onDebugMessageMock: Mock;
   let setShellInputFocusedMock: Mock;
   let mockConfig: Config;
-  let mockGeminiClient: GeminiClient;
+  let mockAgentClient: AgentClient;
 
   let mockShellOutputCallback: (event: ShellOutputEvent) => void;
   let resolveExecutionPromise: (result: ShellExecutionResult) => void;
@@ -110,7 +110,7 @@ describe('useShellCommandProcessor', () => {
         terminalHeight: 24,
       }),
     } as unknown as Config;
-    mockGeminiClient = { addHistory: vi.fn() } as unknown as GeminiClient;
+    mockAgentClient = { addHistory: vi.fn() } as unknown as AgentClient;
 
     // os functions are already mocked in the vi.mock call above
     // No need to re-mock them here
@@ -141,7 +141,7 @@ describe('useShellCommandProcessor', () => {
         onExecMock,
         onDebugMessageMock,
         mockConfig,
-        mockGeminiClient,
+        mockAgentClient,
         setShellInputFocusedMock,
         80,
         24,
@@ -245,7 +245,7 @@ describe('useShellCommandProcessor', () => {
         ],
       }),
     );
-    expect(mockGeminiClient.addHistory).toHaveBeenCalled();
+    expect(mockAgentClient.addHistory).toHaveBeenCalled();
   });
 
   it('should reset shell input focus to false after successful completion', async () => {
@@ -415,7 +415,7 @@ describe('useShellCommandProcessor', () => {
           onExecMock,
           onDebugMessageMock,
           mockConfig,
-          mockGeminiClient,
+          mockAgentClient,
           setShellInputFocusedMock,
           80,
           24,

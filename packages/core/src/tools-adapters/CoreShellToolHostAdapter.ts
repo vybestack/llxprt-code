@@ -200,7 +200,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
 
     return summarizeToolOutput(
       content,
-      this.config.getGeminiClient(),
+      this.config.getAgentClient(),
       signal,
       tokenBudget,
     );

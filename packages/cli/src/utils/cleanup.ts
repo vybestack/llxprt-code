@@ -6,11 +6,8 @@
 
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import {
-  FileOutput,
-  Storage,
-  ShellExecutionService,
-} from '@vybestack/llxprt-code-core';
+import { FileOutput, ShellExecutionService } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 type FileOutputWithOptionalDisposeInstance = typeof FileOutput & {
   disposeInstance?: unknown;

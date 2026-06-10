@@ -1,25 +1,20 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Compatibility shim: re-exports telemetry types and functions from
+ * the @vybestack/llxprt-code-telemetry package. Avoids re-exporting
+ * names that collide with core's own types (e.g., ToolCall, HookEventName).
  */
-
-export enum TelemetryTarget {
-  GCP = 'gcp',
-  LOCAL = 'local',
-}
-
-const DEFAULT_TELEMETRY_TARGET = TelemetryTarget.LOCAL;
-const DEFAULT_OTLP_ENDPOINT = 'http://localhost:4317';
-
-export { DEFAULT_TELEMETRY_TARGET, DEFAULT_OTLP_ENDPOINT };
 export {
+  TelemetryTarget,
+  DEFAULT_TELEMETRY_TARGET,
+  DEFAULT_OTLP_ENDPOINT,
   initializeTelemetry,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
   flushTelemetry,
-} from './sdk.js';
-export {
   logCliConfiguration,
   logUserPrompt,
   logToolCall,
@@ -29,8 +24,22 @@ export {
   logApiResponse,
   logSlashCommand,
   logKittySequenceOverflow,
-} from './loggers.js';
-export {
+  logLoopDetected,
+  logNextSpeakerCheck,
+  logToolOutputTruncated,
+  logFileOperation,
+  logConversationRequest,
+  logConversationResponse,
+  logProviderSwitch,
+  logProviderCapability,
+  logTokenUsage,
+  logPerformanceMetrics,
+  logMalformedJsonResponse,
+  logModelRouting,
+  logExtensionInstallEvent,
+  logExtensionUninstall,
+  logExtensionEnable,
+  logExtensionDisable,
   StartSessionEvent,
   EndSessionEvent,
   UserPromptEvent,
@@ -41,8 +50,50 @@ export {
   ApiResponseEvent,
   SlashCommandEvent,
   KittySequenceOverflowEvent,
-} from './types.js';
-export type { TelemetryEvent } from './types.js';
-export { SpanStatusCode, ValueType } from '@opentelemetry/api';
-export { SemanticAttributes } from '@opentelemetry/semantic-conventions';
+  LoopDetectedEvent,
+  LoopType,
+  NextSpeakerCheckEvent,
+  MalformedJsonResponseEvent,
+  ConversationRequestEvent,
+  ConversationResponseEvent,
+  EnhancedConversationResponseEvent,
+  ProviderSwitchEvent,
+  ProviderCapabilityEvent,
+  TokenUsageEvent,
+  PerformanceMetricsEvent,
+  ToolOutputTruncatedEvent,
+  FileOperationEvent,
+  ModelRoutingEvent,
+  ExtensionInstallEvent,
+  ExtensionUninstallEvent,
+  ExtensionEnableEvent,
+  ExtensionDisableEvent,
+  IdeConnectionType,
+  IdeConnectionEvent,
+  ToolCallDecision,
+  getDecisionFromOutcome,
+  initializeMetrics,
+  recordToolCallMetrics,
+  recordTokenUsageMetrics,
+  recordApiResponseMetrics,
+  recordApiErrorMetrics,
+  recordFileOperationMetric,
+  recordModelRoutingMetrics,
+  getMeter,
+  SpanStatusCode,
+  ValueType,
+  SemanticAttributes,
+} from '@vybestack/llxprt-code-telemetry/telemetry/index.js';
+
+export type {
+  TelemetryEvent,
+  ProviderCapabilities,
+  ProviderContext,
+  ProviderPerformanceMetrics,
+  TelemetryConfig,
+  SessionConfig,
+  TelemetryPromptConfig,
+  CompletedToolCallShape,
+} from '@vybestack/llxprt-code-telemetry/telemetry/index.js';
+
 export * from './uiTelemetry.js';

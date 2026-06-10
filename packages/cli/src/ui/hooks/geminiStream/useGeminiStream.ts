@@ -17,7 +17,7 @@
 import { useMemo } from 'react';
 import {
   type Config,
-  type GeminiClient,
+  type AgentClient,
   type EditorType,
   type ThinkingBlock,
   type MessageBus,
@@ -88,7 +88,7 @@ export async function prepareTurnForQuery(
 }
 
 export const useGeminiStream = (
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
   config: Config,
@@ -112,7 +112,7 @@ export const useGeminiStream = (
   runtimeMessageBus?: MessageBus,
 ) => {
   const orchestration = useGeminiStreamOrchestration({
-    geminiClient,
+    agentClient,
     addItem,
     config,
     settings,
@@ -137,7 +137,7 @@ export const useGeminiStream = (
     orchestration,
     config,
     history,
-    geminiClient,
+    agentClient,
     onDebugMessage,
   );
 };
@@ -146,7 +146,7 @@ function useGeminiStreamReturn(
   orchestration: ReturnType<typeof useGeminiStreamOrchestration>,
   config: Config,
   history: HistoryItem[],
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   onDebugMessage: (message: string) => void,
 ) {
   const pendingHistoryItems = usePendingHistoryItems(
@@ -159,7 +159,7 @@ function useGeminiStreamReturn(
     config,
     orchestration.st.gitService,
     history,
-    geminiClient,
+    agentClient,
     config.storage,
     onDebugMessage,
   );

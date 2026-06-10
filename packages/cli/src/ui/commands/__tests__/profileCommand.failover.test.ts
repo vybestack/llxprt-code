@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { profileCommand } from '../profileCommand.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type { CommandContext } from '../types.js';
-import type { LoadBalancerProfile } from '@vybestack/llxprt-code-core';
+import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 
 const runtimeMocks = vi.hoisted(() => ({
   saveLoadBalancerProfile: vi.fn(),

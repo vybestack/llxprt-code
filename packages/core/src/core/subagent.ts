@@ -29,8 +29,8 @@ import {
 import {
   StreamEventType,
   type StreamEvent,
-  type GeminiChat,
-} from './geminiChat.js';
+  type ChatSession,
+} from './chatSession.js';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
@@ -440,7 +440,7 @@ export class SubAgentScope {
   }
 
   private async runInteractiveTurn(
-    chat: GeminiChat,
+    chat: ChatSession,
     currentMessages: Content[],
     abortController: AbortController,
     turnIndex: number,
@@ -681,7 +681,7 @@ export class SubAgentScope {
   }
 
   private async runNonInteractiveTurn(
-    chat: GeminiChat,
+    chat: ChatSession,
     currentMessages: Content[],
     toolsList: FunctionDeclaration[],
     abortController: AbortController,

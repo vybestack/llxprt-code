@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Subagent orchestrator regression coverage intentionally lives with existing runtime assembly tests. */
+
 import { describe, expect, it, vi } from 'vitest';
 import type { SubagentManager } from '../config/subagentManager.js';
-import type { ProfileManager } from '../config/profileManager.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '../config/types.js';
-import type { Profile } from '../types/modelParams.js';
 import type { Config } from '../config/config.js';
 import type { SubAgentScope } from './subagent.js';
 import { type SubAgentScope as SubAgentScopeInstance } from './subagent.js';
@@ -460,18 +461,14 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(result.dispose).toBeTypeOf('function');
   });
 
-  it('passes the foreground content generator factory into provider-backed subagent runtimes', async () => {
+  it('forwards providerManager to loader for provider-backed subagent runtimes', async () => {
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
     const loadProfile = vi.fn().mockResolvedValue(profile);
 
     const providerManager = { getActiveProvider: vi.fn() };
-    const contentGeneratorFactory = {
-      createContentGenerator: vi.fn(),
-    };
     const config = {
       ...makeForegroundConfig(),
       getProviderManager: () => providerManager,
-      getContentGeneratorFactory: () => contentGeneratorFactory,
     } as unknown as Config;
 
     const runtimeBundle = createRuntimeBundle('provider-backed');
@@ -504,7 +501,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     );
     expect(
       loaderArgs.profile.contentGeneratorConfig.contentGeneratorFactory,
-    ).toBe(contentGeneratorFactory);
+    ).toBeUndefined();
   });
 
   it('seeds default disabled tools into subagent runtime settings when profile omits disabled tools', async () => {
@@ -799,6 +796,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(settingsService.getCurrentProfileName()).toBe(
       keyNameSubagent.profile,
     );
+
     expect(settingsService.get('auth-key-name')).toBe('chutesminimax');
   });
 
@@ -892,5 +890,206 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     expect(disposeSpy).toHaveBeenCalledTimes(1);
     expect(clearSpy).not.toHaveBeenCalled();
+  });
+
+  it('launches load balancer profile subagents with a concrete runtime provider and model', async () => {
+    const loadBalancerSubagent: SubagentConfig = {
+      name: 'typescript-helper',
+      profile: 'typescript-lb',
+      systemPrompt: 'Write TypeScript carefully.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const loadBalancerProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['anthropic-fast', 'openai-fallback'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const anthropicProfile: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4',
+      modelParams: {
+        temperature: 0.2,
+        top_p: 0.8,
+      },
+      ephemeralSettings: {
+        'auth-key': 'anthropic-key',
+        'compression-threshold': 0.66,
+        'tools.allowed': ['read_file'],
+      },
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(loadBalancerSubagent);
+    const loadProfile = vi.fn(async (profileName: string) => {
+      if (profileName === 'typescript-lb') {
+        return loadBalancerProfile;
+      }
+      if (profileName === 'anthropic-fast') {
+        return anthropicProfile;
+      }
+      throw new Error(`unexpected profile ${profileName}`);
+    });
+
+    const providerManager = { getActiveProvider: vi.fn() };
+    const config = {
+      ...makeForegroundConfig(),
+      getProviderManager: () => providerManager,
+    } as unknown as Config;
+    const runtimeBundle = createRuntimeBundle('load-balancer');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+    const scope = {
+      runtimeContext: runtimeBundle.runtimeContext,
+      getAgentId: () => 'typescript-helper-1',
+    } as unknown as SubAgentScopeInstance;
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockResolvedValue(scope);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: config,
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    const result = await orchestrator.launch({
+      name: loadBalancerSubagent.name,
+    });
+
+    const loaderArgs = runtimeLoader.mock.calls[0][0];
+    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
+
+    expect(result.profile).toBe(loadBalancerProfile);
+    expect(loaderArgs.profile.state.provider).toBe('anthropic');
+    expect(loaderArgs.profile.state.model).toBe('claude-sonnet-4');
+    expect(loaderArgs.profile.settings.compressionThreshold).toBe(0.66);
+    expect(loaderArgs.profile.settings.tools?.allowed).toStrictEqual([
+      'read_file',
+    ]);
+    const modelConfig = scopeFactory.mock.calls[0][3];
+    expect(modelConfig.model).toBe('claude-sonnet-4');
+    expect(modelConfig.temp).toBe(0.2);
+    expect(modelConfig.top_p).toBe(0.8);
+
+    expect(loaderArgs.profile.contentGeneratorConfig.model).toBe(
+      'claude-sonnet-4',
+    );
+    expect(loaderArgs.profile.contentGeneratorConfig.apiKey).toBe(
+      'anthropic-key',
+    );
+    expect(loaderArgs.profile.contentGeneratorConfig.providerManager).toBe(
+      providerManager,
+    );
+    expect(settingsService.getCurrentProfileName()).toBe('typescript-lb');
+    expect(settingsService.get('activeProvider')).toBe('anthropic');
+    expect(settingsService.getProviderSettings('anthropic').model).toBe(
+      'claude-sonnet-4',
+    );
+    expect(settingsService.getProviderSettings('').model).toBeUndefined();
+  });
+
+  it('rejects load balancer subagent profiles without referenced profiles', async () => {
+    const emptyLoadBalancerSubagent: SubagentConfig = {
+      name: 'empty-lb-helper',
+      profile: 'empty-lb',
+      systemPrompt: 'Do not launch.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const emptyLoadBalancerProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: [],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(emptyLoadBalancerSubagent);
+    const loadProfile = vi.fn().mockResolvedValue(emptyLoadBalancerProfile);
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await expect(
+      orchestrator.launch({ name: emptyLoadBalancerSubagent.name }),
+    ).rejects.toThrow(/must reference a profile/);
+    expect(runtimeLoader).not.toHaveBeenCalled();
+    expect(scopeFactory).not.toHaveBeenCalled();
+  });
+
+  it('rejects nested load balancer profiles for subagent runtime resolution', async () => {
+    const nestedLoadBalancerSubagent: SubagentConfig = {
+      name: 'nested-lb-helper',
+      profile: 'outer-lb',
+      systemPrompt: 'Do not launch.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const outerLoadBalancerProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['inner-lb'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+    const innerLoadBalancerProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['anthropic-fast'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(nestedLoadBalancerSubagent);
+    const loadProfile = vi.fn(async (profileName: string) => {
+      if (profileName === 'outer-lb') {
+        return outerLoadBalancerProfile;
+      }
+      if (profileName === 'inner-lb') {
+        return innerLoadBalancerProfile;
+      }
+      throw new Error(`unexpected profile ${profileName}`);
+    });
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await expect(
+      orchestrator.launch({ name: nestedLoadBalancerSubagent.name }),
+    ).rejects.toThrow(/cannot use nested load balancer profile 'inner-lb'/);
+    expect(runtimeLoader).not.toHaveBeenCalled();
+    expect(scopeFactory).not.toHaveBeenCalled();
   });
 });

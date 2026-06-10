@@ -16,7 +16,8 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { DebugLogger, MCPOAuthTokenStorage } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
 import process from 'node:process';
 import * as os from 'node:os';
 

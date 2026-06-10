@@ -7,17 +7,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   Config,
-  GeminiClient,
+  AgentClient,
   TodoStore,
   type Todo,
   ApprovalMode,
   todoEvents,
   createRuntimeStateFromConfig,
-  SettingsService,
   type TodoUpdateEvent,
   type Turn,
   type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { PartListUnion } from '@google/genai';
 import {
   createTempDirectory,
@@ -37,7 +37,7 @@ const TITLE_LIST_ITEM_LABEL = 'To' + 'do';
 describe('Task-list Continuation Integration Tests', () => {
   let tempDir: string;
   let config: Config;
-  let geminiClient: GeminiClient;
+  let agentClient: AgentClient;
   let todoStore: TodoStore;
   let sessionId: string;
   let originalHome: string | undefined;
@@ -75,7 +75,7 @@ describe('Task-list Continuation Integration Tests', () => {
       runtimeId: `${sessionId}-todo-runtime`,
     });
 
-    geminiClient = new GeminiClient(config, runtimeState);
+    agentClient = new AgentClient(config, runtimeState);
   });
 
   afterEach(async () => {
@@ -239,11 +239,11 @@ describe('Task-list Continuation Integration Tests', () => {
     });
   });
 
-  describe('GeminiClient Integration', () => {
-    it('@requirement REQ-002 should create GeminiClient with correct configuration', async () => {
-      // Given: GeminiClient instance
-      expect(geminiClient).toBeDefined();
-      expect(typeof geminiClient.sendMessageStream).toBe('function');
+  describe('AgentClient Integration', () => {
+    it('@requirement REQ-002 should create AgentClient with correct configuration', async () => {
+      // Given: AgentClient instance
+      expect(agentClient).toBeDefined();
+      expect(typeof agentClient.sendMessageStream).toBe('function');
     });
 
     it('@requirement REQ-002 should support ephemeral messaging interface', async () => {
@@ -251,8 +251,8 @@ describe('Task-list Continuation Integration Tests', () => {
       let capturedMessage = '';
       let capturedOptions: unknown = null;
 
-      const originalSendMessageStream = geminiClient.sendMessageStream;
-      geminiClient.sendMessageStream = vi.fn(async function* (
+      const originalSendMessageStream = agentClient.sendMessageStream;
+      agentClient.sendMessageStream = vi.fn(async function* (
         request: PartListUnion,
         signal: AbortSignal,
         prompt_id: string,
@@ -273,7 +273,7 @@ describe('Task-list Continuation Integration Tests', () => {
       });
 
       // When: Send ephemeral message
-      const generator = geminiClient.sendMessageStream(
+      const generator = agentClient.sendMessageStream(
         'Test continuation prompt',
         new AbortController().signal,
         'test-prompt-id',
@@ -290,7 +290,7 @@ describe('Task-list Continuation Integration Tests', () => {
       });
 
       // Restore original method
-      geminiClient.sendMessageStream = originalSendMessageStream;
+      agentClient.sendMessageStream = originalSendMessageStream;
     });
 
     it('@requirement REQ-002 should handle YOLO vs DEFAULT approval modes', async () => {

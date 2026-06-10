@@ -12,7 +12,7 @@
  * @requirement REQ-CS-002.5, REQ-CS-002.6, REQ-CS-002.7, REQ-CS-002.8
  *
  * Behavioral tests for the MiddleOutStrategy compression strategy.
- * Extracted from the sandwich compression logic in geminiChat.ts.
+ * Extracted from the sandwich compression logic in chatSession.ts.
  *
  * These tests verify the strategy's output structure and metadata — not
  * internal spy calls.  The "fake provider" returns a known summary so we

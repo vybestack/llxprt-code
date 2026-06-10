@@ -14,8 +14,8 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Readable, Writable } from 'node:stream';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
-import { CoreMcpToolServiceAdapter } from '../tools-adapters/CoreMcpToolServiceAdapter.js';
-import { DiscoveredMCPTool } from '@vybestack/llxprt-code-tools';
+import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
+import type { Config } from './config.js';
 
 const MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS = 2_000;
 
@@ -302,13 +302,9 @@ async function registerDiscoveredTools(
 ): Promise<void> {
   for (const toolDef of toolDefs) {
     const callableTool = new LspNavigationCallableTool(client, toolDef);
-    const mcpToolService = new CoreMcpToolServiceAdapter(
-      callableTool,
-      () => true,
-    );
 
     const discoveredTool = new DiscoveredMCPTool(
-      mcpToolService,
+      callableTool,
       'lsp-navigation',
       toolDef.name,
       toolDef.description ?? '',
@@ -316,6 +312,9 @@ async function registerDiscoveredTools(
       toolDef.inputSchema ?? { type: 'object', properties: {} },
       true,
       undefined,
+      // LspHost is a strict subset of Config; the runtime value is always a
+      // full Config instance, but this module only depends on the narrow interface.
+      host as unknown as Config,
     );
 
     registry.registerTool(discoveredTool);

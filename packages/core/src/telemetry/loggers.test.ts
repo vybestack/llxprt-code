@@ -14,7 +14,7 @@ import type {
 } from '../index.js';
 import {
   EditTool,
-  GeminiClient,
+  AgentClient,
   ToolConfirmationOutcome,
   ToolErrorType,
   ToolRegistry,
@@ -38,7 +38,7 @@ import {
   EVENT_EXTENSION_UNINSTALL,
   EVENT_EXTENSION_ENABLE,
   EVENT_EXTENSION_DISABLE,
-} from './constants.js';
+} from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
 import {
   logApiRequest,
   logApiResponse,
@@ -54,8 +54,8 @@ import {
   logExtensionUninstall,
   logExtensionEnable,
   logExtensionDisable,
-} from './loggers.js';
-import { ToolCallDecision } from './tool-call-decision.js';
+} from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
+import { ToolCallDecision } from '@vybestack/llxprt-code-telemetry/telemetry/tool-call-decision.js';
 import {
   ApiRequestEvent,
   ApiResponseEvent,
@@ -72,13 +72,13 @@ import {
   ExtensionEnableEvent,
   ExtensionDisableEvent,
   FileOperation,
-} from './types.js';
-import * as metrics from './metrics.js';
-import * as sdk from './sdk.js';
+} from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
+import * as metrics from '@vybestack/llxprt-code-telemetry/telemetry/metrics.js';
+import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 import type { GenerateContentResponseUsageMetadata } from '@google/genai';
 import * as uiTelemetry from './uiTelemetry.js';
-import { DiscoveredMCPTool } from '@vybestack/llxprt-code-tools';
+import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 
 // Mock ClearcutLogger to avoid import errors
 const mockClearcutLogger = {
@@ -393,7 +393,7 @@ describe('loggers', () => {
     const cfg1 = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
-      getGeminiClient: () => mockGeminiClient,
+      getAgentClient: () => mockAgentClient,
     } as Config;
     const cfg2 = {
       getSessionId: () => 'test-session-id',
@@ -430,11 +430,11 @@ describe('loggers', () => {
     const runtimeState = createRuntimeStateFromConfig(cfg2, {
       runtimeId: 'telemetry-runtime',
     });
-    const mockGeminiClient = new GeminiClient(cfg2, runtimeState);
+    const mockAgentClient = new AgentClient(cfg2, runtimeState);
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
-      getGeminiClient: () => mockGeminiClient,
+      getAgentClient: () => mockAgentClient,
       getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,

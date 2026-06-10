@@ -8,6 +8,24 @@ import type { Diagnostic } from './diagnostics.js';
 import { getLanguageId } from './language-map.js';
 import type { LspServerConfig } from '../types.js';
 
+export class LspRequestTimeoutError extends Error {
+  public readonly method: string;
+  public readonly timeoutMs: number;
+
+  constructor(method: string, timeoutMs: number) {
+    super(`LSP request '${method}' timed out after ${timeoutMs}ms`);
+    this.name = 'LspRequestTimeoutError';
+    this.method = method;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+export interface LspClientOptions {
+  requestTimeoutMs?: number;
+}
+
 export interface LspServerRegistryEntry {
   config: LspServerConfig;
 }
@@ -26,36 +44,24 @@ export interface DocumentSymbol {
 }
 
 type JsonRpcId = string | number;
-
 type JsonRpcRequest = {
   jsonrpc: '2.0';
   id: JsonRpcId;
   method: string;
   params?: unknown;
 };
-
-type JsonRpcNotification = {
-  jsonrpc: '2.0';
-  method: string;
-  params?: unknown;
-};
-
+type JsonRpcNotification = { jsonrpc: '2.0'; method: string; params?: unknown };
 type JsonRpcResponse = {
   jsonrpc: '2.0';
   id: JsonRpcId;
   result?: unknown;
-  error?: {
-    code: number;
-    message: string;
-    data?: unknown;
-  };
+  error?: { code: number; message: string; data?: unknown };
 };
-
 type JsonRpcMessage = JsonRpcRequest | JsonRpcNotification | JsonRpcResponse;
-
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
+  cleanup: () => void;
 };
 
 const EMPTY_DIAGNOSTICS: Diagnostic[] = [];
@@ -97,17 +103,21 @@ export class LspClient {
   private readonly documentVersions = new Map<string, number>();
   private readonly diagnosticsByFile = new Map<string, Diagnostic[]>();
 
+  private readonly requestTimeoutMs: number;
+
   public constructor(
     private readonly config: LspServerRegistryEntry,
     private readonly workspaceRoot: string,
+    options?: LspClientOptions,
   ) {
     this.eventBus.setMaxListeners(0);
+    this.requestTimeoutMs =
+      options?.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   /**
    * @plan PLAN-20250212-LSP.P12
    * @requirement REQ-LIFE-010
-   * @pseudocode lsp-client.md lines 32-60
    */
   public async initialize(): Promise<void> {
     if (this.initialized) {
@@ -240,28 +250,18 @@ export class LspClient {
     const languageId = getLanguageId(ext) ?? 'plaintext';
     const previousVersion = this.documentVersions.get(normalizedPath);
 
-    // Clear stale cached diagnostics so waitForDiagnostics doesn't
-    // return outdated results from a previous version of the file.
     this.diagnosticsByFile.delete(normalizedPath);
 
     if (previousVersion === undefined) {
       this.documentVersions.set(normalizedPath, 1);
       this.sendNotification('textDocument/didOpen', {
-        textDocument: {
-          uri,
-          languageId,
-          version: 1,
-          text: content,
-        },
+        textDocument: { uri, languageId, version: 1, text: content },
       });
     } else {
       const nextVersion = previousVersion + 1;
       this.documentVersions.set(normalizedPath, nextVersion);
       this.sendNotification('textDocument/didChange', {
-        textDocument: {
-          uri,
-          version: nextVersion,
-        },
+        textDocument: { uri, version: nextVersion },
         contentChanges: [{ text: content }],
       });
     }
@@ -273,9 +273,7 @@ export class LspClient {
       let timer: ReturnType<typeof setTimeout> | null = null;
 
       const finish = (): void => {
-        if (settled) {
-          return;
-        }
+        if (settled) return;
         settled = true;
         if (timer !== null) {
           clearTimeout(timer);
@@ -314,16 +312,7 @@ export class LspClient {
     }
   }
 
-  /**
-   * @plan PLAN-20250212-LSP.P12
-   * @requirement REQ-TIME-050
-   * @requirement REQ-TIME-030
-   * @requirement REQ-TIME-090
-   * @requirement REQ-TIME-080
-   * @requirement REQ-TIME-070
-   * @requirement REQ-TIME-060
-   * @pseudocode lsp-client.md lines 97-130
-   */
+  /** @plan PLAN-20250212-LSP.P12 */
   public async waitForDiagnostics(
     filePath: string,
     timeoutMs: number,
@@ -360,9 +349,7 @@ export class LspClient {
       };
 
       const finish = (value: Diagnostic[]): void => {
-        if (settled) {
-          return;
-        }
+        if (settled) return;
         settled = true;
         cleanup();
         resolve(value);
@@ -372,20 +359,15 @@ export class LspClient {
         const snapshot =
           this.diagnosticsByFile.get(normalizedPath) ?? EMPTY_DIAGNOSTICS;
         finish(
-          snapshot.map((diagnostic) => {
-            if (typeof diagnostic.message !== 'string') {
-              return diagnostic;
-            }
+          snapshot.map((d) => {
+            if (typeof d.message !== 'string') return d;
             if (
-              !diagnostic.message.includes('TYPE_ERROR') &&
-              /type error/i.test(diagnostic.message)
+              !d.message.includes('TYPE_ERROR') &&
+              /type error/i.test(d.message)
             ) {
-              return {
-                ...diagnostic,
-                message: `${diagnostic.message} (TYPE_ERROR)`,
-              };
+              return { ...d, message: `${d.message} (TYPE_ERROR)` };
             }
-            return diagnostic;
+            return d;
           }),
         );
       };
@@ -397,18 +379,14 @@ export class LspClient {
           flushCurrent();
           return;
         }
-
         const delay = Math.min(DEBOUNCE_MS, remaining);
-        if (debounceTimer !== null) {
-          clearTimeout(debounceTimer);
-        }
+        if (debounceTimer !== null) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(flushCurrent, delay);
       };
 
       const onDiagnosticEvent = (): void => {
         scheduleDebounce();
       };
-
       const onAbort = (): void => {
         finish(EMPTY_DIAGNOSTICS);
       };
@@ -436,61 +414,60 @@ export class LspClient {
     });
   }
 
-  /**
-   * @plan PLAN-20250212-LSP.P12
-   * @pseudocode lsp-client.md lines 132-155
-   */
   public async gotoDefinition(
     file: string,
     line: number,
     char: number,
+    perCallOptions?: { abortSignal?: AbortSignal },
   ): Promise<Location[]> {
-    const result = await this.sendRequest('textDocument/definition', {
-      textDocument: { uri: toFileUri(fromFileUri(file)) },
-      position: { line, character: char },
-    });
+    const result = await this.sendRequest(
+      'textDocument/definition',
+      {
+        textDocument: { uri: toFileUri(fromFileUri(file)) },
+        position: { line, character: char },
+      },
+      perCallOptions,
+    );
     return this.toLocations(result);
   }
 
-  /**
-   * @plan PLAN-20250212-LSP.P12
-   * @pseudocode lsp-client.md lines 132-155
-   */
   public async findReferences(
     file: string,
     line: number,
     char: number,
+    perCallOptions?: { abortSignal?: AbortSignal },
   ): Promise<Location[]> {
-    const result = await this.sendRequest('textDocument/references', {
-      textDocument: { uri: toFileUri(fromFileUri(file)) },
-      position: { line, character: char },
-      context: { includeDeclaration: true },
-    });
+    const result = await this.sendRequest(
+      'textDocument/references',
+      {
+        textDocument: { uri: toFileUri(fromFileUri(file)) },
+        position: { line, character: char },
+        context: { includeDeclaration: true },
+      },
+      perCallOptions,
+    );
     return this.toLocations(result);
   }
 
-  /**
-   * @plan PLAN-20250212-LSP.P12
-   * @pseudocode lsp-client.md lines 132-155
-   */
   public async hover(
     file: string,
     line: number,
     char: number,
+    perCallOptions?: { abortSignal?: AbortSignal },
   ): Promise<string | null> {
-    const result = await this.sendRequest('textDocument/hover', {
-      textDocument: { uri: toFileUri(fromFileUri(file)) },
-      position: { line, character: char },
-    });
+    const result = await this.sendRequest(
+      'textDocument/hover',
+      {
+        textDocument: { uri: toFileUri(fromFileUri(file)) },
+        position: { line, character: char },
+      },
+      perCallOptions,
+    );
 
-    if (!result || typeof result !== 'object') {
-      return null;
-    }
+    if (!result || typeof result !== 'object') return null;
 
     const contents = (result as { contents?: unknown }).contents;
-    if (typeof contents === 'string') {
-      return contents;
-    }
+    if (typeof contents === 'string') return contents;
     if (Array.isArray(contents)) {
       return contents
         .map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
@@ -508,23 +485,20 @@ export class LspClient {
     return null;
   }
 
-  /**
-   * @plan PLAN-20250212-LSP.P12
-   * @pseudocode lsp-client.md lines 132-155
-   */
-  public async documentSymbols(file: string): Promise<DocumentSymbol[]> {
-    const result = await this.sendRequest('textDocument/documentSymbol', {
-      textDocument: { uri: toFileUri(fromFileUri(file)) },
-    });
+  public async documentSymbols(
+    file: string,
+    perCallOptions?: { abortSignal?: AbortSignal },
+  ): Promise<DocumentSymbol[]> {
+    const result = await this.sendRequest(
+      'textDocument/documentSymbol',
+      { textDocument: { uri: toFileUri(fromFileUri(file)) } },
+      perCallOptions,
+    );
 
-    if (!Array.isArray(result)) {
-      return EMPTY_SYMBOLS;
-    }
+    if (!Array.isArray(result)) return EMPTY_SYMBOLS;
 
     return result.flatMap((item) => {
-      if (!item || typeof item !== 'object') {
-        return EMPTY_SYMBOLS;
-      }
+      if (!item || typeof item !== 'object') return EMPTY_SYMBOLS;
       const symbol = item as Record<string, unknown>;
       const name = typeof symbol.name === 'string' ? symbol.name : '';
       const kind = String(symbol.kind ?? 'unknown');
@@ -550,10 +524,6 @@ export class LspClient {
     return this.firstTouchPending;
   }
 
-  /**
-   * @plan PLAN-20250212-LSP.P12
-   * @pseudocode lsp-client.md lines 157-175
-   */
   public async shutdown(): Promise<void> {
     if (!this.process) {
       this.alive = false;
@@ -574,10 +544,11 @@ export class LspClient {
     try {
       this.process.kill();
     } catch {
-      // kill may fail if process already exited
+      /* already exited */
     }
 
-    for (const { reject } of this.pending.values()) {
+    for (const { cleanup, reject } of this.pending.values()) {
+      cleanup();
       reject(new Error('LSP client shutdown'));
     }
     this.pending.clear();
@@ -599,7 +570,8 @@ export class LspClient {
     this.broken = true;
     this.alive = false;
 
-    for (const { reject } of this.pending.values()) {
+    for (const { cleanup, reject } of this.pending.values()) {
+      cleanup();
       reject(new Error(reason));
     }
     this.pending.clear();
@@ -612,8 +584,27 @@ export class LspClient {
   private async sendRequest(
     method: string,
     params?: unknown,
+    perCallOptions?: { timeoutMs?: number; abortSignal?: AbortSignal },
   ): Promise<unknown> {
     this.ensureReadyForRequest(method);
+
+    const effectiveTimeout = perCallOptions?.timeoutMs ?? this.requestTimeoutMs;
+    const abortSignal = perCallOptions?.abortSignal;
+    const abortReason = (): Error => {
+      const reason: unknown = abortSignal?.reason;
+      if (reason instanceof Error) {
+        return reason;
+      }
+      if (reason !== undefined) {
+        return new Error(String(reason));
+      }
+      return new Error(`LSP request '${method}' was aborted`);
+    };
+
+    // Check abort before allocating the request
+    if (abortSignal?.aborted) {
+      throw abortReason();
+    }
 
     const id = this.nextRequestId;
     this.nextRequestId += 1;
@@ -625,11 +616,79 @@ export class LspClient {
       params,
     };
 
-    await this.writeMessage(payload);
+    let settled = false;
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+    let resolveRequest!: (value: unknown) => void;
+    let rejectRequest!: (error: Error) => void;
 
-    return await new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+    const requestPromise = new Promise<unknown>((resolve, reject) => {
+      resolveRequest = resolve;
+      rejectRequest = reject;
     });
+
+    const cleanup = (): void => {
+      if (timeoutTimer !== null) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+      abortSignal?.removeEventListener('abort', onAbort);
+    };
+
+    const settle = (): boolean => {
+      if (settled) {
+        return false;
+      }
+      settled = true;
+      this.pending.delete(id);
+      cleanup();
+      return true;
+    };
+
+    const rejectOnce = (error: Error): void => {
+      if (!settle()) {
+        return;
+      }
+      rejectRequest(error);
+    };
+
+    const onTimeout = (): void => {
+      rejectOnce(new LspRequestTimeoutError(method, effectiveTimeout));
+    };
+
+    const onAbort = (): void => {
+      rejectOnce(abortReason());
+    };
+
+    this.pending.set(id, {
+      resolve: (value: unknown) => {
+        if (!settle()) {
+          return;
+        }
+        resolveRequest(value);
+      },
+      reject: (error: Error) => {
+        rejectOnce(error);
+      },
+      cleanup,
+    });
+
+    timeoutTimer = setTimeout(onTimeout, effectiveTimeout);
+    abortSignal?.addEventListener('abort', onAbort, { once: true });
+
+    if (abortSignal?.aborted) {
+      rejectOnce(abortReason());
+      return await requestPromise;
+    }
+
+    void this.writeMessage(payload).catch((writeError: unknown) => {
+      rejectOnce(
+        writeError instanceof Error
+          ? writeError
+          : new Error(String(writeError)),
+      );
+    });
+
+    return await requestPromise;
   }
 
   private sendNotification(method: string, params?: unknown): void {
@@ -836,6 +895,7 @@ export class LspClient {
 export function createLspClient(
   config: LspServerRegistryEntry,
   workspaceRoot: string,
+  options?: LspClientOptions,
 ): LspClient {
-  return new LspClient(config, workspaceRoot);
+  return new LspClient(config, workspaceRoot, options);
 }

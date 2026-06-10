@@ -20,7 +20,7 @@ import path from 'path';
 import { promises as nodeFs } from 'fs';
 import type {
   Config,
-  GeminiClient,
+  AgentClient,
   GitService,
 } from '@vybestack/llxprt-code-core';
 import { getErrorMessage, isNodeError } from '@vybestack/llxprt-code-core';
@@ -46,7 +46,7 @@ export interface FsOps {
  * @param toolCall - The tool call to checkpoint (replace/write_file).
  * @param checkpointDir - Directory to write the checkpoint file.
  * @param gitService - Git service for snapshot/commit hash resolution.
- * @param geminiClient - Gemini client for fetching current chat history.
+ * @param agentClient - Gemini client for fetching current chat history.
  * @param history - Current UI history for checkpoint context.
  * @param onDebugMessage - Debug message callback.
  * @param fsOps - Injected filesystem operations (defaults to node:fs).
@@ -55,7 +55,7 @@ export async function createToolCheckpoint(
   toolCall: TrackedToolCall,
   checkpointDir: string,
   gitService: GitService,
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   history: HistoryItem[],
   onDebugMessage: (message: string) => void,
   fsOps: FsOps = {
@@ -100,7 +100,7 @@ export async function createToolCheckpoint(
   const checkpointFileName = `${timestamp}-${fileName}-${toolName}.json`;
   const checkpointFilePath = path.join(checkpointDir, checkpointFileName);
 
-  const clientHistory = await geminiClient.getHistory();
+  const clientHistory = await agentClient.getHistory();
 
   await fsOps.writeFile(
     checkpointFilePath,
@@ -139,7 +139,7 @@ async function saveRestorableToolCalls(
   config: Config,
   gitService: GitService | undefined,
   history: HistoryItem[],
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   storage: Config['storage'],
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
@@ -190,7 +190,7 @@ async function saveRestorableToolCalls(
         toolCall,
         checkpointDir,
         gitService,
-        geminiClient,
+        agentClient,
         history,
         onDebugMessage,
         effectiveFsOps,
@@ -213,7 +213,7 @@ async function saveRestorableToolCalls(
  * @param config - App configuration (for checkpoint enable check + storage).
  * @param gitService - Git service (may be undefined if no project root).
  * @param history - Current UI history items.
- * @param geminiClient - Gemini client for fetching chat history.
+ * @param agentClient - Gemini client for fetching chat history.
  * @param storage - Storage service providing the checkpoint directory path.
  * @param onDebugMessage - Debug message callback.
  * @param fsOps - Injected filesystem operations (defaults to node:fs, override in tests).
@@ -223,7 +223,7 @@ export function useCheckpointPersistence(
   config: Config,
   gitService: GitService | undefined,
   history: HistoryItem[],
-  geminiClient: GeminiClient,
+  agentClient: AgentClient,
   storage: Config['storage'],
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
@@ -245,7 +245,7 @@ export function useCheckpointPersistence(
       config,
       gitService,
       history,
-      geminiClient,
+      agentClient,
       storage,
       onDebugMessage,
       fsOps,
@@ -257,7 +257,7 @@ export function useCheckpointPersistence(
     onDebugMessage,
     gitService,
     history,
-    geminiClient,
+    agentClient,
     storage,
     fsOps,
   ]);

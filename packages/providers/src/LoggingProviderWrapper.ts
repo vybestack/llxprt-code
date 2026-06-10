@@ -43,7 +43,7 @@ import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimi
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
 import type { ProviderPerformanceMetrics } from './types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { MissingProviderRuntimeError } from './errors.js';
 
@@ -446,7 +446,8 @@ export class LoggingProviderWrapper implements IProvider {
       };
 
       normalizedOptions.settings =
-        normalizedOptions.settings ?? normalizedOptions.runtime.settingsService;
+        normalizedOptions.settings ??
+        (normalizedOptions.runtime.settingsService as SettingsService);
       normalizedOptions.metadata = mergedMetadata;
     }
 

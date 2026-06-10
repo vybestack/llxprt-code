@@ -14,17 +14,16 @@ import type {
   Config,
   GitService,
   Logger,
-  ProfileManager,
   RecordingIntegration,
   SubagentManager,
-  Todo,
-  // Import shared command action return types from core
+  Todo, // Import shared command action return types from core
   ToolActionReturn,
   MessageActionReturn,
   LoadHistoryActionReturn,
   SubmitPromptActionReturn,
   CommandActionReturn,
 } from '@vybestack/llxprt-code-core';
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { OAuthManager } from '../../auth/oauth-manager.js';

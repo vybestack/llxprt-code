@@ -10,7 +10,7 @@ import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
-import type { Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 
 interface ProfileDetailDialogProps {
   profileName: string;

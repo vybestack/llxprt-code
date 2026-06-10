@@ -16,11 +16,11 @@ import { CommandKind } from './types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import type {
   Config,
-  DiscoveredMCPPrompt,
   AnyDeclarativeTool,
   MCPServerConfig,
   DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
+import { getErrorMessage } from '@vybestack/llxprt-code-core';
 import {
   DiscoveredMCPTool,
   getMCPDiscoveryState,
@@ -28,8 +28,9 @@ import {
   MCPDiscoveryState,
   MCPServerStatus,
   mcpServerRequiresOAuth,
-  getErrorMessage,
-} from '@vybestack/llxprt-code-core';
+  type DiscoveredMCPPrompt,
+} from '@vybestack/llxprt-code-mcp';
+
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
@@ -44,12 +45,12 @@ const MAX_MCP_RESOURCES_TO_SHOW = 10;
 
 type RuntimeConfigWithOptionalServices = Omit<
   Config,
-  | 'getGeminiClient'
+  | 'getAgentClient'
   | 'getMcpClientManager'
   | 'getResourceRegistry'
   | 'getToolRegistry'
 > & {
-  getGeminiClient?: () => ReturnType<Config['getGeminiClient']> | undefined;
+  getAgentClient?: () => ReturnType<Config['getAgentClient']> | undefined;
   getMcpClientManager?: () =>
     | ReturnType<Config['getMcpClientManager']>
     | undefined;
@@ -675,7 +676,7 @@ async function performMcpOAuth(
       Date.now(),
     );
 
-    const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-core');
+    const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
 
     let oauthConfig = server.oauth;
     oauthConfig ??= { enabled: false };
@@ -707,9 +708,9 @@ async function performMcpOAuth(
       );
       await mcpClientManager.restartServer(serverName);
     }
-    const geminiClient = runtimeConfig.getGeminiClient?.();
-    if (geminiClient) {
-      await geminiClient.setTools();
+    const agentClient = runtimeConfig.getAgentClient?.();
+    if (agentClient) {
+      await agentClient.setTools();
     }
 
     context.ui.reloadCommands();
@@ -836,9 +837,9 @@ const refreshCommand: SlashCommand = {
     await toolRegistry.discoverAllTools();
 
     // Update the client with the new tools
-    const geminiClient = runtimeConfig.getGeminiClient?.();
-    if (geminiClient) {
-      await geminiClient.setTools();
+    const agentClient = runtimeConfig.getAgentClient?.();
+    if (agentClient) {
+      await agentClient.setTools();
     }
 
     // Reload the slash commands to reflect the changes.

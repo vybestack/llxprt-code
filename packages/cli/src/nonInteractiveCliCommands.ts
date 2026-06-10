@@ -9,10 +9,10 @@ import { parseSlashCommand } from './utils/commands.js';
 import {
   FatalInputError,
   Logger,
-  Storage,
   uiTelemetryService,
   type Config,
 } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { CommandService } from './services/CommandService.js';
 import { FileCommandLoader } from './services/FileCommandLoader.js';
 import type { CommandContext } from './ui/commands/types.js';

@@ -297,4 +297,124 @@ describe('Orchestrator unit tests against real implementation', () => {
       { numRuns: 8 },
     );
   });
+
+  it('requestTimeoutMs config does not break client initialization', async () => {
+    const o = createOrchestrator(
+      {
+        servers: [createFakeServer('fake-ts', ['.ts'])],
+        requestTimeoutMs: 15_000,
+      },
+      WORKSPACE_ROOT,
+    );
+    try {
+      await o.checkFile(
+        '/workspace/src/req-timeout.ts',
+        'const x = TYPE_ERROR',
+      );
+      const status = await o.status();
+      expect(
+        status.some((s) => s.serverId === 'fake-ts' && s.state === 'ok'),
+      ).toBe(true);
+    } finally {
+      await o.shutdown();
+    }
+  });
+  it('withTimeout aborts underlying LspClient request on navigation timeout', async () => {
+    const o = createOrchestrator(
+      {
+        servers: [
+          createFakeServer(
+            'fake-slow',
+            ['.ts'],
+            ['--delay-request-method', 'textDocument/hover'],
+          ),
+        ],
+        navigationTimeoutMs: 300,
+      },
+      WORKSPACE_ROOT,
+    );
+    try {
+      // When hover is delayed, withTimeout should return the fallback value
+      // AND abort the underlying LspClient request so it doesn't hang
+      // until the client's own requestTimeoutMs expires.
+      const result = await o.hover('/workspace/src/slow-hover.ts', 0, 0);
+      expect(result).toBeNull();
+
+      // After the navigation timeout returns fallback, the client should still
+      // be alive for other requests
+      const symbols = await o.documentSymbols('/workspace/src/slow-hover.ts');
+      expect(Array.isArray(symbols)).toBe(true);
+    } finally {
+      await o.shutdown();
+    }
+  });
+
+  it('navigation timeout aborts slow requests before requestTimeoutMs elapses', async () => {
+    const o = createOrchestrator(
+      {
+        servers: [
+          createFakeServer(
+            'fake-req-timeout',
+            ['.ts'],
+            ['--delay-request-method', 'textDocument/hover'],
+          ),
+        ],
+        // navigationTimeoutMs shorter than requestTimeoutMs so the
+        // orchestrator returns fallback before the client's own timeout fires,
+        // proving the abort signal is wired through correctly.
+        navigationTimeoutMs: 300,
+        requestTimeoutMs: 30_000,
+      },
+      WORKSPACE_ROOT,
+    );
+    try {
+      // hover is delayed by the server; withTimeout returns null fallback
+      // after 300ms and aborts the pending LspClient hover request
+      const result = await o.hover('/workspace/src/req-timeout-hover.ts', 0, 0);
+      expect(result).toBeNull();
+
+      // Non-delayed method should still work
+      const symbols = await o.documentSymbols(
+        '/workspace/src/req-timeout-hover.ts',
+      );
+      expect(Array.isArray(symbols)).toBe(true);
+    } finally {
+      await o.shutdown();
+    }
+  });
+
+  it('requestTimeoutMs shorter than navigationTimeoutMs causes LspRequestTimeoutError', async () => {
+    const o = createOrchestrator(
+      {
+        servers: [
+          createFakeServer(
+            'fake-short-req',
+            ['.ts'],
+            ['--delay-request-method', 'textDocument/hover'],
+          ),
+        ],
+        // requestTimeoutMs shorter than navigationTimeoutMs means the
+        // LspClient will reject with LspRequestTimeoutError before the
+        // orchestrator's timeout resolves — the withTimeout catch should
+        // return fallback.
+        requestTimeoutMs: 200,
+        navigationTimeoutMs: 30_000,
+      },
+      WORKSPACE_ROOT,
+    );
+    try {
+      // Hover times out at the client level (200ms), withTimeout catches it
+      // and returns the fallback
+      const result = await o.hover('/workspace/src/short-req-hover.ts', 0, 0);
+      expect(result).toBeNull();
+
+      // Non-delayed method should still work
+      const symbols = await o.documentSymbols(
+        '/workspace/src/short-req-hover.ts',
+      );
+      expect(Array.isArray(symbols)).toBe(true);
+    } finally {
+      await o.shutdown();
+    }
+  });
 });

@@ -6,7 +6,7 @@
 
 /**
  * Pure logging and configuration utilities for turn execution.
- * Extracted from geminiChat.ts Phase 05.
+ * Extracted from chatSession.ts Phase 05.
  */
 
 import type {

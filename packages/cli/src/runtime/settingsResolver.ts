@@ -14,7 +14,8 @@
 
 import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
-import type { Config, SettingsService } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { applyCliSetArguments } from '../config/cliEphemeralSettings.js';
 import { getCliRuntimeServices } from './runtimeAccessors.js';
 import {

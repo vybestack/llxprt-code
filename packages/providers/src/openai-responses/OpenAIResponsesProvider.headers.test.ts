@@ -21,12 +21,13 @@ const parseResponsesStreamMock = vi.hoisted(() =>
 
 const fetchMock = vi.hoisted(() => vi.fn());
 
-vi.mock(
-  '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js',
-  () => ({
-    getSettingsService: () => mockSettingsService,
-  }),
-);
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: () => mockSettingsService,
+  SETTINGS_REGISTRY: [],
+}));
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),

@@ -105,7 +105,7 @@ vi.mock('../core/contentGenerator.js', async (importOriginal) => {
 });
 
 vi.mock('../core/client.js', () => ({
-  GeminiClient: vi.fn().mockImplementation(() => ({
+  AgentClient: vi.fn().mockImplementation(() => ({
     initialize: vi.fn().mockResolvedValue(undefined),
     isInitialized: vi.fn().mockReturnValue(false),
     getHistory: vi.fn().mockReturnValue([]),
@@ -143,11 +143,26 @@ vi.mock('../services/gitService.js', () => ({
   })),
 }));
 
-vi.mock('../tools/mcp-client-manager.js', () => ({
+vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn().mockImplementation(() => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
     getMcpInstructions: vi.fn().mockReturnValue(''),
   })),
+  DiscoveredMCPTool: vi
+    .fn()
+    .mockImplementation(
+      (
+        _callableTool: unknown,
+        serverName: string,
+        serverToolName: string,
+        _description: string,
+        _inputSchema: unknown,
+      ) => ({
+        serverName,
+        serverToolName,
+        name: `${serverName}__${serverToolName}`,
+      }),
+    ),
 }));
 
 vi.mock('../utils/extensionLoader.js', () => ({
@@ -158,6 +173,7 @@ vi.mock('../utils/extensionLoader.js', () => ({
 }));
 
 vi.mock('../runtime/providerRuntimeContext.js', () => ({
+  setProviderRuntimeStateFactory: vi.fn(),
   setActiveProviderRuntimeContext: vi.fn(),
   peekActiveProviderRuntimeContext: vi.fn().mockReturnValue(null),
   createProviderRuntimeContext: vi.fn().mockReturnValue({}),
@@ -175,7 +191,10 @@ vi.mock('../runtime/providerRuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('../settings/settingsServiceInstance.js', () => ({
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
   getSettingsService: vi.fn().mockReturnValue({
     get: vi.fn(),
     set: vi.fn(),
@@ -732,6 +751,41 @@ describe('Config LSP Integration (P33)', () => {
       expect(lspConfig?.diagnosticTimeout).toBeUndefined();
       expect(lspConfig?.firstTouchTimeout).toBeUndefined();
       expect(lspConfig?.navigationTools).toBeUndefined();
+      expect(lspConfig?.requestTimeout).toBeUndefined();
+    });
+  });
+
+  describe('REQ-CFG-074: navigationTimeout configuration', () => {
+    it('should pass navigationTimeout to LspConfig', async () => {
+      const customTimeout = 6000;
+      const params = createBaseConfigParams({
+        lsp: {
+          servers: [],
+          navigationTimeout: customTimeout,
+        },
+      });
+      const config = new Config(params);
+      await initializeTestConfig(config);
+
+      const lspConfig = config.getLspConfig();
+      expect(lspConfig?.navigationTimeout).toBe(customTimeout);
+    });
+  });
+
+  describe('REQ-CFG-075: requestTimeout configuration', () => {
+    it('should pass requestTimeout to LspConfig', async () => {
+      const customTimeout = 5000;
+      const params = createBaseConfigParams({
+        lsp: {
+          servers: [],
+          requestTimeout: customTimeout,
+        },
+      });
+      const config = new Config(params);
+      await initializeTestConfig(config);
+
+      const lspConfig = config.getLspConfig();
+      expect(lspConfig?.requestTimeout).toBe(customTimeout);
     });
   });
 

@@ -11,13 +11,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { Config } from '@vybestack/llxprt-code-core';
 import {
-  Config,
   ProfileManager,
   SettingsService,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -98,18 +98,18 @@ describe('Ephemeral Settings Integration Tests', () => {
   });
 
   describe('Compression Settings Application', () => {
-    it('should apply compression settings to GeminiClient', async () => {
+    it('should apply compression settings to AgentClient', async () => {
       // Set compression-related ephemeral settings
       config.setEphemeralSetting('context-limit', 100000);
       config.setEphemeralSetting('compression-threshold', 0.6);
 
-      // Get the GeminiClient from config
+      // Get the AgentClient from config
       // Verify compression settings are stored in ephemeral settings
-      // (actual compression happens internally in geminiChat when needed)
+      // (actual compression happens internally in chatSession when needed)
       expect(config.getEphemeralSetting('compression-threshold')).toBe(0.6);
       expect(config.getEphemeralSetting('context-limit')).toBe(100000);
 
-      // Compression validation now happens in geminiChat when it reads the settings
+      // Compression validation now happens in chatSession when it reads the settings
     });
   });
 

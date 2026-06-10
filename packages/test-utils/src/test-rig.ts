@@ -14,8 +14,8 @@ import fs from 'node:fs';
 import * as pty from '@lydell/node-pty';
 import stripAnsi from 'strip-ansi';
 import * as os from 'node:os';
-import { LLXPRT_DIR } from '@vybestack/llxprt-code-core';
 
+const LLXPRT_DIR = '.llxprt';
 const WELCOME_CONFIG_FILENAME = 'welcomeConfig.json';
 
 /**

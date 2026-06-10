@@ -66,7 +66,7 @@ describe('errors', () => {
 
     // Create mock config
     mockConfig = {
-      getGeminiClient: vi.fn(() => ({
+      getAgentClient: vi.fn(() => ({
         getContentGenerator: vi.fn(() => ({})),
       })),
     } as unknown as Config;

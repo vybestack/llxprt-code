@@ -24,12 +24,12 @@ import { buildPartsFromCompletedCalls } from './subagentToolProcessing.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import type { ConfigParameters } from '../config/config.js';
 import { Config } from '../config/config.js';
-import { GeminiChat, StreamEventType } from './geminiChat.js';
+import { ChatSession, StreamEventType } from './chatSession.js';
 import {
   createContentGenerator,
   type ContentGenerator,
 } from './contentGenerator.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
@@ -76,7 +76,7 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('./geminiChat.js');
+vi.mock('./chatSession.js');
 vi.mock('./contentGenerator.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./contentGenerator.js')>();
   return {
@@ -433,7 +433,7 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream = vi.fn();
       // We mock the implementation of the constructor.
-      vi.mocked(GeminiChat).mockImplementation(
+      vi.mocked(ChatSession).mockImplementation(
         () =>
           ({
             sendMessageStream: mockSendMessageStream,
@@ -445,7 +445,7 @@ describe('subagent.ts', () => {
               getTotalTokens: vi.fn().mockReturnValue(0),
             }),
             getConfig: vi.fn().mockReturnValue(undefined),
-          }) as unknown as GeminiChat,
+          }) as unknown as ChatSession,
       );
     });
 
@@ -457,7 +457,7 @@ describe('subagent.ts', () => {
     const getGenerationConfigFromMock = (
       callIndex = 0,
     ): GenerateContentConfig & { systemInstruction?: string | Content } => {
-      const callArgs = vi.mocked(GeminiChat).mock.calls[callIndex];
+      const callArgs = vi.mocked(ChatSession).mock.calls[callIndex];
       const generationConfig = callArgs[2];
       // Ensure it's defined before proceeding
       expect(generationConfig).toBeDefined();
@@ -913,10 +913,10 @@ describe('subagent.ts', () => {
     });
 
     describe('runNonInteractive - Initialization and Prompting', () => {
-      it('should correctly template the system prompt and initialize GeminiChat', async () => {
+      it('should correctly template the system prompt and initialize ChatSession', async () => {
         const { config } = await createMockConfig();
 
-        vi.mocked(GeminiChat).mockClear();
+        vi.mocked(ChatSession).mockClear();
 
         const promptConfig: PromptConfig = {
           systemPrompt: 'Hello ${name}, your task is ${task}.',
@@ -943,9 +943,9 @@ describe('subagent.ts', () => {
 
         await scope.runNonInteractive(context);
 
-        // Check if GeminiChat was initialized correctly by the subagent
-        expect(GeminiChat).toHaveBeenCalledTimes(1);
-        const callArgs = vi.mocked(GeminiChat).mock.calls[0];
+        // Check if ChatSession was initialized correctly by the subagent
+        expect(ChatSession).toHaveBeenCalledTimes(1);
+        const callArgs = vi.mocked(ChatSession).mock.calls[0];
 
         // Check Generation Config
         const generationConfig = getGenerationConfigFromMock();
@@ -968,7 +968,7 @@ describe('subagent.ts', () => {
 
       it('should include output instructions in the system prompt when outputs are defined', async () => {
         const { config } = await createMockConfig();
-        vi.mocked(GeminiChat).mockClear();
+        vi.mocked(ChatSession).mockClear();
 
         const promptConfig: PromptConfig = { systemPrompt: 'Do the task.' };
         const outputConfig: OutputConfig = {
@@ -1009,7 +1009,7 @@ describe('subagent.ts', () => {
 
       it('should always start with empty chat history when using systemPrompt', async () => {
         const { config } = await createMockConfig();
-        vi.mocked(GeminiChat).mockClear();
+        vi.mocked(ChatSession).mockClear();
 
         const promptConfig: PromptConfig = {
           systemPrompt: 'You are a subagent.',
@@ -1033,10 +1033,10 @@ describe('subagent.ts', () => {
 
         await scope.runNonInteractive(context);
 
-        const callArgs = vi.mocked(GeminiChat).mock.calls[0];
+        const callArgs = vi.mocked(ChatSession).mock.calls[0];
         const history = callArgs[3];
 
-        // GeminiChat constructor history is always empty;
+        // ChatSession constructor history is always empty;
         // runtime initial messages are generated separately by buildInitialMessages
         expect(history).toStrictEqual([]);
       });
@@ -1070,7 +1070,7 @@ describe('subagent.ts', () => {
 
       it('should substitute placeholders for missing template variables', async () => {
         const { config } = await createMockConfig();
-        vi.mocked(GeminiChat).mockClear();
+        vi.mocked(ChatSession).mockClear();
         const promptConfig: PromptConfig = {
           systemPrompt: 'Hello ${name}, you are missing ${missing}.',
         };
@@ -1101,7 +1101,7 @@ describe('subagent.ts', () => {
 
       it('should substitute placeholder for missing sessionId template variable', async () => {
         const { config } = await createMockConfig();
-        vi.mocked(GeminiChat).mockClear();
+        vi.mocked(ChatSession).mockClear();
         const promptConfig: PromptConfig = {
           systemPrompt: 'Session ${sessionId}',
         };
@@ -1130,7 +1130,7 @@ describe('subagent.ts', () => {
 
       it('should always include outputConfig instructions in system instruction when systemPrompt is used', async () => {
         const { config } = await createMockConfig();
-        vi.mocked(GeminiChat).mockClear();
+        vi.mocked(ChatSession).mockClear();
 
         const promptConfig: PromptConfig = { systemPrompt: 'Do the task.' };
         const outputConfig: OutputConfig = {
@@ -2372,11 +2372,11 @@ describe('subagent.ts', () => {
         } as any);
 
         mockSendMessageStream = vi.fn();
-        vi.mocked(GeminiChat).mockImplementation(
+        vi.mocked(ChatSession).mockImplementation(
           () =>
             ({
               sendMessageStream: mockSendMessageStream,
-            }) as unknown as GeminiChat,
+            }) as unknown as ChatSession,
         );
       });
 
@@ -3096,7 +3096,7 @@ describe('subagent.ts', () => {
       );
 
       // Mock a slow stream that yields after the timeout
-      vi.mocked(GeminiChat).mockImplementationOnce(
+      vi.mocked(ChatSession).mockImplementationOnce(
         () =>
           ({
             sendMessageStream: vi.fn().mockImplementation(async () => {
@@ -3134,7 +3134,7 @@ describe('subagent.ts', () => {
               getCurated: vi.fn().mockReturnValue([]),
               getTotalTokens: vi.fn().mockReturnValue(0),
             }),
-          }) as unknown as GeminiChat,
+          }) as unknown as ChatSession,
       );
 
       vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
@@ -3192,7 +3192,7 @@ describe('subagent.ts', () => {
         resolveIterator = resolve;
       });
 
-      vi.mocked(GeminiChat).mockImplementationOnce(
+      vi.mocked(ChatSession).mockImplementationOnce(
         () =>
           ({
             sendMessageStream: vi.fn().mockImplementation(async () => {
@@ -3230,7 +3230,7 @@ describe('subagent.ts', () => {
               getCurated: vi.fn().mockReturnValue([]),
               getTotalTokens: vi.fn().mockReturnValue(0),
             }),
-          }) as unknown as GeminiChat,
+          }) as unknown as ChatSession,
       );
 
       vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
@@ -3296,7 +3296,7 @@ describe('subagent.ts', () => {
         overrides,
       );
 
-      vi.mocked(GeminiChat).mockImplementationOnce(
+      vi.mocked(ChatSession).mockImplementationOnce(
         () =>
           ({
             sendMessageStream: vi.fn().mockImplementation(async () => {
@@ -3334,7 +3334,7 @@ describe('subagent.ts', () => {
               getCurated: vi.fn().mockReturnValue([]),
               getTotalTokens: vi.fn().mockReturnValue(0),
             }),
-          }) as unknown as GeminiChat,
+          }) as unknown as ChatSession,
       );
 
       vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);

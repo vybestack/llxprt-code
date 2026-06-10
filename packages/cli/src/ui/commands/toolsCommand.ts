@@ -12,10 +12,8 @@ import {
   CommandKind,
 } from './types.js';
 import { MessageType } from '../types.js';
-import type {
-  AnyDeclarativeTool,
-  SettingsService,
-} from '@vybestack/llxprt-code-core';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { type CommandArgumentSchema } from './schema/types.js';
 
 const toolsSchema: CommandArgumentSchema = [
@@ -240,14 +238,14 @@ async function handleToggleTool(
   persistToolLists(context, disabled, allowed);
 
   const config = context.services.config;
-  const geminiClient =
-    typeof config?.getGeminiClient === 'function'
-      ? config.getGeminiClient()
+  const agentClient =
+    typeof config?.getAgentClient === 'function'
+      ? config.getAgentClient()
       : undefined;
 
-  if (geminiClient && typeof geminiClient.setTools === 'function') {
+  if (agentClient && typeof agentClient.setTools === 'function') {
     try {
-      await geminiClient.setTools();
+      await agentClient.setTools();
     } catch (error) {
       context.ui.addItem(
         {

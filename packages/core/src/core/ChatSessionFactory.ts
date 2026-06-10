@@ -14,12 +14,12 @@ import {
   shouldIncludeSubagentDelegationForConfig,
 } from './clientToolGovernance.js';
 import { reportError } from '../utils/errorReporting.js';
-import { GeminiChat } from './geminiChat.js';
+import { ChatSession } from './chatSession.js';
 import { DebugLogger } from '../debug/index.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
-import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { createSettingsProviderRuntimeContext } from '../runtime/settingsRuntimeAdapter.js';
 import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { getErrorMessage } from '../utils/errors.js';
 import type { ContentGenerator } from './contentGenerator.js';
@@ -229,7 +229,7 @@ function buildGenerateContentConfig(
 }
 
 /**
- * Builds the runtime bundle, tool declarations, and GeminiChat instance.
+ * Builds the runtime bundle, tool declarations, and ChatSession instance.
  */
 async function buildChatFromRuntime(
   config: Config,
@@ -240,7 +240,7 @@ async function buildChatFromRuntime(
   todoContinuationService: TodoContinuationService,
   toolRegistry: ToolRegistry | undefined,
   systemInstruction: string,
-): Promise<GeminiChat> {
+): Promise<ChatSession> {
   const model = runtimeState.model;
   const generationConfigWithThinking = buildGenerateContentConfig(
     generateContentConfig,
@@ -248,11 +248,11 @@ async function buildChatFromRuntime(
   );
 
   const settings = buildSettingsSnapshot(config);
-  const providerRuntime = createProviderRuntimeContext({
+  const providerRuntime = createSettingsProviderRuntimeContext({
     settingsService: config.getSettingsService(),
     config,
     runtimeId: runtimeState.runtimeId,
-    metadata: { source: 'GeminiClient.startChat' },
+    metadata: { source: 'AgentClient.startChat' },
   });
 
   const runtimeBundle = await loadAgentRuntime({
@@ -277,7 +277,7 @@ async function buildChatFromRuntime(
   );
   const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
 
-  const chat = new GeminiChat(
+  const chat = new ChatSession(
     runtimeBundle.runtimeContext,
     runtimeBundle.contentGenerator,
     { systemInstruction, ...generationConfigWithThinking, tools },
@@ -295,13 +295,13 @@ async function buildChatFromRuntime(
 }
 
 /**
- * Stateful factory: creates a GeminiChat session.
+ * Stateful factory: creates a ChatSession session.
  * Reuses stored HistoryService when available, creates a new one otherwise.
  * Configures thinking, loads the agent runtime, builds tool declarations.
  */
 export async function createChatSession(
   deps: CreateChatSessionDeps,
-): Promise<GeminiChat> {
+): Promise<ChatSession> {
   const {
     config,
     runtimeState,
@@ -382,7 +382,7 @@ export async function createChatSession(
  */
 export async function createChatSessionSafe(
   deps: CreateChatSessionDeps,
-): Promise<GeminiChat> {
+): Promise<ChatSession> {
   try {
     return await createChatSession(deps);
   } catch (error) {

@@ -21,10 +21,10 @@ import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
 import {
+  SettingsService,
   resetSettingsService,
   registerSettingsService,
-  SettingsService,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-settings';
 
 /**
  * Mock OAuth provider that tracks whether initiateAuth was called

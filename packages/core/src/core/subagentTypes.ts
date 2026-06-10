@@ -155,6 +155,8 @@ export interface RunConfig {
    * before the execution is terminated. Helps prevent infinite loops.
    */
   max_turns?: number;
+  /** Maximum time in seconds allowed for a recovery turn after a termination condition. */
+  grace_period_seconds?: number;
 }
 
 /**

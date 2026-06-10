@@ -6,7 +6,8 @@
 
 import type { Mock, MockInstance } from 'vitest';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { DebugLogger, createTransport } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { createTransport } from '@vybestack/llxprt-code-mcp';
 import { listMcpServers } from './list.js';
 import { loadSettings } from '../../config/settings.js';
 import { ExtensionStorage, loadExtensions } from '../../config/extension.js';
@@ -21,9 +22,9 @@ vi.mock('../../config/extension.js', () => ({
     getUserExtensionsDir: vi.fn(),
   },
 }));
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-mcp')>();
   return {
     ...actual,
     createTransport: vi.fn(),

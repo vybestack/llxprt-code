@@ -15,9 +15,9 @@ import {
   type Mock,
 } from 'vitest';
 import { OAuthCredentialStorage } from './oauth-credential-storage.js';
-import { KeychainTokenStorage } from '../mcp/token-storage/keychain-token-storage.js';
-import type { OAuthCredentials } from '../mcp/token-storage/types.js';
-import { Storage } from '../config/storage.js';
+import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
+import type { OAuthCredentials } from '@vybestack/llxprt-code-mcp';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { coreEvents } from '../utils/events.js';
 
 import * as path from 'node:path';
@@ -29,7 +29,7 @@ vi.mock('node:os', () => ({
 }));
 
 // Mock external dependencies
-vi.mock('../mcp/token-storage/keychain-token-storage.js');
+vi.mock('@vybestack/llxprt-code-mcp');
 vi.mock('node:fs', () => ({
   promises: {
     readFile: vi.fn(),

@@ -8,8 +8,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import type { Profile } from '@vybestack/llxprt-code-core';
-import { ProfileManager } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-settings';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -319,7 +319,7 @@ describe('Profile with Keyfile Integration Tests', () => {
       const keyfileContent = await fs.readFile(keyfilePath, 'utf-8');
       expect(keyfileContent).toBe(fileApiKey);
 
-      // Note: In actual usage (gemini.tsx), auth-key takes precedence over auth-keyfile
+      // Note: In actual usage (cli.tsx), auth-key takes precedence over auth-keyfile
       // when both are present. This is handled by the application logic, not the profile system.
     });
 
@@ -363,7 +363,7 @@ describe('Profile with Keyfile Integration Tests', () => {
   });
 
   describe('Keyfile Reading Simulation', () => {
-    it('should simulate the actual keyfile reading logic from gemini.tsx', async () => {
+    it('should simulate the actual keyfile reading logic from cli.tsx', async () => {
       const apiKey = 'simulated-api-key-reading';
       const keyfilePath = await createTempKeyfile(tempDir, apiKey);
 
@@ -380,7 +380,7 @@ describe('Profile with Keyfile Integration Tests', () => {
       await profileManager.saveProfile('simulation-test', profile);
       const loaded = await profileManager.loadProfile('simulation-test');
 
-      // Simulate the exact logic from gemini.tsx
+      // Simulate the exact logic from cli.tsx
       const authKey = loaded.ephemeralSettings['auth-key'] as string;
       const authKeyfile = loaded.ephemeralSettings['auth-keyfile'] as string;
 

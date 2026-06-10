@@ -251,7 +251,7 @@ export function createMockConfig(
       isPathWithinWorkspace: () => true,
     }),
     getTargetDir: () => '/test',
-    getGeminiClient: vi.fn(),
+    getAgentClient: vi.fn(),
     getDebugMode: vi.fn().mockReturnValue(false),
     getContentGeneratorConfig: vi.fn().mockReturnValue({ model: 'gemini-pro' }),
     getModel: vi.fn().mockReturnValue('gemini-pro'),

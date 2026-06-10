@@ -20,7 +20,7 @@ import type { SkillDefinition } from '../skills/skillManager.js';
  * instead of providers package.
  */
 import type { BucketFailureReason } from '../runtime/contracts/BucketFailureReason.js';
-import type { MCPOAuthConfig } from '../mcp/oauth-provider.js';
+import type { MCPOAuthConfig } from '@vybestack/llxprt-code-mcp';
 import type { OutputFormat } from '../utils/output-format.js';
 import type { FileFilteringOptions } from './constants.js';
 import type { EventEmitter } from 'node:events';
@@ -28,7 +28,7 @@ import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { ExtensionLoader } from '../utils/extensionLoader.js';
 import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
 import type { PolicyEngineConfig } from '../policy/types.js';
-import type { SettingsService } from '../settings/SettingsService.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { IdeClient } from '../ide/ide-client.js';
 import type { AnyToolInvocation } from '@vybestack/llxprt-code-tools';

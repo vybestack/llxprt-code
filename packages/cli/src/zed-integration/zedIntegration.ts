@@ -6,11 +6,12 @@
 
 /* eslint-disable complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
+import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import {
   type Config,
   type ContentGeneratorConfig,
-  type GeminiChat,
-  type GeminiClient,
+  type ChatSession,
+  type AgentClient,
   logToolCall,
   type ToolResult,
   convertToFunctionResponse,
@@ -22,7 +23,6 @@ import {
   getErrorMessage,
   isWithinRoot,
   getErrorStatus,
-  DiscoveredMCPTool,
   DebugLogger,
   getFunctionCalls,
   getResponseTextFromParts,
@@ -129,10 +129,10 @@ export async function runZedIntegration(
     throw e;
   }
 }
-function getRuntimeGeminiClient(config: Config): GeminiClient | undefined {
+function getRuntimeAgentClient(config: Config): AgentClient | undefined {
   return (
-    config as { getGeminiClient: () => GeminiClient | undefined }
-  ).getGeminiClient();
+    config as { getAgentClient: () => AgentClient | undefined }
+  ).getAgentClient();
 }
 
 export class GeminiAgent {
@@ -263,24 +263,24 @@ export class GeminiAgent {
       }
 
       // Try to get the client and check if it's properly initialized
-      let geminiClient = getRuntimeGeminiClient(sessionConfig);
+      let agentClient = getRuntimeAgentClient(sessionConfig);
       const hasContentGeneratorConfig =
         sessionConfig.getContentGeneratorConfig() !== undefined;
 
       this.logger.debug(
         () =>
-          `GeminiClient exists: ${!!geminiClient}, ContentGeneratorConfig exists: ${hasContentGeneratorConfig}`,
+          `AgentClient exists: ${!!agentClient}, ContentGeneratorConfig exists: ${hasContentGeneratorConfig}`,
       );
 
-      if (!geminiClient || !hasContentGeneratorConfig) {
-        geminiClient = await this.#autoAuthenticate(sessionConfig);
+      if (!agentClient || !hasContentGeneratorConfig) {
+        agentClient = await this.#autoAuthenticate(sessionConfig);
       }
 
-      this.logger.debug(() => 'Successfully obtained GeminiClient');
+      this.logger.debug(() => 'Successfully obtained AgentClient');
 
       this.#verifyContentGeneratorConfig(sessionConfig);
 
-      const chat = await this.#startChatWithRetry(geminiClient, sessionConfig);
+      const chat = await this.#startChatWithRetry(agentClient, sessionConfig);
       const session = new Session(
         sessionId,
         chat,
@@ -303,12 +303,12 @@ export class GeminiAgent {
   }
 
   /**
-   * Auto-authenticate when no GeminiClient or ContentGeneratorConfig is available.
+   * Auto-authenticate when no AgentClient or ContentGeneratorConfig is available.
    * Attempts provider-based auth first, then falls back to OAuth.
    */
-  async #autoAuthenticate(sessionConfig: Config): Promise<GeminiClient> {
+  async #autoAuthenticate(sessionConfig: Config): Promise<AgentClient> {
     this.logger.debug(
-      () => 'GeminiClient not available - attempting auto-authentication',
+      () => 'AgentClient not available - attempting auto-authentication',
     );
 
     const { providerManager, hasActiveProvider } =
@@ -332,13 +332,13 @@ export class GeminiAgent {
       providerManager,
     );
 
-    const geminiClient = getRuntimeGeminiClient(sessionConfig);
-    if (!geminiClient) {
+    const agentClient = getRuntimeAgentClient(sessionConfig);
+    if (!agentClient) {
       throw new Error(
         'Failed to authenticate. Please ensure valid credentials are available.',
       );
     }
-    return geminiClient;
+    return agentClient;
   }
 
   /**
@@ -565,14 +565,14 @@ export class GeminiAgent {
    * due to missing ContentGeneratorConfig.
    */
   async #startChatWithRetry(
-    geminiClient: GeminiClient | undefined,
+    agentClient: AgentClient | undefined,
     sessionConfig: Config,
-  ): Promise<GeminiChat> {
-    if (!geminiClient) {
-      throw new Error('GeminiClient is required to start a chat session.');
+  ): Promise<ChatSession> {
+    if (!agentClient) {
+      throw new Error('AgentClient is required to start a chat session.');
     }
     try {
-      return await geminiClient.startChat();
+      return await agentClient.startChat();
     } catch (error) {
       this.logger.debug(() => `Error starting chat: ${error}`);
 
@@ -593,7 +593,7 @@ export class GeminiAgent {
         }
 
         // Try again after auth
-        return geminiClient.startChat();
+        return agentClient.startChat();
       }
 
       throw error;
@@ -634,7 +634,7 @@ export class Session {
 
   constructor(
     private readonly id: string,
-    private readonly chat: GeminiChat,
+    private readonly chat: ChatSession,
     private readonly config: Config,
     private readonly connection: acp.AgentSideConnection,
   ) {

@@ -10,10 +10,10 @@ import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
 } from '@vybestack/llxprt-code-core';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   getProjectHash,
   logSlashCommand,
-  MCPDiscoveryState,
   SlashCommandEvent,
   ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
@@ -371,7 +371,7 @@ function handleLoadHistoryResult(
   result: Extract<ActionResult, { type: 'load_history' }>,
 ): SlashCommandProcessorResult {
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  context.services.config?.getGeminiClient().setHistory(result.clientHistory);
+  context.services.config?.getAgentClient().setHistory(result.clientHistory);
   context.ui.clear();
   result.history.forEach((item, index) => {
     context.ui.addItem(item, index);
@@ -568,7 +568,7 @@ async function performSessionResume(
       timestamp: new Date(),
     });
   }
-  await deps.config.getGeminiClient().restoreHistory(resumeResult.history);
+  await deps.config.getAgentClient().restoreHistory(resumeResult.history);
   const uiHistory = iContentToHistoryItems(resumeResult.history);
   context.ui.clear();
   uiHistory.forEach((item, index) => {

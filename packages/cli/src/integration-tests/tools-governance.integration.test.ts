@@ -8,7 +8,10 @@ import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { ProfileManager, SettingsService } from '@vybestack/llxprt-code-core';
+import {
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';

@@ -46,6 +46,7 @@ interface OrchestratorConfig {
   diagnosticsTimeoutMs?: number;
   firstTouchTimeoutMs?: number;
   navigationTimeoutMs?: number;
+  requestTimeoutMs?: number;
 }
 
 export class Orchestrator {
@@ -248,7 +249,10 @@ export class Orchestrator {
     }
     const normalizedFile = this.normalizeAbsolutePath(file);
     const result = await this.withTimeout(
-      () => client.gotoDefinition(normalizedFile, line, char),
+      (signal) =>
+        client.gotoDefinition(normalizedFile, line, char, {
+          abortSignal: signal,
+        }),
       [] as Location[],
     );
     if (result.length > 0) {
@@ -271,7 +275,10 @@ export class Orchestrator {
     }
     const normalizedFile = this.normalizeAbsolutePath(file);
     return await this.withTimeout(
-      () => client.findReferences(normalizedFile, line, char),
+      (signal) =>
+        client.findReferences(normalizedFile, line, char, {
+          abortSignal: signal,
+        }),
       [] as Location[],
     );
   }
@@ -287,7 +294,8 @@ export class Orchestrator {
     }
     const normalizedFile = this.normalizeAbsolutePath(file);
     return await this.withTimeout(
-      () => client.hover(normalizedFile, line, char),
+      (signal) =>
+        client.hover(normalizedFile, line, char, { abortSignal: signal }),
       null,
     );
   }
@@ -299,7 +307,8 @@ export class Orchestrator {
     }
     const normalizedFile = this.normalizeAbsolutePath(file);
     return await this.withTimeout(
-      () => client.documentSymbols(normalizedFile),
+      (signal) =>
+        client.documentSymbols(normalizedFile, { abortSignal: signal }),
       [] as DocumentSymbol[],
     );
   }
@@ -392,7 +401,9 @@ export class Orchestrator {
     }
 
     const startup = (async () => {
-      const client = new LspClient({ config: server }, this.workspaceRootAbs);
+      const client = new LspClient({ config: server }, this.workspaceRootAbs, {
+        requestTimeoutMs: this.config.requestTimeoutMs,
+      });
       await client.initialize();
       this.clients.set(key, client);
       this.startupPromises.delete(key);
@@ -453,16 +464,22 @@ export class Orchestrator {
   }
 
   private async withTimeout<T>(
-    operation: () => Promise<T>,
+    operation: (signal: AbortSignal) => Promise<T>,
     fallback: T,
   ): Promise<T> {
     const timeoutMs = this.config.navigationTimeoutMs ?? DEFAULT_WAIT_MS;
+    const controller = new AbortController();
     try {
       let timer: ReturnType<typeof setTimeout>;
       return await Promise.race([
-        operation(),
+        operation(controller.signal),
         new Promise<T>((resolveTimeout) => {
-          timer = setTimeout(() => resolveTimeout(fallback), timeoutMs);
+          timer = setTimeout(() => {
+            controller.abort(
+              new Error(`Navigation timeout after ${timeoutMs}ms`),
+            );
+            resolveTimeout(fallback);
+          }, timeoutMs);
         }),
       ]).finally(() => clearTimeout(timer));
     } catch {

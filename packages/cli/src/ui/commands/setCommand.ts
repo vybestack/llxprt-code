@@ -24,9 +24,9 @@ import {
   parseEphemeralSettingValue,
 } from '../../settings/ephemeralSettings.js';
 import {
-  resolveAlias,
   getDirectSettingSpecs,
-} from '@vybestack/llxprt-code-core';
+  resolveAlias,
+} from '@vybestack/llxprt-code-settings';
 import {
   filterStrings,
   filterCompletions,
@@ -551,10 +551,10 @@ function handleSetEphemeral(
   }
 
   // Store compression settings as ephemeral settings
-  // They will be read by geminiChat.ts when compression is needed
+  // They will be read by chatSession.ts when compression is needed
   if (key === 'context-limit' || key === 'compression-threshold') {
     // Settings are stored via setEphemeralSetting below
-    // geminiChat.ts will read them directly when needed
+    // chatSession.ts will read them directly when needed
   }
 
   // Store emojifilter in ephemeral settings like everything else

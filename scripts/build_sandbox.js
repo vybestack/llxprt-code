@@ -90,9 +90,12 @@ console.log('Binding release dependencies for sandbox tarballs...');
 execSync('node scripts/bind-release-deps.js --backup', { stdio: 'inherit' });
 
 const toolsPackageDir = join('packages', 'tools');
-const corePackageDir = join('packages', 'core');
-const providersPackageDir = join('packages', 'providers');
 const cliPackageDir = join('packages', 'cli');
+const settingsPackageDir = join('packages', 'settings');
+const corePackageDir = join('packages', 'core');
+const mcpPackageDir = join('packages', 'mcp');
+const providersPackageDir = join('packages', 'providers');
+const telemetryPackageDir = join('packages', 'telemetry');
 
 try {
   console.log('packing @vybestack/llxprt-code-tools ...');
@@ -101,6 +104,35 @@ try {
   });
   execSync(
     `npm pack -w @vybestack/llxprt-code-tools --pack-destination ./packages/tools/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-settings ...');
+  rmSync(
+    join(settingsPackageDir, 'dist', 'vybestack-llxprt-code-settings-*.tgz'),
+    { force: true },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-settings --pack-destination ./packages/settings/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-telemetry ...');
+  rmSync(
+    join(telemetryPackageDir, 'dist', 'vybestack-llxprt-code-telemetry-*.tgz'),
+    { force: true },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-mcp ...');
+  rmSync(join(mcpPackageDir, 'dist', 'vybestack-llxprt-code-mcp-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist`,
     { stdio: 'ignore' },
   );
 
@@ -148,6 +180,31 @@ chmodSync(
     toolsPackageDir,
     'dist',
     `vybestack-llxprt-code-tools-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    settingsPackageDir,
+    'dist',
+    `vybestack-llxprt-code-settings-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    telemetryPackageDir,
+    'dist',
+    `vybestack-llxprt-code-telemetry-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+
+chmodSync(
+  join(
+    mcpPackageDir,
+    'dist',
+    `vybestack-llxprt-code-mcp-${packageVersion}.tgz`,
   ),
   0o755,
 );

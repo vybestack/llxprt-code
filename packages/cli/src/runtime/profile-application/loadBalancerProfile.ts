@@ -10,15 +10,16 @@ import {
   type ResolvedSubProfile,
 } from '@vybestack/llxprt-code-providers';
 import {
-  type LoadBalancerProfile,
-  type Profile,
   ProfileManager,
   isLoadBalancerProfile,
-} from '@vybestack/llxprt-code-core';
+  type LoadBalancerProfile,
+  type Profile,
+} from '@vybestack/llxprt-code-settings';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type { getCliRuntimeServices } from '../runtimeSettings.js';
+import { createProviderKeyStorage } from '../runtimeSettings.js';
 import {
   getProfileEphemeralSettings,
   getProfileModel,
@@ -70,8 +71,38 @@ async function resolveSubProfileAuthToken(
   deps: LoadBalancerResolutionDeps,
 ): Promise<string | undefined> {
   const authToken = getStringValue(subProfileEphemeralSettings, 'auth-key');
-  if (authToken !== undefined || authKeyfile === undefined) {
+  if (authToken !== undefined) {
     return authToken;
+  }
+
+  const authKeyName = getStringValue(
+    subProfileEphemeralSettings,
+    'auth-key-name',
+  );
+  if (authKeyName !== undefined) {
+    try {
+      const resolvedKey = await createProviderKeyStorage().getKey(authKeyName);
+      if (resolvedKey && resolvedKey.trim() !== '') {
+        deps.lbLogger.debug(
+          () =>
+            `Resolved auth-key-name '${authKeyName}' for sub-profile ${profileName}`,
+        );
+        return resolvedKey.trim();
+      }
+      deps.lbLogger.warn(
+        () =>
+          `Key '${authKeyName}' not found in secure storage for sub-profile ${profileName}; falling back.`,
+      );
+    } catch (error) {
+      deps.lbLogger.warn(
+        () =>
+          `Failed to resolve auth-key-name '${authKeyName}' for sub-profile ${profileName}: ${error}`,
+      );
+    }
+  }
+
+  if (authKeyfile === undefined) {
+    return undefined;
   }
   try {
     const keyfilePath = authKeyfile.startsWith('~')

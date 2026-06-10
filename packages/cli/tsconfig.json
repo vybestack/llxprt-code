@@ -5,14 +5,19 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/cli.tsbuildinfo",
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "composite": false,
     "types": ["node", "vitest/globals"],
     "baseUrl": ".",
     "rootDir": "..",
     "paths": {
-      "@vybestack/llxprt-code-core": ["../core/src/index.ts"],
+      "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
+      "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"],
       "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
-      "@vybestack/llxprt-code-providers/*": ["../providers/src/*"]
+      "@vybestack/llxprt-code-providers/*": ["../providers/src/*"],
+      "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
+      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"]
     }
   },
   "include": [
@@ -24,13 +29,22 @@
     "./package.json",
     "../providers/index.ts",
     "../providers/src/**/*.ts",
-    "../providers/src/**/*.json"
+    "../providers/src/**/*.json",
+    "../mcp/index.ts",
+    "../mcp/src/**/*.ts",
+    "../mcp/src/**/*.d.ts",
+    "../settings/index.ts",
+    "../settings/src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "../providers/src/**/*.test.ts",
     "../providers/src/**/*.spec.ts",
+    "../mcp/src/**/*.test.ts",
+    "../mcp/src/**/*.spec.ts",
+    "../settings/src/**/*.test.ts",
+    "../settings/src/**/*.spec.ts",
 
     // TODO(5691): Fix type errors and remove excludes.
     "src/config/config.integration.test.ts",
@@ -105,5 +119,5 @@
     "src/validateNonInterActiveAuth.test.ts",
     "src/services/prompt-processors/shellProcessor.test.ts"
   ],
-  "references": [{ "path": "../core" }]
+  "references": [{ "path": "../core" }, { "path": "../settings" }]
 }

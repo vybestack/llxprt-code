@@ -8,10 +8,10 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { GeminiChat } from '@vybestack/llxprt-code-core/core/geminiChat.js';
+import { ChatSession } from '@vybestack/llxprt-code-core/core/chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import {
   createProviderRuntimeContext,
@@ -26,7 +26,7 @@ import {
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 
-function createGeminiChat(): GeminiChat {
+function createChatSession(): ChatSession {
   const settingsService = new SettingsService();
   const config = new Config({
     cwd: '/tmp',
@@ -76,11 +76,11 @@ function createGeminiChat(): GeminiChat {
     providerRuntime: { ...providerRuntime },
   });
 
-  return new GeminiChat(view, {} as unknown as ContentGenerator, {}, []);
+  return new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
 }
 
 describe('Issue #1837: OpenAI provider stopReason propagation', () => {
-  let geminiChat: GeminiChat;
+  let chatSession: ChatSession;
 
   beforeEach(() => {
     setActiveProviderRuntimeContext(
@@ -89,7 +89,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         runtimeId: 'openai-stopreason-test',
       }),
     );
-    geminiChat = createGeminiChat();
+    chatSession = createChatSession();
   });
 
   describe('Streaming: OpenAI stopReason mapped from finish_reason', () => {
@@ -107,7 +107,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates).toBeDefined();
       expect(response.candidates.length).toBe(1);
       expect(response.candidates[0].finishReason).toBe('STOP');
@@ -127,7 +127,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('MAX_TOKENS');
     });
 
@@ -152,7 +152,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
@@ -165,7 +165,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('STOP');
     });
   });
@@ -185,7 +185,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('STOP');
       expect(response.usageMetadata?.totalTokenCount).toBe(15);
     });
@@ -199,7 +199,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('MAX_TOKENS');
     });
   });
@@ -227,7 +227,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('STOP');
       expect(response.text).toBe('Here is my answer.');
     });
@@ -248,7 +248,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('STOP');
     });
   });
@@ -267,7 +267,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBeUndefined();
     });
 
@@ -278,7 +278,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         metadata: {},
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBeUndefined();
     });
 
@@ -288,7 +288,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         blocks: [{ type: 'text', text: 'No metadata at all' }],
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBeUndefined();
     });
   });
@@ -301,7 +301,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         metadata: { stopReason: 'stop' },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
@@ -312,7 +312,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         metadata: { stopReason: 'length' },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('MAX_TOKENS');
     });
 
@@ -330,7 +330,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         metadata: { stopReason: 'tool_calls' },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
@@ -341,7 +341,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         metadata: { stopReason: 'content_filter' },
       };
 
-      const response = geminiChat.convertIContentToResponse(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('SAFETY');
     });
   });

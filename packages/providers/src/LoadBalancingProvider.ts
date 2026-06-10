@@ -22,7 +22,7 @@ import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderManager } from './ProviderManager.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Profile } from '@vybestack/llxprt-code-core/types/modelParams.js';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 import { LoadBalancerFailoverError } from './errors.js';
 import {
   isNetworkTransientError,
@@ -487,13 +487,17 @@ export class LoadBalancingProvider implements IProvider {
   }
 
   /**
-   * Get default model (stub for Phase 1)
-   * Will be implemented in later phases to return first sub-profile's model
+   * Get the model that can satisfy provider-level runtime normalization before
+   * the request is delegated to a concrete sub-profile.
    */
   getDefaultModel(): string {
-    // Stub implementation - returns empty string
-    // Later phases will return the first sub-profile's model or a sensible default
-    return '';
+    const firstSubProfile = this.config.subProfiles[0];
+
+    if (isResolvedSubProfile(firstSubProfile)) {
+      return firstSubProfile.model;
+    }
+
+    return firstSubProfile.modelId ?? '';
   }
 
   /**

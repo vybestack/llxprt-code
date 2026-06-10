@@ -105,7 +105,7 @@ describe('profileCommand', () => {
       const contextWithConfig = createMockCommandContext({
         services: {
           config: {
-            getGeminiClient: () => ({ setTools: setToolsSpy }),
+            getAgentClient: () => ({ setTools: setToolsSpy }),
             getProviderManager: () => providerManagerMock,
             setProvider: vi.fn(),
           },

@@ -340,7 +340,7 @@ vi.mock('../../../config/settings.js', async () => {
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
   return {
     ...actual,
     triggerSessionStartHook: vi.fn().mockResolvedValue(null),
@@ -397,7 +397,7 @@ import type { Config, IContent } from '@vybestack/llxprt-code-core';
 
 // Type for the mock config
 interface MockConfig {
-  getGeminiClient: () => {
+  getAgentClient: () => {
     getUserTier: () => Promise<undefined>;
     hasChatInitialized?: () => boolean;
   };
@@ -433,7 +433,7 @@ interface MockConfig {
  */
 function createMockConfig(overrides: Partial<MockConfig> = {}): MockConfig {
   return {
-    getGeminiClient: () => ({
+    getAgentClient: () => ({
       getUserTier: vi.fn().mockResolvedValue(undefined),
       hasChatInitialized: () => false,
     }),

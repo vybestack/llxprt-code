@@ -16,11 +16,11 @@ import type {
   ContentGenerator,
   ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
-import type { GeminiClient } from '../core/client.js';
+import type { AgentClient } from '../core/client.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { McpClientManager } from '../tools/mcp-client-manager.js';
+import type { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '@vybestack/llxprt-code-tools';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
@@ -47,10 +47,12 @@ import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProvide
 import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
 import type { RuntimeTokenizerFactory } from '../runtime/contracts/RuntimeTokenizerFactory.js';
 import type { IdeClient } from '../ide/ide-client.js';
-import type { SettingsService } from '../settings/SettingsService.js';
-import type { ProfileManager } from './profileManager.js';
+import type {
+  ProfileManager,
+  SettingsService,
+  Storage,
+} from '@vybestack/llxprt-code-settings';
 import type { SubagentManager } from './subagentManager.js';
-import type { Storage } from './storage.js';
 import type { FileExclusions } from '../utils/ignorePatterns.js';
 import type { PolicyEngine } from '../policy/policy-engine.js';
 import type { SkillManager } from '../skills/skillManager.js';
@@ -116,7 +118,7 @@ export abstract class ConfigBaseCore {
   protected readonly accessibility!: AccessibilitySettings;
   protected telemetrySettings!: TelemetrySettings;
   protected readonly usageStatisticsEnabled!: boolean;
-  protected geminiClient!: GeminiClient;
+  protected agentClient!: AgentClient;
   protected runtimeState!: AgentRuntimeState;
   protected readonly fileFiltering!: {
     respectGitIgnore: boolean;
@@ -491,8 +493,8 @@ export abstract class ConfigBaseCore {
   getMaxConversationsStored(): number {
     return this.telemetrySettings.maxConversationsStored ?? 1000;
   }
-  getGeminiClient(): GeminiClient {
-    return this.geminiClient;
+  getAgentClient(): AgentClient {
+    return this.agentClient;
   }
   getGeminiDir(): string {
     return path.join(this.targetDir, LLXPRT_DIR);

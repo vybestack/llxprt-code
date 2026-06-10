@@ -9,7 +9,6 @@ export * from './safety/index.js';
 
 // Export config
 export * from './config/config.js';
-export * from './config/profileManager.js';
 export * from './config/subagentManager.js';
 export * from './config/schedulerSingleton.js';
 export * from './policy/index.js';
@@ -66,9 +65,6 @@ export { AsyncTaskAutoTrigger } from './services/asyncTaskAutoTrigger.js';
 // Export SubagentTerminateMode for OutputObject types
 export { SubagentTerminateMode } from './core/subagentTypes.js';
 
-// Export types
-export * from './types/modelParams.js';
-
 // Export Commands logic
 export * from './commands/extensions.js';
 export * from './commands/types.js';
@@ -77,7 +73,7 @@ export * from './commands/types.js';
 export * from './core/client.js';
 export * from './core/baseLlmClient.js';
 export * from './core/contentGenerator.js';
-export * from './core/geminiChat.js';
+export * from './core/chatSession.js';
 export * from './core/logger.js';
 export * from './core/prompts.js';
 export * from './core/tokenLimits.js';
@@ -188,6 +184,20 @@ export {
   PARTIAL_FRAME_TIMEOUT_MS,
 } from './auth/proxy/framing.js';
 export { sanitizeTokenForProxy } from './auth/token-sanitization.js';
+export {
+  SecureStore,
+  SecureStoreError,
+  createDefaultKeyringAdapter,
+} from './storage/secure-store.js';
+export type {
+  KeyringAdapter,
+  SecureStoreOptions,
+} from './storage/secure-store.js';
+export {
+  ProviderKeyStorage,
+  getProviderKeyStorage,
+  resetProviderKeyStorage,
+} from './storage/provider-key-storage.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
@@ -292,6 +302,8 @@ export {
   type ToolName,
 } from '@vybestack/llxprt-code-tools';
 
+export * from './todo/todoFormatter.js';
+
 // Export prompt logic
 export * from './prompts/mcp-prompts.js';
 
@@ -377,12 +389,6 @@ export {
   ReadManyFilesTool,
   type ReadManyFilesParams,
 } from '@vybestack/llxprt-code-tools';
-export * from './tools/mcp-client.js';
-export {
-  DiscoveredMCPTool,
-  generateMcpToolName,
-  generateValidName,
-} from '@vybestack/llxprt-code-tools';
 export {
   TodoRead,
   TodoRead as TodoReadTool,
@@ -418,42 +424,43 @@ export {
   maskKeyForDisplay,
   type ToolKeyRegistryEntry,
 } from '@vybestack/llxprt-code-tools';
+// MCP client/tool — re-exported from @vybestack/llxprt-code-mcp
 export {
-  ProviderKeyStorage,
-  getProviderKeyStorage,
-  resetProviderKeyStorage,
-  validateKeyName,
-  KEY_NAME_REGEX,
-} from './storage/provider-key-storage.js';
-export {
-  SecureStore,
-  SecureStoreError,
-  createDefaultKeyringAdapter,
-  type KeyringAdapter,
-  type SecureStoreErrorCode,
-  type SecureStoreOptions,
-} from './storage/secure-store.js';
-export * from './todo/todoFormatter.js';
+  DiscoveredMCPTool,
+  MCPServerStatus,
+  MCPDiscoveryState,
+  McpClient,
+  getAllMCPServerStatuses,
+  getMCPDiscoveryState,
+  getMCPServerStatus,
+  updateMCPServerStatus,
+  addMCPStatusChangeListener,
+  removeMCPStatusChangeListener,
+  createTransport,
+  mcpServerRequiresOAuth,
+  populateMcpServerCommand,
+  hasNetworkTransport,
+  MCP_DEFAULT_TIMEOUT_MSEC,
+  McpClientManager,
 
-// MCP OAuth
-export { MCPOAuthProvider } from './mcp/oauth-provider.js';
-export { MCPOAuthTokenStorage } from './mcp/oauth-token-storage.js';
+  // MCP OAuth — also re-exported from @vybestack/llxprt-code-mcp
+  MCPOAuthProvider,
+  MCPOAuthTokenStorage,
+  BaseTokenStore,
+  FileTokenStore,
+  OAuthUtils,
+} from '@vybestack/llxprt-code-mcp';
+
 export type {
   MCPOAuthToken,
   MCPOAuthCredentials,
-} from './mcp/oauth-token-storage.js';
-export { BaseTokenStore } from './mcp/token-store.js';
-export type {
+  MCPOAuthConfig,
+  DiscoveredMCPPrompt,
   MCPOAuthToken as MCPOAuthTokenInterface,
   MCPOAuthCredentials as MCPOAuthCredentialsInterface,
-} from './mcp/token-store.js';
-export { FileTokenStore } from './mcp/file-token-store.js';
-export type { MCPOAuthConfig } from './mcp/oauth-provider.js';
-export type {
   OAuthAuthorizationServerMetadata,
   OAuthProtectedResourceMetadata,
-} from './mcp/oauth-utils.js';
-export { OAuthUtils } from './mcp/oauth-utils.js';
+} from '@vybestack/llxprt-code-mcp';
 
 // Export telemetry functions
 export * from './telemetry/index.js';
@@ -487,25 +494,6 @@ export type {
   ToolCallBlock,
 } from '@vybestack/llxprt-code-tools';
 export { ToolFormatter } from '@vybestack/llxprt-code-tools';
-
-// Export settings system
-export { SettingsService } from './settings/SettingsService.js';
-export {
-  getSettingsService,
-  resetSettingsService,
-  registerSettingsService,
-} from './settings/settingsServiceInstance.js';
-export type {
-  ISettingsService,
-  GlobalSettings,
-  SettingsChangeEvent,
-  ProviderSettings,
-  UISettings,
-  AdvancedSettings,
-  EventListener,
-  EventUnsubscribe,
-} from './settings/types.js';
-export type { TelemetrySettings as SettingsTelemetrySettings } from './settings/types.js';
 
 export {
   createProviderRuntimeContext,
@@ -591,9 +579,6 @@ export {
 export type { DebugSettings, DebugOutputConfig } from './debug/index.js';
 export type { LogEntry as DebugLogEntry } from './debug/index.js';
 
-// Export Storage
-export { Storage } from './config/storage.js';
-
 // Export Extension Loader
 export {
   ExtensionLoader,
@@ -604,9 +589,7 @@ export {
   type GeminiCLIExtension,
 } from './utils/extensionLoader.js';
 
-// Export MCP Client Manager
-export { McpClientManager } from './tools/mcp-client-manager.js';
-export { McpClient } from './tools/mcp-client.js';
+// Export MCP Client Manager — re-exported from @vybestack/llxprt-code-mcp (also available above)
 
 // Export models (legacy constants)
 export * from './config/models.js';
@@ -629,27 +612,3 @@ export {
 // @plan PLAN-20260211-SESSIONRECORDING.P03
 // Export session recording module
 export * from './recording/index.js';
-
-export {
-  type SettingCategory,
-  type SettingSpec,
-  type ValidationResult,
-  type SeparatedSettings,
-  type DirectSettingSpec,
-  SETTINGS_REGISTRY,
-  separateSettings,
-  getSettingSpec,
-  resolveAlias,
-  validateSetting,
-  normalizeSetting,
-  parseSetting,
-  getProfilePersistableKeys,
-  getSettingHelp,
-  getCompletionOptions,
-  getAllSettingKeys,
-  getValidationHelp,
-  getAutocompleteSuggestions,
-  getProtectedSettingKeys,
-  getProviderConfigKeys,
-  getDirectSettingSpecs,
-} from './settings/index.js';
