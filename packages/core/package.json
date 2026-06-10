@@ -102,6 +102,7 @@
   ],
   "dependencies": {
     "@vybestack/llxprt-code-mcp": "file:../mcp",
+    "@vybestack/llxprt-code-policy": "file:../policy",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@anthropic-ai/sdk": "^0.55.1",
     "@ast-grep/lang-c": "^0.0.5",

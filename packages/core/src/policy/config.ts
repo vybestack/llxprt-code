@@ -4,223 +4,72 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Legacy core orchestration boundary retained while policy implementation lives in packages/policy. */
 
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
 import toml from '@iarna/toml';
 import { Storage } from '../config/storage.js';
 import {
+  ADMIN_POLICY_TIER,
+  DEFAULT_CORE_POLICIES_DIR,
+  DEFAULT_POLICY_TIER,
+  USER_POLICY_TIER,
+  buildArgsPatterns,
+  escapeRegex,
+  formatPolicyError,
+  getPolicyDirectories as getPolicyDirectoriesFromPolicy,
+  getPolicyTier as getPolicyTierFromPolicy,
+  loadPoliciesFromToml,
+  type MessageBus,
+  MessageBusType,
+  migrateLegacyApprovalMode,
+  type PolicyConfigSource,
+  type PolicyEngine,
   type PolicyEngineConfig,
+  type PolicyPathResolver,
+  type ApprovalMode,
   PolicyDecision,
   type PolicyRule,
-  type ApprovalMode,
   type PolicySettings,
-} from './types.js';
-import { ApprovalMode as ApprovalModeEnum } from '../config/config.js';
-import type { PolicyEngine } from './policy-engine.js';
-import {
-  loadPoliciesFromToml,
-  type PolicyFileError,
-  escapeRegex,
-} from './toml-loader.js';
-import { buildArgsPatterns } from './utils.js';
-import { SHELL_TOOL_NAMES } from '../utils/shell-utils.js';
-import {
-  MessageBusType,
   type UpdatePolicy,
-} from '../confirmation-bus/types.js';
-import { type MessageBus } from '../confirmation-bus/message-bus.js';
+} from '@vybestack/llxprt-code-policy';
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-export const DEFAULT_CORE_POLICIES_DIR = path.join(__dirname, 'policies');
+export {
+  ADMIN_POLICY_TIER,
+  DEFAULT_CORE_POLICIES_DIR,
+  DEFAULT_POLICY_TIER,
+  USER_POLICY_TIER,
+  formatPolicyError,
+  migrateLegacyApprovalMode,
+};
+export type { PolicyConfigSource, PolicyPathResolver };
 
-// Policy tier constants for priority calculation
-export const DEFAULT_POLICY_TIER = 1;
-export const USER_POLICY_TIER = 2;
-export const ADMIN_POLICY_TIER = 3;
+const storagePolicyPathResolver: PolicyPathResolver = {
+  getUserPoliciesDir: () => Storage.getUserPoliciesDir(),
+  getSystemPoliciesDir: () => Storage.getSystemPoliciesDir(),
+};
 
-/**
- * Gets the list of directories to search for policy files, in order of increasing priority
- * (Default -> User -> Admin).
- *
- * @param defaultPoliciesDir Optional path to a directory containing default policies.
- */
 export function getPolicyDirectories(defaultPoliciesDir?: string): string[] {
-  const dirs = [];
-
-  if (defaultPoliciesDir) {
-    dirs.push(defaultPoliciesDir);
-  } else {
-    dirs.push(DEFAULT_CORE_POLICIES_DIR);
-  }
-
-  dirs.push(Storage.getUserPoliciesDir());
-  dirs.push(Storage.getSystemPoliciesDir());
-
-  // Reverse so highest priority (Admin) is first for loading order if needed,
-  // though loadPoliciesFromToml might want them in a specific order.
-  // CLI implementation reversed them: [DEFAULT, USER, ADMIN].reverse() -> [ADMIN, USER, DEFAULT]
-  return dirs.reverse();
+  return getPolicyDirectoriesFromPolicy(
+    defaultPoliciesDir,
+    storagePolicyPathResolver,
+  );
 }
 
-/**
- * Determines the policy tier (1=default, 2=user, 3=admin) for a given directory.
- * This is used by the TOML loader to assign priority bands.
- */
 export function getPolicyTier(
   dir: string,
   defaultPoliciesDir?: string,
 ): number {
-  const USER_POLICIES_DIR = Storage.getUserPoliciesDir();
-  const ADMIN_POLICIES_DIR = Storage.getSystemPoliciesDir();
-
-  const normalizedDir = path.resolve(dir);
-  const normalizedUser = path.resolve(USER_POLICIES_DIR);
-  const normalizedAdmin = path.resolve(ADMIN_POLICIES_DIR);
-
-  if (
-    defaultPoliciesDir &&
-    normalizedDir === path.resolve(defaultPoliciesDir)
-  ) {
-    return DEFAULT_POLICY_TIER;
-  }
-  if (normalizedDir === path.resolve(DEFAULT_CORE_POLICIES_DIR)) {
-    return DEFAULT_POLICY_TIER;
-  }
-  if (normalizedDir === normalizedUser) {
-    return USER_POLICY_TIER;
-  }
-  if (normalizedDir === normalizedAdmin) {
-    return ADMIN_POLICY_TIER;
-  }
-
-  return DEFAULT_POLICY_TIER;
+  return getPolicyTierFromPolicy(
+    dir,
+    defaultPoliciesDir,
+    storagePolicyPathResolver,
+  );
 }
 
-/**
- * Formats a policy file error for console logging.
- */
-export function formatPolicyError(error: PolicyFileError): string {
-  const tierLabel = error.tier.toUpperCase();
-  let message = `[${tierLabel}] Policy file error in ${error.fileName}:
-`;
-  message += `  ${error.message}`;
-  if (error.details) {
-    message += `
-${error.details}`;
-  }
-  if (error.suggestion) {
-    message += `
-  Suggestion: ${error.suggestion}`;
-  }
-  return message;
-}
-
-/**
- * Interface for config sources used by migrateLegacyApprovalMode.
- * This allows decoupling from the full Config class for testing.
- */
-export interface PolicyConfigSource {
-  getApprovalMode: () => ApprovalModeEnum;
-  getAllowedTools: () => string[] | undefined;
-  getNonInteractive: () => boolean;
-  getUserPolicyPath?: () => string | undefined;
-}
-
-/**
- * Normalizes tool names for policy rules.
- * Handles ShellTool alias and subcommand syntax.
- *
- * @param toolName The raw tool name (may have aliases or subcommand syntax)
- * @returns The normalized tool name
- */
-function normalizeToolName(toolName: string): string {
-  // Handle ShellTool alias and subcommand syntax
-  // ShellTool or ShellTool(xxx) -> run_shell_command
-  // run_shell_command(xxx) -> run_shell_command
-  if (
-    toolName === 'ShellTool' ||
-    toolName.startsWith('ShellTool(') ||
-    toolName.startsWith('run_shell_command(')
-  ) {
-    return 'run_shell_command';
-  }
-  return toolName;
-}
-
-/**
- * Write tools that can be auto-approved in AUTO_EDIT mode.
- * Priority 1.015 (just above default write tool ASK_USER at 1.010)
- */
-const AUTO_EDIT_TOOLS = [
-  'replace',
-  'write_file',
-  'insert_at_line',
-  'delete_line_range',
-  'apply_patch',
-] as const;
-
-/**
- * Migrates legacy approval mode settings to policy rules.
- *
- * This function handles:
- * - ApprovalMode.YOLO → wildcard allow-all rule at priority 1.999
- * - ApprovalMode.AUTO_EDIT → allow rules for write tools at priority 1.015
- * - --allowed-tools flag → allow rules at priority 2.3
- *
- * @param config Source of configuration values
- * @returns Array of PolicyRule objects for the legacy settings
- */
-export function migrateLegacyApprovalMode(
-  config: PolicyConfigSource,
-): PolicyRule[] {
-  const rules: PolicyRule[] = [];
-  const approvalMode = config.getApprovalMode();
-
-  // Handle YOLO mode - allow all tools
-  if (approvalMode === ApprovalModeEnum.YOLO) {
-    rules.push({
-      // undefined toolName = wildcard (matches all tools)
-      decision: PolicyDecision.ALLOW,
-      priority: 1.999, // Default tier, highest priority
-      source: 'Legacy (YOLO)',
-    });
-  }
-
-  // Handle AUTO_EDIT mode - allow write tools
-  if (approvalMode === ApprovalModeEnum.AUTO_EDIT) {
-    for (const tool of AUTO_EDIT_TOOLS) {
-      rules.push({
-        toolName: tool,
-        decision: PolicyDecision.ALLOW,
-        priority: 1.015, // Default tier, just above write tools (1.010)
-        source: 'Legacy (AUTO_EDIT)',
-      });
-    }
-  }
-
-  // Handle --allowed-tools flag
-  const allowedTools = config.getAllowedTools();
-  if (allowedTools && allowedTools.length > 0) {
-    for (const tool of allowedTools) {
-      rules.push({
-        toolName: normalizeToolName(tool),
-        decision: PolicyDecision.ALLOW,
-        priority: 2.3, // User tier - explicit temporary allows
-        source: 'Legacy (--allowed-tools)',
-      });
-    }
-  }
-
-  return rules;
-}
-
-// Overload signatures for createPolicyEngineConfig
 export async function createPolicyEngineConfig(
   config: PolicyConfigSource,
 ): Promise<PolicyEngineConfig>;
@@ -231,15 +80,11 @@ export async function createPolicyEngineConfig(
   defaultPoliciesDir?: string,
 ): Promise<PolicyEngineConfig>;
 
-/**
- * Creates a PolicyEngineConfig from either a PolicyConfigSource or PolicySettings.
- */
 export async function createPolicyEngineConfig(
   configOrSettings: PolicyConfigSource | PolicySettings,
   approvalModeParam?: ApprovalMode,
   defaultPoliciesDir?: string,
 ): Promise<PolicyEngineConfig> {
-  // Determine which overload we're handling
   const isPolicyConfigSource =
     typeof (configOrSettings as PolicyConfigSource).getApprovalMode ===
     'function';
@@ -260,41 +105,17 @@ async function buildConfigSourceRules(
   const approvalMode = config.getApprovalMode();
   const nonInteractive = config.getNonInteractive();
 
-  // Map ApprovalModeEnum to ApprovalMode string for TOML loader
-  let tomlApprovalMode: ApprovalMode;
-  switch (approvalMode) {
-    case ApprovalModeEnum.YOLO:
-      tomlApprovalMode = 'yolo' as ApprovalMode;
-      break;
-    case ApprovalModeEnum.AUTO_EDIT:
-      tomlApprovalMode = 'autoEdit' as ApprovalMode;
-      break;
-    default:
-      tomlApprovalMode = 'default' as ApprovalMode;
-  }
-
-  // Load default TOML policies
   const policyDirs = getPolicyDirectories();
   const { rules: tomlRules, errors } = await loadPoliciesFromToml(
-    tomlApprovalMode,
+    approvalMode,
     policyDirs,
     (dir) => getPolicyTier(dir),
   );
 
-  // Emit any errors encountered during TOML loading
-  if (errors.length > 0) {
-    for (const error of errors) {
-      coreEvents.emitFeedback('error', formatPolicyError(error));
-    }
-  }
+  emitPolicyErrors(errors);
 
-  // Get legacy migration rules
   const legacyRules = migrateLegacyApprovalMode(config);
-
-  // Try to load user policy file if specified
   const userPolicyRules = await loadUserPolicyRules(config);
-
-  // Merge all rules: TOML defaults + legacy migration + user policy
   const rules = [...tomlRules, ...legacyRules, ...userPolicyRules];
 
   return {
@@ -312,14 +133,16 @@ async function loadUserPolicyRules(
   if (userPolicyPath) {
     try {
       await fs.access(userPolicyPath);
-      const { loadPolicyFromToml } = await import('./toml-loader.js');
+      const { loadPolicyFromToml } = await import(
+        '@vybestack/llxprt-code-policy'
+      );
       const userRules = await loadPolicyFromToml(
         userPolicyPath,
         USER_POLICY_TIER,
       );
       userPolicyRules.push(...userRules);
     } catch {
-      // File doesn't exist or is invalid, just skip it (already warned about)
+      // File doesn't exist or is invalid, just skip it (already warned about).
     }
   }
   return userPolicyRules;
@@ -332,41 +155,15 @@ async function buildSettingsRules(
 ): Promise<PolicyEngineConfig> {
   const policyDirs = getPolicyDirectories(defaultPoliciesDir);
 
-  // Load policies from TOML files
   const { rules: tomlRules, errors } = await loadPoliciesFromToml(
     approvalMode,
     policyDirs,
     (dir) => getPolicyTier(dir, defaultPoliciesDir),
   );
 
-  // Emit any errors encountered during TOML loading to the UI
-  if (errors.length > 0) {
-    for (const error of errors) {
-      coreEvents.emitFeedback('error', formatPolicyError(error));
-    }
-  }
+  emitPolicyErrors(errors);
 
   const rules: PolicyRule[] = [...tomlRules];
-
-  // Priority system for policy rules:
-  // - Higher priority numbers win over lower priority numbers
-  // - When multiple rules match, the highest priority rule is applied
-  // - Rules are evaluated in order of priority (highest first)
-  //
-  // Priority bands (tiers):
-  // - Default policies (TOML): 1 + priority/1000
-  // - User policies (TOML): 2 + priority/1000
-  // - Admin policies (TOML): 3 + priority/1000
-  //
-  // This ensures Admin > User > Default hierarchy is always preserved.
-  //
-  // Settings-based and dynamic rules (all in user tier 2.x):
-  //   2.95: Tools that the user has selected as "Always Allow"
-  //   2.9:  MCP servers excluded list
-  //   2.4:  Command line flag --exclude-tools
-  //   2.3:  Command line flag --allowed-tools
-  //   2.2:  MCP servers with trust=true
-  //   2.1:  MCP servers allowed list
 
   addMcpExcludedRules(settings, rules);
   addToolsExcludedRules(settings, rules);
@@ -378,6 +175,16 @@ async function buildSettingsRules(
     rules,
     defaultDecision: PolicyDecision.ASK_USER,
   };
+}
+
+function emitPolicyErrors(
+  errors: Array<Parameters<typeof formatPolicyError>[0]>,
+): void {
+  if (errors.length > 0) {
+    for (const error of errors) {
+      coreEvents.emitFeedback('error', formatPolicyError(error));
+    }
+  }
 }
 
 function addMcpExcludedRules(
@@ -429,14 +236,10 @@ function addSingleAllowedToolRule(tool: string, rules: PolicyRule[]): void {
   const match = /^([a-zA-Z0-9_-]+)\((.*)\)$/.exec(tool);
   if (match) {
     const [, toolName, argsStr] = match;
-
-    // Normalize ShellTool alias
     const normalizedName =
       toolName === 'ShellTool' ? 'run_shell_command' : toolName;
 
-    // Extract command prefix from args
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    if (SHELL_TOOL_NAMES.includes(normalizedName) && argsStr) {
+    if (normalizedName === 'run_shell_command' && argsStr) {
       const patterns = buildArgsPatterns(undefined, argsStr);
       for (const pattern of patterns) {
         rules.push({
@@ -448,7 +251,6 @@ function addSingleAllowedToolRule(tool: string, rules: PolicyRule[]): void {
         });
       }
     } else {
-      // Non-shell tool with args - just use the tool name
       rules.push({
         toolName: normalizedName,
         decision: PolicyDecision.ALLOW,
@@ -457,7 +259,6 @@ function addSingleAllowedToolRule(tool: string, rules: PolicyRule[]): void {
       });
     }
   } else {
-    // Regular tool allowlist
     rules.push({
       toolName: normalizeToolName(tool),
       decision: PolicyDecision.ALLOW,
@@ -465,6 +266,17 @@ function addSingleAllowedToolRule(tool: string, rules: PolicyRule[]): void {
       source: 'Settings (Tools Allowed)',
     });
   }
+}
+
+function normalizeToolName(toolName: string): string {
+  if (
+    toolName === 'ShellTool' ||
+    toolName.startsWith('ShellTool(') ||
+    toolName.startsWith('run_shell_command(')
+  ) {
+    return 'run_shell_command';
+  }
+  return toolName;
 }
 
 function addMcpTrustedRules(
@@ -538,7 +350,6 @@ function applyDynamicPolicyRule(
   const toolName = message.toolName;
 
   if (message.commandPrefix !== undefined) {
-    // Convert commandPrefix(es) to argsPatterns for in-memory rules
     const prefixes = Array.isArray(message.commandPrefix)
       ? message.commandPrefix
       : [message.commandPrefix];
@@ -582,10 +393,8 @@ async function persistPolicyToToml(message: UpdatePolicy): Promise<void> {
     const newRule = buildTomlRule(message, message.toolName);
     existingData.rule.push(newRule);
 
-    // Serialize to TOML
     const newContent = toml.stringify(existingData as toml.JsonMap);
 
-    // Atomic write: tmp file + rename
     const tmpFile = `${policyFile}.tmp`;
     await fs.writeFile(tmpFile, newContent, 'utf-8');
     await fs.rename(tmpFile, policyFile);
@@ -606,7 +415,6 @@ async function readExistingTomlPolicy(
     const fileContent = await fs.readFile(policyFile, 'utf-8');
     existingData = toml.parse(fileContent) as { rule?: TomlRule[] };
   } catch (error) {
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       debugLogger.warn(
         `Failed to parse ${policyFile}, overwriting with new policy.`,
@@ -621,9 +429,7 @@ function buildTomlRule(message: UpdatePolicy, toolName: string): TomlRule {
   const newRule: TomlRule = {};
 
   if (message.mcpName) {
-    // MCP tool policy
     newRule.mcpName = message.mcpName;
-    // Extract simple tool name (remove "mcpName__" prefix)
     const simpleToolName = toolName.startsWith(`${message.mcpName}__`)
       ? toolName.slice(message.mcpName.length + 2)
       : toolName;
@@ -631,7 +437,6 @@ function buildTomlRule(message: UpdatePolicy, toolName: string): TomlRule {
     newRule.decision = 'allow';
     newRule.priority = 200;
   } else {
-    // Standard tool policy
     newRule.toolName = toolName;
     newRule.decision = 'allow';
     newRule.priority = 100;

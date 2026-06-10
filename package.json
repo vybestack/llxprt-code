@@ -8,6 +8,7 @@
   "workspaces": [
     "packages/telemetry",
     "packages/mcp",
+    "packages/policy",
     "packages/core",
     "packages/providers",
     "packages/cli",

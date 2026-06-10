@@ -4,88 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export enum PolicyDecision {
-  ALLOW = 'allow',
-  DENY = 'deny',
-  ASK_USER = 'ask_user',
-}
-
-export enum ApprovalMode {
-  DEFAULT = 'default',
-  AUTO_EDIT = 'autoEdit',
-  YOLO = 'yolo',
-}
-
-export interface PolicyRule {
-  /**
-   * A unique name for the policy rule, useful for identification and debugging.
-   */
-  name?: string;
-
-  /**
-   * The name of the tool this rule applies to.
-   * If undefined, the rule applies to all tools.
-   */
-  toolName?: string;
-
-  /**
-   * Pattern to match against tool arguments.
-   * Can be used for more fine-grained control.
-   */
-  argsPattern?: RegExp;
-
-  /**
-   * The decision to make when this rule matches.
-   */
-  decision: PolicyDecision;
-
-  /**
-   * Priority of this rule. Higher numbers take precedence.
-   * Default is 0.
-   */
-  priority?: number;
-
-  /**
-   * Allow shell redirections (>, |, etc.) in this rule.
-   * Only applies to shell tools.
-   * Default is false.
-   */
-  allowRedirection?: boolean;
-
-  /**
-   * Origin of the rule, e.g. "Default: defaults.toml", "Settings (MCP Trusted)",
-   * "Dynamic (Confirmed)".
-   */
-  source?: string;
-}
-
-export interface PolicyEngineConfig {
-  /**
-   * List of policy rules to apply.
-   */
-  rules?: PolicyRule[];
-
-  /**
-   * Default decision when no rules match.
-   * Defaults to ASK_USER.
-   */
-  defaultDecision?: PolicyDecision;
-
-  /**
-   * Whether to allow tools in non-interactive mode.
-   * When true, ASK_USER decisions become DENY.
-   */
-  nonInteractive?: boolean;
-}
-
-export interface PolicySettings {
-  mcp?: {
-    excluded?: string[];
-    allowed?: string[];
-  };
-  tools?: {
-    exclude?: string[];
-    allowed?: string[];
-  };
-  mcpServers?: Record<string, { trust?: boolean }>;
-}
+/**
+ * @plan PLAN-20260609-ISSUE1591.P10d
+ * @requirement REQ-008
+ * Backward-compatible re-export shim. The policy domain now lives in the
+ * dedicated `@vybestack/llxprt-code-policy` workspace package. This file is
+ * retained so existing deep imports (`../policy/types.js`) keep working.
+ */
+export {
+  PolicyDecision,
+  ApprovalMode,
+  type PolicyRule,
+  type PolicyEngineConfig,
+  type PolicySettings,
+} from '@vybestack/llxprt-code-policy';
