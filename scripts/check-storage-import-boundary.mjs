@@ -30,6 +30,18 @@ function parseArgs(argv) {
   return args;
 }
 
+/**
+ * Converts a simple glob (only `*` is special, matching a single path
+ * segment) into a safe regex source string. All other regex metacharacters
+ * are escaped first so that user-supplied patterns cannot inject regex
+ * syntax (prevents regular-expression-injection; see CodeQL js/regex-injection).
+ */
+function globToRegexSource(glob) {
+  const escaped = glob.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Re-enable the single supported wildcard: escaped `\*` -> `[^/]+`.
+  return escaped.replace(/\\\*/g, '[^/]+');
+}
+
 function walkDir(dir, excludePatterns) {
   const results = [];
   const absDir = resolve(dir);
@@ -41,11 +53,11 @@ function walkDir(dir, excludePatterns) {
       const normalized = pat.replace(/\\/g, '/');
       if (normalized.endsWith('/**')) {
         const prefix = normalized.slice(0, -3);
-        const regexStr = prefix.replace(/\*/g, '[^/]+');
+        const regexStr = globToRegexSource(prefix);
         const regex = new RegExp('^' + regexStr + '(/|$)');
         if (regex.test(rel)) return true;
       } else {
-        const regexStr = normalized.replace(/\*/g, '[^/]+');
+        const regexStr = globToRegexSource(normalized);
         const regex = new RegExp('^' + regexStr + '$');
         if (regex.test(rel)) return true;
       }
