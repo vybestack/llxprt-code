@@ -57,6 +57,34 @@ interface CoreSubagentServiceAdapterOptions {
   getAsyncTaskManager?: () => AsyncTaskManager | undefined;
 }
 
+/**
+ * Optional synchronous capabilities that some SubagentManager implementations
+ * expose for cache-backed, non-blocking access. These are not part of the base
+ * SubagentManager contract, so they are declared separately and detected with a
+ * type guard before use.
+ */
+interface CachedSubagentManager {
+  getCachedSubagentNames?: () => string[];
+  getCachedSubagentConfig?: (
+    subagentName: string,
+  ) => CoreSubagentConfig | undefined;
+  loadSubagentSync?: (subagentName: string) => CoreSubagentConfig | undefined;
+}
+
+function asCachedSubagentManager(
+  manager: SubagentManager,
+): CachedSubagentManager {
+  return manager as SubagentManager & CachedSubagentManager;
+}
+
+function isPromiseLike(value: unknown): value is Promise<unknown> {
+  return (
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
 export class CoreSubagentServiceAdapter implements ISubagentService {
   private readonly managerProvider: () => SubagentManager | undefined;
   private readonly profileManagerProvider?: () => ProfileManager | undefined;
@@ -173,9 +201,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
 
   listSubagents(): SubagentInfo[] {
     const manager = this.requireManager();
-    const cachedManager = manager as unknown as {
-      getCachedSubagentNames?: () => string[];
-    };
+    const cachedManager = asCachedSubagentManager(manager);
 
     const names = cachedManager.getCachedSubagentNames?.();
     if (names) {
@@ -192,14 +218,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
 
   getSubagentConfig(name: string): ToolsSubagentConfig | undefined {
     const manager = this.requireManager();
-    const cachedManager = manager as unknown as {
-      getCachedSubagentConfig?: (
-        subagentName: string,
-      ) => CoreSubagentConfig | undefined;
-      loadSubagentSync?: (
-        subagentName: string,
-      ) => CoreSubagentConfig | undefined;
-    };
+    const cachedManager = asCachedSubagentManager(manager);
 
     const config =
       cachedManager.getCachedSubagentConfig?.(name) ??
@@ -210,11 +229,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     }
 
     const maybeConfig = manager.loadSubagent(name);
-    if (
-      maybeConfig &&
-      typeof maybeConfig === 'object' &&
-      'then' in maybeConfig
-    ) {
+    if (isPromiseLike(maybeConfig)) {
       throw new Error(`Subagent '${name}' is not available synchronously.`);
     }
 

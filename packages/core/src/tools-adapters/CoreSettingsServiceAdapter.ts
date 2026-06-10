@@ -22,6 +22,7 @@ export class CoreSettingsServiceAdapter implements ISettingsService {
   }
 
   async setSetting(key: string, value: unknown): Promise<void> {
+    // ISettingsService.set is synchronous (returns void); do not await.
     this.getSettingsService().set?.(key, value);
   }
 }

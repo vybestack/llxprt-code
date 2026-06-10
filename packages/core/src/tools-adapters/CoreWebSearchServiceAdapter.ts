@@ -14,6 +14,8 @@ export class CoreWebSearchServiceAdapter implements IWebSearchService {
   constructor(private readonly config: Config) {}
 
   getServerToolsProvider(): WebSearchServerToolsProvider | undefined {
+    // getServerToolsProvider() may return null; coalesce to undefined to
+    // satisfy the IWebSearchService contract (provider | undefined).
     const provider = this.config
       .getContentGeneratorConfig()
       ?.providerManager?.getServerToolsProvider();

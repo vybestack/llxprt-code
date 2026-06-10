@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -37,8 +37,10 @@ export class CoreIdeServiceAdapter implements IIdeService {
   }
 
   async openDiff(params: OpenDiffParams): Promise<void> {
-    await this.config
-      .getIdeClient()
-      ?.openDiff(params.filePath, params.newContent);
+    const ideClient = this.config.getIdeClient();
+    if (ideClient === undefined) {
+      throw new Error('IDE client is not available');
+    }
+    await ideClient.openDiff(params.filePath, params.newContent);
   }
 }
