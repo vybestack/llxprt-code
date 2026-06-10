@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
-import { GOOGLE_WEB_SEARCH_TOOL } from '../packages/core/src/tools/tool-names.js';
+import { GOOGLE_WEB_SEARCH_TOOL } from '@vybestack/llxprt-code-tools';
 
 // Skip web search tests in CI unless explicitly enabled via RUN_WEB_TESTS=true
 // This test depends on Gemini-backed server tools which aren't available in CI.
