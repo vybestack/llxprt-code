@@ -10,7 +10,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import toml from '@iarna/toml';
 import { z, type ZodError } from 'zod';
-import { buildArgsPatterns } from './utils.js';
+import {
+  buildArgsPatterns,
+  escapeRegex,
+  validatePolicyRegex,
+} from './utils.js';
 
 /**
  * Schema for a single policy rule in the TOML file (before transformation).
@@ -84,18 +88,6 @@ export interface PolicyFileError {
 export interface PolicyLoadResult {
   rules: PolicyRule[];
   errors: PolicyFileError[];
-}
-
-/**
- * Escapes special regex characters in a string for use in a regex pattern.
- * This is used for commandPrefix to ensure literal string matching.
- *
- * @param str The string to escape
- * @returns The escaped string safe for use in a regex
- */
-export function escapeRegex(str: string): string {
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -288,6 +280,7 @@ function resolveRulePatterns(
   let argsPatternRegex: RegExp | undefined;
   if (rule.argsPattern) {
     try {
+      validatePolicyRegex(rule.argsPattern);
       argsPatternRegex = new RegExp(rule.argsPattern);
     } catch (e) {
       const error = e as Error;
@@ -583,6 +576,7 @@ function expandTomlRule(
 
       // Compile regex pattern
       if (argsPattern) {
+        validatePolicyRegex(argsPattern);
         policyRule.argsPattern = new RegExp(argsPattern);
       }
 

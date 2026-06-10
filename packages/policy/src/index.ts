@@ -7,7 +7,6 @@ export type {
 export { PolicyEngine } from './policy-engine.js';
 export { stableStringify, stableParse } from './stable-stringify.js';
 export {
-  escapeRegex,
   loadPoliciesFromToml,
   loadPolicyFromToml,
   loadDefaultPolicies,
@@ -17,7 +16,7 @@ export type {
   PolicyFileErrorType,
   PolicyLoadResult,
 } from './toml-loader.js';
-export { buildArgsPatterns } from './utils.js';
+export { buildArgsPatterns, escapeRegex } from './utils.js';
 export {
   DEFAULT_CORE_POLICIES_DIR,
   DEFAULT_POLICY_TIER,

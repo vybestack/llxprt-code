@@ -19,8 +19,14 @@ const MAX_POLICY_REGEX_SOURCE_LENGTH = 1024;
  * Validates that a policy-supplied regex pattern is within safe bounds.
  * Policy regex comes from admin-controlled TOML files, but we still enforce
  * a source length limit as defence-in-depth against ReDoS.
+ *
+ * Note: the nested-quantifier heuristic only detects directly adjacent
+ * quantifiers (e.g. `a*+`, `b+{2,}`). It does NOT catch grouped nested
+ * quantifiers such as `(a*)*` or `(a+)+`, where the quantifiers are separated
+ * by grouping constructs. Policy authors should avoid nested quantifiers when
+ * authoring policy regexes.
  */
-function validatePolicyRegex(source: string): void {
+export function validatePolicyRegex(source: string): void {
   if (source.length > MAX_POLICY_REGEX_SOURCE_LENGTH) {
     throw new Error(
       `Policy regex pattern exceeds maximum allowed length of ${MAX_POLICY_REGEX_SOURCE_LENGTH}`,

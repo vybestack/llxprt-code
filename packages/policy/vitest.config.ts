@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { sep, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
@@ -7,7 +8,12 @@ const policyEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
 const policySrcDir = fileURLToPath(new URL('./src/', import.meta.url));
 
 function resolveTsSource(baseDir: string, specifier: string): string | null {
-  const direct = baseDir + specifier;
+  // Guard against path traversal: the resolved path must stay within baseDir.
+  const baseRoot = resolve(baseDir);
+  const direct = resolve(baseRoot, specifier);
+  if (direct !== baseRoot && !direct.startsWith(baseRoot + sep)) {
+    return null;
+  }
   if (direct.endsWith('.js')) {
     const tsPath = direct.slice(0, -3) + '.ts';
     if (existsSync(tsPath)) {

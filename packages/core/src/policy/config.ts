@@ -21,6 +21,7 @@ import {
   getPolicyDirectories as getPolicyDirectoriesFromPolicy,
   getPolicyTier as getPolicyTierFromPolicy,
   loadPoliciesFromToml,
+  loadPolicyFromToml,
   type MessageBus,
   MessageBusType,
   migrateLegacyApprovalMode,
@@ -133,9 +134,6 @@ async function loadUserPolicyRules(
   if (userPolicyPath) {
     try {
       await fs.access(userPolicyPath);
-      const { loadPolicyFromToml } = await import(
-        '@vybestack/llxprt-code-policy'
-      );
       const userRules = await loadPolicyFromToml(
         userPolicyPath,
         USER_POLICY_TIER,

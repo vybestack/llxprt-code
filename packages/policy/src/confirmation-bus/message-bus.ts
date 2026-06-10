@@ -122,15 +122,15 @@ export class MessageBus {
             clearTimeout(timeout);
             unsubscribe();
             let resolvedConfirmation: boolean;
-            if (response.confirmed !== undefined) {
-              resolvedConfirmation = response.confirmed;
-            } else if (response.outcome !== undefined) {
+            if (response.outcome !== undefined) {
               const isCancel = response.outcome === ConfirmationOutcome.Cancel;
               const isModify =
                 response.outcome === ConfirmationOutcome.ModifyWithEditor;
               const isSuggest =
                 response.outcome === ConfirmationOutcome.SuggestEdit;
               resolvedConfirmation = !isCancel && !isModify && !isSuggest;
+            } else if (response.confirmed !== undefined) {
+              resolvedConfirmation = response.confirmed;
             } else {
               resolvedConfirmation = false;
             }
