@@ -137,6 +137,12 @@ export {
 } from './utils/fuzzy-replacer.js';
 export { ensureParentDirectoriesExist } from './utils/ensure-dirs.js';
 export {
+  getRipgrepPath,
+  isRipgrepAvailable,
+  clearRipgrepAvailabilityCache,
+  ensureWindowsShortcut,
+} from './utils/ripgrepPathResolver.js';
+export {
   TodoStatus,
   TodoToolCallSchema,
   SubtaskSchema,
