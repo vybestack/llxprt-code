@@ -11,7 +11,10 @@ import type {
 } from './BaseProvider.js';
 import { BaseProvider } from './BaseProvider.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import type { OAuthManager } from '@vybestack/llxprt-code-auth';
+import type {
+  OAuthManager,
+  IProviderKeyStorage,
+} from '@vybestack/llxprt-code-auth';
 import { type OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import type { IModel } from './IModel.js';
 import type {
@@ -286,6 +289,42 @@ describe('BaseProvider', () => {
         provider as unknown as { getAuthToken(): Promise<string> }
       ).getAuthToken();
       expect(authToken).toBe('');
+    });
+
+    // Regression: subagent profiles set 'auth-key-name' in runtime settings
+    // without pre-resolving it to a concrete 'auth-key'. BaseProvider's resolver
+    // must therefore be able to resolve named keys via injected provider key
+    // storage. Before this fix, the auth-package resolver threw because no
+    // providerKeyStorage was injected by BaseProvider.
+    it('resolves auth-key-name via injected provider key storage (subagent path)', async () => {
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key-name', 'chutesminimax');
+
+      // In-memory provider key storage satisfying IProviderKeyStorage — no
+      // mock theater; a real object with deterministic behavior.
+      const storedKeys = new Map<string, string>([
+        ['chutesminimax', 'named-key-secret-value'],
+      ]);
+      const providerKeyStorage: IProviderKeyStorage = {
+        getKey: async (name: string) => storedKeys.get(name) ?? null,
+        listKeys: async () => [...storedKeys.keys()],
+        hasKey: async (name: string) => storedKeys.has(name),
+      };
+
+      const config: BaseProviderConfig = {
+        name: 'test',
+        envKeyNames: ['TEST_API_KEY'],
+        isOAuthEnabled: false,
+        oauthProvider: 'test',
+        providerKeyStorage,
+      };
+
+      const provider = new TestProvider(config);
+
+      const authToken = await (
+        provider as unknown as { getAuthToken(): Promise<string> }
+      ).getAuthToken();
+      expect(authToken).toBe('named-key-secret-value');
     });
   });
 

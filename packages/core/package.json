@@ -51,6 +51,7 @@
     "./settings/SettingsService.js": "./dist/src/settings/SettingsService.js",
     "./settings/settingsServiceInstance.js": "./dist/src/settings/settingsServiceInstance.js",
     "./storage/ConversationFileWriter.js": "./dist/src/storage/ConversationFileWriter.js",
+    "./storage/provider-key-storage.js": "./dist/src/storage/provider-key-storage.js",
     "./storage/secure-store.js": "./dist/src/storage/secure-store.js",
     "./telemetry/loggers.js": "./dist/src/telemetry/loggers.js",
     "./telemetry/types.js": "./dist/src/telemetry/types.js",
