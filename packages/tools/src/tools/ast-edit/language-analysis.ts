@@ -75,9 +75,17 @@ function extractImportModule(line: string): string {
  * @returns Array of imported item names
  */
 function extractImportItems(line: string): string[] {
-  const match = line.match(REGEX.IMPORT_ITEMS);
-  if (match) {
-    return match[1].split(',').map((item) => item.trim());
+  // Extract the contents of the first { ... } block using index scanning to
+  // avoid polynomial backtracking on braces-heavy input.
+  const open = line.indexOf('{');
+  if (open !== -1) {
+    const close = line.indexOf('}', open + 1);
+    if (close > open + 1) {
+      return line
+        .slice(open + 1, close)
+        .split(',')
+        .map((item) => item.trim());
+    }
   }
   return [];
 }
@@ -101,6 +109,23 @@ function extractPythonImportModule(line: string): string {
 }
 
 /**
+ * Strips a trailing ` as <alias>` from a single import item using linear token
+ * scanning (avoids regex backtracking on whitespace-heavy input).
+ * Example: `join as j` -> `join`.
+ */
+function stripImportAlias(item: string): string {
+  const tokens = item.split(/\s+/);
+  if (
+    tokens.length >= 3 &&
+    tokens[tokens.length - 2] === 'as' &&
+    /^\w+$/.test(tokens[tokens.length - 1])
+  ) {
+    return tokens.slice(0, tokens.length - 2).join(' ');
+  }
+  return item;
+}
+
+/**
  * Extracts imported items from a Python import statement.
  * Handles: `from typing import List, Dict`, `from os.path import join, exists`
  */
@@ -108,13 +133,10 @@ function extractPythonImportItems(line: string): string[] {
   // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const fromImportMatch = line.match(/^from\s+[\w.]+\s+import\s+(.+)/);
   if (fromImportMatch) {
-    return (
-      fromImportMatch[1]
-        .split(',')
-        // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-        .map((item) => item.trim().replace(/\s+as\s+\w+$/, ''))
-        .filter((item) => item)
-    );
+    return fromImportMatch[1]
+      .split(',')
+      .map((item) => stripImportAlias(item.trim()))
+      .filter((item) => item);
   }
   return [];
 }

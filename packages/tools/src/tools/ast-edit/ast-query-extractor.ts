@@ -226,11 +226,14 @@ export class ASTQueryExtractor {
   }
 
   private extractSignatureBasic(line: string): string {
-    // Try to capture parameters: ( ... )
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    const match = line.match(/\(([^)]*)\)/);
-    if (match) {
-      return `(${match[1]})`;
+    // Capture parameters: ( ... ). Use index scanning instead of a regex to
+    // avoid polynomial backtracking on lines with many unmatched parentheses.
+    const open = line.indexOf('(');
+    if (open !== -1) {
+      const close = line.indexOf(')', open + 1);
+      if (close !== -1) {
+        return `(${line.slice(open + 1, close)})`;
+      }
     }
     return '';
   }
