@@ -18,15 +18,20 @@
  * @requirement R2.3, R2.4, R9.5
  */
 
-import type { TokenStore } from '@vybestack/llxprt-code-core';
-import {
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import type {
+  TokenStore,
   KeyringTokenStore,
+} from '@vybestack/llxprt-code-auth';
+import {
   ProxyProviderKeyStorage,
   ProxySocketClient,
   ProxyTokenStore,
-} from '@vybestack/llxprt-code-core';
-import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
+} from '@vybestack/llxprt-code-auth';
+import { createKeyringTokenStore } from '@vybestack/llxprt-code-core';
+// ProviderKeyStorage now lives in the storage package
 import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
+import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 
 let proxyTokenStore: ProxyTokenStore | undefined;
 let directTokenStore: KeyringTokenStore | undefined;
@@ -53,7 +58,7 @@ export function createTokenStore(): TokenStore {
     proxyTokenStore ??= new ProxyTokenStore(socketPath);
     return proxyTokenStore;
   }
-  directTokenStore ??= new KeyringTokenStore();
+  directTokenStore ??= createKeyringTokenStore();
   return directTokenStore;
 }
 

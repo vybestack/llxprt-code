@@ -18,14 +18,16 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-core';
-import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-auth';
 import {
   FrameDecoder,
   encodeFrame,
   sanitizeTokenForProxy,
   mergeRefreshedToken,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
+// ProviderKeyStorage now lives in the storage package
+import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import {
   CredentialProxyOAuthHandler,
   type OAuthFlowInterface,

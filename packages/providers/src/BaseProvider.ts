@@ -17,11 +17,14 @@ import {
 import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
   AuthPrecedenceResolver,
   type AuthPrecedenceConfig,
   type OAuthManager,
-} from '@vybestack/llxprt-code-core/auth/precedence.js';
+  type IProviderKeyStorage,
+} from '@vybestack/llxprt-code-auth';
+import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage/storage/provider-key-storage.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
 import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -63,6 +66,13 @@ export interface BaseProviderConfig {
   oauthManager?: OAuthManager;
   // Override for supportsOAuth when method can't be used in constructor
   supportsOAuth?: boolean;
+
+  // Named API key storage used to resolve `auth-key-name` references.
+  // Optional DI seam: when omitted, BaseProvider falls back to core's
+  // singleton provider key storage so resolution works in every runtime
+  // (including subagent runtimes that set `auth-key-name` without
+  // pre-resolving it to a concrete `auth-key`).
+  providerKeyStorage?: IProviderKeyStorage;
 }
 
 export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
@@ -141,11 +151,19 @@ export abstract class BaseProvider implements IProvider {
       providerId: this.name,
     };
 
-    this.authResolver = new AuthPrecedenceResolver(
-      precedenceConfig,
-      config.oauthManager,
-      fallbackSettingsService,
-    );
+    // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor (unified with C-CB-06/C-CB-09)
+    // SettingsService satisfies ISettingsService by structural typing.
+    // providerKeyStorage is injected so the resolver can resolve named keys
+    // (`auth-key-name`) on its own. Pre-extraction, the core resolver reached
+    // core's getProviderKeyStorage() internally; after extraction the auth
+    // package can't, so the consumer must inject it. Falling back to core's
+    // singleton preserves behavior for runtimes (e.g. subagents) that set
+    // `auth-key-name` without pre-resolving it to a concrete `auth-key`.
+    this.authResolver = new AuthPrecedenceResolver(precedenceConfig, {
+      oauthManager: config.oauthManager,
+      settingsService: fallbackSettingsService,
+      providerKeyStorage: config.providerKeyStorage ?? getProviderKeyStorage(),
+    });
   }
 
   /**

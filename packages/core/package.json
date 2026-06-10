@@ -15,8 +15,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./auth/precedence.js": "./dist/src/auth/precedence.js",
-    "./auth/types.js": "./dist/src/auth/types.js",
     "./code_assist/codeAssist.js": "./dist/src/code_assist/codeAssist.js",
     "./config/config.js": "./dist/src/config/config.js",
     "./config/configBaseCore.js": "./dist/src/config/configBaseCore.js",
@@ -101,6 +99,7 @@
     "dist"
   ],
   "dependencies": {
+    "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-storage": "file:../storage",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-settings": "file:../settings",

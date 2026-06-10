@@ -6,9 +6,9 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CodexOAuthProvider } from '../codex-oauth-provider.js';
+import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth';
 import {
   KeyringTokenStore,
-  CodexOAuthTokenSchema,
   type TokenStore,
 } from '@vybestack/llxprt-code-core';
 import {

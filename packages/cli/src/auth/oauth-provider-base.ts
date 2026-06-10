@@ -9,8 +9,8 @@
  * Extracted from the four CLI OAuth providers to eliminate DRY violations.
  */
 
-import { OAuthError, OAuthErrorFactory } from '@vybestack/llxprt-code-core';
-import type { OAuthToken } from '@vybestack/llxprt-code-core';
+import { OAuthError, OAuthErrorFactory } from '@vybestack/llxprt-code-auth';
+import type { OAuthToken } from '@vybestack/llxprt-code-auth';
 
 /**
  * Initialization state machine values shared across all four CLI OAuth providers.

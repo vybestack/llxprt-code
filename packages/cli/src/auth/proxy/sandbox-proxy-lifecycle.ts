@@ -9,9 +9,8 @@
  * Manages server creation, startup, and cleanup.
  *
  * NOTE: This is HOST-SIDE code that creates and manages the proxy server.
- * It intentionally uses direct KeyringTokenStore and getProviderKeyStorage
- * instantiation because it IS the host-side credential source, not a consumer.
- * The factory functions are for consumer sites that need to detect proxy mode.
+ * It intentionally wires the direct credential source through core factories
+ * because it is the host-side bridge for sandboxed consumers.
  *
  * @plan:PLAN-20250214-CREDPROXY.P32
  * @plan:PLAN-20250214-CREDPROXY.P35 - Verified as host-side (direct instantiation correct)
@@ -19,13 +18,14 @@
  * @requirement R25.1, R25.3, R25.4
  */
 
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
-  KeyringTokenStore,
   AnthropicDeviceFlow,
   CodexDeviceFlow,
   QwenDeviceFlow,
   type OAuthToken,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
+import { createKeyringTokenStore } from '@vybestack/llxprt-code-core';
 import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import path from 'node:path';
 import {
@@ -167,7 +167,7 @@ export async function createAndStartProxy(
     };
   }
 
-  const tokenStore = new KeyringTokenStore();
+  const tokenStore = createKeyringTokenStore();
   const providerKeyStorage = getProviderKeyStorage();
 
   // Build flow factories for OAuth initiation
