@@ -329,13 +329,13 @@ jobs:
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-telemetry --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
-      - name: Publish @vybestack/llxprt-code-mcp
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-mcp --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
-
       - name: Publish @vybestack/llxprt-code-ide-integration
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-ide-integration --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Publish @vybestack/llxprt-code-mcp
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        run: npm publish --workspace=@vybestack/llxprt-code-mcp --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-core
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
