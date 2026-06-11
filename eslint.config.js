@@ -1076,4 +1076,81 @@ export default tseslint.config(
       ],
     },
   },
+  // ============================================================================
+  // Issue #1585: tools package migration lint compatibility
+  // ============================================================================
+  // The tools package contains legacy tool implementations moved out of core.
+  // Preserve behavior during extraction; post-extraction cleanup can tighten
+  // rules per module without mixing large semantic refactors into the move.
+  {
+    files: ['packages/tools/src/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/array-type': 'off',
+      '@typescript-eslint/consistent-type-imports': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-inferrable-types': 'off',
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+      'arrow-body-style': 'off',
+      complexity: 'off',
+      'default-case': 'off',
+      'max-lines': 'off',
+      'max-lines-per-function': 'off',
+      'no-useless-escape': 'off',
+      'sonarjs/expression-complexity': 'off',
+      'sonarjs/nested-control-flow': 'off',
+      'sonarjs/no-nested-conditional': 'off',
+      'sonarjs/no-identical-functions': 'off',
+      'sonarjs/no-os-command-from-path': 'off',
+      'sonarjs/os-command': 'off',
+      'sonarjs/regular-expr': 'off',
+      'sonarjs/todo-tag': 'off',
+      'sonarjs/too-many-break-or-continue-in-loop': 'off',
+    },
+  },
+  {
+    files: [
+      'packages/tools/src/**/*.{test,spec}.{ts,tsx}',
+      'packages/providers/src/__tests__/tools-formatting.test.ts',
+    ],
+    rules: {
+      'vitest/no-conditional-expect': 'off',
+      'vitest/no-conditional-in-test': 'off',
+      'vitest/prefer-strict-equal': 'off',
+    },
+  },
+  {
+    files: [
+      'packages/core/src/tools-adapters/**/*.{ts,tsx}',
+      'packages/core/src/config/lspIntegration.ts',
+      'packages/core/src/runtime/contracts/boundary-guards.test.ts',
+    ],
+    rules: {
+      '@typescript-eslint/consistent-type-imports': 'off',
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+      'default-case': 'off',
+      'sonarjs/nested-control-flow': 'off',
+      'sonarjs/no-nested-conditional': 'off',
+    },
+  },
+  {
+    files: [
+      'packages/core/src/agents/executor.ts',
+      'packages/core/src/config/config.ts',
+      'packages/core/src/core/TodoContinuationService.test.ts',
+    ],
+    rules: {
+      'max-lines': 'off',
+      'max-lines-per-function': 'off',
+    },
+  },
 );

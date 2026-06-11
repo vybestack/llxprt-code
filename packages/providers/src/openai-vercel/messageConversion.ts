@@ -43,12 +43,12 @@ import type {
 import {
   normalizeToHistoryToolId,
   normalizeToOpenAIToolId,
-} from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+} from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import {
   buildToolResponsePayload,
   EMPTY_TOOL_RESULT_PLACEHOLDER,
 } from '../utils/toolResponsePayload.js';
-import type { ToolIdMapper } from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+import type { ToolIdMapper } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import {
   extractThinkingBlocks,
   thinkingToReasoningField,

@@ -1,0 +1,827 @@
+
+> @vybestack/llxprt-code-tools@0.10.0 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt/branch-3/llxprt-code/packages/tools
+      Coverage enabled with v8
+
+ ✓ src/__tests__/registry-contract.test.ts (10 tests) 3ms
+ ✓ src/__tests__/package-metadata.test.ts (19 tests) 3ms
+ ✓ src/__tests__/package-boundary.test.ts (21 tests) 7ms
+ ✓ src/__tests__/forbidden-dependencies.test.ts (11 tests) 3ms
+ ✓ src/__tests__/interface-contracts.test.ts (23 tests) 8ms
+ ✓ src/__tests__/tool-key-storage.test.ts (22 tests) 3ms
+ ❯ src/__tests__/mcp-tool.test.ts (4 tests | 2 failed) 8ms
+   × MCP Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > DiscoveredMCPTool invocation through adapter > callTool returns ToolResult with MCP tool output 5ms
+     → expected 'DiscoveredMCPToolInvocation has not m…' to be undefined
+   × MCP Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > DiscoveredMCPTool invocation through adapter > callTool returns error content for nonexistent tool 1ms
+     → expected 'DiscoveredMCPToolInvocation has not m…' to contain 'not found'
+   ✓ MCP Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > MCP tool discovery through adapter > discoverTools returns available MCP tools 0ms
+   ✓ MCP Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > MCP tool name generation > getTool returns the correct tool by server and name 0ms
+ ❯ src/__tests__/memory-tool.test.ts (5 tests | 2 failed) 7ms
+   × Memory Tool Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > MemoryTool saves content through IStorageService > saves content and filesystem reflects the saved file 4ms
+     → expected 'MemoryTool has not moved into package…' to be undefined
+   × Memory Tool Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > MemoryTool reads content and returns it in ToolResult.llmContent > reads previously saved content through IStorageService 1ms
+     → expected 'MemoryTool has not moved into package…' to be undefined
+   ✓ Memory Tool Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > IStorageService LLXPRT directory path > getLLXPRTDir returns configured base directory 0ms
+   ✓ Memory Tool Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > IStorageService ensureDir creates directories > ensureDir creates nested directories 1ms
+   ✓ Memory Tool Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > Key storage path matches pre-extraction behavior > LLXPRT dir path is used for key storage files 0ms
+ ❯ src/__tests__/shell-tool.test.ts (7 tests | 7 failed) 7ms
+   × Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool execution through IShellExecutionService adapter > returns ToolResult with exit code and output for allowed command 4ms
+     → expected 'ShellTool has not moved into packages…' to be undefined
+   × Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool execution through IShellExecutionService adapter > returns ToolResult with error content for failed command 1ms
+     → expected 'ShellTool has not moved into packages…' to contain 'Command failed'
+   × Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool denial: command not allowed by policy > returns error ToolResult for denied command 0ms
+     → expected 'ShellTool has not moved into packages…' to contain 'denied'
+   × Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool denial: command not allowed by policy > denial produces observable result indicating blocked execution 0ms
+     → expected 'ShellTool has not moved into packages…' to contain 'denied'
+   × Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool approval/confirmation flow through IToolMessageBus > requestConfirmation returns proceed_once and produces observable ToolResult 0ms
+     → expected 'ShellTool has not moved into packages…' to be undefined
+   × Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool approval/confirmation flow through IToolMessageBus > requestConfirmation returns cancel and cancels execution with observable outcome 0ms
+     → expected 'ShellTool has not moved into packages…' to contain 'cancel'
+   × Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > IShellExecutionService adapter round-trip > save and retrieve command results through adapter 0ms
+     → expected 'ShellTool has not moved into packages…' to be undefined
+ ❯ src/__tests__/todo-tools.test.ts (5 tests | 4 failed) 5ms
+   × Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TodoWrite writes and TodoRead returns items (observable round-trip) > after writing todos, subsequent read returns the written items 4ms
+     → expected 'TodoWriteTool has not moved into pack…' to be undefined
+   × Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TodoWrite writes and TodoRead returns items (observable round-trip) > after writing multiple batches, read reflects the latest state 0ms
+     → expected 'TodoReadTool has not moved into packa…' to be undefined
+   × Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TodoPause pauses continuation with observable behavioral effect > after pause, read result reflects paused state 0ms
+     → expected 'TodoPauseTool has not moved into pack…' to be undefined
+   × Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TodoRead reads items with ToolResult.llmContent containing structured output > todos appear as structured content in ToolResult 0ms
+     → expected 'TodoReadTool has not moved into packa…' to be undefined
+   ✓ Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ITodoService getDefaultAgentId > returns the expected agent ID 0ms
+ ❯ src/__tests__/edit-ast-tools.test.ts (7 tests | 7 failed) 9ms
+   × Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > EditTool behavioral contract > applies exact text replacement and filesystem reflects the edit 4ms
+     → expected 'EditTool has not moved into packages/…' to be undefined
+   × Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > EditTool behavioral contract > edit produces correct diff stats 1ms
+     → expected 'EditTool has not moved into packages/…' to be undefined
+   × Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ApplyPatchTool behavioral contract > applies unified diff and filesystem reflects the patch 1ms
+     → expected 'ApplyPatchTool has not moved into pac…' to be undefined
+   × Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ASTEditTool behavioral contract > performs ast-edit and returns modified content 1ms
+     → expected 'ASTEditTool has not moved into packag…' to be undefined
+   × Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ASTGrepTool behavioral contract > searches for structural patterns and returns matching AST nodes 1ms
+     → expected 'AstGrepTool has not moved into packag…' to be undefined
+   × Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > StructuralAnalysisTool behavioral contract > performs structural analysis queries and returns results 1ms
+     → expected 'StructuralAnalysisTool has not moved …' to be undefined
+   × Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ToolResult contract for edit tools > edited file contains expected content observable on filesystem 1ms
+     → expected 'EditTool has not moved into packages/…' to be undefined
+ ❯ src/__tests__/subagent-tools.test.ts (7 tests | 7 failed) 7ms
+   × Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TaskTool executes through ISubagentService and returns ToolResult > executeSubagent returns result with correct content 4ms
+     → expected 'TaskTool has not moved into packages/…' to be undefined
+   × Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TaskTool executes through ISubagentService and returns ToolResult > executeSubagent returns error for unknown agent 1ms
+     → expected 'TaskTool has not moved into packages/…' to contain 'Unknown subagent'
+   × Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ListSubagentsTool lists available subagents > listSubagents returns agent list in ToolResult 0ms
+     → expected 'ListSubagentsTool has not moved into …' to be undefined
+   × Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ListSubagentsTool lists available subagents > empty list when no subagents available 0ms
+     → expected 'ListSubagentsTool has not moved into …' to be undefined
+   × Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > CheckAsyncTasksTool checks task status through IAsyncTaskService > checkAsyncTask returns correct status for known task 0ms
+     → expected 'CheckAsyncTasksTool has not moved int…' to be undefined
+   × Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > CheckAsyncTasksTool checks task status through IAsyncTaskService > getTaskStatus returns all task statuses in ToolResult 0ms
+     → expected 'CheckAsyncTasksTool has not moved int…' to be undefined
+   × Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > CheckAsyncTasksTool checks task status through IAsyncTaskService > checkAsyncTask returns failed for unknown task 0ms
+     → expected 'CheckAsyncTasksTool has not moved int…' to contain 'failed'
+ ❯ src/__tests__/filesystem-tools.test.ts (11 tests | 9 failed) 18ms
+   × Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ReadFileTool behavioral contract > reads a temp file and returns content with correct ToolResult.llmContent 11ms
+     → expected 'ReadFileTool has not moved into packa…' to be undefined
+   × Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ReadFileTool behavioral contract > returns error ToolResult when reading a nonexistent file 2ms
+     → expected 'ReadFileTool has not moved into packa…' to contain 'does-not-exist.txt'
+   × Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > WriteFileTool behavioral contract > writes content and filesystem reflects the written content 0ms
+     → expected 'WriteFileTool has not moved into pack…' to be undefined
+   × Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > DeleteLineRangeTool behavioral contract > deletes specified lines from a real temp file 1ms
+     → expected 'DeleteLineRangeTool has not moved int…' to be undefined
+   × Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > InsertAtLineTool behavioral contract > inserts content at a line and filesystem reflects the insertion 1ms
+     → expected 'InsertAtLineTool has not moved into p…' to be undefined
+   × Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ReadLineRangeTool behavioral contract > reads a specific line range and returns correct content 1ms
+     → expected 'ReadLineRangeTool has not moved into …' to be undefined
+   × Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > GlobTool behavioral contract > matches a real temp directory structure and returns file list 1ms
+     → expected 'GlobTool has not moved into packages/…' to be undefined
+   × Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > GrepTool behavioral contract > searches real temp files and returns matching results 1ms
+     → expected 'GrepTool has not moved into packages/…' to be undefined
+   × Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > LsTool behavioral contract > lists a real temp directory and returns directory contents 1ms
+     → expected 'LSTool has not moved into packages/to…' to be undefined
+   ✓ Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ToolResult contract verification > READ_FILE_FIXTURE has correct contract structure 0ms
+   ✓ Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ToolResult contract verification > WRITE_FILE_FIXTURE has correct contract structure 0ms
+ ✓ src/__tests__/boundary-scan.test.ts (10 tests) 71ms
+ ✓ src/__tests__/forbidden-imports.test.ts (4 tests) 110ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 38 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/edit-ast-tools.test.ts > Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > EditTool behavioral contract > applies exact text replacement and filesystem reflects the edit
+AssertionError: expected 'EditTool has not moved into packages/…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"EditTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/edit-ast-tools.test.ts:71:28
+     69|       );
+     70| 
+     71|       expect(result.error).toBeUndefined();
+       |                            ^
+     72|       expect(result.llmContent).toContain('Greetings World');
+     73|       expect(result.returnDisplay).toContain('Greetings World');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/38]⎯
+
+ FAIL  src/__tests__/edit-ast-tools.test.ts > Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > EditTool behavioral contract > edit produces correct diff stats
+AssertionError: expected 'EditTool has not moved into packages/…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"EditTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/edit-ast-tools.test.ts:88:28
+     86|       );
+     87| 
+     88|       expect(result.error).toBeUndefined();
+       |                            ^
+     89|       expect(result.llmContent).toContain('modified');
+     90|       expect(result.returnDisplay).toContain('line4');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/38]⎯
+
+ FAIL  src/__tests__/edit-ast-tools.test.ts > Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ApplyPatchTool behavioral contract > applies unified diff and filesystem reflects the patch
+AssertionError: expected 'ApplyPatchTool has not moved into pac…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"ApplyPatchTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/edit-ast-tools.test.ts:112:28
+    110|       );
+    111| 
+    112|       expect(result.error).toBeUndefined();
+       |                            ^
+    113|       expect(result.llmContent).toContain('patched line 2');
+    114|       expect(result.returnDisplay).toContain('applied');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/38]⎯
+
+ FAIL  src/__tests__/edit-ast-tools.test.ts > Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ASTEditTool behavioral contract > performs ast-edit and returns modified content
+AssertionError: expected 'ASTEditTool has not moved into packag…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"ASTEditTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/edit-ast-tools.test.ts:129:28
+    127|       );
+    128| 
+    129|       expect(result.error).toBeUndefined();
+       |                            ^
+    130|       expect(result.llmContent).toContain('const x = 42');
+    131|       expect(result.returnDisplay).toContain('const x = 42');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/38]⎯
+
+ FAIL  src/__tests__/edit-ast-tools.test.ts > Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ASTGrepTool behavioral contract > searches for structural patterns and returns matching AST nodes
+AssertionError: expected 'AstGrepTool has not moved into packag…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"AstGrepTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/edit-ast-tools.test.ts:147:28
+    145|       );
+    146| 
+    147|       expect(result.error).toBeUndefined();
+       |                            ^
+    148|       expect(result.llmContent).toContain('hello');
+    149|       expect(result.llmContent).toContain('world');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/38]⎯
+
+ FAIL  src/__tests__/edit-ast-tools.test.ts > Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > StructuralAnalysisTool behavioral contract > performs structural analysis queries and returns results
+AssertionError: expected 'StructuralAnalysisTool has not moved …' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"StructuralAnalysisTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/edit-ast-tools.test.ts:164:28
+    162|       );
+    163| 
+    164|       expect(result.error).toBeUndefined();
+       |                            ^
+    165|       expect(result.llmContent).toContain('MyClass');
+    166|       expect(result.llmContent).toContain('myMethod');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/38]⎯
+
+ FAIL  src/__tests__/edit-ast-tools.test.ts > Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ToolResult contract for edit tools > edited file contains expected content observable on filesystem
+AssertionError: expected 'EditTool has not moved into packages/…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"EditTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/edit-ast-tools.test.ts:180:28
+    178|       );
+    179| 
+    180|       expect(result.error).toBeUndefined();
+       |                            ^
+    181|       expect(result.llmContent).toContain('modified content');
+    182|       expect(readFileSync(filePath, 'utf-8')).toBe('modified content');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/38]⎯
+
+ FAIL  src/__tests__/filesystem-tools.test.ts > Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ReadFileTool behavioral contract > reads a temp file and returns content with correct ToolResult.llmContent
+AssertionError: expected 'ReadFileTool has not moved into packa…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"ReadFileTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/filesystem-tools.test.ts:111:28
+    109|       const result = await executeToolForBehavioralAssertion(tool, { f…
+    110| 
+    111|       expect(result.error).toBeUndefined();
+       |                            ^
+    112|       expect(result.llmContent).toContain(READ_FILE_FIXTURE.exampleCon…
+    113|       expect(result.returnDisplay).toContain(READ_FILE_FIXTURE.example…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/38]⎯
+
+ FAIL  src/__tests__/filesystem-tools.test.ts > Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ReadFileTool behavioral contract > returns error ToolResult when reading a nonexistent file
+AssertionError: expected 'ReadFileTool has not moved into packa…' to contain 'does-not-exist.txt'
+
+Expected: [32m"[7mdoes-not-exist.tx[27mt"[39m
+Received: [31m"[7mReadFileTool has not moved into packages/tools ye[27mt"[39m
+
+ ❯ src/__tests__/filesystem-tools.test.ts:125:28
+    123|       );
+    124| 
+    125|       expect(result.error).toContain('does-not-exist.txt');
+       |                            ^
+    126|       expect(result.llmContent).toContain('does-not-exist.txt');
+    127|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/38]⎯
+
+ FAIL  src/__tests__/filesystem-tools.test.ts > Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > WriteFileTool behavioral contract > writes content and filesystem reflects the written content
+AssertionError: expected 'WriteFileTool has not moved into pack…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"WriteFileTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/filesystem-tools.test.ts:138:28
+    136|       );
+    137| 
+    138|       expect(result.error).toBeUndefined();
+       |                            ^
+    139|       expect(result.llmContent).toContain('write-test.txt');
+    140|       expect(result.returnDisplay).toContain('write-test.txt');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/38]⎯
+
+ FAIL  src/__tests__/filesystem-tools.test.ts > Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > DeleteLineRangeTool behavioral contract > deletes specified lines from a real temp file
+AssertionError: expected 'DeleteLineRangeTool has not moved int…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"DeleteLineRangeTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/filesystem-tools.test.ts:157:28
+    155|       );
+    156| 
+    157|       expect(result.error).toBeUndefined();
+       |                            ^
+    158|       expect(result.llmContent).toContain('line2');
+    159|       expect(readFileSync(filePath, 'utf-8')).toBe('line1\nline4\nline…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/38]⎯
+
+ FAIL  src/__tests__/filesystem-tools.test.ts > Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > InsertAtLineTool behavioral contract > inserts content at a line and filesystem reflects the insertion
+AssertionError: expected 'InsertAtLineTool has not moved into p…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"InsertAtLineTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/filesystem-tools.test.ts:173:28
+    171|       );
+    172| 
+    173|       expect(result.error).toBeUndefined();
+       |                            ^
+    174|       expect(result.llmContent).toContain('line2');
+    175|       expect(readFileSync(filePath, 'utf-8')).toBe('line1\nline2\nline…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/38]⎯
+
+ FAIL  src/__tests__/filesystem-tools.test.ts > Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ReadLineRangeTool behavioral contract > reads a specific line range and returns correct content
+AssertionError: expected 'ReadLineRangeTool has not moved into …' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"ReadLineRangeTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/filesystem-tools.test.ts:189:28
+    187|       );
+    188| 
+    189|       expect(result.error).toBeUndefined();
+       |                            ^
+    190|       expect(result.llmContent).toContain('line2\nline3');
+    191|       expect(result.returnDisplay).toContain('line2\nline3');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/38]⎯
+
+ FAIL  src/__tests__/filesystem-tools.test.ts > Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > GlobTool behavioral contract > matches a real temp directory structure and returns file list
+AssertionError: expected 'GlobTool has not moved into packages/…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"GlobTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/filesystem-tools.test.ts:213:28
+    211|       );
+    212| 
+    213|       expect(result.error).toBeUndefined();
+       |                            ^
+    214|       expect(result.llmContent).toContain('index.ts');
+    215|       expect(result.llmContent).toContain('readme.txt');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/38]⎯
+
+ FAIL  src/__tests__/filesystem-tools.test.ts > Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > GrepTool behavioral contract > searches real temp files and returns matching results
+AssertionError: expected 'GrepTool has not moved into packages/…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"GrepTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/filesystem-tools.test.ts:232:28
+    230|       );
+    231| 
+    232|       expect(result.error).toBeUndefined();
+       |                            ^
+    233|       expect(result.llmContent).toContain('Hello World');
+    234|       expect(result.llmContent).toContain('Hello Again');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/38]⎯
+
+ FAIL  src/__tests__/filesystem-tools.test.ts > Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > LsTool behavioral contract > lists a real temp directory and returns directory contents
+AssertionError: expected 'LSTool has not moved into packages/to…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"LSTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/filesystem-tools.test.ts:249:28
+    247|       );
+    248| 
+    249|       expect(result.error).toBeUndefined();
+       |                            ^
+    250|       expect(result.llmContent).toContain('file1.txt');
+    251|       expect(result.llmContent).toContain('file2.txt');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/38]⎯
+
+ FAIL  src/__tests__/mcp-tool.test.ts > MCP Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > DiscoveredMCPTool invocation through adapter > callTool returns ToolResult with MCP tool output
+AssertionError: expected 'DiscoveredMCPToolInvocation has not m…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"DiscoveredMCPToolInvocation has not moved into packages/tools yet"
+
+ ❯ src/__tests__/mcp-tool.test.ts:81:28
+     79|       );
+     80| 
+     81|       expect(result.error).toBeUndefined();
+       |                            ^
+     82|       expect(result.llmContent).toContain('MCP result from test-server…
+     83|       expect(result.returnDisplay).toContain('search');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/38]⎯
+
+ FAIL  src/__tests__/mcp-tool.test.ts > MCP Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > DiscoveredMCPTool invocation through adapter > callTool returns error content for nonexistent tool
+AssertionError: expected 'DiscoveredMCPToolInvocation has not m…' to contain 'not found'
+
+Expected: [32m"not found"[39m
+Received: [31m"DiscoveredMCPToolInvocation has not moved into packages/tools yet"[39m
+
+ ❯ src/__tests__/mcp-tool.test.ts:93:28
+     91|       );
+     92| 
+     93|       expect(result.error).toContain('not found');
+       |                            ^
+     94|       expect(result.llmContent).toContain('nonexistent');
+     95|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/38]⎯
+
+ FAIL  src/__tests__/memory-tool.test.ts > Memory Tool Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > MemoryTool saves content through IStorageService > saves content and filesystem reflects the saved file
+AssertionError: expected 'MemoryTool has not moved into package…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"MemoryTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/memory-tool.test.ts:84:28
+     82|       );
+     83| 
+     84|       expect(result.error).toBeUndefined();
+       |                            ^
+     85|       expect(result.llmContent).toContain('This is saved content.');
+     86|       expect(existsSync(filePath)).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/38]⎯
+
+ FAIL  src/__tests__/memory-tool.test.ts > Memory Tool Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > MemoryTool reads content and returns it in ToolResult.llmContent > reads previously saved content through IStorageService
+AssertionError: expected 'MemoryTool has not moved into package…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"MemoryTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/memory-tool.test.ts:104:28
+    102|       );
+    103| 
+    104|       expect(result.error).toBeUndefined();
+       |                            ^
+    105|       expect(result.llmContent).toContain('Memory content here');
+    106|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/38]⎯
+
+ FAIL  src/__tests__/shell-tool.test.ts > Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool execution through IShellExecutionService adapter > returns ToolResult with exit code and output for allowed command
+AssertionError: expected 'ShellTool has not moved into packages…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"ShellTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/shell-tool.test.ts:79:28
+     77|       );
+     78| 
+     79|       expect(result.error).toBeUndefined();
+       |                            ^
+     80|       expect(result.llmContent).toContain('hello');
+     81|       expect(result.llmContent).toContain('0');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/38]⎯
+
+ FAIL  src/__tests__/shell-tool.test.ts > Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool execution through IShellExecutionService adapter > returns ToolResult with error content for failed command
+AssertionError: expected 'ShellTool has not moved into packages…' to contain 'Command failed'
+
+Expected: [32m"Command failed"[39m
+Received: [31m"ShellTool has not moved into packages/tools yet"[39m
+
+ ❯ src/__tests__/shell-tool.test.ts:99:28
+     97|       );
+     98| 
+     99|       expect(result.error).toContain('Command failed');
+       |                            ^
+    100|       expect(result.llmContent).toContain('exit code 1');
+    101|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/38]⎯
+
+ FAIL  src/__tests__/shell-tool.test.ts > Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool denial: command not allowed by policy > returns error ToolResult for denied command
+AssertionError: expected 'ShellTool has not moved into packages…' to contain 'denied'
+
+Expected: [32m"denied"[39m
+Received: [31m"ShellTool has not moved into packages/tools yet"[39m
+
+ ❯ src/__tests__/shell-tool.test.ts:111:28
+    109|       );
+    110| 
+    111|       expect(result.error).toContain('denied');
+       |                            ^
+    112|       expect(result.llmContent).toContain('rm -rf /');
+    113|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/38]⎯
+
+ FAIL  src/__tests__/shell-tool.test.ts > Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool denial: command not allowed by policy > denial produces observable result indicating blocked execution
+AssertionError: expected 'ShellTool has not moved into packages…' to contain 'denied'
+
+Expected: [32m"denied"[39m
+Received: [31m"ShellTool has not moved into packages/tools yet"[39m
+
+ ❯ src/__tests__/shell-tool.test.ts:124:28
+    122|       );
+    123| 
+    124|       expect(result.error).toContain('denied');
+       |                            ^
+    125|       expect(result.llmContent).toContain('blocked');
+    126|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/38]⎯
+
+ FAIL  src/__tests__/shell-tool.test.ts > Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool approval/confirmation flow through IToolMessageBus > requestConfirmation returns proceed_once and produces observable ToolResult
+AssertionError: expected 'ShellTool has not moved into packages…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"ShellTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/shell-tool.test.ts:140:28
+    138|       );
+    139| 
+    140|       expect(result.error).toBeUndefined();
+       |                            ^
+    141|       expect(result.llmContent).toContain('test');
+    142|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/38]⎯
+
+ FAIL  src/__tests__/shell-tool.test.ts > Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ShellTool approval/confirmation flow through IToolMessageBus > requestConfirmation returns cancel and cancels execution with observable outcome
+AssertionError: expected 'ShellTool has not moved into packages…' to contain 'cancel'
+
+Expected: [32m"cancel"[39m
+Received: [31m"ShellTool has not moved into packages/tools yet"[39m
+
+ ❯ src/__tests__/shell-tool.test.ts:150:28
+    148|       );
+    149| 
+    150|       expect(result.error).toContain('cancel');
+       |                            ^
+    151|       expect(result.llmContent).toContain('cancel');
+    152|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/38]⎯
+
+ FAIL  src/__tests__/shell-tool.test.ts > Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > IShellExecutionService adapter round-trip > save and retrieve command results through adapter
+AssertionError: expected 'ShellTool has not moved into packages…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"ShellTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/shell-tool.test.ts:170:29
+    168|       const result2 = await executeToolForBehavioralAssertion(tool, { …
+    169| 
+    170|       expect(result1.error).toBeUndefined();
+       |                             ^
+    171|       expect(result2.error).toBeUndefined();
+    172|       expect(result1.llmContent).toBe(result2.llmContent);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/38]⎯
+
+ FAIL  src/__tests__/subagent-tools.test.ts > Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TaskTool executes through ISubagentService and returns ToolResult > executeSubagent returns result with correct content
+AssertionError: expected 'TaskTool has not moved into packages/…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"TaskTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/subagent-tools.test.ts:94:28
+     92|       );
+     93| 
+     94|       expect(result.error).toBeUndefined();
+       |                            ^
+     95|       expect(result.llmContent).toContain('typescript-expert');
+     96|       expect(result.llmContent).toContain('Fix this bug');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/38]⎯
+
+ FAIL  src/__tests__/subagent-tools.test.ts > Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TaskTool executes through ISubagentService and returns ToolResult > executeSubagent returns error for unknown agent
+AssertionError: expected 'TaskTool has not moved into packages/…' to contain 'Unknown subagent'
+
+Expected: [32m"[7mUnknown subagen[27mt"[39m
+Received: [31m"[7mTaskTool has not moved into packages/tools ye[27mt"[39m
+
+ ❯ src/__tests__/subagent-tools.test.ts:107:28
+    105|       );
+    106| 
+    107|       expect(result.error).toContain('Unknown subagent');
+       |                            ^
+    108|       expect(result.llmContent).toContain('unknown-agent');
+    109|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/38]⎯
+
+ FAIL  src/__tests__/subagent-tools.test.ts > Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ListSubagentsTool lists available subagents > listSubagents returns agent list in ToolResult
+AssertionError: expected 'ListSubagentsTool has not moved into …' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"ListSubagentsTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/subagent-tools.test.ts:122:28
+    120|       const result = await executeToolForBehavioralAssertion(new ListS…
+    121| 
+    122|       expect(result.error).toBeUndefined();
+       |                            ^
+    123|       expect(result.llmContent).toContain('typescript-expert');
+    124|       expect(result.llmContent).toContain('deep-thinker');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/38]⎯
+
+ FAIL  src/__tests__/subagent-tools.test.ts > Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > ListSubagentsTool lists available subagents > empty list when no subagents available
+AssertionError: expected 'ListSubagentsTool has not moved into …' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"ListSubagentsTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/subagent-tools.test.ts:130:28
+    128|       const service = createFakeSubagentService([]);
+    129|       const result = await executeToolForBehavioralAssertion(new ListS…
+    130|       expect(result.error).toBeUndefined();
+       |                            ^
+    131|       expect(result.llmContent).toContain('No subagents');
+    132|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/38]⎯
+
+ FAIL  src/__tests__/subagent-tools.test.ts > Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > CheckAsyncTasksTool checks task status through IAsyncTaskService > checkAsyncTask returns correct status for known task
+AssertionError: expected 'CheckAsyncTasksTool has not moved int…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"CheckAsyncTasksTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/subagent-tools.test.ts:148:28
+    146|       );
+    147| 
+    148|       expect(result.error).toBeUndefined();
+       |                            ^
+    149|       expect(result.llmContent).toContain('completed');
+    150|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/38]⎯
+
+ FAIL  src/__tests__/subagent-tools.test.ts > Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > CheckAsyncTasksTool checks task status through IAsyncTaskService > getTaskStatus returns all task statuses in ToolResult
+AssertionError: expected 'CheckAsyncTasksTool has not moved int…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"CheckAsyncTasksTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/subagent-tools.test.ts:161:28
+    159|       const result = await executeToolForBehavioralAssertion(new Check…
+    160| 
+    161|       expect(result.error).toBeUndefined();
+       |                            ^
+    162|       expect(result.llmContent).toContain('task-1');
+    163|       expect(result.llmContent).toContain('running');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/38]⎯
+
+ FAIL  src/__tests__/subagent-tools.test.ts > Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > CheckAsyncTasksTool checks task status through IAsyncTaskService > checkAsyncTask returns failed for unknown task
+AssertionError: expected 'CheckAsyncTasksTool has not moved int…' to contain 'failed'
+
+Expected: [32m"failed"[39m
+Received: [31m"CheckAsyncTasksTool has not moved into packages/tools yet"[39m
+
+ ❯ src/__tests__/subagent-tools.test.ts:174:28
+    172|       );
+    173| 
+    174|       expect(result.error).toContain('failed');
+       |                            ^
+    175|       expect(result.llmContent).toContain('unknown-task');
+    176|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/38]⎯
+
+ FAIL  src/__tests__/todo-tools.test.ts > Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TodoWrite writes and TodoRead returns items (observable round-trip) > after writing todos, subsequent read returns the written items
+AssertionError: expected 'TodoWriteTool has not moved into pack…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"TodoWriteTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/todo-tools.test.ts:76:33
+     74|         { todos: writtenTodos },
+     75|       );
+     76|       expect(writeResult.error).toBeUndefined();
+       |                                 ^
+     77|       expect(writeResult.llmContent).toContain('Task 1');
+     78| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/38]⎯
+
+ FAIL  src/__tests__/todo-tools.test.ts > Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TodoWrite writes and TodoRead returns items (observable round-trip) > after writing multiple batches, read reflects the latest state
+AssertionError: expected 'TodoReadTool has not moved into packa…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"TodoReadTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/todo-tools.test.ts:103:32
+    101| 
+    102|       const readResult = await executeToolForBehavioralAssertion(new T…
+    103|       expect(readResult.error).toBeUndefined();
+       |                                ^
+    104|       expect(readResult.llmContent).toContain('Second batch item 1');
+    105|       expect(readResult.llmContent).not.toContain('First batch');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/38]⎯
+
+ FAIL  src/__tests__/todo-tools.test.ts > Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TodoPause pauses continuation with observable behavioral effect > after pause, read result reflects paused state
+AssertionError: expected 'TodoPauseTool has not moved into pack…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"TodoPauseTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/todo-tools.test.ts:122:28
+    120|       );
+    121| 
+    122|       expect(result.error).toBeUndefined();
+       |                            ^
+    123|       expect(result.llmContent).toContain('pause');
+    124|       const readResult = await executeToolForBehavioralAssertion(new T…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/38]⎯
+
+ FAIL  src/__tests__/todo-tools.test.ts > Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10 > TodoRead reads items with ToolResult.llmContent containing structured output > todos appear as structured content in ToolResult
+AssertionError: expected 'TodoReadTool has not moved into packa…' to be undefined
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"TodoReadTool has not moved into packages/tools yet"
+
+ ❯ src/__tests__/todo-tools.test.ts:138:28
+    136|       const result = await executeToolForBehavioralAssertion(new TodoR…
+    137| 
+    138|       expect(result.error).toBeUndefined();
+       |                            ^
+    139|       expect(result.llmContent).toContain('Write tests');
+    140|       expect(result.llmContent).toContain('in_progress');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/38]⎯
+
+
+ Test Files  7 failed | 8 passed (15)
+      Tests  38 failed | 128 passed (166)
+   Start at  20:46:11
+   Duration  384ms (transform 456ms, setup 0ms, collect 848ms, tests 268ms, environment 1ms, prepare 890ms)
+
+JUNIT report written to /Users/acoliver/projects/llxprt/branch-3/llxprt-code/packages/tools/junit.xml
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt/branch-3/llxprt-code/packages/tools
+npm error workspace @vybestack/llxprt-code-tools@0.10.0
+npm error location /Users/acoliver/projects/llxprt/branch-3/llxprt-code/packages/tools
+npm error command failed
+npm error command sh -c vitest run
+
+P10 RED failure classification
+EXPECTED_BEHAVIORAL_RED: 38
+UNACCEPTABLE_COMPILE_RED: 0
+Classification basis: npm run typecheck --workspace @vybestack/llxprt-code-tools passed before the test run; vitest collected all suites without import, transform, or type errors; failing tests are runtime behavioral assertions against ToolResult error/content/filesystem expectations while P10 RED stubs report that implementations have not moved into packages/tools yet. No tests assert NotYetMoved/NotYetImplemented throws.

@@ -12,7 +12,19 @@ const corePackagePrefix = '@vybestack/llxprt-code-core/';
 const coreEntry = fileURLToPath(new URL('../core/index.ts', import.meta.url));
 const coreSrcDir = fileURLToPath(new URL('../core/src/', import.meta.url));
 
-function resolveTsSource(baseDir: string, specifier: string): string {
+const toolsPackagePrefix = '@vybestack/llxprt-code-tools/';
+const toolsEntry = fileURLToPath(new URL('../tools/index.ts', import.meta.url));
+const toolsSrcDir = fileURLToPath(new URL('../tools/src/', import.meta.url));
+
+const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
+const settingsEntry = fileURLToPath(
+  new URL('../settings/index.ts', import.meta.url),
+);
+const settingsSrcDir = fileURLToPath(
+  new URL('../settings/src/', import.meta.url),
+);
+
+function resolveTsSource(baseDir: string, specifier: string): string | null {
   const direct = baseDir + specifier;
   if (direct.endsWith('.js')) {
     const tsPath = direct.slice(0, -3) + '.ts';
@@ -39,6 +51,24 @@ const workspaceDependencyAliasPlugin = {
         source.slice(corePackagePrefix.length),
       );
     }
+    if (source === '@vybestack/llxprt-code-tools') {
+      return toolsEntry;
+    }
+    if (source.startsWith(toolsPackagePrefix)) {
+      return resolveTsSource(
+        toolsSrcDir,
+        source.slice(toolsPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-settings') {
+      return settingsEntry;
+    }
+    if (source.startsWith(settingsPackagePrefix)) {
+      return resolveTsSource(
+        settingsSrcDir,
+        source.slice(settingsPackagePrefix.length),
+      );
+    }
     return null;
   },
 };
@@ -60,7 +90,11 @@ export default defineConfig({
     },
     server: {
       deps: {
-        inline: ['@vybestack/llxprt-code-core'],
+        inline: [
+          '@vybestack/llxprt-code-core',
+          '@vybestack/llxprt-code-tools',
+          '@vybestack/llxprt-code-settings',
+        ],
       },
     },
     dangerouslyIgnoreUnhandledErrors: isWindows,

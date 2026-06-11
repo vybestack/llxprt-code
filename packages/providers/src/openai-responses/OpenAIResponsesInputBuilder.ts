@@ -23,7 +23,7 @@ import {
   limitOutputTokens,
   type ToolOutputSettingsProvider,
 } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import {
   normalizeMediaToDataUri,
   classifyMediaBlock,

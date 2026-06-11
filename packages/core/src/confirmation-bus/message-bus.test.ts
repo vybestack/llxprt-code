@@ -4,7 +4,7 @@ import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision, type PolicyEngineConfig } from '../policy/types.js';
 import { MessageBusType, type ToolConfirmationRequest } from './types.js';
 import type { FunctionCall } from '@google/genai';
-import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { debugLogger } from '../utils/debugLogger.js';
 
 describe('MessageBus', () => {

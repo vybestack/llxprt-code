@@ -16,7 +16,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { ToolFormatter } from '@vybestack/llxprt-code-core/tools/ToolFormatter.js';
+import { ToolFormatter } from '@vybestack/llxprt-code-tools/ToolFormatter.js';
 
 describe('OpenAIProvider Tool Name Handling', () => {
   let provider: OpenAIProvider;

@@ -16,7 +16,7 @@ import type {
   ToolCall,
 } from '../core/coreToolScheduler.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { EditorType } from '../utils/editor.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import { DebugLogger } from '../debug/DebugLogger.js';

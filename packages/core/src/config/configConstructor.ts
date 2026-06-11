@@ -49,7 +49,7 @@ import {
   type ExtensionLoader,
 } from '../utils/extensionLoader.js';
 import { SkillManager } from '../skills/skillManager.js';
-import { setLlxprtMdFilename } from '../tools/memoryTool.js';
+import { setLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import { debugLogger } from '../utils/debugLogger.js';
 import {
   initializeTelemetry,

@@ -1,0 +1,412 @@
+./package-lock.json:6694:    "node_modules/@vybestack/llxprt-code-tools": {
+./package-lock.json:21390:        "@vybestack/llxprt-code-tools": "file:../tools",
+./package-lock.json:21584:        "@vybestack/llxprt-code-tools": "file:../tools",
+./package-lock.json:21644:      "name": "@vybestack/llxprt-code-tools",
+./evals/globalSetup.ts:28:} from '@vybestack/llxprt-code-tools';
+./integration-tests/globalSetup.ts:28:} from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts:26:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/openai-responses/OpenAIResponsesProviderBase.ts:32:import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+./packages/providers/src/openai-responses/buildResponsesInputFromContent.ts:26:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/reasoning/reasoningUtils.ts:13:import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+./packages/providers/src/reasoning/reasoningUtils.ts:14:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/tsconfig.json:15:      "@vybestack/llxprt-code-tools": ["../tools/index.ts"],
+./packages/providers/tsconfig.json:16:      "@vybestack/llxprt-code-tools/*": ["../tools/src/*"]
+./packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.toolIdNormalization.test.ts:23:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/package.json:55:    "@vybestack/llxprt-code-tools": "file:../tools",
+./packages/providers/src/utils/toolFormatDetection.ts:17:import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+./packages/providers/src/utils/toolFormatDetection.ts:22:} from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+./packages/core/src/test-utils/mock-tool.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/test-utils/mock-tool.ts:16:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreMessageBusAdapter.ts:15:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/runtime/runtimeAdapters.ts:11:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreSkillServiceAdapter.ts:13:} from '@vybestack/llxprt-code-tools';
+./packages/tools/src/__tests__/package-metadata.test.ts:53:      expect(pkg.name).toBe('@vybestack/llxprt-code-tools');
+./packages/core/src/test-utils/tools.ts:15:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/test-utils/tools.ts:22:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CorePromptRegistryServiceAdapter.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreShellToolHostAdapter.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreShellToolHostAdapter.ts:12:import { ShellTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreIdeServiceAdapter.ts:13:} from '@vybestack/llxprt-code-tools';
+./packages/core/package.json:107:    "@vybestack/llxprt-code-tools": "file:../tools",
+./packages/core/src/runtime/AgentRuntimeLoader.ts:9:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/runtime/AgentRuntimeLoader.ts:31:import { normalizeToolName } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreSettingsServiceAdapter.ts:10:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreSubagentServiceAdapter.ts:15:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreSubagentServiceAdapter.ts:30:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./scripts/tests/release-process.test.js:66:      '@vybestack/llxprt-code-tools',
+./scripts/tests/release-process.test.js:73:  it('includes @vybestack/llxprt-code-tools as a publishable package in correct order', () => {
+./scripts/tests/release-process.test.js:75:    const toolsIndex = packages.indexOf('@vybestack/llxprt-code-tools');
+./scripts/tests/release-process.test.js:107:  it('includes @vybestack/llxprt-code-tools in versioning', () => {
+./scripts/tests/release-process.test.js:108:    expect(versionJs).toContain('@vybestack/llxprt-code-tools');
+./scripts/tests/release-process.test.js:125:      'npm publish --workspace=@vybestack/llxprt-code-tools',
+./scripts/tests/release-process.test.js:136:      'release.yml should publish @vybestack/llxprt-code-tools',
+./scripts/tests/release-process.test.js:191:    expect(releaseYml).toContain('npm pack -w @vybestack/llxprt-code-tools');
+./scripts/tests/release-process.test.js:206:    expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code-tools');
+./scripts/tests/release-process.test.js:299:      ['@vybestack/llxprt-code-tools', { version: '1.2.3' }],
+./scripts/tests/release-process.test.js:304:      '@vybestack/llxprt-code-tools',
+./scripts/tests/release-process.test.js:309:      '@vybestack/llxprt-code-tools': 'file:../tools',
+./scripts/tests/release-process.test.js:320:      '@vybestack/llxprt-code-tools': '1.2.3',
+./packages/tools/src/__tests__/package-boundary.test.ts:43:      expect(pkg.name).toBe('@vybestack/llxprt-code-tools');
+./packages/core/src/tools-adapters/CoreToolKeyStorageAdapter.ts:7:import type { IToolKeyStorage } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreToolKeyStorageAdapter.ts:12:} from '../tools/tool-key-storage.js';
+./packages/core/src/tools-adapters/CoreMcpToolServiceAdapter.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreTodoServiceAdapter.ts:17:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreToolRegistryHostAdapter.ts:7:import type { IToolRegistryHost } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreToolHostAdapter.ts:19:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreAsyncTaskServiceAdapter.ts:12:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreWebSearchServiceAdapter.ts:10:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreStorageServiceAdapter.ts:8:import type { IStorageService } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools-adapters/CoreLspServiceAdapter.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/runtime/contracts/toolIdNormalization-contract.test.ts:29:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/runtime/contracts/toolIdNormalization-contract.test.ts:146:    const mod = await import('@vybestack/llxprt-code-tools');
+./packages/core/src/config/configTypes.ts:34:import type { AnyToolInvocation } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai/OpenAIProvider.toolNameErrors.test.ts:19:import { ToolFormatter } from '@vybestack/llxprt-code-tools/ToolFormatter.js';
+./packages/core/vitest.config.ts:13:const toolsPackagePrefix = '@vybestack/llxprt-code-tools/';
+./packages/core/vitest.config.ts:86:    if (source === '@vybestack/llxprt-code-tools') {
+./packages/tools/vitest.config.ts:20:const toolsPackagePrefix = '@vybestack/llxprt-code-tools/';
+./packages/tools/vitest.config.ts:39:    if (source === '@vybestack/llxprt-code-tools') {
+./packages/tools/vitest.config.ts:76:        inline: ['@vybestack/llxprt-code-tools'],
+./packages/core/src/config/configBase.ts:12:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai/ToolCallNormalizer.ts:25:import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+./packages/core/src/config/configConstructor.ts:52:import { setLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
+./packages/core/src/policy/policy-helpers.test.ts:19:import type { AnyToolInvocation } from '@vybestack/llxprt-code-tools';
+./packages/tools/tsconfig.json:11:      "@vybestack/llxprt-code-tools": ["./index.ts"],
+./packages/tools/tsconfig.json:12:      "@vybestack/llxprt-code-tools/*": ["./src/*"]
+./packages/core/src/config/config.test.ts:22:import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
+./packages/core/src/config/config.test.ts:36:import { ShellTool, ReadFileTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/config/config.test.ts:51:vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+./packages/core/src/config/config.test.ts:53:    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+./packages/core/src/config/config-lsp-integration.test.ts:21:import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
+./packages/core/src/config/config-lsp-integration.test.ts:38:vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+./packages/core/src/config/config-lsp-integration.test.ts:40:    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+./packages/core/src/config/config-lsp-integration.test.ts:146:vi.mock('../tools/mcp-client-manager.js', () => ({
+./packages/core/src/policy/policy-helpers.ts:9:import type { AnyToolInvocation } from '@vybestack/llxprt-code-tools';
+./packages/core/src/policy/policy-helpers.ts:10:import { BaseToolInvocation } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai/buildResponsesRequest.ts:15:import { type ResponsesTool } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+./packages/providers/src/openai/buildResponsesRequest.ts:20:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/core/src/runtime/AgentRuntimeLoader.test.ts:27:import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/tools/package.json:2:  "name": "@vybestack/llxprt-code-tools",
+./packages/core/src/config/config.ts:13:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/config/config.ts:14:import { ActivateSkillTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/config/config.ts:98:import { McpClientManager } from '../tools/mcp-client-manager.js';
+./packages/core/src/config/toolRegistryFactory.ts:11:import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/config/toolRegistryFactory.ts:42:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/policy/policy-updater.test.ts:20:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/config/configBaseCore.ts:22:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/config/configBaseCore.ts:23:import type { McpClientManager } from '../tools/mcp-client-manager.js';
+./packages/core/src/config/configBaseCore.ts:24:import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai/syntheticToolResponses.ts:14:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/core/src/config/schedulerSingleton.ts:19:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/services/tool-call-tracker-service.ts:8:import { type TodoToolCall } from '@vybestack/llxprt-code-tools';
+./packages/core/src/config/lspIntegration.ts:8:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/config/lspIntegration.ts:18:import { DiscoveredMCPTool } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai/OpenAIResponseParser.ts:27:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/openai/OpenAIResponseParser.ts:28:import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+./packages/core/src/hooks/notification-hook.test.ts:24:import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
+./packages/core/src/confirmation-bus/message-bus.test.ts:7:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/turn.undefined_issue.test.ts:234:        '@vybestack/llxprt-code-tools'
+./packages/core/src/core/turn.undefined_issue.test.ts:256:          '@vybestack/llxprt-code-tools'
+./packages/core/src/confirmation-bus/integration.test.ts:23:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai/ToolCallNormalizer.test.ts:22:vi.mock('@vybestack/llxprt-code-tools/doubleEscapeUtils.js', () => ({
+./packages/providers/src/openai/ToolCallNormalizer.test.ts:26:import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+./packages/core/src/services/todo-reminder-service.ts:7:import { type Todo } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/MessageStreamOrchestrator.ts:25:import type { Todo } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai/OpenAINonStreamHandler.ts:34:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/openai/OpenAINonStreamHandler.ts:35:import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+./packages/core/src/core/turn.ts:24:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/turn.ts:25:import type { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/turn.ts:38:import { normalizeToolName } from '@vybestack/llxprt-code-tools';
+./packages/core/src/confirmation-bus/types.ts:5:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/StreamProcessor.ts:56:import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
+./packages/core/src/confirmation-bus/message-bus.ts:15:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/telemetry/metrics.ts:26:import { type DiffStat } from '@vybestack/llxprt-code-tools';
+./packages/core/src/__tests__/tools-registry-scheduler.test.ts:32:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/__tests__/tools-registry-scheduler.test.ts:80:      } = await import('@vybestack/llxprt-code-tools');
+./packages/core/src/__tests__/tools-registry-scheduler.test.ts:98:        await import('@vybestack/llxprt-code-tools');
+./packages/providers/src/openai/__tests__/ToolNameValidator.test.ts:19:import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+./packages/core/src/telemetry/tool-call-decision.test.ts:12:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/todo/todoFormatter.ts:7:import { type Todo, type TodoToolCall } from '@vybestack/llxprt-code-tools';
+./packages/core/src/storage/SessionPersistenceService.ts:16:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/telemetry/loggers.test.ts:81:import { DiscoveredMCPTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/telemetry/types.ts:12:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/telemetry/types.ts:13:import { DiscoveredMCPTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/storage/secure-store-integration.test.ts:30:import { maskKeyForDisplay } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/__tests__/tools-formatting.test.ts:24: * @vybestack/llxprt-code-tools (self-contained copy). No provider mocks
+./packages/providers/src/__tests__/tools-formatting.test.ts:39:} from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai/ToolNameValidator.ts:25:import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+./packages/providers/src/openai/ToolNameValidator.ts:29:} from '@vybestack/llxprt-code-tools/toolNameUtils.js';
+./packages/core/src/core/client.test.ts:118:vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+./packages/core/src/core/client.test.ts:119:  const actual = await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+./packages/core/src/telemetry/tool-call-decision.ts:7:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai/OpenAIStreamProcessor.ts:33:} from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/openai/OpenAIStreamProcessor.ts:34:import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+./packages/providers/src/openai/OpenAIStreamProcessor.ts:43:import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+./packages/core/src/core/toolGovernance.ts:7:import { normalizeToolName, toSnakeCase } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/openai/OpenAIRequestBuilder.ts:19:import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+./packages/providers/src/openai/OpenAIRequestBuilder.ts:32:} from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+./packages/providers/src/openai/OpenAIRequestBuilder.ts:39:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/openai/OpenAIProvider.ts:28:import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+./packages/providers/src/openai/OpenAIProvider.ts:36:import { ToolFormatter } from '@vybestack/llxprt-code-tools/ToolFormatter.js';
+./packages/core/src/telemetry/uiTelemetry.test.ts:22:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/telemetry/uiTelemetry.test.ts:23:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/anthropic/AnthropicProvider.test.ts:50:vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
+./packages/core/src/index.ts:225:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:245:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:246:export { ToolErrorType, isFatalToolError } from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:247:export { DISCOVERED_TOOL_PREFIX, DiscoveredTool, ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:251:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:289:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:306:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:312:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:318:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:324:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:326:export { EditTool, applyReplacement, type EditToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:330:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:331:export { GoogleWebFetchTool, type GoogleWebFetchToolParams, parsePrompt } from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:332:export { DirectWebFetchTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:333:export type { DirectWebFetchToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:348:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:349:export { ShellTool, OUTPUT_UPDATE_INTERVAL_MS, type ShellToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:358:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:363:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:369:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:389:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:390:export { TaskTool, type TaskToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:460:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/index.ts:461:export { ToolFormatter } from '@vybestack/llxprt-code-tools';
+./packages/providers/src/anthropic/AnthropicResponseParser.ts:17:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/anthropic/AnthropicResponseParser.ts:18:import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+./packages/providers/src/anthropic/AnthropicProvider.toolFormatDetection.test.ts:18:vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
+./packages/providers/src/openai-vercel/OpenAIVercelProvider.ts:57:import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+./packages/providers/src/openai-vercel/OpenAIVercelProvider.ts:64:import { getToolIdStrategy } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+./packages/providers/src/openai-vercel/OpenAIVercelProvider.ts:83:} from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/openai-vercel/messageConversion.ts:46:} from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/openai-vercel/messageConversion.ts:51:import type { ToolIdMapper } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+./packages/core/src/core/toolExecutorUnification.integration.test.ts:37:} from '@vybestack/llxprt-code-tools';
+./packages/providers/src/anthropic/AnthropicProvider.ts:13:import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+./packages/providers/src/anthropic/AnthropicProvider.mediaBlock.test.ts:56:vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
+./packages/providers/src/anthropic/AnthropicMessageNormalizer.ts:24:import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/anthropic/AnthropicStreamProcessor.ts:19:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/providers/src/anthropic/AnthropicStreamProcessor.ts:23:} from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+./packages/providers/src/anthropic/AnthropicProvider.issue276.test.ts:31:vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
+./packages/core/src/core/subagent.test.ts:49:import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/subagent.test.ts:60:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/subagent.test.ts:70:vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+./packages/core/src/core/subagent.test.ts:71:  const actual = await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+./packages/core/src/core/compression/utils.ts:42:import { classifyMediaBlock } from '@vybestack/llxprt-code-tools';
+./packages/core/src/lsp/__tests__/system-integration.test.ts:20:import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
+./packages/core/src/lsp/__tests__/system-integration.test.ts:23:vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+./packages/core/src/lsp/__tests__/system-integration.test.ts:25:    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+./packages/core/src/lsp/__tests__/system-integration.test.ts:128:vi.mock('../../tools/mcp-client-manager.js', () => ({
+./packages/core/src/lsp/__tests__/e2e-lsp.test.ts:24:vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+./packages/core/src/lsp/__tests__/e2e-lsp.test.ts:26:    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+./packages/core/src/lsp/__tests__/e2e-lsp.test.ts:130:vi.mock('../../tools/mcp-client-manager.js', () => ({
+./packages/core/src/core/clientToolGovernance.ts:9:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/subagentToolProcessing.test.ts:8:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/subagentToolProcessing.test.ts:79:      } as unknown as import('@vybestack/llxprt-code-tools').ToolResultDisplay;
+./packages/core/src/core/__tests__/subagent.stateless.test.ts:47:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/coreToolHookTriggers.ts:23:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/subagentRuntimeSetup.ts:38:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/coreToolScheduler.test.ts:43:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/coreToolScheduler.test.ts:49:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/TodoContinuationService.ts:15:import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/TodoContinuationService.ts:16:import type { Todo } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/TurnProcessor.ts:54:import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/messageBus.core-integration.tdd.test.ts:27:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/messageBus.core-integration.tdd.test.ts:34:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/subagentOrchestrator.ts:41:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/subagentToolProcessing.ts:28:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/subagentToolProcessing.ts:29:import { type ToolResultDisplay } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/subagentToolProcessing.ts:31:import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/subagentTypes.ts:21:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/summarizer.ts:7:import { type ToolResult } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/coreToolScheduler.interactiveMode.test.ts:32:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/summarizer.test.ts:18:import type { ToolResult } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/ChatSessionFactory.ts:26:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/extensionLoader.test.ts:10:import { type McpClientManager } from '../tools/mcp-client-manager.js';
+./packages/core/src/core/clientToolGovernance.test.ts:16:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/TodoContinuationService.test.ts:16:import type { Todo } from '@vybestack/llxprt-code-tools';
+./packages/core/src/core/TodoContinuationService.test.ts:30:vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+./packages/core/src/core/TodoContinuationService.test.ts:31:  const actual = await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+./packages/core/src/core/prompts.ts:21:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/memoryDiscovery.subfunctions.test.ts:21:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/memoryDiscovery.ts:16:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/memoryDiscovery.test.ts:16:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/fileDiffUtils.ts:7:import type { FileDiff } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/todo-pause.spec.ts:8:import { type TodoPauseParams, TodoPause } from '@vybestack/llxprt-code-tools';
+./packages/core/src/agents/invocation.test.ts:17:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/read-many-files.test.ts:9:import { ReadManyFilesTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/fileDiffUtils.test.ts:12:import type { FileDiff, ToolResultDisplay } from '@vybestack/llxprt-code-tools';
+./packages/core/src/agents/executor-validation.ts:7:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/agents/executor-validation.ts:17:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/environmentContext.test.ts:27:vi.mock('@vybestack/llxprt-code-tools');
+./packages/core/src/tools/tool-registry.test.ts:12:import { DiscoveredMCPTool, generateMcpToolName } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/tool-registry.test.ts:21:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/ignorePatterns.ts:9:import { getCurrentLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
+./packages/core/src/agents/types.ts:12:import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/read-file.test.ts:8:import { ReadFileTool, type ReadFileToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/read-file.test.ts:18:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/agents/invocation.ts:12:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/agents/invocation.ts:13:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/base-tool-invocation.test.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/base-tool-invocation.test.ts:19:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/agents/executor.ts:29:import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/agents/executor.test.ts:20:import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/agents/executor.test.ts:21:import { LSTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/agents/executor.test.ts:22:import { ReadFileTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ripGrep.test.ts:10:import type { RipGrepToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ripGrep.test.ts:14:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/tool-executor.ts:19:import type { ToolResult } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/result-aggregator.ts:20:import type { ToolResult } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/result-aggregator.ts:21:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/types.ts:19:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/types.ts:24:import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/todo-write.test.ts:13:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/confirmation-coordinator.ts:27:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/confirmation-coordinator.ts:28:import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/confirmation-coordinator.ts:29:import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/confirmation-coordinator.ts:42:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/utils.ts:7:import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/utils.ts:8:import type { ContextAwareTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/tool-key-storage.ts:26:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/tool-key-storage.ts:27:export type { ToolKeyRegistryEntry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/tool-key-storage.ts:34:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/tool-dispatcher.test.ts:18:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/tool-dispatcher.test.ts:22:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/tool-dispatcher.test.ts:23:import type { ContextAwareTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/tool-dispatcher.ts:18:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/tool-dispatcher.ts:21:import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/tool-dispatcher.ts:25:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/result-aggregator.test.ts:11:import type { ToolResult } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/result-aggregator.test.ts:12:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/todo-write.spec.ts:8:import { TodoWrite, type Todo } from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/fileUtils.ts:13:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/tool-utils.test.ts:10:import { ReadFileTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/confirmation-coordinator.test.ts:16:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/confirmation-coordinator.test.ts:17:import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
+./packages/core/src/scheduler/confirmation-coordinator.test.ts:21:vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+./packages/core/src/scheduler/confirmation-coordinator.test.ts:23:    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+./packages/core/src/tools/read-many-files.batch.test.ts:9:import { ReadManyFilesTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/read-many-files.batch.test.ts:25:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/utils/events.ts:8:import type { McpClient } from '../tools/mcp-client.js';
+./packages/core/src/tools/todo-store.test.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/todo-store.test.ts:15:import { TODO_DEFAULT_AGENT_ID as DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/edit-tabs-issue473.test.ts:21:import type { EditToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/edit-tabs-issue473.test.ts:22:import { EditTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/grep.test.ts:8:import type { GrepToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/grep.test.ts:9:import { GrepTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/grep.test.ts:15:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/tools.test.ts:8:import type { ToolInvocation, ToolResult } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/tools.test.ts:13:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/tools.test.ts:14:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/write-file.test.ts:15:import { WriteFileTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/write-file.test.ts:16:import type { FileDiff } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/write-file.test.ts:17:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/memoryTool.test.ts:12:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ast-edit.test.ts:10:import * as AstEditModule from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ast-edit.test.ts:11:import type { EnhancedDeclaration } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ast-edit.test.ts:12:import { ASTEditTool, ASTReadFileTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ast-edit.test.ts:14:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ast-edit.test.ts:15:import { prioritizeSymbolsFromDeclarations } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ast-edit.test.ts:262:            content.includes("from '@vybestack/llxprt-code-tools'") ||
+./packages/core/src/tools/codesearch.test.ts:8:import { CodeSearchTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/google-web-fetch.test.ts:8:import { GoogleWebFetchTool, parsePrompt } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/google-web-fetch.test.ts:11:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/google-web-fetch.test.ts:12:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/google-web-fetch.test.ts:13:import * as fetchUtils from '@vybestack/llxprt-code-tools/utils/fetch.js';
+./packages/core/src/tools/google-web-fetch.test.ts:26:vi.mock('@vybestack/llxprt-code-tools/utils/fetch.js', async (importOriginal) => {
+./packages/core/src/tools/confirmation-policy.test.ts:10:import { WriteFileTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/confirmation-policy.test.ts:11:import { EditTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/confirmation-policy.test.ts:13:import { GoogleWebFetchTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/confirmation-policy.test.ts:15:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/google-web-fetch.integration.test.ts:8:import { GoogleWebFetchTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/google-web-fetch.integration.test.ts:15:import * as fetchUtils from '@vybestack/llxprt-code-tools/utils/fetch.js';
+./packages/core/src/tools/google-web-fetch.integration.test.ts:17:vi.mock('@vybestack/llxprt-code-tools/utils/fetch.js', async (importOriginal) => {
+./packages/core/src/tools/ast-grep.test.ts:3:import { AstGrepTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ast-grep.test.ts:4:import type { ToolResult } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/doubleEscapeUtils.test.ts:2:import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+./packages/core/src/tools/__tests__/apply-patch-lsp-integration.test.ts:17:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/glob-params.test.ts:10:import { GlobTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/language-analysis.test.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/ast-query-extractor.test.ts:8:import { ASTQueryExtractor } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/edit-params.test.ts:10:import { EditTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/ensure-dirs.test.ts:11:import { ensureParentDirectoriesExist } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/write-file-params.test.ts:10:import { WriteFileTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/edit-lsp-integration.test.ts:11:import { EditTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/grep-params.test.ts:10:import { GrepTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/calculate-edit-characterization.test.ts:11:import { ASTEditTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/calculate-edit-characterization.test.ts:14:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/ast-edit-lsp-integration.test.ts:11:import { ASTEditTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/ast-config.test.ts:8:import { ASTConfig } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/insert-at-line-lsp-integration.test.ts:11:import { InsertAtLineTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/ls-params.test.ts:10:import { LSTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/shell-params.test.ts:10:import { ShellTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/delete-line-range-lsp-integration.test.ts:11:import { DeleteLineRangeTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/ast-edit-empty-file.test.ts:11:import { ASTEditTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/repository-context-provider.test.ts:8:import { RepositoryContextProvider } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/ast-edit-characterization.test.ts:5: * BEFORE decomposition. All tests import from '@vybestack/llxprt-code-tools' and must
+./packages/core/src/tools/__tests__/ast-edit-characterization.test.ts:22:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/ast-edit-characterization.test.ts:25:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/__tests__/ast-edit-characterization.test.ts:597:        '@vybestack/llxprt-code-tools'
+./packages/core/src/tools/__tests__/file-read-max-lines.test.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/task.test.ts:10:import { TaskTool, type TaskToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/task.test.ts:15:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/google-web-search.test.ts:13:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ToolIdStrategy.test.ts:22:} from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+./packages/core/src/tools/mcp-client.ts:41:import { DiscoveredMCPTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/edit.test.ts:40:import type { EditToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/edit.test.ts:41:import { applyReplacement, EditTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/edit.test.ts:45:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/edit.test.ts:46:import type { FileDiff } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/edit.test.ts:47:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/edit.test.ts:48:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/todo-read.test.ts:8:import { TodoRead, type Todo } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/modifiable-tool.test.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/modifiable-tool.test.ts:15:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/modifiable-tool.test.ts:16:import { DEFAULT_GUI_EDITOR } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/modifiable-tool.test.ts:27:vi.mock('@vybestack/llxprt-code-tools/utils/editor.js', async (importOriginal) => {
+./packages/core/src/tools/modifiable-tool.test.ts:30:      typeof import('@vybestack/llxprt-code-tools/utils/editor.js')
+./packages/core/src/tools/read-many-files.token-overflow.test.ts:9:import { ReadManyFilesTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/structural-analysis.test.ts:3:import { StructuralAnalysisTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/structural-analysis.test.ts:5:import type { ToolResult } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/diffOptions.test.ts:8:import { getDiffStat } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/exa-web-search.test.ts:8:import { ExaWebSearchTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/insert_at_line.test.ts:8:import { InsertAtLineTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/insert_at_line.test.ts:9:import type { ToolEditConfirmationDetails } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/insert_at_line.test.ts:20:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/messageBus.registry-invocation.tdd.test.ts:21:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/messageBus.registry-invocation.tdd.test.ts:27:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/activate-skill.test.ts:8:import { ActivateSkillTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/toolNameUtils.integration.test.ts:23:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/tool-registry.ts:11:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/toolIdNormalization.test.ts:26:} from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+./packages/core/src/tools/read-line-range.test.ts:23:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/edit-fuzzy.test.ts:14:import type { EditToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/edit-fuzzy.test.ts:15:import { EditTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/grep.timeout.test.ts:8:import type { GrepToolParams } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/grep.timeout.test.ts:9:import { GrepTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/grep.timeout.test.ts:15:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ls.test.ts:23:import { LSTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ls.test.ts:28:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/glob.test.ts:7:import type { GlobToolParams, GlobPath } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/glob.test.ts:8:import { GlobTool, sortFileEntries } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/glob.test.ts:17:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/direct-web-fetch.test.ts:8:import { DirectWebFetchTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/check-async-tasks.test.ts:12:import { CheckAsyncTasksTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/list-subagents.test.ts:8:import { ListSubagentsTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/shell.multibyte.test.ts:29:import { ShellTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ToolFormatter.test.ts:8:import { ToolFormatter } from '@vybestack/llxprt-code-tools/ToolFormatter.js';
+./packages/core/src/tools/todo-schemas.test.ts:14:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/shell.test.ts:50:import { ShellTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/shell.test.ts:62:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/shell.test.ts:63:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/shell.test.ts:64:import { OUTPUT_UPDATE_INTERVAL_MS } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/ToolFormatter.toResponsesTool.test.ts:8:import { ToolFormatter } from '@vybestack/llxprt-code-tools/ToolFormatter.js';
+./packages/core/src/tools/mcp-tool.test.ts:17:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/mcp-tool.test.ts:18:import type { ToolResult } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/mcp-tool.test.ts:19:import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools'; // Added ToolConfirmationOutcome
+./packages/core/src/tools/mcp-tool.test.ts:21:import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/tool-key-storage.test.ts:23:} from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/delete_line_range.test.ts:8:import { DeleteLineRangeTool } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/delete_line_range.test.ts:9:import type { ToolEditConfirmationDetails } from '@vybestack/llxprt-code-tools';
+./packages/core/src/tools/delete_line_range.test.ts:20:import { ToolErrorType } from '@vybestack/llxprt-code-tools';

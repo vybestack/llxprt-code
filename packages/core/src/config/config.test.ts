@@ -19,7 +19,7 @@ import { HookType, HookEventName } from '../hooks/types.js';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
+import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import {
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
@@ -33,8 +33,7 @@ import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../test-utils/config.js';
 
-import { ShellTool } from '../tools/shell.js';
-import { ReadFileTool } from '../tools/read-file.js';
+import { ShellTool, ReadFileTool } from '@vybestack/llxprt-code-tools';
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal();
@@ -48,36 +47,39 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-// Mock dependencies that might be called during Config construction or createServerConfig
-vi.mock('../tools/tool-registry', () => {
-  const ToolRegistryMock = vi.fn();
-  ToolRegistryMock.prototype.registerTool = vi.fn();
+// Mock dependencies that might be called during Config construction or createServerConfig.
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  const registerToolMock = vi.fn();
+  const ToolRegistryMock = vi.fn().mockImplementation(() => ({
+    registerTool: registerToolMock,
+    unregisterTool: vi.fn(),
+    discoverAllTools: vi.fn(),
+    sortTools: vi.fn(),
+    getAllTools: vi.fn(() => []),
+    getTool: vi.fn(),
+    getFunctionDeclarations: vi.fn(() => []),
+  }));
+  ToolRegistryMock.prototype.registerTool = registerToolMock;
   ToolRegistryMock.prototype.unregisterTool = vi.fn();
   ToolRegistryMock.prototype.discoverAllTools = vi.fn();
   ToolRegistryMock.prototype.sortTools = vi.fn();
-  ToolRegistryMock.prototype.getAllTools = vi.fn(() => []); // Mock methods if needed
+  ToolRegistryMock.prototype.getAllTools = vi.fn(() => []);
   ToolRegistryMock.prototype.getTool = vi.fn();
   ToolRegistryMock.prototype.getFunctionDeclarations = vi.fn(() => []);
-  return { ToolRegistry: ToolRegistryMock };
+  return {
+    ...actual,
+    ToolRegistry: ToolRegistryMock,
+    MemoryTool: vi.fn(),
+    setLlxprtMdFilename: vi.fn(),
+    getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
+    DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
+    LLXPRT_CONFIG_DIR: '.llxprt',
+  };
 });
 
 // Mock individual tools if their constructors are complex or have side effects
-vi.mock('../tools/ls');
-vi.mock('../tools/read-file');
-vi.mock('../tools/grep');
-vi.mock('../tools/glob');
-vi.mock('../tools/edit');
-vi.mock('../tools/shell');
-vi.mock('../tools/write-file');
-vi.mock('../tools/google-web-fetch');
-vi.mock('../tools/read-many-files');
-vi.mock('../tools/memoryTool', () => ({
-  MemoryTool: vi.fn(),
-  setLlxprtMdFilename: vi.fn(),
-  getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'), // Mock the original filename
-  DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
-  LLXPRT_CONFIG_DIR: '.llxprt',
-}));
 
 vi.mock('../core/contentGenerator.js', async (importOriginal) => {
   const actual = await importOriginal();
@@ -1264,12 +1266,8 @@ describe('Server Config (config.ts)', () => {
       const config = new Config(params);
       await initializeTestConfig(config);
 
-      // The ToolRegistry class is mocked, so we can inspect its prototype's methods.
-      const registerToolMock = (
-        (await vi.importMock('../tools/tool-registry')) as {
-          ToolRegistry: { prototype: { registerTool: Mock } };
-        }
-      ).ToolRegistry.prototype.registerTool;
+      // The ToolRegistry class is mocked, so inspect the created instance method.
+      const registerToolMock = vi.mocked(config.getToolRegistry().registerTool);
 
       // Check that registerTool was called for ShellTool
       const wasShellToolRegistered = registerToolMock.mock.calls.some(

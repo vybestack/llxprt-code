@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { FileDiff } from '../tools/tools.js';
+import type { FileDiff } from '@vybestack/llxprt-code-tools';
 
 /**
  * Safely extracts the FileDiff object from a tool call's resultDisplay.

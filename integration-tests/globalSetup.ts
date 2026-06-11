@@ -25,7 +25,7 @@ import * as path from 'node:path';
 import {
   LLXPRT_CONFIG_DIR,
   DEFAULT_CONTEXT_FILENAME,
-} from '../packages/core/src/tools/memoryTool.js';
+} from '@vybestack/llxprt-code-tools';
 
 // Handle the case where import.meta.url might be undefined in CI
 const __dirname = import.meta?.url

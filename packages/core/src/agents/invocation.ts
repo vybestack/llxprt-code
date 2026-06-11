@@ -6,8 +6,11 @@
 
 import type { Config } from '../config/config.js';
 import { AgentExecutor } from './executor.js';
-import { BaseToolInvocation, type ToolResult } from '../tools/tools.js';
-import { ToolErrorType } from '../tools/tool-error.js';
+import {
+  BaseToolInvocation,
+  type ToolResult,
+} from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type {
   AgentDefinition,
   AgentInputs,

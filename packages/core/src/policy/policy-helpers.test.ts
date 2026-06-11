@@ -16,7 +16,7 @@ import { PolicyDecision } from './types.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
 import type { ToolCallRequestInfo } from '../core/turn.js';
-import type { AnyToolInvocation } from '../tools/tools.js';
+import type { AnyToolInvocation } from '@vybestack/llxprt-code-tools';
 
 describe('policy-helpers', () => {
   describe('getPolicyContextFromInvocation', () => {

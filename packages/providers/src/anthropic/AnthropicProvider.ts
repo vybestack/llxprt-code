@@ -10,7 +10,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type IModel } from '../IModel.js';
-import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import { TOOL_PREFIX } from './schemaConverter.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import {

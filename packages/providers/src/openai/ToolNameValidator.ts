@@ -22,11 +22,11 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import {
   normalizeToolName,
   findMatchingTool,
-} from '@vybestack/llxprt-code-core/tools/toolNameUtils.js';
+} from '@vybestack/llxprt-code-tools/toolNameUtils.js';
 
 export interface ToolNameValidationResult {
   name: string;

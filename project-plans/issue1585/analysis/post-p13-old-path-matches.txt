@@ -1,0 +1,11 @@
+P13 providers core deep imports:
+P13 CLI core tools deep imports:
+P13 stale moved relative core tools imports/mocks excluding retained infrastructure:
+P13 CLI direct tools dependency check:
+PASS: CLI has no direct tools package dependency
+P13 A2A direct tools dependency check:
+PASS: A2A has no direct tools package dependency
+P13 providers tools dependency check:
+PASS: providers depends on tools via file:../tools
+P13 core exports map retained tools only:
+PASS []

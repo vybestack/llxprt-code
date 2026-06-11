@@ -23,7 +23,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { limitOutputTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import {
   normalizeMediaToDataUri,
   classifyMediaBlock,

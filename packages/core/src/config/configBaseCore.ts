@@ -19,14 +19,9 @@ import type {
 import type { AgentClient } from '../core/client.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { McpClientManager } from '@vybestack/llxprt-code-mcp';
-/**
- * Local constant for the .llxprt directory name.
- * Decoupled from memory tool to eliminate configBaseCore dependency on tools.
- * Both packages own their own literal — P09 may consolidate.
- */
-const LLXPRT_DIR = '.llxprt';
+import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '@vybestack/llxprt-code-tools';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
 import type { HookSystem } from '../hooks/hookSystem.js';

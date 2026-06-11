@@ -24,14 +24,14 @@ import {
   Kind,
   type ToolCallConfirmationDetails,
   type ToolResult,
-} from '../tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   MessageBusType,
   type ToolConfirmationRequest,
   type ToolPolicyRejection,
 } from '../confirmation-bus/types.js';
-import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 const baseConfigParams: ConfigParameters = {
   cwd: '/tmp',

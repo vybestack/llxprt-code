@@ -28,7 +28,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { OAUTH_MODELS } from './AnthropicModelData.js';
 
-vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
     toProviderFormat: vi.fn((tools: unknown[]) => tools),
     fromProviderFormat: vi.fn((rawToolCall: unknown) => [rawToolCall]),

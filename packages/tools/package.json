@@ -1,0 +1,75 @@
+{
+  "name": "@vybestack/llxprt-code-tools",
+  "version": "0.10.0",
+  "description": "LLxprt Code Tools — built-in tool implementations, contracts, formatters, and registry",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./IToolFormatter.js": "./dist/src/formatters/IToolFormatter.js",
+    "./ToolFormatter.js": "./dist/src/formatters/ToolFormatter.js",
+    "./ToolIdStrategy.js": "./dist/src/formatters/ToolIdStrategy.js",
+    "./toolIdNormalization.js": "./dist/src/formatters/toolIdNormalization.js",
+    "./doubleEscapeUtils.js": "./dist/src/formatters/doubleEscapeUtils.js",
+    "./toolNameUtils.js": "./dist/src/formatters/toolNameUtils.js",
+    "./utils/fetch.js": {
+      "types": "./dist/src/utils/fetch.d.ts",
+      "import": "./dist/src/utils/fetch.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@ast-grep/napi": "^0.40.5",
+    "ajv": "^8.17.1",
+    "@google/genai": "1.30.0",
+    "cheerio": "^1.1.2",
+    "diff": "^8.0.3",
+    "fast-glob": "^3.3.3",
+    "glob": "^12.0.0",
+    "html-to-text": "^9.0.5",
+    "node-fetch": "^3.3.2",
+    "shell-quote": "^1.8.3",
+    "turndown": "^7.2.2",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.1",
+    "@ast-grep/lang-c": "^0.0.5",
+    "@ast-grep/lang-cpp": "^0.0.5",
+    "@ast-grep/lang-go": "^0.0.5",
+    "@ast-grep/lang-java": "^0.0.6",
+    "@ast-grep/lang-json": "^0.0.6",
+    "@ast-grep/lang-python": "^0.0.5",
+    "@ast-grep/lang-ruby": "^0.0.6",
+    "@ast-grep/lang-rust": "^0.0.6",
+    "@lvce-editor/ripgrep": "^1.6.0",
+    "mime-types": "^2.1.35"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "@vybestack/llxprt-code-test-utils": "file:../test-utils",
+    "typescript": "^5.3.3",
+    "vitest": "^3.2.4",
+    "@types/mime-types": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

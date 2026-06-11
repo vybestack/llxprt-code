@@ -24,7 +24,7 @@ vi.mock('../config/config.js');
 vi.mock('./getFolderStructure.js', () => ({
   getFolderStructure: vi.fn(),
 }));
-vi.mock('../tools/read-many-files.js');
+vi.mock('@vybestack/llxprt-code-tools');
 
 describe('getDirectoryContextString', () => {
   let mockConfig: Partial<Config>;

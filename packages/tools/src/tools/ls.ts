@@ -1,0 +1,377 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+
+import fs from 'fs';
+import path from 'path';
+import {
+  BaseDeclarativeTool,
+  BaseToolInvocation,
+  Kind,
+  type ToolInvocation,
+  type ToolResult,
+} from './tools.js';
+import { ToolErrorType } from '../types/tool-error.js';
+import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
+import { makeRelative, shortenPath } from '../utils/paths.js';
+import { debugLogger } from '../utils/debugLogger.js';
+import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+
+/**
+ * Parameters for the LS tool
+ */
+export interface LSToolParams {
+  /**
+   * The absolute path to the directory to list
+   */
+  dir_path?: string;
+
+  /**
+   * Alternative parameter name for dir_path (for backward compatibility)
+   */
+  path?: string;
+
+  /**
+   * Array of glob patterns to ignore (optional)
+   */
+  ignore?: string[];
+
+  /**
+   * Whether to respect .gitignore and .llxprtignore patterns (optional, defaults to true)
+   */
+  file_filtering_options?: {
+    respect_git_ignore?: boolean;
+    respect_llxprt_ignore?: boolean;
+  };
+}
+
+/**
+ * File entry returned by LS tool
+ */
+export interface FileEntry {
+  /**
+   * Name of the file or directory
+   */
+  name: string;
+
+  /**
+   * Absolute path to the file or directory
+   */
+  path: string;
+
+  /**
+   * Whether this entry is a directory
+   */
+  isDirectory: boolean;
+
+  /**
+   * Size of the file in bytes (0 for directories)
+   */
+  size: number;
+
+  /**
+   * Last modified timestamp
+   */
+  modifiedTime: Date;
+}
+
+class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
+  constructor(
+    private readonly host: IToolHost,
+    params: LSToolParams,
+    messageBus: IToolMessageBus,
+  ) {
+    super(params, messageBus);
+  }
+
+  private getDirPath(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback chain for optional params
+    return this.params.dir_path || this.params.path || '';
+  }
+
+  /**
+   * Checks whether a filename matches any of the ignore patterns.
+   * @param filename Filename to check
+   * @param patterns Array of glob patterns to check against
+   * @returns True when the filename matches an ignore pattern.
+   */
+  private shouldIgnore(filename: string, patterns?: string[]): boolean {
+    if (!patterns || patterns.length === 0) {
+      return false;
+    }
+    for (const pattern of patterns) {
+      // Convert glob pattern to RegExp
+      const regexPattern = pattern
+        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*/g, '.*')
+        .replace(/\?/g, '.');
+      const regex = new RegExp(`^${regexPattern}$`);
+      if (regex.test(filename)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Gets a description of the file reading operation
+   * @returns A string describing the file being read
+   */
+  getDescription(): string {
+    const dirPath = this.getDirPath();
+    const relativePath = makeRelative(dirPath, this.host.getTargetDir());
+    return shortenPath(relativePath);
+  }
+
+  // Helper for consistent error formatting
+  private errorResult(
+    llmContent: string,
+    returnDisplay: string,
+    type: ToolErrorType,
+  ): ToolResult {
+    return {
+      llmContent,
+      // Keep returnDisplay simpler in core logic
+      returnDisplay: `Error: ${returnDisplay}`,
+      error: {
+        message: llmContent,
+        type,
+      },
+    };
+  }
+
+  /**
+   * Executes the LS operation with the given parameters
+   * @returns Result of the LS operation
+   */
+  async execute(_signal: AbortSignal): Promise<ToolResult> {
+    try {
+      const dirPath = this.getDirPath();
+      const stats = fs.statSync(dirPath);
+      if (!stats.isDirectory()) {
+        return this.errorResult(
+          `Error: Path is not a directory: ${dirPath}`,
+          `Path is not a directory.`,
+          ToolErrorType.PATH_IS_NOT_A_DIRECTORY,
+        );
+      }
+
+      const files = fs.readdirSync(dirPath);
+      if (files.length === 0) {
+        return {
+          llmContent: `Directory ${dirPath} is empty.`,
+          returnDisplay: `Directory is empty.`,
+        };
+      }
+
+      const { entries, ignoredCount } = this.collectEntries(dirPath, files);
+      return this.formatListingResult(dirPath, entries, ignoredCount);
+    } catch (error) {
+      const errorMsg = `Error listing directory: ${error instanceof Error ? error.message : String(error)}`;
+      return this.errorResult(
+        errorMsg,
+        'Failed to list directory.',
+        ToolErrorType.LS_EXECUTION_ERROR,
+      );
+    }
+  }
+
+  private collectEntries(
+    dirPath: string,
+    files: string[],
+  ): { entries: FileEntry[]; ignoredCount: number } {
+    const defaultFileIgnores = this.host.getFileFilteringOptions();
+    const fileFilteringOptions = {
+      respectGitIgnore:
+        this.params.file_filtering_options?.respect_git_ignore ??
+        defaultFileIgnores.respectGitIgnore,
+      respectLlxprtIgnore:
+        this.params.file_filtering_options?.respect_llxprt_ignore ??
+        defaultFileIgnores.respectLlxprtIgnore,
+    };
+    const fileDiscovery = this.host.getFileService();
+
+    const entries: FileEntry[] = [];
+    let ignoredCount = 0;
+
+    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    for (const file of files) {
+      if (this.shouldIgnore(file, this.params.ignore)) {
+        continue;
+      }
+
+      const fullPath = path.join(dirPath, file);
+      const relativePath = path.relative(this.host.getTargetDir(), fullPath);
+
+      if (
+        fileFilteringOptions.respectGitIgnore &&
+        fileDiscovery.shouldGitIgnoreFile(relativePath)
+      ) {
+        ignoredCount++;
+        continue;
+      }
+      if (
+        fileFilteringOptions.respectLlxprtIgnore &&
+        fileDiscovery.shouldLlxprtIgnoreFile(relativePath)
+      ) {
+        ignoredCount++;
+        continue;
+      }
+
+      try {
+        const stats = fs.statSync(fullPath);
+        const isDir = stats.isDirectory();
+        entries.push({
+          name: file,
+          path: fullPath,
+          isDirectory: isDir,
+          size: isDir ? 0 : stats.size,
+          modifiedTime: stats.mtime,
+        });
+      } catch (error) {
+        debugLogger.error(`Error accessing ${fullPath}: ${error}`);
+      }
+    }
+    return { entries, ignoredCount };
+  }
+
+  private formatListingResult(
+    dirPath: string,
+    entries: FileEntry[],
+    ignoredCount: number,
+  ): ToolResult {
+    entries.sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    const directoryContent = entries
+      .map((entry) => `${entry.isDirectory ? '[DIR] ' : ''}${entry.name}`)
+      .join('\n');
+
+    let resultMessage = `Directory listing for ${dirPath}:\n${directoryContent}`;
+    if (ignoredCount > 0) {
+      resultMessage += `\n\n(${ignoredCount} ignored)`;
+    }
+
+    let displayMessage = `Listed ${entries.length} item(s).`;
+    if (ignoredCount > 0) {
+      displayMessage += ` (${ignoredCount} ignored)`;
+    }
+
+    return {
+      llmContent: resultMessage,
+      returnDisplay: displayMessage,
+    };
+  }
+}
+
+/**
+ * Implementation of the LS tool logic
+ */
+export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
+  static readonly Name = 'list_directory';
+
+  constructor(
+    private host: IToolHost,
+    messageBus?: IToolMessageBus,
+  ) {
+    super(
+      LSTool.Name,
+      'ReadFolder',
+      'Lists the names of files and subdirectories directly within a specified directory path. Can optionally ignore entries matching provided glob patterns.',
+      Kind.Search,
+      {
+        properties: {
+          dir_path: {
+            description:
+              'The absolute path to the directory to list (must be absolute, not relative)',
+            type: 'string',
+          },
+          path: {
+            description:
+              'Alternative parameter name for dir_path (for backward compatibility).',
+            type: 'string',
+          },
+          ignore: {
+            description: 'List of glob patterns to ignore',
+            items: {
+              type: 'string',
+            },
+            type: 'array',
+          },
+          file_filtering_options: {
+            description:
+              'Optional: Whether to respect ignore patterns from .gitignore or .llxprtignore',
+            type: 'object',
+            properties: {
+              respect_git_ignore: {
+                description:
+                  'Optional: Whether to respect .gitignore patterns when listing files. Only available in git repositories. Defaults to true.',
+                type: 'boolean',
+              },
+              respect_llxprt_ignore: {
+                description:
+                  'Optional: Whether to respect .llxprtignore patterns when listing files. Defaults to true.',
+                type: 'boolean',
+              },
+            },
+          },
+        },
+        required: [],
+        type: 'object',
+      },
+      true,
+      false,
+      messageBus,
+    );
+  }
+
+  protected override createInvocation(
+    params: LSToolParams,
+    messageBus: IToolMessageBus,
+  ): ToolInvocation<LSToolParams, ToolResult> {
+    const normalizedParams = { ...params };
+    if (!normalizedParams.dir_path && normalizedParams.path) {
+      normalizedParams.dir_path = normalizedParams.path;
+    }
+
+    return new LSToolInvocation(this.host, normalizedParams, messageBus);
+  }
+
+  /**
+   * Validates the parameters for the tool
+   * @param params Parameters to validate
+   * @returns An error message string if invalid, null otherwise
+   */
+  protected override validateToolParamValues(
+    params: LSToolParams,
+  ): string | null {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to validation
+    const dirPath = params.dir_path || params.path;
+    if (!dirPath || dirPath.trim() === '') {
+      return "Either 'dir_path' or 'path' parameter must be provided and non-empty.";
+    }
+
+    if (!path.isAbsolute(dirPath)) {
+      return `Path must be absolute: ${dirPath}`;
+    }
+
+    const pathError = validatePathWithinWorkspace(
+      this.host.getWorkspaceRoots(),
+      dirPath,
+      'Path',
+    );
+    if (pathError) {
+      return pathError;
+    }
+    const noValidationError = null;
+    return noValidationError;
+  }
+}

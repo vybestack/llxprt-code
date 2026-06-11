@@ -5,9 +5,8 @@
  * LSP-provided navigation tools.
  */
 
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { CallableTool, Tool, Part, FunctionCall } from '@google/genai';
-import type { Config } from './config.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import type { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
@@ -15,6 +14,8 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Readable, Writable } from 'node:stream';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
+import type { Config } from './config.js';
 
 const MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS = 2_000;
 
@@ -301,8 +302,6 @@ async function registerDiscoveredTools(
   registry: ToolRegistry,
   host: LspHost,
 ): Promise<void> {
-  const { DiscoveredMCPTool } = await import('@vybestack/llxprt-code-mcp');
-
   for (const toolDef of toolDefs) {
     const callableTool = new LspNavigationCallableTool(client, toolDef);
 

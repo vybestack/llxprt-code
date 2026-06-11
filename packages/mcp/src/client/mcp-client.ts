@@ -62,7 +62,7 @@ import type {
   Unsubscribe,
   WorkspaceContext,
 } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';

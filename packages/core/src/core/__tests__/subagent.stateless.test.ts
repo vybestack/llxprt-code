@@ -44,7 +44,7 @@ import type {
   RunConfig,
   SubAgentRuntimeOverrides,
 } from '../subagentTypes.js';
-import type { ToolRegistry } from '../../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from '../contentGenerator.js';
 import type { Part } from '@google/genai';
 import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';

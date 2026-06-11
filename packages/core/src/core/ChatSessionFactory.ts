@@ -23,7 +23,7 @@ import { createSettingsProviderRuntimeContext } from '../runtime/settingsRuntime
 import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { getErrorMessage } from '../utils/errors.js';
 import type { ContentGenerator } from './contentGenerator.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { isThinkingSupported } from './clientHelpers.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 import type { Config } from '../config/config.js';

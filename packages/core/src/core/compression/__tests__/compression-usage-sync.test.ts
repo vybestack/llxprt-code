@@ -152,6 +152,16 @@ function buildContext(
           adaptiveThinking: () => undefined,
         },
       },
+      providerRuntime: {
+        settingsService: {
+          get: () => undefined,
+          set: () => {},
+          getProviderSettings: () => ({}),
+        },
+        config: undefined,
+        runtimeId: 'test-provider-runtime',
+        metadata: { source: 'test' },
+      },
     } as unknown as AgentRuntimeContext,
     runtimeState: {
       runtimeId: 'test',
@@ -170,7 +180,19 @@ function buildContext(
       error: () => {},
       log: () => {},
     } as unknown as Logger,
-    resolveProvider: () => provider,
+    resolveProvider: () => {
+      const runtime = {
+        settingsService: {
+          get: () => undefined,
+          set: () => {},
+          getProviderSettings: () => ({}),
+        },
+        config: undefined,
+        runtimeId: 'test-provider-runtime',
+        metadata: { source: 'test' },
+      };
+      return { provider, runtime };
+    },
     promptResolver: {
       resolveFile: () => ({ found: false, path: null, source: null }),
     } as unknown as PromptResolver,

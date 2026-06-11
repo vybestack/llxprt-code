@@ -21,7 +21,7 @@ import type {
   CodeBlock,
   MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import {
   classifyMediaBlock,

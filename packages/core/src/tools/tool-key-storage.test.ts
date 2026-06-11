@@ -14,14 +14,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { ToolKeyStorage, type KeyringAdapter } from './tool-key-storage.js';
 import {
-  ToolKeyStorage,
   isValidToolKeyName,
   getToolKeyEntry,
   getSupportedToolNames,
   maskKeyForDisplay,
-  type KeyringAdapter,
-} from './tool-key-storage.js';
+} from '@vybestack/llxprt-code-tools';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 

@@ -166,14 +166,17 @@ describe('Core contracts must not use forbidden naming patterns', () => {
 });
 
 /**
- * Core-owned utilities must not import from providers.
- * The toolIdNormalization utility was moved from providers/utils/ to core/tools/.
+ * Tool-owned utilities must not import from providers.
+ * The toolIdNormalization utility moved from core/tools/ to packages/tools.
  *
  * @plan:PLAN-20260603-ISSUE1584.P04
  * @requirement:REQ-TEST-001
  */
-describe('Core-owned toolIdNormalization must not import from providers', () => {
-  const toolIdNormPath = path.join(TOOLS_DIR, 'toolIdNormalization.ts');
+describe('Tool-owned toolIdNormalization must not import from providers', () => {
+  const toolIdNormPath = path.resolve(
+    __dirname,
+    '../../../../tools/src/formatters/toolIdNormalization.ts',
+  );
 
   it('toolIdNormalization.ts has no provider imports', () => {
     const content = fs.readFileSync(toolIdNormPath, 'utf-8');

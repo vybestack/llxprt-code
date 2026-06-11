@@ -42,7 +42,7 @@ import {
 } from '../runtime/AgentRuntimeLoader.js';
 import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { debugLogger } from '../utils/debugLogger.js';
@@ -133,7 +133,7 @@ export class SubagentOrchestrator {
       if (history !== undefined) {
         const disposable = (history as { dispose?: () => void }).dispose;
         if (typeof disposable === 'function') {
-          disposable();
+          disposable.call(history);
         } else if (typeof history.clear === 'function') {
           history.clear();
           (
