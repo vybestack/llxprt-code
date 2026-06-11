@@ -14,15 +14,21 @@ import {
 import type { ProfileManager } from './profileManager.js';
 import type { SubagentManager } from './subagentManager.js';
 
-function createHost(options: {
-  asyncTaskManager?: AsyncTaskManager;
-  subagentManager?: SubagentManager;
-  profileManager?: ProfileManager;
-}): ToolRegistryHost {
-  let profileManager = options.profileManager;
-  let subagentManager = options.subagentManager;
+function createHost(
+  options: {
+    asyncTaskManager?: AsyncTaskManager;
+    subagentManager?: SubagentManager;
+    profileManager?: ProfileManager;
+    noCoreTools?: boolean;
+  } = {},
+): ToolRegistryHost {
+  const { asyncTaskManager, noCoreTools } = options;
+  let { profileManager, subagentManager } = options;
   return {
-    getCoreTools: () => ['TaskTool', 'ListSubagentsTool', 'check_async_tasks'],
+    getCoreTools: () =>
+      noCoreTools === true
+        ? undefined
+        : ['TaskTool', 'ListSubagentsTool', 'check_async_tasks'],
     getExcludeTools: () => [],
     getUseRipgrep: () => false,
     getProfileManager: () => profileManager,
@@ -34,11 +40,13 @@ function createHost(options: {
       subagentManager = sm;
     },
     getInteractiveSubagentSchedulerFactory: () => undefined,
-    getAsyncTaskManager: () => options.asyncTaskManager,
+    getAsyncTaskManager: () => asyncTaskManager,
   };
 }
 
-function createConfigBoundary(): Record<string, unknown> {
+function createConfigBoundary(
+  overrides?: Record<string, unknown>,
+): Record<string, unknown> {
   return {
     getCoreTools: () => ['TaskTool', 'ListSubagentsTool', 'check_async_tasks'],
     getExcludeTools: () => [],
@@ -50,6 +58,7 @@ function createConfigBoundary(): Record<string, unknown> {
     isToolEnabled: () => true,
     isTrustedFolder: () => false,
     isInteractive: () => false,
+    ...overrides,
   };
 }
 
@@ -107,5 +116,102 @@ describe('toolRegistryFactory adapter-backed runtime tools', () => {
     expect(result.error).toBeUndefined();
     expect(result.llmContent).toContain('Async Tasks Summary');
     expect(result.llmContent).toContain('task-registry-adapter');
+  });
+
+  async function createRegistryWithEmojiMode(mode: string) {
+    const configBoundary = createConfigBoundary({
+      getEphemeralSettings: () => ({ emojifilter: mode }),
+    });
+
+    return createToolRegistry(
+      createHost({
+        noCoreTools: true,
+        profileManager: {} as ProfileManager,
+        subagentManager: {
+          getCachedSubagentNames: vi.fn().mockReturnValue([]),
+          listSubagents: vi.fn().mockResolvedValue([]),
+        } as unknown as SubagentManager,
+      }),
+      configBoundary,
+      new MessageBus(),
+    );
+  }
+
+  it('registers todo_write through createToolRegistry: auto mode filters emojis and succeeds', async () => {
+    const { registry } = await createRegistryWithEmojiMode('auto');
+
+    const tool = registry.getTool('todo_write');
+    expect(tool).toBeDefined();
+
+    const result = await tool!
+      .build({
+        todos: [{ id: '1', content: '\u2705 Fix the bug', status: 'pending' }],
+      })
+      .execute(new AbortController().signal);
+    expect(result.error).toBeUndefined();
+    expect(result.llmContent).toContain('[OK] Fix the bug');
+    expect(result.llmContent).not.toContain('system-reminder');
+  });
+
+  it('registers todo_write through createToolRegistry: warn mode filters and includes warning', async () => {
+    const { registry } = await createRegistryWithEmojiMode('warn');
+
+    const tool = registry.getTool('todo_write');
+    expect(tool).toBeDefined();
+
+    const result = await tool!
+      .build({
+        todos: [{ id: '1', content: '\u2705 Fix the bug', status: 'pending' }],
+      })
+      .execute(new AbortController().signal);
+    expect(result.error).toBeUndefined();
+    expect(result.llmContent).toContain('[OK] Fix the bug');
+    expect(result.llmContent).toContain('system-reminder');
+    expect(result.llmContent).toContain('avoid using emojis');
+  });
+
+  it('registers todo_write through createToolRegistry: allowed mode preserves emoji content', async () => {
+    const { registry } = await createRegistryWithEmojiMode('allowed');
+
+    const tool = registry.getTool('todo_write');
+    expect(tool).toBeDefined();
+
+    const result = await tool!
+      .build({
+        todos: [{ id: '1', content: '\u2705 Fix the bug', status: 'pending' }],
+      })
+      .execute(new AbortController().signal);
+    expect(result.error).toBeUndefined();
+    expect(result.llmContent).toContain('\u2705 Fix the bug');
+    expect(result.llmContent).not.toContain('[OK]');
+  });
+
+  it('registers todo_write through createToolRegistry: error mode blocks emoji content', async () => {
+    const { registry, allPotentialTools } =
+      await createRegistryWithEmojiMode('error');
+
+    const todoRecord = allPotentialTools.find(
+      (t) => t.displayName === 'todo_write',
+    );
+    expect(todoRecord).toBeDefined();
+    expect(todoRecord!.isRegistered).toBe(true);
+
+    const tool = registry.getTool('todo_write');
+    expect(tool).toBeDefined();
+
+    const cleanResult = await tool!
+      .build({
+        todos: [{ id: '1', content: 'Fix the bug', status: 'pending' }],
+      })
+      .execute(new AbortController().signal);
+    expect(cleanResult.error).toBeUndefined();
+
+    const emojiResult = await tool!
+      .build({
+        todos: [{ id: '1', content: '\u2705 Fix the bug', status: 'pending' }],
+      })
+      .execute(new AbortController().signal);
+    expect(emojiResult.error).toBeDefined();
+    expect(emojiResult.error!.message.toLowerCase()).toContain('emoji');
   });
 });
