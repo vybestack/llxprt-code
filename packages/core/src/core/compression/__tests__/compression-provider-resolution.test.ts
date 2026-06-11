@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Issue #1972: cohesive compression provider-resolution behavioral coverage kept together. */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import type { GenerateChatOptions } from '@vybestack/llxprt-code-providers/IProvider.js';
@@ -691,6 +693,67 @@ describe('CompressionHandler provider resolution (issue #1972)', () => {
       );
       expect(providerA.capturedAuthTokens[0]).toBe('profile-a-key');
       expect(providerB.capturedAuthTokens[0]).toBe('profile-b-key');
+    });
+
+    it('pins one round-robin subprofile per compression operation even when verification runs', async () => {
+      const loadBalancedProfile: Profile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['profile-a', 'profile-b'],
+        provider: '',
+        model: 'load-balanced-model',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const profileA = standardProfile({
+        provider: 'profile-provider-a',
+        model: 'profile-model-a',
+        ephemeralSettings: { 'auth-key': 'profile-a-key' },
+      });
+      const profileB = standardProfile({
+        provider: 'profile-provider-b',
+        model: 'profile-model-b',
+        ephemeralSettings: { 'auth-key': 'profile-b-key' },
+      });
+      const profileManager = makeProfileManager({
+        'load-balanced-compression': loadBalancedProfile,
+        'profile-a': profileA,
+        'profile-b': profileB,
+      });
+      const sessionProvider = createFakeProvider('session-provider');
+      const providerA = new NormalizingProvider('profile-provider-a');
+      const providerB = new NormalizingProvider('profile-provider-b');
+      const runtimeContext = makeRuntimeContext({
+        providerName: 'session-provider',
+        model: 'session-model',
+        providerRuntime: {
+          settingsService: new SettingsService(),
+          config: makeConfig(profileManager),
+          runtimeId: 'session-runtime',
+          metadata: { source: 'session-runtime' },
+        },
+        activeProvider: sessionProvider,
+        providers: {
+          'session-provider': sessionProvider,
+          'profile-provider-a': providerA,
+          'profile-provider-b': providerB,
+        },
+        compressionProfile: 'load-balanced-compression',
+        compressionVerification: true,
+      });
+
+      await runOneShotCompression(runtimeContext);
+
+      // A single compression operation (summary + verification) must use the
+      // same pinned subprofile for both LLM calls, and must not advance the
+      // round-robin cursor mid-operation.
+      expect(providerA.capturedOptions).toHaveLength(2);
+      expect(providerB.capturedOptions).toHaveLength(0);
+      expect(providerA.capturedAuthTokens).toStrictEqual([
+        'profile-a-key',
+        'profile-a-key',
+      ]);
     });
 
     it('uses isolated profile runtime for the verification pass', async () => {

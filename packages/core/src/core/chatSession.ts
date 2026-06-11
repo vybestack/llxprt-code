@@ -136,16 +136,19 @@ interface CompressionLoadBalancerCandidate {
 
 class CompressionLoadBalancingProvider implements IProvider {
   readonly name = 'load-balancer';
-  private roundRobinIndex = 0;
+  private readonly selectedRoundRobinCandidate?: CompressionLoadBalancerCandidate;
 
   constructor(
     private readonly strategy: 'round-robin' | 'failover',
     private readonly candidates: readonly CompressionLoadBalancerCandidate[],
     initialIndex: number,
   ) {
-    this.roundRobinIndex = initialIndex;
     if (candidates.length === 0) {
       throw new Error('Load-balanced compression profile requires subprofiles');
+    }
+    if (strategy === 'round-robin') {
+      this.selectedRoundRobinCandidate =
+        this.candidates[initialIndex % this.candidates.length];
     }
   }
 
@@ -183,9 +186,10 @@ class CompressionLoadBalancingProvider implements IProvider {
       return;
     }
 
-    const candidate = this.candidates[this.roundRobinIndex];
-    this.roundRobinIndex = (this.roundRobinIndex + 1) % this.candidates.length;
-    yield* this.generateWithCandidate(candidate, options);
+    yield* this.generateWithCandidate(
+      this.selectedRoundRobinCandidate ?? this.candidates[0],
+      options,
+    );
   }
 
   private async *generateWithFailover(
@@ -194,7 +198,14 @@ class CompressionLoadBalancingProvider implements IProvider {
     let lastError: unknown;
     for (const candidate of this.candidates) {
       try {
-        yield* this.generateWithCandidate(candidate, options);
+        const bufferedChunks: IContent[] = [];
+        for await (const chunk of this.generateWithCandidate(
+          candidate,
+          options,
+        )) {
+          bufferedChunks.push(chunk);
+        }
+        yield* bufferedChunks;
         return;
       } catch (error) {
         lastError = error;
