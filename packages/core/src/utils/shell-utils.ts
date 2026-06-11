@@ -4,6 +4,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * Shell command security validation and parsing.
+ *
+ * **Layered validation architecture:**
+ *
+ * 1. `checkCommandPermissions` is the main entry point. It resolves the
+ *    shell-replacement mode (`none` | `allowlist` | `all`) and dispatches:
+ *    - **`none`**: Any command substitution (`$()`, ``, `<()`, `>()`) triggers
+ *      an immediate hard denial.
+ *    - **`allowlist`** (default): Uses tree-sitter to extract ALL nested commands
+ *      (including inside substitutions), then validates each against the
+ *      allowlist. A tree-sitter parse failure is treated as a hard denial —
+ *      malformed commands are never allowed through.
+ *    - **`all`**: Substitution is permitted; validation falls through to the
+ *      blocklist / allowlist checks below.
+ * 2. Blocklist check — rejects commands on `excludeTools`.
+ * 3. Allowlist matching — checks each command segment against `coreTools` /
+ *    `sessionAllowlist` using `doesToolInvocationMatch`.
+ *
+ * Tree-sitter (`shell-parser.ts`) is the primary parser. The regex-based
+ * functions in this file are best-effort fallbacks used only when the
+ * tree-sitter WASM bundle failed to load at startup. The bypass risk from
+ * regex imprecision is mitigated because `allowlist` mode hard-denies on
+ * parse errors and tree-sitter is bundled (fallback activation is rare).
+ */
+
 import type { AnyToolInvocation } from '../index.js';
 import type { Config } from '../config/config.js';
 import { normalizeShellReplacement } from '../config/config.js';
@@ -117,7 +143,11 @@ export interface SplitCommandsOptions {
   /**
    * Whether to split on pipe operators (|).
    * Default: true (split pipes for security checks).
-   * Set to false for command instrumentation where pipelines should stay intact.
+   *
+   * Originally added for now-removed command instrumentation (PR #1546);
+   * retained because it is zero-cost, tested, and useful for future
+   * pipeline-aware display. Security validation always uses the default
+   * (true) so every pipeline stage is validated individually.
    */
   splitOnPipes?: boolean;
 }
@@ -205,7 +235,13 @@ function handleSingleOperator(
 
 /**
  * Regex-based fallback for splitting shell commands.
- * Used when tree-sitter is not available.
+ *
+ * Known limitations (mitigated because allowlist mode hard-denies on
+ * tree-sitter parse failure and tree-sitter is bundled):
+ * - Backtick quoting state is not tracked (backticks not used as delimiters)
+ * - `$()` / `$(())` nesting is not tracked
+ * - Process substitution `<()`, `>()` is not tracked
+ * - The `&` redirection heuristic (prevChar/nextChar `>`) is fragile
  */
 function splitCommandsRegex(
   command: string,
@@ -352,7 +388,7 @@ export function detectCommandSubstitution(command: string): boolean {
 
 /**
  * Regex-based fallback for detecting command substitution.
- * Used when tree-sitter is not available.
+ * Used only when tree-sitter WASM failed to load at startup.
  */
 function detectCommandSubstitutionRegex(command: string): boolean {
   let inSingleQuotes = false;
@@ -370,17 +406,9 @@ function detectCommandSubstitutionRegex(command: string): boolean {
       continue;
     }
 
-    // Handle quote state changes
-    if (char === "'" && !inDoubleQuotes && !inBackticks) {
-      inSingleQuotes = !inSingleQuotes;
-    } else if (char === '"' && !inSingleQuotes && !inBackticks) {
-      inDoubleQuotes = !inDoubleQuotes;
-    } else if (char === '`' && !inSingleQuotes) {
-      // Backticks work outside single quotes (including in double quotes)
-      inBackticks = !inBackticks;
-    }
-
-    // Check for command substitution patterns that would be executed
+    // Check for command substitution patterns that would be executed.
+    // Detection runs BEFORE state toggles so that an opening backtick is
+    // flagged immediately rather than only at the closing tick.
     if (!inSingleQuotes) {
       // $(...) command substitution - works in double quotes and unquoted
       if (char === '$' && nextChar === '(') {
@@ -397,11 +425,21 @@ function detectCommandSubstitutionRegex(command: string): boolean {
         return true;
       }
 
-      // Backtick command substitution - check for opening backtick
-      // (We track the state above, so this catches the start of backtick substitution)
+      // An opening backtick (outside single quotes, not already inside backticks)
+      // begins command substitution — flag immediately.
       if (char === '`' && !inBackticks) {
         return true;
       }
+    }
+
+    // Handle quote state changes (after detection so opening backtick is caught)
+    if (char === "'" && !inDoubleQuotes && !inBackticks) {
+      inSingleQuotes = !inSingleQuotes;
+    } else if (char === '"' && !inSingleQuotes && !inBackticks) {
+      inDoubleQuotes = !inDoubleQuotes;
+    } else if (char === '`' && !inSingleQuotes) {
+      // Backticks work outside single quotes (including in double quotes)
+      inBackticks = !inBackticks;
     }
 
     i++;

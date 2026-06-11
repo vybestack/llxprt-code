@@ -10,7 +10,11 @@ export interface SplitCommandsOptions {
   /**
    * Whether to split on pipe operators (|).
    * Default: true (split pipes for security checks).
-   * Set to false for command instrumentation where pipelines should stay intact.
+   *
+   * Originally added for now-removed command instrumentation (PR #1546);
+   * retained because it is zero-cost, tested, and useful for future
+   * pipeline-aware display. Security validation always uses the default
+   * (true) so every pipeline stage is validated individually.
    */
   splitOnPipes?: boolean;
 }
