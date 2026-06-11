@@ -233,8 +233,13 @@ function handleIdeAndShellKeys(
   ) {
     const lastPtyId = ShellExecutionService.getLastActivePtyId();
     const hasActiveShellPty =
-      shell.activeShellPtyId !== null && shell.activeShellPtyId !== 0;
-    const hasLastPty = lastPtyId !== null && lastPtyId !== 0;
+      shell.activeShellPtyId !== null &&
+      shell.activeShellPtyId !== 0 &&
+      ShellExecutionService.isActivePty(shell.activeShellPtyId);
+    const hasLastPty =
+      lastPtyId !== null &&
+      lastPtyId !== 0 &&
+      ShellExecutionService.isActivePty(lastPtyId);
     const hasActivePty = hasActiveShellPty || hasLastPty;
     debug.log(
       'Ctrl+F: activeShellPtyId=%s, lastActivePtyId=%s, will toggle=%s',

@@ -137,17 +137,22 @@ function computeShellFocusState(
   const isThisShellTargeted =
     ptyId === activeShellPtyId ||
     (activeShellPtyId == null && isLastActiveShellTarget);
+  const isPtyAlive =
+    ptyId !== undefined && ShellExecutionService.isActivePty(ptyId);
+  const isExecuting = status === ToolCallStatus.Executing;
+  const isActiveOrAlive = isExecuting || isPtyAlive;
   const isThisShellFocused =
     isShellTool &&
-    status === ToolCallStatus.Executing &&
     isThisShellTargeted &&
-    embeddedShellFocused === true;
+    embeddedShellFocused === true &&
+    isActiveOrAlive;
 
+  const interactiveShellEnabled = config?.getEnableInteractiveShell() === true;
   const isThisShellFocusable =
     isShellTool &&
-    status === ToolCallStatus.Executing &&
-    config?.getEnableInteractiveShell() === true &&
-    isThisShellTargeted;
+    interactiveShellEnabled &&
+    isThisShellTargeted &&
+    isActiveOrAlive;
 
   return {
     isShellTool,
