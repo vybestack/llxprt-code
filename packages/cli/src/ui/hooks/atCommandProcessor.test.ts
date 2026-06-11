@@ -10,17 +10,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { handleAtCommand } from './atCommandProcessor.js';
 import {
   type Config,
-  FileDiscoveryService,
   CoreToolHostAdapter,
   GlobTool,
   type MessageBus,
   ReadManyFilesTool,
-  StandardFileSystemService,
   ToolRegistry,
   COMMON_IGNORE_PATTERNS,
   DEFAULT_FILE_EXCLUDES,
   type DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
+import {
+  FileDiscoveryService,
+  StandardFileSystemService,
+} from '@vybestack/llxprt-code-storage';
 import * as os from 'os';
 import { ToolCallStatus } from '../types.js';
 import { type UseHistoryManagerReturn as _UseHistoryManagerReturn } from './useHistoryManager.js';

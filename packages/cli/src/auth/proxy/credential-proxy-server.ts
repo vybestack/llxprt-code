@@ -26,7 +26,8 @@ import {
   sanitizeTokenForProxy,
   mergeRefreshedToken,
 } from '@vybestack/llxprt-code-auth';
-import type { ProviderKeyStorage } from '@vybestack/llxprt-code-core';
+// ProviderKeyStorage now lives in the storage package
+import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import {
   CredentialProxyOAuthHandler,
   type OAuthFlowInterface,

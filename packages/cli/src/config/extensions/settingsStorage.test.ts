@@ -18,7 +18,7 @@ import type { ExtensionSetting } from './extensionSettings.js';
 // In-memory store used by the mock SecureStore instances
 const mockStore = new Map<string, string>();
 
-vi.mock('@vybestack/llxprt-code-core', () => ({
+vi.mock('@vybestack/llxprt-code-storage', () => ({
   SecureStore: vi.fn().mockImplementation(() => ({
     get: vi.fn(async (key: string) => mockStore.get(key) ?? null),
     set: vi.fn(async (key: string, value: string) => {

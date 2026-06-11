@@ -44,12 +44,33 @@
     "./runtime/settingsRuntimeAdapter.js": "./dist/src/runtime/settingsRuntimeAdapter.js",
     "./runtime/runtimeAdapters.js": "./dist/src/runtime/runtimeAdapters.js",
     "./runtime/RuntimeInvocationContext.js": "./dist/src/runtime/RuntimeInvocationContext.js",
+    "./services/fileSystemService.js": {
+      "types": "./dist/src/services/fileSystemService.d.ts",
+      "import": "./dist/src/services/fileSystemService.js"
+    },
+    "./services/fileDiscoveryService.js": {
+      "types": "./dist/src/services/fileDiscoveryService.d.ts",
+      "import": "./dist/src/services/fileDiscoveryService.js"
+    },
     "./services/history/ContentConverters.js": "./dist/src/services/history/ContentConverters.js",
     "./services/history/HistoryService.js": "./dist/src/services/history/HistoryService.js",
     "./services/history/IContent.js": "./dist/src/services/history/IContent.js",
-    "./storage/ConversationFileWriter.js": "./dist/src/storage/ConversationFileWriter.js",
-    "./storage/provider-key-storage.js": "./dist/src/storage/provider-key-storage.js",
-    "./storage/secure-store.js": "./dist/src/storage/secure-store.js",
+    "./storage/ConversationFileWriter.js": {
+      "types": "./dist/src/storage/ConversationFileWriter.d.ts",
+      "import": "./dist/src/storage/ConversationFileWriter.js"
+    },
+    "./storage/provider-key-storage.js": {
+      "types": "./dist/src/storage/provider-key-storage.d.ts",
+      "import": "./dist/src/storage/provider-key-storage.js"
+    },
+    "./storage/sessionTypes.js": {
+      "types": "./dist/src/storage/sessionTypes.d.ts",
+      "import": "./dist/src/storage/sessionTypes.js"
+    },
+    "./storage/secure-store.js": {
+      "types": "./dist/src/storage/secure-store.d.ts",
+      "import": "./dist/src/storage/secure-store.js"
+    },
     "./telemetry/loggers.js": "./dist/src/telemetry/loggers.js",
     "./telemetry/types.js": "./dist/src/telemetry/types.js",
     "./telemetry/index.js": "./dist/src/telemetry/index.js",
@@ -89,7 +110,9 @@
   ],
   "dependencies": {
     "@vybestack/llxprt-code-auth": "file:../auth",
+    "@vybestack/llxprt-code-storage": "file:../storage",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
+    "@vybestack/llxprt-code-policy": "file:../policy",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@ai-sdk/openai": "^2.0.74",
@@ -122,7 +145,6 @@
     "chardet": "^2.1.0",
     "cheerio": "^1.1.2",
     "diff": "^8.0.3",
-    "env-paths": "^4.0.0",
     "execa": "^9.6.0",
     "fast-glob": "^3.3.3",
     "fast-levenshtein": "^2.0.6",
@@ -160,7 +182,6 @@
     "@lydell/node-pty-linux-x64": "1.1.0",
     "@lydell/node-pty-win32-arm64": "1.1.0",
     "@lydell/node-pty-win32-x64": "1.1.0",
-    "@napi-rs/keyring": "^1.2.0",
     "node-pty": "^1.0.0"
   },
   "devDependencies": {

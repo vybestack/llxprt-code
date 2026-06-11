@@ -38,7 +38,7 @@ import {
   ApiResponseEvent,
   ApiErrorEvent,
 } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import { getConversationFileWriter } from '@vybestack/llxprt-code-core/storage/ConversationFileWriter.js';
+import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
 import type { ProviderPerformanceMetrics } from './types.js';

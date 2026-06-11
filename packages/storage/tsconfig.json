@@ -1,0 +1,39 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/storage.tsbuildinfo",
+    "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
+    "composite": true,
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-storage": ["./index.ts"],
+      "@vybestack/llxprt-code-storage/*": ["./src/*"],
+      "@vybestack/llxprt-code-storage/config/storage.js": [
+        "./src/config/storage.ts"
+      ],
+      "@vybestack/llxprt-code-storage/services/fileSystemService.js": [
+        "./src/services/fileSystemService.ts"
+      ],
+      "@vybestack/llxprt-code-storage/services/fileDiscoveryService.js": [
+        "./src/services/fileDiscoveryService.ts"
+      ],
+      "@vybestack/llxprt-code-storage/storage/secure-store.js": [
+        "./src/secure-store/secure-store.ts"
+      ],
+      "@vybestack/llxprt-code-storage/storage/provider-key-storage.js": [
+        "./src/secure-store/provider-key-storage.ts"
+      ],
+      "@vybestack/llxprt-code-storage/storage/sessionTypes.js": [
+        "./src/session/sessionTypes.ts"
+      ],
+      "@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js": [
+        "./src/conversation/ConversationFileWriter.ts"
+      ],
+      "@vybestack/llxprt-code-storage/testing": ["./src/testing.ts"]
+    }
+  },
+  "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}

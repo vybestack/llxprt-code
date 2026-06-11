@@ -15,11 +15,11 @@ import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { KeyringTokenStore } from '@vybestack/llxprt-code-core';
 import {
-  KeyringTokenStore,
   SecureStore,
   type KeyringAdapter,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-storage';
 
 function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();

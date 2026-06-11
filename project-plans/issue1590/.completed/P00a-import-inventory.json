@@ -1,0 +1,859 @@
+{
+  "generatedAt": "2026-06-10T00:22:49.513Z",
+  "fromPackage": "@vybestack/llxprt-code-core",
+  "scanDir": "packages",
+  "movedSymbols": [
+    "LLXPRT_DIR",
+    "PROVIDER_ACCOUNTS_FILENAME",
+    "OAUTH_FILE",
+    "Storage",
+    "SecureStore",
+    "SecureStoreError",
+    "SecureStoreErrorCode",
+    "KeyringAdapter",
+    "SecureStoreOptions",
+    "createDefaultKeyringAdapter",
+    "FileSystemService",
+    "StandardFileSystemService",
+    "FileDiscoveryService",
+    "FilterFilesOptions",
+    "FilterReport",
+    "ProviderKeyStorage",
+    "KEY_NAME_REGEX",
+    "validateKeyName",
+    "getProviderKeyStorage",
+    "resetProviderKeyStorage",
+    "ConversationFileWriter",
+    "getConversationFileWriter",
+    "SESSION_FILE_PREFIX",
+    "ConversationRecord",
+    "BaseMessageRecord",
+    "ToolCallRecord"
+  ],
+  "consumers": [
+    {
+      "filePath": "packages/a2a-server/src/config/config.ts",
+      "imports": [
+        {
+          "symbol": "FileDiscoveryService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/auth/__tests__/codex-oauth-provider.test.ts",
+      "imports": [
+        {
+          "symbol": "SecureStore",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 9
+        },
+        {
+          "symbol": "KeyringAdapter",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/auth/oauth-manager.refresh-race.spec.ts",
+      "imports": [
+        {
+          "symbol": "SecureStore",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 18
+        },
+        {
+          "symbol": "KeyringAdapter",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/auth/proxy/__tests__/e2e-credential-flow.test.ts",
+      "imports": [
+        {
+          "symbol": "ProviderKeyStorage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 26
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/auth/proxy/__tests__/integration.test.ts",
+      "imports": [
+        {
+          "symbol": "ProviderKeyStorage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/auth/proxy/__tests__/platform-matrix.test.ts",
+      "imports": [
+        {
+          "symbol": "ProviderKeyStorage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/auth/proxy/__tests__/refresh-flow.spec.ts",
+      "imports": [
+        {
+          "symbol": "ProviderKeyStorage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 16
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/auth/proxy/credential-proxy-server.ts",
+      "imports": [
+        {
+          "symbol": "ProviderKeyStorage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/auth/proxy/credential-store-factory.ts",
+      "imports": [
+        {
+          "symbol": "ProviderKeyStorage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 21
+        },
+        {
+          "symbol": "getProviderKeyStorage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/auth/proxy/sandbox-proxy-lifecycle.ts",
+      "imports": [
+        {
+          "symbol": "getProviderKeyStorage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 22
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/config/config.integration.test.ts",
+      "imports": [
+        {
+          "symbol": "FileDiscoveryService",
+          "importKind": "vi.mock",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/config/environmentLoader.ts",
+      "imports": [
+        {
+          "symbol": "FileDiscoveryService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/config/extension.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/config/extensions/settingsStorage.test.ts",
+      "imports": [
+        {
+          "symbol": "SecureStore",
+          "importKind": "vi.mock",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/config/extensions/settingsStorage.ts",
+      "imports": [
+        {
+          "symbol": "SecureStore",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 22
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/config/interactiveContext.ts",
+      "imports": [
+        {
+          "symbol": "FileDiscoveryService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/config/paths.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/config/sandboxProfiles.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/config/settings.test.ts",
+      "imports": [
+        {
+          "symbol": "LLXPRT_DIR",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 68
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/config/settingsLoader.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/extensions/extensionAutoUpdater.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/integration-tests/__tests__/oauth-buckets.integration.spec.ts",
+      "imports": [
+        {
+          "symbol": "SecureStore",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 19
+        },
+        {
+          "symbol": "KeyringAdapter",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/integration-tests/oauth-timing.integration.test.ts",
+      "imports": [
+        {
+          "symbol": "SecureStore",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 22
+        },
+        {
+          "symbol": "KeyringAdapter",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 22
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/nonInteractiveCliCommands.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/providers/providerAliases.modelDefaults.test.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "dynamic-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 33
+        },
+        {
+          "symbol": "Storage",
+          "importKind": "dynamic-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 564
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/providers/providerAliases.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/runtime/__tests__/authKeyName.test.ts",
+      "imports": [
+        {
+          "symbol": "ProviderKeyStorage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 28
+        },
+        {
+          "symbol": "SecureStore",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 28
+        },
+        {
+          "symbol": "KeyringAdapter",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 28
+        },
+        {
+          "symbol": "getProviderKeyStorage",
+          "importKind": "vi.mock",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 93
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/services/FileCommandLoader.test.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 12
+        },
+        {
+          "symbol": "Storage",
+          "importKind": "vi.mock",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 63
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/services/FileCommandLoader.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/commands/keyCommand.subcommands.test.ts",
+      "imports": [
+        {
+          "symbol": "ProviderKeyStorage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 24
+        },
+        {
+          "symbol": "SecureStore",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 24
+        },
+        {
+          "symbol": "KeyringAdapter",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 24
+        },
+        {
+          "symbol": "getProviderKeyStorage",
+          "importKind": "vi.mock",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 88
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/commands/keyCommand.ts",
+      "imports": [
+        {
+          "symbol": "SecureStoreError",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/commands/memoryCommand.test.ts",
+      "imports": [
+        {
+          "symbol": "FileDiscoveryService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/commands/test/useSlashCompletion.schema.test.ts",
+      "imports": [
+        {
+          "symbol": "FileDiscoveryService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 34
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/hooks/atCommandProcessor.test.ts",
+      "imports": [
+        {
+          "symbol": "FileDiscoveryService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 11
+        },
+        {
+          "symbol": "StandardFileSystemService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/hooks/atCompletionUtils.ts",
+      "imports": [
+        {
+          "symbol": "FileDiscoveryService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/hooks/slashCommandProcessorSupport.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 20
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/hooks/useLogger.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/hooks/useRewind.test.ts",
+      "imports": [
+        {
+          "symbol": "ConversationRecord",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 13
+        },
+        {
+          "symbol": "BaseMessageRecord",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/hooks/useRewind.ts",
+      "imports": [
+        {
+          "symbol": "ConversationRecord",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 8
+        },
+        {
+          "symbol": "BaseMessageRecord",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/hooks/useShellHistory.test.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "vi.mock",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 36
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/hooks/useShellHistory.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/hooks/useSlashCompletion.test.ts",
+      "imports": [
+        {
+          "symbol": "FileDiscoveryService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/utils/rewindFileOps.test.ts",
+      "imports": [
+        {
+          "symbol": "ConversationRecord",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 13
+        },
+        {
+          "symbol": "BaseMessageRecord",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 13
+        },
+        {
+          "symbol": "ToolCallRecord",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/ui/utils/rewindFileOps.ts",
+      "imports": [
+        {
+          "symbol": "ConversationRecord",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 9
+        },
+        {
+          "symbol": "BaseMessageRecord",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/utils/cleanup.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/utils/persistentState.test.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "vi.mock",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/utils/persistentState.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/utils/sessionCleanup.integration.test.ts",
+      "imports": [
+        {
+          "symbol": "SESSION_FILE_PREFIX",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/utils/sessionCleanup.test.ts",
+      "imports": [
+        {
+          "symbol": "SESSION_FILE_PREFIX",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/utils/sessionCleanup.ts",
+      "imports": [
+        {
+          "symbol": "LLXPRT_DIR",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/utils/sessionUtils.ts",
+      "imports": [
+        {
+          "symbol": "SESSION_FILE_PREFIX",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 9
+        },
+        {
+          "symbol": "ConversationRecord",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/utils/skillUtils.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/zed-integration/fileSystemService.test.ts",
+      "imports": [
+        {
+          "symbol": "FileSystemService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/zed-integration/fileSystemService.ts",
+      "imports": [
+        {
+          "symbol": "FileSystemService",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/src/zed-integration/zedIntegration.ts",
+      "imports": [
+        {
+          "symbol": "FilterFilesOptions",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "filePath": "packages/cli/test/ui/commands/authCommand-logout.test.ts",
+      "imports": [
+        {
+          "symbol": "SecureStore",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 18
+        },
+        {
+          "symbol": "KeyringAdapter",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "filePath": "packages/mcp/src/auth/file-token-store.test.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "vi.mock",
+          "moduleSpecifier": "@vybestack/llxprt-code-core/config/storage.js",
+          "line": 27
+        }
+      ]
+    },
+    {
+      "filePath": "packages/mcp/src/auth/file-token-store.ts",
+      "imports": [
+        {
+          "symbol": "Storage",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core/config/storage.js",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "filePath": "packages/mcp/src/auth/token-storage/keychain-token-storage.ts",
+      "imports": [
+        {
+          "symbol": "createDefaultKeyringAdapter",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core/storage/secure-store.js",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "filePath": "packages/providers/src/LoggingProviderWrapper.ts",
+      "imports": [
+        {
+          "symbol": "getConversationFileWriter",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core/storage/ConversationFileWriter.js",
+          "line": 41
+        }
+      ]
+    },
+    {
+      "filePath": "packages/test-utils/src/test-rig.ts",
+      "imports": [
+        {
+          "symbol": "LLXPRT_DIR",
+          "importKind": "static-import",
+          "moduleSpecifier": "@vybestack/llxprt-code-core",
+          "line": 17
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "totalFiles": 61,
+    "totalImports": 82,
+    "byImportKind": {
+      "static-import": 72,
+      "vi.mock": 8,
+      "dynamic-import": 2
+    },
+    "byPackage": {
+      "packages/a2a-server": 1,
+      "packages/cli": 76,
+      "packages/mcp": 3,
+      "packages/providers": 1,
+      "packages/test-utils": 1
+    }
+  },
+  "reconciliation": {
+    "status": "pass",
+    "missingFromPlan": [],
+    "extraInPlan": [
+      "packages/core/src/config/config.ts",
+      "packages/core/src/storage/storage-compat.test.ts",
+      "packages/mcp/src/auth/token-storage/keychain-token-storage.test.ts",
+      "packages/providers/src/IProvider.ts",
+      "packages/providers/src/LoggingProviderWrapper.test.ts"
+    ]
+  }
+}

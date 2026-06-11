@@ -7,9 +7,11 @@
   "type": "module",
   "workspaces": [
     "packages/tools",
+    "packages/storage",
     "packages/auth",
     "packages/settings",
     "packages/telemetry",
+    "packages/policy",
     "packages/mcp",
     "packages/core",
     "packages/lsp",

@@ -36,12 +36,12 @@ import {
   type AnyDeclarativeTool,
   type Todo,
   DEFAULT_AGENT_ID,
-  type FilterFilesOptions,
   type ToolConfirmationPayload,
   createInkStdio,
   ApprovalMode,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
+import type { FilterFilesOptions } from '@vybestack/llxprt-code-storage';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
 import { Readable, Writable } from 'node:stream';

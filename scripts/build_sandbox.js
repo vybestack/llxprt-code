@@ -93,10 +93,12 @@ const toolsPackageDir = join('packages', 'tools');
 const cliPackageDir = join('packages', 'cli');
 const authPackageDir = join('packages', 'auth');
 const settingsPackageDir = join('packages', 'settings');
+const storagePackageDir = join('packages', 'storage');
 const corePackageDir = join('packages', 'core');
 const mcpPackageDir = join('packages', 'mcp');
 const providersPackageDir = join('packages', 'providers');
 const telemetryPackageDir = join('packages', 'telemetry');
+const policyPackageDir = join('packages', 'policy');
 
 try {
   console.log('packing @vybestack/llxprt-code-tools ...');
@@ -105,6 +107,16 @@ try {
   });
   execSync(
     `npm pack -w @vybestack/llxprt-code-tools --pack-destination ./packages/tools/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-storage ...');
+  rmSync(
+    join(storagePackageDir, 'dist', 'vybestack-llxprt-code-storage-*.tgz'),
+    { force: true },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-storage --pack-destination ./packages/storage/dist`,
     { stdio: 'ignore' },
   );
 
@@ -134,6 +146,15 @@ try {
   );
   execSync(
     `npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-policy ...');
+  rmSync(join(policyPackageDir, 'dist', 'vybestack-llxprt-code-policy-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-policy --pack-destination ./packages/policy/dist`,
     { stdio: 'ignore' },
   );
 
@@ -203,6 +224,14 @@ chmodSync(
 );
 chmodSync(
   join(
+    storagePackageDir,
+    'dist',
+    `vybestack-llxprt-code-storage-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
     authPackageDir,
     'dist',
     `vybestack-llxprt-code-auth-${packageVersion}.tgz`,
@@ -214,6 +243,15 @@ chmodSync(
     telemetryPackageDir,
     'dist',
     `vybestack-llxprt-code-telemetry-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+
+chmodSync(
+  join(
+    policyPackageDir,
+    'dist',
+    `vybestack-llxprt-code-policy-${packageVersion}.tgz`,
   ),
   0o755,
 );
