@@ -390,9 +390,11 @@ describe('scripts/bind-release-deps.js', () => {
 
     expect(bindModule.deriveNpmReleasePackages()).toEqual([
       '@vybestack/llxprt-code-tools',
+      '@vybestack/llxprt-code-storage',
       '@vybestack/llxprt-code-auth',
       '@vybestack/llxprt-code-settings',
       '@vybestack/llxprt-code-telemetry',
+      '@vybestack/llxprt-code-policy',
       '@vybestack/llxprt-code-mcp',
       '@vybestack/llxprt-code-core',
       '@vybestack/llxprt-code-lsp',
