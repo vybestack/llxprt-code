@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs';
 import { isSubpath } from '../utils/paths.js';
-import { detectIde, IDE_DEFINITIONS, type IdeInfo } from '../ide/detect-ide.js';
+import { detectIde, IDE_DEFINITIONS, type IdeInfo } from './detect-ide.js';
 import {
   ideContext,
   IdeContextNotificationSchema,
@@ -15,7 +15,7 @@ import {
   IdeDiffClosedNotificationSchema,
   CloseDiffResponseSchema,
   type DiffUpdateResult,
-} from '../ide/ideContext.js';
+} from './ideContext.js';
 import { getIdeProcessInfo } from './process-utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -25,7 +25,7 @@ import {
   EnvHttpProxyAgent,
   type RequestInit as UndiciRequestInit,
 } from 'undici';
-import { debugLogger } from '../utils/debugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
 const logger = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

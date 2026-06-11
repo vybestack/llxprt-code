@@ -15,7 +15,10 @@ export {
   openBrowserSecurely,
   shouldLaunchBrowser,
 } from './src/utils/secure-browser-launcher.js';
-export { IDE_DEFINITIONS, detectIdeFromEnv } from './src/ide/detect-ide.js';
+export {
+  IDE_DEFINITIONS,
+  detectIdeFromEnv,
+} from '@vybestack/llxprt-code-ide-integration';
 
 // IDE connection telemetry exports removed - telemetry disabled in llxprt
 export {

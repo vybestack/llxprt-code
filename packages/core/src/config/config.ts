@@ -30,8 +30,8 @@ import {
   loadJitSubdirectoryMemory,
 } from '../utils/memoryDiscovery.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
-import { IdeClient } from '../ide/ide-client.js';
-import { ideContext } from '../ide/ideContext.js';
+import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
+import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import type { Content } from '@google/genai';
 import {
   getOrCreateScheduler as _getOrCreateScheduler,

@@ -11,6 +11,7 @@
     "packages/auth",
     "packages/settings",
     "packages/telemetry",
+    "packages/ide-integration",
     "packages/policy",
     "packages/mcp",
     "packages/core",

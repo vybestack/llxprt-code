@@ -67,6 +67,7 @@ describe('release package derivation', () => {
       '@vybestack/llxprt-code-auth',
       '@vybestack/llxprt-code-settings',
       '@vybestack/llxprt-code-telemetry',
+      '@vybestack/llxprt-code-ide-integration',
       '@vybestack/llxprt-code-policy',
       '@vybestack/llxprt-code-mcp',
       '@vybestack/llxprt-code-core',
@@ -152,7 +153,7 @@ describe('.github/workflows/release.yml', () => {
     ).toBeGreaterThan(toolsIndex);
   });
 
-  it('publishes auth, settings, and telemetry before MCP, core, providers, and CLI', () => {
+  it('publishes storage, auth, settings, telemetry, ide-integration, and policy before MCP, core, providers, and CLI', () => {
     const storageIndex = releaseYml.indexOf(
       'npm publish --workspace=@vybestack/llxprt-code-storage',
     );
@@ -164,6 +165,9 @@ describe('.github/workflows/release.yml', () => {
     );
     const telemetryIndex = releaseYml.indexOf(
       'npm publish --workspace=@vybestack/llxprt-code-telemetry',
+    );
+    const ideIntegrationIndex = releaseYml.indexOf(
+      'npm publish --workspace=@vybestack/llxprt-code-ide-integration',
     );
     const policyIndex = releaseYml.indexOf(
       'npm publish --workspace=@vybestack/llxprt-code-policy',
@@ -185,7 +189,8 @@ describe('.github/workflows/release.yml', () => {
     expect(authIndex).toBeGreaterThan(storageIndex);
     expect(settingsIndex).toBeGreaterThan(authIndex);
     expect(telemetryIndex).toBeGreaterThan(settingsIndex);
-    expect(policyIndex).toBeGreaterThan(telemetryIndex);
+    expect(ideIntegrationIndex).toBeGreaterThan(telemetryIndex);
+    expect(policyIndex).toBeGreaterThan(ideIntegrationIndex);
     expect(mcpIndex).toBeGreaterThan(policyIndex);
     expect(coreIndex).toBeGreaterThan(mcpIndex);
     expect(providersIndex).toBeGreaterThan(coreIndex);
@@ -247,6 +252,9 @@ describe('scripts/build_sandbox.js', () => {
     );
     expect(buildSandbox).toContain(
       'npm pack -w @vybestack/llxprt-code-telemetry',
+    );
+    expect(buildSandbox).toContain(
+      'npm pack -w @vybestack/llxprt-code-ide-integration',
     );
     expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code-policy');
     expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code-mcp');
@@ -350,6 +358,9 @@ describe('Dockerfile', () => {
     expect(installCommand).toContain('vybestack-llxprt-code-auth-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-settings-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-telemetry-*.tgz');
+    expect(installCommand).toContain(
+      'vybestack-llxprt-code-ide-integration-*.tgz',
+    );
     expect(installCommand).toContain('vybestack-llxprt-code-policy-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-mcp-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-core-*.tgz');
@@ -394,6 +405,7 @@ describe('scripts/bind-release-deps.js', () => {
       '@vybestack/llxprt-code-auth',
       '@vybestack/llxprt-code-settings',
       '@vybestack/llxprt-code-telemetry',
+      '@vybestack/llxprt-code-ide-integration',
       '@vybestack/llxprt-code-policy',
       '@vybestack/llxprt-code-mcp',
       '@vybestack/llxprt-code-core',

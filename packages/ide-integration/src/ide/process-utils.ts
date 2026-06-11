@@ -8,7 +8,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
 import path from 'path';
-import { debugLogger } from '../utils/debugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
 const execAsync = promisify(exec);
 

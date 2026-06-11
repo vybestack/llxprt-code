@@ -231,16 +231,35 @@ export * from './services/fileSystemService.js';
 export { ContextManager } from './services/contextManager.js';
 
 // Export IDE specific logic
-export * from './ide/ide-client.js';
-export * from './ide/ideContext.js';
-export * from './ide/ide-installer.js';
+// IDE integration code now lives in @vybestack/llxprt-code-ide-integration.
+// Re-exported here for backward compatibility with existing consumers.
 export {
+  IdeClient,
+  IDEConnectionStatus,
+  type IDEConnectionState,
+  ideContext,
+  createIdeContextStore,
+  FileSchema,
+  IdeContextSchema,
+  IdeContextNotificationSchema,
+  IdeDiffAcceptedNotificationSchema,
+  IdeDiffRejectedNotificationSchema,
+  IdeDiffClosedNotificationSchema,
+  CloseDiffResponseSchema,
+  type IdeContext,
+  type File,
+  type DiffUpdateResult,
+  getIdeInstaller,
+  type IdeInstaller,
+  type InstallResult,
   IDE_DEFINITIONS,
   detectIdeFromEnv,
+  detectIde,
   isCloudShell,
   type IdeInfo,
-} from './ide/detect-ide.js';
-export * from './ide/constants.js';
+  getIdeProcessInfo,
+  LLXPRT_CODE_COMPANION_EXTENSION_NAME,
+} from '@vybestack/llxprt-code-ide-integration';
 
 // Export Shell Execution Service
 export * from './services/shellExecutionService.js';

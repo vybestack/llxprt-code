@@ -110,6 +110,7 @@
   ],
   "dependencies": {
     "@vybestack/llxprt-code-auth": "file:../auth",
+    "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
     "@vybestack/llxprt-code-storage": "file:../storage",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-policy": "file:../policy",

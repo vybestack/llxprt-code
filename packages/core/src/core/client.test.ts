@@ -67,7 +67,7 @@ import { GeminiEventType, Turn } from './turn.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
 import { retryWithBackoff } from '../utils/retry.js';
-import { ideContext } from '../ide/ideContext.js';
+import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import {
   getEnabledToolNamesForPrompt,
   shouldIncludeSubagentDelegationForConfig,
@@ -160,7 +160,22 @@ vi.mock('../telemetry/index.js', () => ({
 vi.mock('../utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('../ide/ideContext.js');
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    ideContext: {
+      ...actual.ideContext,
+      getIdeContext: vi.fn(),
+      subscribeToIdeContext: vi.fn(),
+      setIdeContext: vi.fn(),
+      clearIdeContext: vi.fn(),
+    },
+  };
+});
 vi.mock('./tokenLimits', () => ({
   tokenLimit: vi.fn(),
 }));
