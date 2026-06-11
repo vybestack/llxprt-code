@@ -12,14 +12,14 @@ import {
   type ToolInvocation,
   type ToolResult,
   Kind,
-} from '../tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision } from '../policy/types.js';
 import {
   type ModifiableDeclarativeTool,
   type ModifyContext,
-} from '../tools/modifiable-tool.js';
+} from '@vybestack/llxprt-code-tools';
 
 type ToolSpy = ReturnType<(typeof vi)['fn']>;
 

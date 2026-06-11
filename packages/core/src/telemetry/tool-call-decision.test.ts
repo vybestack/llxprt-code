@@ -9,7 +9,7 @@ import {
   getDecisionFromOutcome,
   ToolCallDecision,
 } from './tool-call-decision.js';
-import { ToolConfirmationOutcome } from '../tools/tools.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 describe('getDecisionFromOutcome', () => {
   it('maps ProceedOnce to ACCEPT', () => {

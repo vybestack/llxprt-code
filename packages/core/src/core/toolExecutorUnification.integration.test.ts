@@ -31,7 +31,10 @@ import { ApprovalMode, DEFAULT_AGENT_ID, ToolErrorType } from '../index.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { getTestRuntimeMessageBus } from '../test-utils/config.js';
 
-import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
+import type {
+  ContextAwareTool,
+  ToolContext,
+} from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '../policy/types.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import {

@@ -8,36 +8,53 @@
 import path from 'node:path';
 import os from 'node:os';
 
-import { ToolRegistry } from '../tools/tool-registry.js';
-import { LSTool } from '../tools/ls.js';
-import { ReadFileTool } from '../tools/read-file.js';
-import { GrepTool } from '../tools/grep.js';
-import { RipGrepTool } from '../tools/ripGrep.js';
-import { GlobTool } from '../tools/glob.js';
-import { EditTool } from '../tools/edit.js';
-import { ShellTool } from '../tools/shell.js';
-import { ASTEditTool } from '../tools/ast-edit.js';
-import { ASTReadFileTool } from '../tools/ast-edit.js';
-import { AstGrepTool } from '../tools/ast-grep.js';
-import { StructuralAnalysisTool } from '../tools/structural-analysis.js';
-import { WriteFileTool } from '../tools/write-file.js';
-import { GoogleWebFetchTool } from '../tools/google-web-fetch.js';
-import { ReadManyFilesTool } from '../tools/read-many-files.js';
-import { ReadLineRangeTool } from '../tools/read_line_range.js';
-import { DeleteLineRangeTool } from '../tools/delete_line_range.js';
-import { InsertAtLineTool } from '../tools/insert_at_line.js';
-import { ApplyPatchTool } from '../tools/apply-patch.js';
-import { MemoryTool } from '../tools/memoryTool.js';
-import { GoogleWebSearchTool } from '../tools/google-web-search.js';
-import { ExaWebSearchTool } from '../tools/exa-web-search.js';
-import { TodoWrite } from '../tools/todo-write.js';
-import { TodoRead } from '../tools/todo-read.js';
-import { TodoPause } from '../tools/todo-pause.js';
-import { CodeSearchTool } from '../tools/codesearch.js';
-import { DirectWebFetchTool } from '../tools/direct-web-fetch.js';
-import { TaskTool } from '../tools/task.js';
-import { ListSubagentsTool } from '../tools/list-subagents.js';
-import { CheckAsyncTasksTool } from '../tools/check-async-tasks.js';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import {
+  DeleteLineRangeTool,
+  GlobTool,
+  GrepTool,
+  InsertAtLineTool,
+  LSTool,
+  ReadFileTool,
+  ReadLineRangeTool,
+  ReadManyFilesTool,
+  RipGrepTool,
+  WriteFileTool,
+  GoogleWebFetchTool,
+  AstGrepTool,
+  StructuralAnalysisTool,
+  ASTEditTool,
+  ASTReadFileTool,
+  EditTool,
+  ApplyPatchTool,
+  TodoWrite,
+  TodoRead,
+  TodoPause,
+  ListSubagentsTool,
+  CheckAsyncTasksTool,
+  GoogleWebSearchTool,
+  ExaWebSearchTool,
+  CodeSearchTool,
+  DirectWebFetchTool,
+  MemoryTool,
+  ShellTool,
+  TaskTool,
+} from '@vybestack/llxprt-code-tools';
+
+import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
+import { CoreIdeServiceAdapter } from '../tools-adapters/CoreIdeServiceAdapter.js';
+import { CoreLspServiceAdapter } from '../tools-adapters/CoreLspServiceAdapter.js';
+import { CoreToolKeyStorageAdapter } from '../tools-adapters/CoreToolKeyStorageAdapter.js';
+import { CoreSettingsServiceAdapter } from '../tools-adapters/CoreSettingsServiceAdapter.js';
+import { CoreWebSearchServiceAdapter } from '../tools-adapters/CoreWebSearchServiceAdapter.js';
+import { CoreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
+import { CoreMessageBusAdapter } from '../tools-adapters/CoreMessageBusAdapter.js';
+import { CoreShellToolHostAdapter } from '../tools-adapters/CoreShellToolHostAdapter.js';
+import { CoreSubagentServiceAdapter } from '../tools-adapters/CoreSubagentServiceAdapter.js';
+import { CoreAsyncTaskServiceAdapter } from '../tools-adapters/CoreAsyncTaskServiceAdapter.js';
+import { CoreToolRegistryHostAdapter } from '../tools-adapters/CoreToolRegistryHostAdapter.js';
+import { CoreTodoServiceAdapter } from '../tools-adapters/CoreTodoServiceAdapter.js';
+
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentManager } from './subagentManager.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -169,39 +186,85 @@ function registerStandardTools(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config: any,
   host: ToolRegistryHost,
+  messageBus: MessageBus,
 ): void {
-  registerCoreTool(LSTool, config);
-  registerCoreTool(ReadFileTool, config);
+  const toolHostAdapter = new CoreToolHostAdapter(config);
+  const ideServiceAdapter = new CoreIdeServiceAdapter(config);
+  const lspServiceAdapter = new CoreLspServiceAdapter(config);
+  const toolKeyStorageAdapter = new CoreToolKeyStorageAdapter();
+  const settingsServiceAdapter = new CoreSettingsServiceAdapter(config);
+  const webSearchServiceAdapter = new CoreWebSearchServiceAdapter(config);
+  const storageServiceAdapter = new CoreStorageServiceAdapter();
+  const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
+  const todoServiceAdapter = new CoreTodoServiceAdapter();
+
+  registerCoreTool(LSTool, toolHostAdapter);
+  registerCoreTool(ReadFileTool, toolHostAdapter);
 
   if (host.getUseRipgrep()) {
-    registerCoreTool(RipGrepTool, config);
+    registerCoreTool(RipGrepTool, toolHostAdapter);
   } else {
-    registerCoreTool(GrepTool, config);
+    registerCoreTool(GrepTool, toolHostAdapter);
   }
 
-  registerCoreTool(GlobTool, config);
-  registerCoreTool(EditTool, config);
-  registerCoreTool(ASTEditTool, config);
-  registerCoreTool(WriteFileTool, config);
-  registerCoreTool(GoogleWebFetchTool, config);
-  registerCoreTool(ReadManyFilesTool, config);
-  registerCoreTool(ReadLineRangeTool, config);
-  registerCoreTool(ASTReadFileTool, config);
+  registerCoreTool(GlobTool, toolHostAdapter);
+  registerCoreTool(
+    EditTool,
+    toolHostAdapter,
+    ideServiceAdapter,
+    lspServiceAdapter,
+  );
+  registerCoreTool(ASTEditTool, toolHostAdapter, lspServiceAdapter);
+  registerCoreTool(WriteFileTool, toolHostAdapter);
+  registerCoreTool(GoogleWebFetchTool, toolHostAdapter);
+  registerCoreTool(ReadManyFilesTool, toolHostAdapter);
+  registerCoreTool(ReadLineRangeTool, toolHostAdapter);
+  registerCoreTool(ASTReadFileTool, toolHostAdapter);
   // @plan PLAN-20260211-ASTGREP.P05
-  registerCoreTool(AstGrepTool, config);
-  registerCoreTool(StructuralAnalysisTool, config);
-  registerCoreTool(DeleteLineRangeTool, config);
-  registerCoreTool(InsertAtLineTool, config);
-  registerCoreTool(ApplyPatchTool, config);
-  registerCoreTool(ShellTool, config);
-  registerCoreTool(MemoryTool, config);
-  registerCoreTool(GoogleWebSearchTool, config);
-  registerCoreTool(ExaWebSearchTool, config);
-  registerCoreTool(TodoWrite);
-  registerCoreTool(TodoRead);
-  registerCoreTool(TodoPause);
-  registerCoreTool(CodeSearchTool, config);
-  registerCoreTool(DirectWebFetchTool, config);
+  registerCoreTool(AstGrepTool, toolHostAdapter);
+  registerCoreTool(StructuralAnalysisTool, toolHostAdapter);
+  registerCoreTool(
+    DeleteLineRangeTool,
+    toolHostAdapter,
+    ideServiceAdapter,
+    lspServiceAdapter,
+  );
+  registerCoreTool(
+    InsertAtLineTool,
+    toolHostAdapter,
+    ideServiceAdapter,
+    lspServiceAdapter,
+  );
+  registerCoreTool(
+    ApplyPatchTool,
+    toolHostAdapter,
+    ideServiceAdapter,
+    lspServiceAdapter,
+  );
+  registerCoreTool(
+    ShellTool,
+    new CoreShellToolHostAdapter(config),
+    messageBusAdapter,
+  );
+  registerCoreTool(MemoryTool, {
+    storageService: storageServiceAdapter,
+    settingsService: settingsServiceAdapter,
+    getWorkingDir: () => config.getWorkingDir(),
+    messageBus: messageBusAdapter,
+  });
+  registerCoreTool(GoogleWebSearchTool, webSearchServiceAdapter);
+  registerCoreTool(ExaWebSearchTool, { keyStorage: toolKeyStorageAdapter });
+  registerCoreTool(TodoWrite, todoServiceAdapter);
+  registerCoreTool(TodoRead, todoServiceAdapter);
+  registerCoreTool(TodoPause, todoServiceAdapter);
+  registerCoreTool(CodeSearchTool, {
+    keyStorage: toolKeyStorageAdapter,
+    settingsService: settingsServiceAdapter,
+  });
+  registerCoreTool(DirectWebFetchTool, toolHostAdapter);
+
+  void CoreIdeServiceAdapter;
+  void CoreLspServiceAdapter;
 }
 
 function resolveManagers(host: ToolRegistryHost): {
@@ -236,36 +299,48 @@ function registerAgentTools(
   host: ToolRegistryHost,
   allPotentialTools: ToolRecord[],
 ): void {
-  const taskToolArgs = {
-    profileManager,
-    subagentManager,
-    schedulerFactoryProvider: () =>
-      host.getInteractiveSubagentSchedulerFactory(),
-    getAsyncTaskManager: () => host.getAsyncTaskManager(),
-  };
-
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
   if (profileManager !== undefined && subagentManager !== undefined) {
-    registerCoreTool(TaskTool, config, taskToolArgs);
+    registerCoreTool(
+      TaskTool,
+      new CoreSubagentServiceAdapter({
+        managerProvider: () => subagentManager,
+        profileManagerProvider: () => profileManager,
+        config,
+        isInteractiveEnvironment: () => config.isInteractive(),
+        getSchedulerFactory: () =>
+          host.getInteractiveSubagentSchedulerFactory(),
+        getAsyncTaskManager: () => host.getAsyncTaskManager(),
+      }),
+    );
   } else {
     const taskToolRecord: ToolRecord = {
       toolClass: TaskTool,
       toolName: 'TaskTool',
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries; Name is static but fallback preserves defensive semantics.
-      displayName: TaskTool.Name || 'TaskTool',
+      displayName: 'task',
       isRegistered: false,
       reason: getTaskToolMissingReason(profileManager, subagentManager),
-      args: [config, taskToolArgs],
+      args: [
+        new CoreSubagentServiceAdapter({
+          managerProvider: () => subagentManager,
+          profileManagerProvider: () => profileManager,
+          config,
+          isInteractiveEnvironment: () => config.isInteractive(),
+          getSchedulerFactory: () =>
+            host.getInteractiveSubagentSchedulerFactory(),
+          getAsyncTaskManager: () => host.getAsyncTaskManager(),
+        }),
+      ],
     };
     allPotentialTools.push(taskToolRecord);
   }
 
-  const listSubagentsArgs = {
-    getSubagentManager: () => host.getSubagentManager(),
-  };
+  const listSubagentsArgs = new CoreSubagentServiceAdapter(() =>
+    host.getSubagentManager(),
+  );
 
   if (subagentManager !== undefined) {
-    registerCoreTool(ListSubagentsTool, config, listSubagentsArgs);
+    registerCoreTool(ListSubagentsTool, listSubagentsArgs);
   } else {
     const listSubagentsRecord: ToolRecord = {
       toolClass: ListSubagentsTool,
@@ -274,15 +349,15 @@ function registerAgentTools(
       displayName: ListSubagentsTool.Name || 'ListSubagentsTool',
       isRegistered: false,
       reason: 'requires subagent manager',
-      args: [config, listSubagentsArgs],
+      args: [listSubagentsArgs],
     };
     allPotentialTools.push(listSubagentsRecord);
   }
 
   // @plan PLAN-20260130-ASYNCTASK.P14
-  const checkAsyncTasksArgs = {
-    getAsyncTaskManager: () => host.getAsyncTaskManager(),
-  };
+  const checkAsyncTasksArgs = new CoreAsyncTaskServiceAdapter(() =>
+    host.getAsyncTaskManager(),
+  );
   registerCoreTool(CheckAsyncTasksTool, checkAsyncTasksArgs);
 }
 
@@ -298,7 +373,10 @@ export async function createToolRegistry(
   config: any,
   messageBus: MessageBus,
 ): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
-  const registry = new ToolRegistry(config, messageBus);
+  const registry = new ToolRegistry(
+    new CoreToolRegistryHostAdapter(config),
+    new CoreMessageBusAdapter(messageBus),
+  );
   const allPotentialTools: ToolRecord[] = [];
 
   const baseCoreTools = host.getCoreTools();
@@ -306,7 +384,7 @@ export async function createToolRegistry(
     baseCoreTools && baseCoreTools.length > 0 ? [...baseCoreTools] : undefined;
 
   ensureCoreToolIncluded(effectiveCoreTools, 'TaskTool');
-  ensureCoreToolIncluded(effectiveCoreTools, TaskTool.Name);
+  ensureCoreToolIncluded(effectiveCoreTools, 'task');
   ensureCoreToolIncluded(effectiveCoreTools, 'ListSubagentsTool');
   ensureCoreToolIncluded(effectiveCoreTools, ListSubagentsTool.Name);
 
@@ -317,7 +395,7 @@ export async function createToolRegistry(
     allPotentialTools,
   );
 
-  registerStandardTools(registerCoreTool, config, host);
+  registerStandardTools(registerCoreTool, config, host, messageBus);
 
   const { profileManager, subagentManager } = resolveManagers(host);
 

@@ -13,14 +13,14 @@ import {
   type SchedulerAccessor,
   type EditorCallbacks,
 } from './confirmation-coordinator.js';
-import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
-import type { ToolCallConfirmationDetails } from '../tools/tools.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
 
 // Module-scope mock for modifiable-tool — hoisted by vitest before imports.
 // Per-test behavior can be overridden via vi.mocked().
-vi.mock('../tools/modifiable-tool.js', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   const mod =
-    await importOriginal<typeof import('../tools/modifiable-tool.js')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
   return {
     ...mod,
     isModifiableDeclarativeTool: vi.fn().mockReturnValue(true),

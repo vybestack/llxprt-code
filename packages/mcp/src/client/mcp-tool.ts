@@ -15,9 +15,9 @@ import {
   type ToolMcpConfirmationDetails,
   type ToolResult,
   type PolicyUpdateOptions,
-} from '@vybestack/llxprt-code-core/tools/tools.js';
+  ToolErrorType,
+} from '@vybestack/llxprt-code-tools';
 import { type CallableTool, type FunctionCall, type Part } from '@google/genai';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 

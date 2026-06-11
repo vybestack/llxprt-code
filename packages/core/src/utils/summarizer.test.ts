@@ -15,7 +15,7 @@ import {
   llmSummarizer,
   defaultSummarizer,
 } from './summarizer.js';
-import type { ToolResult } from '../tools/tools.js';
+import type { ToolResult } from '@vybestack/llxprt-code-tools';
 
 // Mock AgentClient and Config constructor
 vi.mock('../core/client.js');

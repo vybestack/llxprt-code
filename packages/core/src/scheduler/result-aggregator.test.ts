@@ -8,8 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ResultAggregator } from './result-aggregator.js';
 import type { ResultPublishCallbacks } from './result-aggregator.js';
 import type { ScheduledToolCall } from './types.js';
-import type { ToolResult } from '../tools/tools.js';
-import { ToolErrorType } from '../tools/tool-error.js';
+import type { ToolResult } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { DEFAULT_MAX_TOKENS } from '../utils/toolOutputLimiter.js';
 import type { ToolOutputSettingsProvider } from '../utils/toolOutputLimiter.js';
 

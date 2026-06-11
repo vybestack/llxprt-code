@@ -18,7 +18,7 @@ import { DebugLogger } from '../debug/index.js';
 import {
   getGlobalCoreMemoryFilePath,
   getProjectCoreMemoryFilePath,
-} from '../tools/memoryTool.js';
+} from '@vybestack/llxprt-code-tools';
 import { tildeifyPath } from '../utils/paths.js';
 import type {
   PromptContext,

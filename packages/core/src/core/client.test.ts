@@ -115,9 +115,14 @@ vi.mock('../services/todo-reminder-service.js', () => ({
     getUpdateActiveTodoReminder: vi.fn(),
   })),
 }));
-vi.mock('../tools/todo-store.js', () => ({
-  TodoStore: mockTodoStoreConstructor,
-}));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
 vi.mock('./turn', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./turn.js')>();
   // Define a mock class that has the same shape as the real Turn

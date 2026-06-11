@@ -31,7 +31,7 @@ import type { PolicyEngineConfig } from '../policy/types.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { IdeClient } from '../ide/ide-client.js';
-import type { AnyToolInvocation } from '../tools/tools.js';
+import type { AnyToolInvocation } from '@vybestack/llxprt-code-tools';
 import { TelemetryTarget } from '../telemetry/index.js';
 import type { LspConfig } from '../lsp/types.js';
 

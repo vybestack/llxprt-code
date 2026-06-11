@@ -9,7 +9,7 @@
  */
 
 import type { Content, FunctionDeclaration } from '@google/genai';
-import type { AnyDeclarativeTool } from '../tools/tools.js';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import { type z } from 'zod';
 
 /**

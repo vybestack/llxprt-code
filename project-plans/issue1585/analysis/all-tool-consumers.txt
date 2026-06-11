@@ -1,0 +1,279 @@
+packages/core/src/agents/executor-validation.ts:10:import { RipGrepTool } from '../tools/ripGrep.js';
+packages/core/src/agents/executor-validation.ts:11:import { LSTool } from '../tools/ls.js';
+packages/core/src/agents/executor-validation.ts:12:import { MemoryTool } from '../tools/memoryTool.js';
+packages/core/src/agents/executor-validation.ts:13:import { ReadFileTool } from '../tools/read-file.js';
+packages/core/src/agents/executor-validation.ts:14:import { ReadManyFilesTool } from '../tools/read-many-files.js';
+packages/core/src/agents/executor-validation.ts:15:import { GoogleWebSearchTool } from '../tools/google-web-search.js';
+packages/core/src/agents/executor-validation.ts:7:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/agents/executor-validation.ts:8:import { GlobTool } from '../tools/glob.js';
+packages/core/src/agents/executor-validation.ts:9:import { GrepTool } from '../tools/grep.js';
+packages/core/src/agents/executor.test.ts:20:import { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/agents/executor.test.ts:21:import { LSTool } from '../tools/ls.js';
+packages/core/src/agents/executor.test.ts:22:import { ReadFileTool } from '../tools/read-file.js';
+packages/core/src/agents/executor.ts:29:import { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/agents/invocation.test.ts:17:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/agents/invocation.ts:10:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/agents/invocation.ts:9:import { BaseToolInvocation, type ToolResult } from '../tools/tools.js';
+packages/core/src/agents/types.ts:12:import type { AnyDeclarativeTool } from '../tools/tools.js';
+packages/core/src/config/config-lsp-integration.test.ts:135:vi.mock('../tools/mcp-client-manager.js', () => ({
+packages/core/src/config/config-lsp-integration.test.ts:21:import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
+packages/core/src/config/config-lsp-integration.test.ts:210:vi.mock('../tools/mcp-tool.js', () => ({
+packages/core/src/config/config-lsp-integration.test.ts:38:vi.mock('../tools/tool-registry', () => {
+packages/core/src/config/config-lsp-integration.test.ts:70:vi.mock('../tools/ls');
+packages/core/src/config/config-lsp-integration.test.ts:71:vi.mock('../tools/read-file');
+packages/core/src/config/config-lsp-integration.test.ts:72:vi.mock('../tools/grep');
+packages/core/src/config/config-lsp-integration.test.ts:73:vi.mock('../tools/glob');
+packages/core/src/config/config-lsp-integration.test.ts:74:vi.mock('../tools/edit');
+packages/core/src/config/config-lsp-integration.test.ts:75:vi.mock('../tools/shell');
+packages/core/src/config/config-lsp-integration.test.ts:76:vi.mock('../tools/write-file');
+packages/core/src/config/config-lsp-integration.test.ts:77:vi.mock('../tools/google-web-fetch');
+packages/core/src/config/config-lsp-integration.test.ts:78:vi.mock('../tools/read-many-files');
+packages/core/src/config/config-lsp-integration.test.ts:79:vi.mock('../tools/memoryTool', () => ({
+packages/core/src/config/config.test.ts:1258:        (await vi.importMock('../tools/tool-registry')) as {
+packages/core/src/config/config.test.ts:22:import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
+packages/core/src/config/config.test.ts:36:import { ShellTool } from '../tools/shell.js';
+packages/core/src/config/config.test.ts:37:import { ReadFileTool } from '../tools/read-file.js';
+packages/core/src/config/config.test.ts:52:vi.mock('../tools/tool-registry', () => {
+packages/core/src/config/config.test.ts:65:vi.mock('../tools/ls');
+packages/core/src/config/config.test.ts:66:vi.mock('../tools/read-file');
+packages/core/src/config/config.test.ts:67:vi.mock('../tools/grep');
+packages/core/src/config/config.test.ts:68:vi.mock('../tools/glob');
+packages/core/src/config/config.test.ts:69:vi.mock('../tools/edit');
+packages/core/src/config/config.test.ts:70:vi.mock('../tools/shell');
+packages/core/src/config/config.test.ts:71:vi.mock('../tools/write-file');
+packages/core/src/config/config.test.ts:72:vi.mock('../tools/google-web-fetch');
+packages/core/src/config/config.test.ts:73:vi.mock('../tools/read-many-files');
+packages/core/src/config/config.test.ts:74:vi.mock('../tools/memoryTool', () => ({
+packages/core/src/config/config.ts:13:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/config/config.ts:14:import { ActivateSkillTool } from '../tools/activate-skill.js';
+packages/core/src/config/config.ts:97:import { McpClientManager } from '../tools/mcp-client-manager.js';
+packages/core/src/config/configBase.ts:12:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/config/configBaseCore.ts:22:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/config/configBaseCore.ts:23:import type { McpClientManager } from '../tools/mcp-client-manager.js';
+packages/core/src/config/configBaseCore.ts:24:import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '../tools/memoryTool.js';
+packages/core/src/config/configConstructor.ts:52:import { setLlxprtMdFilename } from '../tools/memoryTool.js';
+packages/core/src/config/configTypes.ts:34:import type { AnyToolInvocation } from '../tools/tools.js';
+packages/core/src/config/lspIntegration.ts:302:  const { DiscoveredMCPTool } = await import('../tools/mcp-tool.js');
+packages/core/src/config/lspIntegration.ts:8:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/config/schedulerSingleton.ts:19:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/config/toolRegistryFactory.ts:11:import { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/config/toolRegistryFactory.ts:12:import { LSTool } from '../tools/ls.js';
+packages/core/src/config/toolRegistryFactory.ts:13:import { ReadFileTool } from '../tools/read-file.js';
+packages/core/src/config/toolRegistryFactory.ts:14:import { GrepTool } from '../tools/grep.js';
+packages/core/src/config/toolRegistryFactory.ts:15:import { RipGrepTool } from '../tools/ripGrep.js';
+packages/core/src/config/toolRegistryFactory.ts:16:import { GlobTool } from '../tools/glob.js';
+packages/core/src/config/toolRegistryFactory.ts:17:import { EditTool } from '../tools/edit.js';
+packages/core/src/config/toolRegistryFactory.ts:18:import { ShellTool } from '../tools/shell.js';
+packages/core/src/config/toolRegistryFactory.ts:19:import { ASTEditTool } from '../tools/ast-edit.js';
+packages/core/src/config/toolRegistryFactory.ts:20:import { ASTReadFileTool } from '../tools/ast-edit.js';
+packages/core/src/config/toolRegistryFactory.ts:21:import { AstGrepTool } from '../tools/ast-grep.js';
+packages/core/src/config/toolRegistryFactory.ts:22:import { StructuralAnalysisTool } from '../tools/structural-analysis.js';
+packages/core/src/config/toolRegistryFactory.ts:23:import { WriteFileTool } from '../tools/write-file.js';
+packages/core/src/config/toolRegistryFactory.ts:24:import { GoogleWebFetchTool } from '../tools/google-web-fetch.js';
+packages/core/src/config/toolRegistryFactory.ts:25:import { ReadManyFilesTool } from '../tools/read-many-files.js';
+packages/core/src/config/toolRegistryFactory.ts:26:import { ReadLineRangeTool } from '../tools/read_line_range.js';
+packages/core/src/config/toolRegistryFactory.ts:27:import { DeleteLineRangeTool } from '../tools/delete_line_range.js';
+packages/core/src/config/toolRegistryFactory.ts:28:import { InsertAtLineTool } from '../tools/insert_at_line.js';
+packages/core/src/config/toolRegistryFactory.ts:29:import { ApplyPatchTool } from '../tools/apply-patch.js';
+packages/core/src/config/toolRegistryFactory.ts:30:import { MemoryTool } from '../tools/memoryTool.js';
+packages/core/src/config/toolRegistryFactory.ts:31:import { GoogleWebSearchTool } from '../tools/google-web-search.js';
+packages/core/src/config/toolRegistryFactory.ts:32:import { ExaWebSearchTool } from '../tools/exa-web-search.js';
+packages/core/src/config/toolRegistryFactory.ts:33:import { TodoWrite } from '../tools/todo-write.js';
+packages/core/src/config/toolRegistryFactory.ts:34:import { TodoRead } from '../tools/todo-read.js';
+packages/core/src/config/toolRegistryFactory.ts:35:import { TodoPause } from '../tools/todo-pause.js';
+packages/core/src/config/toolRegistryFactory.ts:36:import { CodeSearchTool } from '../tools/codesearch.js';
+packages/core/src/config/toolRegistryFactory.ts:37:import { DirectWebFetchTool } from '../tools/direct-web-fetch.js';
+packages/core/src/config/toolRegistryFactory.ts:38:import { TaskTool } from '../tools/task.js';
+packages/core/src/config/toolRegistryFactory.ts:39:import { ListSubagentsTool } from '../tools/list-subagents.js';
+packages/core/src/config/toolRegistryFactory.ts:40:import { CheckAsyncTasksTool } from '../tools/check-async-tasks.js';
+packages/core/src/confirmation-bus/integration.test.ts:23:import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
+packages/core/src/confirmation-bus/message-bus.test.ts:7:import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
+packages/core/src/confirmation-bus/message-bus.ts:15:} from '../tools/tool-confirmation-types.js';
+packages/core/src/confirmation-bus/types.ts:5:} from '../tools/tool-confirmation-types.js';
+packages/core/src/core/__tests__/subagent.stateless.test.ts:47:import type { ToolRegistry } from '../../tools/tool-registry.js';
+packages/core/src/core/ChatSessionFactory.ts:26:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/core/client.test.ts:118:vi.mock('../tools/todo-store.js', () => ({
+packages/core/src/core/clientToolGovernance.test.ts:16:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/core/clientToolGovernance.ts:9:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/core/compression/utils.ts:42:import { classifyMediaBlock } from '../../tools/mediaUtils.js';
+packages/core/src/core/coreToolHookTriggers.ts:23:} from '../tools/tools.js';
+packages/core/src/core/coreToolScheduler.interactiveMode.test.ts:29:import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
+packages/core/src/core/coreToolScheduler.test.ts:40:import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
+packages/core/src/core/coreToolScheduler.test.ts:46:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/core/messageBus.core-integration.tdd.test.ts:27:} from '../tools/tools.js';
+packages/core/src/core/messageBus.core-integration.tdd.test.ts:34:import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
+packages/core/src/core/MessageStreamOrchestrator.ts:25:import type { Todo } from '../tools/todo-schemas.js';
+packages/core/src/core/prompts.ts:21:} from '../tools/memoryTool.js';
+packages/core/src/core/StreamProcessor.ts:56:import { hasCycleInSchema } from '../tools/tools.js';
+packages/core/src/core/subagent.test.ts:49:import { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/core/subagent.test.ts:60:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/core/subagent.test.ts:70:vi.mock('../tools/todo-store.js', () => ({
+packages/core/src/core/subagentOrchestrator.ts:41:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/core/subagentRuntimeSetup.ts:38:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/core/subagentToolProcessing.test.ts:79:      } as unknown as import('../tools/tools.js').ToolResultDisplay;
+packages/core/src/core/subagentToolProcessing.test.ts:8:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/core/subagentToolProcessing.ts:28:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/core/subagentToolProcessing.ts:29:import { type ToolResultDisplay } from '../tools/tools.js';
+packages/core/src/core/subagentToolProcessing.ts:31:import { TodoStore } from '../tools/todo-store.js';
+packages/core/src/core/subagentTypes.ts:21:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/core/TodoContinuationService.test.ts:16:import type { Todo } from '../tools/todo-schemas.js';
+packages/core/src/core/TodoContinuationService.test.ts:30:vi.mock('../tools/todo-store.js', () => ({
+packages/core/src/core/TodoContinuationService.ts:15:import { TodoStore } from '../tools/todo-store.js';
+packages/core/src/core/TodoContinuationService.ts:16:import type { Todo } from '../tools/todo-schemas.js';
+packages/core/src/core/toolExecutorUnification.integration.test.ts:34:import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
+packages/core/src/core/toolGovernance.ts:7:import { normalizeToolName, toSnakeCase } from '../tools/toolNameUtils.js';
+packages/core/src/core/turn.ts:24:} from '../tools/tools.js';
+packages/core/src/core/turn.ts:25:import type { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/core/turn.ts:38:import { normalizeToolName } from '../tools/toolNameUtils.js';
+packages/core/src/core/turn.undefined_issue.test.ts:233:      const { normalizeToolName } = await import('../tools/toolNameUtils.js');
+packages/core/src/core/turn.undefined_issue.test.ts:253:        const { normalizeToolName } = await import('../tools/toolNameUtils.js');
+packages/core/src/core/TurnProcessor.ts:54:import { hasCycleInSchema } from '../tools/tools.js';
+packages/core/src/hooks/notification-hook.test.ts:24:import type { ToolCallConfirmationDetails } from '../tools/tools.js';
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:121:vi.mock('../../tools/mcp-client-manager.js', () => ({
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:204:vi.mock('../../tools/mcp-tool.js', () => ({
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:24:vi.mock('../../tools/tool-registry', () => {
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:380:      new URL('../../tools/apply-patch.ts', import.meta.url),
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:56:vi.mock('../../tools/ls');
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:57:vi.mock('../../tools/read-file');
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:58:vi.mock('../../tools/grep');
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:59:vi.mock('../../tools/glob');
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:60:vi.mock('../../tools/edit');
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:61:vi.mock('../../tools/shell');
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:62:vi.mock('../../tools/write-file');
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:63:vi.mock('../../tools/google-web-fetch');
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:64:vi.mock('../../tools/read-many-files');
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:65:vi.mock('../../tools/memoryTool', () => ({
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:661:      new URL('../../tools/edit.ts', import.meta.url),
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:664:      new URL('../../tools/write-file.ts', import.meta.url),
+packages/core/src/lsp/__tests__/e2e-lsp.test.ts:667:      new URL('../../tools/lsp-diagnostics-helper.ts', import.meta.url),
+packages/core/src/lsp/__tests__/system-integration.test.ts:120:vi.mock('../../tools/mcp-client-manager.js', () => ({
+packages/core/src/lsp/__tests__/system-integration.test.ts:20:import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '../../tools/memoryTool.js';
+packages/core/src/lsp/__tests__/system-integration.test.ts:203:vi.mock('../../tools/mcp-tool.js', () => ({
+packages/core/src/lsp/__tests__/system-integration.test.ts:23:vi.mock('../../tools/tool-registry', () => {
+packages/core/src/lsp/__tests__/system-integration.test.ts:436:      new URL('../../tools/edit.ts', import.meta.url),
+packages/core/src/lsp/__tests__/system-integration.test.ts:439:      new URL('../../tools/write-file.ts', import.meta.url),
+packages/core/src/lsp/__tests__/system-integration.test.ts:442:      new URL('../../tools/lsp-diagnostics-helper.ts', import.meta.url),
+packages/core/src/lsp/__tests__/system-integration.test.ts:55:vi.mock('../../tools/ls');
+packages/core/src/lsp/__tests__/system-integration.test.ts:56:vi.mock('../../tools/read-file');
+packages/core/src/lsp/__tests__/system-integration.test.ts:57:vi.mock('../../tools/grep');
+packages/core/src/lsp/__tests__/system-integration.test.ts:58:vi.mock('../../tools/glob');
+packages/core/src/lsp/__tests__/system-integration.test.ts:59:vi.mock('../../tools/edit');
+packages/core/src/lsp/__tests__/system-integration.test.ts:60:vi.mock('../../tools/shell');
+packages/core/src/lsp/__tests__/system-integration.test.ts:61:vi.mock('../../tools/write-file');
+packages/core/src/lsp/__tests__/system-integration.test.ts:62:vi.mock('../../tools/google-web-fetch');
+packages/core/src/lsp/__tests__/system-integration.test.ts:63:vi.mock('../../tools/read-many-files');
+packages/core/src/lsp/__tests__/system-integration.test.ts:64:vi.mock('../../tools/memoryTool', () => ({
+packages/core/src/policy/policy-helpers.test.ts:19:import type { AnyToolInvocation } from '../tools/tools.js';
+packages/core/src/policy/policy-helpers.ts:10:import { BaseToolInvocation } from '../tools/tools.js';
+packages/core/src/policy/policy-helpers.ts:9:import type { AnyToolInvocation } from '../tools/tools.js';
+packages/core/src/policy/policy-updater.test.ts:15:import { ShellToolInvocation } from '../tools/shell.js';
+packages/core/src/policy/policy-updater.test.ts:20:} from '../tools/tools.js';
+packages/core/src/prompts/mcp-prompts.ts:8:import { type DiscoveredMCPPrompt } from '../tools/mcp-client.js';
+packages/core/src/prompts/prompt-registry.ts:7:import { type DiscoveredMCPPrompt } from '../tools/mcp-client.js';
+packages/core/src/runtime/AgentRuntimeLoader.test.ts:27:import { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/runtime/AgentRuntimeLoader.ts:31:import { normalizeToolName } from '../tools/toolNameUtils.js';
+packages/core/src/runtime/AgentRuntimeLoader.ts:9:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/runtime/contracts/toolIdNormalization-contract.test.ts:146:    const mod = await import('../../tools/toolIdNormalization.js');
+packages/core/src/runtime/contracts/toolIdNormalization-contract.test.ts:29:} from '../../tools/toolIdNormalization.js';
+packages/core/src/runtime/runtimeAdapters.ts:11:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/scheduler/confirmation-coordinator.test.ts:16:import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
+packages/core/src/scheduler/confirmation-coordinator.test.ts:17:import type { ToolCallConfirmationDetails } from '../tools/tools.js';
+packages/core/src/scheduler/confirmation-coordinator.test.ts:21:vi.mock('../tools/modifiable-tool.js', async (importOriginal) => {
+packages/core/src/scheduler/confirmation-coordinator.test.ts:23:    await importOriginal<typeof import('../tools/modifiable-tool.js')>();
+packages/core/src/scheduler/confirmation-coordinator.ts:27:import { ToolConfirmationOutcome } from '../tools/tools.js';
+packages/core/src/scheduler/confirmation-coordinator.ts:28:import type { ToolCallConfirmationDetails } from '../tools/tools.js';
+packages/core/src/scheduler/confirmation-coordinator.ts:29:import type { ToolConfirmationPayload } from '../tools/tool-confirmation-types.js';
+packages/core/src/scheduler/confirmation-coordinator.ts:42:} from '../tools/modifiable-tool.js';
+packages/core/src/scheduler/result-aggregator.test.ts:11:import type { ToolResult } from '../tools/tools.js';
+packages/core/src/scheduler/result-aggregator.test.ts:12:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/scheduler/result-aggregator.ts:20:import type { ToolResult } from '../tools/tools.js';
+packages/core/src/scheduler/result-aggregator.ts:21:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/scheduler/tool-dispatcher.test.ts:18:} from '../tools/tools.js';
+packages/core/src/scheduler/tool-dispatcher.test.ts:22:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/scheduler/tool-dispatcher.test.ts:23:import type { ContextAwareTool } from '../tools/tool-context.js';
+packages/core/src/scheduler/tool-dispatcher.ts:15:import type { AnyDeclarativeTool, AnyToolInvocation } from '../tools/tools.js';
+packages/core/src/scheduler/tool-dispatcher.ts:18:import type { ToolRegistry } from '../tools/tool-registry.js';
+packages/core/src/scheduler/tool-dispatcher.ts:22:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/scheduler/tool-executor.ts:19:import type { ToolResult } from '../tools/tools.js';
+packages/core/src/scheduler/types.ts:19:} from '../tools/tools.js';
+packages/core/src/scheduler/types.ts:24:import type { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
+packages/core/src/scheduler/utils.ts:7:import type { AnyDeclarativeTool } from '../tools/tools.js';
+packages/core/src/scheduler/utils.ts:8:import type { ContextAwareTool } from '../tools/tool-context.js';
+packages/core/src/services/todo-reminder-service.ts:7:import { type Todo } from '../tools/todo-schemas.js';
+packages/core/src/services/tool-call-tracker-service.ts:8:import { type TodoToolCall } from '../tools/todo-schemas.js';
+packages/core/src/storage/secure-store-integration.test.ts:30:import { maskKeyForDisplay } from '../tools/tool-key-storage.js';
+packages/core/src/storage/SessionPersistenceService.ts:16:} from '../tools/tools.js';
+packages/core/src/telemetry/loggers.test.ts:81:import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
+packages/core/src/telemetry/loggers.test.ts:82:import type { CallableTool } from '../tools/tool.js';
+packages/core/src/telemetry/metrics.ts:26:import { type DiffStat } from '../tools/tools.js';
+packages/core/src/telemetry/tool-call-decision.test.ts:12:import { ToolConfirmationOutcome } from '../tools/tools.js';
+packages/core/src/telemetry/tool-call-decision.ts:7:import { ToolConfirmationOutcome } from '../tools/tools.js';
+packages/core/src/telemetry/types.ts:12:import { ToolConfirmationOutcome } from '../tools/tools.js';
+packages/core/src/telemetry/types.ts:13:import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
+packages/core/src/telemetry/uiTelemetry.test.ts:22:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/telemetry/uiTelemetry.test.ts:23:import { ToolConfirmationOutcome } from '../tools/tools.js';
+packages/core/src/test-utils/mock-tool.ts:11:} from '../tools/tools.js';
+packages/core/src/test-utils/mock-tool.ts:16:} from '../tools/tools.js';
+packages/core/src/test-utils/tools.ts:15:} from '../tools/tools.js';
+packages/core/src/test-utils/tools.ts:22:} from '../tools/modifiable-tool.js';
+packages/core/src/todo/todoFormatter.ts:7:import { type Todo, type TodoToolCall } from '../tools/todo-schemas.js';
+packages/core/src/tools/__tests__/ast-edit-characterization.test.ts:596:      const { ToolConfirmationOutcome } = await import('../tools.js');
+packages/core/src/utils/environmentContext.test.ts:27:vi.mock('../tools/read-many-files.js');
+packages/core/src/utils/events.ts:8:import type { McpClient } from '../tools/mcp-client.js';
+packages/core/src/utils/extensionLoader.test.ts:10:import { type McpClientManager } from '../tools/mcp-client-manager.js';
+packages/core/src/utils/fileDiffUtils.test.ts:12:import type { FileDiff, ToolResultDisplay } from '../tools/tools.js';
+packages/core/src/utils/fileDiffUtils.ts:7:import type { FileDiff } from '../tools/tools.js';
+packages/core/src/utils/fileUtils.ts:13:import { ToolErrorType } from '../tools/tool-error.js';
+packages/core/src/utils/ignorePatterns.test.ts:16:vi.mock('../tools/memoryTool.js', () => ({
+packages/core/src/utils/ignorePatterns.ts:9:import { getCurrentLlxprtMdFilename } from '../tools/memoryTool.js';
+packages/core/src/utils/memoryDiscovery.subfunctions.test.ts:21:} from '../tools/memoryTool.js';
+packages/core/src/utils/memoryDiscovery.test.ts:16:} from '../tools/memoryTool.js';
+packages/core/src/utils/memoryDiscovery.ts:16:} from '../tools/memoryTool.js';
+packages/core/src/utils/summarizer.test.ts:18:import type { ToolResult } from '../tools/tools.js';
+packages/core/src/utils/summarizer.ts:7:import { type ToolResult } from '../tools/tools.js';
+packages/core/src/utils/tool-utils.test.ts:10:import { ReadFileTool } from '../tools/read-file.js';
+packages/providers/src/anthropic/AnthropicMessageNormalizer.ts:24:import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/anthropic/AnthropicProvider.issue276.test.ts:31:vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+packages/providers/src/anthropic/AnthropicProvider.mediaBlock.test.ts:56:vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+packages/providers/src/anthropic/AnthropicProvider.test.ts:50:vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+packages/providers/src/anthropic/AnthropicProvider.toolFormatDetection.test.ts:18:vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+packages/providers/src/anthropic/AnthropicProvider.ts:13:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/anthropic/AnthropicResponseParser.ts:17:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/anthropic/AnthropicResponseParser.ts:18:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/anthropic/AnthropicStreamProcessor.ts:19:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/anthropic/AnthropicStreamProcessor.ts:23:} from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.toolIdNormalization.test.ts:23:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai-responses/buildResponsesInputFromContent.ts:26:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts:26:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai-responses/OpenAIResponsesProviderBase.ts:32:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai-vercel/messageConversion.ts:46:} from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai-vercel/messageConversion.ts:51:import type { ToolIdMapper } from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+packages/providers/src/openai-vercel/OpenAIVercelProvider.ts:57:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai-vercel/OpenAIVercelProvider.ts:64:import { getToolIdStrategy } from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+packages/providers/src/openai-vercel/OpenAIVercelProvider.ts:83:} from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/__tests__/ToolNameValidator.test.ts:19:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai/buildResponsesRequest.ts:15:import { type ResponsesTool } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai/buildResponsesRequest.ts:20:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/OpenAINonStreamHandler.ts:34:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/OpenAINonStreamHandler.ts:35:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/OpenAIProvider.toolNameErrors.test.ts:19:import { ToolFormatter } from '@vybestack/llxprt-code-core/tools/ToolFormatter.js';
+packages/providers/src/openai/OpenAIProvider.ts:28:import { type ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai/OpenAIProvider.ts:36:import { ToolFormatter } from '@vybestack/llxprt-code-core/tools/ToolFormatter.js';
+packages/providers/src/openai/OpenAIRequestBuilder.ts:19:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai/OpenAIRequestBuilder.ts:32:} from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+packages/providers/src/openai/OpenAIRequestBuilder.ts:39:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/OpenAIResponseParser.ts:27:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/OpenAIResponseParser.ts:28:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/OpenAIStreamProcessor.ts:33:} from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/OpenAIStreamProcessor.ts:34:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/OpenAIStreamProcessor.ts:43:import { type ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai/syntheticToolResponses.ts:14:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/ToolCallNormalizer.test.ts:22:vi.mock('@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js', () => ({
+packages/providers/src/openai/ToolCallNormalizer.test.ts:26:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/ToolCallNormalizer.ts:25:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/ToolNameValidator.ts:25:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai/ToolNameValidator.ts:29:} from '@vybestack/llxprt-code-core/tools/toolNameUtils.js';
+packages/providers/src/reasoning/reasoningUtils.ts:13:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/reasoning/reasoningUtils.ts:14:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/utils/toolFormatDetection.ts:17:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/utils/toolFormatDetection.ts:22:} from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';

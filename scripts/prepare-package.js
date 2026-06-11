@@ -35,6 +35,13 @@ function copyFiles(packageName, filesToCopy) {
   }
 }
 
+// Prepare 'tools' package
+copyFiles('tools', {
+  'README.md': 'README.md',
+  LICENSE: 'LICENSE',
+  '.npmrc': '.npmrc',
+});
+
 // Prepare 'core' package
 copyFiles('core', {
   'README.md': 'README.md',

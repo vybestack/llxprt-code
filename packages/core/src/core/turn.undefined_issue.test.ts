@@ -230,7 +230,9 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
   describe('Integration with normalizeToolName', () => {
     it('should import normalizeToolName correctly', async () => {
       // Test that we can import the normalizeToolName function
-      const { normalizeToolName } = await import('../tools/toolNameUtils.js');
+      const { normalizeToolName } = await import(
+        '@vybestack/llxprt-code-tools'
+      );
 
       expect(typeof normalizeToolName).toBe('function');
 
@@ -250,7 +252,9 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
     ])(
       'should handle Turn.ts scenario: input="$input"',
       async ({ input, expected }) => {
-        const { normalizeToolName } = await import('../tools/toolNameUtils.js');
+        const { normalizeToolName } = await import(
+          '@vybestack/llxprt-code-tools'
+        );
 
         // Test the same logic as in turn.ts:444-456
         const result = normalizeToolName(input);

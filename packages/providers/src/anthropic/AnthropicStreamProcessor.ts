@@ -16,11 +16,11 @@ import type {
   ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderToolset } from '../IProvider.js';
-import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import {
   processToolParameters,
   logDoubleEscapingInChunk,
-} from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+} from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 import { coerceParametersToSchema } from '@vybestack/llxprt-code-core/utils/parameterCoercion.js';
 import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';

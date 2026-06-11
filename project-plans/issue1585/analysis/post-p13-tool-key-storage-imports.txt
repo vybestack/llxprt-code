@@ -1,0 +1,11 @@
+P13 tool-key-storage moved-symbol import scan:
+Allowed retained infrastructure imports: packages/core/src/tools/tool-key-storage.ts, packages/core/src/tools/tool-key-storage.test.ts, packages/core/src/tools-adapters/CoreToolKeyStorageAdapter.ts, and packages/core/src/index.ts narrowed re-export of ToolKeyStorage/getToolKeyStorage only.
+Consumer imports from retained core tool-key-storage outside allowlist:
+Moved pure helper imports from core tool-key-storage:
+Core public index pure helper source:
+398:  TOOL_KEY_REGISTRY,
+399:  getToolKeyEntry,
+400:  getSupportedToolNames,
+401:  isValidToolKeyName,
+402:  maskKeyForDisplay,
+403:  type ToolKeyRegistryEntry,

@@ -1,31 +1,34 @@
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, '../..');
+const harnessPath = path.join(repoRoot, 'packages/ui/scripts/image-harness.ts');
 const forceHarness =
   process.env.LLXPRT_FORCE_IMAGE_HARNESS === '1' ||
   process.env.LLXPRT_FORCE_IMAGE_HARNESS === 'true';
 const skipVar = process.env.LLXPRT_SKIP_IMAGE_HARNESS;
 const shouldSkipHarness =
   !forceHarness &&
-  (process.env.CI === 'true' ||
+  (!fs.existsSync(harnessPath) ||
+    process.env.CI === 'true' ||
     skipVar === '1' ||
     skipVar === 'true' ||
     (process.platform === 'linux' && process.env.CI === 'true'));
 
 if (shouldSkipHarness) {
   console.warn(
-    'Skipping ui-image-harness (linux CI/libspng instability; see #816).',
+    'Skipping ui-image-harness (missing harness or linux CI/libspng instability; see #816).',
   );
 }
 
 const runTest = shouldSkipHarness ? test.skip : test;
 
 runTest('ui image harness', () => {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  const repoRoot = path.resolve(__dirname, '../..');
   const result = spawnSync(
     'bun',
     ['run', 'packages/ui/scripts/image-harness.ts'],

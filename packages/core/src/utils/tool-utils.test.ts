@@ -6,8 +6,8 @@
 
 import { expect, describe, it } from 'vitest';
 import { doesToolInvocationMatch } from './tool-utils.js';
-import type { AnyToolInvocation, Config } from '../index.js';
-import { ReadFileTool } from '../tools/read-file.js';
+import type { AnyToolInvocation } from '../index.js';
+import { ReadFileTool } from '@vybestack/llxprt-code-tools';
 
 describe('doesToolInvocationMatch', () => {
   it('should not match a partial command prefix', () => {
@@ -59,7 +59,26 @@ describe('doesToolInvocationMatch', () => {
   });
 
   describe('for non-shell tools', () => {
-    const readFileTool = new ReadFileTool({} as Config);
+    const readFileTool = new ReadFileTool({
+      getTargetDir: () => '',
+      getWorkspaceRoots: () => [''],
+      getApprovalMode: () => 'auto',
+      setApprovalMode: () => {},
+      isInteractive: () => false,
+      hasFeatureFlag: () => false,
+      getFileService: () => ({
+        shouldGitIgnoreFile: () => false,
+        shouldLlxprtIgnoreFile: () => false,
+        filterFiles: (paths: string[]) => paths,
+      }),
+      getFileFilteringOptions: () => ({
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      }),
+      getFileExclusions: () => [],
+      getEphemeralSettings: () => ({}),
+      getDebugMode: () => false,
+    });
     const invocation = {
       params: { file: 'test.txt' },
     } as AnyToolInvocation;

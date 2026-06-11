@@ -13,7 +13,7 @@ import {
   getAllLlxprtMdFilenames as getAllGeminiMdFilenames,
   getGlobalCoreMemoryFilePath,
   getProjectCoreMemoryFilePath,
-} from '../tools/memoryTool.js';
+} from '@vybestack/llxprt-code-tools';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { processImports } from './memoryImportProcessor.js';
 import type { FileFilteringOptions } from '../config/constants.js';

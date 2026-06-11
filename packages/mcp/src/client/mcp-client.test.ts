@@ -34,7 +34,7 @@ import {
   McpClient,
   populateMcpServerCommand,
 } from './mcp-client.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';

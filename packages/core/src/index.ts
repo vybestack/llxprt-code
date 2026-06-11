@@ -221,18 +221,6 @@ export {
   getProviderKeyStorage,
   resetProviderKeyStorage,
 } from './storage/provider-key-storage.js';
-export {
-  ToolKeyStorage,
-  getToolKeyStorage,
-  isValidToolKeyName,
-  getSupportedToolNames,
-  getToolKeyEntry,
-  maskKeyForDisplay,
-} from './tools/tool-key-storage.js';
-export { TodoStore } from './tools/todo-store.js';
-export { todoEvents } from './tools/todo-events.js';
-export type { Todo, Subtask, TodoToolCall } from './tools/todo-schemas.js';
-export type { TodoUpdateEvent } from './tools/todo-events.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
@@ -258,11 +246,84 @@ export * from './ide/constants.js';
 export * from './services/shellExecutionService.js';
 
 // Export base tool definitions
-export * from './tools/tools.js';
-export * from './tools/tool-error.js';
-export * from './tools/tool-registry.js';
-export * from './tools/tool-context.js';
-export * from './tools/tool-names.js';
+export {
+  BaseToolInvocation,
+  DeclarativeTool,
+  BaseDeclarativeTool,
+  BaseTool,
+  isTool,
+  hasCycleInSchema,
+  Kind,
+  ToolConfirmationOutcome,
+} from '@vybestack/llxprt-code-tools';
+
+export type {
+  ToolInvocation,
+  AnyToolInvocation,
+  PolicyUpdateOptions,
+  ToolBuilder,
+  AnyDeclarativeTool,
+  ToolResult,
+  FileRead,
+  ToolResultDisplay,
+  FileDiff,
+  DiffStat as ToolDiffStat,
+  ToolEditConfirmationDetails,
+  ToolExecuteConfirmationDetails,
+  ToolMcpConfirmationDetails,
+  ToolInfoConfirmationDetails,
+  ToolCallConfirmationDetails,
+  ToolLocation,
+  ToolConfirmationPayload,
+} from '@vybestack/llxprt-code-tools';
+export { ToolErrorType, isFatalToolError } from '@vybestack/llxprt-code-tools';
+export {
+  DISCOVERED_TOOL_PREFIX,
+  DiscoveredTool,
+  ToolRegistry,
+} from '@vybestack/llxprt-code-tools';
+export type {
+  ToolContext,
+  ContextAwareTool,
+} from '@vybestack/llxprt-code-tools';
+export {
+  GOOGLE_WEB_SEARCH_TOOL,
+  EXA_WEB_SEARCH_TOOL,
+  EDIT_TOOL_NAME,
+  GREP_TOOL_NAME,
+  READ_MANY_FILES_TOOL_NAME,
+  READ_FILE_TOOL_NAME,
+  LS_TOOL_NAME,
+  MEMORY_TOOL_NAME,
+  ACTIVATE_SKILL_TOOL_NAME,
+  READ_FILE_TOOL,
+  WRITE_FILE_TOOL,
+  EDIT_TOOL,
+  INSERT_AT_LINE_TOOL,
+  DELETE_LINE_RANGE_TOOL,
+  READ_LINE_RANGE_TOOL,
+  READ_MANY_FILES_TOOL,
+  GREP_TOOL,
+  RIPGREP_TOOL,
+  GLOB_TOOL,
+  LS_TOOL,
+  LIST_DIRECTORY_TOOL,
+  CODE_SEARCH_TOOL,
+  GOOGLE_WEB_FETCH_TOOL,
+  DIRECT_WEB_FETCH_TOOL,
+  TASK_TOOL,
+  MEMORY_TOOL,
+  TODO_READ_TOOL,
+  TODO_WRITE_TOOL,
+  TODO_PAUSE_TOOL,
+  LIST_SUBAGENTS_TOOL,
+  SHELL_TOOL,
+  AST_GREP_TOOL,
+  STRUCTURAL_ANALYSIS_TOOL,
+  APPLY_PATCH_TOOL,
+  EDIT_TOOL_NAMES,
+  type ToolName,
+} from '@vybestack/llxprt-code-tools';
 
 export * from './todo/todoFormatter.js';
 
@@ -277,21 +338,115 @@ export * from './prompt-config/prompt-service.js';
 export * from './prompt-config/types.js';
 
 // Export specific tool logic
-export * from './tools/read-file.js';
-export * from './tools/ls.js';
-export * from './tools/grep.js';
-export * from './tools/ripGrep.js';
-export * from './tools/glob.js';
-export * from './tools/edit.js';
-export * from './tools/write-file.js';
-export * from './tools/google-web-fetch.js';
-export * from './tools/direct-web-fetch.js';
-export * from './tools/memoryTool.js';
-export * from './tools/shell.js';
-export * from './tools/google-web-search.js';
-export * from './tools/exa-web-search.js';
-export * from './tools/codesearch.js';
-export * from './tools/read-many-files.js';
+export {
+  LSTool,
+  ReadFileTool,
+  ReadLineRangeTool,
+} from '@vybestack/llxprt-code-tools';
+export type {
+  LSToolParams,
+  FileEntry,
+  ReadFileToolParams,
+  ReadLineRangeToolParams,
+} from '@vybestack/llxprt-code-tools';
+export {
+  GrepTool,
+  RipGrepTool,
+  type GrepToolParams,
+  type RipGrepToolParams,
+} from '@vybestack/llxprt-code-tools';
+export {
+  GlobTool,
+  sortFileEntries,
+  type GlobPath,
+  type GlobToolParams,
+} from '@vybestack/llxprt-code-tools';
+
+export {
+  EditTool,
+  applyReplacement,
+  type EditToolParams,
+} from '@vybestack/llxprt-code-tools';
+export {
+  WriteFileTool,
+  type WriteFileToolParams,
+} from '@vybestack/llxprt-code-tools';
+export {
+  GoogleWebFetchTool,
+  type GoogleWebFetchToolParams,
+  parsePrompt,
+} from '@vybestack/llxprt-code-tools';
+export { DirectWebFetchTool } from '@vybestack/llxprt-code-tools';
+export type { DirectWebFetchToolParams } from '@vybestack/llxprt-code-tools';
+export {
+  MemoryTool,
+  setLlxprtMdFilename,
+  getCurrentLlxprtMdFilename,
+  getAllLlxprtMdFilenames,
+  DEFAULT_CONTEXT_FILENAME,
+  LLXPRT_CONFIG_DIR,
+  GEMINI_DIR,
+  CORE_MEMORY_FILENAME,
+  MEMORY_SECTION_HEADER,
+  getGlobalCoreMemoryFilePath,
+  getProjectCoreMemoryFilePath,
+  type MemoryToolDependencies,
+  type SaveMemoryParams,
+} from '@vybestack/llxprt-code-tools';
+export {
+  ShellTool,
+  OUTPUT_UPDATE_INTERVAL_MS,
+  type ShellToolParams,
+} from '@vybestack/llxprt-code-tools';
+export {
+  GoogleWebSearchTool,
+  ExaWebSearchTool,
+  CodeSearchTool,
+  type WebSearchToolParams,
+  type WebSearchToolResult,
+  type ExaWebSearchToolParams,
+  type CodeSearchToolParams,
+} from '@vybestack/llxprt-code-tools';
+
+export {
+  ReadManyFilesTool,
+  type ReadManyFilesParams,
+} from '@vybestack/llxprt-code-tools';
+export {
+  TodoRead,
+  TodoRead as TodoReadTool,
+  type TodoReadParams,
+  TodoWrite,
+  TodoWrite as TodoWriteTool,
+  type TodoWriteParams,
+  TodoPause,
+  TodoPause as TodoPauseTool,
+  type TodoPauseParams,
+  LocalTodoStore as TodoStore,
+  todoEvents,
+  TodoEvent,
+  TodoEventEmitter,
+  type Todo,
+  type Subtask,
+  type TodoStatus,
+  type TodoToolCall,
+  type TodoUpdateEvent,
+} from '@vybestack/llxprt-code-tools';
+export { TaskTool, type TaskToolParams } from '@vybestack/llxprt-code-tools';
+export * from './tools-adapters/index.js';
+export {
+  ToolKeyStorage,
+  getToolKeyStorage,
+  type ToolKeyStorageOptions,
+} from './tools/tool-key-storage.js';
+export {
+  TOOL_KEY_REGISTRY,
+  getToolKeyEntry,
+  getSupportedToolNames,
+  isValidToolKeyName,
+  maskKeyForDisplay,
+  type ToolKeyRegistryEntry,
+} from '@vybestack/llxprt-code-tools';
 // MCP client/tool — re-exported from @vybestack/llxprt-code-mcp
 export {
   DiscoveredMCPTool,
@@ -352,8 +507,16 @@ export * from './adapters/IStreamAdapter.js';
 export * from './parsers/TextToolCallParser.js';
 
 // Export tool formatters
-export * from './tools/IToolFormatter.js';
-export * from './tools/ToolFormatter.js';
+export type {
+  IToolFormatter,
+  ToolFormat,
+  OpenAIFunction,
+  OpenAITool,
+  ResponsesTool,
+  FormatterTool,
+  ToolCallBlock,
+} from '@vybestack/llxprt-code-tools';
+export { ToolFormatter } from '@vybestack/llxprt-code-tools';
 
 export {
   createProviderRuntimeContext,

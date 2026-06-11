@@ -6,7 +6,7 @@
 
 import type { FunctionDeclaration } from '@google/genai';
 import type { ToolRegistryView } from '../runtime/AgentRuntimeContext.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { Config } from '../config/config.js';
 import { shouldIncludeSubagentDelegation } from '../prompt-config/subagent-delegation.js';
 

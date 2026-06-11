@@ -15,12 +15,12 @@ import {
   type ToolCallConfirmationDetails,
   type ToolInvocation,
   type ToolResult,
-} from '../tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision } from '../policy/types.js';
-import { ToolErrorType } from '../tools/tool-error.js';
-import type { ContextAwareTool } from '../tools/tool-context.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import type { ContextAwareTool } from '@vybestack/llxprt-code-tools';
 import type { Config } from '../index.js';
 import { ApprovalMode } from '../index.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';

@@ -20,7 +20,7 @@ import {
 } from '../policy/toml-loader.js';
 import { PolicyDecision, type PolicyEngineConfig } from '../policy/types.js';
 import { MessageBusType, type ToolConfirmationRequest } from './types.js';
-import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 describe('Message Bus Integration Tests', () => {
   let testDir: string;

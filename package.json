@@ -6,6 +6,7 @@
   },
   "type": "module",
   "workspaces": [
+    "packages/tools",
     "packages/storage",
     "packages/auth",
     "packages/settings",
@@ -13,12 +14,12 @@
     "packages/policy",
     "packages/mcp",
     "packages/core",
+    "packages/lsp",
     "packages/providers",
     "packages/cli",
     "packages/a2a-server",
     "packages/test-utils",
-    "packages/vscode-ide-companion",
-    "packages/lsp"
+    "packages/vscode-ide-companion"
   ],
   "private": "true",
   "repository": {

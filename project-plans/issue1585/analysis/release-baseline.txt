@@ -1,0 +1,36 @@
+322:        run: npm publish --workspace=@vybestack/llxprt-code-core --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+326:        run: npm publish --workspace=@vybestack/llxprt-code-lsp --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+330:        run: npm publish --workspace=@vybestack/llxprt-code-providers --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+334:        run: npm publish --workspace=@vybestack/llxprt-code --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+66:      '@vybestack/llxprt-code-providers',
+105:  it('publishes providers after core but before CLI', () => {
+109:    const providersIndex = releaseYml.indexOf(
+110:      'npm publish --workspace=@vybestack/llxprt-code-providers',
+117:    expect(providersIndex).toBeGreaterThan(coreIndex);
+118:    expect(cliIndex).toBeGreaterThan(providersIndex);
+146:  it('prepares providers tarballs for sandbox images', () => {
+147:    expect(releaseYml).toContain('packages/providers/dist');
+149:      'npm pack -w @vybestack/llxprt-code-providers',
+157:  it('packs providers alongside core and CLI', () => {
+161:      'npm pack -w @vybestack/llxprt-code-providers',
+174:  it('copies providers tarball after core and before CLI', () => {
+178:    const providersCopy = dockerfile.indexOf(
+179:      'COPY --chown=node:node packages/providers/dist/vybestack-llxprt-code-providers-*.tgz',
+186:    expect(providersCopy).toBeGreaterThan(coreCopy);
+187:    expect(cliCopy).toBeGreaterThan(providersCopy);
+197:    expect(installCommand).toContain('vybestack-llxprt-code-providers-*.tgz');
+221:      ['@vybestack/llxprt-code-providers', { version: '1.2.3' }],
+225:      '@vybestack/llxprt-code-providers',
+229:      '@vybestack/llxprt-code-providers': 'file:../providers',
+239:      '@vybestack/llxprt-code-providers': '1.2.3',
+255:            '@vybestack/llxprt-code-providers': 'file:../providers',
+264:        new Set(['@vybestack/llxprt-code', '@vybestack/llxprt-code-providers']),
+102:    `npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist`,
+113:    `npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist`,
+123:    `npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist`,
+53:COPY --chown=node:node packages/core/dist/vybestack-llxprt-code-core-*.tgz /tmp/
+54:COPY --chown=node:node packages/providers/dist/vybestack-llxprt-code-providers-*.tgz /tmp/
+55:COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz /tmp/
+61:      /tmp/vybestack-llxprt-code-core-*.tgz \
+62:      /tmp/vybestack-llxprt-code-providers-*.tgz \
+63:      /tmp/vybestack-llxprt-code-*.tgz && \

@@ -29,7 +29,7 @@ import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
 import { BaseProvider, type BaseProviderConfig } from '../BaseProvider.js';
-import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';

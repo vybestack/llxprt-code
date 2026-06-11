@@ -1,0 +1,45 @@
+packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts:26:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai-responses/OpenAIResponsesProviderBase.ts:32:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai-responses/buildResponsesInputFromContent.ts:26:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.toolIdNormalization.test.ts:23:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/reasoning/reasoningUtils.ts:13:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/reasoning/reasoningUtils.ts:14:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/utils/toolFormatDetection.ts:17:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/utils/toolFormatDetection.ts:22:} from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+packages/providers/src/anthropic/AnthropicProvider.test.ts:50:vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+packages/providers/src/anthropic/AnthropicResponseParser.ts:17:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/anthropic/AnthropicResponseParser.ts:18:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/OpenAIProvider.toolNameErrors.test.ts:19:import { ToolFormatter } from '@vybestack/llxprt-code-core/tools/ToolFormatter.js';
+packages/providers/src/openai/ToolNameValidator.ts:25:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai/ToolNameValidator.ts:29:} from '@vybestack/llxprt-code-core/tools/toolNameUtils.js';
+packages/providers/src/anthropic/AnthropicMessageNormalizer.ts:24:import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/ToolCallNormalizer.ts:25:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/OpenAINonStreamHandler.ts:34:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/OpenAINonStreamHandler.ts:35:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/OpenAIRequestBuilder.ts:19:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai/OpenAIRequestBuilder.ts:32:} from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+packages/providers/src/openai/OpenAIRequestBuilder.ts:39:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/anthropic/AnthropicStreamProcessor.ts:19:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/anthropic/AnthropicStreamProcessor.ts:23:} from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/buildResponsesRequest.ts:15:import { type ResponsesTool } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai/buildResponsesRequest.ts:20:import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/anthropic/AnthropicProvider.toolFormatDetection.test.ts:18:vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+packages/providers/src/openai/ToolCallNormalizer.test.ts:22:vi.mock('@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js', () => ({
+packages/providers/src/openai/ToolCallNormalizer.test.ts:26:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/anthropic/AnthropicProvider.mediaBlock.test.ts:56:vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+packages/providers/src/openai/OpenAIStreamProcessor.ts:33:} from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/OpenAIStreamProcessor.ts:34:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/OpenAIStreamProcessor.ts:43:import { type ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/anthropic/AnthropicProvider.ts:13:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/anthropic/AnthropicProvider.issue276.test.ts:31:vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+packages/providers/src/openai-vercel/OpenAIVercelProvider.ts:57:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai-vercel/OpenAIVercelProvider.ts:64:import { getToolIdStrategy } from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+packages/providers/src/openai-vercel/OpenAIVercelProvider.ts:83:} from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/syntheticToolResponses.ts:14:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/OpenAIProvider.ts:28:import { type ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+packages/providers/src/openai/OpenAIProvider.ts:36:import { ToolFormatter } from '@vybestack/llxprt-code-core/tools/ToolFormatter.js';
+packages/providers/src/openai-vercel/messageConversion.ts:46:} from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai-vercel/messageConversion.ts:51:import type { ToolIdMapper } from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+packages/providers/src/openai/OpenAIResponseParser.ts:27:import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+packages/providers/src/openai/OpenAIResponseParser.ts:28:import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+packages/providers/src/openai/__tests__/ToolNameValidator.test.ts:19:import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';

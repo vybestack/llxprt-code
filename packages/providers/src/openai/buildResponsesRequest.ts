@@ -12,12 +12,12 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type ITool } from '../ITool.js';
-import { type ResponsesTool } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+import { type ResponsesTool } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import {
   ensureJsonSafe,
   hasUnicodeReplacements,
 } from '@vybestack/llxprt-code-core/utils/unicodeUtils.js';
-import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 
 export interface ResponsesRequestParams {
   messages?: IContent[];

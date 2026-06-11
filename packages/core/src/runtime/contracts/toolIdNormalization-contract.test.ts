@@ -26,7 +26,7 @@ import {
   normalizeToOpenAIToolId,
   normalizeToHistoryToolId,
   normalizeToAnthropicToolId,
-} from '../../tools/toolIdNormalization.js';
+} from '@vybestack/llxprt-code-tools';
 
 describe('toolIdNormalization core-owned contract', () => {
   /**
@@ -143,7 +143,7 @@ describe('toolIdNormalization core-owned contract', () => {
   it('toolIdNormalization is importable from core tools path without provider imports', async () => {
     // Dynamic import tests that the module resolves from core path.
     // This would fail if the core path redirected to providers.
-    const mod = await import('../../tools/toolIdNormalization.js');
+    const mod = await import('@vybestack/llxprt-code-tools');
     expect(mod.normalizeToOpenAIToolId).toBeTypeOf('function');
     expect(mod.normalizeToHistoryToolId).toBeTypeOf('function');
     expect(mod.normalizeToAnthropicToolId).toBeTypeOf('function');
