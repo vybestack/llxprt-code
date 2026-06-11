@@ -133,7 +133,7 @@ export class SubagentOrchestrator {
       if (history !== undefined) {
         const disposable = (history as { dispose?: () => void }).dispose;
         if (typeof disposable === 'function') {
-          disposable();
+          disposable.call(history);
         } else if (typeof history.clear === 'function') {
           history.clear();
           (

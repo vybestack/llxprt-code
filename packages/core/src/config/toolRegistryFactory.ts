@@ -307,8 +307,10 @@ function registerAgentTools(
         managerProvider: () => subagentManager,
         profileManagerProvider: () => profileManager,
         config,
+        isInteractiveEnvironment: () => config.isInteractive(),
         getSchedulerFactory: () =>
           host.getInteractiveSubagentSchedulerFactory(),
+        getAsyncTaskManager: () => host.getAsyncTaskManager(),
       }),
     );
   } else {
@@ -323,8 +325,10 @@ function registerAgentTools(
           managerProvider: () => subagentManager,
           profileManagerProvider: () => profileManager,
           config,
+          isInteractiveEnvironment: () => config.isInteractive(),
           getSchedulerFactory: () =>
             host.getInteractiveSubagentSchedulerFactory(),
+          getAsyncTaskManager: () => host.getAsyncTaskManager(),
         }),
       ],
     };

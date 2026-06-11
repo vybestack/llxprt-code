@@ -49,6 +49,7 @@ function createConfigBoundary(): Record<string, unknown> {
     getEphemeralSettings: () => ({}),
     isToolEnabled: () => true,
     isTrustedFolder: () => false,
+    isInteractive: () => false,
   };
 }
 
