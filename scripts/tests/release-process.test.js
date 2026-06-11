@@ -107,7 +107,7 @@ describe('.github/workflows/release.yml', () => {
     }
   });
 
-  it('publishes auth, settings, and telemetry before MCP, core, providers, and CLI', () => {
+  it('publishes auth, settings, telemetry, and ide-integration before MCP, core, providers, and CLI', () => {
     const authIndex = releaseYml.indexOf(
       'npm publish --workspace=@vybestack/llxprt-code-auth',
     );
@@ -116,6 +116,9 @@ describe('.github/workflows/release.yml', () => {
     );
     const telemetryIndex = releaseYml.indexOf(
       'npm publish --workspace=@vybestack/llxprt-code-telemetry',
+    );
+    const ideIntegrationIndex = releaseYml.indexOf(
+      'npm publish --workspace=@vybestack/llxprt-code-ide-integration',
     );
     const mcpIndex = releaseYml.indexOf(
       'npm publish --workspace=@vybestack/llxprt-code-mcp',
@@ -133,7 +136,8 @@ describe('.github/workflows/release.yml', () => {
     expect(authIndex).toBeGreaterThan(0);
     expect(settingsIndex).toBeGreaterThan(authIndex);
     expect(telemetryIndex).toBeGreaterThan(settingsIndex);
-    expect(mcpIndex).toBeGreaterThan(telemetryIndex);
+    expect(ideIntegrationIndex).toBeGreaterThan(telemetryIndex);
+    expect(mcpIndex).toBeGreaterThan(ideIntegrationIndex);
     expect(coreIndex).toBeGreaterThan(mcpIndex);
     expect(providersIndex).toBeGreaterThan(coreIndex);
     expect(cliIndex).toBeGreaterThan(providersIndex);
@@ -185,6 +189,9 @@ describe('scripts/build_sandbox.js', () => {
     );
     expect(buildSandbox).toContain(
       'npm pack -w @vybestack/llxprt-code-telemetry',
+    );
+    expect(buildSandbox).toContain(
+      'npm pack -w @vybestack/llxprt-code-ide-integration',
     );
     expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code-mcp');
     expect(buildSandbox).toContain('npm pack -w @vybestack/llxprt-code-core');
@@ -243,6 +250,9 @@ describe('Dockerfile', () => {
     expect(installCommand).toContain('vybestack-llxprt-code-auth-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-settings-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-telemetry-*.tgz');
+    expect(installCommand).toContain(
+      'vybestack-llxprt-code-ide-integration-*.tgz',
+    );
     expect(installCommand).toContain('vybestack-llxprt-code-mcp-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-core-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-providers-*.tgz');
