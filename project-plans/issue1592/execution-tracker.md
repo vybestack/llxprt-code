@@ -8,7 +8,7 @@
 | 01 | P01 | [x] | 2026-06-11 | 2026-06-11 | targeted PASS | [x] | Contracts + construction inversion complete; see .completed/P01.md |
 | 01a | P01A | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Verification complete; see reviews/p01a-implementation-review.md and .completed/P01a.md |
 | 02 | P02 | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Package scaffold + CI/release wiring complete; see .completed/P02.md |
-| 02a | P02A | [ ] | - | - | - | [ ] | Verification |
+| 02a | P02A | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Package scaffold verification approved; see reviews/p02a-package-scaffold-review.md and .completed/P02A.md |
 | 03 | P03 | [ ] | - | - | - | [ ] | Code move per move-map |
 | 03a | P03A | [ ] | - | - | - | [ ] | Verification (behavior-preservation audit) |
 | 04 | P04 | [ ] | - | - | - | [ ] | Consumer migration (CLI/a2a/bundle) |
