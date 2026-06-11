@@ -10,6 +10,7 @@
     "packages/auth",
     "packages/settings",
     "packages/telemetry",
+    "packages/policy",
     "packages/mcp",
     "packages/core",
     "packages/providers",

@@ -97,6 +97,7 @@ const corePackageDir = join('packages', 'core');
 const mcpPackageDir = join('packages', 'mcp');
 const providersPackageDir = join('packages', 'providers');
 const telemetryPackageDir = join('packages', 'telemetry');
+const policyPackageDir = join('packages', 'policy');
 
 try {
   console.log('packing @vybestack/llxprt-code ...');
@@ -146,6 +147,15 @@ try {
   );
   execSync(
     `npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-policy ...');
+  rmSync(join(policyPackageDir, 'dist', 'vybestack-llxprt-code-policy-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-policy --pack-destination ./packages/policy/dist`,
     { stdio: 'ignore' },
   );
 
@@ -219,6 +229,15 @@ chmodSync(
     telemetryPackageDir,
     'dist',
     `vybestack-llxprt-code-telemetry-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+
+chmodSync(
+  join(
+    policyPackageDir,
+    'dist',
+    `vybestack-llxprt-code-policy-${packageVersion}.tgz`,
   ),
   0o755,
 );

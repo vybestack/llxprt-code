@@ -46,6 +46,7 @@ const actualWorkspaces = [
   '@vybestack/llxprt-code-auth',
   '@vybestack/llxprt-code-settings',
   '@vybestack/llxprt-code-telemetry',
+  '@vybestack/llxprt-code-policy',
   '@vybestack/llxprt-code-mcp',
   '@vybestack/llxprt-code-core',
   '@vybestack/llxprt-code-providers',

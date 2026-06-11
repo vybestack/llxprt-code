@@ -120,6 +120,7 @@
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-storage": "file:../storage",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
+    "@vybestack/llxprt-code-policy": "file:../policy",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@ai-sdk/openai": "^2.0.74",

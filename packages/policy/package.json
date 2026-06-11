@@ -1,0 +1,52 @@
+{
+  "name": "@vybestack/llxprt-code-policy",
+  "version": "0.10.0",
+  "description": "LLxprt Code Policy — policy engine and confirmation bus",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types.js": "./dist/src/types.js",
+    "./policy-engine.js": "./dist/src/policy-engine.js",
+    "./stable-stringify.js": "./dist/src/stable-stringify.js",
+    "./config.js": "./dist/src/config.js",
+    "./toml-loader.js": "./dist/src/toml-loader.js",
+    "./utils.js": "./dist/src/utils.js",
+    "./confirmation-bus/index.js": "./dist/src/confirmation-bus/index.js",
+    "./confirmation-bus/types.js": "./dist/src/confirmation-bus/types.js",
+    "./confirmation-bus/message-bus.js": "./dist/src/confirmation-bus/message-bus.js"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "fast-check": "^4.2.0",
+    "typescript": "^5.3.3",
+    "vitest": "^3.1.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
