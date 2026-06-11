@@ -114,12 +114,12 @@ export interface ISubagentService {
    * List all available subagents.
    * @returns Array of subagent information.
    */
-  listSubagents(): SubagentInfo[];
+  listSubagents(): Promise<SubagentInfo[]>;
 
   /**
    * Get configuration for a specific subagent.
    * @param name - The subagent name.
    * @returns The subagent configuration, or undefined if not found.
    */
-  getSubagentConfig(name: string): SubagentConfig | undefined;
+  getSubagentConfig(name: string): Promise<SubagentConfig | undefined>;
 }

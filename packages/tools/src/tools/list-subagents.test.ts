@@ -12,23 +12,20 @@ describe('ListSubagentsTool', () => {
   const createMockService = (): ISubagentService =>
     ({
       executeSubagent: vi.fn(),
-      listSubagents: vi.fn().mockReturnValue([]),
+      listSubagents: vi.fn().mockResolvedValue([]),
       getSubagentConfig: vi.fn(),
     }) as unknown as ISubagentService;
 
   it('returns summaries for available subagents', async () => {
     const service = createMockService();
-    vi.spyOn(service, 'listSubagents').mockReturnValue([{ name: 'alpha' }]);
-    vi.spyOn(service, 'getSubagentConfig').mockImplementation(
-      () =>
-        ({
-          name: 'alpha',
-          profile: 'reviewer',
-          systemPrompt:
-            'Review code submissions for adherence to style guidelines.\nFocus on maintainability.',
-          updatedAt: '2025-01-05T00:00:00Z',
-        }) satisfies SubagentConfig,
-    );
+    vi.spyOn(service, 'listSubagents').mockResolvedValue([{ name: 'alpha' }]);
+    vi.spyOn(service, 'getSubagentConfig').mockResolvedValue({
+      name: 'alpha',
+      profile: 'reviewer',
+      systemPrompt:
+        'Review code submissions for adherence to style guidelines.\nFocus on maintainability.',
+      updatedAt: '2025-01-05T00:00:00Z',
+    } satisfies SubagentConfig);
 
     const tool = new ListSubagentsTool({ getSubagentService: () => service });
     const invocation = tool.build({});
@@ -44,9 +41,9 @@ describe('ListSubagentsTool', () => {
 
   it('truncates long descriptions', async () => {
     const service = createMockService();
-    vi.spyOn(service, 'listSubagents').mockReturnValue([{ name: 'beta' }]);
+    vi.spyOn(service, 'listSubagents').mockResolvedValue([{ name: 'beta' }]);
     const longPrompt = 'A'.repeat(400);
-    vi.spyOn(service, 'getSubagentConfig').mockReturnValue({
+    vi.spyOn(service, 'getSubagentConfig').mockResolvedValue({
       name: 'beta',
       profile: 'helper',
       systemPrompt: longPrompt,
@@ -62,7 +59,7 @@ describe('ListSubagentsTool', () => {
 
   it('handles missing subagents gracefully', async () => {
     const service = createMockService();
-    vi.spyOn(service, 'listSubagents').mockReturnValue([]);
+    vi.spyOn(service, 'listSubagents').mockResolvedValue([]);
 
     const tool = new ListSubagentsTool({ getSubagentService: () => service });
     const invocation = tool.build({});

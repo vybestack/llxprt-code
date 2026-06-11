@@ -70,7 +70,7 @@ class ListSubagentsToolInvocation extends BaseToolInvocation<
   }
 
   override async execute(): Promise<ToolResult> {
-    const subagents = this.subagentService.listSubagents();
+    const subagents = await this.subagentService.listSubagents();
     if (subagents.length === 0) {
       const message =
         'No subagents are currently registered. Use the /subagent CLI command to create one.';
@@ -86,7 +86,7 @@ class ListSubagentsToolInvocation extends BaseToolInvocation<
       a.name.localeCompare(b.name),
     )) {
       try {
-        const config = this.subagentService.getSubagentConfig(name);
+        const config = await this.subagentService.getSubagentConfig(name);
         if (!config) {
           throw new Error(`Subagent '${name}' not found.`);
         }

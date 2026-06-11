@@ -52,8 +52,8 @@ function createFakeSubagentService(
         error: `Unknown subagent: ${request.name}`,
       } satisfies SubagentResult;
     },
-    listSubagents: () => agents,
-    getSubagentConfig: (name: string) => {
+    listSubagents: async () => agents,
+    getSubagentConfig: async (name: string) => {
       const agent = agents.find((a) => a.name === name);
       if (agent) {
         return {

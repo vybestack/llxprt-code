@@ -77,14 +77,6 @@ function asCachedSubagentManager(
   return manager as SubagentManager & CachedSubagentManager;
 }
 
-function isPromiseLike(value: unknown): value is Promise<unknown> {
-  return (
-    value !== null &&
-    (typeof value === 'object' || typeof value === 'function') &&
-    typeof (value as { then?: unknown }).then === 'function'
-  );
-}
-
 export class CoreSubagentServiceAdapter implements ISubagentService {
   private readonly managerProvider: () => SubagentManager | undefined;
   private readonly profileManagerProvider?: () => ProfileManager | undefined;
@@ -199,42 +191,36 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     }
   }
 
-  listSubagents(): SubagentInfo[] {
+  async listSubagents(): Promise<SubagentInfo[]> {
     const manager = this.requireManager();
     const cachedManager = asCachedSubagentManager(manager);
 
-    const names = cachedManager.getCachedSubagentNames?.();
-    if (names) {
-      return names.map((name) => ({ name }));
+    const cachedNames = cachedManager.getCachedSubagentNames?.();
+    if (cachedNames) {
+      return cachedNames.map((name) => ({ name }));
     }
 
-    const listResult = manager.listSubagents();
-    if (Array.isArray(listResult)) {
-      return listResult.map((name) => ({ name }));
-    }
-
-    throw new Error('Subagent list is not available synchronously.');
+    const names = await manager.listSubagents();
+    return names.map((name) => ({ name }));
   }
 
-  getSubagentConfig(name: string): ToolsSubagentConfig | undefined {
+  async getSubagentConfig(
+    name: string,
+  ): Promise<ToolsSubagentConfig | undefined> {
     const manager = this.requireManager();
     const cachedManager = asCachedSubagentManager(manager);
 
-    const config =
+    const cachedConfig =
       cachedManager.getCachedSubagentConfig?.(name) ??
       cachedManager.loadSubagentSync?.(name);
 
-    if (config) {
-      return toToolsSubagentConfig(config);
+    if (cachedConfig) {
+      return toToolsSubagentConfig(cachedConfig);
     }
 
-    const maybeConfig = manager.loadSubagent(name);
-    if (isPromiseLike(maybeConfig)) {
-      throw new Error(`Subagent '${name}' is not available synchronously.`);
-    }
-
-    return maybeConfig
-      ? toToolsSubagentConfig(maybeConfig as CoreSubagentConfig)
+    const loaded = await manager.loadSubagent(name);
+    return loaded
+      ? toToolsSubagentConfig(loaded as CoreSubagentConfig)
       : undefined;
   }
 

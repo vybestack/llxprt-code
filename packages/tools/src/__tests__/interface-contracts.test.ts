@@ -263,10 +263,10 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
           output: `Ran ${request.name}`,
           success: true,
         }),
-        listSubagents: () => [
+        listSubagents: async () => [
           { name: 'typescript-expert', description: 'TS expert' },
         ],
-        getSubagentConfig: (name: string) =>
+        getSubagentConfig: async (name: string) =>
           name === 'typescript-expert'
             ? { name: 'typescript-expert', instructions: 'Be helpful' }
             : undefined,
@@ -280,12 +280,12 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       expect(result.success).toBe(true);
       expect(result.output).toContain('typescript-expert');
 
-      const agents = service.listSubagents();
+      const agents = await service.listSubagents();
       expect(agents).toHaveLength(1);
 
-      const config = service.getSubagentConfig('typescript-expert');
+      const config = await service.getSubagentConfig('typescript-expert');
       expect(config?.name).toBe('typescript-expert');
-      expect(service.getSubagentConfig('nonexistent')).toBeUndefined();
+      expect(await service.getSubagentConfig('nonexistent')).toBeUndefined();
     });
   });
 
