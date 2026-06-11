@@ -7,7 +7,7 @@
 | 00a | P00A | [x] | 2026-06-11 | 2026-06-11 | GO | N/A | Preflight verification complete; see analysis/preflight-results.md and .completed/P00a.md |
 | 01 | P01 | [x] | 2026-06-11 | 2026-06-11 | targeted PASS | [x] | Contracts + construction inversion complete; see .completed/P01.md |
 | 01a | P01A | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Verification complete; see reviews/p01a-implementation-review.md and .completed/P01a.md |
-| 02 | P02 | [ ] | - | - | - | [ ] | Package scaffold + CI/release wiring |
+| 02 | P02 | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Package scaffold + CI/release wiring complete; see .completed/P02.md |
 | 02a | P02A | [ ] | - | - | - | [ ] | Verification |
 | 03 | P03 | [ ] | - | - | - | [ ] | Code move per move-map |
 | 03a | P03A | [ ] | - | - | - | [ ] | Verification (behavior-preservation audit) |

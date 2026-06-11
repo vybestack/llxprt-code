@@ -82,7 +82,17 @@
     "./utils/secure-browser-launcher.js": "./dist/src/utils/secure-browser-launcher.js",
     "./utils/toolOutputLimiter.js": "./dist/src/utils/toolOutputLimiter.js",
     "./utils/unicodeUtils.js": "./dist/src/utils/unicodeUtils.js",
-    "./utils/workspaceContext.js": "./dist/src/utils/workspaceContext.js"
+    "./utils/workspaceContext.js": "./dist/src/utils/workspaceContext.js",
+    "./core/chatSessionTypes.js": "./dist/src/core/chatSessionTypes.js",
+    "./core/clientContract.js": "./dist/src/core/clientContract.js",
+    "./core/compression/types.js": "./dist/src/core/compression/types.js",
+    "./core/coreToolHookTriggers.js": "./dist/src/core/coreToolHookTriggers.js",
+    "./core/lifecycleHookTriggers.js": "./dist/src/core/lifecycleHookTriggers.js",
+    "./core/subagentTypes.js": "./dist/src/core/subagentTypes.js",
+    "./core/tokenLimits.js": "./dist/src/core/tokenLimits.js",
+    "./core/toolSchedulerContract.js": "./dist/src/core/toolSchedulerContract.js",
+    "./core/turn.js": "./dist/src/core/turn.js",
+    "./scheduler/types.js": "./dist/src/scheduler/types.js"
   },
   "scripts": {
     "build": "node ../../scripts/build_package.js",

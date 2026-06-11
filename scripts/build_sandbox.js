@@ -95,6 +95,7 @@ const settingsPackageDir = join('packages', 'settings');
 const corePackageDir = join('packages', 'core');
 const mcpPackageDir = join('packages', 'mcp');
 const providersPackageDir = join('packages', 'providers');
+const agentsPackageDir = join('packages', 'agents');
 const telemetryPackageDir = join('packages', 'telemetry');
 
 try {
@@ -165,6 +166,15 @@ try {
     `npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist`,
     { stdio: 'ignore' },
   );
+
+  console.log('packing @vybestack/llxprt-code-agents ...');
+  rmSync(join(agentsPackageDir, 'dist', 'vybestack-llxprt-code-agents-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist`,
+    { stdio: 'ignore' },
+  );
 } finally {
   // Restore workspace file: dependencies so local development is unaffected.
   console.log('Restoring workspace dependencies after sandbox pack...');
@@ -225,6 +235,14 @@ chmodSync(
     providersPackageDir,
     'dist',
     `vybestack-llxprt-code-providers-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    agentsPackageDir,
+    'dist',
+    `vybestack-llxprt-code-agents-${packageVersion}.tgz`,
   ),
   0o755,
 );

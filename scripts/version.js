@@ -48,6 +48,8 @@ const actualWorkspaces = [
   '@vybestack/llxprt-code-mcp',
   '@vybestack/llxprt-code-core',
   '@vybestack/llxprt-code-providers',
+  '@vybestack/llxprt-code-agents',
+
   '@vybestack/llxprt-code-test-utils',
   'llxprt-code-vscode-ide-companion',
   '@vybestack/llxprt-code-lsp',

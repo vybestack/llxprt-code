@@ -12,6 +12,7 @@
     "packages/mcp",
     "packages/core",
     "packages/providers",
+    "packages/agents",
     "packages/cli",
     "packages/a2a-server",
     "packages/test-utils",

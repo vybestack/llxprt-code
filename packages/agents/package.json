@@ -1,0 +1,51 @@
+{
+  "name": "@vybestack/llxprt-code-agents",
+  "version": "0.10.0",
+  "description": "LLxprt Code Agents — agent runtime, chat loop, and subagent orchestration",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@google/genai": "1.30.0",
+    "@vybestack/llxprt-code-auth": "file:../auth",
+    "@vybestack/llxprt-code-core": "file:../core",
+    "@vybestack/llxprt-code-settings": "file:../settings",
+    "diff": "^8.0.3",
+    "fast-levenshtein": "^2.0.6",
+    "undici": "^7.18.2",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "@vybestack/llxprt-code-test-utils": "file:../test-utils",
+    "fast-check": "^4.2.0",
+    "typescript": "^5.3.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
