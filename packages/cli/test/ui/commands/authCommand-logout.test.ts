@@ -17,11 +17,13 @@ import { AuthCommandExecutor } from '../../../src/ui/commands/authCommand.js';
 import { OAuthManager } from '../../../src/auth/oauth-manager.js';
 import {
   KeyringTokenStore,
-  SecureStore,
   OAuthToken,
   Logger,
-  type KeyringAdapter,
 } from '@vybestack/llxprt-code-core';
+import {
+  SecureStore,
+  type KeyringAdapter,
+} from '@vybestack/llxprt-code-storage';
 import { QwenOAuthProvider } from '../../../src/auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../../src/auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../../src/auth/anthropic-oauth-provider.js';

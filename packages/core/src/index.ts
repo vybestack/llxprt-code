@@ -214,6 +214,7 @@ export {
 export type {
   KeyringAdapter,
   SecureStoreOptions,
+  SecureStoreErrorCode,
 } from './storage/secure-store.js';
 export {
   ProviderKeyStorage,

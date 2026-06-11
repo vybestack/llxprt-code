@@ -10,12 +10,12 @@ import {
   getCurrentLlxprtMdFilename,
   DEFAULT_FILE_FILTERING_OPTIONS,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
-  FileDiscoveryService,
   DebugLogger,
   debugLogger,
   type FileFilteringOptions,
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
+import { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { resolvePath } from '../utils/resolvePath.js';
 import { isDebugMode } from './environmentLoader.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';

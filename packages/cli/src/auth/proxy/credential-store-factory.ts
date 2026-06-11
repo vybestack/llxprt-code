@@ -28,12 +28,10 @@ import {
   ProxySocketClient,
   ProxyTokenStore,
 } from '@vybestack/llxprt-code-auth';
-// Non-auth types remain from core
-import type { ProviderKeyStorage } from '@vybestack/llxprt-code-core';
-import {
-  createKeyringTokenStore,
-  getProviderKeyStorage,
-} from '@vybestack/llxprt-code-core';
+import { createKeyringTokenStore } from '@vybestack/llxprt-code-core';
+// ProviderKeyStorage now lives in the storage package
+import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
+import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 
 let proxyTokenStore: ProxyTokenStore | undefined;
 let directTokenStore: KeyringTokenStore | undefined;

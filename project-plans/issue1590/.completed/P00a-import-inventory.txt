@@ -1,0 +1,173 @@
+P00a Import Inventory — 2026-06-10T00:22:49.513Z
+============================================================
+From package: @vybestack/llxprt-code-core
+Scan directory: packages
+Moved symbols: 26
+
+Total consumer files: 61
+Total imports: 82
+
+Import kinds:
+  static-import: 72
+  vi.mock: 8
+  dynamic-import: 2
+
+By package:
+  packages/a2a-server: 1
+  packages/cli: 76
+  packages/mcp: 3
+  packages/providers: 1
+  packages/test-utils: 1
+
+Consumer files:
+  packages/a2a-server/src/config/config.ts:
+    - FileDiscoveryService (static-import) from @vybestack/llxprt-code-core line 14
+  packages/cli/src/auth/__tests__/codex-oauth-provider.test.ts:
+    - SecureStore (static-import) from @vybestack/llxprt-code-core line 9
+    - KeyringAdapter (static-import) from @vybestack/llxprt-code-core line 9
+  packages/cli/src/auth/oauth-manager.refresh-race.spec.ts:
+    - SecureStore (static-import) from @vybestack/llxprt-code-core line 18
+    - KeyringAdapter (static-import) from @vybestack/llxprt-code-core line 18
+  packages/cli/src/auth/proxy/__tests__/e2e-credential-flow.test.ts:
+    - ProviderKeyStorage (static-import) from @vybestack/llxprt-code-core line 26
+  packages/cli/src/auth/proxy/__tests__/integration.test.ts:
+    - ProviderKeyStorage (static-import) from @vybestack/llxprt-code-core line 12
+  packages/cli/src/auth/proxy/__tests__/platform-matrix.test.ts:
+    - ProviderKeyStorage (static-import) from @vybestack/llxprt-code-core line 23
+  packages/cli/src/auth/proxy/__tests__/refresh-flow.spec.ts:
+    - ProviderKeyStorage (static-import) from @vybestack/llxprt-code-core line 16
+  packages/cli/src/auth/proxy/credential-proxy-server.ts:
+    - ProviderKeyStorage (static-import) from @vybestack/llxprt-code-core line 21
+  packages/cli/src/auth/proxy/credential-store-factory.ts:
+    - ProviderKeyStorage (static-import) from @vybestack/llxprt-code-core line 21
+    - getProviderKeyStorage (static-import) from @vybestack/llxprt-code-core line 25
+  packages/cli/src/auth/proxy/sandbox-proxy-lifecycle.ts:
+    - getProviderKeyStorage (static-import) from @vybestack/llxprt-code-core line 22
+  packages/cli/src/config/config.integration.test.ts:
+    - FileDiscoveryService (vi.mock) from @vybestack/llxprt-code-core line 28
+  packages/cli/src/config/environmentLoader.ts:
+    - FileDiscoveryService (static-import) from @vybestack/llxprt-code-core line 13
+  packages/cli/src/config/extension.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 7
+  packages/cli/src/config/extensions/settingsStorage.test.ts:
+    - SecureStore (vi.mock) from @vybestack/llxprt-code-core line 21
+  packages/cli/src/config/extensions/settingsStorage.ts:
+    - SecureStore (static-import) from @vybestack/llxprt-code-core line 22
+  packages/cli/src/config/interactiveContext.ts:
+    - FileDiscoveryService (static-import) from @vybestack/llxprt-code-core line 8
+  packages/cli/src/config/paths.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 8
+  packages/cli/src/config/sandboxProfiles.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 9
+  packages/cli/src/config/settings.test.ts:
+    - LLXPRT_DIR (static-import) from @vybestack/llxprt-code-core line 68
+  packages/cli/src/config/settingsLoader.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 4
+  packages/cli/src/extensions/extensionAutoUpdater.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 14
+  packages/cli/src/integration-tests/__tests__/oauth-buckets.integration.spec.ts:
+    - SecureStore (static-import) from @vybestack/llxprt-code-core line 19
+    - KeyringAdapter (static-import) from @vybestack/llxprt-code-core line 19
+  packages/cli/src/integration-tests/oauth-timing.integration.test.ts:
+    - SecureStore (static-import) from @vybestack/llxprt-code-core line 22
+    - KeyringAdapter (static-import) from @vybestack/llxprt-code-core line 22
+  packages/cli/src/nonInteractiveCliCommands.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 9
+  packages/cli/src/providers/providerAliases.modelDefaults.test.ts:
+    - Storage (dynamic-import) from @vybestack/llxprt-code-core line 33
+    - Storage (dynamic-import) from @vybestack/llxprt-code-core line 564
+  packages/cli/src/providers/providerAliases.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 12
+  packages/cli/src/runtime/__tests__/authKeyName.test.ts:
+    - ProviderKeyStorage (static-import) from @vybestack/llxprt-code-core line 28
+    - SecureStore (static-import) from @vybestack/llxprt-code-core line 28
+    - KeyringAdapter (static-import) from @vybestack/llxprt-code-core line 28
+    - getProviderKeyStorage (vi.mock) from @vybestack/llxprt-code-core line 93
+  packages/cli/src/services/FileCommandLoader.test.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 12
+    - Storage (vi.mock) from @vybestack/llxprt-code-core line 63
+  packages/cli/src/services/FileCommandLoader.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 13
+  packages/cli/src/ui/commands/keyCommand.subcommands.test.ts:
+    - ProviderKeyStorage (static-import) from @vybestack/llxprt-code-core line 24
+    - SecureStore (static-import) from @vybestack/llxprt-code-core line 24
+    - KeyringAdapter (static-import) from @vybestack/llxprt-code-core line 24
+    - getProviderKeyStorage (vi.mock) from @vybestack/llxprt-code-core line 88
+  packages/cli/src/ui/commands/keyCommand.ts:
+    - SecureStoreError (static-import) from @vybestack/llxprt-code-core line 25
+  packages/cli/src/ui/commands/memoryCommand.test.ts:
+    - FileDiscoveryService (static-import) from @vybestack/llxprt-code-core line 14
+  packages/cli/src/ui/commands/test/useSlashCompletion.schema.test.ts:
+    - FileDiscoveryService (static-import) from @vybestack/llxprt-code-core line 34
+  packages/cli/src/ui/hooks/atCommandProcessor.test.ts:
+    - FileDiscoveryService (static-import) from @vybestack/llxprt-code-core line 11
+    - StandardFileSystemService (static-import) from @vybestack/llxprt-code-core line 11
+  packages/cli/src/ui/hooks/atCompletionUtils.ts:
+    - FileDiscoveryService (static-import) from @vybestack/llxprt-code-core line 11
+  packages/cli/src/ui/hooks/slashCommandProcessorSupport.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 20
+  packages/cli/src/ui/hooks/useLogger.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 8
+  packages/cli/src/ui/hooks/useRewind.test.ts:
+    - ConversationRecord (static-import) from @vybestack/llxprt-code-core line 13
+    - BaseMessageRecord (static-import) from @vybestack/llxprt-code-core line 13
+  packages/cli/src/ui/hooks/useRewind.ts:
+    - ConversationRecord (static-import) from @vybestack/llxprt-code-core line 8
+    - BaseMessageRecord (static-import) from @vybestack/llxprt-code-core line 8
+  packages/cli/src/ui/hooks/useShellHistory.test.ts:
+    - Storage (vi.mock) from @vybestack/llxprt-code-core line 36
+  packages/cli/src/ui/hooks/useShellHistory.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 10
+  packages/cli/src/ui/hooks/useSlashCompletion.test.ts:
+    - FileDiscoveryService (static-import) from @vybestack/llxprt-code-core line 21
+  packages/cli/src/ui/utils/rewindFileOps.test.ts:
+    - ConversationRecord (static-import) from @vybestack/llxprt-code-core line 13
+    - BaseMessageRecord (static-import) from @vybestack/llxprt-code-core line 13
+    - ToolCallRecord (static-import) from @vybestack/llxprt-code-core line 13
+  packages/cli/src/ui/utils/rewindFileOps.ts:
+    - ConversationRecord (static-import) from @vybestack/llxprt-code-core line 9
+    - BaseMessageRecord (static-import) from @vybestack/llxprt-code-core line 9
+  packages/cli/src/utils/cleanup.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 9
+  packages/cli/src/utils/persistentState.test.ts:
+    - Storage (vi.mock) from @vybestack/llxprt-code-core line 12
+  packages/cli/src/utils/persistentState.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 7
+  packages/cli/src/utils/sessionCleanup.integration.test.ts:
+    - SESSION_FILE_PREFIX (static-import) from @vybestack/llxprt-code-core line 10
+  packages/cli/src/utils/sessionCleanup.test.ts:
+    - SESSION_FILE_PREFIX (static-import) from @vybestack/llxprt-code-core line 12
+  packages/cli/src/utils/sessionCleanup.ts:
+    - LLXPRT_DIR (static-import) from @vybestack/llxprt-code-core line 12
+  packages/cli/src/utils/sessionUtils.ts:
+    - SESSION_FILE_PREFIX (static-import) from @vybestack/llxprt-code-core line 9
+    - ConversationRecord (static-import) from @vybestack/llxprt-code-core line 9
+  packages/cli/src/utils/skillUtils.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core line 11
+  packages/cli/src/zed-integration/fileSystemService.test.ts:
+    - FileSystemService (static-import) from @vybestack/llxprt-code-core line 10
+  packages/cli/src/zed-integration/fileSystemService.ts:
+    - FileSystemService (static-import) from @vybestack/llxprt-code-core line 7
+  packages/cli/src/zed-integration/zedIntegration.ts:
+    - FilterFilesOptions (static-import) from @vybestack/llxprt-code-core line 10
+  packages/cli/test/ui/commands/authCommand-logout.test.ts:
+    - SecureStore (static-import) from @vybestack/llxprt-code-core line 18
+    - KeyringAdapter (static-import) from @vybestack/llxprt-code-core line 18
+  packages/mcp/src/auth/file-token-store.test.ts:
+    - Storage (vi.mock) from @vybestack/llxprt-code-core/config/storage.js line 27
+  packages/mcp/src/auth/file-token-store.ts:
+    - Storage (static-import) from @vybestack/llxprt-code-core/config/storage.js line 11
+  packages/mcp/src/auth/token-storage/keychain-token-storage.ts:
+    - createDefaultKeyringAdapter (static-import) from @vybestack/llxprt-code-core/storage/secure-store.js line 21
+  packages/providers/src/LoggingProviderWrapper.ts:
+    - getConversationFileWriter (static-import) from @vybestack/llxprt-code-core/storage/ConversationFileWriter.js line 41
+  packages/test-utils/src/test-rig.ts:
+    - LLXPRT_DIR (static-import) from @vybestack/llxprt-code-core line 17
+
+Reconciliation: pass
+Extra in plan (5):
+  - packages/core/src/config/config.ts
+  - packages/core/src/storage/storage-compat.test.ts
+  - packages/mcp/src/auth/token-storage/keychain-token-storage.test.ts
+  - packages/providers/src/IProvider.ts
+  - packages/providers/src/LoggingProviderWrapper.test.ts

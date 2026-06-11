@@ -25,12 +25,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 import {
   ProviderKeyStorage,
   SecureStore,
-  clearActiveProviderRuntimeContext,
   type KeyringAdapter,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-storage';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
@@ -90,9 +90,9 @@ function createStubProvider(): IProvider {
 
 let mockStorageRef: ProviderKeyStorage | null = null;
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-storage', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-storage')>();
   return {
     ...actual,
     getProviderKeyStorage: () => mockStorageRef,

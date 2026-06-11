@@ -22,11 +22,8 @@ import { CommandKind } from './types.js';
 
 import type { CommandArgumentSchema, CompleterFn } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import {
-  maskKeyForDisplay,
-  SecureStoreError,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+import { maskKeyForDisplay, debugLogger } from '@vybestack/llxprt-code-core';
+import { SecureStoreError } from '@vybestack/llxprt-code-storage';
 import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
 
 /**
