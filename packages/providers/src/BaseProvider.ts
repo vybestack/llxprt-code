@@ -24,7 +24,7 @@ import {
   type OAuthManager,
   type IProviderKeyStorage,
 } from '@vybestack/llxprt-code-auth';
-import { getProviderKeyStorage } from '@vybestack/llxprt-code-core/storage/provider-key-storage.js';
+import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage/storage/provider-key-storage.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
 import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';

@@ -18,7 +18,7 @@ import * as os from 'os';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { FileDiscoveryService } from '@vybestack/llxprt-code-core';
+import { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 
 describe('useSlashCompletion', () => {

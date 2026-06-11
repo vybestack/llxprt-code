@@ -9,10 +9,12 @@ import { CodexOAuthProvider } from '../codex-oauth-provider.js';
 import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth';
 import {
   KeyringTokenStore,
-  SecureStore,
-  type KeyringAdapter,
   type TokenStore,
 } from '@vybestack/llxprt-code-core';
+import {
+  SecureStore,
+  type KeyringAdapter,
+} from '@vybestack/llxprt-code-storage';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';

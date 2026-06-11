@@ -20,11 +20,32 @@ const shouldUseForkPool = isWindows || isMacCi;
 
 const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
+const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
 const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
 const providersEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
 const providersSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
 const coreEntry = fileURLToPath(new URL('../core/index.ts', import.meta.url));
 const coreSrcDir = fileURLToPath(new URL('../core/src/', import.meta.url));
+const storageEntry = fileURLToPath(
+  new URL('../storage/index.ts', import.meta.url),
+);
+const storageSrcDir = fileURLToPath(
+  new URL('../storage/src/', import.meta.url),
+);
+
+/**
+ * Storage deep-path export mapping mirrors package.json "exports" field.
+ * Export subpaths like "./storage/secure-store.js" map to source dirs like "secure-store/".
+ */
+const storageExportToSource: Record<string, string> = {
+  'config/storage': 'config/storage',
+  'services/fileSystemService': 'services/fileSystemService',
+  'services/fileDiscoveryService': 'services/fileDiscoveryService',
+  'storage/secure-store': 'secure-store/secure-store',
+  'storage/provider-key-storage': 'secure-store/provider-key-storage',
+  'storage/sessionTypes': 'session/sessionTypes',
+  'storage/ConversationFileWriter': 'conversation/ConversationFileWriter',
+};
 const settingsEntry = fileURLToPath(
   new URL('../settings/index.ts', import.meta.url),
 );
@@ -63,6 +84,25 @@ const workspaceAliasPlugin = {
       return resolveTsSource(
         coreSrcDir,
         source.slice(corePackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-storage') {
+      return storageEntry;
+    }
+    if (source.startsWith(storagePackagePrefix)) {
+      const subPath = source
+        .slice(storagePackagePrefix.length)
+        .replace(/\.js$/, '');
+      const sourcePath = storageExportToSource[subPath];
+      if (sourcePath) {
+        const tsPath = storageSrcDir + sourcePath + '.ts';
+        if (existsSync(tsPath)) {
+          return tsPath;
+        }
+      }
+      return resolveTsSource(
+        storageSrcDir,
+        source.slice(storagePackagePrefix.length),
       );
     }
     // @plan PLAN-20260608-ISSUE1588.P03b — settings source alias
@@ -130,6 +170,7 @@ export default defineConfig({
       deps: {
         inline: [
           '@vybestack/llxprt-code-core',
+          '@vybestack/llxprt-code-storage',
           '@vybestack/llxprt-code-providers',
           '@vybestack/llxprt-code-settings',
           'ajv',

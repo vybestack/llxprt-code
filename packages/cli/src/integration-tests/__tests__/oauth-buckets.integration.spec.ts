@@ -18,10 +18,12 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import {
   KeyringTokenStore,
-  SecureStore,
-  type KeyringAdapter,
   type OAuthToken,
 } from '@vybestack/llxprt-code-core';
+import {
+  SecureStore,
+  type KeyringAdapter,
+} from '@vybestack/llxprt-code-storage';
 import type { StandardProfile } from '@vybestack/llxprt-code-settings';
 import { OAuthManager } from '../../auth/oauth-manager.js';
 import type { OAuthProvider } from '../../auth/types.js';

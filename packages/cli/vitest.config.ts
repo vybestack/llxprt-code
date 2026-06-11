@@ -26,12 +26,29 @@ const ajvCjsEntry = resolve(
 );
 const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
+const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
 const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
 const ideIntegrationPackagePrefix = '@vybestack/llxprt-code-ide-integration/';
 const providersEntry = resolve(__dirname, '../providers/index.ts');
 const providersSrcDir = resolve(__dirname, '../providers/src/') + '/';
 const coreEntry = resolve(__dirname, '../core/index.ts');
 const coreSrcDir = resolve(__dirname, '../core/src/') + '/';
+const storageEntry = resolve(__dirname, '../storage/index.ts');
+const storageSrcDir = resolve(__dirname, '../storage/src/') + '/';
+
+/**
+ * Storage deep-path export mapping mirrors package.json "exports" field.
+ * Export subpaths like "./storage/secure-store.js" map to source dirs like "secure-store/".
+ */
+const storageExportToSource: Record<string, string> = {
+  'config/storage': 'config/storage',
+  'services/fileSystemService': 'services/fileSystemService',
+  'services/fileDiscoveryService': 'services/fileDiscoveryService',
+  'storage/secure-store': 'secure-store/secure-store',
+  'storage/provider-key-storage': 'secure-store/provider-key-storage',
+  'storage/sessionTypes': 'session/sessionTypes',
+  'storage/ConversationFileWriter': 'conversation/ConversationFileWriter',
+};
 const settingsEntry = resolve(__dirname, '../settings/index.ts');
 const settingsSrcDir = resolve(__dirname, '../settings/src/') + '/';
 const ideIntegrationEntry = resolve(__dirname, '../ide-integration/index.ts');
@@ -74,6 +91,25 @@ const workspaceAliasPlugin = {
       return resolveTsSource(
         coreSrcDir,
         source.slice(corePackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-storage') {
+      return storageEntry;
+    }
+    if (source.startsWith(storagePackagePrefix)) {
+      const subPath = source
+        .slice(storagePackagePrefix.length)
+        .replace(/\.js$/, '');
+      const sourcePath = storageExportToSource[subPath];
+      if (sourcePath) {
+        const tsPath = storageSrcDir + sourcePath + '.ts';
+        if (existsSync(tsPath)) {
+          return tsPath;
+        }
+      }
+      return resolveTsSource(
+        storageSrcDir,
+        source.slice(storagePackagePrefix.length),
       );
     }
     // @plan PLAN-20260608-ISSUE1588.P03b — settings source alias

@@ -25,13 +25,19 @@ const TEST_CONTENT_GENERATOR_CONFIG: ContentGeneratorConfig = {
 };
 
 // Mock file discovery service and tool registry
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-storage', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-storage');
   return {
     ...actual,
     FileDiscoveryService: vi.fn().mockImplementation(() => ({
       initialize: vi.fn(),
     })),
+  };
+});
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+  return {
+    ...actual,
     createToolRegistry: vi.fn().mockResolvedValue({}),
   };
 });

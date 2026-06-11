@@ -6,10 +6,12 @@
   },
   "type": "module",
   "workspaces": [
+    "packages/storage",
     "packages/auth",
     "packages/settings",
     "packages/telemetry",
     "packages/ide-integration",
+    "packages/policy",
     "packages/mcp",
     "packages/core",
     "packages/providers",

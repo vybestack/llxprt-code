@@ -65,7 +65,8 @@ import {
 } from './settings';
 import { getV2NamespacedSettingPath } from './settingsMerge.js';
 
-import { FatalConfigError, LLXPRT_DIR } from '@vybestack/llxprt-code-core';
+import { LLXPRT_DIR } from '@vybestack/llxprt-code-storage';
+import { FatalConfigError } from '@vybestack/llxprt-code-core';
 
 const MOCK_WORKSPACE_DIR = '/mock/workspace';
 // Use the (mocked) SETTINGS_DIRECTORY_NAME for consistency
