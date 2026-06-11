@@ -22,9 +22,13 @@ import type {
   AllToolCallsCompleteHandler,
   ToolCallsUpdateHandler,
 } from '../scheduler/types.js';
+import type { Config } from '../config/config.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { ToolCallRequestInfo } from './turn.js';
 import type { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
 import type { ToolConfirmationPayload } from '../tools/tools.js';
+import type { EditorType } from '../utils/editor.js';
 
 // Re-export types that staying consumers need
 export type {
@@ -45,13 +49,13 @@ export type {
  * @requirement REQ-INV-002
  */
 export interface ToolSchedulerFactoryOptions {
-  config: import('../config/config.js').Config;
-  messageBus: import('../confirmation-bus/message-bus.js').MessageBus;
-  toolRegistry: import('../tools/tool-registry.js').ToolRegistry;
+  config: Config;
+  messageBus: MessageBus;
+  toolRegistry: ToolRegistry;
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
-  getPreferredEditor: () => import('../utils/editor.js').EditorType | undefined;
+  getPreferredEditor: () => EditorType | undefined;
   onEditorClose: () => void;
   onEditorOpen?: () => void;
   toolContextInteractiveMode?: boolean;
@@ -71,15 +75,13 @@ export interface ToolSchedulerContract {
   cancelAll(): void;
   dispose(): void;
   setCallbacks(options: {
-    config: import('../config/config.js').Config;
-    messageBus: import('../confirmation-bus/message-bus.js').MessageBus;
-    toolRegistry: import('../tools/tool-registry.js').ToolRegistry;
+    config: Config;
+    messageBus: MessageBus;
+    toolRegistry: ToolRegistry;
     outputUpdateHandler?: OutputUpdateHandler;
     onAllToolCallsComplete?: AllToolCallsCompleteHandler;
     onToolCallsUpdate?: ToolCallsUpdateHandler;
-    getPreferredEditor: () =>
-      | import('../utils/editor.js').EditorType
-      | undefined;
+    getPreferredEditor: () => EditorType | undefined;
     onEditorClose: () => void;
     onEditorOpen?: () => void;
   }): void;

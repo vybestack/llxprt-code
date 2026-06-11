@@ -10,7 +10,11 @@ import * as os from 'os';
 import * as http from 'http';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { MessageBus } from '@vybestack/llxprt-code-core';
+import {
+  AgentClient,
+  CoreToolScheduler,
+  MessageBus,
+} from '@vybestack/llxprt-code-core';
 
 /**
  * Creates a temporary directory for tests
@@ -42,10 +46,27 @@ export async function cleanupTempDirectory(dir: string): Promise<void> {
     }
   }
 }
+function attachTestAgentFactories(config: Config): void {
+  Object.defineProperties(config, {
+    agentClientFactory: {
+      value: (
+        cfg: Config,
+        runtimeState: ConstructorParameters<typeof AgentClient>[1],
+      ) => new AgentClient(cfg, runtimeState),
+      configurable: true,
+    },
+    toolSchedulerFactory: {
+      value: (options: ConstructorParameters<typeof CoreToolScheduler>[0]) =>
+        new CoreToolScheduler(options),
+      configurable: true,
+    },
+  });
+}
 
 export async function initializeTestConfig(
   config: Config,
 ): Promise<MessageBus> {
+  attachTestAgentFactories(config);
   const sessionMessageBus = new MessageBus(
     config.getPolicyEngine(),
     config.getDebugMode(),

@@ -141,6 +141,9 @@ function createMockExecutionConfig(
     getUsageStatisticsEnabled: () => false,
     getDebugMode: () => false,
     getContentGeneratorConfig: () => ({ model: 'test-model' }),
+    getToolSchedulerFactory:
+      () => (options: ConstructorParameters<typeof CoreToolScheduler>[0]) =>
+        new CoreToolScheduler(options),
   };
 
   // Add scheduler singleton methods - they need the full config reference

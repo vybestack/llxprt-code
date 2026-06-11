@@ -5,6 +5,8 @@
  */
 
 import { Config, type ConfigParameters } from '../config/config.js';
+import { AgentClient } from '../core/client.js';
+import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { MessageBus as MessageBusType } from '../confirmation-bus/message-bus.js';
@@ -30,11 +32,29 @@ export function getTestRuntimeMessageBus(config: Config): MessageBusType {
   return bus;
 }
 
+function attachTestAgentFactories(config: Config): void {
+  Object.defineProperties(config, {
+    agentClientFactory: {
+      value: (
+        cfg: Config,
+        runtimeState: ConstructorParameters<typeof AgentClient>[1],
+      ) => new AgentClient(cfg, runtimeState),
+      configurable: true,
+    },
+    toolSchedulerFactory: {
+      value: (options: ConstructorParameters<typeof CoreToolScheduler>[0]) =>
+        new CoreToolScheduler(options),
+      configurable: true,
+    },
+  });
+}
+
 /**
  * Test-only helper that initializes Config with an explicit session MessageBus,
  * mirroring the production composition-root DI path.
  */
 export async function initializeTestConfig(config: Config): Promise<void> {
+  attachTestAgentFactories(config);
   const sessionMessageBus = new MessageBus(
     config.getPolicyEngine(),
     config.getDebugMode(),
@@ -62,6 +82,7 @@ export function makeFakeConfig(options?: {
   };
 
   const config = new Config(params);
+  attachTestAgentFactories(config);
 
   // Set some reasonable defaults for testing
   config.setModel('gemini-2.0-flash-exp');

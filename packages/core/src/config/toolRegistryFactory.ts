@@ -87,9 +87,7 @@ export interface TaskToolRegistration {
 
 /** TaskTool dependencies argument shape */
 export interface TaskToolArgs {
-  profileManager:
-    | import('@vybestack/llxprt-code-settings').ProfileManager
-    | undefined;
+  profileManager: ProfileManager | undefined;
   subagentManager: SubagentManager | undefined;
   schedulerFactoryProvider: () => SubagentSchedulerFactory | undefined;
   getAsyncTaskManager: () => AsyncTaskManager | undefined;
@@ -362,43 +360,25 @@ function registerAgentTools(
     getAsyncTaskManager: () => host.getAsyncTaskManager(),
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
   if (profileManager !== undefined && subagentManager !== undefined) {
-    if (registration) {
-      registerTaskTool(
-        registry,
-        effectiveCoreTools,
-        host.getExcludeTools(),
-        allPotentialTools,
-        registration,
-        config,
-        taskToolArgs,
-      );
-    } else {
-      // Post-P03 misconfiguration: managers present but no registration available.
-      // This is an explicit config-error diagnostic, NOT the missing-manager path.
-      const taskToolRecord: ToolRecord = {
-        toolClass: undefined,
-        toolName: TASK_TOOL_CLASS_NAME,
-        displayName: TASK_TOOL_NAME,
-        isRegistered: false,
-        reason:
-          'taskToolRegistration not provided (configuration error: composition root must wire TaskToolRegistration)',
-        args: [config, taskToolArgs],
-      };
-      allPotentialTools.push(taskToolRecord);
-    }
+    registerTaskTool(
+      registry,
+      effectiveCoreTools,
+      host.getExcludeTools(),
+      allPotentialTools,
+      registration,
+      config,
+      taskToolArgs,
+    );
   } else {
     // Missing-manager path: preserved exactly from today's behavior
     const taskToolRecord: ToolRecord = {
-      toolClass: registration?.toolClass,
+      toolClass: registration.toolClass,
       toolName: TASK_TOOL_CLASS_NAME,
-      displayName: registration?.staticName ?? TASK_TOOL_NAME,
+      displayName: registration.staticName,
       isRegistered: false,
       reason: getTaskToolMissingReason(profileManager, subagentManager),
-      args: registration
-        ? registration.buildArgs(config, taskToolArgs)
-        : [config, taskToolArgs],
+      args: registration.buildArgs(config, taskToolArgs),
     };
     allPotentialTools.push(taskToolRecord);
   }

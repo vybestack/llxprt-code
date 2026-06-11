@@ -17,22 +17,21 @@
  */
 
 import { TaskTool } from '../tools/task.js';
+import type { Config } from './config.js';
 import type {
   TaskToolRegistration,
   TaskToolArgs,
 } from './toolRegistryFactory.js';
+import type { AnyDeclarativeTool } from '../tools/tools.js';
 
 export const defaultTaskToolRegistration: TaskToolRegistration = {
   toolClass: TaskTool,
-  className: TaskTool.name, // 'TaskTool'
-  staticName: TaskTool.Name, // 'task'
+  className: 'TaskTool',
+  staticName: 'task',
   buildArgs(_config: unknown, taskToolArgs: TaskToolArgs): unknown[] {
     return [_config, taskToolArgs];
   },
-  create(
-    config: unknown,
-    args: TaskToolArgs,
-  ): import('../tools/tools.js').AnyDeclarativeTool {
-    return new TaskTool(config as import('../config/config.js').Config, args);
+  create(config: unknown, args: TaskToolArgs): AnyDeclarativeTool {
+    return new TaskTool(config as Config, args);
   },
 };

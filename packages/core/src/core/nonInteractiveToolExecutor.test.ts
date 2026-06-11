@@ -28,6 +28,7 @@ import {
   disposeScheduler,
   clearAllSchedulers,
 } from '../config/schedulerSingleton.js';
+import { CoreToolScheduler } from './coreToolScheduler.js';
 
 describe('executeToolCall', () => {
   let mockToolRegistry: ToolRegistry;
@@ -73,6 +74,12 @@ describe('executeToolCall', () => {
       getTelemetryLogPromptsEnabled: () => false,
       getPolicyEngine: () => policyEngine,
       getMessageBus: () => messageBus,
+      getToolSchedulerFactory:
+        () =>
+        (
+          schedulerOptions: ConstructorParameters<typeof CoreToolScheduler>[0],
+        ) =>
+          new CoreToolScheduler(schedulerOptions),
     };
 
     // Add scheduler singleton methods - they need the full config reference
@@ -441,6 +448,12 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       getMessageBus: () => messageBus,
       getApprovalMode: () => options?.approvalMode ?? ApprovalMode.DEFAULT,
       getAllowedTools: () => options?.allowedTools,
+      getToolSchedulerFactory:
+        () =>
+        (
+          schedulerOptions: ConstructorParameters<typeof CoreToolScheduler>[0],
+        ) =>
+          new CoreToolScheduler(schedulerOptions),
     };
 
     // Add scheduler singleton methods

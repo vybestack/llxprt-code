@@ -29,12 +29,16 @@ import type {
   PartListUnion,
   SendMessageParameters,
 } from '@google/genai';
+import type { UserTierId } from '../code_assist/types.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { CompletedToolCall } from '../scheduler/types.js';
-import type { Turn } from './turn.js';
-import type { ServerGeminiStreamEvent } from './turn.js';
+import type {
+  PerformCompressionResult,
+  ServerGeminiStreamEvent,
+  Turn,
+} from './turn.js';
 import type { StreamEvent } from './chatSessionTypes.js';
 import type { Config } from '../config/config.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -50,9 +54,7 @@ export interface AgentChatContract {
   clearHistory(): void;
   getHistoryService(): HistoryService | null;
   wasRecentlyCompressed(): boolean;
-  performCompression(
-    promptId: string,
-  ): Promise<import('./turn.js').PerformCompressionResult>;
+  performCompression(promptId: string): Promise<PerformCompressionResult>;
   recordCompletedToolCalls(
     model: string,
     completedToolCalls: CompletedToolCall[],
@@ -88,7 +90,7 @@ export interface AgentClientContract {
   getContentGenerator(): ContentGenerator;
   startChat(extraHistory?: Content[]): Promise<AgentChatContract>;
   generateDirectMessage(
-    params: import('@google/genai').SendMessageParameters,
+    params: SendMessageParameters,
     promptId: string,
   ): Promise<GenerateContentResponse>;
   generateJson(
@@ -113,7 +115,7 @@ export interface AgentClientContract {
     isInvalidStreamRetry?: boolean,
     is413Retry?: boolean,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn>;
-  getUserTier(): import('../code_assist/types.js').UserTierId | undefined;
+  getUserTier(): UserTierId | undefined;
   getCurrentSequenceModel(): string | null;
 }
 

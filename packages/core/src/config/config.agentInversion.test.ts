@@ -18,7 +18,6 @@ import {
 } from './toolRegistryFactory.js';
 import { DeclarativeTool, type ToolInvocation } from '../tools/tools.js';
 import { Kind } from '../tools/tools.js';
-import type { MessageBus as MessageBusType } from '../confirmation-bus/message-bus.js';
 
 function baseParams(
   overrides: Partial<ConfigParameters> = {},
@@ -33,6 +32,19 @@ function baseParams(
   };
 }
 
+function emptyChatStream(): AsyncGenerator<never, never> {
+  return (async function* () {
+    if (Math.random() < 0) {
+      yield undefined as never;
+    }
+    return undefined as never;
+  })();
+}
+
+function emptyServerStream(): AsyncGenerator<never, never> {
+  return emptyChatStream();
+}
+
 function createFakeAgentClient(): AgentClientContract {
   let initialized = false;
   const history: Content[] = [];
@@ -45,7 +57,7 @@ function createFakeAgentClient(): AgentClientContract {
     },
     hasChatInitialized: vi.fn(() => false),
     getChat: vi.fn(() => ({
-      sendMessageStream: vi.fn(async () => (async function* () {})()),
+      sendMessageStream: vi.fn(async () => emptyChatStream()),
       getHistory: () => history,
       setHistory: vi.fn(),
       clearHistory: vi.fn(),
@@ -76,7 +88,7 @@ function createFakeAgentClient(): AgentClientContract {
     addDirectoryContext: vi.fn(async () => {}),
     getContentGenerator: vi.fn(() => ({}) as never),
     startChat: vi.fn(async () => ({
-      sendMessageStream: vi.fn(async () => (async function* () {})()),
+      sendMessageStream: vi.fn(async () => emptyChatStream()),
       getHistory: () => history,
       setHistory: vi.fn(),
       clearHistory: vi.fn(),
@@ -89,9 +101,7 @@ function createFakeAgentClient(): AgentClientContract {
     generateJson: vi.fn(async () => ({})),
     generateContent: vi.fn(async () => ({}) as GenerateContentResponse),
     generateEmbedding: vi.fn(async () => []),
-    async *sendMessageStream(): AsyncGenerator<never, never> {
-      return undefined as never;
-    },
+    sendMessageStream: vi.fn(() => emptyServerStream()),
     getUserTier: vi.fn(() => undefined),
     getCurrentSequenceModel: vi.fn(() => null),
   };
@@ -244,7 +254,7 @@ describe('P01 construction inversion contracts', () => {
     const taskRecord = allPotentialTools.find(
       (tool) => tool.toolName === 'TaskTool',
     );
-    expect(taskRecord).toEqual(
+    expect(taskRecord).toStrictEqual(
       expect.objectContaining({
         toolClass: RegisteredTaskTool,
         toolName: 'TaskTool',

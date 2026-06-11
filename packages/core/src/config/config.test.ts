@@ -27,6 +27,7 @@ import {
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import { AgentClient } from '../core/client.js';
+import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
@@ -239,6 +240,9 @@ describe('Server Config (config.ts)', () => {
     sessionId: SESSION_ID,
     model: MODEL,
     settingsService: sharedSettingsService,
+    agentClientFactory: (config, runtimeState) =>
+      new AgentClient(config, runtimeState),
+    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
   };
 
   beforeEach(() => {
