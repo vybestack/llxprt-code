@@ -39,7 +39,7 @@ import {
 import { DEFAULT_FILE_FILTERING_OPTIONS } from './constants.js';
 import { parseLspConfig, type LspState } from './lspIntegration.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
-import { Storage } from './storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { FileExclusions } from '../utils/ignorePatterns.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { setGlobalProxy } from '../utils/fetch.js';
@@ -62,9 +62,12 @@ import {
   StandardFileSystemService,
   type FileSystemService,
 } from '../services/fileSystemService.js';
-import { registerSettingsService } from '../settings/settingsServiceInstance.js';
-import { SettingsService } from '../settings/SettingsService.js';
 import { peekActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import {
+  activateSettingsRuntimeContext,
+  createRuntimeSettingsService,
+} from '../runtime/settingsRuntimeAdapter.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { logCliConfiguration, StartSessionEvent } from '../telemetry/index.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
@@ -208,23 +211,37 @@ export interface ConfigConstructorTarget {
   getProxy(): string | undefined;
 }
 
+function isSettingsService(value: unknown): value is SettingsService {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return [
+    'clear',
+    'updateSettings',
+    'switchProvider',
+    'on',
+    'off',
+    'getCurrentProfileName',
+  ].every((methodName) => typeof candidate[methodName] === 'function');
+}
+
 function applySettingsService(
   config: ConfigConstructorTarget,
   params: ConfigParameters,
 ): void {
   const providedSettingsService = params.settingsService;
-  if (providedSettingsService) {
-    registerSettingsService(providedSettingsService);
-  }
-
   const existingContext = peekActiveProviderRuntimeContext();
   if (providedSettingsService) {
     config.settingsService = providedSettingsService;
-  } else if (existingContext?.settingsService) {
+  } else if (isSettingsService(existingContext?.settingsService)) {
     config.settingsService = existingContext.settingsService;
   } else {
-    config.settingsService = new SettingsService();
+    config.settingsService = createRuntimeSettingsService();
   }
+
+  activateSettingsRuntimeContext(config.settingsService);
 }
 
 function applyCoreIdentity(

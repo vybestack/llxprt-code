@@ -19,8 +19,9 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { NotYetImplemented } from '@vybestack/llxprt-code-core/utils/errors.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime as createProviderWithRuntimeHelper } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-core/auth/precedence.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -104,14 +105,14 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
     } = await import(
       '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js'
     );
-    const { getSettingsService } = await import(
-      '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js'
-    );
+    const { getSettingsService, registerSettingsService: registerSS } =
+      await import('@vybestack/llxprt-code-settings');
     const tempRuntime = createProviderRuntimeContext({
       settingsService: new SettingsService(),
       runtimeId: 'test-global-runtime',
     });
     setActiveProviderRuntimeContext(tempRuntime);
+    registerSS(tempRuntime.settingsService);
     const globalSettingsService = getSettingsService();
     globalSettingsService.clear();
     clearActiveProviderRuntimeContext();

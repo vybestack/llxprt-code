@@ -38,7 +38,7 @@ let log: (message: string) => void = () => {};
 function updateWorkspacePath(context: vscode.ExtensionContext) {
   // console.error('updateWorkspace called with ', context);
   const workspaceFolders = vscode.workspace.workspaceFolders;
-  if (workspaceFolders && workspaceFolders.length > 0) {
+  if (workspaceFolders !== undefined && workspaceFolders.length > 0) {
     const workspacePaths = workspaceFolders
       .map((folder) => folder.uri.fsPath)
       .join(path.delimiter);
@@ -156,7 +156,7 @@ function registerDiffCommands(
       'llxprt.diff.accept',
       (uri?: vscode.Uri) => {
         const docUri = uri ?? vscode.window.activeTextEditor?.document.uri;
-        if (docUri && docUri.scheme === DIFF_SCHEME) {
+        if (docUri !== undefined && docUri.scheme === DIFF_SCHEME) {
           void diffManager.acceptDiff(docUri);
         }
       },
@@ -165,7 +165,7 @@ function registerDiffCommands(
       'llxprt.diff.cancel',
       (uri?: vscode.Uri) => {
         const docUri = uri ?? vscode.window.activeTextEditor?.document.uri;
-        if (docUri && docUri.scheme === DIFF_SCHEME) {
+        if (docUri !== undefined && docUri.scheme === DIFF_SCHEME) {
           void diffManager.cancelDiff(docUri);
         }
       },
@@ -175,7 +175,7 @@ function registerDiffCommands(
 
 async function runLLxprtCodeCommand() {
   const workspaceFolders = vscode.workspace.workspaceFolders;
-  if (!workspaceFolders || workspaceFolders.length === 0) {
+  if (workspaceFolders === undefined || workspaceFolders.length === 0) {
     vscode.window.showInformationMessage(
       'No folder open. Please open a folder to run LLxprt Code.',
     );
@@ -191,7 +191,7 @@ async function runLLxprtCodeCommand() {
     });
   }
 
-  if (selectedFolder) {
+  if (selectedFolder !== undefined) {
     const llxprtCmd = 'llxprt';
     const terminal = vscode.window.createTerminal({
       name: `LLxprt Code (${selectedFolder.name})`,
@@ -272,7 +272,7 @@ export async function deactivate(): Promise<void> {
   log('Extension deactivated');
   try {
     // VS Code lifecycle boundary: ideServer may be undefined if activation failed
-    if (ideServer) {
+    if (ideServer !== undefined) {
       await ideServer.stop();
     }
   } catch (err) {
@@ -280,7 +280,7 @@ export async function deactivate(): Promise<void> {
     log(`Failed to stop IDE server during deactivation: ${message}`);
   } finally {
     // VS Code lifecycle boundary: logger may be undefined if activation failed
-    if (logger) {
+    if (logger !== undefined) {
       logger.dispose();
     }
   }

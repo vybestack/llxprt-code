@@ -3,13 +3,18 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderWithRuntime } from '../test-utils/runtime.js';
 
 // Mock the settings service instance
-vi.mock('../settings/settingsServiceInstance.js');
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: vi.fn(),
+}));
 
 const mockGetSettingsService = getSettingsService as vi.MockedFunction<
   typeof getSettingsService

@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
@@ -22,7 +22,8 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import type { CodexOAuthToken } from '@vybestack/llxprt-code-core/auth/types.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+import type { CodexOAuthToken } from '@vybestack/llxprt-code-auth';
 
 function buildCodexCallOptions(
   provider: OpenAIResponsesProvider,

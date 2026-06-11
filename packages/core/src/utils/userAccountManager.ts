@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import { promises as fsp, readFileSync } from 'node:fs';
-import { Storage } from '../config/storage.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from './debugLogger.js';
 
 interface UserAccounts {

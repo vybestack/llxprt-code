@@ -7,12 +7,27 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OAuthManager } from './oauth-manager.js';
 import { KeyringTokenStore } from './types.js';
+import type { ISecureStore } from '@vybestack/llxprt-code-auth';
 import { GeminiOAuthProvider } from './gemini-oauth-provider.js';
 import { QwenOAuthProvider } from './qwen-oauth-provider.js';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import { promises as fs } from 'node:fs';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
+
+/** Minimal in-memory ISecureStore for tests that don't exercise storage. */
+function createStubSecureStore(): ISecureStore {
+  const store = new Map<string, string>();
+  return {
+    get: async (key) => store.get(key) ?? null,
+    set: async (key, value) => {
+      store.set(key, value);
+    },
+    delete: async (key) => store.delete(key),
+    list: async () => [...store.keys()],
+    has: async (key) => store.has(key),
+  };
+}
 
 // Mock the file system to simulate missing OAuth credentials
 vi.mock('node:fs', async (importOriginal) => {
@@ -49,7 +64,9 @@ describe('OAuth Provider Premature Initialization', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    tokenStore = new KeyringTokenStore();
+    tokenStore = new KeyringTokenStore({
+      secureStore: createStubSecureStore(),
+    });
     oauthManager = new OAuthManager(tokenStore);
 
     // Mock the OAuth credentials file to not exist

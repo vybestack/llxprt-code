@@ -35,15 +35,15 @@ import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.j
 import { triggerPreCompressHook } from './lifecycleHookTriggers.js';
 import { PreCompressTrigger } from '../hooks/types.js';
 import type { ContentGenerator } from './contentGenerator.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { getProviderKeyStorage } from '../storage/provider-key-storage.js';
 
 import { createRuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
-import { isLoadBalancerProfile } from '../types/modelParams.js';
+import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import type {
   LoadBalancerProfile,
   StandardProfile,
-} from '../types/modelParams.js';
+} from '@vybestack/llxprt-code-settings';
 
 // Decomposed modules
 import { CompressionHandler } from './compression/CompressionHandler.js';
@@ -210,7 +210,8 @@ class CompressionLoadBalancingProvider implements IProvider {
     const candidateOptions: RuntimeGenerateChatOptions = {
       ...options,
       runtime: candidate.runtime,
-      settings: candidate.runtime.settingsService,
+      settings: candidate.runtime
+        .settingsService as RuntimeGenerateChatOptions['settings'],
       config: candidate.config,
       resolved: {
         ...options.resolved,

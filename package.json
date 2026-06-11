@@ -6,6 +6,9 @@
   },
   "type": "module",
   "workspaces": [
+    "packages/auth",
+    "packages/settings",
+    "packages/telemetry",
     "packages/mcp",
     "packages/core",
     "packages/providers",
@@ -34,7 +37,7 @@
     "auth:docker": "echo 'For ghcr.io, use: echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin'",
     "auth": "npm run auth:npm && npm run auth:docker",
     "generate": "node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js",
-    "predocs:settings": "npm run build --workspace @vybestack/llxprt-code-core",
+    "predocs:settings": "npm run build --workspace @vybestack/llxprt-code-settings && npm run build --workspace @vybestack/llxprt-code-core",
     "schema:settings": "tsx ./scripts/generate-settings-schema.ts",
     "docs:settings": "tsx ./scripts/generate-settings-doc.ts",
     "docs:keybindings": "tsx ./scripts/generate-keybindings-doc.ts",
@@ -57,9 +60,9 @@
     "test:integration:sandbox:podman": "cross-env LLXPRT_SANDBOX=podman vitest run --root ./integration-tests",
     "test:always_passing_evals": "vitest run --root ./evals",
     "test:all_evals": "cross-env RUN_EVALS=1 vitest run --root ./evals",
-    "lint": "cross-env NODE_OPTIONS=--max-old-space-size=6144 eslint . --ext .ts,.tsx && cross-env NODE_OPTIONS=--max-old-space-size=6144 eslint integration-tests",
+    "lint": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --ext .ts,.tsx && cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint integration-tests",
     "lint:fix": "eslint . --fix && eslint integration-tests --fix",
-    "lint:ci": "cross-env NODE_OPTIONS=--max-old-space-size=6144 eslint . --ext .ts,.tsx && cross-env NODE_OPTIONS=--max-old-space-size=6144 eslint integration-tests",
+    "lint:ci": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --ext .ts,.tsx && cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint integration-tests",
     "lint:all": "./scripts/lint-all.sh",
     "format": "prettier --experimental-cli --write .",
     "format:check": "prettier --check .",
@@ -174,5 +177,5 @@
       "prettier --write"
     ]
   },
-  "packageManager": "pnpm@10.17.0+sha512.fce8a3dd29a4ed2ec566fb53efbb04d8c44a0f05bc6f24a73046910fb9c3ce7afa35a0980500668fa3573345bd644644fa98338fa168235c80f4aa17aa17fbef"
+  "packageManager": "npm@11.6.2"
 }

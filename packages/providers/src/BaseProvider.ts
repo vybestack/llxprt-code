@@ -17,21 +17,25 @@ import {
 import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
   AuthPrecedenceResolver,
   type AuthPrecedenceConfig,
   type OAuthManager,
-} from '@vybestack/llxprt-code-core/auth/precedence.js';
+  type IProviderKeyStorage,
+} from '@vybestack/llxprt-code-auth';
+import { getProviderKeyStorage } from '@vybestack/llxprt-code-core/storage/provider-key-storage.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
-import {
-  peekActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-core/settings/SettingsService.js';
-import { getSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  createSettingsProviderRuntimeContext,
+  resolveRuntimeSettingsService,
+  setSettingsProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { MissingProviderRuntimeError } from './errors.js';
 import {
   assertProviderRuntimeContext,
@@ -62,6 +66,13 @@ export interface BaseProviderConfig {
   oauthManager?: OAuthManager;
   // Override for supportsOAuth when method can't be used in constructor
   supportsOAuth?: boolean;
+
+  // Named API key storage used to resolve `auth-key-name` references.
+  // Optional DI seam: when omitted, BaseProvider falls back to core's
+  // singleton provider key storage so resolution works in every runtime
+  // (including subagent runtimes that set `auth-key-name` without
+  // pre-resolving it to a concrete `auth-key`).
+  providerKeyStorage?: IProviderKeyStorage;
 }
 
 export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
@@ -124,16 +135,8 @@ export abstract class BaseProvider implements IProvider {
     this.providerConfig = providerConfig;
     this.defaultConfig = globalConfig;
 
-    let fallbackSettingsService: SettingsService;
-    if (settingsService) {
-      fallbackSettingsService = settingsService;
-    } else {
-      try {
-        fallbackSettingsService = getSettingsService();
-      } catch {
-        fallbackSettingsService = new SettingsService();
-      }
-    }
+    const fallbackSettingsService =
+      resolveRuntimeSettingsService(settingsService);
 
     this.defaultSettingsService = fallbackSettingsService;
 
@@ -148,11 +151,19 @@ export abstract class BaseProvider implements IProvider {
       providerId: this.name,
     };
 
-    this.authResolver = new AuthPrecedenceResolver(
-      precedenceConfig,
-      config.oauthManager,
-      fallbackSettingsService,
-    );
+    // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor (unified with C-CB-06/C-CB-09)
+    // SettingsService satisfies ISettingsService by structural typing.
+    // providerKeyStorage is injected so the resolver can resolve named keys
+    // (`auth-key-name`) on its own. Pre-extraction, the core resolver reached
+    // core's getProviderKeyStorage() internally; after extraction the auth
+    // package can't, so the consumer must inject it. Falling back to core's
+    // singleton preserves behavior for runtimes (e.g. subagents) that set
+    // `auth-key-name` without pre-resolving it to a concrete `auth-key`.
+    this.authResolver = new AuthPrecedenceResolver(precedenceConfig, {
+      oauthManager: config.oauthManager,
+      settingsService: fallbackSettingsService,
+      providerKeyStorage: config.providerKeyStorage ?? getProviderKeyStorage(),
+    });
   }
 
   /**
@@ -673,26 +684,26 @@ export abstract class BaseProvider implements IProvider {
       mergedMetadata.source = 'BaseProvider.generateChatCompletion';
     }
 
-    const runtimeContext: ProviderRuntimeContext = normalized.runtime
-      ? {
-          ...normalized.runtime,
-          settingsService: normalized.settings,
-          config: normalized.config ?? normalized.runtime.config,
-          metadata: mergedMetadata,
-        }
-      : {
-          settingsService: normalized.settings,
-          config: normalized.config ?? previousContext?.config,
-          runtimeId:
-            previousContext?.runtimeId ?? 'base-provider.normalized-call',
-          metadata: mergedMetadata,
-        };
+    const runtimeContext: ProviderRuntimeContext =
+      createSettingsProviderRuntimeContext({
+        ...(normalized.runtime ?? {}),
+        settingsService: normalized.settings,
+        config:
+          normalized.config ??
+          normalized.runtime?.config ??
+          previousContext?.config,
+        runtimeId:
+          normalized.runtime?.runtimeId ??
+          previousContext?.runtimeId ??
+          'base-provider.normalized-call',
+        metadata: mergedMetadata,
+      });
 
     return async function* (
       this: BaseProvider,
     ): AsyncIterableIterator<IContent> {
       if (needsContextSwap === true) {
-        setActiveProviderRuntimeContext(runtimeContext);
+        setSettingsProviderRuntimeContext(runtimeContext);
       }
 
       try {
@@ -702,7 +713,7 @@ export abstract class BaseProvider implements IProvider {
         }
       } finally {
         if (needsContextSwap === true) {
-          setActiveProviderRuntimeContext(previousContext ?? null);
+          setSettingsProviderRuntimeContext(previousContext ?? null);
         }
         normalized.resolved.authToken = '';
         this.authResolver.setSettingsService(this.defaultSettingsService);

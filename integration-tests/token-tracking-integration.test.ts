@@ -15,7 +15,7 @@ import { ProviderPerformanceTracker } from '@vybestack/llxprt-code-providers/log
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-core/settings/settingsServiceInstance.js';
+import { resetSettingsService } from '@vybestack/llxprt-code-settings/settings/settingsServiceInstance.js';
 
 describe('Token Tracking Integration Tests', () => {
   let providerManager: ProviderManager;

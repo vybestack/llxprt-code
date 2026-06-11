@@ -15,8 +15,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   sanitizeForByteString,
   needsSanitization,
-  SettingsService,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '@vybestack/llxprt-code-providers';
 import { MockFileSystem } from './IFileSystem.js';
 import {

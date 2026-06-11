@@ -14,10 +14,10 @@ import type { RuntimeProvider as IProvider } from '../../../runtime/contracts/Ru
 import type { RuntimeGenerateChatOptions } from '../../../runtime/contracts/RuntimeProviderChat.js';
 import type { AgentRuntimeContext } from '../../../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../../../runtime/providerRuntimeContext.js';
-import { SettingsService } from '../../../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ContentGenerator } from '../../contentGenerator.js';
 import type { Config } from '../../../config/config.js';
-import type { Profile, StandardProfile } from '../../../types/modelParams.js';
+import type { Profile, StandardProfile } from '@vybestack/llxprt-code-settings';
 import { ChatSession } from '../../chatSession.js';
 import { CompressionHandler } from '../CompressionHandler.js';
 import { HistoryService } from '../../../services/history/HistoryService.js';

@@ -54,7 +54,7 @@ async function writePortAndWorkspace({
 }: WritePortAndWorkspaceArgs): Promise<void> {
   const workspaceFolders = vscode.workspace.workspaceFolders;
   const workspacePath =
-    workspaceFolders && workspaceFolders.length > 0
+    workspaceFolders !== undefined && workspaceFolders.length > 0
       ? workspaceFolders.map((folder) => folder.uri.fsPath).join(path.delimiter)
       : '';
 
@@ -530,10 +530,10 @@ export class IDEServer {
       this.server = undefined;
     }
 
-    if (this.context) {
+    if (this.context !== undefined) {
       this.context.environmentVariableCollection.clear();
     }
-    if (this.portFile) {
+    if (this.portFile !== undefined) {
       try {
         await fs.unlink(this.portFile);
       } catch {

@@ -338,7 +338,8 @@ export async function runVerificationPass(
       runtime: providerRuntime,
       invocation,
 
-      settings: providerRuntime.settingsService,
+      settings:
+        providerRuntime.settingsService as RuntimeGenerateChatOptions['settings'],
       resolved: resolvedOptions,
       metadata: {
         ...(providerRuntime.metadata ?? {}),

@@ -8,10 +8,29 @@
     "types": ["node", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
+      "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
       "@vybestack/llxprt-code-core": ["./index.ts"],
-      "@vybestack/llxprt-code-core/*": ["./src/*"]
+      "@vybestack/llxprt-code-core/*": ["./src/*"],
+      "@vybestack/llxprt-code-mcp": ["../mcp/dist/mcp/index.d.ts"],
+      "@vybestack/llxprt-code-mcp/*": ["../mcp/dist/mcp/src/*"],
+      "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
+      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"]
     }
   },
-  "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.json",
+    "../settings/index.ts",
+    "../settings/src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "../settings/src/**/*.test.ts",
+    "../settings/src/**/*.spec.ts"
+  ],
+  "references": [{ "path": "../auth" }, { "path": "../settings" }]
 }

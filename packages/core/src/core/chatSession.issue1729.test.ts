@@ -4,7 +4,7 @@ import type { ThinkingBlock } from '../services/history/blocks/ThinkingBlock.js'
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { Config } from '../config/config.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';

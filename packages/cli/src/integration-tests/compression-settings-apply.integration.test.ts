@@ -5,12 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-settings';
+import { Config } from '@vybestack/llxprt-code-core';
 import {
-  Config,
   ProfileManager,
   SettingsService,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,

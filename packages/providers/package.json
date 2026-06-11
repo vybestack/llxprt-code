@@ -51,7 +51,9 @@
     "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "^1.0.21",
     "@google/genai": "1.30.0",
+    "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
+    "@vybestack/llxprt-code-settings": "file:../settings",
     "ai": "^5.0.104",
     "openai": "^5.10.1",
     "zod": "^3.25.76"

@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { SettingsService } from '../../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '../providerCallOptions.js';
 
 describe('createProviderCallOptions', () => {

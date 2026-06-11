@@ -9,7 +9,6 @@ export * from './safety/index.js';
 
 // Export config
 export * from './config/config.js';
-export * from './config/profileManager.js';
 export * from './config/subagentManager.js';
 export * from './config/schedulerSingleton.js';
 export * from './policy/index.js';
@@ -65,9 +64,6 @@ export { AsyncTaskReminderService } from './services/asyncTaskReminderService.js
 export { AsyncTaskAutoTrigger } from './services/asyncTaskAutoTrigger.js';
 // Export SubagentTerminateMode for OutputObject types
 export { SubagentTerminateMode } from './core/subagentTypes.js';
-
-// Export types
-export * from './types/modelParams.js';
 
 // Export Commands logic
 export * from './commands/extensions.js';
@@ -153,7 +149,9 @@ export * from './utils/extensionLoader.js';
 export * from './utils/terminalSerializer.js';
 export * from './utils/LruCache.js';
 
-// Export auth system
+// @plan:PLAN-20260608-ISSUE1586.P15
+// @requirement:REQ-API-001.2
+// Auth public API re-exported from @vybestack/llxprt-code-auth (no wrapper/shim)
 export {
   AuthPrecedenceResolver,
   type AuthPrecedenceConfig,
@@ -162,32 +160,52 @@ export {
   type RuntimeAuthScopeFlushResult,
   type RuntimeAuthScopeCacheEntrySummary,
   type OAuthTokenRequestMetadata,
-} from './auth/precedence.js';
-export * from './auth/token-store.js';
-export { KeyringTokenStore } from './auth/keyring-token-store.js';
-export * from './auth/types.js';
-export * from './auth/qwen-device-flow.js';
-export * from './auth/anthropic-device-flow.js';
-export * from './auth/codex-device-flow.js';
-export * from './auth/oauth-errors.js';
-// @plan:PLAN-20250214-CREDPROXY.P35 - Token merge utility for shared use
+  type OAuthToken,
+  type AuthStatus,
+  type TokenStore,
+  KeyringTokenStore,
+  type CodexOAuthToken,
+  type BucketStats,
+  type DeviceCodeResponse,
+  OAuthError,
+  OAuthErrorFactory,
+  CodexDeviceFlow,
+  AnthropicDeviceFlow,
+  QwenDeviceFlow,
+  type DeviceFlowConfig,
+} from '@vybestack/llxprt-code-auth';
+// @plan:PLAN-20260608-ISSUE1586.P15
+// @requirement:REQ-API-001.2
+// Token merge utility re-exported from auth package
 export {
   mergeRefreshedToken,
   type OAuthTokenWithExtras,
-} from './auth/token-merge.js';
-// @plan:PLAN-20250214-CREDPROXY.P33, P35 - Proxy mode credential store classes and utilities
-export { ProxyTokenStore } from './auth/proxy/proxy-token-store.js';
-export { ProxyProviderKeyStorage } from './auth/proxy/proxy-provider-key-storage.js';
-export { ProxySocketClient } from './auth/proxy/proxy-socket-client.js';
+} from '@vybestack/llxprt-code-auth';
+// @plan:PLAN-20260608-ISSUE1586.P15
+// @requirement:REQ-API-001.2
+// Proxy mode credential store classes and utilities re-exported from auth package
+export { ProxyTokenStore } from '@vybestack/llxprt-code-auth';
+export { ProxyProviderKeyStorage } from '@vybestack/llxprt-code-auth';
+export { ProxySocketClient } from '@vybestack/llxprt-code-auth';
 export {
   FrameDecoder,
-  FrameDecoderOptions,
-  FrameError,
   encodeFrame,
   MAX_FRAME_SIZE,
   PARTIAL_FRAME_TIMEOUT_MS,
-} from './auth/proxy/framing.js';
-export { sanitizeTokenForProxy } from './auth/token-sanitization.js';
+} from '@vybestack/llxprt-code-auth';
+export type {
+  FrameDecoderOptions,
+  FrameError,
+} from '@vybestack/llxprt-code-auth';
+export { sanitizeTokenForProxy } from '@vybestack/llxprt-code-auth';
+
+// @plan:PLAN-20260608-ISSUE1586.P15
+// @requirement:REQ-API-001.2
+// Auth factory functions
+export {
+  createAuthPrecedenceResolver,
+  createKeyringTokenStore,
+} from './auth-factories.js';
 export {
   SecureStore,
   SecureStoreError,
@@ -336,25 +354,6 @@ export * from './parsers/TextToolCallParser.js';
 export * from './tools/IToolFormatter.js';
 export * from './tools/ToolFormatter.js';
 
-// Export settings system
-export { SettingsService } from './settings/SettingsService.js';
-export {
-  getSettingsService,
-  resetSettingsService,
-  registerSettingsService,
-} from './settings/settingsServiceInstance.js';
-export type {
-  ISettingsService,
-  GlobalSettings,
-  SettingsChangeEvent,
-  ProviderSettings,
-  UISettings,
-  AdvancedSettings,
-  EventListener,
-  EventUnsubscribe,
-} from './settings/types.js';
-export type { TelemetrySettings as SettingsTelemetrySettings } from './settings/types.js';
-
 export {
   createProviderRuntimeContext,
   getActiveProviderRuntimeContext,
@@ -439,9 +438,6 @@ export {
 export type { DebugSettings, DebugOutputConfig } from './debug/index.js';
 export type { LogEntry as DebugLogEntry } from './debug/index.js';
 
-// Export Storage
-export { Storage } from './config/storage.js';
-
 // Export Extension Loader
 export {
   ExtensionLoader,
@@ -475,27 +471,3 @@ export {
 // @plan PLAN-20260211-SESSIONRECORDING.P03
 // Export session recording module
 export * from './recording/index.js';
-
-export {
-  type SettingCategory,
-  type SettingSpec,
-  type ValidationResult,
-  type SeparatedSettings,
-  type DirectSettingSpec,
-  SETTINGS_REGISTRY,
-  separateSettings,
-  getSettingSpec,
-  resolveAlias,
-  validateSetting,
-  normalizeSetting,
-  parseSetting,
-  getProfilePersistableKeys,
-  getSettingHelp,
-  getCompletionOptions,
-  getAllSettingKeys,
-  getValidationHelp,
-  getAutocompleteSuggestions,
-  getProtectedSettingKeys,
-  getProviderConfigKeys,
-  getDirectSettingSpecs,
-} from './settings/index.js';

@@ -4,23 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { MessageBus, Config } from '@vybestack/llxprt-code-core';
+
+// @plan:PLAN-20260608-ISSUE1586.P15
+// @requirement:REQ-API-001.2
+// Re-export auth types from @vybestack/llxprt-code-auth
 import type {
-  MessageBus,
-  Config,
   OAuthToken,
   OAuthTokenRequestMetadata,
   TokenStore,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
 
-// Re-export core auth types for CLI usage
 export type {
   OAuthToken,
   AuthStatus,
   TokenStore,
   OAuthTokenRequestMetadata,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
 
-export { KeyringTokenStore } from '@vybestack/llxprt-code-core';
+export { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
 
 /**
  * Runtime dependencies for OAuthManager that include MessageBus integration.

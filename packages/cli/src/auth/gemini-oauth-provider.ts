@@ -13,10 +13,12 @@
 
 import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import {
-  clearOauthClientCache,
   OAuthErrorFactory,
   GracefulErrorHandler,
   RetryHandler,
+} from '@vybestack/llxprt-code-auth';
+import {
+  clearOauthClientCache,
   shouldLaunchBrowser,
   DebugLogger,
   debugLogger,

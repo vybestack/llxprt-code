@@ -329,7 +329,8 @@ export class DirectMessageProcessor {
       invocation: {
         signal: timeoutSignal,
       } as unknown as GenerateChatOptions['invocation'],
-      settings: runtimeContext.settingsService,
+      settings:
+        runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       userMemory: runtimeContext.config?.getUserMemory?.(),

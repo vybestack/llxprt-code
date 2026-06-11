@@ -16,7 +16,7 @@ import {
 import { Type } from '@google/genai';
 import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { type ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
-import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { createSettingsProviderRuntimeContext } from '../runtime/settingsRuntimeAdapter.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type {
   Content,
@@ -865,7 +865,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     const settings = this.resolveSettingsSnapshot();
     const runtimeState = createAgentRuntimeStateFromConfig(this.runtimeContext);
 
-    const providerRuntime = createProviderRuntimeContext({
+    const providerRuntime = createSettingsProviderRuntimeContext({
       settingsService: this.runtimeContext.getSettingsService(),
       config: this.runtimeContext,
       runtimeId: runtimeState.runtimeId,

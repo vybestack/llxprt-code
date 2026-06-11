@@ -115,11 +115,11 @@ async function buildOAuthStatusSuffix(
         '@vybestack/llxprt-code-core'
       );
       const tokenStorage = new MCPOAuthTokenStorage();
-      const hasToken = await tokenStorage.getCredentials(serverName);
-      if (hasToken) {
+      const credentials = await tokenStorage.getCredentials(serverName);
+      if (credentials !== null) {
         ({ suffix, needsAuthHint } = resolveTokenStatus(
           MCPOAuthTokenStorage,
-          hasToken.token,
+          credentials.token,
         ));
       } else {
         suffix = ` ${COLOR_RED}(OAuth not authenticated)${RESET_COLOR}`;
@@ -698,7 +698,7 @@ async function performMcpOAuth(
     );
 
     const mcpClientManager = runtimeConfig.getMcpClientManager?.();
-    if (mcpClientManager) {
+    if (mcpClientManager !== undefined) {
       context.ui.addItem(
         {
           type: 'info',

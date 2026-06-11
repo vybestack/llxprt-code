@@ -9,13 +9,13 @@ import {
   type AuthPrecedenceConfig,
   type OAuthManager,
   type OAuthTokenRequestMetadata,
-} from '../../../core/src/auth/precedence.js';
+} from '@vybestack/llxprt-code-auth';
 import {
   createProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../../../core/src/runtime/providerRuntimeContext.js';
-import { SettingsService } from '../../../core/src/settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const baseConfig: AuthPrecedenceConfig = {
   envKeyNames: [],
@@ -70,12 +70,16 @@ describe('CLI auth runtime scope gaps', () => {
       getOAuthToken: vi.fn(),
     };
 
-    const resolver = new AuthPrecedenceResolver(baseConfig, oauthManager);
-
     const scope = {
       runtimeId: 'cli-runtime-A',
       metadata: { origin: 'auth-runtime-scope-test' },
     };
+
+    const resolver = new AuthPrecedenceResolver(baseConfig, {
+      oauthManager,
+      settingsService: new SettingsService(),
+      getActiveRuntimeContext: () => peekActiveProviderRuntimeContext(),
+    });
 
     await runWithRuntimeScope(scope, async () => {
       setActiveProviderRuntimeContext(
@@ -111,12 +115,16 @@ describe('CLI auth runtime scope gaps', () => {
       getOAuthToken: vi.fn(),
     };
 
-    const resolver = new AuthPrecedenceResolver(baseConfig, oauthManager);
-
     const scope = {
       runtimeId: 'cli-runtime-metadata',
       metadata: { command: 'auth-runtime-scope' },
     };
+
+    const resolver = new AuthPrecedenceResolver(baseConfig, {
+      oauthManager,
+      settingsService: new SettingsService(),
+      getActiveRuntimeContext: () => peekActiveProviderRuntimeContext(),
+    });
 
     await runWithRuntimeScope(scope, async () => {
       setActiveProviderRuntimeContext(

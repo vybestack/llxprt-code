@@ -18,6 +18,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { ToolConfirmationOutcome } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 // Mock dependencies
 vi.mock(import('fs/promises'), async (importOriginal) => {
@@ -39,8 +40,15 @@ const mockSettingsService = {
   get: vi.fn().mockReturnValue(undefined),
   set: vi.fn(),
 };
-vi.mock('../settings/settingsServiceInstance.js', () => ({
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
   getSettingsService: () => mockSettingsService,
+}));
+
+vi.mock('../runtime/settingsRuntimeAdapter.js', () => ({
+  getRuntimeSettingsService: () => mockSettingsService,
 }));
 
 const MEMORY_SECTION_HEADER = '## LLxprt Code Added Memories';
@@ -71,6 +79,9 @@ describe('MemoryTool', () => {
 
   beforeEach(() => {
     vi.mocked(os.homedir).mockReturnValue(path.join('/mock', 'home'));
+    vi.spyOn(Storage, 'getGlobalLlxprtDir').mockImplementation(() =>
+      path.join('/mock', 'home', '.llxprt'),
+    );
     mockFsAdapter.readFile.mockReset();
     mockFsAdapter.writeFile.mockReset().mockResolvedValue(undefined);
     mockFsAdapter.mkdir

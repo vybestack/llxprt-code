@@ -29,7 +29,7 @@ import {
   createContentGenerator,
   type ContentGenerator,
 } from './contentGenerator.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
