@@ -183,6 +183,22 @@ export function formatNonInteractiveError(error: unknown): string {
   return String(error);
 }
 
+export function installNonInteractiveSigintHandler(): () => void {
+  let exited = false;
+  const handler = () => {
+    if (exited) {
+      return;
+    }
+    exited = true;
+    process.stderr.write('\nCancelled.\n');
+    process.exit(130);
+  };
+  process.on('SIGINT', handler);
+  return () => {
+    process.off('SIGINT', handler);
+  };
+}
+
 export function validateDnsResolutionOrder(
   order: string | undefined,
 ): DnsResolutionOrder {
@@ -1135,33 +1151,34 @@ export async function main() {
 
   const prompt_id = Math.random().toString(16).slice(2);
 
-  const nonInteractiveConfig = await validateNonInteractiveAuth(
-    settings.merged.useExternalAuth,
-    config,
-    settings,
-  );
-
-  initializeOutputListenersAndFlush();
-
-  // Fire SessionStart hook for non-interactive mode and inject context
-  const sessionStartOutput = await triggerSessionStartHook(
-    nonInteractiveConfig,
-    SessionStartSource.Startup,
-  );
-  if (sessionStartOutput) {
-    // Display system message
-    if (sessionStartOutput.systemMessage) {
-      writeToStderr(`${sessionStartOutput.systemMessage}\n`);
-    }
-
-    // Prepend additional context to input
-    const additionalContext = sessionStartOutput.getAdditionalContext();
-    if (additionalContext) {
-      input = `${additionalContext}\n\n${input}`;
-    }
-  }
-
+  const removeSigintHandler = installNonInteractiveSigintHandler();
   try {
+    const nonInteractiveConfig = await validateNonInteractiveAuth(
+      settings.merged.useExternalAuth,
+      config,
+      settings,
+    );
+
+    initializeOutputListenersAndFlush();
+
+    // Fire SessionStart hook for non-interactive mode and inject context
+    const sessionStartOutput = await triggerSessionStartHook(
+      nonInteractiveConfig,
+      SessionStartSource.Startup,
+    );
+    if (sessionStartOutput) {
+      // Display system message
+      if (sessionStartOutput.systemMessage) {
+        writeToStderr(`${sessionStartOutput.systemMessage}\n`);
+      }
+
+      // Prepend additional context to input
+      const additionalContext = sessionStartOutput.getAdditionalContext();
+      if (additionalContext) {
+        input = `${additionalContext}\n\n${input}`;
+      }
+    }
+
     await runNonInteractive({
       config: nonInteractiveConfig,
       settings,
@@ -1174,14 +1191,16 @@ export async function main() {
     // Fire SessionEnd hook on successful completion
     await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Exit);
   } catch (error) {
-    // Fire SessionEnd hook on error
-    await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Other);
+    // Fire SessionEnd hook on error. validateNonInteractiveAuth calls
+    // process.exit on auth failure, so if we reach this catch the config
+    // has already been validated/mutated in place and is safe to use.
+    await triggerSessionEndHook(config, SessionEndReason.Other);
 
     if (isTelemetrySdkInitialized()) {
-      await shutdownTelemetry(nonInteractiveConfig);
+      await shutdownTelemetry(config);
     }
 
-    if (nonInteractiveConfig.getOutputFormat() === OutputFormat.JSON) {
+    if (config.getOutputFormat() === OutputFormat.JSON) {
       const formatter = new JsonFormatter();
       const normalizedError =
         error instanceof Error ? error : new Error(String(error));
@@ -1192,10 +1211,12 @@ export async function main() {
     }
     // Call cleanup before process.exit, which causes cleanup to not run
     await runExitCleanup();
+  } finally {
+    removeSigintHandler();
   }
 
   if (isTelemetrySdkInitialized()) {
-    await shutdownTelemetry(nonInteractiveConfig);
+    await shutdownTelemetry(config);
   }
 
   // Call cleanup before process.exit, which causes cleanup to not run

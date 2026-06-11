@@ -57,6 +57,8 @@
     "src/config/extension.test.ts",
     "src/config/settings.test.ts",
     "src/nonInteractiveCli.test.ts",
+    "src/nonInteractiveCliCancellation.test.ts",
+    "src/nonInteractiveSigint.test.ts",
     "src/services/FileCommandLoader.test.ts",
     "src/services/prompt-processors/argumentProcessor.test.ts",
     "src/utils/cleanup.test.ts",
