@@ -10,10 +10,12 @@
 import type {
   Profile,
   LoadBalancerProfile,
+  StandardProfile,
   EphemeralSettings,
   ModelParams,
 } from './types.js';
 import { isLoadBalancerProfile } from './types.js';
+
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -450,9 +452,20 @@ export class ProfileManager {
     settingsService: ProfileSettingsServiceLike,
   ): Promise<void> {
     const profile = await this.loadProfile(profileName);
+    if (isLoadBalancerProfile(profile)) {
+      throw new Error(
+        `LoadBalancer profile '${profileName}' cannot be loaded directly into SettingsService`,
+      );
+    }
+    await this.applyLoadedProfile(profileName, profile, settingsService);
+  }
 
+  async applyLoadedProfile(
+    profileName: string,
+    profile: StandardProfile,
+    settingsService: ProfileSettingsServiceLike,
+  ): Promise<void> {
     const settingsData = this.convertProfileToSettingsData(profile);
-
     if (typeof settingsService.setCurrentProfileName === 'function') {
       settingsService.setCurrentProfileName(profileName);
     }
@@ -461,7 +474,6 @@ export class ProfileManager {
       throw new Error('SettingsService does not support profile import');
     }
     await settingsService.importFromProfile(settingsData);
-
     this.applyToolSettings(settingsData, settingsService);
     this.applyReasoningSettings(profile, settingsService);
   }

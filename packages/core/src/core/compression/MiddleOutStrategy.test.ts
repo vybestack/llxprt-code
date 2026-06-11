@@ -21,7 +21,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { IContent, MediaBlock } from '../../services/history/IContent.js';
-import type { CompressionContext } from './types.js';
+import type { CompressionContext, CompressionProviderResult } from './types.js';
 import { EmptySummaryError, isTransientCompressionError } from './types.js';
 import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '../../runtime/contracts/RuntimeProviderChat.js';
@@ -188,6 +188,17 @@ const noopLogger = {
   log: () => {},
 } as unknown as Logger;
 
+const testProviderRuntime = {
+  settingsService: {
+    get: () => undefined,
+    set: () => {},
+    getProviderSettings: () => ({}),
+  },
+  config: undefined,
+  runtimeId: 'test-provider-runtime',
+  metadata: { source: 'test' },
+};
+
 // ---------------------------------------------------------------------------
 // Build a CompressionContext for testing
 // ---------------------------------------------------------------------------
@@ -199,14 +210,26 @@ function buildContext(
     topPreserveThreshold: number;
     compressionThreshold: number;
     compressionProfile: string;
-    resolveProvider: (profileName?: string) => IProvider;
+    resolveProvider: (profileName?: string) => CompressionProviderResult;
     model: string;
     provider: string;
     currentTokenCount: number;
   }> = {},
 ): CompressionContext {
   const defaultProvider = createFakeProvider('default-provider');
-  const resolveProvider = overrides.resolveProvider ?? (() => defaultProvider);
+  const defaultRuntime = {
+    settingsService: {
+      get: () => undefined,
+      set: () => {},
+      getProviderSettings: () => ({}),
+    },
+    config: undefined,
+    runtimeId: 'test-provider-runtime',
+    metadata: { source: 'test' },
+  };
+  const resolveProvider =
+    overrides.resolveProvider ??
+    (() => ({ provider: defaultProvider, runtime: defaultRuntime }));
 
   const runtimeState: AgentRuntimeState = {
     runtimeId: 'test-runtime',
@@ -214,6 +237,17 @@ function buildContext(
     model: overrides.model ?? 'test-model',
     sessionId: 'test-session',
     updatedAt: Date.now(),
+  };
+
+  const contextProviderRuntime = {
+    settingsService: {
+      get: () => undefined,
+      set: () => {},
+      getProviderSettings: () => ({}),
+    },
+    config: undefined,
+    runtimeId: 'test-provider-runtime',
+    metadata: { source: 'test' },
   };
 
   const runtimeContext = {
@@ -236,6 +270,7 @@ function buildContext(
         adaptiveThinking: () => undefined,
       },
     },
+    providerRuntime: contextProviderRuntime,
   } as unknown as AgentRuntimeContext;
 
   const promptResolver = {
@@ -441,7 +476,10 @@ describe('MiddleOutStrategy', () => {
       const history = generateHistory(20);
       const ctx = buildContext({
         history,
-        resolveProvider: () => fakeProvider,
+        resolveProvider: () => ({
+          provider: fakeProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new MiddleOutStrategy();
 
@@ -486,9 +524,9 @@ describe('MiddleOutStrategy', () => {
         compressionProfile: 'compression-profile',
         resolveProvider: (profileName?: string) => {
           if (profileName === 'compression-profile') {
-            return profileProvider;
+            return { provider: profileProvider, runtime: testProviderRuntime };
           }
-          return defaultProvider;
+          return { provider: defaultProvider, runtime: testProviderRuntime };
         },
       });
       const profileResult = await strategy.compress(ctxWithProfile);
@@ -516,7 +554,7 @@ describe('MiddleOutStrategy', () => {
         history,
         resolveProvider: (profileName?: string) => {
           resolvedWithProfileName = profileName;
-          return defaultProvider;
+          return { provider: defaultProvider, runtime: testProviderRuntime };
         },
       });
 
@@ -781,7 +819,10 @@ describe('MiddleOutStrategy', () => {
       const history = generateHistory(20);
       const ctx = buildContext({
         history,
-        resolveProvider: () => multiChunkProvider,
+        resolveProvider: () => ({
+          provider: multiChunkProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new MiddleOutStrategy();
 
@@ -963,7 +1004,10 @@ describe('MiddleOutStrategy', () => {
 
       const ctx = buildContext({
         history,
-        resolveProvider: () => captureProvider,
+        resolveProvider: () => ({
+          provider: captureProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new MiddleOutStrategy();
       const result = await strategy.compress(ctx);
@@ -1051,7 +1095,10 @@ describe('MiddleOutStrategy', () => {
 
       const ctx = buildContext({
         history,
-        resolveProvider: () => captureProvider,
+        resolveProvider: () => ({
+          provider: captureProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new MiddleOutStrategy();
       const result = await strategy.compress(ctx);
@@ -1118,7 +1165,10 @@ describe('MiddleOutStrategy', () => {
 
       const ctx = buildContext({
         history,
-        resolveProvider: () => captureProvider,
+        resolveProvider: () => ({
+          provider: captureProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new MiddleOutStrategy();
       const result = await strategy.compress(ctx);
@@ -1184,7 +1234,10 @@ describe('MiddleOutStrategy', () => {
 
       const ctx = buildContext({
         history,
-        resolveProvider: () => captureProvider,
+        resolveProvider: () => ({
+          provider: captureProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new MiddleOutStrategy();
       const result = await strategy.compress(ctx);
@@ -1237,7 +1290,10 @@ describe('MiddleOutStrategy', () => {
 
       const ctx = buildContext({
         history,
-        resolveProvider: () => captureProvider,
+        resolveProvider: () => ({
+          provider: captureProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new MiddleOutStrategy();
       const result = await strategy.compress(ctx);
@@ -1285,7 +1341,10 @@ describe('MiddleOutStrategy', () => {
       const defaultProvider = createFakeProvider('default-provider');
       const ctx = buildContext({
         history,
-        resolveProvider: () => defaultProvider,
+        resolveProvider: () => ({
+          provider: defaultProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new MiddleOutStrategy();
       const result = await strategy.compress(ctx);
@@ -1309,7 +1368,10 @@ describe('MiddleOutStrategy', () => {
       const history = generateHistory(20);
       const ctx = buildContext({
         history,
-        resolveProvider: () => emptyProvider,
+        resolveProvider: () => ({
+          provider: emptyProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new MiddleOutStrategy();
 
@@ -1332,7 +1394,10 @@ describe('MiddleOutStrategy', () => {
       const history = generateHistory(20);
       const ctx = buildContext({
         history,
-        resolveProvider: () => whitespaceProvider,
+        resolveProvider: () => ({
+          provider: whitespaceProvider,
+          runtime: testProviderRuntime,
+        }),
       });
       const strategy = new MiddleOutStrategy();
 

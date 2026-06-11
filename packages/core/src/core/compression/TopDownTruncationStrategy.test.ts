@@ -165,7 +165,10 @@ function buildContext(
     estimateTokens,
     currentTokenCount: overrides.currentTokenCount ?? 5000,
     logger: noopLogger,
-    resolveProvider: () => throwingProvider,
+    resolveProvider: () => ({
+      provider: throwingProvider,
+      runtime: { settingsService: {} } as never,
+    }),
     promptResolver,
     promptBaseDir: '/tmp/test-prompts',
     promptContext: {
