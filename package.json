@@ -6,6 +6,7 @@
   },
   "type": "module",
   "workspaces": [
+    "packages/storage",
     "packages/auth",
     "packages/settings",
     "packages/telemetry",

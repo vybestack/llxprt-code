@@ -9,7 +9,7 @@
 import {
   SESSION_FILE_PREFIX,
   type ConversationRecord,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-storage';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 

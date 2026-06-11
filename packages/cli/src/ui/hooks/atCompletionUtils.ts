@@ -8,12 +8,12 @@ import * as fs from 'fs/promises';
 import type { Dirent } from 'fs';
 import * as path from 'path';
 import { glob } from 'glob';
-import type { FileDiscoveryService } from '@vybestack/llxprt-code-core';
 import {
   escapePath,
   unescapePath,
   SHELL_SPECIAL_CHARS,
 } from '@vybestack/llxprt-code-core';
+import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import type { ParsedAtPath } from './slashCompletionTypes.js';
 

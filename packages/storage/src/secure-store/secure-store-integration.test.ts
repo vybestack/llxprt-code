@@ -27,7 +27,17 @@ import {
   SecureStoreError,
   type KeyringAdapter,
 } from './secure-store.js';
-import { maskKeyForDisplay } from '../tools/tool-key-storage.js';
+/**
+ * Inline helper replaces core-owned tool masking behavior without importing
+ * core-owned tool modules into the storage package.
+ */
+function maskKeyForDisplay(key: string): string {
+  if (key.length <= 8) return '*'.repeat(key.length);
+  const first2 = key.substring(0, 2);
+  const last2 = key.substring(key.length - 2);
+  const middle = '*'.repeat(key.length - 4);
+  return `${first2}${middle}${last2}`;
+}
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 

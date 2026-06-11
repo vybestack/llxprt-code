@@ -13,10 +13,10 @@ import process from 'node:process';
 import {
   DebugLogger,
   loadServerHierarchicalMemory,
-  type FileDiscoveryService,
   type FileFilteringOptions,
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
+import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';

@@ -9,7 +9,7 @@
 import type {
   ConversationRecord,
   BaseMessageRecord,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-storage';
 import fs from 'node:fs/promises';
 import * as Diff from 'diff';
 import {

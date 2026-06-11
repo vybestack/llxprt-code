@@ -22,9 +22,11 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AuthPrecedenceResolver,
   type OAuthManager as CoreOAuthManager,
+} from '@vybestack/llxprt-code-core';
+import {
   SecureStore,
   type KeyringAdapter,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-storage';
 import {
   SettingsService,
   ProfileManager,

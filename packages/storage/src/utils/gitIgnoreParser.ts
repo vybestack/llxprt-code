@@ -1,0 +1,250 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import ignore, { type Ignore } from 'ignore';
+
+export interface GitIgnoreFilter {
+  isIgnored(filePath: string): boolean;
+  getPatterns(): string[];
+}
+
+export class GitIgnoreParser implements GitIgnoreFilter {
+  private projectRoot: string;
+  private cache: Map<string, Ignore> = new Map();
+  private globalPatterns: Ignore | undefined;
+  private processedExtraPatterns: Ignore;
+
+  constructor(
+    projectRoot: string,
+    private readonly extraPatterns?: string[],
+  ) {
+    this.projectRoot = path.resolve(projectRoot);
+    this.processedExtraPatterns = ignore();
+    if (this.extraPatterns) {
+      // extraPatterns are assumed to be from project root (like .geminiignore)
+      this.processedExtraPatterns.add(
+        this.processPatterns(this.extraPatterns, '.'),
+      );
+    }
+  }
+
+  private loadPatternsForFile(patternsFilePath: string): Ignore {
+    let content: string;
+    try {
+      content = fs.readFileSync(patternsFilePath, 'utf-8');
+    } catch {
+      // File not readable; return empty ignore.
+      return ignore();
+    }
+
+    // .git/info/exclude file patterns are relative to project root and not file directory
+    const isExcludeFile = patternsFilePath.endsWith(
+      path.join('.git', 'info', 'exclude'),
+    );
+    // Use posix path for patterns to preserve escaped characters (e.g., \#, \!)
+    const relativeBaseDir = isExcludeFile
+      ? '.'
+      : path
+          .dirname(path.relative(this.projectRoot, patternsFilePath))
+          .split(path.sep)
+          .join(path.posix.sep);
+
+    const rawPatterns = content.split('\n');
+    return ignore().add(this.processPatterns(rawPatterns, relativeBaseDir));
+  }
+
+  private processPatterns(
+    rawPatterns: string[],
+    relativeBaseDir: string,
+  ): string[] {
+    return rawPatterns
+      .map((p) => p.trimStart())
+      .filter((p) => p !== '' && !p.startsWith('#'))
+      .map((p) => {
+        // Handle escaped special chars at the start: \! or \#
+        // These mean the pattern literally starts with ! or #
+        // We need to KEEP the backslash for the ignore library to interpret correctly
+        // Note: Do NOT strip the backslash - ignore library needs it
+        const isEscapedBang = p.startsWith('\\!');
+
+        const isNegative = !isEscapedBang && p.startsWith('!');
+        if (isNegative) {
+          p = p.substring(1);
+        }
+
+        const isAnchoredInFile = p.startsWith('/');
+        if (isAnchoredInFile) {
+          p = p.substring(1);
+        }
+
+        // An empty pattern can result from a negated pattern like `!`,
+        // which we can ignore.
+        if (p === '') {
+          return '';
+        }
+
+        let newPattern = p;
+        if (relativeBaseDir && relativeBaseDir !== '.') {
+          // Only in nested .gitignore files, the patterns need to be modified according to:
+          // - If `a/b/.gitignore` defines `/c` then it needs to be changed to `/a/b/c`
+          // - If `a/b/.gitignore` defines `c` then it needs to be changed to `/a/b/**/c`
+          // - If `a/b/.gitignore` defines `c/d` then it needs to be changed to `/a/b/c/d`
+
+          if (!isAnchoredInFile && !p.includes('/')) {
+            // If no slash and not anchored in file, it matches files in any
+            // subdirectory.
+            newPattern = path.posix.join('**', p);
+          }
+
+          // Prepend the .gitignore file's directory.
+          newPattern = path.posix.join(relativeBaseDir, newPattern);
+
+          // Anchor the pattern to a nested gitignore directory.
+          if (!newPattern.startsWith('/')) {
+            newPattern = '/' + newPattern;
+          }
+        }
+
+        // Anchor the pattern if originally anchored
+        if (isAnchoredInFile && !newPattern.startsWith('/')) {
+          newPattern = '/' + newPattern;
+        }
+
+        if (isNegative) {
+          newPattern = '!' + newPattern;
+        }
+
+        return newPattern;
+      })
+      .filter((p) => p !== '');
+  }
+
+  isIgnored(filePath: string): boolean {
+    if (!filePath || typeof filePath !== 'string') {
+      return false;
+    }
+
+    if (
+      filePath.startsWith('\\') ||
+      filePath === '/' ||
+      filePath.includes('\0')
+    ) {
+      return false;
+    }
+
+    try {
+      const resolved = path.resolve(this.projectRoot, filePath);
+      const relativePath = path.relative(this.projectRoot, resolved);
+
+      if (relativePath === '' || relativePath.startsWith('..')) {
+        return false;
+      }
+
+      // Even in windows, Ignore expects forward slashes.
+      const normalizedPath = relativePath.replace(/\\/g, '/');
+
+      if (normalizedPath.startsWith('/') || normalizedPath === '') {
+        return false;
+      }
+
+      const ig = ignore();
+
+      // Always ignore .git directory
+      ig.add('.git');
+
+      // Load global patterns from .git/info/exclude on first call
+      if (this.globalPatterns === undefined) {
+        const excludeFile = path.join(
+          this.projectRoot,
+          '.git',
+          'info',
+          'exclude',
+        );
+        this.globalPatterns = fs.existsSync(excludeFile)
+          ? this.loadPatternsForFile(excludeFile)
+          : ignore();
+      }
+      ig.add(this.globalPatterns);
+
+      const pathParts = relativePath.split(path.sep);
+
+      const dirsToVisit = [this.projectRoot];
+      let currentAbsDir = this.projectRoot;
+      // Collect all directories in the path
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        currentAbsDir = path.join(currentAbsDir, pathParts[i]);
+        dirsToVisit.push(currentAbsDir);
+      }
+
+      for (const dir of dirsToVisit) {
+        const relativeDir = path.relative(this.projectRoot, dir);
+        if (relativeDir) {
+          const normalizedRelativeDir = relativeDir.replace(/\\/g, '/');
+          const igPlusExtras = ignore()
+            .add(ig)
+            .add(this.processedExtraPatterns);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          if (igPlusExtras.ignores(normalizedRelativeDir)) {
+            // This directory is ignored by an ancestor's .gitignore.
+            // According to git behavior, we don't need to process this
+            // directory's .gitignore, as nothing inside it can be
+            // un-ignored.
+            break;
+          }
+        }
+
+        if (this.cache.has(dir)) {
+          const patterns = this.cache.get(dir);
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          if (patterns) {
+            ig.add(patterns);
+          }
+        } else {
+          const gitignorePath = path.join(dir, '.gitignore');
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          if (fs.existsSync(gitignorePath)) {
+            const patterns = this.loadPatternsForFile(gitignorePath);
+            this.cache.set(dir, patterns);
+            ig.add(patterns);
+          } else {
+            this.cache.set(dir, ignore()); // Cache miss
+          }
+        }
+      }
+
+      // Apply extra patterns (e.g. from .geminiignore) last for precedence
+      ig.add(this.processedExtraPatterns);
+
+      return ig.ignores(normalizedPath);
+    } catch {
+      // Path resolution failed; not ignored.
+      return false;
+    }
+  }
+
+  /**
+   * Returns the explicitly added ("extra") ignore patterns.
+   *
+   * NOTE: Despite the generic name, this does NOT return globally loaded
+   * patterns. The underlying `ignore` library does not expose its compiled
+   * patterns, so global patterns cannot be enumerated here. Only the
+   * `extraPatterns` supplied to the constructor are returned.
+   */
+  getPatterns(): string[] {
+    const allPatterns: string[] = [];
+
+    // Global patterns cannot be enumerated: the `ignore` library does not
+    // expose its compiled pattern set. Intentionally omitted.
+
+    if (this.extraPatterns) {
+      allPatterns.push(...this.extraPatterns);
+    }
+
+    return allPatterns;
+  }
+}

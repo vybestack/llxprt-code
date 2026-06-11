@@ -18,7 +18,7 @@ import * as crypto from 'node:crypto';
 import { BaseTokenStorage } from './base-token-storage.js';
 import type { OAuthCredentials } from './types.js';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
-import { createDefaultKeyringAdapter } from '@vybestack/llxprt-code-core/storage/secure-store.js';
+import { createDefaultKeyringAdapter } from '@vybestack/llxprt-code-storage/storage/secure-store.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 
 interface Keytar {
