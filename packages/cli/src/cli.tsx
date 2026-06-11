@@ -1152,6 +1152,7 @@ export async function main() {
   const prompt_id = Math.random().toString(16).slice(2);
 
   const removeSigintHandler = installNonInteractiveSigintHandler();
+  let nonInteractiveExitCode = 0;
   try {
     const nonInteractiveConfig = await validateNonInteractiveAuth(
       settings.merged.useExternalAuth,
@@ -1191,14 +1192,11 @@ export async function main() {
     // Fire SessionEnd hook on successful completion
     await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Exit);
   } catch (error) {
+    nonInteractiveExitCode = 1;
     // Fire SessionEnd hook on error. validateNonInteractiveAuth calls
     // process.exit on auth failure, so if we reach this catch the config
     // has already been validated/mutated in place and is safe to use.
     await triggerSessionEndHook(config, SessionEndReason.Other);
-
-    if (isTelemetrySdkInitialized()) {
-      await shutdownTelemetry(config);
-    }
 
     if (config.getOutputFormat() === OutputFormat.JSON) {
       const formatter = new JsonFormatter();
@@ -1209,8 +1207,6 @@ export async function main() {
       const printableError = formatNonInteractiveError(error);
       debugLogger.error(`Non-interactive run failed: ${printableError}`);
     }
-    // Call cleanup before process.exit, which causes cleanup to not run
-    await runExitCleanup();
   } finally {
     removeSigintHandler();
   }
@@ -1221,7 +1217,7 @@ export async function main() {
 
   // Call cleanup before process.exit, which causes cleanup to not run
   await runExitCleanup();
-  process.exit(0);
+  process.exit(nonInteractiveExitCode);
 }
 
 function setWindowTitle(title: string, settings: LoadedSettings) {

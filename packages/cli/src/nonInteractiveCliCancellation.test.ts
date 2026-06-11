@@ -60,8 +60,17 @@ function setupTtyStdin(): {
     event: string;
     listener: (...args: unknown[]) => void;
   }> = [];
+
+  // Capture originals before any mocking so restore puts back the real
+  // process.stdin methods instead of the mock fns.
   const origOn = stdin.on.bind(stdin);
   const origRemoveListener = stdin.removeListener.bind(stdin);
+  const origSetRawMode = stdin.setRawMode;
+  const origResume = stdin.resume;
+  const origPause = stdin.pause;
+  const origRemoveAllListeners = stdin.removeAllListeners;
+  const origIsTTY = stdin.isTTY;
+  const origIsRaw = stdin.isRaw;
 
   stdin.setRawMode = mockSetRawMode;
   stdin.resume = mockResume;
@@ -114,10 +123,12 @@ function setupTtyStdin(): {
     restore: () => {
       stdin.on = origOn;
       stdin.removeListener = origRemoveListener;
-      stdin.setRawMode = mockSetRawMode;
-      stdin.resume = mockResume;
-      stdin.pause = mockPause;
-      stdin.removeAllListeners = mockRemoveAllListeners;
+      stdin.setRawMode = origSetRawMode;
+      stdin.resume = origResume;
+      stdin.pause = origPause;
+      stdin.removeAllListeners = origRemoveAllListeners;
+      stdin.isTTY = origIsTTY;
+      stdin.isRaw = origIsRaw;
     },
   };
 }
