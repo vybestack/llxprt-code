@@ -71,6 +71,9 @@ export * from './commands/types.js';
 
 // Export Core Logic
 export * from './core/client.js';
+export * from './core/clientContract.js';
+export * from './core/toolSchedulerContract.js';
+
 export * from './core/baseLlmClient.js';
 export * from './core/contentGenerator.js';
 export * from './core/chatSession.js';

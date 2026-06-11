@@ -59,6 +59,7 @@ import {
   applyTransition,
   buildCancelAllEntry,
 } from '../scheduler/status-transitions.js';
+import type { ToolSchedulerContract } from './toolSchedulerContract.js';
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
 export {
@@ -97,7 +98,7 @@ export interface CoreToolSchedulerOptions {
   toolContextInteractiveMode?: boolean;
 }
 
-export class CoreToolScheduler {
+export class CoreToolScheduler implements ToolSchedulerContract {
   private toolCalls: ToolCall[] = [];
   private outputUpdateHandler?: OutputUpdateHandler;
   private onAllToolCallsComplete?: AllToolCallsCompleteHandler;

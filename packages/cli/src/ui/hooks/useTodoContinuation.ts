@@ -5,7 +5,11 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { Config, AgentClient, Todo } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  AgentClientContract,
+  Todo,
+} from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { useTodoContext } from '../contexts/TodoContext.js';
 
@@ -109,7 +113,7 @@ function generatePrompt(todo: Todo, config: Config): string {
 }
 
 function sendContinuationPrompt(
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   taskDescription: string,
   continuationPrompt: string,
   onDebugMessage: (message: string) => void,
@@ -158,7 +162,7 @@ function processContinuation(
   isResponding: boolean,
   continuationState: ContinuationState,
   continuationInProgressRef: React.MutableRefObject<boolean>,
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   onDebugMessage: (message: string) => void,
   setContinuationState: React.Dispatch<React.SetStateAction<ContinuationState>>,
 ): void {
@@ -205,7 +209,7 @@ function processContinuation(
  * [REQ-001] Task Continuation Detection, [REQ-002] Continuation Prompting
  */
 export const useTodoContinuation = (
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   config: Config,
   isResponding: boolean,
   onDebugMessage: (message: string) => void,

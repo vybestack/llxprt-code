@@ -12,7 +12,9 @@ import * as dotenv from 'dotenv';
 import type { TelemetryTarget } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import {
+  AgentClient,
   Config,
+  CoreToolScheduler,
   type ConfigParameters,
   FileDiscoveryService,
   ApprovalMode,
@@ -94,6 +96,13 @@ function createBaseConfigParameters(
     folderTrust: settings.folderTrust === true,
     interactive: true,
     extensions,
+    // @plan PLAN-20260610-ISSUE1592.P01
+    // @requirement REQ-INV-001
+    agentClientFactory: (config, runtimeState) =>
+      new AgentClient(config, runtimeState),
+    // @plan PLAN-20260610-ISSUE1592.P01
+    // @requirement REQ-INV-002
+    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
   };
 }
 

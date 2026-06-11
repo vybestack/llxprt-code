@@ -35,7 +35,12 @@ import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
 import { CodeSearchTool } from '../tools/codesearch.js';
 import { DirectWebFetchTool } from '../tools/direct-web-fetch.js';
-import { TaskTool } from '../tools/task.js';
+// @plan PLAN-20260610-ISSUE1592.P01
+// @requirement REQ-INV-003
+// TaskTool is NOT imported directly here anymore.
+// The defaultTaskToolRegistration module is the ONLY core-config file importing ../tools/task.js.
+// It is DELETED in P03 when composition roots wire the registration from agents.
+import { defaultTaskToolRegistration } from './defaultTaskToolRegistration.js';
 import { ListSubagentsTool } from '../tools/list-subagents.js';
 import { CheckAsyncTasksTool } from '../tools/check-async-tasks.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
@@ -43,6 +48,52 @@ import { SubagentManager } from './subagentManager.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
+import type { AnyDeclarativeTool } from '../tools/tools.js';
+
+/**
+ * @plan PLAN-20260610-ISSUE1592.P01
+ * @requirement REQ-INV-003
+ *
+ * TaskTool registration descriptor — a seam that decouples toolRegistryFactory
+ * from the concrete TaskTool class. The descriptor preserves ToolRecord metadata
+ * semantics: className -> toolName, staticName -> displayName.
+ *
+ * CRITICAL semantics mapping (do NOT swap):
+ *   ToolRecord.toolName    = className   ('TaskTool')
+ *   ToolRecord.displayName = staticName  ('task' via TaskTool.Name)
+ */
+
+/** Core-owned constants for TaskTool identity (used even when class is absent) */
+export const TASK_TOOL_CLASS_NAME = 'TaskTool';
+export const TASK_TOOL_NAME = 'task';
+
+/**
+ * Descriptor for TaskTool registration. The seam between toolRegistryFactory
+ * and the concrete TaskTool class.
+ */
+export interface TaskToolRegistration {
+  /** Concrete class constructor for ToolRecord.toolClass */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly toolClass: any;
+  /** ToolClass.name ('TaskTool') — becomes ToolRecord.toolName; allow-list/exclude matching */
+  readonly className: string;
+  /** static ToolClass.Name ('task') — becomes ToolRecord.displayName; also matched by allow-list */
+  readonly staticName: string;
+  /** Constructor args builder, stored in ToolRecord.args */
+  buildArgs(config: unknown, taskToolArgs: TaskToolArgs): unknown[];
+  /** Create a tool instance */
+  create(config: unknown, args: TaskToolArgs): AnyDeclarativeTool;
+}
+
+/** TaskTool dependencies argument shape */
+export interface TaskToolArgs {
+  profileManager:
+    | import('@vybestack/llxprt-code-settings').ProfileManager
+    | undefined;
+  subagentManager: SubagentManager | undefined;
+  schedulerFactoryProvider: () => SubagentSchedulerFactory | undefined;
+  getAsyncTaskManager: () => AsyncTaskManager | undefined;
+}
 
 /** Tool record for settings UI */
 export interface ToolRecord {
@@ -68,6 +119,12 @@ export interface ToolRegistryHost {
     | SubagentSchedulerFactory
     | undefined;
   getAsyncTaskManager(): AsyncTaskManager | undefined;
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-003
+   * Returns the injected TaskToolRegistration, or undefined to use core-local default.
+   */
+  getTaskToolRegistration(): TaskToolRegistration | undefined;
 }
 
 function getTaskToolMissingReason(
@@ -164,6 +221,59 @@ function ensureCoreToolIncluded(
   }
 }
 
+function registerTaskTool(
+  registry: ToolRegistry,
+  effectiveCoreTools: string[] | undefined,
+  excludeTools: string[] | undefined,
+  allPotentialTools: ToolRecord[],
+  registration: TaskToolRegistration,
+  config: unknown,
+  taskToolArgs: TaskToolArgs,
+): void {
+  const className = registration.className;
+  const toolName = registration.staticName || className;
+  const args = registration.buildArgs(config, taskToolArgs);
+  let isEnabled = true;
+  let reason: string | undefined;
+
+  if (effectiveCoreTools) {
+    isEnabled = effectiveCoreTools.some(
+      (tool) =>
+        tool === className ||
+        tool === toolName ||
+        tool.startsWith(`${className}(`) ||
+        tool.startsWith(`${toolName}(`),
+    );
+  }
+
+  const isExcluded = (excludeTools ?? []).some(
+    (tool) => tool === className || tool === toolName,
+  );
+  if (isExcluded) {
+    isEnabled = false;
+    reason = 'excluded by excludeTools setting';
+  }
+
+  const toolRecord: ToolRecord = {
+    toolClass: registration.toolClass,
+    toolName: className,
+    displayName: toolName,
+    isRegistered: false,
+    reason,
+    args,
+  };
+
+  if (isEnabled) {
+    registry.registerTool(registration.create(config, taskToolArgs));
+    toolRecord.isRegistered = true;
+    toolRecord.reason = undefined;
+  } else if (!reason) {
+    toolRecord.reason = 'not included in coreTools configuration';
+  }
+
+  allPotentialTools.push(toolRecord);
+}
+
 function registerStandardTools(
   registerCoreTool: RegisterCoreToolFn,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -235,7 +345,15 @@ function registerAgentTools(
   subagentManager: SubagentManager | undefined,
   host: ToolRegistryHost,
   allPotentialTools: ToolRecord[],
+  registry: ToolRegistry,
+  effectiveCoreTools: string[] | undefined,
 ): void {
+  // @plan PLAN-20260610-ISSUE1592.P01
+  // @requirement REQ-INV-003
+  // Resolve registration: injected > core-local default > absent
+  const registration =
+    host.getTaskToolRegistration() ?? defaultTaskToolRegistration;
+
   const taskToolArgs = {
     profileManager,
     subagentManager,
@@ -246,16 +364,41 @@ function registerAgentTools(
 
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
   if (profileManager !== undefined && subagentManager !== undefined) {
-    registerCoreTool(TaskTool, config, taskToolArgs);
+    if (registration) {
+      registerTaskTool(
+        registry,
+        effectiveCoreTools,
+        host.getExcludeTools(),
+        allPotentialTools,
+        registration,
+        config,
+        taskToolArgs,
+      );
+    } else {
+      // Post-P03 misconfiguration: managers present but no registration available.
+      // This is an explicit config-error diagnostic, NOT the missing-manager path.
+      const taskToolRecord: ToolRecord = {
+        toolClass: undefined,
+        toolName: TASK_TOOL_CLASS_NAME,
+        displayName: TASK_TOOL_NAME,
+        isRegistered: false,
+        reason:
+          'taskToolRegistration not provided (configuration error: composition root must wire TaskToolRegistration)',
+        args: [config, taskToolArgs],
+      };
+      allPotentialTools.push(taskToolRecord);
+    }
   } else {
+    // Missing-manager path: preserved exactly from today's behavior
     const taskToolRecord: ToolRecord = {
-      toolClass: TaskTool,
-      toolName: 'TaskTool',
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries; Name is static but fallback preserves defensive semantics.
-      displayName: TaskTool.Name || 'TaskTool',
+      toolClass: registration?.toolClass,
+      toolName: TASK_TOOL_CLASS_NAME,
+      displayName: registration?.staticName ?? TASK_TOOL_NAME,
       isRegistered: false,
       reason: getTaskToolMissingReason(profileManager, subagentManager),
-      args: [config, taskToolArgs],
+      args: registration
+        ? registration.buildArgs(config, taskToolArgs)
+        : [config, taskToolArgs],
     };
     allPotentialTools.push(taskToolRecord);
   }
@@ -305,8 +448,11 @@ export async function createToolRegistry(
   const effectiveCoreTools =
     baseCoreTools && baseCoreTools.length > 0 ? [...baseCoreTools] : undefined;
 
-  ensureCoreToolIncluded(effectiveCoreTools, 'TaskTool');
-  ensureCoreToolIncluded(effectiveCoreTools, TaskTool.Name);
+  // @plan PLAN-20260610-ISSUE1592.P01
+  // @requirement REQ-INV-003
+  // Use constants instead of TaskTool class references
+  ensureCoreToolIncluded(effectiveCoreTools, TASK_TOOL_CLASS_NAME);
+  ensureCoreToolIncluded(effectiveCoreTools, TASK_TOOL_NAME);
   ensureCoreToolIncluded(effectiveCoreTools, 'ListSubagentsTool');
   ensureCoreToolIncluded(effectiveCoreTools, ListSubagentsTool.Name);
 
@@ -328,6 +474,8 @@ export async function createToolRegistry(
     subagentManager,
     host,
     allPotentialTools,
+    registry,
+    effectiveCoreTools,
   );
 
   await registry.discoverAllTools();

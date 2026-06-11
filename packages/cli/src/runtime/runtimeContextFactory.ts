@@ -21,7 +21,9 @@ import * as path from 'node:path';
  */
 
 import {
+  AgentClient,
   Config,
+  CoreToolScheduler,
   type KeyringTokenStore,
   MessageBus,
   type ProviderRuntimeContext,
@@ -228,6 +230,14 @@ function resolveRuntimeConfig(
       cwd: workspaceDir,
       model,
       settingsService,
+      // @plan PLAN-20260610-ISSUE1592.P01
+      // @requirement REQ-INV-001
+      agentClientFactory: (config, runtimeState) =>
+        new AgentClient(config, runtimeState),
+      // @plan PLAN-20260610-ISSUE1592.P01
+      // @requirement REQ-INV-002
+      toolSchedulerFactory: (schedulerOptions) =>
+        new CoreToolScheduler(schedulerOptions),
     });
 
   const llxprtDir = path.join(os.homedir(), '.llxprt');

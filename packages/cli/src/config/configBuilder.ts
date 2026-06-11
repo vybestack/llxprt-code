@@ -6,7 +6,9 @@
 
 import process from 'node:process';
 import {
+  AgentClient,
   Config,
+  CoreToolScheduler,
   normalizeShellReplacement,
   type ApprovalMode,
   type OutputFormat,
@@ -318,6 +320,13 @@ export function buildConfig(input: ConfigBuildInput): Config {
   return new Config({
     ...buildSessionBaseArgs(input, toolConfig, telemetry, sanitizationConfig),
     ...buildFeatureArgs(input, hooksConfig),
+    // @plan PLAN-20260610-ISSUE1592.P01
+    // @requirement REQ-INV-001
+    agentClientFactory: (config, runtimeState) =>
+      new AgentClient(config, runtimeState),
+    // @plan PLAN-20260610-ISSUE1592.P01
+    // @requirement REQ-INV-002
+    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
   });
 }
 

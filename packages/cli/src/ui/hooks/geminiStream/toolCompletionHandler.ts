@@ -16,7 +16,7 @@
  */
 
 import { useRef, useCallback, useEffect } from 'react';
-import type { AgentClient } from '@vybestack/llxprt-code-core';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core';
 import { DEFAULT_AGENT_ID, DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Part, PartListUnion } from '@google/genai';
 import type {
@@ -102,7 +102,7 @@ export function buildToolResponses(
  */
 export function recordCancelledToolHistory(
   tools: Array<TrackedCompletedToolCall | TrackedCancelledToolCall>,
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   markToolsAsSubmitted: (callIds: string[]) => void,
 ): void {
   const allParts = tools.flatMap((tc) => tc.response.responseParts);
@@ -168,7 +168,7 @@ async function _executeCompletedTools(
   completedToolCallsFromScheduler: TrackedToolCall[],
   turnCancelledRef: React.MutableRefObject<boolean>,
   submitQueryRef: SubmitQueryRef,
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   markToolsAsSubmitted: (callIds: string[]) => void,
   performMemoryRefresh: () => Promise<void>,
   onTodoPause: (() => void) | undefined,
@@ -274,7 +274,7 @@ export function useToolCompletionHandler(
   isResponding: boolean,
   turnCancelledRef: React.MutableRefObject<boolean>,
   submitQueryRef: SubmitQueryRef,
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   markToolsAsSubmitted: (callIds: string[]) => void,
   performMemoryRefresh: () => Promise<void>,
   onTodoPause?: () => void,

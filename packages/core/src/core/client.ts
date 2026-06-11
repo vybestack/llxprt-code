@@ -47,6 +47,7 @@ import type { IContent } from '../services/history/IContent.js';
 
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
+import type { AgentClientContract } from './clientContract.js';
 export {
   isThinkingSupported,
   findCompressSplitPoint,
@@ -69,7 +70,7 @@ import {
   type MessageStreamDeps,
 } from './MessageStreamOrchestrator.js';
 
-export class AgentClient {
+export class AgentClient implements AgentClientContract {
   private chat?: ChatSession;
   private contentGenerator?: ContentGenerator;
   private embeddingModel: string;

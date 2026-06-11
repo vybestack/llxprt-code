@@ -5,7 +5,7 @@
 | Phase | ID | Status | Started | Completed | Verified | Semantic? | Notes |
 |-------|-----|--------|---------|-----------|----------|-----------|-------|
 | 00a | P00A | [x] | 2026-06-11 | 2026-06-11 | GO | N/A | Preflight verification complete; see analysis/preflight-results.md and .completed/P00a.md |
-| 01 | P01 | [ ] | - | - | - | [ ] | Contracts + construction inversion (TDD-first) |
+| 01 | P01 | [x] | 2026-06-11 | 2026-06-11 | targeted PASS | [x] | Contracts + construction inversion complete; see .completed/P01.md |
 | 01a | P01A | [ ] | - | - | - | [ ] | Verification |
 | 02 | P02 | [ ] | - | - | - | [ ] | Package scaffold + CI/release wiring |
 | 02a | P02A | [ ] | - | - | - | [ ] | Verification |

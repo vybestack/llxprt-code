@@ -29,7 +29,7 @@ import type {
   UserTierId,
   ModelInfo,
   AnsiOutput,
-  CoreToolScheduler,
+  ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
 import {
   getAllMCPServerStatuses,
@@ -92,7 +92,7 @@ type SchedulerConfig = Config & {
     },
     options?: Record<string, unknown>,
     dependencies?: { messageBus?: MessageBus },
-  ): Promise<CoreToolScheduler>;
+  ): Promise<ToolSchedulerContract>;
 };
 
 function getEventTraceId(event: ServerGeminiStreamEvent): string | undefined {
@@ -103,7 +103,7 @@ function getEventTraceId(event: ServerGeminiStreamEvent): string | undefined {
 export class Task {
   id: string;
   contextId: string;
-  scheduler: CoreToolScheduler | null;
+  scheduler: ToolSchedulerContract | null;
   config: Config;
   agentClient: AgentClient;
   pendingToolConfirmationDetails: Map<
@@ -494,7 +494,7 @@ export class Task {
     }
   }
 
-  private async createScheduler(): Promise<CoreToolScheduler> {
+  private async createScheduler(): Promise<ToolSchedulerContract> {
     const sessionId = this.config.getSessionId();
     if (!sessionId) {
       throw new Error('Scheduler sessionId is required');

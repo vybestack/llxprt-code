@@ -17,9 +17,11 @@ import { Config } from './config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { clearAllSchedulers } from './schedulerSingleton.js';
+import { AgentClient } from '../core/client.js';
+import type { CoreToolScheduler as CoreToolSchedulerType } from '../core/coreToolScheduler.js';
 
 // Use dynamic import to avoid circular dependencies with Config
-let CoreToolScheduler: unknown;
+let CoreToolScheduler: typeof CoreToolSchedulerType;
 
 // eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeAll(async () => {
@@ -73,6 +75,13 @@ describe('Config - CoreToolScheduler Singleton', () => {
       model: 'gemini-pro',
       settingsService: mockSettingsService,
       eventEmitter: undefined,
+      // @plan PLAN-20260610-ISSUE1592.P01
+      // @requirement REQ-INV-001
+      agentClientFactory: (cfg, runtimeState) =>
+        new AgentClient(cfg, runtimeState),
+      // @plan PLAN-20260610-ISSUE1592.P01
+      // @requirement REQ-INV-002
+      toolSchedulerFactory: (options) => new CoreToolScheduler(options),
     };
 
     config = new Config(configParams);

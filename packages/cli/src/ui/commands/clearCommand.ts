@@ -5,7 +5,7 @@
  */
 
 import {
-  type AgentClient,
+  type AgentClientContract,
   uiTelemetryService,
   triggerSessionEndHook,
   triggerSessionStartHook,
@@ -54,7 +54,7 @@ async function triggerSessionStartHookSafe(
 
 function resolveForegroundAgentClient(
   context: CommandContext,
-): AgentClient | null {
+): AgentClientContract | null {
   if (context.services.config) {
     return context.services.config.getAgentClient();
   }
