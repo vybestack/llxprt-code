@@ -13,7 +13,7 @@
 | 03a | P03A | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Code move verification complete; see .completed/P03A.md |
 | 04 | P04 | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Consumer audit + integration hardening complete; see .completed/P04.md |
 | 04a | P04A | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Consumer migration verification complete; see .completed/P04A.md |
-| 05 | P05 | [ ] | - | - | - | [ ] | Cleanup, docs, final battery |
+| 05 | P05 | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Cleanup + final hardening complete; see .completed/P05.md |
 | 05a | P05A | [ ] | - | - | - | [ ] | Final semantic review |
 
 ## Completion Markers
