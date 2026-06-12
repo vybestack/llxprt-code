@@ -123,3 +123,11 @@ export { getOpenAIProviderInfo } from './openai/getOpenAIProviderInfo.js';
 
 // --- Additional types needed for provider construction ---
 export type { DumpMode } from './utils/dumpContext.js';
+export { dumpRequestContext } from './utils/dumpContext.js';
+export {
+  buildAnthropicDumpMessages,
+  buildGeminiDumpContents,
+  buildOpenAIDumpMessages,
+  buildProviderDumpBody,
+} from './utils/providerRequestConversion.js';
+export { wrapStreamWithDump } from './utils/dumpSDKContext.js';

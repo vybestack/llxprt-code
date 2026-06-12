@@ -16,11 +16,11 @@ import {
   type IContent,
   type ToolCallBlock,
   type ThinkingBlock,
-  type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
+import { convertHistoryToGeminiFormat } from './GeminiMessageConverter.js';
 import {
   Type,
   type Part,
@@ -38,14 +38,18 @@ import {
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import { resolveUserMemory } from '../utils/userMemory.js';
-import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import {
   ensureActiveLoopHasThoughtSignatures,
   stripThoughtsFromHistory,
 } from './thoughtSignatures.js';
 import {
   shouldDumpSDKContext,
-  dumpSDKContext,
+  dumpSDKRequestContext,
+  dumpSDKResponseContext,
+  wrapStreamWithDump,
+  wrapStreamWithSDKErrorDump,
+  bestEffortDump,
+  dumpSDKErrorRequestResponse,
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
@@ -1443,134 +1447,11 @@ export class GeminiProvider extends BaseProvider {
     currentModel: string,
     configForMessages: unknown,
   ): Array<{ role: string; parts: Part[] }> {
-    const contents: Array<{ role: string; parts: Part[] }> = [];
-    for (const c of content) {
-      if (c.speaker === 'human') {
-        const parts = this.convertHumanBlocks(c.blocks);
-        if (parts.length > 0) {
-          contents.push({ role: 'user', parts });
-        }
-      } else if (c.speaker === 'ai') {
-        const parts = this.convertAiBlocks(c.blocks);
-        if (parts.length > 0) {
-          contents.push({ role: 'model', parts });
-        }
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive check for speaker type exhaustiveness
-      } else if (c.speaker === 'tool') {
-        this.convertToolBlocks(c, currentModel, configForMessages, contents);
-      }
-    }
-    return contents;
-  }
-
-  /** Convert human speaker blocks to Gemini Parts. */
-  private convertHumanBlocks(
-    blocks: NormalizedGenerateChatOptions['contents'][number]['blocks'],
-  ): Part[] {
-    const parts: Part[] = [];
-    for (const block of blocks) {
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      if (block.type === 'text') {
-        parts.push({ text: block.text });
-      } else if (block.type === 'media') {
-        parts.push(...this.convertMediaBlock(block));
-      }
-    }
-    return parts;
-  }
-
-  /** Convert a media block to Gemini Part(s). */
-  private convertMediaBlock(block: {
-    type: 'media';
-    encoding: string;
-    mimeType: string;
-    data: string;
-  }): Part[] {
-    if (block.encoding === 'url') {
-      return [
-        { fileData: { mimeType: block.mimeType, fileUri: block.data } } as Part,
-      ];
-    }
-    let imageData = block.data;
-    if (imageData.startsWith('data:')) {
-      const base64Index = imageData.indexOf('base64,');
-      if (base64Index !== -1) {
-        imageData = imageData.substring(base64Index + 7);
-      }
-    }
-    return [
-      { inlineData: { mimeType: block.mimeType, data: imageData } } as Part,
-    ];
-  }
-
-  /** Convert AI speaker blocks to Gemini Parts. */
-  private convertAiBlocks(
-    blocks: NormalizedGenerateChatOptions['contents'][number]['blocks'],
-  ): Part[] {
-    const parts: Part[] = [];
-    for (const block of blocks) {
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      if (block.type === 'text') {
-        parts.push({ text: block.text });
-      } else if (block.type === 'tool_call') {
-        const tc = block;
-        parts.push({
-          functionCall: { id: tc.id, name: tc.name, args: tc.parameters },
-        } as Part);
-      }
-    }
-    return parts;
-  }
-
-  /** Convert tool speaker content to Gemini format and push into contents. */
-  private convertToolBlocks(
-    c: NormalizedGenerateChatOptions['contents'][number],
-    currentModel: string,
-    configForMessages: unknown,
-    contents: Array<{ role: string; parts: Part[] }>,
-  ): void {
-    const toolResponseBlock = c.blocks.find((b) => b.type === 'tool_response');
-    if (!toolResponseBlock) {
-      throw new Error('Tool content must have a tool_response block');
-    }
-    const mediaBlocks = c.blocks.filter(
-      (b): b is MediaBlock => b.type === 'media',
+    return convertHistoryToGeminiFormat(
+      content,
+      currentModel,
+      configForMessages,
     );
-    const payload = buildToolResponsePayload(
-      toolResponseBlock,
-      configForMessages as Config | undefined,
-    );
-    const frPart: Part = {
-      functionResponse: {
-        id: toolResponseBlock.callId,
-        name: toolResponseBlock.toolName,
-        response: {
-          status: payload.status,
-          result: payload.result,
-          error: payload.error,
-          truncated: payload.truncated,
-          originalLength: payload.originalLength,
-          limitMessage: payload.limitMessage,
-        },
-      },
-    };
-    if (mediaBlocks.length > 0 && isGemini3Model(currentModel)) {
-      frPart.functionResponse!.parts = mediaBlocks.map((mb) => ({
-        inlineData: { mimeType: mb.mimeType, data: mb.data },
-      }));
-      contents.push({ role: 'user', parts: [frPart] });
-    } else if (mediaBlocks.length > 0) {
-      const parts: Part[] = [frPart];
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for (const mb of mediaBlocks) {
-        parts.push({
-          inlineData: { mimeType: mb.mimeType, data: mb.data },
-        } as Part);
-      }
-      contents.push({ role: 'user', parts });
-    } else {
-      contents.push({ role: 'user', parts: [frPart] });
-    }
   }
 
   /** Create the response-to-chunks mapper function. */
@@ -1898,20 +1779,29 @@ export class GeminiProvider extends BaseProvider {
     ) => IContent[],
     reasoningIncludeInResponse: boolean,
   ): Promise<GeminiGenerationResult> {
+    let requestBaseId: string | undefined;
+
+    if (shouldDumpSuccess) {
+      const reqResult = await bestEffortDump('request', 'gemini', () =>
+        dumpSDKRequestContext(
+          'gemini',
+          '/v1/models/generateContent',
+          oauthRequest,
+          baseURL ?? 'https://generativelanguage.googleapis.com',
+        ),
+      );
+      requestBaseId = reqResult?.baseId;
+    }
+
     // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     try {
       const response = await generatorWithStream.generateContent!(
         oauthRequest,
         sessionId,
       );
-      if (shouldDumpSuccess) {
-        await dumpSDKContext(
-          'gemini',
-          '/v1/models/generateContent',
-          oauthRequest,
-          response,
-          false,
-          baseURL ?? 'https://generativelanguage.googleapis.com',
+      if (shouldDumpSuccess && requestBaseId) {
+        await bestEffortDump('response', 'gemini', () =>
+          dumpSDKResponseContext(requestBaseId, 'gemini', response, false),
         );
       }
       return {
@@ -1924,17 +1814,46 @@ export class GeminiProvider extends BaseProvider {
       if (shouldDumpError) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        await dumpSDKContext(
-          'gemini',
-          '/v1/models/generateContent',
-          oauthRequest,
-          { error: errorMessage },
-          true,
-          baseURL ?? 'https://generativelanguage.googleapis.com',
-        );
+        if (requestBaseId) {
+          await bestEffortDump('error-response', 'gemini', () =>
+            dumpSDKResponseContext(
+              requestBaseId,
+              'gemini',
+              { error: errorMessage },
+              true,
+            ),
+          );
+        } else {
+          await dumpSDKErrorRequestResponse(
+            'gemini',
+            '/v1/models/generateContent',
+            oauthRequest,
+            { error: errorMessage },
+            baseURL ?? 'https://generativelanguage.googleapis.com',
+            dumpSDKRequestContext,
+            dumpSDKResponseContext,
+          );
+        }
       }
       throw error;
     }
+  }
+
+  private buildOAuthStreamingPrelude(
+    runtimeId: string,
+    sessionId: string,
+  ): IContent[] {
+    return [
+      {
+        speaker: 'ai',
+        blocks: [],
+        metadata: {
+          session: sessionId,
+          runtime: runtimeId,
+          authMode: 'oauth',
+        },
+      } as IContent,
+    ];
   }
 
   /** Streaming OAuth generate with dump support. */
@@ -1955,50 +1874,64 @@ export class GeminiProvider extends BaseProvider {
     shouldDumpError: boolean,
     baseURL: string | undefined,
   ): Promise<GeminiGenerationResult> {
+    let requestBaseId: string | undefined;
+
+    if (shouldDumpSuccess) {
+      const reqResult = await bestEffortDump('request', 'gemini', () =>
+        dumpSDKRequestContext(
+          'gemini',
+          '/v1/models/streamGenerateContent',
+          oauthRequest,
+          baseURL ?? 'https://generativelanguage.googleapis.com',
+        ),
+      );
+      requestBaseId = reqResult?.baseId;
+    }
+
     try {
       const oauthStream = await Promise.resolve(
         generatorWithStream.generateContentStream(oauthRequest, sessionId),
       );
-      if (shouldDumpSuccess) {
-        await dumpSDKContext(
-          'gemini',
-          '/v1/models/streamGenerateContent',
-          oauthRequest,
-          { streaming: true },
-          false,
-          baseURL ?? 'https://generativelanguage.googleapis.com',
-        );
-      }
+      const streamForReturn = this.wrapGeminiStreamForDump(
+        oauthStream,
+        oauthRequest,
+        shouldDumpSuccess,
+        shouldDumpError,
+        requestBaseId,
+        baseURL,
+      );
       if (streamingEnabled) {
         return {
-          stream: oauthStream,
+          stream: streamForReturn,
           emitted: true,
-          preludeChunks: [
-            {
-              speaker: 'ai',
-              blocks: [],
-              metadata: {
-                session: sessionId,
-                runtime: runtimeId,
-                authMode: 'oauth',
-              },
-            } as IContent,
-          ],
+          preludeChunks: this.buildOAuthStreamingPrelude(runtimeId, sessionId),
         };
       }
-      return { stream: oauthStream, emitted: false };
+      return { stream: streamForReturn, emitted: false };
     } catch (error) {
       if (shouldDumpError) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        await dumpSDKContext(
-          'gemini',
-          '/v1/models/streamGenerateContent',
-          oauthRequest,
-          { error: errorMessage },
-          true,
-          baseURL ?? 'https://generativelanguage.googleapis.com',
-        );
+        if (requestBaseId) {
+          await bestEffortDump('error-response', 'gemini', () =>
+            dumpSDKResponseContext(
+              requestBaseId,
+              'gemini',
+              { error: errorMessage },
+              true,
+            ),
+          );
+        } else {
+          await dumpSDKErrorRequestResponse(
+            'gemini',
+            '/v1/models/streamGenerateContent',
+            oauthRequest,
+            { error: errorMessage },
+            baseURL ?? 'https://generativelanguage.googleapis.com',
+            dumpSDKRequestContext,
+            dumpSDKResponseContext,
+          );
+        }
       }
       throw error;
     }
@@ -2081,17 +2014,26 @@ export class GeminiProvider extends BaseProvider {
     ) => IContent[],
     reasoningIncludeInResponse: boolean,
   ): Promise<GeminiGenerationResult> {
-    try {
-      const response = await contentGenerator.generateContent(apiRequest);
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      if (shouldDumpSuccess) {
-        await dumpSDKContext(
+    let requestBaseId: string | undefined;
+
+    if (shouldDumpSuccess) {
+      const reqResult = await bestEffortDump('request', 'gemini', () =>
+        dumpSDKRequestContext(
           'gemini',
           '/v1/models/generateContent',
           apiRequest,
-          response,
-          false,
           baseURL ?? 'https://generativelanguage.googleapis.com',
+        ),
+      );
+      requestBaseId = reqResult?.baseId;
+    }
+
+    try {
+      const response = await contentGenerator.generateContent(apiRequest);
+      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      if (shouldDumpSuccess && requestBaseId) {
+        await bestEffortDump('response', 'gemini', () =>
+          dumpSDKResponseContext(requestBaseId, 'gemini', response, false),
         );
       }
       return {
@@ -2104,17 +2046,59 @@ export class GeminiProvider extends BaseProvider {
       if (shouldDumpError) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        await dumpSDKContext(
-          'gemini',
-          '/v1/models/generateContent',
-          apiRequest,
-          { error: errorMessage },
-          true,
-          baseURL ?? 'https://generativelanguage.googleapis.com',
-        );
+        if (requestBaseId) {
+          await bestEffortDump('error-response', 'gemini', () =>
+            dumpSDKResponseContext(
+              requestBaseId,
+              'gemini',
+              { error: errorMessage },
+              true,
+            ),
+          );
+        } else {
+          await dumpSDKErrorRequestResponse(
+            'gemini',
+            '/v1/models/generateContent',
+            apiRequest,
+            { error: errorMessage },
+            baseURL ?? 'https://generativelanguage.googleapis.com',
+            dumpSDKRequestContext,
+            dumpSDKResponseContext,
+          );
+        }
       }
       throw error;
     }
+  }
+
+  private wrapGeminiStreamForDump(
+    stream: AsyncIterable<GenerateContentResponse>,
+    request: GenerateContentParameters,
+    shouldDumpSuccess: boolean,
+    shouldDumpError: boolean,
+    requestBaseId: string | undefined,
+    baseURL: string | undefined,
+  ): AsyncIterable<GenerateContentResponse> {
+    if (shouldDumpSuccess && requestBaseId) {
+      return wrapStreamWithDump(
+        stream,
+        requestBaseId,
+        'gemini',
+        dumpSDKResponseContext,
+      );
+    }
+    if (shouldDumpError) {
+      return wrapStreamWithSDKErrorDump(
+        stream,
+        'gemini',
+        '/v1/models/streamGenerateContent',
+        request,
+        baseURL ?? 'https://generativelanguage.googleapis.com',
+        dumpSDKRequestContext,
+        dumpSDKResponseContext,
+      );
+    }
+    return stream;
   }
 
   private async nonOAuthStreamingGenerate(
@@ -2128,31 +2112,55 @@ export class GeminiProvider extends BaseProvider {
     shouldDumpError: boolean,
     baseURL: string | undefined,
   ): Promise<GeminiGenerationResult> {
-    try {
-      const stream = await contentGenerator.generateContentStream(apiRequest);
-      if (shouldDumpSuccess) {
-        await dumpSDKContext(
+    let requestBaseId: string | undefined;
+
+    if (shouldDumpSuccess) {
+      const reqResult = await bestEffortDump('request', 'gemini', () =>
+        dumpSDKRequestContext(
           'gemini',
           '/v1/models/streamGenerateContent',
           apiRequest,
-          { streaming: true },
-          false,
           baseURL ?? 'https://generativelanguage.googleapis.com',
-        );
-      }
-      return { stream, emitted: false };
+        ),
+      );
+      requestBaseId = reqResult?.baseId;
+    }
+
+    try {
+      const stream = await contentGenerator.generateContentStream(apiRequest);
+      const streamForReturn = this.wrapGeminiStreamForDump(
+        stream,
+        apiRequest,
+        shouldDumpSuccess,
+        shouldDumpError,
+        requestBaseId,
+        baseURL,
+      );
+      return { stream: streamForReturn, emitted: false };
     } catch (error) {
       if (shouldDumpError) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        await dumpSDKContext(
-          'gemini',
-          '/v1/models/streamGenerateContent',
-          apiRequest,
-          { error: errorMessage },
-          true,
-          baseURL ?? 'https://generativelanguage.googleapis.com',
-        );
+        if (requestBaseId) {
+          await bestEffortDump('error-response', 'gemini', () =>
+            dumpSDKResponseContext(
+              requestBaseId,
+              'gemini',
+              { error: errorMessage },
+              true,
+            ),
+          );
+        } else {
+          await dumpSDKErrorRequestResponse(
+            'gemini',
+            '/v1/models/streamGenerateContent',
+            apiRequest,
+            { error: errorMessage },
+            baseURL ?? 'https://generativelanguage.googleapis.com',
+            dumpSDKRequestContext,
+            dumpSDKResponseContext,
+          );
+        }
       }
       throw error;
     }
