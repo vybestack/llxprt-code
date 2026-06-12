@@ -100,6 +100,7 @@ export function buildErrorTransition(
     request: ctx.request,
     status: 'error',
     tool: ctx.tool,
+    invocation: ctx.invocation,
     response: ensureAgentId(response, ctx.request),
     durationMs: computeDuration(ctx.startTime),
     outcome: ctx.outcome,

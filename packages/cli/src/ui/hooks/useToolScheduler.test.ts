@@ -1379,13 +1379,14 @@ describe('mapToDisplay', () => {
       expectedStatus: ToolCallStatus.Error,
       expectedResultDisplay: 'Error display tool not found',
       expectedName: baseRequest.name,
-      expectedDescription: JSON.stringify(baseRequest.args),
+      expectedDescription: 'Test error tool not found',
     },
     {
       name: 'error tool execution failed',
       status: 'error',
       extraProps: {
         tool: baseTool,
+        invocation: baseInvocation,
         response: {
           ...baseResponse,
           error: new Error('Tool execution failed'),
@@ -1395,7 +1396,7 @@ describe('mapToDisplay', () => {
       expectedStatus: ToolCallStatus.Error,
       expectedResultDisplay: 'Execution failed display',
       expectedName: baseTool.displayName, // Changed from baseTool.name
-      expectedDescription: JSON.stringify(baseRequest.args),
+      expectedDescription: baseInvocation.getDescription(),
     },
     {
       name: 'cancelled',

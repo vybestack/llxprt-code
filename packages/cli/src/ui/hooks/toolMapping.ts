@@ -82,11 +82,20 @@ function getDisplayName(trackedCall: TrackedToolCall): string {
   return trackedCall.tool.displayName;
 }
 
+function hasInvocation(
+  trackedCall: TrackedToolCall,
+): trackedCall is TrackedToolCall & {
+  invocation: { getDescription(): string };
+} {
+  return 'invocation' in trackedCall && trackedCall.invocation !== undefined;
+}
+
 function getDescription(trackedCall: TrackedToolCall): string {
-  if (trackedCall.status === 'error') {
-    return JSON.stringify(trackedCall.request.args);
+  if (hasInvocation(trackedCall)) {
+    return trackedCall.invocation.getDescription();
   }
-  return trackedCall.invocation.getDescription();
+
+  return trackedCall.response.error?.message ?? 'Tool execution failed';
 }
 
 function getRenderOutputAsMarkdown(trackedCall: TrackedToolCall): boolean {

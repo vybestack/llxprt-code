@@ -13,6 +13,8 @@ import { todoEvents, type TodoUpdateEvent } from './todo-events.js';
 import { TodoContextTracker } from '../utils/todoContextTracker.js';
 import { formatTodoListForDisplay } from '../utils/todoFormatter.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';
+import type { IToolHost } from '../interfaces/IToolHost.js';
+import { EmojiFilter, isEmojiFilterMode } from '../utils/EmojiFilter.js';
 
 export interface TodoWriteParams {
   todos: Todo[];
@@ -93,7 +95,10 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     required: ['todos'],
   } as const;
 
-  constructor(private readonly todoService?: ITodoService) {
+  constructor(
+    private readonly todoService?: ITodoService,
+    private readonly toolHost?: IToolHost,
+  ) {
     super(
       TodoWrite.Name,
       'TodoWrite',
@@ -114,7 +119,6 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     todos: Todo[],
     sessionId: string,
     agentId: string | undefined,
-    rawTodos: Todo[],
   ): void {
     const scopedAgentId = agentId ?? DEFAULT_AGENT_ID;
     const inProgressTodo = todos.find((todo) => todo.status === 'in_progress');
@@ -123,11 +127,18 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
       scopedAgentId,
     );
     contextTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
+    this.emitTodoUpdated(todos, sessionId, scopedAgentId);
+  }
 
+  private emitTodoUpdated(
+    todos: Todo[],
+    sessionId: string,
+    agentId: string | undefined,
+  ): void {
     const event: TodoUpdateEvent = {
       sessionId,
-      agentId: scopedAgentId,
-      todos: rawTodos,
+      agentId,
+      todos,
       timestamp: new Date(),
     };
     todoEvents.emitTodoUpdated(event);
@@ -148,7 +159,28 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
         `Validation error: ${error.path.join('.')} - ${error.message}`,
       );
     }
-    const todos = result.data;
+    const emojiResult = this.applyEmojiFilter(result.data);
+    if (emojiResult.blocked) {
+      return {
+        llmContent: emojiResult.errorMessage ?? 'Emojis detected in content',
+        returnDisplay: emojiResult.errorMessage ?? 'Emojis detected in content',
+        error: {
+          message: emojiResult.errorMessage ?? 'Emojis detected in content',
+        },
+      };
+    }
+
+    const revalidation = TodoArraySchema.safeParse(emojiResult.filtered);
+    if (!revalidation.success) {
+      const err = revalidation.error.errors[0];
+      const msg = `Emoji filtering produced invalid todo content: ${err.path.join('.')} - ${err.message}`;
+      return {
+        llmContent: msg,
+        returnDisplay: msg,
+        error: { message: msg },
+      };
+    }
+    const todos = revalidation.data;
 
     // Get session and agent IDs from context
     const sessionId = this.context?.sessionId ?? 'default';
@@ -205,13 +237,9 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
           (todo) => todo.status === 'in_progress',
         );
         serviceTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
+        this.emitTodoUpdated(todos, sessionId, scopedAgentId);
       } else {
-        this.trackInteractiveUpdate(
-          todos,
-          sessionId,
-          scopedAgentId,
-          params.todos,
-        );
+        this.trackInteractiveUpdate(todos, sessionId, scopedAgentId);
       }
     }
 
@@ -220,8 +248,17 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     const statistics = this.calculateStatistics(todos);
     const nextAction = this.determineNextAction(todos);
 
+    let llmContent = formattedOutput;
+    if (emojiResult.systemFeedback) {
+      llmContent += `
+
+<system-reminder>
+${emojiResult.systemFeedback}
+</system-reminder>`;
+    }
+
     return {
-      llmContent: formattedOutput,
+      llmContent,
       returnDisplay: formattedOutput,
       metadata: {
         stateChanged: shouldGenerateReminder,
@@ -246,9 +283,10 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
           ? String(todo.id)
           : String(index + 1);
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
-      const normalizedSubtasks = Array.isArray(todo?.subtasks)
-        ? todo.subtasks.map((subtask, subIndex) => {
+      const rawSubtasks = todo?.subtasks;
+      const hasSubtasks = Array.isArray(rawSubtasks);
+      const normalizedSubtasks = hasSubtasks
+        ? rawSubtasks.map((subtask, subIndex) => {
             const subtaskId =
               // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
               subtask?.id !== undefined &&
@@ -262,15 +300,17 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
               id: subtaskId,
             };
           })
-        : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
-          todo?.subtasks;
+        : undefined;
 
-      return {
+      const normalized: Todo = {
         ...todo,
         id: normalizedId,
         status: todo.status ?? 'pending',
-        subtasks: normalizedSubtasks,
-      } as Todo;
+      };
+      if (hasSubtasks) {
+        normalized.subtasks = normalizedSubtasks;
+      }
+      return normalized;
     });
     return this.enforceOneInProgress(normalized);
   }
@@ -336,5 +376,77 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
 
     // All tasks are completed
     return { type: 'all-complete' };
+  }
+
+  private getTodoEmojiFilter(): EmojiFilter | null {
+    if (!this.toolHost) {
+      return null;
+    }
+    const raw = this.toolHost.getEphemeralSettings?.().emojifilter;
+    const mode = isEmojiFilterMode(raw) ? raw : 'auto';
+    return new EmojiFilter({ mode });
+  }
+
+  private applyEmojiFilter(todos: Todo[]): {
+    filtered: Todo[];
+    blocked: boolean;
+    errorMessage?: string;
+    systemFeedback?: string;
+  } {
+    const filter = this.getTodoEmojiFilter();
+    if (!filter) {
+      return { filtered: todos, blocked: false };
+    }
+
+    let blocked = false;
+    let errorMessage: string | undefined;
+    const feedbackParts: Set<string> = new Set();
+
+    const filteredTodos = todos.map((todo) => {
+      const contentResult = filter.filterText(todo.content);
+      if (contentResult.blocked) {
+        blocked = true;
+        errorMessage = contentResult.error ?? 'Emojis detected in todo content';
+      }
+      if (contentResult.systemFeedback)
+        feedbackParts.add(contentResult.systemFeedback);
+
+      const filteredSubtasks = todo.subtasks?.map((subtask) => {
+        const subResult = filter.filterText(subtask.content);
+        if (subResult.blocked) {
+          blocked = true;
+          errorMessage =
+            subResult.error ?? 'Emojis detected in subtask content';
+        }
+        if (subResult.systemFeedback)
+          feedbackParts.add(subResult.systemFeedback);
+        const subFiltered = subResult.filtered;
+        return {
+          ...subtask,
+          content:
+            typeof subFiltered === 'string' ? subFiltered : subtask.content,
+        };
+      });
+
+      const todoFiltered = contentResult.filtered;
+      const filteredTodo: Todo = {
+        ...todo,
+        content: typeof todoFiltered === 'string' ? todoFiltered : todo.content,
+      };
+      if (todo.subtasks) {
+        filteredTodo.subtasks = filteredSubtasks;
+      }
+      return filteredTodo;
+    });
+
+    return {
+      filtered: filteredTodos,
+      blocked,
+      errorMessage,
+      systemFeedback:
+        feedbackParts.size > 0
+          ? Array.from(feedbackParts).join(' ')
+          : undefined,
+    };
   }
 }

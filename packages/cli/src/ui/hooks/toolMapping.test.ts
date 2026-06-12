@@ -221,11 +221,15 @@ describe('toolMapping', () => {
       );
     });
 
-    it('maps error tool call missing tool definition', () => {
+    it('maps error tool call missing tool definition without exposing raw args', () => {
       const toolCall: ToolCall = {
         status: 'error',
         request: mockRequest,
-        response: { ...mockResponse, resultDisplay: 'Tool not found' },
+        response: {
+          ...mockResponse,
+          error: new Error('Tool not found'),
+          resultDisplay: 'Tool not found',
+        },
       };
 
       const result = mapToDisplay(toolCall);
@@ -233,9 +237,40 @@ describe('toolMapping', () => {
 
       expect(displayTool.status).toBe(ToolCallStatus.Error);
       expect(displayTool.name).toBe('test_tool');
-      expect(displayTool.description).toBe('{"arg1":"val1"}');
+      expect(displayTool.description).toBe('Tool not found');
       expect(displayTool.resultDisplay).toBe('Tool not found');
       expect(displayTool.renderOutputAsMarkdown).toBe(false);
+    });
+
+    it('uses invocation description for errors after invocation was built', () => {
+      const dogSequence = '\u{1F415}\u{1F436}\u{1F415}\u{1F436}';
+      const toolCall = {
+        status: 'error',
+        request: {
+          ...mockRequest,
+          args: { reason: dogSequence },
+        },
+        tool: mockTool,
+        invocation: {
+          getDescription: () =>
+            'Pause AI continuation: Pause reason is empty after emoji filtering',
+        } as unknown as AnyToolInvocation,
+        response: {
+          ...mockResponse,
+          error: new Error('Pause reason is empty after emoji filtering'),
+          resultDisplay: 'Pause reason is empty after emoji filtering',
+        },
+      } as ToolCall;
+
+      const result = mapToDisplay(toolCall);
+      const displayTool = result.tools[0];
+
+      expect(displayTool.status).toBe(ToolCallStatus.Error);
+      expect(displayTool.name).toBe('Test Tool');
+      expect(displayTool.description).toBe(
+        'Pause AI continuation: Pause reason is empty after emoji filtering',
+      );
+      expect(displayTool.description).not.toContain(dogSequence);
     });
 
     it('maps cancelled tool call properties correctly', () => {

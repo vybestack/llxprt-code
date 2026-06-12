@@ -403,9 +403,9 @@ function registerStandardTools(
   });
   registerCoreTool(GoogleWebSearchTool, webSearchServiceAdapter);
   registerCoreTool(ExaWebSearchTool, { keyStorage: toolKeyStorageAdapter });
-  registerCoreTool(TodoWrite, todoServiceAdapter);
+  registerCoreTool(TodoWrite, todoServiceAdapter, toolHostAdapter);
   registerCoreTool(TodoRead, todoServiceAdapter);
-  registerCoreTool(TodoPause, todoServiceAdapter);
+  registerCoreTool(TodoPause, todoServiceAdapter, toolHostAdapter);
   registerCoreTool(CodeSearchTool, {
     keyStorage: toolKeyStorageAdapter,
     settingsService: settingsServiceAdapter,

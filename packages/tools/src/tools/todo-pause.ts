@@ -8,6 +8,8 @@ import { Type } from '@google/genai';
 import { BaseTool, type ToolResult, Kind } from './tools.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';
+import type { IToolHost } from '../interfaces/IToolHost.js';
+import { EmojiFilter, isEmojiFilterMode } from '../utils/EmojiFilter.js';
 
 export interface TodoPauseParams {
   reason: string;
@@ -20,7 +22,10 @@ export interface TodoPauseParams {
 export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
   static readonly Name = 'todo_pause';
 
-  constructor(private readonly todoService?: ITodoService) {
+  constructor(
+    private readonly todoService?: ITodoService,
+    private readonly toolHost?: IToolHost,
+  ) {
     super(
       TodoPause.Name,
       'TodoPause',
@@ -50,7 +55,7 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
   }
 
   override getDescription(params: TodoPauseParams): string {
-    return `Pause AI continuation: ${params.reason}`;
+    return `Pause AI continuation: ${this.getReasonForDisplay(params.reason)}`;
   }
 
   override validateToolParams(
@@ -134,7 +139,27 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
     _signal: AbortSignal,
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
-    const reason = params.reason;
+    const reasonResult = this.filterReason(params.reason);
+    if (reasonResult.blocked) {
+      const message =
+        reasonResult.errorMessage ?? 'Emojis detected in pause reason';
+      return {
+        llmContent: message,
+        returnDisplay: message,
+        error: { message },
+      };
+    }
+
+    if (reasonResult.reason.length === 0) {
+      const message = 'Pause reason is empty after emoji filtering';
+      return {
+        llmContent: message,
+        returnDisplay: message,
+        error: { message },
+      };
+    }
+
+    const reason = reasonResult.reason;
 
     const store = this.todoService?.getTodoStore(this.context);
     if (store?.writePausedState) {
@@ -146,15 +171,66 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
       ]);
     }
 
-    // Format the user-friendly message
     const userMessage = `AI paused: ${reason}`;
 
-    // Format the LLM content message
-    const llmMessage = `AI execution paused due to: ${reason}`;
+    let llmMessage = `AI execution paused due to: ${reason}`;
+    if (reasonResult.systemFeedback) {
+      llmMessage += `
+
+<system-reminder>
+${reasonResult.systemFeedback}
+</system-reminder>`;
+    }
 
     return {
       llmContent: llmMessage,
       returnDisplay: userMessage,
+    };
+  }
+
+  private getTodoPauseEmojiFilter(): EmojiFilter | null {
+    if (!this.toolHost) {
+      return null;
+    }
+    const raw = this.toolHost.getEphemeralSettings?.().emojifilter;
+    const mode = isEmojiFilterMode(raw) ? raw : 'auto';
+    return new EmojiFilter({ mode });
+  }
+
+  private getReasonForDisplay(reason: string): string {
+    const result = this.filterReason(reason);
+    if (result.blocked) {
+      return result.errorMessage ?? 'Emojis detected in pause reason';
+    }
+    return result.reason.length > 0
+      ? result.reason
+      : 'Pause reason is empty after emoji filtering';
+  }
+
+  private filterReason(reason: string): {
+    reason: string;
+    blocked: boolean;
+    errorMessage?: string;
+    systemFeedback?: string;
+  } {
+    const filter = this.getTodoPauseEmojiFilter();
+    if (!filter) {
+      return { reason, blocked: false };
+    }
+
+    const result = filter.filterText(reason);
+    if (result.blocked) {
+      return {
+        reason,
+        blocked: true,
+        errorMessage: result.error ?? 'Emojis detected in pause reason',
+      };
+    }
+
+    return {
+      reason: typeof result.filtered === 'string' ? result.filtered : reason,
+      blocked: false,
+      systemFeedback: result.systemFeedback,
     };
   }
 }

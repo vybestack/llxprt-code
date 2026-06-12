@@ -75,8 +75,10 @@ export * from './core/toolSchedulerContract.js';
 export type {
   CancelledToolCall,
   CompletedToolCall,
+  ErroredToolCall,
   ExecutingToolCall,
   ScheduledToolCall,
+  ToolCall,
   ValidatingToolCall,
   WaitingToolCall,
 } from './scheduler/types.js';

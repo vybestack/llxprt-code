@@ -270,6 +270,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
           request: { ...call.request, args: args as Record<string, unknown> },
           status: 'error',
           tool: call.tool,
+          invocation: call.invocation,
           response,
         } as ErroredToolCall;
       }
