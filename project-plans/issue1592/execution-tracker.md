@@ -14,10 +14,10 @@
 | 04 | P04 | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Consumer audit + integration hardening complete; see .completed/P04.md |
 | 04a | P04A | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Consumer migration verification complete; see .completed/P04A.md |
 | 05 | P05 | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Cleanup + final hardening complete; see .completed/P05.md |
-| 05a | P05A | [ ] | - | - | - | [ ] | Final semantic review |
+| 05a | P05A | [x] | 2026-06-11 | 2026-06-11 | APPROVE | [x] | Final semantic review approved; see reviews/p05a-final-semantic-review.md and .completed/P05A.md |
 
 ## Completion Markers
 
-- [ ] All phases have completion markers in `.completed/`
-- [ ] Full battery (authoritative definition in plan/00-overview.md, INCLUDING the synthetic-haiku smoke test) green at EVERY code-changing phase (P01, P02, P03, P04, P05) AND every verification phase (P01a, P02a, P03a, P04a, P05a)
-- [ ] No phases skipped
+- [x] All phases have completion markers in `.completed/`
+- [x] Full battery (authoritative definition in plan/00-overview.md, INCLUDING the synthetic-haiku smoke test) green at EVERY code-changing phase (P01, P02, P03, P04, P05) AND every verification phase (P01a, P02a, P03a, P04a, P05a)
+- [x] No phases skipped
