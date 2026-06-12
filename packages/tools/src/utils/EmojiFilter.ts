@@ -14,7 +14,7 @@
  */
 export type EmojiFilterMode = 'allowed' | 'auto' | 'warn' | 'error';
 
-export const VALID_EMOJI_FILTER_MODES = new Set<string>([
+export const VALID_EMOJI_FILTER_MODES: ReadonlySet<string> = new Set([
   'allowed',
   'auto',
   'warn',
