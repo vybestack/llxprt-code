@@ -51,7 +51,7 @@ import {
 } from './shellCommandProcessor.js';
 import {
   type Config,
-  type AgentClient,
+  type AgentClientContract as AgentClient,
   type ShellExecutionResult,
   type ShellOutputEvent,
 } from '@vybestack/llxprt-code-core';

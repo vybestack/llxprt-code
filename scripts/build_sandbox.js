@@ -98,6 +98,7 @@ const corePackageDir = join('packages', 'core');
 const mcpPackageDir = join('packages', 'mcp');
 const ideIntegrationPackageDir = join('packages', 'ide-integration');
 const providersPackageDir = join('packages', 'providers');
+const agentsPackageDir = join('packages', 'agents');
 const telemetryPackageDir = join('packages', 'telemetry');
 const policyPackageDir = join('packages', 'policy');
 
@@ -203,6 +204,14 @@ try {
     { stdio: 'ignore' },
   );
 
+  console.log('packing @vybestack/llxprt-code-agents ...');
+  rmSync(join(agentsPackageDir, 'dist', 'vybestack-llxprt-code-agents-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist`,
+    { stdio: 'ignore' },
+  );
   console.log('packing @vybestack/llxprt-code ...');
   rmSync(join(cliPackageDir, 'dist', 'vybestack-llxprt-code-*.tgz'), {
     force: true,
@@ -301,6 +310,14 @@ chmodSync(
     providersPackageDir,
     'dist',
     `vybestack-llxprt-code-providers-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    agentsPackageDir,
+    'dist',
+    `vybestack-llxprt-code-agents-${packageVersion}.tgz`,
   ),
   0o755,
 );

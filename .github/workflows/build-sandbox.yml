@@ -64,6 +64,7 @@ jobs:
           npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist
           npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist
           npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist
+          npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist
           npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
 
       - name: Build and push Docker image

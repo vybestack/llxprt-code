@@ -99,17 +99,23 @@ vi.mock('../config/config.js', async () => {
 
 // Mock the AgentClient to avoid actual API calls
 const sendMessageStreamSpy = vi.fn();
+vi.mock('@vybestack/llxprt-code-agents', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-agents');
+  return {
+    ...actual,
+    AgentClient: vi.fn().mockImplementation(() => ({
+      sendMessageStream: sendMessageStreamSpy,
+      getUserTier: vi.fn().mockReturnValue('free'),
+      initialize: vi.fn(),
+    })),
+  };
+});
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
     createRuntimeStateFromConfig: actual.createRuntimeStateFromConfig,
     MockTool: actual.MockTool, // Explicitly export MockTool
-    AgentClient: vi.fn().mockImplementation(() => ({
-      sendMessageStream: sendMessageStreamSpy,
-      getUserTier: vi.fn().mockReturnValue('free'),
-      initialize: vi.fn(),
-    })),
   };
 });
 

@@ -7,7 +7,7 @@
 import {
   CompressionStatus,
   PerformCompressionResult,
-  type ChatSession,
+  type AgentChatContract,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItemCompression } from '../types.js';
 import { MessageType } from '../types.js';
@@ -55,10 +55,13 @@ function makePendingCompression(): HistoryItemCompression {
 }
 
 async function executeCompression(
-  chat: ChatSession,
+  chat: AgentChatContract,
   promptId: string,
 ): Promise<HistoryItemCompression> {
   const historyService = chat.getHistoryService();
+  if (!historyService) {
+    throw new Error('Chat history service is unavailable.');
+  }
   const originalTokenCount = historyService.getTotalTokens();
   const wasRecentlyCompressedBeforeCommand = chat.wasRecentlyCompressed();
   const result = await chat.performCompression(promptId);

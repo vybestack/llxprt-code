@@ -95,7 +95,6 @@ export default defineConfig({
     testTimeout: 30000,
     teardownTimeout: 120000,
     silent: true,
-    dangerouslyIgnoreUnhandledErrors: isWindows,
     pool: shouldUseForkPool ? 'forks' : undefined,
     poolOptions: shouldUseForkPool
       ? {

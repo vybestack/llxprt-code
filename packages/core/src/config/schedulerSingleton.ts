@@ -12,9 +12,9 @@
 import type { Config } from './config.js';
 import type {
   CompletedToolCall,
-  CoreToolScheduler,
   ToolCall,
-} from '../core/coreToolScheduler.js';
+  ToolSchedulerContract,
+} from '../core/toolSchedulerContract.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { EditorType } from '../utils/editor.js';
@@ -62,14 +62,14 @@ export interface SchedulerSingletonDependencies {
 }
 
 type SchedulerEntry = {
-  scheduler: CoreToolScheduler;
+  scheduler: ToolSchedulerContract;
   refCount: number;
   callbacks?: SchedulerCallbacks;
   interactiveMode: boolean;
 };
 
 type SchedulerInitState = {
-  promise: Promise<CoreToolScheduler>;
+  promise: Promise<ToolSchedulerContract>;
   callbacks: SchedulerCallbacks;
   refCount: number;
   interactiveMode: boolean;
@@ -205,7 +205,7 @@ function reuseExistingScheduler(
   config: Config,
   dependencies: SchedulerSingletonDependencies,
   callbacks: SchedulerCallbacks,
-): CoreToolScheduler {
+): ToolSchedulerContract {
   entry.refCount += 1;
   if (entry.interactiveMode !== interactiveMode) {
     debugLog.debug(
@@ -230,7 +230,7 @@ async function awaitInFlightScheduler(
   config: Config,
   dependencies: SchedulerSingletonDependencies,
   callbacks: SchedulerCallbacks,
-): Promise<CoreToolScheduler> {
+): Promise<ToolSchedulerContract> {
   inFlight.refCount += 1;
   if (inFlight.interactiveMode !== interactiveMode) {
     debugLog.debug(
@@ -268,12 +268,17 @@ async function createNewScheduler(
   interactiveMode: boolean,
   dependencies: SchedulerSingletonDependencies,
   callbacks: SchedulerCallbacks,
-): Promise<CoreToolScheduler> {
+): Promise<ToolSchedulerContract> {
+  // @plan PLAN-20260610-ISSUE1592.P01
+  // @requirement REQ-INV-002
   const creationPromise = (async () => {
-    const { CoreToolScheduler: CoreToolSchedulerClass } = await import(
-      '../core/coreToolScheduler.js'
-    );
-    return new CoreToolSchedulerClass({
+    const factory = config.getToolSchedulerFactory();
+    if (!factory) {
+      throw new Error(
+        'toolSchedulerFactory is required before Config.getOrCreateScheduler() can create a CoreToolScheduler',
+      );
+    }
+    return factory({
       config,
       messageBus: dependencies.messageBus,
       toolRegistry: dependencies.toolRegistry,
@@ -321,7 +326,7 @@ export async function getOrCreateScheduler(
   callbacks: SchedulerCallbacks,
   options: SchedulerOptions | undefined,
   dependencies: SchedulerSingletonDependencies,
-): Promise<CoreToolScheduler> {
+): Promise<ToolSchedulerContract> {
   const interactiveMode = options?.interactiveMode ?? true;
   const entry = schedulerEntries.get(sessionId);
 
@@ -390,7 +395,7 @@ export function disposeScheduler(sessionId: string): void {
 
 export function getSchedulerInstance(
   sessionId: string,
-): CoreToolScheduler | undefined {
+): ToolSchedulerContract | undefined {
   return schedulerEntries.get(sessionId)?.scheduler;
 }
 

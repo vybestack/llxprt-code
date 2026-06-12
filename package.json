@@ -17,6 +17,7 @@
     "packages/core",
     "packages/lsp",
     "packages/providers",
+    "packages/agents",
     "packages/cli",
     "packages/a2a-server",
     "packages/test-utils",

@@ -11,12 +11,17 @@
 
 import * as path from 'node:path';
 import type { EventEmitter } from 'node:events';
-import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
+import type { SubagentSchedulerFactory } from '../core/subagentTypes.js';
 import type {
   ContentGenerator,
   ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
-import type { AgentClient } from '../core/client.js';
+import type {
+  AgentClientContract,
+  AgentClientFactory,
+} from '../core/clientContract.js';
+import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
+import type { TaskToolRegistration } from './toolRegistryFactory.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -118,7 +123,7 @@ export abstract class ConfigBaseCore {
   protected readonly accessibility!: AccessibilitySettings;
   protected telemetrySettings!: TelemetrySettings;
   protected readonly usageStatisticsEnabled!: boolean;
-  protected agentClient!: AgentClient;
+  protected agentClient!: AgentClientContract;
   protected runtimeState!: AgentRuntimeState;
   protected readonly fileFiltering!: {
     respectGitIgnore: boolean;
@@ -228,6 +233,28 @@ export abstract class ConfigBaseCore {
    * Lazily-created HookSystem instance, only when enableHooks=true
    */
   protected hookSystem: HookSystem | undefined;
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-002
+   */
+  getToolSchedulerFactory(): ToolSchedulerFactory | undefined {
+    return this.toolSchedulerFactory;
+  }
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-003
+   */
+  protected agentClientFactory: AgentClientFactory | undefined;
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-002
+   */
+  protected toolSchedulerFactory: ToolSchedulerFactory | undefined;
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-003
+   */
+  protected taskToolRegistration: TaskToolRegistration | undefined;
   protected initialized = false;
 
   // ---- Simple field accessors ----
@@ -493,7 +520,7 @@ export abstract class ConfigBaseCore {
   getMaxConversationsStored(): number {
     return this.telemetrySettings.maxConversationsStored ?? 1000;
   }
-  getAgentClient(): AgentClient {
+  getAgentClient(): AgentClientContract {
     return this.agentClient;
   }
   getGeminiDir(): string {
@@ -697,6 +724,13 @@ export abstract class ConfigBaseCore {
   }
   getEnableHooks(): boolean {
     return this.enableHooks;
+  }
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-003
+   */
+  getTaskToolRegistration(): TaskToolRegistration | undefined {
+    return this.taskToolRegistration;
   }
   getEnableHooksUI(): boolean {
     return this.enableHooksUI;

@@ -18,7 +18,7 @@ import { act } from 'react';
 import { useGeminiStream } from './geminiStream/index.js';
 import type {
   Config,
-  AgentClient,
+  AgentClientContract as AgentClient,
   ToolCallRequestInfo,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';

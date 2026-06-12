@@ -20,7 +20,7 @@ import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
 import type {
   Config,
-  AgentClient,
+  AgentClientContract as AgentClient,
   GitService,
 } from '@vybestack/llxprt-code-core';
 import type { TrackedToolCall } from '../../useReactToolScheduler.js';

@@ -34,6 +34,9 @@ import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import type { AnyToolInvocation } from '@vybestack/llxprt-code-tools';
 import { TelemetryTarget } from '../telemetry/index.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
+import type { AgentClientFactory } from '../core/clientContract.js';
+import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
+import type { TaskToolRegistration } from './toolRegistryFactory.js';
 
 export type { MCPOAuthConfig, AnyToolInvocation, SkillDefinition };
 export { TelemetryTarget };
@@ -445,6 +448,32 @@ export interface ConfigParameters {
   outputSettings?: OutputSettings;
   introspectionAgentSettings?: IntrospectionAgentSettings;
   useWriteTodos?: boolean;
+
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-001
+   * Factory for creating AgentClient instances. Injected by composition roots.
+   * Absence is an error at USE time (initialize/initializeContentGeneratorConfig),
+   * never at Config construction time.
+   */
+  agentClientFactory?: AgentClientFactory;
+
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-002
+   * Factory for creating CoreToolScheduler instances. Injected by composition roots.
+   * Absence is an error at USE time (getOrCreateScheduler),
+   * never at Config construction time.
+   */
+  toolSchedulerFactory?: ToolSchedulerFactory;
+
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-003
+   * TaskTool registration descriptor. Injected by composition roots (P03+).
+   * During P01-P02, core-local default registration is used when not provided.
+   */
+  taskToolRegistration?: TaskToolRegistration;
 
   jitContextEnabled?: boolean;
   adminSkillsEnabled?: boolean;

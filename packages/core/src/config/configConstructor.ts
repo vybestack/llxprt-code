@@ -76,6 +76,9 @@ import type { HookDefinition, HookEventName } from '../hooks/types.js';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { EventEmitter } from 'node:events';
 import type { Config } from './config.js';
+import type { AgentClientFactory } from '../core/clientContract.js';
+import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
+import type { TaskToolRegistration } from './toolRegistryFactory.js';
 
 /**
  * Typed target interface for applyConfigParams — lists every field
@@ -206,6 +209,22 @@ export interface ConfigConstructorTarget {
   outputSettings: OutputSettings;
   introspectionAgentSettings: IntrospectionAgentSettings;
   useWriteTodos: boolean;
+
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-001
+   */
+  agentClientFactory: AgentClientFactory | undefined;
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-002
+   */
+  toolSchedulerFactory: ToolSchedulerFactory | undefined;
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-003
+   */
+  taskToolRegistration: TaskToolRegistration | undefined;
 
   // Called at end of applyConfigParams
   getProxy(): string | undefined;
@@ -414,6 +433,12 @@ function applyPolicyAndLifecycle(
     enabled: false,
   };
   config.useWriteTodos = params.useWriteTodos ?? true;
+
+  // @plan PLAN-20260610-ISSUE1592.P01
+  // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
+  config.agentClientFactory = params.agentClientFactory;
+  config.toolSchedulerFactory = params.toolSchedulerFactory;
+  config.taskToolRegistration = params.taskToolRegistration;
 
   if (params.contextFileName !== undefined && params.contextFileName !== '') {
     setLlxprtMdFilename(params.contextFileName);

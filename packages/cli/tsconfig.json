@@ -11,6 +11,7 @@
     "rootDir": "..",
     "paths": {
       "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
+      "@vybestack/llxprt-code-agents": ["../agents/index.ts"],
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-ide-integration": ["../ide-integration/index.ts"],

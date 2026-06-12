@@ -9,7 +9,7 @@ import {
   type Config,
   type CompletedToolCall,
   type EditorType,
-  type AgentClient,
+  type AgentClientContract,
   type MessageBus,
   type ToolCallRequestInfo,
   debugLogger,
@@ -76,7 +76,7 @@ export function useToolSchedulerSetup(
   onEditorOpen: () => void,
   runtimeMessageBus: MessageBus | undefined,
   addItem: UseHistoryManagerReturn['addItem'],
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
 ) {
   const handleCompletedToolsRef = useRef<
     (tools: TrackedToolCall[]) => Promise<void>
@@ -115,7 +115,7 @@ export function useToolSchedulerSetup(
 async function processPrimaryCompletion(
   completedToolCallsFromScheduler: TrackedToolCall[],
   addItem: UseHistoryManagerReturn['addItem'],
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   config: Config,
   handleCompletedTools: (tools: TrackedToolCall[]) => Promise<void>,
 ): Promise<void> {
@@ -174,7 +174,7 @@ export function useShellCommandSetup({
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>;
   onDebugMessage: (message: string) => void;
   config: Config;
-  agentClient: AgentClient;
+  agentClient: AgentClientContract;
   setShellInputFocused: (value: boolean) => void;
   terminalWidth?: number;
   terminalHeight?: number;

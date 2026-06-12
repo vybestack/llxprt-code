@@ -3,6 +3,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
+      "@vybestack/llxprt-code-agents": ["../agents/dist/index.d.ts"],
       "@vybestack/llxprt-code-core": ["../core/dist/index.d.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/dist/src/*"],
       "@vybestack/llxprt-code-mcp": ["../mcp/dist/mcp/index.d.ts"],
