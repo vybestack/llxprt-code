@@ -167,6 +167,7 @@ export class MessageStreamOrchestrator {
       loopDetector.reset(ctx.prompt_id);
       setLastPromptId(ctx.prompt_id);
       resetCurrentSequenceModel();
+      await todoContinuationService.clearPausedState();
 
       const hookOutput = await agentHookManager.fireBeforeAgentHookSafe(
         ctx.prompt_id,

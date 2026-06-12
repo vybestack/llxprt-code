@@ -96,13 +96,24 @@ vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
     }),
   })),
 }));
-const { todoStoreReadMock, mockTodoStoreConstructor } = vi.hoisted(() => {
+const {
+  todoStoreReadMock,
+  todoStoreReadPausedMock,
+  todoStoreWritePausedMock,
+  mockTodoStoreConstructor,
+} = vi.hoisted(() => {
   const readMock = vi.fn();
+  const readPausedMock = vi.fn();
+  const writePausedMock = vi.fn();
   const constructorMock = vi.fn().mockImplementation(() => ({
     readTodos: readMock,
+    readPausedState: readPausedMock,
+    writePausedState: writePausedMock,
   }));
   return {
     todoStoreReadMock: readMock,
+    todoStoreReadPausedMock: readPausedMock,
+    todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
 });
@@ -341,10 +352,16 @@ describe('Gemini Client (client.ts)', () => {
     vi.mocked(uiTelemetryService.setLastPromptTokenCount).mockClear();
     mockTodoStoreConstructor.mockReset();
     todoStoreReadMock.mockReset();
+    todoStoreReadPausedMock.mockReset();
+    todoStoreWritePausedMock.mockReset();
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
+      readPausedState: todoStoreReadPausedMock,
+      writePausedState: todoStoreWritePausedMock,
     }));
     todoStoreReadMock.mockResolvedValue([]);
+    todoStoreReadPausedMock.mockResolvedValue(false);
+    todoStoreWritePausedMock.mockResolvedValue(undefined);
 
     // Re-setup prompts mocks after reset
     vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
@@ -1175,6 +1192,99 @@ sub memory
           part.text.includes('System Note'),
       );
       expect(reminderPart).toBeDefined();
+    });
+
+    it('does not retry with pending todos when paused for the current prompt', async () => {
+      todoStoreReadMock.mockResolvedValue([
+        {
+          id: 'todo-1',
+          content: 'Blocked task',
+          status: 'pending',
+        },
+      ]);
+      todoStoreReadPausedMock.mockResolvedValue(true);
+      client['lastPromptId'] = 'prompt-paused-current';
+
+      const forwardedRequests: Part[][] = [];
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        forwardedRequests.push(req as Part[]);
+        return (async function* () {
+          yield {
+            type: GeminiEventType.Content,
+            value: 'Waiting for user input',
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })();
+      });
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as ChatSession;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Continue the task' }],
+        new AbortController().signal,
+        'prompt-paused-current',
+      );
+      await fromAsync(stream);
+
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+      expect(todoStoreWritePausedMock).not.toHaveBeenCalled();
+      expect(forwardedRequests).toHaveLength(1);
+      expect(JSON.stringify(forwardedRequests[0])).not.toContain('System Note');
+    });
+
+    it('clears paused state at the start of a new prompt', async () => {
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield {
+            type: GeminiEventType.Content,
+            value: 'Started new work',
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })(),
+      );
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as ChatSession;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const stream = client.sendMessageStream(
+        [{ text: 'New request' }],
+        new AbortController().signal,
+        'prompt-new-after-pause',
+      );
+      await fromAsync(stream);
+
+      expect(todoStoreWritePausedMock).toHaveBeenCalledWith(false);
     });
 
     it('does not retry after todo_pause', async () => {
