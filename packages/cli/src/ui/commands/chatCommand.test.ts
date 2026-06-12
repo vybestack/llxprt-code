@@ -9,7 +9,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import type { CommandContext, SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import type { AgentClient } from '@vybestack/llxprt-code-core';
+import type { AgentClientContract as AgentClient } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 import * as fsPromises from 'fs/promises';
 import { chatCommand } from './chatCommand.js';

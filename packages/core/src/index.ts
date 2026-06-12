@@ -69,20 +69,26 @@ export { SubagentTerminateMode } from './core/subagentTypes.js';
 export * from './commands/extensions.js';
 export * from './commands/types.js';
 
-// Export Core Logic
-export * from './core/client.js';
-export * from './core/baseLlmClient.js';
+// Export Core Logic (contracts only — implementations moved to the agents package)
+export * from './core/clientContract.js';
+export * from './core/toolSchedulerContract.js';
+export type {
+  CancelledToolCall,
+  CompletedToolCall,
+  ExecutingToolCall,
+  ScheduledToolCall,
+  ValidatingToolCall,
+  WaitingToolCall,
+} from './scheduler/types.js';
+
 export * from './core/contentGenerator.js';
-export * from './core/chatSession.js';
 export * from './core/logger.js';
 export * from './core/prompts.js';
 export * from './core/tokenLimits.js';
 export * from './core/turn.js';
 export * from './core/geminiRequest.js';
-export * from './core/coreToolScheduler.js';
-export * from './core/nonInteractiveToolExecutor.js';
-export type { SubagentSchedulerFactory } from './core/subagentScheduler.js';
-export { buildContinuationDirective } from './core/compression/utils.js';
+export type { SubagentSchedulerFactory } from './core/subagentTypes.js';
+export { buildContinuationDirective } from './core/compression/continuationDirective.js';
 
 export * from './code_assist/codeAssist.js';
 export * from './code_assist/oauth2.js';
@@ -231,16 +237,35 @@ export * from './services/fileSystemService.js';
 export { ContextManager } from './services/contextManager.js';
 
 // Export IDE specific logic
-export * from './ide/ide-client.js';
-export * from './ide/ideContext.js';
-export * from './ide/ide-installer.js';
+// IDE integration code now lives in @vybestack/llxprt-code-ide-integration.
+// Re-exported here for backward compatibility with existing consumers.
 export {
+  IdeClient,
+  IDEConnectionStatus,
+  type IDEConnectionState,
+  ideContext,
+  createIdeContextStore,
+  FileSchema,
+  IdeContextSchema,
+  IdeContextNotificationSchema,
+  IdeDiffAcceptedNotificationSchema,
+  IdeDiffRejectedNotificationSchema,
+  IdeDiffClosedNotificationSchema,
+  CloseDiffResponseSchema,
+  type IdeContext,
+  type File,
+  type DiffUpdateResult,
+  getIdeInstaller,
+  type IdeInstaller,
+  type InstallResult,
   IDE_DEFINITIONS,
   detectIdeFromEnv,
+  detectIde,
   isCloudShell,
   type IdeInfo,
-} from './ide/detect-ide.js';
-export * from './ide/constants.js';
+  getIdeProcessInfo,
+  LLXPRT_CODE_COMPANION_EXTENSION_NAME,
+} from '@vybestack/llxprt-code-ide-integration';
 
 // Export Shell Execution Service
 export * from './services/shellExecutionService.js';
@@ -622,7 +647,6 @@ export * from './models/index.js';
 
 // --- Subagent Feature: PLAN-20250117-SUBAGENTCONFIG ---
 export { SubagentManager } from './config/subagentManager.js';
-export { SubagentOrchestrator } from './core/subagentOrchestrator.js';
 export type { SubagentConfig } from './config/types.js';
 // --- End of Subagent Feature ---
 export {

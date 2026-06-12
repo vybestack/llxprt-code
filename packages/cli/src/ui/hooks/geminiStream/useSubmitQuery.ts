@@ -15,7 +15,7 @@ import { useCallback, useEffect } from 'react';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   type Config,
-  type AgentClient,
+  type AgentClientContract,
   type MessageSenderType,
   type RecordingIntegration,
   type ServerGeminiStreamEvent,
@@ -39,7 +39,7 @@ import { StreamProcessingStatus, type QueuedSubmission } from './types.js';
 
 export interface UseSubmitQueryDeps {
   config: Config;
-  agentClient: AgentClient;
+  agentClient: AgentClientContract;
   addItem: (
     item: Omit<HistoryItem, 'id'>,
     timestamp?: number,

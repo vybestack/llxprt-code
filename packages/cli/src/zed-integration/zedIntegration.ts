@@ -10,8 +10,8 @@ import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import {
   type Config,
   type ContentGeneratorConfig,
-  type ChatSession,
-  type AgentClient,
+  type AgentChatContract,
+  type AgentClientContract,
   logToolCall,
   type ToolResult,
   convertToFunctionResponse,
@@ -28,8 +28,6 @@ import {
   getResponseTextFromParts,
   EmojiFilter,
   type FilterConfiguration,
-  type StreamEvent,
-  StreamEventType,
   todoEvents,
   type TodoUpdateEvent,
   type AnyToolInvocation,
@@ -44,6 +42,11 @@ import {
 import type { FilterFilesOptions } from '@vybestack/llxprt-code-storage';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
+import {
+  StreamEventType,
+  type StreamEvent,
+} from '@vybestack/llxprt-code-agents';
+
 import { Readable, Writable } from 'node:stream';
 import {
   type Content,
@@ -129,9 +132,11 @@ export async function runZedIntegration(
     throw e;
   }
 }
-function getRuntimeAgentClient(config: Config): AgentClient | undefined {
+function getRuntimeAgentClient(
+  config: Config,
+): AgentClientContract | undefined {
   return (
-    config as { getAgentClient: () => AgentClient | undefined }
+    config as { getAgentClient: () => AgentClientContract | undefined }
   ).getAgentClient();
 }
 
@@ -306,7 +311,7 @@ export class GeminiAgent {
    * Auto-authenticate when no AgentClient or ContentGeneratorConfig is available.
    * Attempts provider-based auth first, then falls back to OAuth.
    */
-  async #autoAuthenticate(sessionConfig: Config): Promise<AgentClient> {
+  async #autoAuthenticate(sessionConfig: Config): Promise<AgentClientContract> {
     this.logger.debug(
       () => 'AgentClient not available - attempting auto-authentication',
     );
@@ -565,9 +570,9 @@ export class GeminiAgent {
    * due to missing ContentGeneratorConfig.
    */
   async #startChatWithRetry(
-    agentClient: AgentClient | undefined,
+    agentClient: AgentClientContract | undefined,
     sessionConfig: Config,
-  ): Promise<ChatSession> {
+  ): Promise<AgentChatContract> {
     if (!agentClient) {
       throw new Error('AgentClient is required to start a chat session.');
     }
@@ -634,7 +639,7 @@ export class Session {
 
   constructor(
     private readonly id: string,
-    private readonly chat: ChatSession,
+    private readonly chat: AgentChatContract,
     private readonly config: Config,
     private readonly connection: acp.AgentSideConnection,
   ) {

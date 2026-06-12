@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ToolMessageProps } from './ToolMessage.js';
 import { ToolMessage } from './ToolMessage.js';
 import { StreamingState, ToolCallStatus } from '../../types.js';
@@ -13,7 +14,25 @@ import { StreamingContext } from '../../contexts/StreamingContext.js';
 import { renderWithProviders } from '../../../test-utils/render.js';
 import { Colors } from '../../colors.js';
 import { TOOL_STATUS } from '../../constants.js';
-import type { AnsiOutput } from '@vybestack/llxprt-code-core';
+import type { AnsiOutput, Config } from '@vybestack/llxprt-code-core';
+
+const isActivePtyMock = vi.hoisted(() => vi.fn());
+const getLastActivePtyIdMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-core')
+  >('@vybestack/llxprt-code-core');
+
+  return {
+    ...actual,
+    ShellExecutionService: {
+      ...actual.ShellExecutionService,
+      isActivePty: isActivePtyMock,
+      getLastActivePtyId: getLastActivePtyIdMock,
+    },
+  };
+});
 
 vi.mock('../GeminiRespondingSpinner.js', () => ({
   GeminiRespondingSpinner: ({
@@ -43,6 +62,10 @@ vi.mock('../../utils/MarkdownDisplay.js', () => ({
   MarkdownDisplay: function MockMarkdownDisplay({ text }: { text: string }) {
     return <Text color={Colors.Foreground}>MockMarkdown:{text}</Text>;
   },
+}));
+vi.mock('../ShellInputPrompt.js', () => ({
+  ShellInputPrompt: ({ focus }: { focus: boolean }) =>
+    focus ? React.createElement(Text, null, 'MockShellInput') : null,
 }));
 
 const renderWithContext = (
@@ -204,5 +227,141 @@ describe('<ToolMessage />', () => {
       StreamingState.Idle,
     );
     expect(lastFrame()).toMatchSnapshot();
+  });
+
+  describe('shell focus state for completed shell with live PTY', () => {
+    const shellConfig = {
+      getEnableInteractiveShell: () => true,
+    } as unknown as Config;
+
+    beforeEach(() => {
+      isActivePtyMock.mockReturnValue(false);
+      getLastActivePtyIdMock.mockReturnValue(null);
+    });
+
+    it('shows focused indicator for executing shell with matching ptyId', () => {
+      getLastActivePtyIdMock.mockReturnValue(42);
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name="Shell"
+          status={ToolCallStatus.Executing}
+          ptyId={42}
+          activeShellPtyId={42}
+          embeddedShellFocused={true}
+          config={shellConfig}
+        />,
+        StreamingState.Idle,
+      );
+      expect(lastFrame()).toContain('Focused');
+    });
+
+    it('shows focusable indicator for executing shell even when not focused', () => {
+      getLastActivePtyIdMock.mockReturnValue(42);
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name="Shell"
+          status={ToolCallStatus.Executing}
+          ptyId={42}
+          activeShellPtyId={42}
+          embeddedShellFocused={false}
+          config={shellConfig}
+        />,
+        StreamingState.Idle,
+      );
+      expect(lastFrame()).toContain('Tab/Ctrl+F to focus');
+      expect(lastFrame()).not.toContain('Focused');
+    });
+
+    it('shows focused indicator for completed shell when PTY is still alive and embeddedShellFocused is true', () => {
+      getLastActivePtyIdMock.mockReturnValue(42);
+      isActivePtyMock.mockReturnValue(true);
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name="Shell"
+          status={ToolCallStatus.Success}
+          ptyId={42}
+          activeShellPtyId={42}
+          embeddedShellFocused={true}
+          config={shellConfig}
+        />,
+        StreamingState.Idle,
+      );
+      expect(lastFrame()).toContain('Focused');
+    });
+
+    it('does not show focused indicator for completed shell when PTY is dead', () => {
+      getLastActivePtyIdMock.mockReturnValue(42);
+      isActivePtyMock.mockReturnValue(false);
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name="Shell"
+          status={ToolCallStatus.Success}
+          ptyId={42}
+          activeShellPtyId={42}
+          embeddedShellFocused={true}
+          config={shellConfig}
+        />,
+        StreamingState.Idle,
+      );
+      expect(lastFrame()).not.toContain('Focused');
+      expect(lastFrame()).not.toContain('Tab/Ctrl+F to focus');
+    });
+
+    it('does not show focused indicator for non-shell tool', () => {
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name="ReadFile"
+          status={ToolCallStatus.Success}
+          ptyId={42}
+          embeddedShellFocused={true}
+          config={shellConfig}
+        />,
+        StreamingState.Idle,
+      );
+      expect(lastFrame()).not.toContain('Focused');
+      expect(lastFrame()).not.toContain('Tab/Ctrl+F to focus');
+    });
+
+    it('shows focusable indicator for completed shell when PTY is alive but not focused', () => {
+      getLastActivePtyIdMock.mockReturnValue(42);
+      isActivePtyMock.mockReturnValue(true);
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name="Shell"
+          status={ToolCallStatus.Success}
+          ptyId={42}
+          activeShellPtyId={42}
+          embeddedShellFocused={false}
+          config={shellConfig}
+        />,
+        StreamingState.Idle,
+      );
+      expect(lastFrame()).toContain('Tab/Ctrl+F to focus');
+      expect(lastFrame()).not.toContain('Focused');
+    });
+
+    it('shows ShellInputPrompt for completed shell when PTY alive and focused', () => {
+      getLastActivePtyIdMock.mockReturnValue(42);
+      isActivePtyMock.mockReturnValue(true);
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name="Shell"
+          status={ToolCallStatus.Success}
+          ptyId={42}
+          activeShellPtyId={42}
+          embeddedShellFocused={true}
+          config={shellConfig}
+        />,
+        StreamingState.Idle,
+      );
+      expect(lastFrame()).toContain('MockShellInput');
+    });
   });
 });

@@ -3,11 +3,12 @@
   "compilerOptions": {
     "outDir": "dist",
     "lib": ["DOM", "DOM.Iterable", "ES2021"],
-    "composite": true,
+    "composite": false,
     "types": ["node", "vitest/globals"],
     "baseUrl": ".",
     "rootDir": "..",
     "paths": {
+      "@vybestack/llxprt-code-agents": ["../agents/index.ts"],
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],

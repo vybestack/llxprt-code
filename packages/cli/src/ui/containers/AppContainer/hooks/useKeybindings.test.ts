@@ -16,6 +16,7 @@ const setMouseEventsActiveMock = vi.hoisted(() => vi.fn());
 const disableMouseEventsMock = vi.hoisted(() => vi.fn());
 const enableMouseEventsMock = vi.hoisted(() => vi.fn());
 const getLastActivePtyIdMock = vi.hoisted(() => vi.fn());
+const isActivePtyMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../hooks/useKeypress.js', async () => {
   const actual = await vi.importActual<
@@ -44,6 +45,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
     ...actual,
     ShellExecutionService: {
       getLastActivePtyId: getLastActivePtyIdMock,
+      isActivePty: isActivePtyMock,
     },
     DebugLogger: class {
       log(): void {
@@ -148,6 +150,7 @@ describe('useKeybindings', () => {
     vi.clearAllMocks();
     isMouseEventsActiveMock.mockReturnValue(false);
     getLastActivePtyIdMock.mockReturnValue(null);
+    isActivePtyMock.mockReturnValue(false);
   });
 
   it('copy mode consumes keypress before exit handling', () => {
@@ -320,6 +323,7 @@ describe('useKeybindings', () => {
 
   it('toggles embedded shell focus when interactive shell is enabled and a pty exists', () => {
     const harness = createHarness();
+    isActivePtyMock.mockReturnValue(true);
 
     renderUseKeybindings(harness, {
       shell: {
@@ -338,6 +342,74 @@ describe('useKeybindings', () => {
     expect(harness.setEmbeddedShellFocused).toHaveBeenCalledWith(
       expect.any(Function),
     );
+  });
+
+  it('does not toggle shell focus when activeShellPtyId is nonzero but isActivePty returns false (stale PTY)', () => {
+    const harness = createHarness();
+    // activeShellPtyId is a nonzero id that is no longer alive
+    isActivePtyMock.mockReturnValue(false);
+
+    renderUseKeybindings(harness, {
+      shell: {
+        activeShellPtyId: 42,
+        setEmbeddedShellFocused: harness.setEmbeddedShellFocused,
+        getEnableInteractiveShell: () => true,
+      },
+    });
+
+    const handler = getRegisteredHandler();
+
+    act(() => {
+      handler({ ctrl: true, name: 'f' } as Key);
+    });
+
+    expect(harness.setEmbeddedShellFocused).not.toHaveBeenCalled();
+  });
+
+  it('toggles embedded shell focus when activeShellPtyId is null but lastActivePtyId is alive', () => {
+    const harness = createHarness();
+    getLastActivePtyIdMock.mockReturnValue(99);
+    isActivePtyMock.mockReturnValue(true);
+
+    renderUseKeybindings(harness, {
+      shell: {
+        activeShellPtyId: null,
+        setEmbeddedShellFocused: harness.setEmbeddedShellFocused,
+        getEnableInteractiveShell: () => true,
+      },
+    });
+
+    const handler = getRegisteredHandler();
+
+    act(() => {
+      handler({ ctrl: true, name: 'f' } as Key);
+    });
+
+    expect(harness.setEmbeddedShellFocused).toHaveBeenCalledWith(
+      expect.any(Function),
+    );
+  });
+
+  it('does not toggle shell focus when lastActivePtyId points to a dead PTY', () => {
+    const harness = createHarness();
+    getLastActivePtyIdMock.mockReturnValue(99);
+    isActivePtyMock.mockReturnValue(false);
+
+    renderUseKeybindings(harness, {
+      shell: {
+        activeShellPtyId: null,
+        setEmbeddedShellFocused: harness.setEmbeddedShellFocused,
+        getEnableInteractiveShell: () => true,
+      },
+    });
+
+    const handler = getRegisteredHandler();
+
+    act(() => {
+      handler({ ctrl: true, name: 'f' } as Key);
+    });
+
+    expect(harness.setEmbeddedShellFocused).not.toHaveBeenCalled();
   });
 
   it('runs /ide status command only when IDE mode and context are both present', () => {

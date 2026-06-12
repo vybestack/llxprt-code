@@ -23,6 +23,11 @@ import {
   DEFAULT_GEMINI_MODEL,
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
+import {
+  AgentClient,
+  CoreToolScheduler,
+  createTaskToolRegistration,
+} from '@vybestack/llxprt-code-agents';
 
 import { logger } from '../utils/logger.js';
 import type { Settings } from './settings.js';
@@ -94,6 +99,16 @@ function createBaseConfigParameters(
     folderTrust: settings.folderTrust === true,
     interactive: true,
     extensions,
+    // @plan PLAN-20260610-ISSUE1592.P01
+    // @requirement REQ-INV-001
+    agentClientFactory: (config, runtimeState) =>
+      new AgentClient(config, runtimeState),
+    // @plan PLAN-20260610-ISSUE1592.P01
+    // @requirement REQ-INV-002
+    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
+    // @plan PLAN-20260610-ISSUE1592.P03
+    // @requirement REQ-INV-003
+    taskToolRegistration: createTaskToolRegistration(),
   };
 }
 

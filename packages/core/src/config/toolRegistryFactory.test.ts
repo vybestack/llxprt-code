@@ -35,6 +35,7 @@ function createHost(options: {
     },
     getInteractiveSubagentSchedulerFactory: () => undefined,
     getAsyncTaskManager: () => options.asyncTaskManager,
+    getTaskToolRegistration: () => undefined,
   };
 }
 

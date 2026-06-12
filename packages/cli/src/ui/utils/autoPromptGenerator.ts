@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { AgentClientContract, Config } from '@vybestack/llxprt-code-core';
 import {
-  AgentClient,
   createRuntimeStateFromConfig,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
+import { AgentClient } from '@vybestack/llxprt-code-agents';
 import type { SendMessageParameters } from '@google/genai';
 import { FunctionCallingConfigMode } from '@google/genai';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
@@ -54,7 +54,7 @@ export async function generateAutoPrompt(
       ? config.getProvider()?.toLowerCase()
       : undefined;
   const configuredClient = config.getAgentClient() as
-    | AgentClient
+    | AgentClientContract
     | null
     | undefined;
   const useDetachedClient =
@@ -72,7 +72,7 @@ export async function generateAutoPrompt(
   }
 
   const requestFromClient = async (
-    targetClient: AgentClient,
+    targetClient: AgentClientContract,
     options?: { useRuntimeScope?: boolean },
   ): Promise<{ text?: string }> => {
     const executeRequest = () =>

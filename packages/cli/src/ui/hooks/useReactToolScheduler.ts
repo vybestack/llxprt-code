@@ -13,7 +13,6 @@ import {
   type WaitingToolCall,
   type CompletedToolCall,
   type CancelledToolCall,
-  type CoreToolScheduler,
   type OutputUpdateHandler,
   type ToolCallsUpdateHandler,
   type ToolCall,
@@ -24,6 +23,8 @@ import {
   type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
+import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
+
 import type { HistoryItemWithoutId } from '../types.js';
 import { ToolCallStatus } from '../types.js';
 

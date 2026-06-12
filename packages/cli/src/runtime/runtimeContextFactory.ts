@@ -28,7 +28,13 @@ import {
   flushRuntimeAuthScope,
   type RuntimeAuthScopeFlushResult,
   SubagentManager,
+  type ConfigParameters,
 } from '@vybestack/llxprt-code-core';
+import {
+  AgentClient,
+  CoreToolScheduler,
+  createTaskToolRegistration,
+} from '@vybestack/llxprt-code-agents';
 import {
   clearSettingsProviderRuntimeContext,
   createSettingsProviderRuntimeContext,
@@ -46,11 +52,18 @@ import stripJsonComments from 'strip-json-comments';
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const DEFAULT_DEBUG_MODE = false;
 
-/**
- * @fix issue1317
- * Load user settings from disk so isolated runtimes can resolve oauthEnabledProviders.
- * Follows the same pattern as resolveLoadedSettings() in providerManagerInstance.ts.
- */
+function attachAgentRuntimeFactories(config: Config): void {
+  const mutableConfig = config as unknown as Pick<
+    ConfigParameters,
+    'agentClientFactory' | 'toolSchedulerFactory' | 'taskToolRegistration'
+  >;
+  mutableConfig.agentClientFactory ??= (config, runtimeState) =>
+    new AgentClient(config, runtimeState);
+  mutableConfig.toolSchedulerFactory ??= (schedulerOptions) =>
+    new CoreToolScheduler(schedulerOptions);
+  mutableConfig.taskToolRegistration ??= createTaskToolRegistration();
+}
+
 function loadSettingsForIsolatedRuntime(): LoadedSettings | undefined {
   try {
     if (fs.existsSync(USER_SETTINGS_PATH)) {
@@ -228,7 +241,20 @@ function resolveRuntimeConfig(
       cwd: workspaceDir,
       model,
       settingsService,
+      // @plan PLAN-20260610-ISSUE1592.P01
+      // @requirement REQ-INV-001
+      agentClientFactory: (config, runtimeState) =>
+        new AgentClient(config, runtimeState),
+      // @plan PLAN-20260610-ISSUE1592.P01
+      // @requirement REQ-INV-002
+      toolSchedulerFactory: (schedulerOptions) =>
+        new CoreToolScheduler(schedulerOptions),
+      // @plan PLAN-20260610-ISSUE1592.P03
+      // @requirement REQ-INV-003
+      taskToolRegistration: createTaskToolRegistration(),
     });
+
+  attachAgentRuntimeFactories(config);
 
   const llxprtDir = path.join(os.homedir(), '.llxprt');
   const resolvedProfileManager =

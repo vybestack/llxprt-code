@@ -16,7 +16,7 @@ import {
 } from './checkpointUtils.js';
 import type { ToolCallRequestInfo } from '../core/turn.js';
 import type { GitService } from '../services/gitService.js';
-import type { AgentClient } from '../core/client.js';
+import type { AgentClientContract as AgentClient } from '../core/clientContract.js';
 import type { Content } from '@google/genai';
 
 describe('checkpointUtils', () => {

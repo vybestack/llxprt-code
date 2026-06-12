@@ -18,40 +18,68 @@ import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig as CoreSubagentConfig } from '../config/types.js';
 import type { Config } from '../config/config.js';
 import {
-  SubagentOrchestrator,
-  type SubagentLaunchRequest,
-  type SubagentLaunchResult,
-} from '../core/subagentOrchestrator.js';
-import {
+  ContextState,
   SubagentTerminateMode,
+  type OutputConfig,
   type OutputObject,
+  type RunConfig,
+  type ToolConfig,
 } from '../core/subagentTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import {
-  buildToolGovernance,
-  canonicalizeToolName,
-  isToolBlocked,
-} from '../core/toolGovernance.js';
-import {
   buildContextState,
   buildExcludedToolNames,
+  buildToolGovernance,
+  canonicalizeToolName,
   createCancelledResult,
   createErrorResult,
   formatSuccessContent,
   formatSuccessDisplay,
   isExcludedToolName,
+  isToolBlocked,
   normalizeSubagentStreamingText,
   resolveTimeoutSeconds,
   stringifySubagentOutput,
   toToolsSubagentConfig,
 } from './coreSubagentServiceHelpers.js';
 
+export interface CoreSubagentLaunchRequest {
+  name: string;
+  runConfig?: RunConfig;
+  toolConfig?: ToolConfig;
+  outputConfig?: OutputConfig;
+  behaviourPrompts?: string[];
+}
+
+export interface CoreSubagentLaunchScope {
+  output?: OutputObject;
+  onMessage?: (message: string) => void;
+  runInteractive?: (
+    context: ContextState,
+    options?: { schedulerFactory?: unknown },
+  ) => Promise<void>;
+  runNonInteractive: (context: ContextState) => Promise<void>;
+}
+
+export interface CoreSubagentLaunchResult {
+  agentId: string;
+  scope: CoreSubagentLaunchScope;
+  dispose: () => Promise<void>;
+}
+
+export interface CoreSubagentLauncher {
+  launch: (
+    request: CoreSubagentLaunchRequest,
+    signal?: AbortSignal,
+  ) => Promise<CoreSubagentLaunchResult>;
+}
+
 interface CoreSubagentServiceAdapterOptions {
   managerProvider: () => SubagentManager | undefined;
   profileManagerProvider?: () => ProfileManager | undefined;
   config?: Config;
-  orchestratorFactory?: () => SubagentOrchestrator;
+  orchestratorFactory?: () => CoreSubagentLauncher;
   isInteractiveEnvironment?: () => boolean;
   getSchedulerFactory?: () => unknown;
   getAsyncTaskManager?: () => AsyncTaskManager | undefined;
@@ -81,7 +109,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
   private readonly managerProvider: () => SubagentManager | undefined;
   private readonly profileManagerProvider?: () => ProfileManager | undefined;
   private readonly config?: Config;
-  private readonly orchestratorFactory?: () => SubagentOrchestrator;
+  private readonly orchestratorFactory?: () => CoreSubagentLauncher;
   private readonly isInteractiveEnvironment?: () => boolean;
   private readonly getSchedulerFactory?: () => unknown;
   private readonly getAsyncTaskManager?: () => AsyncTaskManager | undefined;
@@ -225,10 +253,10 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
   }
 
   private createExecutionServices(): {
-    orchestrator: SubagentOrchestrator;
+    orchestrator: CoreSubagentLauncher;
     config: Config;
   } {
-    const subagentManager = this.requireManager();
+    this.requireManager();
     const profileManager = this.profileManagerProvider?.();
     if (!profileManager || !this.config) {
       throw new Error(
@@ -236,14 +264,13 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       );
     }
 
+    const orchestrator = this.orchestratorFactory?.();
+    if (!orchestrator) {
+      throw new Error('Subagent execution requires an orchestrator factory.');
+    }
+
     return {
-      orchestrator:
-        this.orchestratorFactory?.() ??
-        new SubagentOrchestrator({
-          subagentManager,
-          profileManager,
-          foregroundConfig: this.config,
-        }),
+      orchestrator,
       config: this.config,
     };
   }
@@ -251,8 +278,8 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
   private buildLaunchRequest(
     request: SubagentRequest,
     timeoutMs?: number,
-  ): SubagentLaunchRequest {
-    const launchRequest: SubagentLaunchRequest = { name: request.name };
+  ): CoreSubagentLaunchRequest {
+    const launchRequest: CoreSubagentLaunchRequest = { name: request.name };
 
     if (timeoutMs !== undefined) {
       launchRequest.runConfig = { max_time_minutes: timeoutMs / 60_000 };
@@ -416,7 +443,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
 
   private async runScope(
     request: SubagentRequest,
-    launchResult: SubagentLaunchResult,
+    launchResult: CoreSubagentLaunchResult,
     config: Config,
     updateOutput?: (output: string) => void,
   ): Promise<OutputObject> {
@@ -453,7 +480,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
   private setupStreaming(
     subagentName: string,
     agentId: string,
-    scope: SubagentLaunchResult['scope'],
+    scope: CoreSubagentLaunchResult['scope'],
     updateOutput?: (output: string) => void,
   ): () => void {
     if (!updateOutput) {
@@ -680,7 +707,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
 
   private executeInBackground(
     request: SubagentRequest,
-    launchResult: SubagentLaunchResult,
+    launchResult: CoreSubagentLaunchResult,
     config: Config,
     asyncTaskManager: AsyncTaskManager,
     timeoutController: AbortController,

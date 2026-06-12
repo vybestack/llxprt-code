@@ -2615,9 +2615,7 @@ describe('InputPrompt', () => {
   });
 
   it('should still allow input when shell is not focused', async () => {
-    const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />, {
-      shellFocus: false,
-    });
+    const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
 
     await act(async () => {
       stdin.write('a');
@@ -2625,6 +2623,20 @@ describe('InputPrompt', () => {
     await waitFor(() => expect(mockBuffer.handleInput).toHaveBeenCalled());
     unmount();
   });
+
+  it('should not process typed keys when embedded shell is focused', async () => {
+    props.isEmbeddedShellFocused = true;
+    props.focus = true;
+    const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
+
+    await act(async () => {
+      stdin.write('a');
+    });
+
+    expect(mockBuffer.handleInput).not.toHaveBeenCalled();
+    unmount();
+  });
+
   describe('command queuing while streaming', () => {
     beforeEach(() => {
       props.streamingState = StreamingState.Responding;

@@ -50,11 +50,8 @@ const utf32BE = (s: string) => {
 describe('BOM end-to-end integration', () => {
   let rig: TestRig;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     rig = new TestRig();
-    await rig.setup('bom-integration', {
-      settings: { tools: { core: ['read_file'] } },
-    });
   });
 
   afterEach(async () => await rig.cleanup());
@@ -64,6 +61,9 @@ describe('BOM end-to-end integration', () => {
     content: Buffer,
     expectedText: string | null,
   ) {
+    await rig.setup('bom-integration', {
+      settings: { tools: { core: ['read_file'] } },
+    });
     writeFileSync(join(rig.testDir!, filename), content);
     const prompt = `read the file ${filename} and output its exact contents`;
     const output = await rig.run({ args: prompt });
@@ -118,6 +118,13 @@ describe('BOM end-to-end integration', () => {
   });
 
   it('Can describe a PNG file', async () => {
+    await rig.setup('png-integration', {
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'utf-bom-encoding.png.responses.jsonl',
+      ),
+      settings: { tools: { core: ['read_file'] } },
+    });
     const imagePath = resolve(
       process.cwd(),
       'docs/assets/llxprt-screenshot.png',

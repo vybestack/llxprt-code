@@ -17,12 +17,16 @@ import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useTodoContinuation } from './useTodoContinuation.js';
 import { useTodoContext } from '../contexts/TodoContext.js';
+import { FinishReason } from '@google/genai';
 import {
   Config,
-  AgentClient,
   ApprovalMode,
   type Todo,
+  type AgentClientContract,
+  GeminiEventType,
+  type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
+import { AgentClient as AgentClientClass } from '@vybestack/llxprt-code-agents';
 
 // Mock dependencies
 vi.mock('../contexts/TodoContext.js');
@@ -31,9 +35,12 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   return {
     ...actual,
     Config: vi.fn(),
-    AgentClient: vi.fn(),
   };
 });
+
+vi.mock('@vybestack/llxprt-code-agents', () => ({
+  AgentClient: vi.fn(),
+}));
 
 interface MockTodoContext {
   todos: Todo[];
@@ -49,10 +56,16 @@ interface MockConfig {
 }
 
 interface MockAgentClient {
-  sendMessageStream: Mock<
-    (message: string, options?: { ephemeral: boolean }) => Promise<void>
-  >;
+  sendMessageStream: Mock<AgentClientContract['sendMessageStream']>;
 }
+
+const createEmptyStream =
+  async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+    yield {
+      type: GeminiEventType.Finished,
+      value: { reason: FinishReason.STOP },
+    };
+  };
 
 describe('useTodoContinuation - Behavioral Tests', () => {
   let mockConfig: MockConfig;
@@ -84,11 +97,13 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
     // Mock AgentClient
     mockAgentClient = {
-      sendMessageStream: vi.fn().mockResolvedValue(undefined),
+      sendMessageStream: vi.fn(() => createEmptyStream()),
     };
     (
-      AgentClient as unknown as MockedFunction<() => AgentClient>
-    ).mockImplementation(() => mockAgentClient as unknown as AgentClient);
+      AgentClientClass as unknown as MockedFunction<() => AgentClientContract>
+    ).mockImplementation(
+      () => mockAgentClient as unknown as AgentClientContract,
+    );
 
     // Mock TodoContext
     mockTodoContext = {
@@ -121,7 +136,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false, // not responding
           mockOnDebugMessage,
@@ -136,7 +151,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       // Then: Continuation should be triggered
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Complete feature implementation'),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
 
@@ -149,7 +165,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -174,7 +190,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -199,7 +215,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -224,7 +240,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           true, // currently responding
           mockOnDebugMessage,
@@ -255,7 +271,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -270,7 +286,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       // Then: Should send prompt with in_progress task (most relevant)
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Fix critical bug'),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
 
@@ -286,7 +303,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -302,7 +319,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         expect.stringMatching(/(continue|proceed).*without.*confirmation/i),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
 
@@ -315,7 +333,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -330,7 +348,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       // Then: Should send with ephemeral flag
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.any(String),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
   });
@@ -339,7 +358,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     it('@requirement REQ-003.1 should respond to todo state changes', () => {
       const { result, rerender } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -372,14 +391,15 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('New active task'),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
 
     it('@requirement REQ-003.2 should handle todo_pause events', () => {
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -404,7 +424,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     it('@requirement REQ-004.1 should track continuation state', () => {
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -441,7 +461,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -473,7 +493,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -500,7 +520,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result, rerender } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -540,7 +560,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -570,7 +590,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -604,7 +624,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -633,7 +653,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -648,7 +668,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       // Then: Should select in_progress task
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Active task'),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
   });
@@ -662,7 +683,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -688,7 +709,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -716,7 +737,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -743,14 +764,15 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Active task'),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
 
     it('@requirement REQ-007.4 should expose clearPause function', () => {
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClient,
+          mockAgentClient as unknown as AgentClientContract,
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,

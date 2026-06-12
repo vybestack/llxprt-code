@@ -18,12 +18,18 @@ import {
 
 const mockIsBinary = vi.hoisted(() => vi.fn());
 const mockShellExecutionService = vi.hoisted(() => vi.fn());
+const mockIsActivePty = vi.hoisted(() => vi.fn());
+const mockGetLastActivePtyId = vi.hoisted(() => vi.fn());
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...original,
-    ShellExecutionService: { execute: mockShellExecutionService },
+    ShellExecutionService: {
+      execute: mockShellExecutionService,
+      isActivePty: mockIsActivePty,
+      getLastActivePtyId: mockGetLastActivePtyId,
+    },
     isBinary: mockIsBinary,
   };
 });
@@ -51,7 +57,7 @@ import {
 } from './shellCommandProcessor.js';
 import {
   type Config,
-  type AgentClient,
+  type AgentClientContract as AgentClient,
   type ShellExecutionResult,
   type ShellOutputEvent,
 } from '@vybestack/llxprt-code-core';
@@ -119,6 +125,8 @@ describe('useShellCommandProcessor', () => {
     );
     mockIsBinary.mockReturnValue(false);
     vi.mocked(fs.existsSync).mockReturnValue(false);
+    mockIsActivePty.mockReturnValue(false);
+    mockGetLastActivePtyId.mockReturnValue(null);
 
     mockShellExecutionService.mockImplementation(
       (_cmd, _cwd, callback, _signal, _usePty, _config) => {
@@ -629,6 +637,101 @@ describe('useShellCommandProcessor', () => {
 
       const finalHistoryItem = addItemToHistoryMock.mock.calls[1][0];
       expect(finalHistoryItem.tools[0].resultDisplay).not.toContain('WARNING');
+    });
+  });
+
+  describe('shellCleanup focus preservation', () => {
+    it('should not clear shell input focus when PTY is still alive after completion', async () => {
+      mockIsActivePty.mockReturnValue(true);
+      mockGetLastActivePtyId.mockReturnValue(12345);
+
+      const { result } = renderProcessorHook();
+
+      act(() => {
+        result.current.handleShellCommand(
+          'echo "live"',
+          new AbortController().signal,
+        );
+      });
+      const execPromise = onExecMock.mock.calls[0][0];
+
+      act(() => {
+        resolveExecutionPromise(createMockServiceResult({ output: 'live' }));
+      });
+      await act(async () => await execPromise);
+
+      expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
+      expect(setShellInputFocusedMock).not.toHaveBeenCalledWith(false);
+    });
+
+    it('should clear shell input focus when no PTY remains alive after completion', async () => {
+      mockIsActivePty.mockReturnValue(false);
+      mockGetLastActivePtyId.mockReturnValue(null);
+
+      const { result } = renderProcessorHook();
+
+      act(() => {
+        result.current.handleShellCommand(
+          'echo "done"',
+          new AbortController().signal,
+        );
+      });
+      const execPromise = onExecMock.mock.calls[0][0];
+
+      act(() => {
+        resolveExecutionPromise(createMockServiceResult({ output: 'done' }));
+      });
+      await act(async () => await execPromise);
+
+      expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
+      expect(setShellInputFocusedMock).toHaveBeenCalledWith(false);
+    });
+
+    it('should clear shell input focus when PTY was alive but has since died', async () => {
+      mockGetLastActivePtyId.mockReturnValue(12345);
+      mockIsActivePty.mockReturnValue(false);
+
+      const { result } = renderProcessorHook();
+
+      act(() => {
+        result.current.handleShellCommand(
+          'echo "dead"',
+          new AbortController().signal,
+        );
+      });
+      const execPromise = onExecMock.mock.calls[0][0];
+
+      act(() => {
+        resolveExecutionPromise(createMockServiceResult({ output: 'dead' }));
+      });
+      await act(async () => await execPromise);
+
+      expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
+      expect(setShellInputFocusedMock).toHaveBeenCalledWith(false);
+    });
+
+    it('should not clear focus on synchronous error when PTY is still alive', async () => {
+      mockIsActivePty.mockReturnValue(true);
+      mockGetLastActivePtyId.mockReturnValue(12345);
+      const testError = new Error('Synchronous spawn error');
+      mockShellExecutionService.mockImplementation(() => {
+        throw testError;
+      });
+
+      const { result } = renderProcessorHook();
+
+      act(() => {
+        result.current.handleShellCommand(
+          'a-command',
+          new AbortController().signal,
+        );
+      });
+      const execPromise = onExecMock.mock.calls[0][0];
+
+      await act(async () => await execPromise);
+
+      expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
+      expect(setShellInputFocusedMock).not.toHaveBeenCalledWith(false);
     });
   });
 });
