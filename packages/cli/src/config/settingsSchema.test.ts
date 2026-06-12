@@ -15,6 +15,7 @@ import {
   getEnableHooks,
   getEnableHooksUI,
 } from './settingsSchema.js';
+import { validateSettings } from './settings-validation.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -220,6 +221,121 @@ describe('SettingsSchema', () => {
       expect(
         SETTINGS_SCHEMA.ui.properties.autoConfigureMaxOldSpaceSize.showInDialog,
       ).toBe(true);
+    });
+
+    describe('ui.maxHeapSizeMB', () => {
+      it('should be defined in the UI settings schema', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB).toBeDefined();
+      });
+
+      it('should be a number type', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB.type).toBe('number');
+      });
+
+      it('should have label Max Heap Size (MB)', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB.label).toBe(
+          'Max Heap Size (MB)',
+        );
+      });
+
+      it('should be in the UI category', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB.category).toBe('UI');
+      });
+
+      it('should require restart', () => {
+        expect(
+          SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB.requiresRestart,
+        ).toBe(true);
+      });
+
+      it('should default to 8192', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB.default).toBe(8192);
+      });
+
+      it('should have minimum of 512', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB.minimum).toBe(512);
+      });
+
+      it('should show in dialog', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB.showInDialog).toBe(
+          true,
+        );
+      });
+
+      it('should have a description', () => {
+        const description =
+          SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB.description;
+        expect(typeof description).toBe('string');
+        expect(typeof description === 'string' && description.length > 0).toBe(
+          true,
+        );
+      });
+
+      it('should have multipleOf 1 (integer constraint)', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB.multipleOf).toBe(1);
+      });
+
+      it('should accept integer value 512 via validation', () => {
+        const result = validateSettings({
+          ui: { maxHeapSizeMB: 512 },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept integer value 8192 via validation', () => {
+        const result = validateSettings({
+          ui: { maxHeapSizeMB: 8192 },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject fractional value 1536.75 via validation', () => {
+        const result = validateSettings({
+          ui: { maxHeapSizeMB: 1536.75 },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject value below minimum 512 (e.g. 511) via validation', () => {
+        const result = validateSettings({
+          ui: { maxHeapSizeMB: 511 },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('should accept value exactly at minimum 512 via validation', () => {
+        const result = validateSettings({
+          ui: { maxHeapSizeMB: 512 },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject fractional value below minimum via validation', () => {
+        const result = validateSettings({
+          ui: { maxHeapSizeMB: 511.5 },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('should infer Settings[ui][maxHeapSizeMB] as number (accepts 4096 without casts)', () => {
+        // Compile-time proof: maxHeapSizeMB is `number`, not the literal 8192.
+        // If InferSettings incorrectly produced the literal type 8192, assigning
+        // 4096 (or any other number) would fail to compile.
+        const settings: Settings = {
+          ui: {
+            maxHeapSizeMB: 4096,
+          },
+        };
+        expect(settings.ui?.maxHeapSizeMB).toBe(4096);
+
+        // Also prove it accepts the default value
+        const defaultSettings: Settings = {
+          ui: {
+            maxHeapSizeMB: 8192,
+          },
+        };
+        expect(defaultSettings.ui?.maxHeapSizeMB).toBe(8192);
+      });
     });
 
     it('should infer Settings type correctly', () => {

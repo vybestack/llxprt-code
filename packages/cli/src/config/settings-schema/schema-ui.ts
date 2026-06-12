@@ -273,6 +273,18 @@ export const UI_SETTINGS_SCHEMA = {
           'Automatically configure Node.js max old space size based on system memory.',
         showInDialog: true,
       },
+      maxHeapSizeMB: {
+        type: 'number',
+        label: 'Max Heap Size (MB)',
+        category: 'UI',
+        requiresRestart: true,
+        default: 8192,
+        minimum: 512,
+        multipleOf: 1,
+        description:
+          'Caps the auto-configured Node.js max old space heap size. Overrides the default 8GB cap when auto-configure is enabled. Must be an integer.',
+        showInDialog: true,
+      },
       historyMaxItems: {
         type: 'number',
         label: 'History Max Items',

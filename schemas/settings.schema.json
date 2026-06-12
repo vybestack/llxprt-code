@@ -537,6 +537,15 @@
           "default": true,
           "type": "boolean"
         },
+        "maxHeapSizeMB": {
+          "title": "Max Heap Size (MB)",
+          "description": "Caps the auto-configured Node.js max old space heap size. Overrides the default 8GB cap when auto-configure is enabled. Must be an integer.",
+          "markdownDescription": "Caps the auto-configured Node.js max old space heap size. Overrides the default 8GB cap when auto-configure is enabled. Must be an integer.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `8192`",
+          "default": 8192,
+          "type": "number",
+          "minimum": 512,
+          "multipleOf": 1
+        },
         "historyMaxItems": {
           "title": "History Max Items",
           "description": "Maximum number of history items to keep.",

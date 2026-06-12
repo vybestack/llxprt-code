@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import os from 'node:os';
+import v8 from 'node:v8';
 import {
   shouldRelaunchForMemory,
   isDebugMode,
@@ -116,6 +117,113 @@ describe('bootstrap utilities', () => {
       expect(consoleSpy).toHaveBeenCalled();
       consoleSpy.mockRestore();
     });
+
+    describe('custom maxHeapCapMB parameter', () => {
+      let totalmemSpy: ReturnType<typeof vi.spyOn>;
+      let heapStatsSpy: ReturnType<typeof vi.spyOn>;
+
+      beforeEach(() => {
+        delete process.env.LLXPRT_CODE_NO_RELAUNCH;
+        // Mock a 16 GB machine: 16 * 1024 * 1024 * 1024 = 17179869184 bytes
+        totalmemSpy = vi.spyOn(os, 'totalmem').mockReturnValue(17179869184);
+        // Mock current heap at 1024 MB: 1024 * 1024 * 1024 = 1073741824 bytes
+        heapStatsSpy = vi.spyOn(v8, 'getHeapStatistics').mockReturnValue({
+          total_heap_size: 0,
+          total_heap_size_executable: 0,
+          total_physical_size: 0,
+          total_available_size: 0,
+          used_heap_size: 0,
+          heap_size_limit: 1073741824,
+          malloced_memory: 0,
+          peak_malloced_memory: 0,
+          does_zap_garbage: 0,
+          number_of_native_contexts: 0,
+          number_of_detached_contexts: 0,
+          total_global_handles_size: 0,
+          used_global_handles_size: 0,
+          external_memory: 0,
+        });
+      });
+
+      afterEach(() => {
+        totalmemSpy.mockRestore();
+        heapStatsSpy.mockRestore();
+      });
+
+      it('should use custom cap when provided instead of default', () => {
+        // 16 GB total -> 50% = 8192, cap=768 -> target = min(8192, 768) = 768
+        // current heap = 1024 -> 768 < 1024 so no relaunch needed
+        const result = shouldRelaunchForMemory(false, 768);
+        expect(result).toStrictEqual([]);
+      });
+
+      it('should relaunch when custom cap produces target above current heap', () => {
+        // 16 GB total -> 50% = 8192, cap=4096 -> target = min(8192, 4096) = 4096
+        // current heap = 1024 -> 4096 > 1024 so relaunch needed
+        const result = shouldRelaunchForMemory(false, 4096);
+        expect(result).toStrictEqual(['--max-old-space-size=4096']);
+      });
+
+      it('should prove it uses the provided cap, not the default', () => {
+        // 16 GB total -> 50% = 8192
+        // With cap=2048: target = min(8192, 2048) = 2048, current=1024 -> relaunch
+        // With default cap (8192): target = min(8192, 8192) = 8192, current=1024 -> relaunch
+        // These produce different results, proving the cap is used
+        const resultWithCustom = shouldRelaunchForMemory(false, 2048);
+        const resultWithDefault = shouldRelaunchForMemory(false, 8192);
+
+        expect(resultWithCustom).toStrictEqual(['--max-old-space-size=2048']);
+        expect(resultWithDefault).toStrictEqual(['--max-old-space-size=8192']);
+        expect(resultWithCustom).not.toStrictEqual(resultWithDefault);
+      });
+
+      it('should fall back to MAX_HEAP_CAP_MB when cap is undefined', () => {
+        // Both calls use the same mocked system, so results must be identical
+        const resultWithUndefined = shouldRelaunchForMemory(false);
+        const resultWithExplicitDefault = shouldRelaunchForMemory(
+          false,
+          MAX_HEAP_CAP_MB,
+        );
+        expect(resultWithUndefined).toStrictEqual(resultWithExplicitDefault);
+      });
+
+      it('should honor minimum value 512 as cap', () => {
+        // 16 GB total -> 50% = 8192, cap=512 -> target = min(8192, 512) = 512
+        // current heap = 1024 -> 512 < 1024 so no relaunch
+        const result = shouldRelaunchForMemory(false, 512);
+        expect(result).toStrictEqual([]);
+      });
+
+      it('should use larger custom cap exceeding default', () => {
+        // 16 GB total -> 50% = 8192, cap=32768 -> target = min(8192, 32768) = 8192
+        // current heap = 1024 -> 8192 > 1024 so relaunch
+        const result = shouldRelaunchForMemory(false, 32768);
+        expect(result).toStrictEqual(['--max-old-space-size=8192']);
+      });
+
+      it('should floor fractional cap to integer', () => {
+        // 16 GB total -> 50% = 8192, cap=1536.75 -> floored to 1536 -> target = min(8192, 1536) = 1536
+        // current heap = 1024 -> 1536 > 1024 so relaunch
+        const result = shouldRelaunchForMemory(false, 1536.75);
+        expect(result).toStrictEqual(['--max-old-space-size=1536']);
+      });
+
+      it('should never emit fractional --max-old-space-size even with fractional cap', () => {
+        const result = shouldRelaunchForMemory(false, 4096.9);
+        // 16 GB total -> 50% = 8192, floored cap=4096 -> target = min(8192, 4096) = 4096
+        expect(result).toStrictEqual(['--max-old-space-size=4096']);
+        const value = result[0].split('=')[1];
+        expect(value).not.toContain('.');
+        expect(Number.isInteger(Number(value))).toBe(true);
+      });
+
+      it('should floor fractional cap below current heap so no relaunch occurs', () => {
+        // 16 GB total -> 50% = 8192, cap=1023.9 -> floored to 1023 -> target = min(8192, 1023) = 1023
+        // current heap = 1024 -> 1023 < 1024 so no relaunch
+        const result = shouldRelaunchForMemory(false, 1023.9);
+        expect(result).toStrictEqual([]);
+      });
+    });
   });
 
   describe('RELAUNCH_EXIT_CODE', () => {
@@ -220,6 +328,73 @@ describe('bootstrap utilities', () => {
     it('should not cap when 50% of container memory is below the cap', () => {
       const result = computeSandboxMemoryArgs(false, 8192);
       expect(result).toStrictEqual(['--max-old-space-size=4096']);
+    });
+
+    describe('custom maxHeapCapMB parameter', () => {
+      it('should use custom cap when provided', () => {
+        const result = computeSandboxMemoryArgs(false, 6144, 2048);
+        // 50% of 6144 = 3072, but capped at 2048
+        expect(result).toStrictEqual(['--max-old-space-size=2048']);
+      });
+
+      it('should fall back to MAX_HEAP_CAP_MB when cap is undefined', () => {
+        const result = computeSandboxMemoryArgs(false, 6144);
+        // 50% of 6144 = 3072, capped at default 8192 -> 3072
+        expect(result).toStrictEqual(['--max-old-space-size=3072']);
+      });
+
+      it('should honor minimum value 512 as cap with large container', () => {
+        const result = computeSandboxMemoryArgs(false, 131072, 512);
+        expect(result).toStrictEqual(['--max-old-space-size=512']);
+      });
+
+      it('should use 50% of container when below custom cap', () => {
+        const result = computeSandboxMemoryArgs(false, 2048, 8192);
+        // 50% of 2048 = 1024, well below cap of 8192
+        expect(result).toStrictEqual(['--max-old-space-size=1024']);
+      });
+
+      it('should use custom cap larger than default', () => {
+        const result = computeSandboxMemoryArgs(false, 131072, 32768);
+        // 50% of 131072 = 65536, capped at 32768
+        expect(result).toStrictEqual(['--max-old-space-size=32768']);
+      });
+
+      it('should still clamp to minimum 128 when both container and cap are tiny', () => {
+        // Container 64MB -> 50% = 32, but min floor is 128
+        const result = computeSandboxMemoryArgs(false, 64, 512);
+        expect(result).toStrictEqual(['--max-old-space-size=128']);
+      });
+
+      it('should produce same result as default when cap matches MAX_HEAP_CAP_MB', () => {
+        const resultExplicit = computeSandboxMemoryArgs(
+          false,
+          6144,
+          MAX_HEAP_CAP_MB,
+        );
+        const resultDefault = computeSandboxMemoryArgs(false, 6144);
+        expect(resultExplicit).toStrictEqual(resultDefault);
+      });
+
+      it('should floor fractional cap to integer', () => {
+        // 50% of 6144 = 3072, cap=2048.75 -> floored to 2048 -> min(3072, 2048) = 2048
+        const result = computeSandboxMemoryArgs(false, 6144, 2048.75);
+        expect(result).toStrictEqual(['--max-old-space-size=2048']);
+      });
+
+      it('should never emit fractional --max-old-space-size even with fractional cap', () => {
+        const result = computeSandboxMemoryArgs(false, 8192, 4096.5);
+        const arg = result[0];
+        const value = arg.split('=')[1];
+        expect(value).not.toContain('.');
+        expect(Number.isInteger(Number(value))).toBe(true);
+      });
+
+      it('should floor fractional cap that dominates container memory', () => {
+        // 50% of 4096 = 2048, cap=1023.1 -> floored to 1023 -> min(2048, 1023) = 1023
+        const result = computeSandboxMemoryArgs(false, 4096, 1023.1);
+        expect(result).toStrictEqual(['--max-old-space-size=1023']);
+      });
     });
   });
 

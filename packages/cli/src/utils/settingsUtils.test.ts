@@ -71,12 +71,21 @@ describe('SettingsUtils', () => {
         const definition = getSettingDefinition('invalidSetting');
         expect(definition).toBeUndefined();
       });
+
+      it('should expose numeric constraints for maxHeapSizeMB', () => {
+        const definition = getSettingDefinition('ui.maxHeapSizeMB');
+        expect(definition).toBeDefined();
+        expect(definition?.type).toBe('number');
+        expect(definition?.minimum).toBe(512);
+        expect(definition?.multipleOf).toBe(1);
+      });
     });
 
     describe('requiresRestart', () => {
       it('should return true for settings that require restart', () => {
         expect(requiresRestart('ui.autoConfigureMaxOldSpaceSize')).toBe(true);
         expect(requiresRestart('checkpointing.enabled')).toBe(true);
+        expect(requiresRestart('ui.maxHeapSizeMB')).toBe(true);
       });
 
       it('should return false for settings that do not require restart', () => {
@@ -95,10 +104,58 @@ describe('SettingsUtils', () => {
         expect(getDefaultValue('fileFiltering.enableRecursiveFileSearch')).toBe(
           true,
         );
+        expect(getDefaultValue('ui.maxHeapSizeMB')).toBe(8192);
       });
 
       it('should return undefined for invalid settings', () => {
         expect(getDefaultValue('invalidSetting')).toBeUndefined();
+      });
+    });
+
+    describe('ui.maxHeapSizeMB merge/default behavior', () => {
+      it('should default to 8192 when omitted from settings', () => {
+        // When no ui.maxHeapSizeMB is set, getEffectiveValue should fall back to default
+        const emptySettings = {};
+        const emptyMerged = {};
+        const value = getEffectiveValue(
+          'ui.maxHeapSizeMB',
+          emptySettings as never,
+          emptyMerged as never,
+        );
+        expect(value).toBe(8192);
+      });
+
+      it('should return configured value when set in merged settings', () => {
+        const emptyScope = {};
+        const merged = { ui: { maxHeapSizeMB: 4096 } };
+        const value = getEffectiveValue(
+          'ui.maxHeapSizeMB',
+          emptyScope as never,
+          merged as never,
+        );
+        expect(value).toBe(4096);
+      });
+
+      it('should return configured value when set in scope settings', () => {
+        const scopeSettings = { ui: { maxHeapSizeMB: 4096 } };
+        const emptyMerged = {};
+        const value = getEffectiveValue(
+          'ui.maxHeapSizeMB',
+          scopeSettings as never,
+          emptyMerged as never,
+        );
+        expect(value).toBe(4096);
+      });
+
+      it('should prefer scope value over merged value', () => {
+        const scopeSettings = { ui: { maxHeapSizeMB: 2048 } };
+        const merged = { ui: { maxHeapSizeMB: 4096 } };
+        const value = getEffectiveValue(
+          'ui.maxHeapSizeMB',
+          scopeSettings as never,
+          merged as never,
+        );
+        expect(value).toBe(2048);
       });
     });
 
@@ -107,6 +164,7 @@ describe('SettingsUtils', () => {
         const restartSettings = getRestartRequiredSettings();
         expect(restartSettings).toContain('ui.autoConfigureMaxOldSpaceSize');
         expect(restartSettings).toContain('checkpointing.enabled');
+        expect(restartSettings).toContain('ui.maxHeapSizeMB');
         expect(restartSettings).not.toContain('ui.showMemoryUsage');
       });
     });
@@ -255,6 +313,7 @@ describe('SettingsUtils', () => {
         expect(shouldShowInDialog('ui.vimMode')).toBe(true);
         expect(shouldShowInDialog('ui.hideWindowTitle')).toBe(true);
         expect(shouldShowInDialog('ui.usageStatisticsEnabled')).toBe(false);
+        expect(shouldShowInDialog('ui.maxHeapSizeMB')).toBe(true);
       });
 
       it('should return false for settings marked to hide from dialog', () => {

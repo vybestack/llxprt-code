@@ -382,6 +382,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `true`
   - **Requires restart:** Yes
 
+- **`ui.maxHeapSizeMB`** (number):
+  - **Description:** Caps the auto-configured Node.js max old space heap size. Overrides the default 8GB cap when auto-configure is enabled. Must be an integer.
+  - **Default:** `8192`
+  - **Requires restart:** Yes
+
 - **`ui.historyMaxItems`** (number):
   - **Description:** Maximum number of history items to keep.
   - **Default:** `100`

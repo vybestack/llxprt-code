@@ -427,9 +427,11 @@ type InferSettings<T extends SettingsSchema> = {
       ? T[K]['options'] extends readonly SettingEnumOption[]
         ? T[K]['options'][number]['value']
         : T[K]['default']
-      : T[K]['default'] extends boolean
-        ? boolean
-        : T[K]['default'];
+      : T[K]['type'] extends 'number'
+        ? number
+        : T[K]['default'] extends boolean
+          ? boolean
+          : T[K]['default'];
 };
 
 export type Settings = InferSettings<SettingsSchemaType>;

@@ -191,6 +191,9 @@ function buildSchemaForType(
       if ('maximum' in source && source.maximum !== undefined) {
         numberSchema.maximum = source.maximum;
       }
+      if ('multipleOf' in source && source.multipleOf !== undefined) {
+        numberSchema.multipleOf = source.multipleOf;
+      }
       return numberSchema;
     }
     case 'enum':

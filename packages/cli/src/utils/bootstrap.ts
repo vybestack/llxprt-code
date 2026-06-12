@@ -41,7 +41,11 @@ export function isDebugMode(): boolean {
  * @param debugMode - Whether to log debug information
  * @returns Array of Node.js arguments for relaunch, or empty array if no relaunch needed
  */
-export function shouldRelaunchForMemory(debugMode: boolean): string[] {
+export function shouldRelaunchForMemory(
+  debugMode: boolean,
+  maxHeapCapMB: number = MAX_HEAP_CAP_MB,
+): string[] {
+  const cap = Math.floor(maxHeapCapMB);
   const totalMemoryMB = os.totalmem() / (1024 * 1024);
   const heapStats = v8.getHeapStatistics();
   const currentMaxOldSpaceSizeMb = Math.floor(
@@ -50,7 +54,7 @@ export function shouldRelaunchForMemory(debugMode: boolean): string[] {
 
   const targetMaxOldSpaceSizeInMB = Math.min(
     Math.floor(totalMemoryMB * 0.5),
-    MAX_HEAP_CAP_MB,
+    cap,
   );
 
   if (debugMode) {
@@ -128,11 +132,13 @@ export function parseDockerMemoryToMB(memoryStr: string): number | undefined {
 export function computeSandboxMemoryArgs(
   debugMode: boolean,
   containerMemoryMB?: number,
+  maxHeapCapMB: number = MAX_HEAP_CAP_MB,
 ): string[] {
+  const cap = Math.floor(maxHeapCapMB);
   const totalMemoryMB = containerMemoryMB ?? os.totalmem() / (1024 * 1024);
   const targetMaxOldSpaceSizeInMB = Math.max(
     128,
-    Math.min(Math.floor(totalMemoryMB * 0.5), MAX_HEAP_CAP_MB),
+    Math.min(Math.floor(totalMemoryMB * 0.5), cap),
   );
 
   if (debugMode) {

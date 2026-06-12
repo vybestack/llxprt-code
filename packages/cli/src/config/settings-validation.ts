@@ -51,7 +51,7 @@ function buildStringJsonSchema(def: JsonSchemaLike): z.ZodTypeAny {
 
 function applyNumberBounds(
   schema: z.ZodNumber,
-  def: { minimum?: unknown; maximum?: unknown },
+  def: { minimum?: unknown; maximum?: unknown; multipleOf?: unknown },
 ): z.ZodNumber {
   let boundedSchema = schema;
   if (typeof def.minimum === 'number') {
@@ -59,6 +59,9 @@ function applyNumberBounds(
   }
   if (typeof def.maximum === 'number') {
     boundedSchema = boundedSchema.max(def.maximum);
+  }
+  if (typeof def.multipleOf === 'number') {
+    boundedSchema = boundedSchema.multipleOf(def.multipleOf);
   }
   return boundedSchema;
 }
@@ -192,13 +195,21 @@ function buildObjectShapeFromProperties(
 }
 
 /**
- * Builds a Zod schema for primitive types (string, number, boolean).
+ * Shape accepted by buildPrimitiveSchema — captures numeric constraints.
  */
-function buildPrimitiveSchema(definition: {
+interface PrimitiveSchemaDefinition {
   type: 'string' | 'number' | 'boolean';
   minimum?: number;
   maximum?: number;
-}): z.ZodTypeAny {
+  multipleOf?: number;
+}
+
+/**
+ * Builds a Zod schema for primitive types (string, number, boolean).
+ */
+function buildPrimitiveSchema(
+  definition: PrimitiveSchemaDefinition,
+): z.ZodTypeAny {
   switch (definition.type) {
     case 'string':
       return z.string();
@@ -241,11 +252,7 @@ function buildZodSchemaFromDefinition(
     case 'number':
     case 'boolean':
       baseSchema = buildPrimitiveSchema(
-        definition as {
-          type: 'string' | 'number' | 'boolean';
-          minimum?: number;
-          maximum?: number;
-        },
+        definition as PrimitiveSchemaDefinition,
       );
       break;
 
@@ -312,13 +319,7 @@ function buildZodSchemaFromCollection(
     case 'string':
     case 'number':
     case 'boolean':
-      return buildPrimitiveSchema(
-        collection as {
-          type: 'string' | 'number' | 'boolean';
-          minimum?: number;
-          maximum?: number;
-        },
-      );
+      return buildPrimitiveSchema(collection as PrimitiveSchemaDefinition);
 
     case 'enum': {
       return buildEnumSchema(collection.options);
