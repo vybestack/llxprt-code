@@ -206,6 +206,26 @@ export class TodoContinuationService {
     }
   }
 
+  async readPausedState(): Promise<boolean> {
+    try {
+      const sessionId = this.config.getSessionId();
+      const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
+      return await store.readPausedState();
+    } catch {
+      return false;
+    }
+  }
+
+  async clearPausedState(): Promise<void> {
+    try {
+      const sessionId = this.config.getSessionId();
+      const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
+      await store.writePausedState(false);
+    } catch {
+      // Clearing paused task-list state failed; do not block the new prompt.
+    }
+  }
+
   getActiveTodos(todos: Todo[]): Todo[] {
     const inProgress = todos.filter((todo) => todo.status === 'in_progress');
     const pending = todos.filter((todo) => todo.status === 'pending');
@@ -245,6 +265,10 @@ export class TodoContinuationService {
     activeTodos: Todo[];
   }> {
     const todos = options?.todoSnapshot ?? (await this.readTodoSnapshot());
+    if (await this.readPausedState()) {
+      return { reminder: null, todos, activeTodos: [] };
+    }
+
     const activeTodos = options?.activeTodos ?? this.getActiveTodos(todos);
 
     let reminder: string | null = null;
@@ -394,6 +418,12 @@ export class TodoContinuationService {
 
   async applyPendingReminder(request: PartListUnion): Promise<PartListUnion> {
     if (this.toolCallReminderLevel === 'none') return request;
+
+    if (await this.readPausedState()) {
+      this.toolCallReminderLevel = 'none';
+      this.toolActivityCount = 0;
+      return request;
+    }
 
     const reminderResult = await this.getTodoReminderForCurrentState({
       todoSnapshot: this.lastTodoSnapshot,

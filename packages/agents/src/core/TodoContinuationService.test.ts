@@ -17,14 +17,25 @@ import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-r
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 
-// Mock TodoStore so readTodoSnapshot doesn't hit the filesystem
-const { todoStoreReadMock, mockTodoStoreConstructor } = vi.hoisted(() => {
+// Mock TodoStore so persisted todo state doesn't hit the filesystem
+const {
+  todoStoreReadMock,
+  todoStoreReadPausedMock,
+  todoStoreWritePausedMock,
+  mockTodoStoreConstructor,
+} = vi.hoisted(() => {
   const readMock = vi.fn();
+  const readPausedMock = vi.fn();
+  const writePausedMock = vi.fn();
   const constructorMock = vi.fn().mockImplementation(() => ({
     readTodos: readMock,
+    readPausedState: readPausedMock,
+    writePausedState: writePausedMock,
   }));
   return {
     todoStoreReadMock: readMock,
+    todoStoreReadPausedMock: readPausedMock,
+    todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
 });
@@ -108,8 +119,12 @@ describe('TodoContinuationService', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     todoStoreReadMock.mockResolvedValue([]);
+    todoStoreReadPausedMock.mockResolvedValue(false);
+    todoStoreWritePausedMock.mockResolvedValue(undefined);
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
+      readPausedState: todoStoreReadPausedMock,
+      writePausedState: todoStoreWritePausedMock,
     }));
 
     vi.mocked(TodoReminderService).mockImplementation(
@@ -493,6 +508,25 @@ describe('TodoContinuationService', () => {
       ).toHaveBeenCalledWith(pendingTodo);
     });
 
+    it('suppresses reminders and active todos when todo continuation is paused', async () => {
+      todoStoreReadMock.mockResolvedValue([pendingTodo]);
+      todoStoreReadPausedMock.mockResolvedValue(true);
+
+      const result = await service.getTodoReminderForCurrentState();
+
+      expect(result).toStrictEqual({
+        reminder: null,
+        todos: [pendingTodo],
+        activeTodos: [],
+      });
+      expect(
+        vi.mocked(reminderService.getUpdateActiveTodoReminder),
+      ).not.toHaveBeenCalled();
+      expect(
+        vi.mocked(reminderService.getCreateListReminder),
+      ).not.toHaveBeenCalled();
+    });
+
     it('returns escalated reminder when escalate flag is set', async () => {
       todoStoreReadMock.mockResolvedValue([pendingTodo]);
       const result = await service.getTodoReminderForCurrentState({
@@ -558,6 +592,25 @@ describe('TodoContinuationService', () => {
       expect(arr).toHaveLength(2);
       expect(arr[0]).toStrictEqual({ text: 'single part' });
       expect(arr[1].text).toBe('Reminder');
+    });
+  });
+
+  describe('applyPendingReminder', () => {
+    it('returns the original request and resets pending reminder state when paused', async () => {
+      const request = [{ text: 'original request' }];
+      service.toolCallReminderLevel = 'base';
+      service.toolActivityCount = 5;
+      todoStoreReadPausedMock.mockResolvedValue(true);
+
+      const result = await service.applyPendingReminder(request);
+
+      expect(result).toBe(request);
+      expect(service.toolCallReminderLevel).toBe('none');
+      expect(service.toolActivityCount).toBe(0);
+      expect(todoStoreReadMock).not.toHaveBeenCalled();
+      expect(
+        vi.mocked(reminderService.getUpdateActiveTodoReminder),
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -887,6 +940,46 @@ describe('TodoContinuationService', () => {
       todoStoreReadMock.mockRejectedValue(new Error('disk error'));
       const result = await service.readTodoSnapshot();
       expect(result).toStrictEqual([]);
+    });
+  });
+
+  describe('readPausedState', () => {
+    it('reads paused state from the store using config session id', async () => {
+      todoStoreReadPausedMock.mockResolvedValue(true);
+
+      const result = await service.readPausedState();
+
+      expect(result).toBe(true);
+      expect(mockTodoStoreConstructor).toHaveBeenCalledWith(
+        'test-session',
+        expect.anything(),
+      );
+    });
+
+    it('returns false on error', async () => {
+      todoStoreReadPausedMock.mockRejectedValue(new Error('disk error'));
+
+      const result = await service.readPausedState();
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('clearPausedState', () => {
+    it('writes false to paused state for the current session', async () => {
+      await service.clearPausedState();
+
+      expect(todoStoreWritePausedMock).toHaveBeenCalledWith(false);
+      expect(mockTodoStoreConstructor).toHaveBeenCalledWith(
+        'test-session',
+        expect.anything(),
+      );
+    });
+
+    it('does not throw when clearing paused state fails', async () => {
+      todoStoreWritePausedMock.mockRejectedValue(new Error('disk error'));
+
+      await expect(service.clearPausedState()).resolves.toBeUndefined();
     });
   });
 });
