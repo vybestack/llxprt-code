@@ -424,6 +424,7 @@ describe('scripts/bind-release-deps.js', () => {
       '@vybestack/llxprt-code-core',
       '@vybestack/llxprt-code-lsp',
       '@vybestack/llxprt-code-providers',
+      '@vybestack/llxprt-code-agents',
       '@vybestack/llxprt-code',
     ]);
   });
