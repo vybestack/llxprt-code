@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { normalizeToolName, toSnakeCase } from '@vybestack/llxprt-code-tools';
+import { canonicalizeToolName } from '@vybestack/llxprt-code-tools';
+
+export { canonicalizeToolName };
 
 function isStringArray(value: unknown): value is string[] {
   return (
@@ -21,34 +23,6 @@ export interface ToolGovernance {
   allowed: Set<string>;
   disabled: Set<string>;
   excluded: Set<string>;
-}
-
-function hasMultipleWords(name: string): boolean {
-  const withoutFirst = name.slice(1);
-  return /[A-Z]/.test(withoutFirst) || name.includes('_') || name.includes('-');
-}
-
-export function canonicalizeToolName(rawName: string): string {
-  const trimmed = rawName.trim();
-  if (!trimmed) {
-    return '__invalid_tool_name__';
-  }
-
-  let nameToProcess = trimmed;
-
-  if (trimmed.endsWith('Tool') && trimmed.length > 4) {
-    const withoutTool = trimmed.slice(0, -4);
-    if (hasMultipleWords(withoutTool)) {
-      nameToProcess = withoutTool;
-    }
-  }
-
-  const normalized = normalizeToolName(nameToProcess);
-  if (normalized !== null) {
-    return normalized;
-  }
-
-  return toSnakeCase(nameToProcess).toLowerCase();
 }
 
 export function buildToolGovernance(

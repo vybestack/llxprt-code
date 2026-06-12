@@ -28,7 +28,7 @@ import {
 } from './types.js';
 import { HookEventName } from './types.js';
 
-import { canonicalizeToolName } from '../core/toolGovernance.js';
+import { canonicalizeToolName } from '@vybestack/llxprt-code-tools';
 
 /**
  * Aggregated hook result
@@ -290,8 +290,10 @@ export class HookAggregator {
       // Intersect explicit function-name allow-lists so hooks can only narrow access.
       if (Array.isArray(toolConfig.allowedFunctionNames)) {
         hasExplicitFunctionNames = true;
-        const hookNames = new Set(
-          toolConfig.allowedFunctionNames.map(canonicalizeToolName),
+        const hookNames = new Set<string>(
+          toolConfig.allowedFunctionNames.map((name) =>
+            canonicalizeToolName(name),
+          ),
         );
         allowedFunctionNames =
           allowedFunctionNames === undefined

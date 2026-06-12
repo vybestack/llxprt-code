@@ -10,7 +10,7 @@ import type {
   GenerateContentResponse,
   Part,
 } from '@google/genai';
-import { getFunctionCallsFromParts } from '../utils/generateContentResponseUtilities.js';
+import { getFunctionCallsFromParts } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 
 const responseRestrictions = new WeakMap<GenerateContentResponse, string[]>();

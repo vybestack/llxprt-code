@@ -29,17 +29,10 @@ import {
   type GenerateContentResponse,
   type GenerateContentConfig,
 } from '@google/genai';
-<<<<<<< HEAD:packages/core/src/agents/executor.test.ts
-import type { Config } from '../config/config.js';
-import { attachHookRestrictedAllowedTools } from '../core/hookToolRestrictions.js';
-
-import { MockTool } from '../test-utils/mock-tool.js';
-import { getDirectoryContextString } from '../utils/environmentContext.js';
-=======
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { attachHookRestrictedAllowedTools } from '../core/hookToolRestrictions.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
->>>>>>> origin/main:packages/agents/src/agents/executor.test.ts
 import { z } from 'zod';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';

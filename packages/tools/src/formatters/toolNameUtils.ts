@@ -72,6 +72,46 @@ export function normalizeToolName(rawName: string): string | null {
 }
 
 /**
+ * Sentinel returned by {@link canonicalizeToolName} when the input name is
+ * blank or whitespace-only.
+ */
+export const INVALID_TOOL_NAME = '__invalid_tool_name__';
+
+function hasMultipleWords(name: string): boolean {
+  const withoutFirst = name.slice(1);
+  return /[A-Z]/.test(withoutFirst) || name.includes('_') || name.includes('-');
+}
+
+/**
+ * Canonicalize a tool name to its normalized snake_case identifier.
+ *
+ * Returns {@link INVALID_TOOL_NAME} for blank/whitespace-only input so callers
+ * can treat unusable names deterministically.
+ */
+export function canonicalizeToolName(rawName: string): string {
+  const trimmed = rawName.trim();
+  if (!trimmed) {
+    return INVALID_TOOL_NAME;
+  }
+
+  let nameToProcess = trimmed;
+
+  if (trimmed.endsWith('Tool') && trimmed.length > 4) {
+    const withoutTool = trimmed.slice(0, -4);
+    if (hasMultipleWords(withoutTool)) {
+      nameToProcess = withoutTool;
+    }
+  }
+
+  const normalized = normalizeToolName(nameToProcess);
+  if (normalized !== null) {
+    return normalized;
+  }
+
+  return toSnakeCase(nameToProcess).toLowerCase();
+}
+
+/**
  * Convert string to snake_case.
  */
 export function toSnakeCase(value: string): string {

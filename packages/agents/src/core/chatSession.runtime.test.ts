@@ -476,7 +476,7 @@ describe('ChatSession runtime context', () => {
       runtimeId: 'test.runtime.hook-selection',
       metadata: { source: 'chatSession.runtime.test' },
     });
-    const hookManager = new ProviderManager(hookProviderRuntime);
+    const hookManager = new TestRuntimeProviderManager(hookProviderRuntime);
     hookManager.registerProvider(provider);
 
     const runtimeState = createAgentRuntimeState({
