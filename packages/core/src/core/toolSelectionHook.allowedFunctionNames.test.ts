@@ -81,15 +81,16 @@ const variants: ProcessorVariant[] = [
           _applyToolSelectionHook: (
             configForHooks: unknown,
             tools: ToolGroupArray,
-          ) => Promise<ToolGroupArray>;
+          ) => Promise<{ tools: ToolGroupArray }>;
         }
       )._applyToolSelectionHook;
 
-      return applyHook.call(
+      const result = await applyHook.call(
         processor,
         createHookConfig(hookToolConfig),
         toolsFromConfig,
       );
+      return result.tools;
     },
   },
   {
@@ -110,11 +111,12 @@ const variants: ProcessorVariant[] = [
         }
       )._applyToolSelectionHook;
 
-      return (await applyHook.call(
+      const result = (await applyHook.call(
         processor,
         createHookConfig(hookToolConfig),
         toolsFromConfig,
-      )) as ToolGroupArray;
+      )) as { tools: ToolGroupArray };
+      return result.tools;
     },
   },
 ];

@@ -7,6 +7,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StreamProcessor } from './StreamProcessor.js';
+import { attachHookRestrictedAllowedTools } from './hookToolRestrictions.js';
+
 import { DebugLogger } from '../debug/DebugLogger.js';
 import type { GenerateContentResponse } from '@google/genai';
 import type { Content, Part } from '@google/genai';
@@ -97,11 +99,6 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     // Stub internal methods that processStreamResponse calls post-loop
     (processor as unknown as Record<string, unknown>)['_consolidateTextParts'] =
       (parts: Part[]) => parts;
-    (processor as unknown as Record<string, unknown>)['_extractResponseText'] =
-      () => '';
-    (processor as unknown as Record<string, unknown>)[
-      '_validateStreamCompletion'
-    ] = vi.fn();
     (processor as unknown as Record<string, unknown>)[
       '_recordHistoryWithUsage'
     ] = vi.fn().mockResolvedValue(undefined);
@@ -196,6 +193,60 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     expect(result2.done).toBe(false);
 
     await gen.next(); // generator done
+  });
+
+  it('rejects a stream that has no content after hook restrictions filter every tool call', async () => {
+    const blockedToolChunk = attachHookRestrictedAllowedTools(
+      {
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [
+                {
+                  functionCall: {
+                    id: 'blocked-call',
+                    name: 'run_shell_command',
+                    args: { command: 'echo blocked' },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        functionCalls: [
+          {
+            id: 'blocked-top-level-call',
+            name: 'run_shell_command',
+            args: { command: 'echo blocked top level' },
+          },
+        ],
+      } as unknown as GenerateContentResponse,
+      [],
+    );
+
+    async function* filteredOnlyStream(): AsyncGenerator<GenerateContentResponse> {
+      yield blockedToolChunk;
+    }
+
+    const userInput: Content = {
+      role: 'user',
+      parts: [{ text: 'Hi' }],
+    };
+
+    const yielded: GenerateContentResponse[] = [];
+    await expect(
+      (async () => {
+        for await (const chunk of processor.processStreamResponse(
+          filteredOnlyStream(),
+          userInput,
+        )) {
+          yielded.push(chunk);
+        }
+      })(),
+    ).rejects.toThrow('Model stream ended');
+
+    expect(yielded).toHaveLength(1);
   });
 
   it('yields the correct number of chunks matching the source', async () => {

@@ -31,7 +31,7 @@ function hasMultipleWords(name: string): boolean {
 export function canonicalizeToolName(rawName: string): string {
   const trimmed = rawName.trim();
   if (!trimmed) {
-    return '';
+    return '__invalid_tool_name__';
   }
 
   let nameToProcess = trimmed;

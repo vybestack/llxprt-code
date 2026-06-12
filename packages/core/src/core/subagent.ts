@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
 
 /**
  * @plan PLAN-20251028-STATELESS6.P08
@@ -26,11 +26,20 @@ import {
   type FunctionCall,
   type FunctionDeclaration,
 } from '@google/genai';
+
 import {
   StreamEventType,
   type StreamEvent,
   type ChatSession,
 } from './chatSession.js';
+import {
+  filterHookRestrictedParts,
+  filterHookRestrictedFunctionCalls,
+  getHookRestrictedAllowedTools,
+  getHookRestrictedFunctionCallsFromParts,
+  isHookRestrictedToolCall,
+  mergeHookRestrictedFunctionCalls,
+} from './hookToolRestrictions.js';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
@@ -497,6 +506,39 @@ export class SubAgentScope {
     };
   }
 
+  private partitionInteractiveToolRequests(
+    toolRequests: ToolCallRequestInfo[],
+  ): { manualParts: Part[]; schedulerRequests: ToolCallRequestInfo[] } {
+    const manualParts: Part[] = [];
+    const schedulerRequests: ToolCallRequestInfo[] = [];
+
+    for (const request of toolRequests) {
+      const hookRestrictedAllowedTools = request.hookRestrictedAllowedTools;
+      const functionCall = {
+        name: request.name,
+        args: request.args,
+        id: request.callId,
+      };
+      if (isHookRestrictedToolCall(functionCall, hookRestrictedAllowedTools)) {
+        continue;
+      }
+      if (request.name === 'self_emitvalue') {
+        manualParts.push(
+          ...handleEmitValueCall(request, {
+            output: this.output,
+            onMessage: this.onMessage,
+            subagentId: this.subagentId,
+            logger: this.logger,
+          }),
+        );
+      } else {
+        schedulerRequests.push(request);
+      }
+    }
+
+    return { manualParts, schedulerRequests };
+  }
+
   private async handleInteractiveToolCalls(
     toolRequests: ToolCallRequestInfo[],
     scheduler: {
@@ -513,23 +555,8 @@ export class SubAgentScope {
   ): Promise<Content[] | null> {
     if (toolRequests.length === 0) return null;
 
-    const manualParts: Part[] = [];
-    const schedulerRequests: ToolCallRequestInfo[] = [];
-
-    for (const request of toolRequests) {
-      if (request.name === 'self_emitvalue') {
-        manualParts.push(
-          ...handleEmitValueCall(request, {
-            output: this.output,
-            onMessage: this.onMessage,
-            subagentId: this.subagentId,
-            logger: this.logger,
-          }),
-        );
-      } else {
-        schedulerRequests.push(request);
-      }
-    }
+    const { manualParts, schedulerRequests } =
+      this.partitionInteractiveToolRequests(toolRequests);
 
     let responseParts: Part[] = [...manualParts];
 
@@ -570,6 +597,9 @@ export class SubAgentScope {
     }
 
     if (responseParts.length === 0) {
+      if (manualParts.length === 0 && schedulerRequests.length === 0) {
+        return null;
+      }
       responseParts.push({
         text: 'All tool calls failed. Please analyze the errors and try an alternative approach.',
       });
@@ -701,23 +731,28 @@ export class SubAgentScope {
       `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`,
     );
 
-    const { functionCalls: rawCalls, textResponse } =
-      await this.consumeNonInteractiveStream(
-        responseStream,
-        abortController,
-        currentTurn,
-      );
+    const {
+      functionCalls: rawCalls,
+      textResponse,
+      parseableTextResponse,
+      hookRestrictedAllowedTools,
+    } = await this.consumeNonInteractiveStream(
+      responseStream,
+      abortController,
+      currentTurn,
+    );
     if (abortController.signal.aborted === true) {
       return { functionCalls: [], textResponse: '' };
     }
 
     let functionCalls = rawCalls;
-    if (textResponse) {
+    if (parseableTextResponse) {
       const result = processNonInteractiveTextResponse(
-        textResponse,
+        parseableTextResponse,
         functionCalls,
         execCtx,
         resolveToolName,
+        hookRestrictedAllowedTools,
       );
       functionCalls = result.functionCalls;
     }
@@ -729,7 +764,12 @@ export class SubAgentScope {
     responseStream: AsyncIterable<StreamEvent>,
     abortController: AbortController,
     currentTurn: number,
-  ): Promise<{ functionCalls: FunctionCall[]; textResponse: string }> {
+  ): Promise<{
+    functionCalls: FunctionCall[];
+    textResponse: string;
+    parseableTextResponse: string;
+    hookRestrictedAllowedTools: string[] | undefined;
+  }> {
     const timeoutController = new AbortController();
     const timeoutSignal = timeoutController.signal;
     const onAbort = () => timeoutController.abort();
@@ -737,60 +777,55 @@ export class SubAgentScope {
     if (abortController.signal.aborted === true) {
       onAbort();
       abortController.signal.removeEventListener('abort', onAbort);
-      return { functionCalls: [], textResponse: '' };
+      return {
+        functionCalls: [],
+        textResponse: '',
+        parseableTextResponse: '',
+        hookRestrictedAllowedTools: undefined,
+      };
     }
 
     const functionCalls: FunctionCall[] = [];
     let textResponse = '';
+    let parseableTextResponse = '';
+    let hookRestrictedAllowedTools: string[] | undefined;
     const iterator = responseStream[Symbol.asyncIterator]();
     const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(this.config);
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
       while (true) {
-        let result: IteratorResult<StreamEvent, unknown>;
-        if (effectiveTimeoutMs > 0) {
-          result = await nextStreamEventWithIdleTimeout({
-            iterator,
-            timeoutMs: effectiveTimeoutMs,
-            signal: timeoutSignal,
-            onTimeout: () => {
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (abortController.signal.aborted === true) {
-                return;
-              }
-              this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
-              timeoutController.abort();
-              abortController.abort(createAbortError());
-            },
-            createTimeoutError: () => createAbortError(),
-          });
-        } else {
-          result = await iterator.next();
+        const result = await this.readNextNonInteractiveEvent(
+          iterator,
+          abortController,
+          timeoutController,
+          timeoutSignal,
+          effectiveTimeoutMs,
+        );
+        if (result.done === true) {
+          break;
         }
-        if (result.done === true) break;
         const resp = result.value;
         const isRuntimeAborted = Boolean(abortController.signal.aborted);
         if (isRuntimeAborted) {
-          return { functionCalls: [], textResponse: '' };
+          return {
+            functionCalls: [],
+            textResponse: '',
+            parseableTextResponse: '',
+            hookRestrictedAllowedTools,
+          };
         }
-        if (
-          resp.type === StreamEventType.CHUNK &&
-          resp.value.functionCalls != null
-        ) {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
-          const chunkCalls = resp.value.functionCalls ?? [];
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (chunkCalls.length > 0) {
-            functionCalls.push(...chunkCalls);
-            this.logger.debug(
-              () =>
-                `Subagent ${this.subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
-            );
-          }
-        }
-        if (resp.type === StreamEventType.CHUNK && resp.value.text) {
-          textResponse += resp.value.text;
+        if (resp.type === StreamEventType.CHUNK) {
+          const chunkResult = this.collectNonInteractiveChunk(
+            resp,
+            functionCalls,
+            currentTurn,
+          );
+          hookRestrictedAllowedTools =
+            chunkResult.hookRestrictedAllowedTools ??
+            hookRestrictedAllowedTools;
+          textResponse += chunkResult.text;
+          parseableTextResponse += chunkResult.text;
         }
       }
     } finally {
@@ -799,7 +834,78 @@ export class SubAgentScope {
       abortController.signal.removeEventListener('abort', onAbort);
     }
 
-    return { functionCalls, textResponse };
+    return {
+      functionCalls,
+      textResponse,
+      parseableTextResponse,
+      hookRestrictedAllowedTools,
+    };
+  }
+
+  private async readNextNonInteractiveEvent(
+    iterator: AsyncIterator<StreamEvent, unknown>,
+    abortController: AbortController,
+    timeoutController: AbortController,
+    timeoutSignal: AbortSignal,
+    effectiveTimeoutMs: number,
+  ): Promise<IteratorResult<StreamEvent, unknown>> {
+    if (effectiveTimeoutMs > 0) {
+      return nextStreamEventWithIdleTimeout({
+        iterator,
+        timeoutMs: effectiveTimeoutMs,
+        signal: timeoutSignal,
+        onTimeout: () => {
+          if (abortController.signal.aborted === true) {
+            return;
+          }
+          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+          timeoutController.abort();
+          abortController.abort(createAbortError());
+        },
+        createTimeoutError: () => createAbortError(),
+      });
+    }
+    return iterator.next();
+  }
+
+  private collectNonInteractiveChunk(
+    resp: StreamEvent & { type: StreamEventType.CHUNK },
+    functionCalls: FunctionCall[],
+    currentTurn: number,
+  ): { text: string; hookRestrictedAllowedTools: string[] | undefined } {
+    const allowedTools = getHookRestrictedAllowedTools(resp.value);
+    const parts = resp.value.candidates?.[0]?.content?.parts ?? [];
+    const partCalls = getHookRestrictedFunctionCallsFromParts(
+      parts,
+      allowedTools,
+    );
+    const topLevelCalls = filterHookRestrictedFunctionCalls(
+      resp.value.functionCalls ?? [],
+      allowedTools,
+    );
+    const chunkCalls = mergeHookRestrictedFunctionCalls(
+      partCalls,
+      topLevelCalls,
+    );
+    if (chunkCalls.length > 0) {
+      functionCalls.push(...chunkCalls);
+      this.logger.debug(
+        () =>
+          `Subagent ${this.subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
+      );
+    }
+    if (allowedTools === undefined) {
+      return {
+        text: resp.value.text ?? '',
+        hookRestrictedAllowedTools: undefined,
+      };
+    }
+    const filteredParts = filterHookRestrictedParts(parts, allowedTools);
+    const filteredText = filteredParts
+      .map((part) => part.text)
+      .filter((text): text is string => typeof text === 'string')
+      .join('');
+    return { text: filteredText, hookRestrictedAllowedTools: allowedTools };
   }
 
   private async dispatchNonInteractiveTurnResult(

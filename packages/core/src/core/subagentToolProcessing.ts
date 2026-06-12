@@ -33,6 +33,10 @@ import { debugLogger } from '../utils/debugLogger.js';
 import { SubagentTerminateMode, type OutputObject } from './subagentTypes.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { createSchedulerConfig } from './subagentRuntimeSetup.js';
+import {
+  getHookRestrictedAllowedToolsForFunctionCall,
+  isHookRestrictedToolCall,
+} from './hookToolRestrictions.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -345,66 +349,88 @@ export async function processFunctionCalls(
 ): Promise<Content[]> {
   const toolResponseParts: Part[] = [];
 
+  let executedFunctionCallCount = 0;
   for (const functionCall of functionCalls) {
-    const callId = functionCall.id ?? `${functionCall.name}-${Date.now()}`;
-    const requestInfo: ToolCallRequestInfo = {
-      callId,
-      name: functionCall.name as string,
-      args: functionCall.args ?? {},
-      isClientInitiated: true,
-      prompt_id: promptId,
-      agentId: ctx.subagentId,
-    };
-
-    ctx.logger.debug(
-      () =>
-        `Subagent ${ctx.subagentId} executing tool '${requestInfo.name}' with args=${JSON.stringify(requestInfo.args)}`,
-    );
-
-    const toolResponse = await executeNonInteractiveTool(
-      functionCall,
-      requestInfo,
-      callId,
-      abortController,
-      ctx,
-    );
-
-    logToolResult(functionCall, toolResponse, ctx);
-
-    if (isFatalToolError(toolResponse.errorType)) {
-      const fatalMessage = buildToolUnavailableMessage(
-        functionCall.name as string,
-        toolResponse.resultDisplay,
-        toolResponse.error,
-      );
-      ctx.logger.warn(
+    const allowedTools =
+      getHookRestrictedAllowedToolsForFunctionCall(functionCall);
+    if (isHookRestrictedToolCall(functionCall, allowedTools)) {
+      ctx.logger.debug(
         () =>
-          `Subagent ${ctx.subagentId} cannot use tool '${functionCall.name}': ${fatalMessage}`,
+          `Subagent ${ctx.subagentId} skipped hook-restricted tool '${functionCall.name}'`,
       );
-      toolResponseParts.push({ text: fatalMessage });
-      ctx.output.final_message = fatalMessage;
-      continue;
-    }
+    } else {
+      executedFunctionCallCount += 1;
+      const callId = functionCall.id ?? `${functionCall.name}-${Date.now()}`;
+      const requestInfo: ToolCallRequestInfo = {
+        callId,
+        name: functionCall.name as string,
+        args: functionCall.args ?? {},
+        isClientInitiated: true,
+        prompt_id: promptId,
+        agentId: ctx.subagentId,
+        ...(allowedTools !== undefined
+          ? { hookRestrictedAllowedTools: allowedTools }
+          : {}),
+      };
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
-    if (toolResponse.responseParts !== undefined) {
-      for (const part of toolResponse.responseParts) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if ('functionCall' in part) {
-          continue;
-        }
-        toolResponseParts.push(part);
+      ctx.logger.debug(
+        () =>
+          `Subagent ${ctx.subagentId} executing tool '${requestInfo.name}' with args=${JSON.stringify(requestInfo.args)}`,
+      );
+
+      const toolResponse = await executeNonInteractiveTool(
+        functionCall,
+        requestInfo,
+        callId,
+        abortController,
+        ctx,
+      );
+
+      logToolResult(functionCall, toolResponse, ctx);
+
+      if (isFatalToolError(toolResponse.errorType)) {
+        const fatalMessage = buildToolUnavailableMessage(
+          functionCall.name as string,
+          toolResponse.resultDisplay,
+          toolResponse.error,
+        );
+        ctx.logger.warn(
+          () =>
+            `Subagent ${ctx.subagentId} cannot use tool '${functionCall.name}': ${fatalMessage}`,
+        );
+        toolResponseParts.push({ text: fatalMessage });
+        ctx.output.final_message = fatalMessage;
+      } else {
+        pushNonFunctionCallResponseParts(
+          toolResponse.responseParts,
+          toolResponseParts,
+        );
       }
     }
   }
 
-  if (functionCalls.length > 0 && toolResponseParts.length === 0) {
+  if (executedFunctionCallCount === 0) {
+    return [];
+  }
+
+  if (toolResponseParts.length === 0) {
     toolResponseParts.push({
       text: 'All tool calls failed. Please analyze the errors and try an alternative approach.',
     });
   }
 
   return [{ role: 'user', parts: toolResponseParts }];
+}
+
+function pushNonFunctionCallResponseParts(
+  responseParts: Part[],
+  toolResponseParts: Part[],
+): void {
+  for (const part of responseParts) {
+    if (!('functionCall' in part)) {
+      toolResponseParts.push(part);
+    }
+  }
 }
 
 async function executeNonInteractiveTool(

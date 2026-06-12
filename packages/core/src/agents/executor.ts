@@ -28,6 +28,16 @@ import type {
   Schema,
 } from '@google/genai';
 import { executeToolCall } from '../core/nonInteractiveToolExecutor.js';
+import {
+  filterHookRestrictedFunctionCalls,
+  filterHookRestrictedParts,
+  getHookRestrictedAllowedTools,
+  getHookRestrictedAllowedToolsForFunctionCall,
+  getHookRestrictedFunctionCallsFromParts,
+  hasFilteredHookRestrictedToolCalls,
+  isHookRestrictedToolCall,
+  mergeHookRestrictedFunctionCalls,
+} from '../core/hookToolRestrictions.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { CoreMessageBusAdapter } from '../tools-adapters/CoreMessageBusAdapter.js';
@@ -80,6 +90,11 @@ type AgentLoopIterationResult =
 type ToolExecutionResult = {
   responseParts: Part[];
   partialResult: string | null;
+};
+
+type AgentModelResult = {
+  functionCalls: FunctionCall[];
+  textResponse: string;
 };
 
 import { type z } from 'zod';
@@ -379,9 +394,10 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     const promptId = `${this.runtimeContext.getSessionId()}#${this.agentId}#${turnCounter}`;
     const nextTurnCounter = turnCounter + 1;
 
+    let modelResult: AgentModelResult;
     let functionCalls: FunctionCall[];
     try {
-      const modelResult = await this.callModel(
+      modelResult = await this.callModel(
         chat,
         currentMessage,
         tools,
@@ -681,7 +697,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     tools: FunctionDeclaration[],
     signal: AbortSignal,
     promptId: string,
-  ): Promise<{ functionCalls: FunctionCall[]; textResponse: string }> {
+  ): Promise<AgentModelResult> {
     const timeoutController = new AbortController();
     const timeoutSignal = timeoutController.signal;
     const onAbort = () => timeoutController.abort();
@@ -720,7 +736,10 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         },
       );
 
-      return { functionCalls, textResponse };
+      return {
+        functionCalls,
+        textResponse,
+      };
     } finally {
       streamIterator?.return?.().catch(() => {});
       timeoutController.abort();
@@ -775,30 +794,44 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     chunk: GenerateContentResponse,
     functionCalls: FunctionCall[],
     onText: (text: string) => void,
-  ): void {
-    const parts = chunk.candidates?.[0]?.content?.parts;
-
+  ): boolean {
+    const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+    const allowedTools = getHookRestrictedAllowedTools(chunk);
+    const filteredParts = filterHookRestrictedParts(parts, allowedTools);
     const { subject } = parseThought(
-      parts?.find((p: Part) => p.thought === true)?.text ?? '',
+      filteredParts.find((p: Part) => p.thought === true)?.text ?? '',
     );
 
     if (subject !== '') {
       this.emitActivity('THOUGHT_CHUNK', { text: subject });
     }
 
-    if (chunk.functionCalls) {
-      functionCalls.push(...chunk.functionCalls);
+    const partCalls = getHookRestrictedFunctionCallsFromParts(
+      filteredParts,
+      allowedTools,
+    );
+    const topLevelCalls = filterHookRestrictedFunctionCalls(
+      chunk.functionCalls ?? [],
+      allowedTools,
+    );
+    const allowedFunctionCalls = mergeHookRestrictedFunctionCalls(
+      partCalls,
+      topLevelCalls,
+    );
+    if (allowedFunctionCalls.length > 0) {
+      functionCalls.push(...allowedFunctionCalls);
     }
 
-    const text =
-      parts
-        ?.filter((p: Part) => p.thought !== true && typeof p.text === 'string')
-        .map((p: Part) => p.text)
-        .join('') ?? '';
+    const text = filteredParts
+      .filter((p: Part) => p.thought !== true && typeof p.text === 'string')
+      .map((p: Part) => p.text)
+      .join('');
 
     if (text.length > 0) {
       onText(text);
     }
+
+    return hasFilteredHookRestrictedToolCalls(chunk);
   }
 
   /** Initializes a `ChatSession` instance for the agent run. */
@@ -969,12 +1002,19 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     const toolExecutionPromises: Array<Promise<ToolExecutionResult | void>> =
       [];
     const syncResponseParts: Part[] = [];
+    let executableFunctionCallCount = 0;
 
     // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const [index, functionCall] of functionCalls.entries()) {
       const callId = functionCall.id ?? `${promptId}-${index}`;
       const args = functionCall.args ?? {};
+      const hookAllowedTools =
+        getHookRestrictedAllowedToolsForFunctionCall(functionCall);
+      if (isHookRestrictedToolCall(functionCall, hookAllowedTools)) {
+        continue;
+      }
 
+      executableFunctionCallCount += 1;
       this.emitActivity('TOOL_CALL_START', { name: functionCall.name, args });
 
       if (functionCall.name === TASK_COMPLETE_TOOL_NAME) {
@@ -1012,7 +1052,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     }
 
     return this.assembleToolResponses(
-      functionCalls,
+      executableFunctionCallCount,
       syncResponseParts,
       toolExecutionPromises,
       submittedOutput,
@@ -1202,12 +1242,17 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     signal: AbortSignal,
     promptId: string,
   ): Promise<ToolExecutionResult | void> {
+    const hookAllowedTools =
+      getHookRestrictedAllowedToolsForFunctionCall(functionCall);
     const requestInfo: ToolCallRequestInfo = {
       callId,
       name: functionCall.name as string,
       args,
       isClientInitiated: true,
       prompt_id: promptId,
+      ...(hookAllowedTools !== undefined
+        ? { hookRestrictedAllowedTools: hookAllowedTools }
+        : {}),
     };
 
     return (async () => {
@@ -1244,7 +1289,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
   /** Assembles all tool response parts and returns the final result. */
   private async assembleToolResponses(
-    functionCalls: FunctionCall[],
+    executableFunctionCallCount: number,
     syncResponseParts: Part[],
     toolExecutionPromises: Array<Promise<ToolExecutionResult | void>>,
     submittedOutput: string | null,
@@ -1269,7 +1314,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     }
 
     if (
-      functionCalls.length > 0 &&
+      executableFunctionCallCount > 0 &&
       toolResponseParts.length === 0 &&
       !taskCompleted
     ) {

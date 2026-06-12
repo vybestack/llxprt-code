@@ -60,6 +60,16 @@ import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
 } from './chatSession.js';
+import {
+  attachHookRestrictedAllowedTools,
+  filterHookRestrictedContent,
+  filterHookRestrictedFunctionCalls,
+  filterHookRestrictedParts,
+  getHookRestrictedAllowedTools,
+  getHookRestrictedFunctionCallsFromParts,
+  mergeHookRestrictedFunctionCalls,
+} from './hookToolRestrictions.js';
+import { canonicalizeToolName } from './toolGovernance.js';
 
 /**
  * StreamProcessor handles making API calls and processing streaming responses.
@@ -73,6 +83,11 @@ type ToolGroupArray = Array<{
     parametersJsonSchema?: unknown;
   }>;
 }>;
+
+interface ToolSelectionHookResult {
+  tools: GenerateContentConfig['tools'];
+  allowedFunctionNames: string[] | undefined;
+}
 
 function isMissingFinishReason(
   finishReason: FinishReason | null | undefined | '',
@@ -247,10 +262,12 @@ export class StreamProcessor {
     const requestContents = this._buildRequestContents(userContent);
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
-    const tools = await this._applyToolSelectionHook(
+    const requestTools = this._selectRequestTools(params);
+    const toolSelection = await this._applyToolSelectionHook(
       configForHooks,
-      this.generationConfig.tools,
+      requestTools,
     );
+    const tools = toolSelection.tools;
 
     const { requestPayload, baseRuntimeContext, runtimeContext } =
       this._prepareRequestPayload(requestContents, tools, params);
@@ -259,6 +276,7 @@ export class StreamProcessor {
       configForHooks,
       requestPayload.contents,
       tools as ProviderToolset | undefined,
+      toolSelection.allowedFunctionNames,
     );
     requestPayload.contents = finalContents;
 
@@ -277,6 +295,7 @@ export class StreamProcessor {
       baseRuntimeContext,
       params,
       promptId,
+      toolSelection.allowedFunctionNames,
     );
   }
 
@@ -288,6 +307,7 @@ export class StreamProcessor {
     configForHooks: AgentRuntimeContext['providerRuntime']['config'],
     requestContents: IContent[],
     tools: ProviderToolset | undefined,
+    hookRestrictedAllowedTools: string[] | undefined,
   ): Promise<IContent[]> {
     if (
       configForHooks === undefined ||
@@ -347,7 +367,12 @@ export class StreamProcessor {
         reason !== undefined && reason !== null && reason !== ''
           ? reason
           : 'Request blocked by BeforeModel hook',
-        syntheticResponse,
+        syntheticResponse === undefined
+          ? undefined
+          : attachHookRestrictedAllowedTools(
+              syntheticResponse,
+              hookRestrictedAllowedTools,
+            ),
       );
     }
 
@@ -413,6 +438,7 @@ export class StreamProcessor {
     const runtimeContext = this._buildRuntimeContext(
       baseRuntimeContext,
       params,
+      tools,
     );
 
     return { requestPayload, baseRuntimeContext, runtimeContext };
@@ -421,12 +447,13 @@ export class StreamProcessor {
   private _buildRuntimeContext(
     baseRuntimeContext: ProviderRuntimeContext,
     params: SendMessageParameters,
+    tools: unknown,
   ): ProviderRuntimeContext {
     if (!params.config) return baseRuntimeContext;
     return {
       ...baseRuntimeContext,
-      config: { ...baseRuntimeContext.config, ...params.config },
-    } as ProviderRuntimeContext;
+      config: { ...baseRuntimeContext.config, ...params.config, tools },
+    } as unknown as ProviderRuntimeContext;
   }
 
   private async _sendProviderRequest(
@@ -436,6 +463,7 @@ export class StreamProcessor {
     baseRuntimeContext: ProviderRuntimeContext,
     params: SendMessageParameters,
     promptId: string,
+    hookRestrictedAllowedTools: string[] | undefined,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const startTime = Date.now();
     try {
@@ -459,6 +487,7 @@ export class StreamProcessor {
         requestPayload,
         promptId,
         startTime,
+        hookRestrictedAllowedTools,
       );
     } catch (error) {
       const durationMs = Date.now() - startTime;
@@ -482,11 +511,13 @@ export class StreamProcessor {
     requestPayload: { contents: IContent[]; tools: unknown },
     promptId: string,
     startTime: number,
+    hookRestrictedAllowedTools: string[] | undefined,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const convertedStream = this._convertIContentStream(
       streamResponse,
       requestPayload,
       { promptId, startTime },
+      hookRestrictedAllowedTools,
     );
 
     const firstChunk = await convertedStream.next();
@@ -499,14 +530,18 @@ export class StreamProcessor {
 
     return prependAsyncGenerator(firstChunk.value, convertedStream);
   }
+  private _selectRequestTools(
+    params: SendMessageParameters,
+  ): GenerateContentConfig['tools'] {
+    return params.config?.tools ?? this.generationConfig.tools;
+  }
 
   private async _applyToolSelectionHook(
     configForHooks: AgentRuntimeContext['providerRuntime']['config'],
     tools: GenerateContentConfig['tools'],
-  ): Promise<GenerateContentConfig['tools']> {
-    const toolsFromConfig = tools as ToolGroupArray | undefined;
-    if (toolsFromConfig === undefined || configForHooks === undefined) {
-      return tools;
+  ): Promise<ToolSelectionHookResult> {
+    if (configForHooks === undefined) {
+      return { tools, allowedFunctionNames: undefined };
     }
 
     const getToolSelectionHooksEnabled = configForHooks.getEnableHooks;
@@ -514,7 +549,7 @@ export class StreamProcessor {
       typeof getToolSelectionHooksEnabled !== 'function' ||
       getToolSelectionHooksEnabled.call(configForHooks) !== true
     ) {
-      return tools;
+      return { tools, allowedFunctionNames: undefined };
     }
 
     const getToolSelectionHookSystem = configForHooks.getHookSystem;
@@ -523,10 +558,14 @@ export class StreamProcessor {
         ? getToolSelectionHookSystem.call(configForHooks)
         : undefined;
     if (hookSystem === undefined) {
-      return tools;
+      return { tools, allowedFunctionNames: undefined };
     }
 
     await hookSystem.initialize();
+    const toolsFromConfig = Array.isArray(tools)
+      ? (tools as ToolGroupArray)
+      : [];
+
     const toolSelectionResult =
       await hookSystem.fireBeforeToolSelectionEvent(toolsFromConfig);
     const modifiedConfig = toolSelectionResult?.applyToolConfigModifications({
@@ -543,21 +582,23 @@ export class StreamProcessor {
       Array.isArray(toolConfig.allowedFunctionNames)
     ) {
       const allowedFunctions = toolConfig.allowedFunctionNames;
-      return toolsFromConfig
+      const allowedNames = new Set(allowedFunctions.map(canonicalizeToolName));
+      const filteredTools = toolsFromConfig
         .map((toolGroup) => ({
           ...toolGroup,
           functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
             ? toolGroup.functionDeclarations.filter(
                 (fn) =>
                   typeof fn.name === 'string' &&
-                  allowedFunctions.includes(fn.name),
+                  allowedNames.has(canonicalizeToolName(fn.name)),
               )
             : [],
         }))
         .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
+      return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
     }
 
-    return toolsFromConfig;
+    return { tools: toolsFromConfig, allowedFunctionNames: undefined };
   }
 
   private _buildRequestContents(userContent: Content | Content[]): IContent[] {
@@ -616,24 +657,33 @@ export class StreamProcessor {
     streamResponse: AsyncIterable<IContent>,
     llmRequest?: Record<string, unknown>,
     telemetryContext?: { promptId: string; startTime: number },
+    hookRestrictedAllowedTools?: string[],
   ): AsyncGenerator<GenerateContentResponse> {
     let lastConvertedChunk: GenerateContentResponse | undefined;
 
     for await (const iContent of streamResponse) {
       this._trackPromptTokens(iContent);
 
-      const convertedChunk = convertIContentToResponse(iContent);
+      const convertedChunk = attachHookRestrictedAllowedTools(
+        convertIContentToResponse(iContent),
+        hookRestrictedAllowedTools,
+      );
       lastConvertedChunk = convertedChunk;
 
       const hookResult = await this._processAfterModelHook(
         iContent,
         llmRequest,
         convertedChunk,
+        hookRestrictedAllowedTools,
       );
 
       if (hookResult.type === 'modified') {
-        lastConvertedChunk = hookResult.response;
-        yield hookResult.response;
+        const restrictedResponse = attachHookRestrictedAllowedTools(
+          hookResult.response,
+          hookRestrictedAllowedTools,
+        );
+        lastConvertedChunk = restrictedResponse;
+        yield restrictedResponse;
         continue;
       }
 
@@ -662,6 +712,7 @@ export class StreamProcessor {
     iContent: IContent,
     llmRequest: Record<string, unknown> | undefined,
     convertedChunk: GenerateContentResponse,
+    hookRestrictedAllowedTools: string[] | undefined,
   ): Promise<
     | { type: 'modified'; response: GenerateContentResponse }
     | { type: 'passthrough' }
@@ -685,9 +736,16 @@ export class StreamProcessor {
     if (!hookSystem.isInitialized()) {
       await hookSystem.initialize();
     }
+    const filteredContent = filterHookRestrictedContent(
+      convertIContentToResponse(iContent).candidates?.[0]?.content ?? {
+        role: 'model',
+        parts: [],
+      },
+      hookRestrictedAllowedTools,
+    );
     const afterModelResult = await hookSystem.fireAfterModelEvent(
       llmRequest ?? {},
-      iContent,
+      ContentConverters.toIContent(filteredContent),
     );
 
     // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
@@ -704,7 +762,10 @@ export class StreamProcessor {
     // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (afterModelResult?.isBlockingDecision() === true) {
       const modifiedResponse = afterModelResult.getModifiedResponse();
-      const syntheticResponse = modifiedResponse ?? convertedChunk;
+      const syntheticResponse = attachHookRestrictedAllowedTools(
+        modifiedResponse ?? convertedChunk,
+        hookRestrictedAllowedTools,
+      );
       const effectiveReason = afterModelResult.getEffectiveReason() as
         | string
         | undefined;
@@ -761,8 +822,12 @@ export class StreamProcessor {
       this.runtimeContext.ephemerals.reasoning.includeInContext();
 
     for await (const chunk of streamResponse) {
-      this._accumulateChunkMetadata(chunk, acc, includeThoughts);
-      yield chunk;
+      const filteredChunk = attachHookRestrictedAllowedTools(
+        chunk,
+        getHookRestrictedAllowedTools(chunk),
+      );
+      this._accumulateChunkMetadata(filteredChunk, acc, includeThoughts);
+      yield filteredChunk;
     }
 
     await this._finalizeStreamProcessing(acc, userInput);
@@ -803,28 +868,48 @@ export class StreamProcessor {
     if (candidateWithReason !== undefined)
       acc.finishReason = candidateWithReason.finishReason as FinishReason;
 
-    if (isValidResponse(chunk)) {
-      const parts = chunk.candidates?.[0]?.content?.parts;
-      if (parts !== undefined) {
-        const chunkOutcome = analyzeResponseOutcome(parts);
-        acc.outcome = {
-          hasVisibleText:
-            acc.outcome.hasVisibleText || chunkOutcome.hasVisibleText,
-          hasThinking: acc.outcome.hasThinking || chunkOutcome.hasThinking,
-          hasToolCalls: acc.outcome.hasToolCalls || chunkOutcome.hasToolCalls,
-          isActionable: acc.outcome.isActionable || chunkOutcome.isActionable,
-        };
-        acc.modelResponseParts.push(
-          ...(includeThoughts ? parts : parts.filter((p) => !isThoughtPart(p))),
-        );
-      }
+    const allowedTools = getHookRestrictedAllowedTools(chunk);
+    const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+    const effectiveParts = isValidResponse(chunk)
+      ? filterHookRestrictedParts(parts, allowedTools)
+      : [];
+    const allowedPartCalls = getHookRestrictedFunctionCallsFromParts(
+      effectiveParts,
+      allowedTools,
+    );
+    const allowedMergedCalls = mergeHookRestrictedFunctionCalls(
+      allowedPartCalls,
+      filterHookRestrictedFunctionCalls(
+        chunk.functionCalls ?? [],
+        allowedTools,
+      ),
+    );
+    const allowedTopLevelCallParts = allowedMergedCalls
+      .slice(allowedPartCalls.length)
+      .map((functionCall) => ({ functionCall }));
+    const outcomeParts = [...effectiveParts, ...allowedTopLevelCallParts];
+
+    if (outcomeParts.length > 0) {
+      const chunkOutcome = analyzeResponseOutcome(outcomeParts);
+      acc.outcome = {
+        hasVisibleText:
+          acc.outcome.hasVisibleText || chunkOutcome.hasVisibleText,
+        hasThinking: acc.outcome.hasThinking || chunkOutcome.hasThinking,
+        hasToolCalls: acc.outcome.hasToolCalls || chunkOutcome.hasToolCalls,
+        isActionable: acc.outcome.isActionable || chunkOutcome.isActionable,
+      };
+      acc.modelResponseParts.push(
+        ...(includeThoughts
+          ? outcomeParts
+          : outcomeParts.filter((p) => !isThoughtPart(p))),
+      );
     }
 
     const chunkText = typeof chunk.text === 'string' ? chunk.text : '';
     this.logger.debug(() => `[stream:terminal] observed converted chunk`, {
       chunkFinishReason: candidateWithReason?.finishReason,
-      partCount: chunk.candidates?.[0]?.content?.parts?.length ?? 0,
-      toolCallCount: chunk.functionCalls?.length ?? 0,
+      partCount: effectiveParts.length,
+      toolCallCount: allowedMergedCalls.length,
       textLength: chunkText.length,
       hasUsageMetadata: Boolean(chunk.usageMetadata),
     });

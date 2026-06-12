@@ -23,7 +23,7 @@ import type { Config } from '../config/config.js';
 import { createErrorResponse } from '../utils/generateContentResponseUtilities.js';
 import { setToolContext } from './utils.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
-import { isToolBlocked } from '../core/toolGovernance.js';
+import { canonicalizeToolName, isToolBlocked } from '../core/toolGovernance.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import levenshtein from 'fast-levenshtein';
 
@@ -44,70 +44,72 @@ export class ToolDispatcher {
     governance: ToolGovernance,
     interactiveMode: boolean,
   ): ToolCall[] {
-    return requests.map((reqInfo): ToolCall => {
-      if (isToolBlocked(reqInfo.name, governance)) {
-        const errorMessage = `Tool "${reqInfo.name}" is disabled in the current profile.`;
-        return {
-          status: 'error',
-          request: reqInfo,
-          response: createErrorResponse(
-            reqInfo,
-            new Error(errorMessage),
-            ToolErrorType.TOOL_DISABLED,
-          ),
-          durationMs: 0,
-        };
-      }
+    return requests
+      .filter((reqInfo) => !this.isRequestBlockedByHookRestriction(reqInfo))
+      .map((reqInfo): ToolCall => {
+        if (isToolBlocked(reqInfo.name, governance)) {
+          const errorMessage = `Tool "${reqInfo.name}" is disabled in the current profile.`;
+          return {
+            status: 'error',
+            request: reqInfo,
+            response: createErrorResponse(
+              reqInfo,
+              new Error(errorMessage),
+              ToolErrorType.TOOL_DISABLED,
+            ),
+            durationMs: 0,
+          };
+        }
 
-      const toolInstance = this.toolRegistry.getTool(reqInfo.name);
-      if (!toolInstance) {
-        const suggestion = this.getToolSuggestion(reqInfo.name);
-        const errorMessage = `Tool "${reqInfo.name}" could not be loaded.${suggestion}`;
-        return {
-          status: 'error',
-          request: reqInfo,
-          response: createErrorResponse(
-            reqInfo,
-            new Error(errorMessage),
-            ToolErrorType.TOOL_NOT_REGISTERED,
-          ),
-          durationMs: 0,
-        };
-      }
+        const toolInstance = this.toolRegistry.getTool(reqInfo.name);
+        if (!toolInstance) {
+          const suggestion = this.getToolSuggestion(reqInfo.name);
+          const errorMessage = `Tool "${reqInfo.name}" could not be loaded.${suggestion}`;
+          return {
+            status: 'error',
+            request: reqInfo,
+            response: createErrorResponse(
+              reqInfo,
+              new Error(errorMessage),
+              ToolErrorType.TOOL_NOT_REGISTERED,
+            ),
+            durationMs: 0,
+          };
+        }
 
-      setToolContext(
-        toolInstance,
-        this.config.getSessionId(),
-        reqInfo.agentId ?? DEFAULT_AGENT_ID,
-        interactiveMode,
-      );
+        setToolContext(
+          toolInstance,
+          this.config.getSessionId(),
+          reqInfo.agentId ?? DEFAULT_AGENT_ID,
+          interactiveMode,
+        );
 
-      const invocationOrError = this.buildInvocation(
-        toolInstance,
-        reqInfo.args,
-      );
-      if (invocationOrError instanceof Error) {
+        const invocationOrError = this.buildInvocation(
+          toolInstance,
+          reqInfo.args,
+        );
+        if (invocationOrError instanceof Error) {
+          return {
+            status: 'error',
+            request: reqInfo,
+            tool: toolInstance,
+            response: createErrorResponse(
+              reqInfo,
+              invocationOrError,
+              ToolErrorType.INVALID_TOOL_PARAMS,
+            ),
+            durationMs: 0,
+          };
+        }
+
         return {
-          status: 'error',
+          status: 'validating',
           request: reqInfo,
           tool: toolInstance,
-          response: createErrorResponse(
-            reqInfo,
-            invocationOrError,
-            ToolErrorType.INVALID_TOOL_PARAMS,
-          ),
-          durationMs: 0,
+          invocation: invocationOrError,
+          startTime: Date.now(),
         };
-      }
-
-      return {
-        status: 'validating',
-        request: reqInfo,
-        tool: toolInstance,
-        invocation: invocationOrError,
-        startTime: Date.now(),
-      };
-    });
+      });
   }
 
   /**
@@ -126,6 +128,22 @@ export class ToolDispatcher {
       }
       return new Error(String(e));
     }
+  }
+
+  private isRequestBlockedByHookRestriction(
+    reqInfo: ToolCallRequestInfo,
+  ): boolean {
+    const allowedTools = reqInfo.hookRestrictedAllowedTools;
+    if (allowedTools === undefined) {
+      return false;
+    }
+
+    if (typeof reqInfo.name !== 'string' || reqInfo.name.trim() === '') {
+      return true;
+    }
+
+    const allowed = new Set(allowedTools.map(canonicalizeToolName));
+    return !allowed.has(canonicalizeToolName(reqInfo.name));
   }
 
   /**

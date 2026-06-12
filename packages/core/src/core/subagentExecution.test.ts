@@ -10,6 +10,7 @@ import {
   filterTextWithEmoji,
   checkGoalCompletion,
   processInteractiveTextResponse,
+  processNonInteractiveTextResponse,
   handleExecutionError,
   createCompletionChannel,
 } from './subagentExecution.js';
@@ -215,6 +216,41 @@ describe('subagentExecution', () => {
         }),
       ).toThrow('Blocked!');
       expect(output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
+    });
+  });
+
+  describe('processNonInteractiveTextResponse', () => {
+    function makeTextToolContext() {
+      return {
+        output: makeOutput(),
+        subagentId: 'test-subagent',
+        logger: new DebugLogger('test'),
+        toolsView: {},
+        textToolParser: {
+          parse: vi.fn().mockReturnValue({
+            cleanedContent: '',
+            toolCalls: [
+              {
+                name: 'run_shell_command',
+                arguments: { command: 'echo blocked' },
+              },
+            ],
+          }),
+        },
+      };
+    }
+
+    it('should apply hook restrictions to parsed textual tool calls', () => {
+      const ctx = makeTextToolContext();
+      const result = processNonInteractiveTextResponse(
+        'tool: run_shell_command',
+        [],
+        ctx,
+        () => 'run_shell_command',
+        ['read_file'],
+      );
+
+      expect(result.functionCalls).toHaveLength(0);
     });
   });
 

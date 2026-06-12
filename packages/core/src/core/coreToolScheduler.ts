@@ -28,7 +28,7 @@ interface QueuedRequest {
 import { DEFAULT_AGENT_ID } from './turn.js';
 import { createErrorResponse } from '../utils/generateContentResponseUtilities.js';
 import { DebugLogger } from '../debug/index.js';
-import { buildToolGovernance } from './toolGovernance.js';
+import { buildToolGovernance, canonicalizeToolName } from './toolGovernance.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import { triggerToolNotificationHook } from './coreToolHookTriggers.js';
 import { ToolExecutor } from '../scheduler/tool-executor.js';
@@ -353,15 +353,15 @@ export class CoreToolScheduler {
   private deduplicateRequests(
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
   ): ToolCallRequestInfo[] {
-    const requestsToProcess = (
-      Array.isArray(request) ? request : [request]
-    ).map((req) => {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string agentId falls through to default
-      if (!req.agentId) {
-        req.agentId = DEFAULT_AGENT_ID;
-      }
-      return req;
-    });
+    const requestsToProcess = (Array.isArray(request) ? request : [request])
+      .filter((req) => !this.isHookRestrictedRequest(req))
+      .map((req) => {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string agentId falls through to default
+        if (!req.agentId) {
+          req.agentId = DEFAULT_AGENT_ID;
+        }
+        return req;
+      });
 
     const freshRequests: ToolCallRequestInfo[] = [];
     const duplicates: ToolCallRequestInfo[] = [];
@@ -379,6 +379,14 @@ export class CoreToolScheduler {
       );
     }
     return freshRequests;
+  }
+  private isHookRestrictedRequest(req: ToolCallRequestInfo): boolean {
+    const allowedTools = req.hookRestrictedAllowedTools;
+    if (allowedTools === undefined) {
+      return false;
+    }
+    const allowed = new Set(allowedTools.map(canonicalizeToolName));
+    return !allowed.has(canonicalizeToolName(req.name));
   }
 
   private evaluateToolCall(
@@ -451,6 +459,7 @@ export class CoreToolScheduler {
         governance,
         this.toolContextInteractiveMode,
       );
+      if (newToolCalls.length === 0) return;
 
       this.toolCalls = this.toolCalls.concat(newToolCalls);
       this.notifyToolCallsUpdate();

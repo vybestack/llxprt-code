@@ -462,15 +462,17 @@ console.log(JSON.stringify({
           'hooks-system.before-tool-selection.responses',
         ),
       });
-      // Create inline hook command (works on both Unix and Windows)
+      // Create inline hook command allowing only read_file, not run_shell_command
       const hookCommand =
-        "node -e \"console.log(JSON.stringify({hookSpecificOutput: {hookEventName: 'BeforeToolSelection', toolConfig: {mode: 'ANY', allowedFunctionNames: ['read_file', 'run_shell_command']}}}))\"";
+        "node -e \"console.log(JSON.stringify({hookSpecificOutput: {hookEventName: 'BeforeToolSelection', toolConfig: {mode: 'ANY', allowedFunctionNames: ['read_file']}}}))\"";
 
       rig.setup('should modify tool selection with BeforeToolSelection hooks', {
         settings: {
           debugMode: true,
-          hooks: {
+          hooksConfig: {
             enabled: true,
+          },
+          hooks: {
             BeforeToolSelection: [
               {
                 hooks: [
@@ -493,9 +495,16 @@ console.log(JSON.stringify({
         args: 'Check the content of new_file_data.txt, after that run echo command to see the content',
       });
 
-      // Should use read_file (allowed) but not run_shell_command (not in allowed list)
+      // Should use read_file (allowed) but not run_shell_command (restricted)
       const foundReadFile = await rig.waitForToolCall('read_file');
       expect(foundReadFile).toBeTruthy();
+
+      // run_shell_command must not appear in tool telemetry at all (not just successful calls)
+      const toolLogs = rig.readToolLogs();
+      const runShellCall = toolLogs.find(
+        (log) => log.toolRequest.name === 'run_shell_command',
+      );
+      expect(runShellCall).toBeUndefined();
 
       // Should generate hook telemetry indicating the hook was called
       const hookTelemetryFound = await rig.waitForTelemetryEvent('hook_call');
@@ -1331,34 +1340,77 @@ console.log(JSON.stringify({
         await run.expectText('Hello', 10000);
       }
 
-      // Wait for all clears to complete
       // BatchLogRecordProcessor exports telemetry every 10 seconds by default
-      // Use generous wait time across all platforms (CI, Docker, Mac, Linux)
       await new Promise((resolve) => setTimeout(resolve, 15000));
 
       // Wait for telemetry to be written to disk
       await rig.waitForTelemetryReady();
 
-      // Wait for hook telemetry events to be flushed to disk
-      // In interactive mode, telemetry may be buffered, so we need to poll for the events
-      // We execute multiple clears to generate more hook events (total: 1 + numClears * 2)
-      // But we only require >= 1 hooks to pass, making the test more permissive
-      const expectedMinHooks = 1; // SessionStart (startup), SessionEnd (clear), SessionStart (clear)
+      // Poll for the specific clear lifecycle conditions rather than a generic hook count.
+      // This requires: a SessionEnd with reason=clear, and a SessionStart with source=clear.
+
+      // --- Helpers for safe hook_input parsing and clear-lifecycle predicates ---
+      function parseHookInput(raw: unknown): Record<string, unknown> | null {
+        const str = typeof raw === 'string' ? raw : JSON.stringify(raw);
+        try {
+          const parsed = JSON.parse(str) as unknown;
+          if (
+            parsed === null ||
+            typeof parsed !== 'object' ||
+            Array.isArray(parsed)
+          ) {
+            return null;
+          }
+          return parsed as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      }
+
+      function isSessionEndClear(log: {
+        hookCall: {
+          hook_event_name: string;
+          hook_name: string;
+          hook_input: unknown;
+        };
+      }): boolean {
+        if (log.hookCall.hook_event_name !== 'SessionEnd') return false;
+        if (log.hookCall.hook_name !== sessionEndCommand) return false;
+        const parsed = parseHookInput(log.hookCall.hook_input);
+        return parsed !== null && parsed['reason'] === 'clear';
+      }
+
+      function isSessionStartClear(log: {
+        hookCall: {
+          hook_event_name: string;
+          hook_name: string;
+          hook_input: unknown;
+        };
+      }): boolean {
+        if (log.hookCall.hook_event_name !== 'SessionStart') return false;
+        if (log.hookCall.hook_name !== sessionStartCommand) return false;
+        const parsed = parseHookInput(log.hookCall.hook_input);
+        return parsed !== null && parsed['source'] === 'clear';
+      }
+      // --- End helpers ---
+
       const pollResult = await poll(
         () => {
           const hookLogs = rig.readHookLogs();
-          return hookLogs.length >= expectedMinHooks;
+          return (
+            hookLogs.some(isSessionEndClear) &&
+            hookLogs.some(isSessionStartClear)
+          );
         },
-        90000, // 90 second timeout for all platforms
-        1000, // check every 1s to reduce I/O overhead
+        90000,
+        1000,
       );
 
-      // If polling failed, log diagnostic info
       if (!pollResult) {
         const hookLogs = rig.readHookLogs();
         const hookEvents = hookLogs.map((log) => log.hookCall.hook_event_name);
         console.error(
-          `Polling timeout after 90000ms: Expected >= ${expectedMinHooks} hooks, got ${hookLogs.length}`,
+          `Polling timeout: expected SessionEnd(reason=clear) and SessionStart(source=clear), got ${hookLogs.length} hooks`,
         );
         console.error(
           'Hooks found:',
@@ -1367,69 +1419,32 @@ console.log(JSON.stringify({
         console.error('Full hook logs:', JSON.stringify(hookLogs, null, 2));
       }
 
-      // Verify hooks executed
+      expect(pollResult).toBe(true);
+
       const hookLogs = rig.readHookLogs();
 
-      // Diagnostic: Log which hooks we actually got
-      const hookEvents = hookLogs.map((log) => log.hookCall.hook_event_name);
-      if (hookLogs.length < expectedMinHooks) {
-        console.error(
-          `TEST FAILURE: Expected >= ${expectedMinHooks} hooks, got ${hookLogs.length}: [${hookEvents.length > 0 ? hookEvents.join(', ') : 'NONE'}]`,
-        );
-      }
-
-      expect(hookLogs.length).toBeGreaterThanOrEqual(expectedMinHooks);
-
-      // Find SessionEnd hook log
-      const sessionEndLog = hookLogs.find(
-        (log) =>
-          log.hookCall.hook_event_name === 'SessionEnd' &&
-          log.hookCall.hook_name === sessionEndCommand,
+      // Verify clear-specific SessionEnd exists with reason=clear
+      const sessionEndClearLog = hookLogs.find(isSessionEndClear);
+      expect(sessionEndClearLog).toBeDefined();
+      expect(sessionEndClearLog?.hookCall.exit_code).toBe(0);
+      expect(sessionEndClearLog?.hookCall.stdout).toContain(
+        'Session ending due to clear',
       );
-      // Because the flakiness of the test, we relax this check
-      // expect(sessionEndLog).toBeDefined();
-      if (sessionEndLog) {
-        expect(sessionEndLog.hookCall.exit_code).toBe(0);
-        expect(sessionEndLog.hookCall.stdout).toContain(
-          'Session ending due to clear',
-        );
 
-        // Verify hook input contains reason
-        const hookInputStr =
-          typeof sessionEndLog.hookCall.hook_input === 'string'
-            ? sessionEndLog.hookCall.hook_input
-            : JSON.stringify(sessionEndLog.hookCall.hook_input);
-        const hookInput = JSON.parse(hookInputStr) as Record<string, unknown>;
-        expect(hookInput['reason']).toBe('clear');
-      }
-
-      // Find SessionStart hook log after clear
-      const sessionStartAfterClearLogs = hookLogs.filter(
-        (log) =>
-          log.hookCall.hook_event_name === 'SessionStart' &&
-          log.hookCall.hook_name === sessionStartCommand,
+      // Verify clear-specific SessionStart exists with source=clear
+      const sessionStartClearLog = hookLogs.find(isSessionStartClear);
+      expect(sessionStartClearLog).toBeDefined();
+      expect(sessionStartClearLog?.hookCall.exit_code).toBe(0);
+      expect(sessionStartClearLog?.hookCall.stdout).toContain(
+        'Session starting after clear',
       );
-      // Should have at least one SessionStart from after clear
-      // Because the flakiness of the test, we relax this check
-      // expect(sessionStartAfterClearLogs.length).toBeGreaterThanOrEqual(1);
 
-      const sessionStartLog = sessionStartAfterClearLogs.find((log) => {
-        const hookInputStr =
-          typeof log.hookCall.hook_input === 'string'
-            ? log.hookCall.hook_input
-            : JSON.stringify(log.hookCall.hook_input);
-        const hookInput = JSON.parse(hookInputStr) as Record<string, unknown>;
-        return hookInput['source'] === 'clear';
-      });
-
-      // Because the flakiness of the test, we relax this check
-      // expect(sessionStartLog).toBeDefined();
-      if (sessionStartLog) {
-        expect(sessionStartLog.hookCall.exit_code).toBe(0);
-        expect(sessionStartLog.hookCall.stdout).toContain(
-          'Session starting after clear',
-        );
-      }
+      // SessionEnd(reason=clear) must appear before SessionStart(source=clear) in log order
+      const sessionEndClearIndex = hookLogs.findIndex(isSessionEndClear);
+      const sessionStartClearIndex = hookLogs.findIndex(isSessionStartClear);
+      expect(sessionEndClearIndex).toBeGreaterThanOrEqual(0);
+      expect(sessionStartClearIndex).toBeGreaterThanOrEqual(0);
+      expect(sessionEndClearIndex).toBeLessThan(sessionStartClearIndex);
     });
   });
 

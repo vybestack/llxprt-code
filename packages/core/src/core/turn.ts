@@ -24,8 +24,7 @@ import {
 } from '@vybestack/llxprt-code-tools';
 import type { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import {
-  getResponseText,
-  getFunctionCalls,
+  getFunctionCallsFromParts,
   analyzeResponseOutcome,
   type ResponseOutcome,
 } from '../utils/generateContentResponseUtilities.js';
@@ -37,6 +36,7 @@ import {
 } from '../utils/errors.js';
 import { normalizeToolName } from '@vybestack/llxprt-code-tools';
 import type { ChatSession } from './chatSession.js';
+import { isThoughtPart } from './chatSessionTypes.js';
 import {
   InvalidStreamError,
   StreamEventType,
@@ -51,6 +51,14 @@ import {
   resolveStreamIdleTimeoutMs,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 } from '../utils/streamIdleTimeout.js';
+import {
+  filterHookRestrictedParts,
+  filterHookRestrictedFunctionCalls,
+  getHookRestrictedAllowedTools,
+  getHookRestrictedFunctionCallsFromParts,
+  getHookRestrictedAllowedToolsForFunctionCall,
+  mergeHookRestrictedFunctionCalls,
+} from './hookToolRestrictions.js';
 
 export const DEFAULT_AGENT_ID = 'primary';
 
@@ -132,6 +140,7 @@ export interface ToolCallRequestInfo {
   prompt_id: string;
   agentId?: string;
   checkpoint?: string;
+  hookRestrictedAllowedTools?: string[];
 }
 
 export interface ToolCallResponseInfo {
@@ -446,18 +455,46 @@ export class Turn {
     });
   }
 
+  private pushFilteredDebugResponse(
+    resp: GenerateContentResponse,
+    allowedParts: Part[],
+  ): void {
+    this.debugResponses.push(
+      resp.candidates === undefined
+        ? resp
+        : ({
+            ...resp,
+            candidates: resp.candidates.map((candidate, index) =>
+              index === 0
+                ? {
+                    ...candidate,
+                    content:
+                      candidate.content === undefined
+                        ? undefined
+                        : { ...candidate.content, parts: allowedParts },
+                  }
+                : candidate,
+            ),
+          } as GenerateContentResponse),
+    );
+  }
+
   private *processStreamChunk(
     resp: GenerateContentResponse,
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
   ): Generator<ServerGeminiStreamEvent> {
-    this.debugResponses.push(resp);
-
     // Check ALL parts for thinking, not just parts[0]
     // Bug fix: Previously only checked parts[0], missing thoughts in other positions
     // @plan PLAN-20251202-THINKING.P16
     const allParts = resp.candidates?.[0]?.content?.parts ?? [];
-    for (const part of allParts) {
+    const allowedParts = filterHookRestrictedParts(
+      allParts,
+      getHookRestrictedAllowedTools(resp),
+    );
+    this.pushFilteredDebugResponse(resp, allowedParts);
+
+    for (const part of allowedParts) {
       if ((part as unknown as { thought?: boolean }).thought === true) {
         const thought = parseThought(
           (part as unknown as { text?: string }).text ?? '',
@@ -470,9 +507,13 @@ export class Turn {
       }
     }
 
-    const chunkOutcome = analyzeResponseOutcome(allParts);
-    const text = getResponseText(resp);
-    if (chunkOutcome.hasVisibleText && text !== undefined) {
+    const chunkOutcome = analyzeResponseOutcome(allowedParts);
+    const text = allowedParts
+      .filter((part) => !isThoughtPart(part))
+      .map((part) => part.text)
+      .filter((partText): partText is string => typeof partText === 'string')
+      .join('');
+    if (chunkOutcome.hasVisibleText && text !== '') {
       yield { type: GeminiEventType.Content, value: text, traceId };
 
       // Emit citation event if conditions are met
@@ -486,7 +527,15 @@ export class Turn {
     }
 
     // Handle function calls (requesting tool execution)
-    const functionCalls = getFunctionCalls(resp) ?? [];
+    const partFunctionCalls = getFunctionCallsFromParts(allowedParts) ?? [];
+    const topLevelFunctionCalls = filterHookRestrictedFunctionCalls(
+      resp.functionCalls ?? [],
+      getHookRestrictedAllowedTools(resp),
+    );
+    const functionCalls = mergeHookRestrictedFunctionCalls(
+      partFunctionCalls,
+      topLevelFunctionCalls,
+    );
     for (const fnCall of functionCalls) {
       const event = this.handlePendingFunctionCall(fnCall);
       if (event) {
@@ -498,10 +547,11 @@ export class Turn {
     const finishReason = resp.candidates?.[0]?.finishReason;
 
     // This is the key change: Only yield 'Finished' if there is a finishReason.
+    // Pass only allowed function calls so logging/outcome reflect executable calls.
     if (finishReason != null) {
       yield* this.emitFinishReason(
         finishReason,
-        allParts,
+        allowedParts,
         functionCalls,
         text,
         resp.usageMetadata,
@@ -510,7 +560,7 @@ export class Turn {
       );
     } else {
       this.logNoFinishReason(
-        allParts,
+        allowedParts,
         functionCalls,
         text,
         resp.usageMetadata,
@@ -538,27 +588,13 @@ export class Turn {
     let cumulativeOutcome = this.createEmptyResponseOutcome();
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Turn events cross provider/runtime boundaries despite declared types.
     while (true) {
-      // Use watchdog if timeout > 0, otherwise call iterator.next() directly
-      let result: IteratorResult<StreamEvent>;
-      if (effectiveTimeoutMs > 0) {
-        result = await nextStreamEventWithIdleTimeout({
-          iterator: streamIterator,
-          timeoutMs: effectiveTimeoutMs,
-          signal: timeoutController.signal,
-          onTimeout: () => {
-            if (signal.aborted) {
-              return;
-            }
-            idleFlag.timedOut = true;
-            timeoutController.abort();
-          },
-          createTimeoutError: () =>
-            new Error(TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE),
-        });
-      } else {
-        // Watchdog disabled: call iterator.next() directly
-        result = await streamIterator.next();
-      }
+      const result = await this.readNextStreamEvent(
+        streamIterator,
+        timeoutController,
+        signal,
+        effectiveTimeoutMs,
+        idleFlag,
+      );
       if (result.done === true) {
         break;
       }
@@ -570,52 +606,29 @@ export class Turn {
         return;
       }
 
-      // Handle the RETRY event
       if (streamEvent.type === StreamEventType.RETRY) {
         cumulativeOutcome = this.createEmptyResponseOutcome();
         yield { type: GeminiEventType.Retry };
         continue;
       }
 
-      // Handle AGENT_EXECUTION_STOPPED event
-      if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
-        yield {
-          type: GeminiEventType.AgentExecutionStopped,
-          reason: streamEvent.reason,
-          systemMessage: streamEvent.systemMessage,
-          contextCleared: streamEvent.contextCleared,
-        };
-        return;
+      const controlEvent = this.handleControlStreamEvent(streamEvent);
+      if (controlEvent !== undefined) {
+        yield controlEvent;
+        if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
+          return;
+        }
+        continue;
       }
-
-      // Handle AGENT_EXECUTION_BLOCKED event
-      if (streamEvent.type === StreamEventType.AGENT_EXECUTION_BLOCKED) {
-        yield {
-          type: GeminiEventType.AgentExecutionBlocked,
-          reason: streamEvent.reason,
-          systemMessage: streamEvent.systemMessage,
-          contextCleared: streamEvent.contextCleared,
-        };
+      if (streamEvent.type !== StreamEventType.CHUNK) {
         continue;
       }
 
-      // Narrow to CHUNK — the only other variant in the discriminated union
       const resp = streamEvent.value;
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
       if (resp === null || resp === undefined) continue;
 
-      const parts = resp.candidates?.[0]?.content?.parts ?? [];
-      const chunkOutcome = analyzeResponseOutcome(parts);
-      cumulativeOutcome = {
-        hasVisibleText:
-          cumulativeOutcome.hasVisibleText || chunkOutcome.hasVisibleText,
-        hasThinking: cumulativeOutcome.hasThinking || chunkOutcome.hasThinking,
-        hasToolCalls:
-          cumulativeOutcome.hasToolCalls || chunkOutcome.hasToolCalls,
-        isActionable:
-          cumulativeOutcome.isActionable || chunkOutcome.isActionable,
-      };
-
+      cumulativeOutcome = this.mergeResponseOutcome(cumulativeOutcome, resp);
       const traceId = resp.responseId ?? undefined;
       yield* this.processStreamChunk(
         resp,
@@ -623,6 +636,93 @@ export class Turn {
         cumulativeOutcome,
       );
     }
+  }
+
+  private readNextStreamEvent(
+    streamIterator: AsyncIterator<StreamEvent>,
+    timeoutController: AbortController,
+    signal: AbortSignal,
+    effectiveTimeoutMs: number,
+    idleFlag: { timedOut: boolean },
+  ): Promise<IteratorResult<StreamEvent>> {
+    if (effectiveTimeoutMs <= 0) {
+      return streamIterator.next();
+    }
+
+    return nextStreamEventWithIdleTimeout({
+      iterator: streamIterator,
+      timeoutMs: effectiveTimeoutMs,
+      signal: timeoutController.signal,
+      onTimeout: () => {
+        if (signal.aborted) {
+          return;
+        }
+        idleFlag.timedOut = true;
+        timeoutController.abort();
+      },
+      createTimeoutError: () =>
+        new Error(TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE),
+    });
+  }
+
+  private handleControlStreamEvent(
+    streamEvent: StreamEvent,
+  ): ServerGeminiStreamEvent | undefined {
+    if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
+      return {
+        type: GeminiEventType.AgentExecutionStopped,
+        reason: streamEvent.reason,
+        systemMessage: streamEvent.systemMessage,
+        contextCleared: streamEvent.contextCleared,
+      };
+    }
+
+    if (streamEvent.type === StreamEventType.AGENT_EXECUTION_BLOCKED) {
+      return {
+        type: GeminiEventType.AgentExecutionBlocked,
+        reason: streamEvent.reason,
+        systemMessage: streamEvent.systemMessage,
+        contextCleared: streamEvent.contextCleared,
+      };
+    }
+
+    return undefined;
+  }
+
+  private mergeResponseOutcome(
+    cumulativeOutcome: ResponseOutcome,
+    resp: GenerateContentResponse,
+  ): ResponseOutcome {
+    const parts = resp.candidates?.[0]?.content?.parts ?? [];
+    const allowedParts = filterHookRestrictedParts(
+      parts,
+      getHookRestrictedAllowedTools(resp),
+    );
+    const allowedPartCalls = getHookRestrictedFunctionCallsFromParts(
+      allowedParts,
+      getHookRestrictedAllowedTools(resp),
+    );
+    const allowedMergedCalls = mergeHookRestrictedFunctionCalls(
+      allowedPartCalls,
+      filterHookRestrictedFunctionCalls(
+        resp.functionCalls ?? [],
+        getHookRestrictedAllowedTools(resp),
+      ),
+    );
+    const allowedTopLevelCallParts = allowedMergedCalls
+      .slice(allowedPartCalls.length)
+      .map((functionCall) => ({ functionCall }));
+    const chunkOutcome = analyzeResponseOutcome([
+      ...allowedParts,
+      ...allowedTopLevelCallParts,
+    ]);
+    return {
+      hasVisibleText:
+        cumulativeOutcome.hasVisibleText || chunkOutcome.hasVisibleText,
+      hasThinking: cumulativeOutcome.hasThinking || chunkOutcome.hasThinking,
+      hasToolCalls: cumulativeOutcome.hasToolCalls || chunkOutcome.hasToolCalls,
+      isActionable: cumulativeOutcome.isActionable || chunkOutcome.isActionable,
+    };
   }
 
   private extractErrorStatus(error: unknown): number | undefined {
@@ -766,6 +866,7 @@ export class Turn {
     }
 
     const args = fnCall.args ?? {};
+    const allowedTools = getHookRestrictedAllowedToolsForFunctionCall(fnCall);
 
     const toolCallRequest: ToolCallRequestInfo = {
       callId,
@@ -775,6 +876,9 @@ export class Turn {
       prompt_id: this.prompt_id,
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
       agentId: this.agentId ?? DEFAULT_AGENT_ID,
+      ...(allowedTools !== undefined
+        ? { hookRestrictedAllowedTools: allowedTools }
+        : {}),
     };
 
     this.pendingToolCalls.push(toolCallRequest);

@@ -300,6 +300,40 @@ describe('HookAggregator', () => {
       expect(toolConfig?.allowedFunctionNames).toStrictEqual([]);
     });
 
+    it('should not convert NONE mode with omitted allowedFunctionNames into an explicit deny-all list', () => {
+      const results: HookExecutionResult[] = [
+        {
+          hookConfig: {
+            type: HookType.Command,
+            command: 'test-command',
+            timeout: 30000,
+          },
+          eventName: HookEventName.BeforeToolSelection,
+          success: true,
+          output: {
+            hookSpecificOutput: {
+              hookEventName: 'BeforeToolSelection',
+              toolConfig: {
+                mode: 'NONE',
+              },
+            },
+          } as BeforeToolSelectionOutput,
+          duration: 100,
+        },
+      ];
+
+      const aggregated = aggregator.aggregateResults(
+        results,
+        HookEventName.BeforeToolSelection,
+      );
+
+      expect(aggregated.success).toBe(true);
+      const output = aggregated.finalOutput as BeforeToolSelectionOutput;
+      const toolConfig = output.hookSpecificOutput?.toolConfig;
+      expect(toolConfig?.mode).toBe('NONE');
+      expect(toolConfig?.allowedFunctionNames).toBeUndefined();
+    });
+
     it('should merge tool configurations with ANY mode', () => {
       const results: HookExecutionResult[] = [
         {
@@ -351,11 +385,7 @@ describe('HookAggregator', () => {
       const output = aggregated.finalOutput as BeforeToolSelectionOutput;
       const toolConfig = output.hookSpecificOutput?.toolConfig;
       expect(toolConfig?.mode).toBe('ANY');
-      expect(toolConfig?.allowedFunctionNames).toStrictEqual([
-        'tool1',
-        'tool2',
-        'tool3',
-      ]);
+      expect(toolConfig?.allowedFunctionNames).toStrictEqual([]);
     });
 
     it('should merge tool configurations with AUTO mode when all are AUTO', () => {
@@ -409,10 +439,95 @@ describe('HookAggregator', () => {
       const output = aggregated.finalOutput as BeforeToolSelectionOutput;
       const toolConfig = output.hookSpecificOutput?.toolConfig;
       expect(toolConfig?.mode).toBe('AUTO');
-      expect(toolConfig?.allowedFunctionNames).toStrictEqual([
-        'tool1',
-        'tool2',
-      ]);
+      expect(toolConfig?.allowedFunctionNames).toStrictEqual([]);
+    });
+
+    it('should preserve omitted allowedFunctionNames as unrestricted', () => {
+      const results: HookExecutionResult[] = [
+        {
+          hookConfig: {
+            type: HookType.Command,
+            command: 'test-command',
+            timeout: 30000,
+          },
+          eventName: HookEventName.BeforeToolSelection,
+          success: true,
+          output: {
+            hookSpecificOutput: {
+              hookEventName: 'BeforeToolSelection',
+              toolConfig: {
+                mode: 'AUTO',
+              },
+            },
+          } as BeforeToolSelectionOutput,
+          duration: 100,
+        },
+      ];
+
+      const aggregated = aggregator.aggregateResults(
+        results,
+        HookEventName.BeforeToolSelection,
+      );
+
+      expect(aggregated.success).toBe(true);
+      const output = aggregated.finalOutput as BeforeToolSelectionOutput;
+      const toolConfig = output.hookSpecificOutput?.toolConfig;
+      expect(toolConfig?.mode).toBe('AUTO');
+      expect(toolConfig?.allowedFunctionNames).toBeUndefined();
+    });
+
+    it('preserves an explicit empty allowedFunctionNames list as most restrictive', () => {
+      const results: HookExecutionResult[] = [
+        {
+          hookConfig: {
+            type: HookType.Command,
+            command: 'test-command',
+            timeout: 30000,
+          },
+          eventName: HookEventName.BeforeToolSelection,
+          success: true,
+          output: {
+            hookSpecificOutput: {
+              hookEventName: 'BeforeToolSelection',
+              toolConfig: {
+                mode: 'ANY',
+                allowedFunctionNames: [],
+              },
+            },
+          } as BeforeToolSelectionOutput,
+          duration: 100,
+        },
+        {
+          hookConfig: {
+            type: HookType.Command,
+            command: 'test-command',
+            timeout: 30000,
+          },
+          eventName: HookEventName.BeforeToolSelection,
+          success: true,
+          output: {
+            hookSpecificOutput: {
+              hookEventName: 'BeforeToolSelection',
+              toolConfig: {
+                mode: 'ANY',
+                allowedFunctionNames: ['read_file'],
+              },
+            },
+          } as BeforeToolSelectionOutput,
+          duration: 100,
+        },
+      ];
+
+      const aggregated = aggregator.aggregateResults(
+        results,
+        HookEventName.BeforeToolSelection,
+      );
+
+      expect(aggregated.success).toBe(true);
+      const output = aggregated.finalOutput as BeforeToolSelectionOutput;
+      expect(
+        output.hookSpecificOutput?.toolConfig.allowedFunctionNames,
+      ).toStrictEqual([]);
     });
   });
 

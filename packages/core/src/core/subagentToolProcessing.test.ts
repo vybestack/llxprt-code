@@ -16,9 +16,12 @@ import {
   finalizeOutput,
   handleEmitValueCall,
   buildPartsFromCompletedCalls,
+  processFunctionCalls,
   type EmitValueContext,
   type BuildPartsContext,
+  type ProcessFunctionCallsContext,
 } from './subagentToolProcessing.js';
+import { setHookRestrictedAllowedToolsOnFunctionCall } from './hookToolRestrictions.js';
 import { SubagentTerminateMode, type OutputObject } from './subagentTypes.js';
 
 describe('subagentToolProcessing', () => {
@@ -440,7 +443,91 @@ describe('subagentToolProcessing', () => {
       );
       expect(parts.length).toBe(1);
       expect(parts[0]).toHaveProperty('functionResponse');
+
       expect(parts[0]).not.toHaveProperty('functionCall');
+    });
+  });
+
+  describe('processFunctionCalls hook restrictions', () => {
+    function makeProcessContext(): ProcessFunctionCallsContext {
+      return {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.ERROR,
+        },
+        subagentId: 'test-agent',
+        logger: new DebugLogger('test'),
+        toolExecutorContext: {
+          getToolRegistry: () => ({}) as never,
+          getEphemeralSettings: () => ({}),
+          getEphemeralSetting: () => undefined,
+          getExcludeTools: () => [],
+          getSessionId: () => 'test-session',
+          getTelemetryLogPromptsEnabled: () => false,
+          getOrCreateScheduler: vi.fn(),
+          disposeScheduler: vi.fn(),
+        },
+        config: {} as never,
+      };
+    }
+
+    it('does not execute hook-restricted provider-emitted function calls', async () => {
+      const allowedCall = {
+        id: 'allowed-call',
+        name: 'self_emitvalue',
+        args: {
+          emit_variable_name: 'result',
+          emit_variable_value: 'allowed',
+        },
+      };
+      const blockedCall = {
+        id: 'blocked-call',
+        name: 'run_shell_command',
+        args: { command: 'echo blocked' },
+      };
+      setHookRestrictedAllowedToolsOnFunctionCall(allowedCall, [
+        'self_emitvalue',
+      ]);
+      setHookRestrictedAllowedToolsOnFunctionCall(blockedCall, [
+        'self_emitvalue',
+      ]);
+
+      const ctx = makeProcessContext();
+      const content = await processFunctionCalls(
+        [allowedCall, blockedCall],
+        new AbortController(),
+        'prompt-1',
+        ctx,
+      );
+
+      expect(ctx.output.emitted_vars['result']).toBe('allowed');
+      expect(
+        ctx.toolExecutorContext.getOrCreateScheduler,
+      ).not.toHaveBeenCalled();
+      expect(JSON.stringify(content)).not.toContain('run_shell_command');
+      expect(JSON.stringify(content)).not.toContain('blocked-call');
+    });
+
+    it('returns empty content when every provider-emitted function call is hook-restricted', async () => {
+      const blockedCall = {
+        id: 'blocked-call',
+        name: 'run_shell_command',
+        args: { command: 'echo blocked' },
+      };
+      setHookRestrictedAllowedToolsOnFunctionCall(blockedCall, []);
+
+      const ctx = makeProcessContext();
+      const content = await processFunctionCalls(
+        [blockedCall],
+        new AbortController(),
+        'prompt-1',
+        ctx,
+      );
+
+      expect(content).toStrictEqual([]);
+      expect(
+        ctx.toolExecutorContext.getOrCreateScheduler,
+      ).not.toHaveBeenCalled();
     });
   });
 });
