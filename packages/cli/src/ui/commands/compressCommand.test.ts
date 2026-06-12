@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { AgentClientContract as AgentClient } from '@vybestack/llxprt-code-core';
+import type { AgentClientContract as AgentClient } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   CompressionStatus,
   PerformCompressionResult,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-core/core/turn.js';
 import { compressCommand } from './compressCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
