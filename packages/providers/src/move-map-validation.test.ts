@@ -69,6 +69,12 @@ const RENAMED_DESTINATION_OVERRIDES = new Map<string, string>([
     'packages/providers/src/providerInterface.contract.test.ts',
   ],
 ]);
+const AGENT_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
+  [
+    'packages/core/src/providers/openai/OpenAIStreamProcessor.stopReason.test.ts',
+    'packages/agents/src/core/MessageConverter.stopReason.test.ts',
+  ],
+]);
 const CORE_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   [
     'packages/core/src/providers/openai-vercel/toolIdUtils.ts',
@@ -166,6 +172,7 @@ describe('P09 Move-map completeness validation', () => {
       const source = inventoryLine.trim();
       const dest =
         CORE_OWNED_DESTINATION_OVERRIDES.get(source) ??
+        AGENT_OWNED_DESTINATION_OVERRIDES.get(source) ??
         RENAMED_DESTINATION_OVERRIDES.get(source) ??
         source.replace(
           'packages/core/src/providers/',

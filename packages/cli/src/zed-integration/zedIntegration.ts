@@ -28,8 +28,6 @@ import {
   getResponseTextFromParts,
   EmojiFilter,
   type FilterConfiguration,
-  type StreamEvent,
-  StreamEventType,
   todoEvents,
   type TodoUpdateEvent,
   type AnyToolInvocation,
@@ -44,6 +42,11 @@ import {
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
+import {
+  StreamEventType,
+  type StreamEvent,
+} from '@vybestack/llxprt-code-agents';
+
 import { Readable, Writable } from 'node:stream';
 import {
   type Content,

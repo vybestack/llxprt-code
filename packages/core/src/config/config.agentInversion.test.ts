@@ -264,4 +264,49 @@ describe('P01 construction inversion contracts', () => {
     );
     expect(registeredTools).toContainEqual(expect.any(RegisteredTaskTool));
   });
+
+  it('records disabled TaskTool diagnostic when registration is missing', async () => {
+    const host = {
+      getCoreTools: () => ['TaskTool'],
+      getExcludeTools: () => undefined,
+      getUseRipgrep: () => false,
+      getProfileManager: () => ({}) as never,
+      setProfileManager: vi.fn(),
+      getSubagentManager: () => ({}) as never,
+      setSubagentManager: vi.fn(),
+      getInteractiveSubagentSchedulerFactory: () => undefined,
+      getAsyncTaskManager: () => undefined,
+      getTaskToolRegistration: () => undefined,
+    };
+    const config = new Config(baseParams());
+    vi.spyOn(config, 'getPromptRegistry').mockReturnValue({
+      clear: vi.fn(),
+      registerPrompt: vi.fn(),
+      getPrompt: vi.fn(),
+      listPrompts: vi.fn(() => []),
+    } as never);
+    const messageBus = new MessageBus(config.getPolicyEngine(), false);
+
+    const { registry, allPotentialTools } = await createToolRegistry(
+      host,
+      config,
+      messageBus,
+    );
+
+    const taskRecord = allPotentialTools.find(
+      (tool) => tool.toolName === 'TaskTool',
+    );
+    expect(taskRecord).toStrictEqual(
+      expect.objectContaining({
+        toolClass: undefined,
+        toolName: 'TaskTool',
+        displayName: 'task',
+        isRegistered: false,
+        reason:
+          'TaskTool registration was not provided by the composition root',
+        args: [],
+      }),
+    );
+    expect(registry.getTool('task')).toBeUndefined();
+  });
 });

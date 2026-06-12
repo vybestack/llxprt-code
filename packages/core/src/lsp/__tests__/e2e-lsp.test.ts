@@ -79,16 +79,6 @@ vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
   };
 });
 
-vi.mock('../../core/client.js', () => ({
-  AgentClient: vi.fn().mockImplementation(() => ({
-    initialize: vi.fn().mockResolvedValue(undefined),
-    isInitialized: vi.fn().mockReturnValue(false),
-    getHistory: vi.fn().mockReturnValue([]),
-    getHistoryService: vi.fn().mockReturnValue(null),
-    dispose: vi.fn(),
-  })),
-}));
-
 vi.mock('../../telemetry/index.js', () => ({
   initializeTelemetry: vi.fn(),
   DEFAULT_TELEMETRY_TARGET: 'local',

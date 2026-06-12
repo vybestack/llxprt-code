@@ -10,6 +10,11 @@
  * other subagent modules depend on this, but it depends on none of them.
  *
  * Extracted from subagent.ts as part of Issue #1581.
+ *
+ * @plan PLAN-20260610-ISSUE1592.P03
+ * SubagentSchedulerFactory type relocated here from core/subagentScheduler.ts
+ * (which moves to agents) so that core config stayers can import it without
+ * depending on agents.
  */
 
 import type { FunctionDeclaration, Part } from '@google/genai';
@@ -20,6 +25,31 @@ import type {
 import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { Config } from '../config/config.js';
+import type { ToolCallRequestInfo } from './turn.js';
+import type {
+  CompletedToolCall,
+  OutputUpdateHandler,
+  ToolCallsUpdateHandler,
+} from './toolSchedulerContract.js';
+
+/**
+ * @plan PLAN-20260610-ISSUE1592.P03
+ * Relocated from core/subagentScheduler.ts (which moves to agents).
+ * Core config stayers import this type from here.
+ */
+export type SubagentSchedulerFactory = (args: {
+  schedulerConfig: Config;
+  onAllToolCallsComplete: (calls: CompletedToolCall[]) => Promise<void>;
+  outputUpdateHandler: OutputUpdateHandler;
+  onToolCallsUpdate?: ToolCallsUpdateHandler;
+}) => {
+  schedule(
+    request: ToolCallRequestInfo | ToolCallRequestInfo[],
+    signal: AbortSignal,
+  ): Promise<void> | void;
+  dispose?: () => void;
+};
 
 /**
  * Describes the possible termination modes for a subagent.

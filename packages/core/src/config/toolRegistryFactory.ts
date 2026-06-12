@@ -35,18 +35,16 @@ import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
 import { CodeSearchTool } from '../tools/codesearch.js';
 import { DirectWebFetchTool } from '../tools/direct-web-fetch.js';
-// @plan PLAN-20260610-ISSUE1592.P01
+// @plan PLAN-20260610-ISSUE1592.P03
 // @requirement REQ-INV-003
-// TaskTool is NOT imported directly here anymore.
-// The defaultTaskToolRegistration module is the ONLY core-config file importing ../tools/task.js.
-// It is DELETED in P03 when composition roots wire the registration from agents.
-import { defaultTaskToolRegistration } from './defaultTaskToolRegistration.js';
+// TaskTool registration is now injected by composition roots from the agents package.
+// The core-local default module was deleted in P03.
 import { ListSubagentsTool } from '../tools/list-subagents.js';
 import { CheckAsyncTasksTool } from '../tools/check-async-tasks.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentManager } from './subagentManager.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
+import type { SubagentSchedulerFactory } from '../core/subagentTypes.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import type { AnyDeclarativeTool } from '../tools/tools.js';
 
@@ -219,6 +217,46 @@ function ensureCoreToolIncluded(
   }
 }
 
+function pushMissingTaskToolRegistrationRecord(
+  allPotentialTools: ToolRecord[],
+  effectiveCoreTools: string[] | undefined,
+  profileManager: ProfileManager | undefined,
+  subagentManager: SubagentManager | undefined,
+): void {
+  const isEnabled =
+    effectiveCoreTools === undefined ||
+    effectiveCoreTools.some((tool) =>
+      matchesToolIdentifier(tool, TASK_TOOL_CLASS_NAME),
+    ) ||
+    effectiveCoreTools.some((tool) =>
+      matchesToolIdentifier(tool, TASK_TOOL_NAME),
+    );
+
+  if (!isEnabled) {
+    allPotentialTools.push({
+      toolClass: undefined,
+      toolName: TASK_TOOL_CLASS_NAME,
+      displayName: TASK_TOOL_NAME,
+      isRegistered: false,
+      reason: 'not included in coreTools configuration',
+      args: [],
+    });
+    return;
+  }
+
+  allPotentialTools.push({
+    toolClass: undefined,
+    toolName: TASK_TOOL_CLASS_NAME,
+    displayName: TASK_TOOL_NAME,
+    isRegistered: false,
+    reason:
+      profileManager === undefined || subagentManager === undefined
+        ? getTaskToolMissingReason(profileManager, subagentManager)
+        : 'TaskTool registration was not provided by the composition root',
+    args: [],
+  });
+}
+
 function registerTaskTool(
   registry: ToolRegistry,
   effectiveCoreTools: string[] | undefined,
@@ -346,41 +384,51 @@ function registerAgentTools(
   registry: ToolRegistry,
   effectiveCoreTools: string[] | undefined,
 ): void {
-  // @plan PLAN-20260610-ISSUE1592.P01
+  // @plan PLAN-20260610-ISSUE1592.P03
   // @requirement REQ-INV-003
-  // Resolve registration: injected > core-local default > absent
-  const registration =
-    host.getTaskToolRegistration() ?? defaultTaskToolRegistration;
+  // Resolve registration from the composition root. If absent, core records a
+  // disabled diagnostic entry without importing the agents-owned TaskTool class.
+  const registration = host.getTaskToolRegistration();
 
-  const taskToolArgs = {
-    profileManager,
-    subagentManager,
-    schedulerFactoryProvider: () =>
-      host.getInteractiveSubagentSchedulerFactory(),
-    getAsyncTaskManager: () => host.getAsyncTaskManager(),
-  };
-
-  if (profileManager !== undefined && subagentManager !== undefined) {
-    registerTaskTool(
-      registry,
-      effectiveCoreTools,
-      host.getExcludeTools(),
+  if (registration === undefined) {
+    pushMissingTaskToolRegistrationRecord(
       allPotentialTools,
-      registration,
-      config,
-      taskToolArgs,
+      effectiveCoreTools,
+      profileManager,
+      subagentManager,
     );
   } else {
-    // Missing-manager path: preserved exactly from today's behavior
-    const taskToolRecord: ToolRecord = {
-      toolClass: registration.toolClass,
-      toolName: TASK_TOOL_CLASS_NAME,
-      displayName: registration.staticName,
-      isRegistered: false,
-      reason: getTaskToolMissingReason(profileManager, subagentManager),
-      args: registration.buildArgs(config, taskToolArgs),
+    const taskToolArgs = {
+      profileManager,
+      subagentManager,
+      schedulerFactoryProvider: () =>
+        host.getInteractiveSubagentSchedulerFactory(),
+      getAsyncTaskManager: () => host.getAsyncTaskManager(),
     };
-    allPotentialTools.push(taskToolRecord);
+
+    if (profileManager !== undefined && subagentManager !== undefined) {
+      registerTaskTool(
+        registry,
+        effectiveCoreTools,
+        host.getExcludeTools(),
+        allPotentialTools,
+        registration,
+        config,
+        taskToolArgs,
+      );
+    } else {
+      // Missing-manager path: preserved exactly from today's behavior when the
+      // composition root provides the agents-owned TaskTool registration.
+      const taskToolRecord: ToolRecord = {
+        toolClass: registration.toolClass,
+        toolName: TASK_TOOL_CLASS_NAME,
+        displayName: registration.staticName,
+        isRegistered: false,
+        reason: getTaskToolMissingReason(profileManager, subagentManager),
+        args: registration.buildArgs(config, taskToolArgs),
+      };
+      allPotentialTools.push(taskToolRecord);
+    }
   }
 
   const listSubagentsArgs = {

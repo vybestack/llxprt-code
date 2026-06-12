@@ -10,7 +10,7 @@
  * @requirement REQ-INV-001
  *
  * Core-owned structural contract for the agent client surface.
- * Stays in core when AgentClient class moves to @vybestack/llxprt-code-agents.
+ * Stays in core when AgentClient class moves to the agents package.
  * Concrete AgentClient implements this interface.
  *
  * Member list derived mechanically from call sites:
@@ -37,7 +37,6 @@ import type { CompletedToolCall } from '../scheduler/types.js';
 import type {
   PerformCompressionResult,
   ServerGeminiStreamEvent,
-  Turn,
 } from './turn.js';
 import type { StreamEvent } from './chatSessionTypes.js';
 import type { Config } from '../config/config.js';
@@ -114,7 +113,7 @@ export interface AgentClientContract {
     turns?: number,
     isInvalidStreamRetry?: boolean,
     is413Retry?: boolean,
-  ): AsyncGenerator<ServerGeminiStreamEvent, Turn>;
+  ): AsyncGenerator<ServerGeminiStreamEvent, unknown>;
   getUserTier(): UserTierId | undefined;
   getCurrentSequenceModel(): string | null;
 }

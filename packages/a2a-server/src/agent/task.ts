@@ -7,7 +7,6 @@
 /* eslint-disable max-lines -- Existing A2A task orchestration file exceeds the project line limit; MCP extraction only updates import boundaries. */
 
 import {
-  AgentClient,
   GeminiEventType,
   ToolConfirmationOutcome,
   ApprovalMode,
@@ -31,6 +30,7 @@ import type {
   AnsiOutput,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
+import { AgentClient } from '@vybestack/llxprt-code-agents';
 import {
   getAllMCPServerStatuses,
   MCPServerStatus,

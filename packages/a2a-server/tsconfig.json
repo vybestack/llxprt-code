@@ -8,6 +8,8 @@
     "baseUrl": ".",
     "rootDir": "..",
     "paths": {
+      "@vybestack/llxprt-code-agents": ["../agents/index.ts"],
+      "@vybestack/llxprt-code-agents/*": ["../agents/src/*"],
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
@@ -18,12 +20,17 @@
     "index.ts",
     "src/**/*.ts",
     "src/**/*.json",
+    "../agents/index.ts",
+    "../agents/src/**/*.ts",
+    "../agents/src/**/*.json",
     "../mcp/index.ts",
     "../mcp/src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
+    "../agents/src/**/*.test.ts",
+    "../agents/src/**/*.spec.ts",
     "../mcp/src/**/*.test.ts",
     "../mcp/src/**/*.spec.ts"
   ],

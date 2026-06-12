@@ -14,12 +14,6 @@ const mockOpenDiff = vi.hoisted(() => vi.fn());
 
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 
-vi.mock('../core/client.js', () => ({
-  AgentClient: vi.fn().mockImplementation(() => ({
-    generateJson: mockGenerateJson,
-  })),
-}));
-
 vi.mock('../utils/editor.js', () => ({
   openDiff: mockOpenDiff,
 }));

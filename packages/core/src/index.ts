@@ -69,23 +69,26 @@ export { SubagentTerminateMode } from './core/subagentTypes.js';
 export * from './commands/extensions.js';
 export * from './commands/types.js';
 
-// Export Core Logic
-export * from './core/client.js';
+// Export Core Logic (contracts only — implementations moved to the agents package)
 export * from './core/clientContract.js';
 export * from './core/toolSchedulerContract.js';
+export type {
+  CancelledToolCall,
+  CompletedToolCall,
+  ExecutingToolCall,
+  ScheduledToolCall,
+  ValidatingToolCall,
+  WaitingToolCall,
+} from './scheduler/types.js';
 
-export * from './core/baseLlmClient.js';
 export * from './core/contentGenerator.js';
-export * from './core/chatSession.js';
 export * from './core/logger.js';
 export * from './core/prompts.js';
 export * from './core/tokenLimits.js';
 export * from './core/turn.js';
 export * from './core/geminiRequest.js';
-export * from './core/coreToolScheduler.js';
-export * from './core/nonInteractiveToolExecutor.js';
-export type { SubagentSchedulerFactory } from './core/subagentScheduler.js';
-export { buildContinuationDirective } from './core/compression/utils.js';
+export type { SubagentSchedulerFactory } from './core/subagentTypes.js';
+export { buildContinuationDirective } from './core/compression/continuationDirective.js';
 
 export * from './code_assist/codeAssist.js';
 export * from './code_assist/oauth2.js';
@@ -461,7 +464,6 @@ export * from './models/index.js';
 
 // --- Subagent Feature: PLAN-20250117-SUBAGENTCONFIG ---
 export { SubagentManager } from './config/subagentManager.js';
-export { SubagentOrchestrator } from './core/subagentOrchestrator.js';
 export type { SubagentConfig } from './config/types.js';
 // --- End of Subagent Feature ---
 export {

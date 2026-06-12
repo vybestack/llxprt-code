@@ -26,8 +26,7 @@ import {
 } from '../telemetry/index.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
-import { AgentClient } from '../core/client.js';
-import { CoreToolScheduler } from '../core/coreToolScheduler.js';
+import type { ToolSchedulerFactoryOptions } from '../core/toolSchedulerContract.js';
 import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
@@ -88,18 +87,28 @@ vi.mock('../core/contentGenerator.js', async (importOriginal) => {
   };
 });
 
-vi.mock('../core/client.js', () => ({
-  AgentClient: vi.fn().mockImplementation(() => ({
-    initialize: vi.fn().mockResolvedValue(undefined),
-    isInitialized: vi.fn().mockReturnValue(false),
-    getHistory: vi.fn().mockReturnValue([]),
-    getHistoryService: vi.fn().mockReturnValue(null),
-    setHistory: vi.fn(),
-    storeHistoryForLaterUse: vi.fn(),
-    dispose: vi.fn(),
-    stripThoughtsFromHistory: vi.fn(),
-  })),
+const AgentClient = vi.fn().mockImplementation(() => ({
+  initialize: vi.fn().mockResolvedValue(undefined),
+  isInitialized: vi.fn().mockReturnValue(false),
+  hasChatInitialized: vi.fn().mockReturnValue(false),
+  getHistory: vi.fn().mockReturnValue([]),
+  getHistoryService: vi.fn().mockReturnValue(null),
+  setHistory: vi.fn(),
+  storeHistoryServiceForReuse: vi.fn(),
+  storeHistoryForLaterUse: vi.fn(),
+  dispose: vi.fn(),
+  clearTools: vi.fn(),
+  stripThoughtsFromHistory: vi.fn(),
 }));
+
+class CoreToolScheduler {
+  constructor(_options: ToolSchedulerFactoryOptions) {}
+  schedule = vi.fn().mockResolvedValue(undefined);
+  cancelAll = vi.fn();
+  dispose = vi.fn();
+  setCallbacks = vi.fn();
+  handleConfirmationResponse = vi.fn().mockResolvedValue(undefined);
+}
 
 vi.mock('../telemetry/index.js', () => {
   // Create a mock StartSessionEvent class to avoid circular dependency issues
@@ -380,7 +389,7 @@ describe('Server Config (config.ts)', () => {
       (
         config as unknown as { agentClient: typeof mockExistingClient }
       ).agentClient = mockExistingClient;
-      (AgentClient as Mock).mockImplementation(() => mockNewClient);
+      AgentClient.mockImplementation(() => mockNewClient);
 
       await config.refreshAuth();
 
@@ -424,7 +433,7 @@ describe('Server Config (config.ts)', () => {
 
       // No existing client
       (config as unknown as { agentClient: null }).agentClient = null;
-      (AgentClient as Mock).mockImplementation(() => mockNewClient);
+      AgentClient.mockImplementation(() => mockNewClient);
 
       await config.refreshAuth();
 
@@ -477,7 +486,7 @@ describe('Server Config (config.ts)', () => {
       (
         config as unknown as { agentClient: typeof mockExistingClient }
       ).agentClient = mockExistingClient;
-      (AgentClient as Mock).mockImplementation(() => mockNewClient);
+      AgentClient.mockImplementation(() => mockNewClient);
 
       await config.refreshAuth();
 
@@ -527,7 +536,7 @@ describe('Server Config (config.ts)', () => {
       (
         config as unknown as { agentClient: typeof mockExistingClient }
       ).agentClient = mockExistingClient;
-      (AgentClient as Mock).mockImplementation(() => mockNewClient);
+      AgentClient.mockImplementation(() => mockNewClient);
 
       await config.refreshAuth();
 
@@ -579,7 +588,7 @@ describe('Server Config (config.ts)', () => {
         storeHistoryServiceForReuse: vi.fn(),
       };
 
-      (AgentClient as Mock).mockImplementation(() => mockNewClient);
+      AgentClient.mockImplementation(() => mockNewClient);
 
       // Call initializeContentGeneratorConfig - this should NOT trigger OAuth
       await config.initializeContentGeneratorConfig();
@@ -639,7 +648,7 @@ describe('Server Config (config.ts)', () => {
         storeHistoryServiceForReuse: vi.fn(),
       };
 
-      (AgentClient as Mock).mockImplementation(() => mockNewClient);
+      AgentClient.mockImplementation(() => mockNewClient);
 
       // Refresh auth
       await config.refreshAuth();
@@ -689,7 +698,7 @@ describe('Server Config (config.ts)', () => {
       (
         config as unknown as { agentClient: typeof mockExistingClient }
       ).agentClient = mockExistingClient;
-      (AgentClient as Mock).mockImplementation(() => mockNewClient);
+      AgentClient.mockImplementation(() => mockNewClient);
 
       await config.refreshAuth();
 

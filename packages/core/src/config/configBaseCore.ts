@@ -11,7 +11,7 @@
 
 import * as path from 'node:path';
 import type { EventEmitter } from 'node:events';
-import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
+import type { SubagentSchedulerFactory } from '../core/subagentTypes.js';
 import type {
   ContentGenerator,
   ContentGeneratorConfig,

@@ -10,7 +10,7 @@
  * @requirement REQ-INV-002
  *
  * Core-owned structural contract for the tool scheduler surface.
- * Stays in core when CoreToolScheduler class moves to @vybestack/llxprt-code-agents.
+ * Stays in core when CoreToolScheduler class moves to the agents package.
  * Concrete CoreToolScheduler implements this interface.
  *
  * Re-exports scheduler result types from scheduler/types.ts (which stays in core)

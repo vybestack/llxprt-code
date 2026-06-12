@@ -22,18 +22,14 @@ import type { ToolRegistry } from './tool-registry.js';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { AgentClient } from '../core/client.js';
+import type { AgentClientContract } from '../core/clientContract.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { ToolErrorType } from './tool-error.js';
-import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 
 const rootDir = path.resolve(os.tmpdir(), 'gemini-cli-test-root');
 
-// --- MOCKS ---
-vi.mock('../core/client.js');
-
-let mockAgentClientInstance: Mocked<AgentClient>;
+let mockAgentClientInstance: Mocked<AgentClientContract>;
 
 // Mock Config
 const fsService = new StandardFileSystemService();
@@ -87,12 +83,7 @@ describe('WriteFileTool', () => {
       fs.mkdirSync(rootDir, { recursive: true });
     }
 
-    // Setup AgentClient mock
-    mockAgentClientInstance = new (vi.mocked(AgentClient))(
-      mockConfig,
-      {} as AgentRuntimeState,
-    ) as Mocked<AgentClient>;
-    vi.mocked(AgentClient).mockImplementation(() => mockAgentClientInstance);
+    mockAgentClientInstance = {} as Mocked<AgentClientContract>;
 
     // Now that mockAgentClientInstance is initialized, set the mock implementation for getAgentClient
     mockConfigInternal.getAgentClient.mockReturnValue(mockAgentClientInstance);

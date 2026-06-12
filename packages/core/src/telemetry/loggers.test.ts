@@ -9,17 +9,9 @@
 import type {
   AnyToolInvocation,
   CompletedToolCall,
-  ContentGeneratorConfig,
   ErroredToolCall,
 } from '../index.js';
-import {
-  EditTool,
-  AgentClient,
-  ToolConfirmationOutcome,
-  ToolErrorType,
-  ToolRegistry,
-  createRuntimeStateFromConfig,
-} from '../index.js';
+import { EditTool, ToolConfirmationOutcome, ToolErrorType } from '../index.js';
 import { logs } from '@opentelemetry/api-logs';
 import { SemanticAttributes } from '@opentelemetry/semantic-conventions';
 import type { Config } from '../config/config.js';
@@ -391,47 +383,6 @@ describe('loggers', () => {
   });
 
   describe('logToolCall', () => {
-    const cfg1 = {
-      getSessionId: () => 'test-session-id',
-      getTargetDir: () => 'target-dir',
-      getAgentClient: () => mockAgentClient,
-    } as Config;
-    const cfg2 = {
-      getSessionId: () => 'test-session-id',
-      getTargetDir: () => 'target-dir',
-      getProxy: () => 'http://test.proxy.com:8080',
-      getContentGeneratorConfig: () =>
-        ({ model: 'test-model' }) as ContentGeneratorConfig,
-      getModel: () => 'test-model',
-      getEmbeddingModel: () => 'test-embedding-model',
-      getWorkingDir: () => 'test-working-dir',
-      getSandbox: () => true,
-      getCoreTools: () => ['ls', 'read-file'],
-      getApprovalMode: () => 'default',
-      getTelemetryLogPromptsEnabled: () => true,
-      getFileFilteringRespectGitIgnore: () => true,
-      getFileFilteringAllowBuildArtifacts: () => false,
-      getDebugMode: () => true,
-      getMcpServers: () => ({
-        'test-server': {
-          command: 'test-command',
-        },
-      }),
-      getQuestion: () => 'test-question',
-      getToolRegistry: () => new ToolRegistry(cfg1, cfg1.getMessageBus()),
-
-      getUserMemory: () => 'user-memory',
-      getComplexityAnalyzerSettings: () => ({
-        complexityThreshold: 0.5,
-        minTasksForSuggestion: 3,
-        suggestionCooldownMs: 300000,
-      }),
-    } as unknown as Config;
-
-    const runtimeState = createRuntimeStateFromConfig(cfg2, {
-      runtimeId: 'telemetry-runtime',
-    });
-    const mockAgentClient = new AgentClient(cfg2, runtimeState);
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',

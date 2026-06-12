@@ -21,9 +21,7 @@ import * as path from 'node:path';
  */
 
 import {
-  AgentClient,
   Config,
-  CoreToolScheduler,
   type KeyringTokenStore,
   MessageBus,
   type ProviderRuntimeContext,
@@ -31,6 +29,11 @@ import {
   type RuntimeAuthScopeFlushResult,
   SubagentManager,
 } from '@vybestack/llxprt-code-core';
+import {
+  AgentClient,
+  CoreToolScheduler,
+  createTaskToolRegistration,
+} from '@vybestack/llxprt-code-agents';
 import {
   clearSettingsProviderRuntimeContext,
   createSettingsProviderRuntimeContext,
@@ -238,6 +241,9 @@ function resolveRuntimeConfig(
       // @requirement REQ-INV-002
       toolSchedulerFactory: (schedulerOptions) =>
         new CoreToolScheduler(schedulerOptions),
+      // @plan PLAN-20260610-ISSUE1592.P03
+      // @requirement REQ-INV-003
+      taskToolRegistration: createTaskToolRegistration(),
     });
 
   const llxprtDir = path.join(os.homedir(), '.llxprt');

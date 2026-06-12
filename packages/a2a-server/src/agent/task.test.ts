@@ -13,9 +13,9 @@ import {
   GeminiEventType,
   ApprovalMode,
   ToolConfirmationOutcome,
-  type CoreToolScheduler,
   type ToolCall,
 } from '@vybestack/llxprt-code-core';
+import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
 import { createMockConfig } from '../utils/testing_utils.js';
 import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
 import type { Mock } from 'vitest';

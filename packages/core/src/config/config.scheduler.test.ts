@@ -4,30 +4,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeAll,
-  beforeEach,
-  afterEach,
-  vi,
-} from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Config } from './config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { clearAllSchedulers } from './schedulerSingleton.js';
-import { AgentClient } from '../core/client.js';
-import type { CoreToolScheduler as CoreToolSchedulerType } from '../core/coreToolScheduler.js';
+import type { ToolSchedulerFactoryOptions } from '../core/toolSchedulerContract.js';
 
-// Use dynamic import to avoid circular dependencies with Config
-let CoreToolScheduler: typeof CoreToolSchedulerType;
+const AgentClient = vi.fn().mockImplementation(() => ({
+  initialize: vi.fn().mockResolvedValue(undefined),
+  isInitialized: vi.fn().mockReturnValue(false),
+  hasChatInitialized: vi.fn().mockReturnValue(false),
+  getHistory: vi.fn().mockResolvedValue([]),
+  getHistoryService: vi.fn().mockReturnValue(null),
+  storeHistoryForLaterUse: vi.fn(),
+  storeHistoryServiceForReuse: vi.fn(),
+  dispose: vi.fn(),
+}));
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-beforeAll(async () => {
-  const schedulerModule = await import('../core/coreToolScheduler.js');
-  CoreToolScheduler = schedulerModule.CoreToolScheduler;
-});
+class CoreToolScheduler {
+  constructor(_options: ToolSchedulerFactoryOptions) {}
+  schedule = vi.fn().mockResolvedValue(undefined);
+  cancelAll = vi.fn();
+  dispose = vi.fn();
+  setCallbacks = vi.fn();
+  handleConfirmationResponse = vi.fn().mockResolvedValue(undefined);
+}
 
 describe('Config - CoreToolScheduler Singleton', () => {
   let config: Config;

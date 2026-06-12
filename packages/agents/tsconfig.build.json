@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "paths": {
+      "@vybestack/llxprt-code-auth": ["../auth/dist/index.d.ts"],
+      "@vybestack/llxprt-code-auth/*": ["../auth/dist/src/*"],
+      "@vybestack/llxprt-code-core": ["../core/dist/index.d.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/dist/src/*"],
+      "@vybestack/llxprt-code-settings": ["../settings/dist/index.d.ts"],
+      "@vybestack/llxprt-code-settings/*": ["../settings/dist/src/*"]
+    }
+  },
+  "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/test-utils/**",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
+}

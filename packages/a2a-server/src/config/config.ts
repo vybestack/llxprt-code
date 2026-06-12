@@ -12,9 +12,7 @@ import * as dotenv from 'dotenv';
 import type { TelemetryTarget } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import {
-  AgentClient,
   Config,
-  CoreToolScheduler,
   type ConfigParameters,
   FileDiscoveryService,
   ApprovalMode,
@@ -25,6 +23,11 @@ import {
   DEFAULT_GEMINI_MODEL,
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
+import {
+  AgentClient,
+  CoreToolScheduler,
+  createTaskToolRegistration,
+} from '@vybestack/llxprt-code-agents';
 
 import { logger } from '../utils/logger.js';
 import type { Settings } from './settings.js';
@@ -103,6 +106,9 @@ function createBaseConfigParameters(
     // @plan PLAN-20260610-ISSUE1592.P01
     // @requirement REQ-INV-002
     toolSchedulerFactory: (options) => new CoreToolScheduler(options),
+    // @plan PLAN-20260610-ISSUE1592.P03
+    // @requirement REQ-INV-003
+    taskToolRegistration: createTaskToolRegistration(),
   };
 }
 

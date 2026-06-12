@@ -10,11 +10,12 @@ import * as os from 'os';
 import * as http from 'http';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
+import { MessageBus } from '@vybestack/llxprt-code-core';
 import {
   AgentClient,
   CoreToolScheduler,
-  MessageBus,
-} from '@vybestack/llxprt-code-core';
+  createTaskToolRegistration,
+} from '@vybestack/llxprt-code-agents';
 
 /**
  * Creates a temporary directory for tests
@@ -58,6 +59,10 @@ function attachTestAgentFactories(config: Config): void {
     toolSchedulerFactory: {
       value: (options: ConstructorParameters<typeof CoreToolScheduler>[0]) =>
         new CoreToolScheduler(options),
+      configurable: true,
+    },
+    taskToolRegistration: {
+      value: createTaskToolRegistration(),
       configurable: true,
     },
   });

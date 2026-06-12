@@ -23,7 +23,7 @@ import type React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Part } from '@google/genai';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
-import type { AgentClient } from '@vybestack/llxprt-code-core';
+import type { AgentClientContract as AgentClient } from '@vybestack/llxprt-code-core';
 import type {
   TrackedToolCall,
   TrackedCompletedToolCall,

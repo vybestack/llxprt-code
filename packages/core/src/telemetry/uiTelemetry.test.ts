@@ -18,7 +18,7 @@ import type {
   CompletedToolCall,
   ErroredToolCall,
   SuccessfulToolCall,
-} from '../core/coreToolScheduler.js';
+} from '../scheduler/types.js';
 import { ToolErrorType } from '../tools/tool-error.js';
 import { ToolConfirmationOutcome } from '../tools/tools.js';
 import { MockTool } from '../test-utils/tools.js';

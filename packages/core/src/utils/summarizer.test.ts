@@ -6,10 +6,8 @@
 
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AgentClient } from '../core/client.js';
-import { Config } from '../config/config.js';
+import type { AgentClientContract } from '../core/clientContract.js';
 import { debugLogger } from './debugLogger.js';
-import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import {
   summarizeToolOutput,
   llmSummarizer,
@@ -17,37 +15,14 @@ import {
 } from './summarizer.js';
 import type { ToolResult } from '../tools/tools.js';
 
-// Mock AgentClient and Config constructor
-vi.mock('../core/client.js');
-vi.mock('../config/config.js');
-
 describe('summarizers', () => {
-  let mockAgentClient: AgentClient;
-  let MockConfig: Mock;
+  let mockAgentClient: AgentClientContract;
   const abortSignal = new AbortController().signal;
 
   beforeEach(() => {
-    MockConfig = vi.mocked(Config);
-    const mockConfigInstance = new MockConfig(
-      'test-api-key',
-      'gemini-pro',
-      false,
-      '.',
-      false,
-      undefined,
-      false,
-      undefined,
-      undefined,
-      undefined,
-    );
-
-    const runtimeState = createAgentRuntimeState({
-      runtimeId: 'summarizer-test-runtime',
-      provider: 'gemini',
-      model: 'gemini-pro',
-    });
-    mockAgentClient = new AgentClient(mockConfigInstance, runtimeState);
-    (mockAgentClient.generateContent as Mock) = vi.fn();
+    mockAgentClient = {
+      generateContent: vi.fn(),
+    } as unknown as AgentClientContract;
 
     vi.spyOn(debugLogger, 'error').mockImplementation(() => {});
   });

@@ -6,9 +6,7 @@
 
 import process from 'node:process';
 import {
-  AgentClient,
   Config,
-  CoreToolScheduler,
   normalizeShellReplacement,
   type ApprovalMode,
   type OutputFormat,
@@ -17,6 +15,11 @@ import {
   type PolicyEngineConfig,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
+import {
+  AgentClient,
+  CoreToolScheduler,
+  createTaskToolRegistration,
+} from '@vybestack/llxprt-code-agents';
 import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
 import { loadSettings } from './settings.js';
 import { appEvents } from '../utils/events.js';
@@ -327,6 +330,9 @@ export function buildConfig(input: ConfigBuildInput): Config {
     // @plan PLAN-20260610-ISSUE1592.P01
     // @requirement REQ-INV-002
     toolSchedulerFactory: (options) => new CoreToolScheduler(options),
+    // @plan PLAN-20260610-ISSUE1592.P03
+    // @requirement REQ-INV-003
+    taskToolRegistration: createTaskToolRegistration(),
   });
 }
 

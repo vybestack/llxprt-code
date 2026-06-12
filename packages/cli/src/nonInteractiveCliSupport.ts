@@ -1,7 +1,6 @@
 import {
   type Config,
   type ToolCallRequestInfo,
-  executeToolCall,
   GeminiEventType,
   JsonStreamEventType,
   type MessageBus,
@@ -16,6 +15,7 @@ import {
   type SessionMetrics,
 } from '@vybestack/llxprt-code-core';
 import type { Part } from '@google/genai';
+import { executeToolCall } from '@vybestack/llxprt-code-agents';
 
 type RuntimeToolCallRequest = Omit<ToolCallRequestInfo, 'args' | 'callId'> & {
   args: unknown;

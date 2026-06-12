@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { AgentClient } from '@vybestack/llxprt-code-core';
+import type { AgentClientContract as AgentClient } from '@vybestack/llxprt-code-core';
 import {
   CompressionStatus,
   PerformCompressionResult,

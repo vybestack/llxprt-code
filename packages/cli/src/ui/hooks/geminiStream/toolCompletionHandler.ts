@@ -92,7 +92,9 @@ export function buildToolResponses(
   geminiTools: Array<TrackedCompletedToolCall | TrackedCancelledToolCall>,
 ): Part[] {
   return geminiTools.flatMap((toolCall) =>
-    toolCall.response.responseParts.filter((part) => !isFunctionCallPart(part)),
+    toolCall.response.responseParts.filter(
+      (part: Part) => !isFunctionCallPart(part),
+    ),
   );
 }
 

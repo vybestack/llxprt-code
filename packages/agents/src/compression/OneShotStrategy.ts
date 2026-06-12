@@ -1,0 +1,304 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @plan PLAN-20260211-HIGHDENSITY.P05
+ * @requirement REQ-HD-001.3
+ * @pseudocode strategy-interface.md lines 90-94
+ *
+ * One-shot compression strategy: summarizes the entire history except
+ * the last N messages in a single LLM call. The preserved tail is
+ * determined by the preserveThreshold ephemeral setting.
+ *
+ * Unlike middle-out (which preserves both top and bottom), one-shot
+ * preserves ONLY the recent tail. The summary replaces everything
+ * above the preserved messages.
+ */
+
+import { readFileSync } from 'node:fs';
+import type {
+  IContent,
+  UsageStats,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type {
+  CompressionContext,
+  CompressionResult,
+  CompressionResultMetadata,
+  CompressionStrategy,
+  StrategyTrigger,
+} from '@vybestack/llxprt-code-core/core/compression/types.js';
+import {
+  CompressionExecutionError,
+  EmptySummaryError,
+  PromptResolutionError,
+  isTransientCompressionError,
+} from '@vybestack/llxprt-code-core/core/compression/types.js';
+import {
+  adjustForToolCallBoundary,
+  aggregateTextFromBlocks,
+  buildTriggerInstruction,
+  COMPRESSION_SECURITY_PREAMBLE,
+  runVerificationPass,
+  sanitizeHistoryForCompression,
+} from './utils.js';
+import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
+import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
+
+const MINIMUM_COMPRESS_MESSAGES = 4;
+
+// ---------------------------------------------------------------------------
+// OneShotStrategy
+// ---------------------------------------------------------------------------
+
+export class OneShotStrategy implements CompressionStrategy {
+  readonly name = 'one-shot' as const;
+  readonly requiresLLM = true;
+  /** @plan PLAN-20260211-HIGHDENSITY.P03 @requirement REQ-HD-001.3 */
+  readonly trigger: StrategyTrigger = {
+    mode: 'threshold',
+    defaultThreshold: 0.85,
+  };
+
+  async compress(context: CompressionContext): Promise<CompressionResult> {
+    const { history } = context;
+
+    if (history.length === 0) {
+      return this.noCompressionResult(history);
+    }
+
+    // Compute the split: everything above the preserved tail gets compressed
+    const { toCompress, toKeep } = this.computeSplit(context);
+
+    if (toCompress.length < MINIMUM_COMPRESS_MESSAGES) {
+      return this.noCompressionResult(history);
+    }
+
+    // Resolve the compression prompt
+    const prompt = this.resolvePrompt(context);
+
+    // Resolve the provider (compression profile may be undefined)
+    const compressionProfile =
+      context.runtimeContext.ephemerals.compressionProfile();
+    const provider = context.resolveProvider(compressionProfile);
+
+    // Build the LLM request
+    // @plan PLAN-20260211-HIGHDENSITY.P23
+    // @requirement REQ-HD-011.3, REQ-HD-012.2
+    const triggerInstruction = buildTriggerInstruction(toCompress);
+    const compressionRequest: IContent[] = [
+      COMPRESSION_SECURITY_PREAMBLE,
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: prompt }],
+      },
+      ...sanitizeHistoryForCompression(toCompress),
+      ...this.buildContextInjections(context),
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: triggerInstruction }],
+      },
+    ];
+
+    // Call the provider and aggregate the streamed response
+    const { text: summary, usage: capturedUsage } = await this.callProvider(
+      provider,
+      compressionRequest,
+      context.config,
+    );
+
+    if (!summary.trim()) {
+      throw new EmptySummaryError('one-shot');
+    }
+
+    // Optional verification pass — gated by compressionVerification flag (default off)
+    let finalSummary = summary;
+    if (context.compressionVerification === true) {
+      finalSummary = await runVerificationPass(
+        provider,
+        summary,
+        context.config,
+      );
+    }
+
+    // Assemble result: summary + continuation directive + preserved tail
+    const summaryEntry: IContent = {
+      speaker: 'human' as const,
+      blocks: [{ type: 'text' as const, text: finalSummary }],
+      ...(capturedUsage ? { metadata: { usage: capturedUsage } } : {}),
+    };
+
+    const newHistory: IContent[] = [
+      summaryEntry,
+      {
+        speaker: 'ai' as const,
+        blocks: [
+          {
+            type: 'text' as const,
+            text: buildContinuationDirective(context.activeTodos),
+          },
+        ],
+      },
+      ...toKeep,
+    ];
+
+    const metadata: CompressionResultMetadata = {
+      originalMessageCount: history.length,
+      compressedMessageCount: newHistory.length,
+      strategyUsed: 'one-shot',
+      llmCallMade: true,
+      topPreserved: 0,
+      bottomPreserved: toKeep.length,
+      middleCompressed: toCompress.length,
+      ...(capturedUsage ? { usage: capturedUsage } : {}),
+    };
+
+    return { newHistory, metadata };
+  }
+
+  // -------------------------------------------------------------------------
+  // Private helpers
+  // -------------------------------------------------------------------------
+
+  private computeSplit(context: CompressionContext): {
+    toCompress: IContent[];
+    toKeep: IContent[];
+  } {
+    const history = context.history as IContent[];
+    const preserveThreshold =
+      context.runtimeContext.ephemerals.preserveThreshold();
+
+    let splitIndex = Math.floor(history.length * (1 - preserveThreshold));
+
+    if (splitIndex < MINIMUM_COMPRESS_MESSAGES) {
+      return { toCompress: [], toKeep: [...history] };
+    }
+
+    splitIndex = adjustForToolCallBoundary(history, splitIndex);
+
+    if (splitIndex < MINIMUM_COMPRESS_MESSAGES) {
+      return { toCompress: [], toKeep: [...history] };
+    }
+
+    return {
+      toCompress: history.slice(0, splitIndex),
+      toKeep: history.slice(splitIndex),
+    };
+  }
+
+  private resolvePrompt(context: CompressionContext): string {
+    const resolved = context.promptResolver.resolveFile(
+      context.promptBaseDir,
+      'compression.md',
+      context.promptContext,
+    );
+
+    if (resolved.found && resolved.path) {
+      try {
+        return readFileSync(resolved.path, 'utf-8');
+      } catch {
+        // Fall through to hardcoded default
+      }
+    }
+
+    const fallback = getCompressionPrompt();
+    if (!fallback) {
+      throw new PromptResolutionError('compression.md');
+    }
+    return fallback;
+  }
+
+  private async callProvider(
+    provider: IProvider,
+    request: IContent[],
+    config?: CompressionContext['config'],
+  ): Promise<{ text: string; usage?: UsageStats }> {
+    try {
+      const stream = provider.generateChatCompletion({
+        contents: request,
+        tools: undefined,
+        config,
+      });
+
+      let summary = '';
+      let lastBlockWasNonText = false;
+      let capturedUsage: UsageStats | undefined;
+
+      for await (const chunk of stream) {
+        const result = aggregateTextFromBlocks(
+          chunk.blocks,
+          summary,
+          lastBlockWasNonText,
+        );
+        summary = result.text;
+        lastBlockWasNonText = result.lastBlockWasNonText;
+        if (chunk.metadata?.usage) {
+          capturedUsage = chunk.metadata.usage;
+        }
+      }
+
+      return { text: summary, usage: capturedUsage };
+    } catch (error) {
+      throw new CompressionExecutionError(
+        'one-shot',
+        `LLM provider call failed: ${error instanceof Error ? error.message : String(error)}`,
+        { isTransient: isTransientCompressionError(error) },
+      );
+    }
+  }
+
+  private noCompressionResult(history: readonly IContent[]): CompressionResult {
+    return {
+      newHistory: [...history],
+      metadata: {
+        originalMessageCount: history.length,
+        compressedMessageCount: history.length,
+        strategyUsed: 'one-shot',
+        llmCallMade: false,
+        topPreserved: 0,
+        bottomPreserved: 0,
+        middleCompressed: 0,
+      },
+    };
+  }
+
+  /**
+   * @plan PLAN-20260211-HIGHDENSITY.P23
+   * @requirement REQ-HD-011.3, REQ-HD-012.2
+   */
+  private buildContextInjections(context: CompressionContext): IContent[] {
+    const injections: IContent[] = [];
+
+    if (context.activeTodos && context.activeTodos.trim().length > 0) {
+      injections.push({
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: `The following are the current active todo/task items. When summarizing, preserve context about why each task exists and what has been tried:
+
+${context.activeTodos}`,
+          },
+        ],
+      });
+    }
+
+    if (context.transcriptPath) {
+      injections.push({
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: `Note: The full pre-compression transcript is available at: ${context.transcriptPath}`,
+          },
+        ],
+      });
+    }
+
+    return injections;
+  }
+}
