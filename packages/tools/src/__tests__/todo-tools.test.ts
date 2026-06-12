@@ -24,6 +24,7 @@ import { describe, it, expect } from 'vitest';
 import { TodoPauseTool, TodoReadTool, TodoWriteTool } from '../index.js';
 import type { ITodoService, TodoStore } from '../interfaces/index.js';
 import type { ToolContext } from '../types/tool-context.js';
+import { todoEvents, type TodoUpdateEvent } from '../tools/todo-events.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
 /**
@@ -217,6 +218,57 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
       );
       expect(contexts.length).toBeGreaterThanOrEqual(4);
       expect(activeTodo).toBe('active');
+    });
+
+    it('emits interactive todo updates when a service context tracker is present', async () => {
+      let todos: Array<Record<string, unknown>> = [];
+      const events: TodoUpdateEvent[] = [];
+      const store: TodoStore = {
+        getTodos: () => todos as never[],
+        setTodos: (newTodos) => {
+          todos = [...newTodos];
+        },
+      };
+      const service: ITodoService = {
+        getTodoStore: () => store,
+        getReminderService: () => ({
+          shouldGenerateReminder: () => false,
+        }),
+        getContextTracker: () => ({
+          setActiveTodo: () => {},
+        }),
+        getDefaultAgentId: () => 'default-agent',
+      };
+      const listener = (event: TodoUpdateEvent) => {
+        events.push(event);
+      };
+      todoEvents.onTodoUpdated(listener);
+
+      try {
+        const writeTool = new TodoWriteTool(service);
+        writeTool.context = {
+          sessionId: 'session-42',
+          agentId: 'agent-7',
+          interactiveMode: true,
+        };
+
+        await executeToolForBehavioralAssertion(writeTool, {
+          todos: [
+            { id: 'visible', content: 'Visible in panel', status: 'pending' },
+          ],
+        });
+      } finally {
+        todoEvents.offTodoUpdated(listener);
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        sessionId: 'session-42',
+        agentId: 'agent-7',
+        todos: [
+          { id: 'visible', content: 'Visible in panel', status: 'pending' },
+        ],
+      });
     });
   });
 

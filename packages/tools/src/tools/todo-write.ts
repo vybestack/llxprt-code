@@ -130,7 +130,6 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     todos: Todo[],
     sessionId: string,
     agentId: string | undefined,
-    rawTodos: Todo[],
   ): void {
     const scopedAgentId = agentId ?? DEFAULT_AGENT_ID;
     const inProgressTodo = todos.find((todo) => todo.status === 'in_progress');
@@ -139,11 +138,18 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
       scopedAgentId,
     );
     contextTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
+    this.emitTodoUpdated(todos, sessionId, scopedAgentId);
+  }
 
+  private emitTodoUpdated(
+    todos: Todo[],
+    sessionId: string,
+    agentId: string | undefined,
+  ): void {
     const event: TodoUpdateEvent = {
       sessionId,
-      agentId: scopedAgentId,
-      todos: rawTodos,
+      agentId,
+      todos,
       timestamp: new Date(),
     };
     todoEvents.emitTodoUpdated(event);
@@ -242,13 +248,9 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
           (todo) => todo.status === 'in_progress',
         );
         serviceTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
+        this.emitTodoUpdated(todos, sessionId, scopedAgentId);
       } else {
-        this.trackInteractiveUpdate(
-          todos,
-          sessionId,
-          scopedAgentId,
-          params.todos,
-        );
+        this.trackInteractiveUpdate(todos, sessionId, scopedAgentId);
       }
     }
 
