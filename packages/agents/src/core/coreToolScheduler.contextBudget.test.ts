@@ -9,18 +9,16 @@ import {
   CoreToolScheduler,
   type CompletedToolCall,
 } from './coreToolScheduler.js';
-import type {
-  ToolInvocation,
-  ToolResult,
-  Config,
-  ToolRegistry,
-} from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-  ApprovalMode,
-} from '@vybestack/llxprt-code-core';
+  type ToolInvocation,
+  type ToolResult,
+} from '@vybestack/llxprt-code-core/tools/tools.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 

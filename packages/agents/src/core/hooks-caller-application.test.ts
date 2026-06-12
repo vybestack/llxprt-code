@@ -30,15 +30,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ToolCall, SuccessfulToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
-  type ToolResult,
   Kind,
-  ApprovalMode,
-  type Config,
-} from '@vybestack/llxprt-code-core';
+  type ToolResult,
+} from '@vybestack/llxprt-code-core/tools/tools.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
   triggerBeforeToolHook,

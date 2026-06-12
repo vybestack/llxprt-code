@@ -10,7 +10,7 @@
 | 02 | P02 | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Package scaffold + CI/release wiring complete; see .completed/P02.md |
 | 02a | P02A | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Package scaffold verification approved; see reviews/p02a-package-scaffold-review.md and .completed/P02A.md |
 | 03 | P03 | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Code move per move-map complete; see .completed/P03.md |
-| 03a | P03A | [ ] | - | - | - | [ ] | Verification (behavior-preservation audit) |
+| 03a | P03A | [x] | 2026-06-11 | 2026-06-11 | PASS | [x] | Code move verification complete; see .completed/P03A.md |
 | 04 | P04 | [ ] | - | - | - | [ ] | Consumer migration (CLI/a2a/bundle) |
 | 04a | P04A | [ ] | - | - | - | [ ] | Verification + regression checklist |
 | 05 | P05 | [ ] | - | - | - | [ ] | Cleanup, docs, final battery |

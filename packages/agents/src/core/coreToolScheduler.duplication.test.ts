@@ -5,15 +5,16 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import type { ToolResult, Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core/tools/tool-confirmation-types.js';
 import {
-  ToolConfirmationOutcome,
-  type ToolInvocation,
   BaseDeclarativeTool,
   BaseToolInvocation,
-  ApprovalMode,
   Kind,
-} from '@vybestack/llxprt-code-core';
+  type ToolInvocation,
+  type ToolResult,
+} from '@vybestack/llxprt-code-core/tools/tools.js';
 import {
   CoreToolScheduler,
   type CompletedToolCall,

@@ -6,12 +6,12 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CoreToolScheduler } from './coreToolScheduler.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   ApprovalMode,
-  Config,
   type ConfigParameters,
-  ToolRegistry,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
 import { IdeClient } from '@vybestack/llxprt-code-core/ide/ide-client.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {

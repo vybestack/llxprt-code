@@ -17,21 +17,21 @@ import type {
 } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { convertToFunctionResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import type {
-  ToolCallConfirmationDetails,
-  ToolConfirmationPayload,
-  ToolInvocation,
-  ToolResult,
-  Config,
-  ToolRegistry,
-} from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import {
+  ToolConfirmationOutcome,
+  type ToolConfirmationPayload,
+} from '@vybestack/llxprt-code-core/tools/tool-confirmation-types.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
-  ToolConfirmationOutcome,
   Kind,
-  ApprovalMode,
-} from '@vybestack/llxprt-code-core';
+  type ToolCallConfirmationDetails,
+  type ToolInvocation,
+  type ToolResult,
+} from '@vybestack/llxprt-code-core/tools/tools.js';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { MockModifiableTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
