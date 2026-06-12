@@ -19,7 +19,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { AgentClient } from '../client.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  Config,
+  type ConfigParameters,
+} from '@vybestack/llxprt-code-core/config/config.js';
 import {
   createAgentRuntimeState,
   updateAgentRuntimeState,
@@ -34,7 +37,7 @@ function createTestConfig(): Config {
   const config = new Config({
     sessionId: 'test-session-id',
     targetDir: '/tmp/test-dir',
-  } as unknown as import('../../config/config.js').ConfigParameters);
+  } as unknown as ConfigParameters);
   // Note: We don't set provider/model/auth here because runtime state should override them
   return config;
 }

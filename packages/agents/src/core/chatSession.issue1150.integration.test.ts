@@ -18,6 +18,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type {
   IContent,
+  ThinkingBlock,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Part, GenerateContentResponse } from '@google/genai';

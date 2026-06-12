@@ -119,6 +119,7 @@ function sendContinuationPrompt(
   onDebugMessage: (message: string) => void,
   setContinuationState: React.Dispatch<React.SetStateAction<ContinuationState>>,
   continuationInProgressRef: React.MutableRefObject<boolean>,
+  abortControllerRef: React.MutableRefObject<AbortController | undefined>,
 ): void {
   if (continuationInProgressRef.current) {
     return;
@@ -133,26 +134,40 @@ function sendContinuationPrompt(
     lastPromptTime: new Date(),
   }));
 
-  (
-    agentClient.sendMessageStream as unknown as (
-      message: string,
-      options?: { ephemeral: boolean },
-    ) => Promise<void>
-  )(continuationPrompt, { ephemeral: true })
-    .catch((error: unknown) => {
-      onDebugMessage(
-        `[TodoContinuation] Error sending continuation prompt: ${error instanceof Error ? error.message : String(error)}`,
+  const abortController = new AbortController();
+  abortControllerRef.current = abortController;
+  const promptId = `todo-continuation-${Date.now().toString(16)}`;
+
+  void (async () => {
+    try {
+      const stream = agentClient.sendMessageStream(
+        continuationPrompt,
+        abortController.signal,
+        promptId,
       );
-      setContinuationState((prev) => ({
-        isActive: false,
-        attemptCount: prev.attemptCount,
-        lastPromptTime: prev.lastPromptTime,
-        taskDescription: prev.taskDescription,
-      }));
-    })
-    .finally(() => {
+      for await (const _event of stream) {
+        // Continuation prompts are submitted for side effects; the main stream
+        // UI owns rendering for user-initiated turns.
+      }
+    } catch (error: unknown) {
+      if (!abortController.signal.aborted) {
+        onDebugMessage(
+          `[TodoContinuation] Error sending continuation prompt: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        setContinuationState((prev) => ({
+          isActive: false,
+          attemptCount: prev.attemptCount,
+          lastPromptTime: prev.lastPromptTime,
+          taskDescription: prev.taskDescription,
+        }));
+      }
+    } finally {
       continuationInProgressRef.current = false;
-    });
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = undefined;
+      }
+    }
+  })();
 }
 
 function processContinuation(
@@ -162,6 +177,7 @@ function processContinuation(
   isResponding: boolean,
   continuationState: ContinuationState,
   continuationInProgressRef: React.MutableRefObject<boolean>,
+  abortControllerRef: React.MutableRefObject<AbortController | undefined>,
   agentClient: AgentClientContract,
   onDebugMessage: (message: string) => void,
   setContinuationState: React.Dispatch<React.SetStateAction<ContinuationState>>,
@@ -200,6 +216,7 @@ function processContinuation(
     onDebugMessage,
     setContinuationState,
     continuationInProgressRef,
+    abortControllerRef,
   );
 }
 
@@ -232,6 +249,7 @@ export const useTodoContinuation = (
         isResponding,
         continuationState,
         continuationInProgressRef,
+        abortControllerRef,
         agentClient,
         onDebugMessage,
         setContinuationState,

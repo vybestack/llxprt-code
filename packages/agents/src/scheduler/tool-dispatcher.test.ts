@@ -21,8 +21,8 @@ import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.j
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type { ContextAwareTool } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/index.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core/index.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -374,6 +374,3 @@ describe('ToolDispatcher', () => {
     });
   });
 });
-
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';

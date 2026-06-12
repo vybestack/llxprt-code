@@ -28,6 +28,7 @@ import {
   flushRuntimeAuthScope,
   type RuntimeAuthScopeFlushResult,
   SubagentManager,
+  type ConfigParameters,
 } from '@vybestack/llxprt-code-core';
 import {
   AgentClient,
@@ -51,11 +52,18 @@ import stripJsonComments from 'strip-json-comments';
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const DEFAULT_DEBUG_MODE = false;
 
-/**
- * @fix issue1317
- * Load user settings from disk so isolated runtimes can resolve oauthEnabledProviders.
- * Follows the same pattern as resolveLoadedSettings() in providerManagerInstance.ts.
- */
+function attachAgentRuntimeFactories(config: Config): void {
+  const mutableConfig = config as unknown as Pick<
+    ConfigParameters,
+    'agentClientFactory' | 'toolSchedulerFactory' | 'taskToolRegistration'
+  >;
+  mutableConfig.agentClientFactory ??= (config, runtimeState) =>
+    new AgentClient(config, runtimeState);
+  mutableConfig.toolSchedulerFactory ??= (schedulerOptions) =>
+    new CoreToolScheduler(schedulerOptions);
+  mutableConfig.taskToolRegistration ??= createTaskToolRegistration();
+}
+
 function loadSettingsForIsolatedRuntime(): LoadedSettings | undefined {
   try {
     if (fs.existsSync(USER_SETTINGS_PATH)) {
@@ -245,6 +253,8 @@ function resolveRuntimeConfig(
       // @requirement REQ-INV-003
       taskToolRegistration: createTaskToolRegistration(),
     });
+
+  attachAgentRuntimeFactories(config);
 
   const llxprtDir = path.join(os.homedir(), '.llxprt');
   const resolvedProfileManager =

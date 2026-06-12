@@ -82,6 +82,9 @@ describe('Config Regression Guards', () => {
 
   describe('GeminiRequest', () => {
     it('should not import Config for runtime state', () => {
+      // This regression guard intentionally reads the core source file. The
+      // agents package is enforcing a cross-package runtime-state boundary here,
+      // not importing or executing core internals in production code.
       const filePath = resolve(
         __dirname,
         '../../../../core/src/core/geminiRequest.ts',

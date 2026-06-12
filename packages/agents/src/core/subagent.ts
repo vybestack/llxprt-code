@@ -218,9 +218,14 @@ export class SubAgentScope {
     const environmentContextLoader =
       overrides.environmentContextLoader ?? defaultEnvironmentContextLoader;
 
+    const runtimeContext: AgentRuntimeContext = Object.freeze({
+      ...runtimeBundle.runtimeContext,
+      tools: toolsView,
+    });
+
     return new SubAgentScope(
       name,
-      runtimeBundle.runtimeContext,
+      runtimeContext,
       modelConfig,
       runConfig,
       promptConfig,

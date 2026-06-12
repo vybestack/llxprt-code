@@ -223,7 +223,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 111 | `packages/core/src/providers/openai/OpenAIResponseParser.test.ts` | `packages/providers/src/openai/OpenAIResponseParser.test.ts` | Rule 4 | B |
 | 112 | `packages/core/src/providers/openai/OpenAIStreamProcessor.ts` | `packages/providers/src/openai/OpenAIStreamProcessor.ts` | Rule 4 | B |
 | 113 | `packages/core/src/providers/openai/OpenAIStreamProcessorState.ts` | `packages/providers/src/openai/OpenAIStreamProcessorState.ts` | Rule 4 | B |
-| 114 | `packages/core/src/providers/openai/OpenAIStreamProcessor.stopReason.test.ts` | `packages/providers/src/openai/OpenAIStreamProcessor.stopReason.test.ts` | Rule 4 | B |
+| 114 | `packages/core/src/providers/openai/OpenAIStreamProcessor.stopReason.test.ts` | `packages/agents/src/core/MessageConverter.stopReason.test.ts` | Agent-owned override | B |
 | 115 | `packages/core/src/providers/openai/ConversationCache.ts` | `packages/providers/src/openai/ConversationCache.ts` | Rule 4 | B |
 | 116 | `packages/core/src/providers/openai/ConversationCache.accumTokens.test.ts` | `packages/providers/src/openai/ConversationCache.accumTokens.test.ts` | Rule 4 | B |
 | 117 | `packages/core/src/providers/openai/IChatGenerateParams.ts` | `packages/providers/src/openai/IChatGenerateParams.ts` | Rule 4 | B |

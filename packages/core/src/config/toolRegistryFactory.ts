@@ -232,6 +232,7 @@ function ensureCoreToolIncluded(
 function pushMissingTaskToolRegistrationRecord(
   allPotentialTools: ToolRecord[],
   effectiveCoreTools: string[] | undefined,
+  excludeTools: string[] | undefined,
   profileManager: ProfileManager | undefined,
   subagentManager: SubagentManager | undefined,
 ): void {
@@ -243,14 +244,21 @@ function pushMissingTaskToolRegistrationRecord(
     effectiveCoreTools.some((tool) =>
       matchesToolIdentifier(tool, TASK_TOOL_NAME),
     );
+  const isExcluded = (excludeTools ?? []).some(
+    (tool) =>
+      matchesToolIdentifier(tool, TASK_TOOL_CLASS_NAME) ||
+      matchesToolIdentifier(tool, TASK_TOOL_NAME),
+  );
 
-  if (!isEnabled) {
+  if (!isEnabled || isExcluded) {
     allPotentialTools.push({
       toolClass: undefined,
       toolName: TASK_TOOL_CLASS_NAME,
       displayName: TASK_TOOL_NAME,
       isRegistered: false,
-      reason: 'not included in coreTools configuration',
+      reason: isExcluded
+        ? 'excluded by excludeTools setting'
+        : 'not included in coreTools configuration',
       args: [],
     });
     return;
@@ -452,6 +460,7 @@ function registerAgentTools(
     pushMissingTaskToolRegistrationRecord(
       allPotentialTools,
       effectiveCoreTools,
+      host.getExcludeTools(),
       profileManager,
       subagentManager,
     );
@@ -477,12 +486,19 @@ function registerAgentTools(
     } else {
       // Missing-manager path: preserved exactly from today's behavior when the
       // composition root provides the agents-owned TaskTool registration.
+      const isExcluded = (host.getExcludeTools() ?? []).some(
+        (tool) =>
+          matchesToolIdentifier(tool, TASK_TOOL_CLASS_NAME) ||
+          matchesToolIdentifier(tool, TASK_TOOL_NAME),
+      );
       const taskToolRecord: ToolRecord = {
         toolClass: registration.toolClass,
         toolName: TASK_TOOL_CLASS_NAME,
         displayName: registration.staticName,
         isRegistered: false,
-        reason: getTaskToolMissingReason(profileManager, subagentManager),
+        reason: isExcluded
+          ? 'excluded by excludeTools setting'
+          : getTaskToolMissingReason(profileManager, subagentManager),
         args: registration.buildArgs(config, taskToolArgs),
       };
       allPotentialTools.push(taskToolRecord);

@@ -264,8 +264,21 @@ describe('Server Config (config.ts)', () => {
   };
 
   beforeEach(() => {
-    // Reset mocks if necessary
     vi.clearAllMocks();
+    AgentClient.mockReset();
+    AgentClient.mockImplementation(() => ({
+      initialize: vi.fn().mockResolvedValue(undefined),
+      isInitialized: vi.fn().mockReturnValue(false),
+      hasChatInitialized: vi.fn().mockReturnValue(false),
+      getHistory: vi.fn().mockReturnValue([]),
+      getHistoryService: vi.fn().mockReturnValue(null),
+      setHistory: vi.fn(),
+      storeHistoryServiceForReuse: vi.fn(),
+      storeHistoryForLaterUse: vi.fn(),
+      dispose: vi.fn(),
+      clearTools: vi.fn(),
+      stripThoughtsFromHistory: vi.fn(),
+    }));
   });
 
   describe('initialize', () => {

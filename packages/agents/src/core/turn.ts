@@ -9,6 +9,7 @@
  * Protocol types (GeminiEventType, ServerGeminiStreamEvent, etc.) remain in core.
  */
 
+import { createHash } from 'node:crypto';
 import type {
   GenerateContentResponse,
   FinishReason,
@@ -61,6 +62,44 @@ export const TURN_STREAM_IDLE_TIMEOUT_MS = DEFAULT_STREAM_IDLE_TIMEOUT_MS;
 
 const TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE =
   'Stream idle timeout: no response received within the allowed time.';
+
+function createSafeJsonReplacer(): (key: string, value: unknown) => unknown {
+  const seen = new WeakSet<object>();
+  return (_key: string, value: unknown): unknown => {
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+
+    if (typeof value !== 'object' || value === null) {
+      return value;
+    }
+
+    if (seen.has(value)) {
+      return '[Circular]';
+    }
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    const record = value as Record<string, unknown>;
+    return Object.keys(record)
+      .sort()
+      .reduce<Record<string, unknown>>((sorted, key) => {
+        sorted[key] = record[key];
+        return sorted;
+      }, {});
+  };
+}
+
+function safeJsonStringify(value: unknown, space?: number): string {
+  try {
+    return JSON.stringify(value, createSafeJsonReplacer(), space);
+  } catch (error) {
+    return `[Unserializable request: ${getErrorMessage(error)}]`;
+  }
+}
 
 // Re-export types that consumers need from this module
 export {
@@ -253,8 +292,8 @@ export class Turn {
 
     // Handle function calls (requesting tool execution)
     const functionCalls = getFunctionCalls(resp) ?? [];
-    for (const fnCall of functionCalls) {
-      const event = this.handlePendingFunctionCall(fnCall);
+    for (const [functionCallIndex, fnCall] of functionCalls.entries()) {
+      const event = this.handlePendingFunctionCall(fnCall, functionCallIndex);
       if (event) {
         yield event;
       }
@@ -457,7 +496,7 @@ export class Turn {
   ): AsyncGenerator<ServerGeminiStreamEvent> {
     const idleFlag: { timedOut: boolean } = { timedOut: false };
     this.logger.debug('Turn.run called', {
-      req: JSON.stringify(req, null, 2),
+      req: safeJsonStringify(req, 2),
       typeofReq: typeof req,
       isArray: Array.isArray(req),
     });
@@ -510,10 +549,11 @@ export class Turn {
 
   private handlePendingFunctionCall(
     fnCall: FunctionCall,
+    functionCallIndex: number,
   ): ServerGeminiStreamEvent | null {
     const callId =
       fnCall.id ??
-      `${fnCall.name}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      this.createSyntheticFunctionCallId(fnCall, functionCallIndex);
 
     // REAL FIX: Turn.ts also gets fragmented data - handle properly
     let name = fnCall.name;
@@ -547,6 +587,25 @@ export class Turn {
 
     // Yield a request for the tool call, not the pending/confirming status
     return { type: GeminiEventType.ToolCallRequest, value: toolCallRequest };
+  }
+
+  private createSyntheticFunctionCallId(
+    fnCall: FunctionCall,
+    functionCallIndex: number,
+  ): string {
+    const payload = safeJsonStringify({
+      promptId: this.prompt_id,
+      agentId: this.agentId,
+      functionCallIndex,
+      name: fnCall.name ?? '',
+      args: fnCall.args ?? {},
+    });
+    const digest = createHash('sha256')
+      .update(payload)
+      .digest('hex')
+      .slice(0, 16);
+    const name = normalizeToolName(fnCall.name ?? '') ?? 'undefined_tool_name';
+    return `${name}-${functionCallIndex}-${digest}`;
   }
 
   getDebugResponses(): GenerateContentResponse[] {

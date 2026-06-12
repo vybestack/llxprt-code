@@ -139,10 +139,7 @@ function attachTestAgentFactories(config: Config): void {
  */
 export async function initializeTestConfig(config: Config): Promise<void> {
   attachTestAgentFactories(config);
-  const sessionMessageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
-  );
+  const sessionMessageBus = getTestRuntimeMessageBus(config);
   await (
     config as Config & {
       initialize(dependencies?: { messageBus?: MessageBusType }): Promise<void>;

@@ -146,7 +146,7 @@ const coverageReporter = isWindows
 export default defineConfig({
   plugins: [workspaceAliasPlugin],
   test: {
-    passWithNoTests: true,
+    passWithNoTests: false,
     reporters: ['default', 'junit'],
     testTimeout: 30000,
     teardownTimeout: 120000,
@@ -163,7 +163,6 @@ export default defineConfig({
         ],
       },
     },
-    dangerouslyIgnoreUnhandledErrors: isWindows,
     pool: shouldUseForkPool ? 'forks' : undefined,
     poolOptions: shouldUseForkPool
       ? {

@@ -17,11 +17,14 @@ import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useTodoContinuation } from './useTodoContinuation.js';
 import { useTodoContext } from '../contexts/TodoContext.js';
+import { FinishReason } from '@google/genai';
 import {
   Config,
   ApprovalMode,
   type Todo,
   type AgentClientContract,
+  GeminiEventType,
+  type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import { AgentClient as AgentClientClass } from '@vybestack/llxprt-code-agents';
 
@@ -53,10 +56,16 @@ interface MockConfig {
 }
 
 interface MockAgentClient {
-  sendMessageStream: Mock<
-    (message: string, options?: { ephemeral: boolean }) => Promise<void>
-  >;
+  sendMessageStream: Mock<AgentClientContract['sendMessageStream']>;
 }
+
+const createEmptyStream =
+  async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+    yield {
+      type: GeminiEventType.Finished,
+      value: { reason: FinishReason.STOP },
+    };
+  };
 
 describe('useTodoContinuation - Behavioral Tests', () => {
   let mockConfig: MockConfig;
@@ -88,7 +97,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
     // Mock AgentClient
     mockAgentClient = {
-      sendMessageStream: vi.fn().mockResolvedValue(undefined),
+      sendMessageStream: vi.fn(() => createEmptyStream()),
     };
     (
       AgentClientClass as unknown as MockedFunction<() => AgentClientContract>
@@ -142,7 +151,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       // Then: Continuation should be triggered
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Complete feature implementation'),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
 
@@ -276,7 +286,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       // Then: Should send prompt with in_progress task (most relevant)
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Fix critical bug'),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
 
@@ -308,7 +319,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         expect.stringMatching(/(continue|proceed).*without.*confirmation/i),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
 
@@ -336,7 +348,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       // Then: Should send with ephemeral flag
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.any(String),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
   });
@@ -378,7 +391,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('New active task'),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
 
@@ -654,7 +668,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       // Then: Should select in_progress task
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Active task'),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
   });
@@ -749,7 +764,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Active task'),
-        { ephemeral: true },
+        expect.any(AbortSignal),
+        expect.stringMatching(/^todo-continuation-/),
       );
     });
 

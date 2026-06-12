@@ -385,7 +385,6 @@ describe('loggers', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
-      getAgentClient: () => mockAgentClient,
       getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,

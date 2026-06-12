@@ -272,6 +272,7 @@ describe('P09 Move-map completeness validation', () => {
     for (const row of parsedRows) {
       const expectedDest =
         CORE_OWNED_DESTINATION_OVERRIDES.get(row.sourcePath) ??
+        AGENT_OWNED_DESTINATION_OVERRIDES.get(row.sourcePath) ??
         RENAMED_DESTINATION_OVERRIDES.get(row.sourcePath) ??
         row.sourcePath.replace(
           'packages/core/src/providers/',

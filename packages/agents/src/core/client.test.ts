@@ -146,14 +146,14 @@ vi.mock('./turn', async (importOriginal) => {
 });
 
 vi.mock('@vybestack/llxprt-code-core/config/config.js');
-vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure', () => ({
+vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting', () => ({
+vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 vi.mock(
-  '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities',
+  '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
     getResponseText: (result: GenerateContentResponse) =>
       result.candidates?.[0]?.content?.parts

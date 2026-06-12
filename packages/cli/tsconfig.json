@@ -12,7 +12,6 @@
     "paths": {
       "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
       "@vybestack/llxprt-code-agents": ["../agents/index.ts"],
-      "@vybestack/llxprt-code-agents/*": ["../agents/src/*"],
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-ide-integration": ["../ide-integration/index.ts"],
@@ -32,9 +31,6 @@
     "src/**/*.d.ts",
     "src/**/*.json",
     "./package.json",
-    "../agents/index.ts",
-    "../agents/src/**/*.ts",
-    "../agents/src/**/*.json",
     "../providers/index.ts",
     "../providers/src/**/*.ts",
     "../providers/src/**/*.json",
@@ -51,8 +47,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "../agents/src/**/*.test.ts",
-    "../agents/src/**/*.spec.ts",
     "../providers/src/**/*.test.ts",
     "../providers/src/**/*.spec.ts",
     "../auth/src/**/*.test.ts",
