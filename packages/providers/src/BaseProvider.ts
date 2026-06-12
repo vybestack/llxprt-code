@@ -904,14 +904,14 @@ export abstract class BaseProvider implements IProvider {
    * Get API key from SettingsService if available
    */
   protected async getApiKeyFromSettings(): Promise<string | undefined> {
-    return this.getProviderSetting('apiKey');
+    return this.getProviderSetting('auth-key');
   }
 
   /**
    * Set API key in SettingsService if available
    */
   protected async setApiKeyInSettings(apiKey: string): Promise<void> {
-    await this.setProviderSetting('apiKey', apiKey);
+    await this.setProviderSetting('auth-key', apiKey);
   }
 
   /**
@@ -956,11 +956,19 @@ export abstract class BaseProvider implements IProvider {
       // Extract model parameters from settings, excluding standard fields
       const {
         enabled: _enabled,
-        apiKey: _apiKey,
+        'auth-key': _authKey,
+        'auth-keyfile': _authKeyfile,
         'base-url': _baseUrl,
         model: _model,
         maxTokens,
         temperature,
+        // Defensive: strip legacy sensitive aliases that should never reach
+        // the model params pass-through, even if present in imported/malformed
+        // provider settings data.
+        apiKey: _legacyApiKey,
+        apiKeyfile: _legacyApiKeyfile,
+        'api-key': _legacyApiKeyDash,
+        'api-keyfile': _legacyApiKeyfileDash,
         ...additionalSettings
       } = settings;
 
@@ -1060,7 +1068,8 @@ function isFalsyLikeValue(value: unknown): boolean {
 
 export interface ProviderSettings {
   enabled: boolean;
-  apiKey?: string;
+  'auth-key'?: string;
+  'auth-keyfile'?: string;
   baseUrl?: string;
   model?: string;
   maxTokens?: number;

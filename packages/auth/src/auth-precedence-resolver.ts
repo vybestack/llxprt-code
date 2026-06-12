@@ -211,11 +211,11 @@ export class AuthPrecedenceResolver {
         ? settingsService.getProviderSettings(providerKey)
         : undefined;
     const providerAuthKey = this.normalizeAuthValue(
-      providerSettings?.['auth-key'] ?? providerSettings?.apiKey,
+      providerSettings?.['auth-key'],
     );
     if (providerAuthKey !== undefined) return providerAuthKey;
     const providerAuthKeyfile = this.normalizeAuthValue(
-      providerSettings?.['auth-keyfile'] ?? providerSettings?.apiKeyfile,
+      providerSettings?.['auth-keyfile'],
     );
     return this.resolveKeyFileAuth(providerAuthKeyfile);
   }

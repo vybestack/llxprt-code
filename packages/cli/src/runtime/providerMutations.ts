@@ -268,9 +268,7 @@ export async function updateActiveProviderApiKey(
   });
 
   if (!trimmed) {
-    settingsService.setProviderSetting(providerName, 'apiKey', undefined);
     settingsService.setProviderSetting(providerName, 'auth-key', undefined);
-    settingsService.setProviderSetting(providerName, 'apiKeyfile', undefined);
     settingsService.setProviderSetting(providerName, 'auth-keyfile', undefined);
     config.setEphemeralSetting('auth-key', undefined);
     config.setEphemeralSetting('auth-keyfile', undefined);
@@ -293,8 +291,7 @@ export async function updateActiveProviderApiKey(
     };
   }
 
-  settingsService.setProviderSetting(providerName, 'apiKey', trimmed);
-  settingsService.setProviderSetting(providerName, 'apiKeyfile', undefined);
+  settingsService.setProviderSetting(providerName, 'auth-key', trimmed);
   settingsService.setProviderSetting(providerName, 'auth-keyfile', undefined);
   config.setEphemeralSetting('auth-key', trimmed);
   config.setEphemeralSetting('auth-keyfile', undefined);

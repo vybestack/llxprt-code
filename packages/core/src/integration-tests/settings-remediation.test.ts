@@ -96,11 +96,11 @@ describe('Settings Remediation Integration', () => {
      * @and No file operations occur
      */
     it('should update provider settings through integration', () => {
-      settingsService.setProviderSetting('openai', 'apiKey', 'test-key-123');
+      settingsService.setProviderSetting('openai', 'auth-key', 'test-key-123');
       settingsService.setProviderSetting('openai', 'model', 'gpt-4');
 
       const providerSettings = settingsService.getProviderSettings('openai');
-      expect(providerSettings.apiKey).toBe('test-key-123');
+      expect(providerSettings['auth-key']).toBe('test-key-123');
       expect(providerSettings.model).toBe('gpt-4');
     });
 
@@ -421,8 +421,8 @@ describe('Settings Remediation Integration', () => {
       config.setEphemeralSetting('model', 'gpt-4');
       config.setEphemeralSetting('temperature', 0.7);
 
-      settingsService.setProviderSetting('openai', 'apiKey', 'key-1');
-      settingsService.setProviderSetting('anthropic', 'apiKey', 'key-2');
+      settingsService.setProviderSetting('openai', 'auth-key', 'key-1');
+      settingsService.setProviderSetting('anthropic', 'auth-key', 'key-2');
 
       config.setEphemeralSetting('model', 'gpt-4-turbo');
 
@@ -435,8 +435,8 @@ describe('Settings Remediation Integration', () => {
 
       expect(allGlobalSettings.model).toBe('gpt-4-turbo');
       expect(allGlobalSettings.temperature).toBe(0.7);
-      expect(openaiSettings.apiKey).toBe('key-1');
-      expect(anthropicSettings.apiKey).toBe('key-2');
+      expect(openaiSettings['auth-key']).toBe('key-1');
+      expect(anthropicSettings['auth-key']).toBe('key-2');
 
       expect(events).toHaveLength(6);
       expect(events[0].type).toBe('global-change');
@@ -462,13 +462,13 @@ describe('Settings Remediation Integration', () => {
      */
     it('should support legacy promise-based interface', async () => {
       config.setEphemeralSetting('model', 'test-model');
-      settingsService.setProviderSetting('openai', 'apiKey', 'test-key');
+      settingsService.setProviderSetting('openai', 'auth-key', 'test-key');
 
       const globalSettings = await settingsService.getSettings();
       const providerSettings = await settingsService.getSettings('openai');
 
-      expect(globalSettings.providers.openai.apiKey).toBe('test-key');
-      expect(providerSettings.apiKey).toBe('test-key');
+      expect(globalSettings.providers.openai['auth-key']).toBe('test-key');
+      expect(providerSettings['auth-key']).toBe('test-key');
 
       await settingsService.updateSettings({ model: 'updated-model' });
       await settingsService.updateSettings('openai', { model: 'gpt-4' });
@@ -487,18 +487,20 @@ describe('Settings Remediation Integration', () => {
     it('should provide comprehensive diagnostics', async () => {
       config.setEphemeralSetting('model', 'test-model');
       config.setEphemeralSetting('temperature', 0.8);
-      settingsService.setProviderSetting('openai', 'apiKey', 'test-key');
+      settingsService.setProviderSetting('openai', 'auth-key', 'test-key');
       settingsService.setProviderSetting('openai', 'model', 'gpt-4');
       settingsService.set('activeProvider', 'openai');
 
       const diagnostics = await settingsService.getDiagnosticsData();
 
       expect(diagnostics.provider).toBe('openai');
-      expect(diagnostics.providerSettings.apiKey).toBe('test-key');
+      expect(diagnostics.providerSettings['auth-key']).toBe('test-key');
       expect(diagnostics.providerSettings.model).toBe('gpt-4');
       expect(diagnostics.ephemeralSettings.model).toBe('test-model');
       expect(diagnostics.ephemeralSettings.temperature).toBe(0.8);
-      expect(diagnostics.allSettings.providers.openai.apiKey).toBe('test-key');
+      expect(diagnostics.allSettings.providers.openai['auth-key']).toBe(
+        'test-key',
+      );
     });
   });
 });

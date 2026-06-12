@@ -810,16 +810,11 @@ export class ChatSession {
   ): void {
     this.copyProfileSettingAliases(profileSettings, provider, ephemerals, [
       { sourceKey: 'auth-key', globalKey: 'auth-key', providerKey: 'auth-key' },
-      { sourceKey: 'auth-key', providerKey: 'apiKey' },
-      { sourceKey: 'apiKey', globalKey: 'auth-key', providerKey: 'apiKey' },
-      { sourceKey: 'apiKey', providerKey: 'auth-key' },
       {
         sourceKey: 'auth-keyfile',
         globalKey: 'auth-keyfile',
         providerKey: 'auth-keyfile',
       },
-      { sourceKey: 'auth-keyfile', providerKey: 'apiKeyfile' },
-      { sourceKey: 'apiKeyfile', providerKey: 'apiKeyfile' },
       {
         sourceKey: 'auth-key-name',
         globalKey: 'auth-key-name',
@@ -962,7 +957,6 @@ export class ChatSession {
     const providerSettings = profileSettings.getProviderSettings(provider);
     const directAuth = this.getStringSettingFromValues([
       providerSettings['auth-key'],
-      providerSettings.apiKey,
       profileSettings.get('auth-key'),
     ]);
     if (directAuth) {
@@ -982,7 +976,6 @@ export class ChatSession {
 
     const keyFile = this.getStringSettingFromValues([
       providerSettings['auth-keyfile'],
-      providerSettings.apiKeyfile,
       profileSettings.get('auth-keyfile'),
     ]);
     if (keyFile) {

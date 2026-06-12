@@ -440,8 +440,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       const reservedKeys = new Set([
         'enabled',
+        'auth-key',
         'apiKey',
         'api-key',
+        'auth-keyfile',
         'apiKeyfile',
         'api-keyfile',
         'base-url',

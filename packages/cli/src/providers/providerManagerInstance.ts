@@ -441,9 +441,9 @@ function resolveOpenaiSettings(
   const openaiSettings = openaiProviderSettings?.openai as
     | Record<string, unknown>
     | undefined;
-  const openaiProviderApiKey =
-    (openaiSettings?.apiKey as string | undefined) ??
-    (openaiSettings?.['auth-key'] as string | undefined);
+  const openaiProviderApiKey = openaiSettings?.['auth-key'] as
+    | string
+    | undefined;
 
   const openaiApiKey = resolveOpenaiApiKey(
     ephemeralAuthKey,

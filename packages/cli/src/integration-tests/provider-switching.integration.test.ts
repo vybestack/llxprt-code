@@ -104,25 +104,25 @@ describe('Runtime Provider Switching Integration', () => {
     const setResult = await setProviderApiKey('key-for-provider-a');
     expect(setResult.success).toBe(true);
     expect(
-      config.getSettingsService().getProviderSettings('providerA').apiKey,
+      config.getSettingsService().getProviderSettings('providerA')['auth-key'],
     ).toBe('key-for-provider-a');
     expect(config.getEphemeralSetting('auth-key')).toBe('key-for-provider-a');
 
     await switchActiveProvider('providerB');
     expect(
-      config.getSettingsService().getProviderSettings('providerA').apiKey,
+      config.getSettingsService().getProviderSettings('providerA')['auth-key'],
     ).toBeUndefined();
     expect(config.getEphemeralSetting('auth-key')).toBeUndefined();
 
     const resultB = await setProviderApiKey('key-for-provider-b');
     expect(resultB.success).toBe(true);
     expect(
-      config.getSettingsService().getProviderSettings('providerB').apiKey,
+      config.getSettingsService().getProviderSettings('providerB')['auth-key'],
     ).toBe('key-for-provider-b');
 
     await switchActiveProvider('providerA');
     expect(
-      config.getSettingsService().getProviderSettings('providerB').apiKey,
+      config.getSettingsService().getProviderSettings('providerB')['auth-key'],
     ).toBeUndefined();
   });
 

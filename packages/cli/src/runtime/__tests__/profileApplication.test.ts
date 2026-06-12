@@ -1181,11 +1181,11 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
 
     await applyProfileWithGuards(profile);
 
-    expect(settingsServiceStub.getProviderSettings('anthropic')['apiKey']).toBe(
-      'keyfile-api-key',
-    );
     expect(
-      settingsServiceStub.getProviderSettings('anthropic')['apiKeyfile'],
+      settingsServiceStub.getProviderSettings('anthropic')['auth-key'],
+    ).toBe('keyfile-api-key');
+    expect(
+      settingsServiceStub.getProviderSettings('anthropic')['auth-keyfile'],
     ).toBeDefined();
   });
 

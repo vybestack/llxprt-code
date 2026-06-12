@@ -474,7 +474,7 @@ export class SubagentOrchestrator {
     ]);
     if (authKey) {
       service.set('auth-key', authKey);
-      service.set(`providers.${provider}.apiKey`, authKey);
+      service.set(`providers.${provider}.auth-key`, authKey);
     }
     const authKeyName = this.getStringSetting(profile.ephemeralSettings, [
       'auth-key-name',
@@ -489,16 +489,16 @@ export class SubagentOrchestrator {
     if (authKeyfile) {
       const expandedKeyfile = authKeyfile.replace(/^~(?=$|[\\/])/, homedir());
       service.set('auth-keyfile', expandedKeyfile);
-      service.set(`providers.${provider}.apiKeyfile`, expandedKeyfile);
-      const apiKey = service.get(`providers.${provider}.apiKey`);
+      service.set(`providers.${provider}.auth-keyfile`, expandedKeyfile);
+      const authKey = service.get(`providers.${provider}.auth-key`);
       const shouldLoadApiKeyfile =
         // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        apiKey === undefined ||
-        apiKey === null ||
-        apiKey === '' ||
-        apiKey === false ||
-        apiKey === 0 ||
-        (typeof apiKey === 'number' && Number.isNaN(apiKey));
+        authKey === undefined ||
+        authKey === null ||
+        authKey === '' ||
+        authKey === false ||
+        authKey === 0 ||
+        (typeof authKey === 'number' && Number.isNaN(authKey));
       if (shouldLoadApiKeyfile) {
         this.tryLoadApiKeyFromKeyfile(provider, expandedKeyfile, service);
       }
@@ -515,7 +515,7 @@ export class SubagentOrchestrator {
       if (fs.existsSync(resolvedPath)) {
         const content = fs.readFileSync(resolvedPath, 'utf8').trim();
         if (content !== '') {
-          service.set(`providers.${provider}.apiKey`, content);
+          service.set(`providers.${provider}.auth-key`, content);
         }
       }
     } catch (error) {

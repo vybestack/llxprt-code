@@ -474,9 +474,9 @@ function createProviderSetters(
     settingsService.setProviderSetting(targetProviderName, key, value);
   };
   return {
-    setProviderApiKey: (apiKey) => setProviderSetting('apiKey', apiKey),
+    setProviderApiKey: (apiKey) => setProviderSetting('auth-key', apiKey),
     setProviderApiKeyfile: (filePath) =>
-      setProviderSetting('apiKeyfile', filePath),
+      setProviderSetting('auth-keyfile', filePath),
     setProviderBaseUrl: (baseUrl) => setProviderSetting('base-url', baseUrl),
   };
 }
@@ -494,7 +494,14 @@ function sanitizeSensitiveModelParams(sanitizedProfile: Profile): void {
   );
   propagateModelParamToEphemeral(sanitizedProfile, ['base-url'], 'base-url');
   const sanitizedModelParams = getProfileModelParams(sanitizedProfile);
-  for (const key of ['apiKey', 'api-key', 'apiKeyfile', 'api-keyfile']) {
+  for (const key of [
+    'auth-key',
+    'apiKey',
+    'api-key',
+    'auth-keyfile',
+    'apiKeyfile',
+    'api-keyfile',
+  ]) {
     if (key in sanitizedModelParams) {
       delete sanitizedModelParams[key as keyof ModelParams];
     }
