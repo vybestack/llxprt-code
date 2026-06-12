@@ -21,11 +21,19 @@ import {
   type FunctionCall,
 } from '@google/genai';
 import {
-  getResponseText,
-  getFunctionCalls,
+  getFunctionCallsFromParts,
   analyzeResponseOutcome,
   type ResponseOutcome,
 } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import { isThoughtPart } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import {
+  filterHookRestrictedParts,
+  filterHookRestrictedFunctionCalls,
+  getHookRestrictedAllowedTools,
+  getHookRestrictedFunctionCallsFromParts,
+  getHookRestrictedAllowedToolsForFunctionCall,
+  mergeHookRestrictedFunctionCalls,
+} from './hookToolRestrictions.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import {
   getErrorMessage,
@@ -251,18 +259,46 @@ export class Turn {
     });
   }
 
+  private pushFilteredDebugResponse(
+    resp: GenerateContentResponse,
+    allowedParts: Part[],
+  ): void {
+    this.debugResponses.push(
+      resp.candidates === undefined
+        ? resp
+        : ({
+            ...resp,
+            candidates: resp.candidates.map((candidate, index) =>
+              index === 0
+                ? {
+                    ...candidate,
+                    content:
+                      candidate.content === undefined
+                        ? undefined
+                        : { ...candidate.content, parts: allowedParts },
+                  }
+                : candidate,
+            ),
+          } as GenerateContentResponse),
+    );
+  }
+
   private *processStreamChunk(
     resp: GenerateContentResponse,
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
   ): Generator<ServerGeminiStreamEvent> {
-    this.debugResponses.push(resp);
-
     // Check ALL parts for thinking, not just parts[0]
     // Bug fix: Previously only checked parts[0], missing thoughts in other positions
     // @plan PLAN-20251202-THINKING.P16
     const allParts = resp.candidates?.[0]?.content?.parts ?? [];
-    for (const part of allParts) {
+    const allowedParts = filterHookRestrictedParts(
+      allParts,
+      getHookRestrictedAllowedTools(resp),
+    );
+    this.pushFilteredDebugResponse(resp, allowedParts);
+
+    for (const part of allowedParts) {
       if ((part as unknown as { thought?: boolean }).thought === true) {
         const thought = parseThought(
           (part as unknown as { text?: string }).text ?? '',
@@ -275,9 +311,13 @@ export class Turn {
       }
     }
 
-    const chunkOutcome = analyzeResponseOutcome(allParts);
-    const text = getResponseText(resp);
-    if (chunkOutcome.hasVisibleText && text !== undefined) {
+    const chunkOutcome = analyzeResponseOutcome(allowedParts);
+    const text = allowedParts
+      .filter((part) => !isThoughtPart(part))
+      .map((part) => part.text)
+      .filter((partText): partText is string => typeof partText === 'string')
+      .join('');
+    if (chunkOutcome.hasVisibleText && text !== '') {
       yield { type: GeminiEventType.Content, value: text, traceId };
 
       // Emit citation event if conditions are met
@@ -291,7 +331,15 @@ export class Turn {
     }
 
     // Handle function calls (requesting tool execution)
-    const functionCalls = getFunctionCalls(resp) ?? [];
+    const partFunctionCalls = getFunctionCallsFromParts(allowedParts) ?? [];
+    const topLevelFunctionCalls = filterHookRestrictedFunctionCalls(
+      resp.functionCalls ?? [],
+      getHookRestrictedAllowedTools(resp),
+    );
+    const functionCalls = mergeHookRestrictedFunctionCalls(
+      partFunctionCalls,
+      topLevelFunctionCalls,
+    );
     for (const [functionCallIndex, fnCall] of functionCalls.entries()) {
       const event = this.handlePendingFunctionCall(fnCall, functionCallIndex);
       if (event) {
@@ -303,10 +351,11 @@ export class Turn {
     const finishReason = resp.candidates?.[0]?.finishReason;
 
     // This is the key change: Only yield 'Finished' if there is a finishReason.
+    // Pass only allowed function calls so logging/outcome reflect executable calls.
     if (finishReason != null) {
       yield* this.emitFinishReason(
         finishReason,
-        allParts,
+        allowedParts,
         functionCalls,
         text,
         resp.usageMetadata,
@@ -315,7 +364,7 @@ export class Turn {
       );
     } else {
       this.logNoFinishReason(
-        allParts,
+        allowedParts,
         functionCalls,
         text,
         resp.usageMetadata,
@@ -409,17 +458,7 @@ export class Turn {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
       if (resp === null || resp === undefined) continue;
 
-      const parts = resp.candidates?.[0]?.content?.parts ?? [];
-      const chunkOutcome = analyzeResponseOutcome(parts);
-      cumulativeOutcome = {
-        hasVisibleText:
-          cumulativeOutcome.hasVisibleText || chunkOutcome.hasVisibleText,
-        hasThinking: cumulativeOutcome.hasThinking || chunkOutcome.hasThinking,
-        hasToolCalls:
-          cumulativeOutcome.hasToolCalls || chunkOutcome.hasToolCalls,
-        isActionable:
-          cumulativeOutcome.isActionable || chunkOutcome.isActionable,
-      };
+      cumulativeOutcome = this.mergeResponseOutcome(cumulativeOutcome, resp);
 
       const traceId = resp.responseId ?? undefined;
       yield* this.processStreamChunk(
@@ -428,6 +467,42 @@ export class Turn {
         cumulativeOutcome,
       );
     }
+  }
+
+  private mergeResponseOutcome(
+    cumulativeOutcome: ResponseOutcome,
+    resp: GenerateContentResponse,
+  ): ResponseOutcome {
+    const parts = resp.candidates?.[0]?.content?.parts ?? [];
+    const allowedParts = filterHookRestrictedParts(
+      parts,
+      getHookRestrictedAllowedTools(resp),
+    );
+    const allowedPartCalls = getHookRestrictedFunctionCallsFromParts(
+      allowedParts,
+      getHookRestrictedAllowedTools(resp),
+    );
+    const allowedMergedCalls = mergeHookRestrictedFunctionCalls(
+      allowedPartCalls,
+      filterHookRestrictedFunctionCalls(
+        resp.functionCalls ?? [],
+        getHookRestrictedAllowedTools(resp),
+      ),
+    );
+    const allowedTopLevelCallParts = allowedMergedCalls
+      .slice(allowedPartCalls.length)
+      .map((functionCall) => ({ functionCall }));
+    const chunkOutcome = analyzeResponseOutcome([
+      ...allowedParts,
+      ...allowedTopLevelCallParts,
+    ]);
+    return {
+      hasVisibleText:
+        cumulativeOutcome.hasVisibleText || chunkOutcome.hasVisibleText,
+      hasThinking: cumulativeOutcome.hasThinking || chunkOutcome.hasThinking,
+      hasToolCalls: cumulativeOutcome.hasToolCalls || chunkOutcome.hasToolCalls,
+      isActionable: cumulativeOutcome.isActionable || chunkOutcome.isActionable,
+    };
   }
 
   private extractErrorStatus(error: unknown): number | undefined {
@@ -572,6 +647,7 @@ export class Turn {
     }
 
     const args = fnCall.args ?? {};
+    const allowedTools = getHookRestrictedAllowedToolsForFunctionCall(fnCall);
 
     const toolCallRequest: ToolCallRequestInfo = {
       callId,
@@ -581,6 +657,9 @@ export class Turn {
       prompt_id: this.prompt_id,
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
       agentId: this.agentId ?? DEFAULT_AGENT_ID,
+      ...(allowedTools !== undefined
+        ? { hookRestrictedAllowedTools: allowedTools }
+        : {}),
     };
 
     this.pendingToolCalls.push(toolCallRequest);

@@ -144,6 +144,22 @@ describe('executeToolCall', () => {
     });
   });
 
+  it('throws before creating a completed call for hook-restricted requests', async () => {
+    const request: ToolCallRequestInfo = {
+      callId: 'call-hook-blocked',
+      name: 'run_shell_command',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-id-hook-blocked',
+      hookRestrictedAllowedTools: ['read_file'],
+    };
+
+    await expect(
+      executeToolCall(mockConfig, request, abortController.signal),
+    ).rejects.toThrow('disabled by hook restrictions');
+    expect(mockToolRegistry.getTool).not.toHaveBeenCalled();
+  });
+
   it('should return an error if tool is not found', async () => {
     const request: ToolCallRequestInfo = {
       callId: 'call2',

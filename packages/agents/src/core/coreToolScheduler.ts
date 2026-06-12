@@ -24,7 +24,7 @@ import type { SerializableConfirmationDetails } from '@vybestack/llxprt-code-cor
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import { createErrorResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { buildToolGovernance } from './toolGovernance.js';
+import { buildToolGovernance, canonicalizeToolName } from './toolGovernance.js';
 import type { AnsiOutput } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 import { triggerToolNotificationHook } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
 import { ToolExecutor } from '../scheduler/tool-executor.js';
@@ -358,15 +358,15 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   private deduplicateRequests(
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
   ): ToolCallRequestInfo[] {
-    const requestsToProcess = (
-      Array.isArray(request) ? request : [request]
-    ).map((req) => {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string agentId falls through to default
-      if (!req.agentId) {
-        req.agentId = DEFAULT_AGENT_ID;
-      }
-      return req;
-    });
+    const requestsToProcess = (Array.isArray(request) ? request : [request])
+      .filter((req) => !this.isHookRestrictedRequest(req))
+      .map((req) => {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string agentId falls through to default
+        if (!req.agentId) {
+          req.agentId = DEFAULT_AGENT_ID;
+        }
+        return req;
+      });
 
     const freshRequests: ToolCallRequestInfo[] = [];
     const duplicates: ToolCallRequestInfo[] = [];
@@ -384,6 +384,14 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       );
     }
     return freshRequests;
+  }
+  private isHookRestrictedRequest(req: ToolCallRequestInfo): boolean {
+    const allowedTools = req.hookRestrictedAllowedTools;
+    if (allowedTools === undefined) {
+      return false;
+    }
+    const allowed = new Set(allowedTools.map(canonicalizeToolName));
+    return !allowed.has(canonicalizeToolName(req.name));
   }
 
   private evaluateToolCall(
@@ -456,6 +464,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
         governance,
         this.toolContextInteractiveMode,
       );
+      if (newToolCalls.length === 0) return;
 
       this.toolCalls = this.toolCalls.concat(newToolCalls);
       this.notifyToolCallsUpdate();

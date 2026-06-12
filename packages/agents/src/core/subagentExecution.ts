@@ -39,6 +39,10 @@ import {
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AnsiLine } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import {
+  isHookRestrictedToolCall,
+  setHookRestrictedAllowedToolsOnFunctionCall,
+} from './hookToolRestrictions.js';
 
 // ---------------------------------------------------------------------------
 // Shared execution context — all loop helpers receive this instead of `this`
@@ -221,6 +225,7 @@ export function processNonInteractiveTextResponse(
     rawName: string | undefined,
     toolsView: ToolRegistryView,
   ) => string | null,
+  hookRestrictedAllowedTools?: readonly string[],
 ): NonInteractiveTextResult {
   const messageToSend = textResponse;
 
@@ -245,6 +250,7 @@ export function processNonInteractiveTextResponse(
         parsedResult.toolCalls,
         ctx,
         resolveToolNameFn,
+        hookRestrictedAllowedTools,
       );
       if (synthesized.length > 0) {
         functionCalls = [...functionCalls, ...synthesized];
@@ -339,6 +345,7 @@ function synthesizeToolCalls(
     rawName: string | undefined,
     toolsView: ToolRegistryView,
   ) => string | null,
+  hookRestrictedAllowedTools: readonly string[] | undefined,
 ): FunctionCall[] {
   const synthesized: FunctionCall[] = [];
   toolCalls.forEach((call, index) => {
@@ -350,11 +357,23 @@ function synthesizeToolCalls(
       );
       return;
     }
-    synthesized.push({
+    const functionCall = {
       id: `parsed_${ctx.subagentId}_${Date.now()}_${index}`,
       name: normalizedName,
       args: call.arguments ?? {},
-    });
+    };
+    setHookRestrictedAllowedToolsOnFunctionCall(
+      functionCall,
+      hookRestrictedAllowedTools,
+    );
+    if (isHookRestrictedToolCall(functionCall, hookRestrictedAllowedTools)) {
+      ctx.logger.debug(
+        () =>
+          `Subagent ${ctx.subagentId} skipped hook-restricted textual tool '${functionCall.name}'`,
+      );
+      return;
+    }
+    synthesized.push(functionCall);
   });
   return synthesized;
 }

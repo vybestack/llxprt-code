@@ -30,6 +30,11 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 
+import {
+  AfterModelHookOutput,
+  BeforeModelHookOutput,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
+
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
 }));
@@ -175,6 +180,352 @@ describe('ChatSession runtime context', () => {
     expect(Array.isArray(contents)).toBe(true);
     expect(contents.length).toBeGreaterThan(0);
   });
+
+  it('filters hook-disallowed provider function calls from non-stream responses and history', async () => {
+    const generateChatCompletionMock = vi.fn(async function* () {
+      yield {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'allowed-call',
+            name: 'read_file',
+            parameters: { file_path: 'file.txt' },
+          },
+          {
+            type: 'tool_call',
+            id: 'blocked-call',
+            name: 'run_shell_command',
+            parameters: { command: 'echo blocked' },
+          },
+        ],
+        automaticFunctionCallingHistory: [
+          {
+            role: 'model',
+            parts: [
+              {
+                functionCall: {
+                  id: 'history-allowed-call',
+                  name: 'read_file',
+                  args: { file_path: 'file.txt' },
+                },
+              },
+              {
+                functionCall: {
+                  id: 'history-blocked-call',
+                  name: 'run_shell_command',
+                  args: { command: 'echo blocked-history' },
+                },
+              },
+            ],
+          },
+        ],
+      };
+    });
+
+    const provider: IProvider = {
+      name: 'stub',
+      isDefault: true,
+      getModels: vi.fn(async () => []),
+      getDefaultModel: () => 'stub-model',
+      generateChatCompletion: generateChatCompletionMock,
+      getServerTools: () => [],
+      invokeServerTool: vi.fn(),
+      getAuthToken: vi.fn(async () => 'stub-auth-token'),
+    };
+    manager.registerProvider(provider);
+
+    const tools = [
+      {
+        functionDeclarations: [
+          { name: 'read_file' } as Record<string, unknown>,
+          { name: 'run_shell_command' } as Record<string, unknown>,
+        ],
+      },
+    ] as unknown as Tool[];
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: 'runtime-test',
+      provider: provider.name,
+      model: config.getModel(),
+      sessionId: config.getSessionId(),
+    });
+    const historyService = new HistoryService();
+    const hookConfig = Object.create(config) as Config;
+    Object.defineProperties(hookConfig, {
+      getEnableHooks: { value: () => true },
+      getHookSystem: {
+        value: () => ({
+          initialize: async () => undefined,
+          fireBeforeToolSelectionEvent: async () => ({
+            applyToolConfigModifications: () => ({
+              toolConfig: { allowedFunctionNames: ['read_file'] },
+            }),
+          }),
+        }),
+      },
+    });
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 128000,
+        preserveThreshold: 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+        'reasoning.includeInContext': true,
+      },
+      provider: createProviderAdapterFromManager(config.getProviderManager()),
+      telemetry: createTelemetryAdapterFromConfig(config),
+      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      providerRuntime: { ...providerRuntime, config: hookConfig },
+    });
+
+    const chat = new ChatSession(
+      view,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
+
+    const response = await chat.sendMessage(
+      { message: 'Use tools', config: { tools } },
+      'prompt-hook-selection',
+    );
+
+    expect(response.functionCalls).toStrictEqual([
+      expect.objectContaining({ name: 'read_file' }),
+    ]);
+
+    expect(JSON.stringify(response)).not.toContain('run_shell_command');
+    expect(JSON.stringify(historyService.getCurated())).not.toContain(
+      'run_shell_command',
+    );
+  });
+
+  it('preserves direct response text when filtering hook-disallowed tool calls', async () => {
+    const generateChatCompletionMock = vi.fn(async function* () {
+      yield {
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'visible text' },
+          {
+            type: 'tool_call',
+            id: 'blocked-call',
+            name: 'run_shell_command',
+            parameters: { command: 'echo blocked' },
+          },
+        ],
+        metadata: {
+          providerMetadata: {
+            automaticFunctionCallingHistory: [
+              {
+                role: 'model',
+                parts: [
+                  {
+                    functionCall: {
+                      id: 'metadata-blocked-call',
+                      name: 'run_shell_command',
+                      args: { command: 'echo metadata-blocked' },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      };
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'still visible' }],
+      };
+    });
+
+    const provider: IProvider = {
+      name: 'stub',
+      isDefault: true,
+      getModels: vi.fn(async () => []),
+      getDefaultModel: () => 'stub-model',
+      generateChatCompletion: generateChatCompletionMock,
+      getServerTools: () => [],
+      invokeServerTool: vi.fn(),
+      getAuthToken: vi.fn(async () => 'stub-auth-token'),
+    };
+    manager.registerProvider(provider);
+
+    const tools = [
+      {
+        functionDeclarations: [
+          { name: 'read_file' } as Record<string, unknown>,
+          { name: 'run_shell_command' } as Record<string, unknown>,
+        ],
+      },
+    ] as unknown as Tool[];
+    const hookConfig = Object.create(config) as Config;
+    Object.defineProperties(hookConfig, {
+      getEnableHooks: { value: () => true },
+      getHookSystem: {
+        value: () => ({
+          initialize: async () => undefined,
+          fireBeforeToolSelectionEvent: async () => ({
+            applyToolConfigModifications: () => ({
+              toolConfig: { allowedFunctionNames: ['read_file'] },
+            }),
+          }),
+          fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
+          fireAfterModelEvent: async () => new AfterModelHookOutput({}),
+        }),
+      },
+    });
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: 'runtime-test',
+      provider: provider.name,
+      model: config.getModel(),
+      sessionId: config.getSessionId(),
+    });
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: new HistoryService(),
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 128000,
+        preserveThreshold: 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+        'reasoning.includeInContext': true,
+      },
+      provider: createProviderAdapterFromManager(config.getProviderManager()),
+      telemetry: createTelemetryAdapterFromConfig(config),
+      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      providerRuntime: { ...providerRuntime, config: hookConfig },
+    });
+
+    const chat = new ChatSession(
+      view,
+      {} as unknown as ContentGenerator,
+      { tools },
+      [],
+    );
+
+    const response = await chat.generateDirectMessage(
+      { message: 'Use direct response' },
+      'prompt-direct-hook-selection',
+    );
+
+    expect(response.text).toBe('visible textstill visible');
+    expect(JSON.stringify(response)).not.toContain('run_shell_command');
+  });
+
+  it('applies BeforeToolSelection to request-scoped streaming tools', async () => {
+    const calls: GenerateChatOptions[] = [];
+    const generateChatCompletionMock = vi.fn(async function* (
+      options: GenerateChatOptions,
+    ) {
+      calls.push(options);
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'streamed response' }],
+      };
+    });
+
+    const provider: IProvider = {
+      name: 'stub',
+      isDefault: true,
+      getModels: vi.fn(async () => []),
+      getDefaultModel: () => 'stub-model',
+      generateChatCompletion: generateChatCompletionMock,
+      getServerTools: () => [],
+      invokeServerTool: vi.fn(),
+      getAuthToken: vi.fn(async () => 'stub-auth-token'),
+    };
+
+    const tools = [
+      {
+        functionDeclarations: [
+          { name: 'read_file' } as Record<string, unknown>,
+          { name: 'run_shell_command' } as Record<string, unknown>,
+        ],
+      },
+    ] as unknown as Tool[];
+    const hookConfig = config;
+    Object.defineProperties(hookConfig, {
+      getConversationLoggingEnabled: { value: () => false },
+      getEnableHooks: { value: () => true },
+      getHookSystem: {
+        value: () => ({
+          initialize: async () => undefined,
+          isInitialized: () => true,
+
+          fireBeforeToolSelectionEvent: async () => ({
+            applyToolConfigModifications: () => ({
+              toolConfig: { allowedFunctionNames: ['read_file'] },
+            }),
+          }),
+          fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
+          fireAfterModelEvent: async () => new AfterModelHookOutput({}),
+        }),
+      },
+    });
+    const hookProviderRuntime = createProviderRuntimeContext({
+      settingsService,
+      config: hookConfig,
+      runtimeId: 'test.runtime.hook-selection',
+      metadata: { source: 'chatSession.runtime.test' },
+    });
+    const hookManager = new TestRuntimeProviderManager(hookProviderRuntime);
+    hookManager.registerProvider(provider);
+
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: 'runtime-test',
+      provider: provider.name,
+      model: config.getModel(),
+      sessionId: config.getSessionId(),
+    });
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: new HistoryService(),
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 128000,
+        preserveThreshold: 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+        'reasoning.includeInContext': true,
+      },
+      provider: createProviderAdapterFromManager(hookManager),
+      telemetry: createTelemetryAdapterFromConfig(hookConfig),
+      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      providerRuntime: hookProviderRuntime,
+    });
+
+    const chat = new ChatSession(
+      view,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
+
+    const stream = await chat.sendMessageStream(
+      { message: 'stream with request-scoped tools', config: { tools } },
+      'prompt-stream-hook-selection',
+    );
+    for await (const _event of stream) {
+      // exhaust stream
+    }
+
+    expect(calls[0].tools).toStrictEqual([
+      {
+        functionDeclarations: [{ name: 'read_file' }],
+      },
+    ]);
+  });
+
   it('aborts a stalled non-stream sendMessage response after partial provider output instead of hanging forever', async () => {
     vi.useFakeTimers();
     const testTimeoutMs = 30_000; // 30 second timeout for this test

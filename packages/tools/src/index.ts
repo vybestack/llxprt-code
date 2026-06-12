@@ -68,6 +68,8 @@ export {
   isValidToolName,
   isValidToolName as isValidFormatterToolName,
   findMatchingTool,
+  canonicalizeToolName,
+  INVALID_TOOL_NAME,
 } from './formatters/toolNameUtils.js';
 
 export {

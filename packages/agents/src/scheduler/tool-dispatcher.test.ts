@@ -119,11 +119,18 @@ class ContextAwareMockTool extends MockTool implements ContextAwareTool {
   context?: { sessionId: string; agentId?: string; interactiveMode?: boolean };
 }
 
-function makeRequest(name: string, callId = 'call-1'): ToolCallRequestInfo {
+function makeRequest(
+  name: string,
+  callId = 'call-1',
+  hookRestrictedAllowedTools?: string[],
+): ToolCallRequestInfo {
   return {
     callId,
     name,
     args: { param: 'value' },
+    ...(hookRestrictedAllowedTools !== undefined
+      ? { hookRestrictedAllowedTools }
+      : {}),
   } as ToolCallRequestInfo;
 }
 
@@ -219,6 +226,52 @@ describe('ToolDispatcher', () => {
       expect(results[0].response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
     });
 
+    it('drops requests blocked by hookRestrictedAllowed before validation', () => {
+      const allowedTool = new MockTool('read_file');
+      const disallowedTool = new MockTool('run_shell_command');
+      const tools = new Map([
+        ['read_file', allowedTool],
+        ['run_shell_command', disallowedTool],
+      ]);
+      const registry = {
+        getTool: vi.fn((name: string) => tools.get(name) ?? null),
+        getAllToolNames: vi
+          .fn()
+          .mockReturnValue(['read_file', 'run_shell_command']),
+      };
+      const dispatcher = new ToolDispatcher(registry as never, config);
+      const governance = makeGovernance();
+
+      const results = dispatcher.resolveAndValidate(
+        [
+          makeRequest('read_file', 'c-allowed', ['read_file']),
+          makeRequest('run_shell_command', 'c-blocked', ['read_file']),
+        ],
+        governance,
+        false,
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0].status).toBe('validating');
+      expect(registry.getTool).toHaveBeenCalledTimes(1);
+      expect(registry.getTool).toHaveBeenCalledWith('read_file');
+    });
+
+    it('drops all requests when hookRestrictedAllowed is empty', () => {
+      const tool = new MockTool('read_file');
+      const registry = makeMockRegistry(tool);
+      const dispatcher = new ToolDispatcher(registry as never, config);
+      const governance = makeGovernance();
+
+      const results = dispatcher.resolveAndValidate(
+        [makeRequest('read_file', 'c-blocked', [])],
+        governance,
+        false,
+      );
+
+      expect(results).toStrictEqual([]);
+      expect(registry.getTool).not.toHaveBeenCalled();
+    });
     it('returns ErroredToolCall with INVALID_TOOL_PARAMS when buildInvocation throws', () => {
       const throwingTool = new MockTool('bad_tool', true /* throwOnBuild */);
       const registry = makeMockRegistry(throwingTool);

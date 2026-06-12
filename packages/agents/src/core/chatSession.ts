@@ -344,7 +344,34 @@ export class ChatSession {
       this.generationConfig,
     );
 
-    this.turnProcessor = new TurnProcessor(
+    const { turnProcessor, directMessageProcessor } =
+      this._buildMessageProcessors(
+        view,
+        providerResolver,
+        providerRuntimeBuilder,
+        makePositionMatcher,
+        resolveBaseUrl,
+      );
+    this.turnProcessor = turnProcessor;
+    this.directMessageProcessor = directMessageProcessor;
+  }
+
+  private _buildMessageProcessors(
+    view: AgentRuntimeContext,
+    providerResolver: (ctx: string) => IProvider,
+    providerRuntimeBuilder: (
+      s: string,
+      m?: Record<string, unknown>,
+    ) => ProviderRuntimeContext,
+    makePositionMatcher: () =>
+      | (() => { historyId: string; toolName?: string })
+      | undefined,
+    resolveBaseUrl: (p: IProvider) => string | undefined,
+  ): {
+    turnProcessor: TurnProcessor;
+    directMessageProcessor: DirectMessageProcessor;
+  } {
+    const turnProcessor = new TurnProcessor(
       view,
       this.compressionHandler,
       providerResolver,
@@ -356,13 +383,17 @@ export class ChatSession {
       resolveBaseUrl,
     );
 
-    this.directMessageProcessor = new DirectMessageProcessor(
+    const directMessageProcessor = new DirectMessageProcessor(
       view,
       providerResolver,
       providerRuntimeBuilder,
+      this.generationConfig,
+
       this.historyService,
       makePositionMatcher,
     );
+
+    return { turnProcessor, directMessageProcessor };
   }
 
   // ── Density wrapper ──────────────────────────────────────────────

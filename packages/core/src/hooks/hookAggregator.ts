@@ -28,6 +28,8 @@ import {
 } from './types.js';
 import { HookEventName } from './types.js';
 
+import { canonicalizeToolName } from '@vybestack/llxprt-code-tools';
+
 /**
  * Aggregated hook result
  */
@@ -252,23 +254,25 @@ export class HookAggregator {
    * Merge tool selection outputs with specific logic for tool config
    *
    * Tool Selection Strategy:
-   * - The intent is to provide a UNION of tools from all hooks
    * - If any hook specifies NONE mode, no tools are available (most restrictive wins)
    * - If any hook specifies ANY mode (and no NONE), ANY mode is used
    * - Otherwise AUTO mode is used
-   * - Function names are collected from all hooks and sorted for deterministic caching
+   * - Omitted allowedFunctionNames remains unrestricted
+   * - Explicit function-name allow-lists are intersected and sorted for deterministic caching
    *
-   * This means hooks can only add/enable tools, not filter them out individually.
-   * If one hook restricts and another re-enables, the union takes the re-enabled tool.
+   * Hooks can only narrow individually allowed tools; an explicit empty
+   * allow-list remains the most restrictive function-name selection.
+
    */
   private mergeToolSelectionOutputs(
     outputs: BeforeToolSelectionOutput[],
   ): BeforeToolSelectionOutput {
     const merged: BeforeToolSelectionOutput = {};
 
-    const allFunctionNames = new Set<string>();
+    let allowedFunctionNames: Set<string> | undefined;
     let hasNoneMode = false;
     let hasAnyMode = false;
+    let hasExplicitFunctionNames = false;
 
     for (const output of outputs) {
       const toolConfig = output.hookSpecificOutput?.toolConfig;
@@ -283,32 +287,47 @@ export class HookAggregator {
         hasAnyMode = true;
       }
 
-      // Collect function names (union of all hooks)
-      if (toolConfig.allowedFunctionNames) {
-        for (const name of toolConfig.allowedFunctionNames) {
-          allFunctionNames.add(name);
-        }
+      // Intersect explicit function-name allow-lists so hooks can only narrow access.
+      if (Array.isArray(toolConfig.allowedFunctionNames)) {
+        hasExplicitFunctionNames = true;
+        const hookNames = new Set<string>(
+          toolConfig.allowedFunctionNames.map((name) =>
+            canonicalizeToolName(name),
+          ),
+        );
+        allowedFunctionNames =
+          allowedFunctionNames === undefined
+            ? hookNames
+            : new Set(
+                [...allowedFunctionNames].filter((name) => hookNames.has(name)),
+              );
       }
     }
 
     // Determine final mode and function names
     let finalMode: FunctionCallingConfigMode;
-    let finalFunctionNames: string[] = [];
+    let finalFunctionNames: string[] | undefined;
 
     if (hasNoneMode) {
-      // NONE mode wins - most restrictive
+      // NONE mode wins for tool declaration mode, while omitted allowedFunctionNames stays unrestricted.
       finalMode = FunctionCallingConfigMode.NONE;
-      finalFunctionNames = [];
+      finalFunctionNames = hasExplicitFunctionNames
+        ? Array.from(allowedFunctionNames ?? []).sort()
+        : undefined;
     } else if (hasAnyMode) {
       // ANY mode if present (and no NONE)
       finalMode = FunctionCallingConfigMode.ANY;
       // Sort for deterministic output to ensure consistent caching
-      finalFunctionNames = Array.from(allFunctionNames).sort();
+      finalFunctionNames = hasExplicitFunctionNames
+        ? Array.from(allowedFunctionNames ?? []).sort()
+        : undefined;
     } else {
       // Default to AUTO mode
       finalMode = FunctionCallingConfigMode.AUTO;
       // Sort for deterministic output to ensure consistent caching
-      finalFunctionNames = Array.from(allFunctionNames).sort();
+      finalFunctionNames = hasExplicitFunctionNames
+        ? Array.from(allowedFunctionNames ?? []).sort()
+        : undefined;
     }
 
     merged.hookSpecificOutput = {

@@ -30,6 +30,7 @@ import {
   type GenerateContentConfig,
 } from '@google/genai';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { attachHookRestrictedAllowedTools } from '../core/hookToolRestrictions.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { z } from 'zod';
@@ -622,6 +623,112 @@ describe('AgentExecutor', () => {
       expect(errors[0].data['error']).toContain(
         'Task already marked complete in this turn',
       );
+    });
+
+    it('should not treat only hook-filtered function calls as successful completion', async () => {
+      const definition = createTestDefinition([LSTool.Name]);
+      const executor = await AgentExecutor.create(
+        definition,
+        mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
+        onActivity,
+      );
+      const blockedCall: FunctionCall = {
+        name: 'run_shell_command',
+        args: { command: 'echo blocked' },
+        id: 'blocked-call',
+      };
+      const blockedResponse = attachHookRestrictedAllowedTools(
+        createMockResponseChunk([{ functionCall: blockedCall }], [blockedCall]),
+        ['read_file'],
+      );
+      mockSendMessageStream
+        .mockImplementationOnce(async () =>
+          (async function* () {
+            yield { type: StreamEventType.CHUNK, value: blockedResponse };
+          })(),
+        )
+        .mockImplementationOnce(async () =>
+          (async function* () {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: createMockResponseChunk([
+                { text: 'Still no executable tool calls' },
+              ]),
+            };
+          })(),
+        );
+
+      const output = await executor.run({ goal: 'Blocked tool call' }, signal);
+
+      expect(output.terminate_reason).toBe(
+        AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
+      );
+      expect(mockExecuteToolCall).not.toHaveBeenCalled();
+    });
+
+    it('should execute allowed function calls when the same response also has hook-filtered calls', async () => {
+      const definition = createTestDefinition([LSTool.Name]);
+      const executor = await AgentExecutor.create(
+        definition,
+        mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
+        onActivity,
+      );
+      const signal = new AbortController().signal;
+      const allowedCall: FunctionCall = {
+        name: LSTool.Name,
+        args: { path: '/allowed' },
+        id: 'allowed-call',
+      };
+      const blockedCall: FunctionCall = {
+        name: 'run_shell_command',
+        args: { command: 'echo blocked' },
+        id: 'blocked-call',
+      };
+      const mixedResponse = attachHookRestrictedAllowedTools(
+        createMockResponseChunk(
+          [{ functionCall: allowedCall }, { functionCall: blockedCall }],
+          [allowedCall, blockedCall],
+        ),
+        [LSTool.Name],
+      );
+      mockSendMessageStream.mockImplementationOnce(async () =>
+        (async function* () {
+          yield { type: StreamEventType.CHUNK, value: mixedResponse };
+        })(),
+      );
+      mockModelResponse([
+        {
+          name: TASK_COMPLETE_TOOL_NAME,
+          args: { output: 'done' },
+          id: 'complete-call',
+        },
+      ]);
+      mockModelResponse([
+        {
+          name: TASK_COMPLETE_TOOL_NAME,
+          args: { output: 'done' },
+          id: 'complete-call-2',
+        },
+      ]);
+      mockModelResponse([], undefined, 'No more tool calls');
+
+      mockExecuteToolCall.mockResolvedValueOnce(
+        createCompletedToolCallResponse({
+          callId: 'allowed-call',
+          name: LSTool.Name,
+          resultDisplay: 'ok',
+        }),
+      );
+
+      const output = await executor.run({ goal: 'Mixed calls' }, signal);
+
+      expect(output.terminate_reason).toBe(
+        AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
+      );
+      expect(mockExecuteToolCall).toHaveBeenCalledTimes(1);
+      expect(mockExecuteToolCall.mock.calls[0][1].name).toBe(LSTool.Name);
     });
 
     it('should execute parallel tool calls and then complete', async () => {

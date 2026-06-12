@@ -23,6 +23,7 @@ import type {
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
 import { InvalidStreamError, StreamEventType } from './chatSession.js';
+import { attachHookRestrictedAllowedTools } from './hookToolRestrictions.js';
 
 const mockSendMessageStream = vi.fn();
 const mockGetHistory = vi.fn();
@@ -55,6 +56,12 @@ vi.mock(
         .join('') ?? undefined,
     getFunctionCalls: (resp: GenerateContentResponse) =>
       resp.functionCalls ?? [],
+    getFunctionCallsFromParts: (parts: Part[]) => {
+      const functionCalls = parts
+        .filter((part) => part.functionCall !== undefined)
+        .map((part) => part.functionCall!);
+      return functionCalls.length > 0 ? functionCalls : undefined;
+    },
     analyzeResponseOutcome: (parts: Part[]) => {
       let hasVisibleText = false;
       let hasThinking = false;
@@ -175,18 +182,26 @@ describe('Turn', () => {
         yield {
           type: StreamEventType.CHUNK,
           value: {
-            functionCalls: [
+            candidates: [
               {
-                id: 'fc1',
-                name: 'tool1',
-                args: { arg1: 'val1' },
-                isClientInitiated: false,
+                content: {
+                  parts: [
+                    {
+                      functionCall: {
+                        id: 'fc1',
+                        name: 'tool1',
+                        args: { arg1: 'val1' },
+                      },
+                    },
+                    {
+                      functionCall: {
+                        name: 'tool2',
+                        args: { arg2: 'val2' },
+                      },
+                    },
+                  ],
+                },
               },
-              {
-                name: 'tool2',
-                args: { arg2: 'val2' },
-                isClientInitiated: false,
-              }, // No ID
             ],
           } as unknown as GenerateContentResponse,
         };
@@ -227,6 +242,284 @@ describe('Turn', () => {
       expect(event2.value.callId).toStrictEqual('tool2-1-ecb6737fd951388d');
       expect(turn.pendingToolCalls[1]).toStrictEqual(event2.value);
       expect(turn.getDebugResponses().length).toBe(1);
+    });
+
+    it('should not yield tool_call_request events for hook-disallowed function calls', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: attachHookRestrictedAllowedTools(
+            {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          id: 'allowed-call',
+                          name: 'read_file',
+                          args: { file_path: 'file.txt' },
+                        },
+                      },
+                      {
+                        functionCall: {
+                          id: 'blocked-call',
+                          name: 'run_shell_command',
+                          args: { command: 'echo blocked' },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            } as unknown as GenerateContentResponse,
+            ['read_file'],
+          ),
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events = [];
+      const reqParts: Part[] = [{ text: 'Use tools' }];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      const toolEvents = events.filter(
+        (event): event is ServerGeminiToolCallRequestEvent =>
+          event.type === GeminiEventType.ToolCallRequest,
+      );
+      expect(toolEvents).toHaveLength(1);
+      expect(toolEvents[0].value).toStrictEqual(
+        expect.objectContaining({
+          callId: 'allowed-call',
+          name: 'read_file',
+          args: { file_path: 'file.txt' },
+          isClientInitiated: false,
+        }),
+      );
+      expect(turn.pendingToolCalls).toStrictEqual([toolEvents[0].value]);
+    });
+
+    it('should not yield tool_call_request events when hook allows no functions', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: attachHookRestrictedAllowedTools(
+            {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          id: 'blocked-call',
+                          name: 'read_file',
+                          args: { file_path: 'file.txt' },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            } as unknown as GenerateContentResponse,
+            [],
+          ),
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events = [];
+      const reqParts: Part[] = [{ text: 'Use tools' }];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      expect(
+        events.some((event) => event.type === GeminiEventType.ToolCallRequest),
+      ).toBe(false);
+      expect(turn.pendingToolCalls).toStrictEqual([]);
+    });
+
+    it('should report no tool calls in finished outcome when all provider calls are hook-disallowed', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: attachHookRestrictedAllowedTools(
+            {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          id: 'blocked-call',
+                          name: 'run_shell_command',
+                          args: { command: 'echo blocked' },
+                        },
+                      },
+                    ],
+                  },
+                  finishReason: 'STOP' as FinishReason,
+                },
+              ],
+            } as unknown as GenerateContentResponse,
+            ['read_file'],
+          ),
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events: ServerGeminiStreamEvent[] = [];
+      for await (const event of turn.run(
+        [{ text: 'Use a blocked tool' }],
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      expect(
+        events.some((event) => event.type === GeminiEventType.ToolCallRequest),
+      ).toBe(false);
+      const finishedEvent = findFinishedEvent(events);
+      expect(finishedEvent).toBeDefined();
+      expect(finishedEvent?.value.outcome).toStrictEqual({
+        hadVisibleOutput: false,
+        hadThinking: false,
+        hadToolCalls: false,
+      });
+    });
+
+    it('should include allowed top-level function calls when candidate parts also contain function calls', async () => {
+      const topLevelCall = {
+        id: 'top-level-call',
+        name: 'read_file',
+        args: { file_path: 'top.txt' },
+      };
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: attachHookRestrictedAllowedTools(
+            {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          id: 'part-call',
+                          name: 'read_file',
+                          args: { file_path: 'part.txt' },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+              functionCalls: [topLevelCall],
+            } as unknown as GenerateContentResponse,
+            ['read_file'],
+          ),
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events: ServerGeminiStreamEvent[] = [];
+      for await (const event of turn.run(
+        [{ text: 'Use allowed tools' }],
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      const toolEvents = events.filter(
+        (event): event is ServerGeminiToolCallRequestEvent =>
+          event.type === GeminiEventType.ToolCallRequest,
+      );
+      expect(toolEvents.map((event) => event.value.name)).toStrictEqual([
+        'read_file',
+        'read_file',
+      ]);
+      expect(toolEvents.map((event) => event.value.callId)).toStrictEqual([
+        'part-call',
+        'top-level-call',
+      ]);
+    });
+
+    it('should not inherit hook restrictions from a previous response', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: attachHookRestrictedAllowedTools(
+            {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          id: 'blocked-call',
+                          name: 'run_shell_command',
+                          args: { command: 'echo blocked' },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            } as unknown as GenerateContentResponse,
+            ['read_file'],
+          ),
+        };
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      functionCall: {
+                        id: 'unrestricted-call',
+                        name: 'run_shell_command',
+                        args: { command: 'echo allowed' },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          } as unknown as GenerateContentResponse,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events: ServerGeminiStreamEvent[] = [];
+      for await (const event of turn.run(
+        [{ text: 'Use tools' }],
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      const toolEvents = events.filter(
+        (event): event is ServerGeminiToolCallRequestEvent =>
+          event.type === GeminiEventType.ToolCallRequest,
+      );
+      expect(toolEvents).toHaveLength(1);
+      expect(toolEvents[0].value).toStrictEqual(
+        expect.objectContaining({
+          callId: 'unrestricted-call',
+          name: 'run_shell_command',
+          args: { command: 'echo allowed' },
+        }),
+      );
     });
 
     it('should yield UserCancelled event if signal is aborted', async () => {
@@ -515,14 +808,37 @@ describe('Turn', () => {
         yield {
           type: StreamEventType.CHUNK,
           value: {
-            candidates: [],
-            functionCalls: [
-              // Add `id` back to the mock to match what the code expects
-              { id: 'fc1', name: undefined, args: { arg1: 'val1' } },
-              { id: 'fc2', name: 'tool2', args: undefined },
-              { id: 'fc3', name: undefined, args: undefined },
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    // Add `id` back to the mock to match what the code expects
+                    {
+                      functionCall: {
+                        id: 'fc1',
+                        name: undefined,
+                        args: { arg1: 'val1' },
+                      },
+                    },
+                    {
+                      functionCall: {
+                        id: 'fc2',
+                        name: 'tool2',
+                        args: undefined,
+                      },
+                    },
+                    {
+                      functionCall: {
+                        id: 'fc3',
+                        name: undefined,
+                        args: undefined,
+                      },
+                    },
+                  ],
+                },
+              },
             ],
-          },
+          } as unknown as GenerateContentResponse,
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);

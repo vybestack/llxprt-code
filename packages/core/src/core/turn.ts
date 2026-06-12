@@ -102,6 +102,7 @@ export interface ToolCallRequestInfo {
   prompt_id: string;
   agentId?: string;
   checkpoint?: string;
+  hookRestrictedAllowedTools?: string[];
 }
 
 export interface ToolCallResponseInfo {

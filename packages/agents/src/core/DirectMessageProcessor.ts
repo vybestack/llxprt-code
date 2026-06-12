@@ -44,9 +44,39 @@ type ToolGroupArray = Array<{
     parametersJsonSchema?: unknown;
   }>;
 }>;
+
+interface ToolSelectionHookResult {
+  tools: ToolGroupArray | undefined;
+  allowedFunctionNames: string[] | undefined;
+}
+
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  attachHookRestrictedAllowedTools,
+  filterHookRestrictedContent,
+  filterHookRestrictedContents,
+} from './hookToolRestrictions.js';
+import { canonicalizeToolName } from './toolGovernance.js';
+
+function isContentArray(value: unknown): value is Content[] {
+  return Array.isArray(value);
+}
+
+function getIContentAutomaticFunctionCallingHistory(
+  content: IContent,
+): Content[] | undefined {
+  const topLevelValue = (content as unknown as Record<string, unknown>)[
+    'automaticFunctionCallingHistory'
+  ];
+  if (isContentArray(topLevelValue)) {
+    return topLevelValue;
+  }
+  const metadataValue =
+    content.metadata?.providerMetadata?.['automaticFunctionCallingHistory'];
+  return isContentArray(metadataValue) ? metadataValue : undefined;
+}
 
 /**
  * Handles non-streaming direct message generation.
@@ -62,6 +92,8 @@ export class DirectMessageProcessor {
       source: string,
       extras?: Record<string, unknown>,
     ) => ProviderRuntimeContext,
+    private readonly generationConfig: GenerateContentConfig,
+
     private readonly historyService: HistoryService,
     private readonly makePositionMatcher: () =>
       | (() => { historyId: string; toolName?: string })
@@ -212,11 +244,14 @@ export class DirectMessageProcessor {
     upstreamAbortSignal: AbortSignal | undefined,
     effectiveTimeoutMs: number,
     onAbort: () => void,
-  ): Promise<{ lastResponse: IContent; aggregatedText: string }> {
+    allowedFunctionNames: string[] | undefined,
+  ): Promise<{
+    lastResponse: IContent;
+    aggregatedText: string;
+  }> {
     let lastResponse: IContent | undefined;
     let lastBlockWasNonText = false;
     let aggregatedText = '';
-
     try {
       const iterator = streamResponse[Symbol.asyncIterator]();
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
@@ -246,10 +281,15 @@ export class DirectMessageProcessor {
         }
 
         const iContent = nextResponse.value;
-        lastResponse = iContent;
+        const { filteredIContent, response } = this._filterStreamedIContent(
+          iContent,
+          allowedFunctionNames,
+        );
+        lastResponse = response;
+
         const result = aggregateTextWithSpacing(
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          iContent.blocks ?? [],
+          filteredIContent.blocks ?? [],
           aggregatedText,
           lastBlockWasNonText,
         );
@@ -264,7 +304,45 @@ export class DirectMessageProcessor {
     if (!lastResponse) {
       throw new Error('No response from provider');
     }
-    return { lastResponse, aggregatedText };
+    return {
+      lastResponse,
+      aggregatedText,
+    };
+  }
+
+  private _filterStreamedIContent(
+    iContent: IContent,
+    allowedFunctionNames: string[] | undefined,
+  ): { filteredIContent: IContent; response: IContent } {
+    const filteredResponse = attachHookRestrictedAllowedTools(
+      convertIContentToResponse(iContent),
+      allowedFunctionNames,
+    );
+    const filteredIContent = ContentConverters.toIContent(
+      filteredResponse.candidates?.[0]?.content ?? {
+        role: 'model',
+        parts: [],
+      },
+    );
+    const afcHistory = getIContentAutomaticFunctionCallingHistory(iContent);
+    const response: IContent = {
+      ...filteredIContent,
+      metadata: {
+        ...filteredIContent.metadata,
+        ...iContent.metadata,
+        providerMetadata: {
+          ...filteredIContent.metadata?.providerMetadata,
+          automaticFunctionCallingHistory:
+            afcHistory !== undefined
+              ? filterHookRestrictedContents(
+                  afcHistory,
+                  allowedFunctionNames,
+                ).filter((content) => (content.parts?.length ?? 0) > 0)
+              : filteredResponse.automaticFunctionCallingHistory,
+        },
+      },
+    };
+    return { filteredIContent, response };
   }
 
   /**
@@ -275,52 +353,99 @@ export class DirectMessageProcessor {
     params: SendMessageParameters,
     userIContents: IContent[],
   ): Promise<GenerateContentResponse> {
-    const { effectiveToolsFromConfig, contentsForApi, syntheticResponse } =
-      await this._applyPreSendHooks(params, userIContents);
+    const {
+      effectiveToolsFromConfig,
+      contentsForApi,
+      syntheticResponse,
+      allowedFunctionNames,
+    } = await this._applyPreSendHooks(params, userIContents);
 
     if (syntheticResponse) {
-      return syntheticResponse;
+      return this._applyHookRestrictedAllowedTools(
+        syntheticResponse,
+        allowedFunctionNames,
+      );
     }
 
-    const directOverrides = this._extractDirectGeminiOverrides(params.config);
-    const baseUrlForCall = this.runtimeContext.state.baseUrl;
+    const runtimeContext = this.providerRuntimeBuilder(
+      'DirectMessageProcessor.generateDirectMessage',
+      this._buildProviderRuntimeMetadata(params, effectiveToolsFromConfig),
+    );
+    const upstreamAbortSignal = params.config?.abortSignal;
+    const { timeoutController, timeoutSignal, onAbort } =
+      this._setupAbortController(upstreamAbortSignal);
+    const streamResponse = this._createDirectProviderStream(
+      provider,
+      contentsForApi,
+      effectiveToolsFromConfig,
+      runtimeContext,
+      timeoutSignal,
+    );
+    const { lastResponse, aggregatedText } = await this._consumeStreamResponse(
+      streamResponse,
+      timeoutController,
+      timeoutSignal,
+      upstreamAbortSignal,
+      resolveStreamIdleTimeoutMs(runtimeContext.config),
+      onAbort,
+      allowedFunctionNames,
+    );
 
+    return this._processDirectResponse(
+      lastResponse,
+      aggregatedText,
+      runtimeContext.config,
+      {
+        contents: contentsForApi,
+        tools:
+          effectiveToolsFromConfig !== undefined &&
+          effectiveToolsFromConfig.length > 0
+            ? effectiveToolsFromConfig
+            : undefined,
+      },
+      allowedFunctionNames,
+    );
+  }
+
+  private _buildProviderRuntimeMetadata(
+    params: SendMessageParameters,
+    effectiveToolsFromConfig: ToolGroupArray | undefined,
+  ): Record<string, unknown> {
+    const directOverrides = this._extractDirectGeminiOverrides(params.config);
+    return {
+      toolCount: effectiveToolsFromConfig?.length ?? 0,
+      ...(directOverrides ? { geminiDirectOverrides: directOverrides } : {}),
+    };
+  }
+
+  private _createDirectProviderStream(
+    provider: IProvider,
+    contentsForApi: IContent[],
+    effectiveToolsFromConfig: ToolGroupArray | undefined,
+    runtimeContext: ProviderRuntimeContext,
+    timeoutSignal: AbortSignal,
+  ): AsyncIterable<IContent> {
     this.logger.debug(
       () =>
         '[DirectMessageProcessor] Calling provider.generateChatCompletion (non-stream retry path)',
       {
         providerName: provider.name,
         model: this.runtimeContext.state.model,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         toolCount: effectiveToolsFromConfig?.length ?? 0,
-        baseUrl: baseUrlForCall,
+        baseUrl: this.runtimeContext.state.baseUrl,
       },
     );
 
-    const runtimeContext = this.providerRuntimeBuilder(
-      'DirectMessageProcessor.generateDirectMessage',
-      {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        toolCount: effectiveToolsFromConfig?.length ?? 0,
-        ...(directOverrides ? { geminiDirectOverrides: directOverrides } : {}),
-      },
-    );
-
-    const providerSupportsIContent =
-      typeof provider.generateChatCompletion === 'function';
-    if (!providerSupportsIContent) {
+    if (typeof provider.generateChatCompletion !== 'function') {
       throw new Error(
         `Provider ${provider.name} does not support IContent generation`,
       );
     }
 
-    const upstreamAbortSignal = params.config?.abortSignal;
-    const { timeoutController, timeoutSignal, onAbort } =
-      this._setupAbortController(upstreamAbortSignal);
-
-    const streamResponse = provider.generateChatCompletion({
+    return provider.generateChatCompletion({
       contents: contentsForApi,
       tools:
+        effectiveToolsFromConfig !== undefined &&
         effectiveToolsFromConfig.length > 0
           ? (effectiveToolsFromConfig as ProviderToolset)
           : undefined,
@@ -335,32 +460,12 @@ export class DirectMessageProcessor {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       userMemory: runtimeContext.config?.getUserMemory?.(),
     });
+  }
 
-    const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
-      runtimeContext.config,
-    );
-
-    const { lastResponse, aggregatedText } = await this._consumeStreamResponse(
-      streamResponse,
-      timeoutController,
-      timeoutSignal,
-      upstreamAbortSignal,
-      effectiveTimeoutMs,
-      onAbort,
-    );
-
-    return this._processDirectResponse(
-      lastResponse,
-      aggregatedText,
-      runtimeContext.config,
-      {
-        contents: contentsForApi,
-        tools:
-          effectiveToolsFromConfig.length > 0
-            ? effectiveToolsFromConfig
-            : undefined,
-      },
-    );
+  private _selectRequestTools(
+    params: SendMessageParameters,
+  ): GenerateContentConfig['tools'] {
+    return params.config?.tools ?? this.generationConfig.tools;
   }
 
   /**
@@ -371,21 +476,23 @@ export class DirectMessageProcessor {
     params: SendMessageParameters,
     userIContents: IContent[],
   ): Promise<{
-    effectiveToolsFromConfig: ToolGroupArray;
+    effectiveToolsFromConfig: ToolGroupArray | undefined;
     contentsForApi: IContent[];
     syntheticResponse: GenerateContentResponse | undefined;
+    allowedFunctionNames: string[] | undefined;
   }> {
-    const toolsFromConfig =
-      params.config?.tools && Array.isArray(params.config.tools)
-        ? (params.config.tools as ToolGroupArray)
-        : undefined;
+    const requestTools = this._selectRequestTools(params);
+    const toolsFromConfig = Array.isArray(requestTools)
+      ? (requestTools as ToolGroupArray)
+      : [];
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
     let contentsForApi: IContent[] = userIContents;
-    const effectiveToolsFromConfig =
-      configForHooks && toolsFromConfig
+    const toolSelection =
+      configForHooks !== undefined
         ? await this._applyToolSelectionHook(configForHooks, toolsFromConfig)
-        : toolsFromConfig;
+        : { tools: toolsFromConfig, allowedFunctionNames: undefined };
+    const effectiveToolsFromConfig = toolSelection.tools;
 
     if (configForHooks) {
       const hookResult = await this._handleBeforeModelHook(
@@ -395,10 +502,10 @@ export class DirectMessageProcessor {
       );
       if (hookResult.syntheticResponse) {
         return {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined tools array should default to empty array
-          effectiveToolsFromConfig: effectiveToolsFromConfig || [],
+          effectiveToolsFromConfig,
           contentsForApi,
           syntheticResponse: hookResult.syntheticResponse,
+          allowedFunctionNames: toolSelection.allowedFunctionNames,
         };
       }
       if (hookResult.modifiedContents) {
@@ -407,22 +514,26 @@ export class DirectMessageProcessor {
     }
 
     return {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined tools array should default to empty array
-      effectiveToolsFromConfig: effectiveToolsFromConfig || [],
+      effectiveToolsFromConfig,
       contentsForApi,
       syntheticResponse: undefined,
+      allowedFunctionNames: toolSelection.allowedFunctionNames,
     };
   }
 
   private async _applyToolSelectionHook(
     configForHooks: Config,
     toolsFromConfig: ToolGroupArray,
-  ): Promise<ToolGroupArray> {
+  ): Promise<ToolSelectionHookResult> {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!configForHooks.getEnableHooks?.()) return toolsFromConfig;
+    if (!configForHooks.getEnableHooks?.()) {
+      return { tools: toolsFromConfig, allowedFunctionNames: undefined };
+    }
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const hookSystem = configForHooks.getHookSystem?.();
-    if (!hookSystem) return toolsFromConfig;
+    if (!hookSystem) {
+      return { tools: toolsFromConfig, allowedFunctionNames: undefined };
+    }
     await hookSystem.initialize();
     const toolSelectionResult =
       await hookSystem.fireBeforeToolSelectionEvent(toolsFromConfig);
@@ -435,17 +546,21 @@ export class DirectMessageProcessor {
     ) {
       const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
       if (Array.isArray(allowedFunctions)) {
-        return toolsFromConfig
+        const allowedNames = new Set(
+          allowedFunctions.map(canonicalizeToolName),
+        );
+        const filteredTools = toolsFromConfig
           .map((toolGroup) => ({
             ...toolGroup,
             functionDeclarations: toolGroup.functionDeclarations.filter((fn) =>
-              allowedFunctions.includes(fn.name),
+              allowedNames.has(canonicalizeToolName(fn.name)),
             ),
           }))
           .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
+        return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
       }
     }
-    return toolsFromConfig;
+    return { tools: toolsFromConfig, allowedFunctionNames: undefined };
   }
 
   /**
@@ -544,8 +659,25 @@ export class DirectMessageProcessor {
     aggregatedText: string,
     config: Config | undefined,
     llmRequest?: Record<string, unknown>,
+    allowedFunctionNames?: string[],
   ): Promise<GenerateContentResponse> {
-    let directResponse = convertIContentToResponse(lastResponse);
+    let directResponse = this._applyHookRestrictedAllowedTools(
+      convertIContentToResponse(lastResponse),
+      allowedFunctionNames,
+    );
+    const automaticFunctionCallingHistory =
+      lastResponse.metadata?.providerMetadata?.[
+        'automaticFunctionCallingHistory'
+      ];
+    if (isContentArray(automaticFunctionCallingHistory)) {
+      directResponse.automaticFunctionCallingHistory =
+        filterHookRestrictedContents(
+          automaticFunctionCallingHistory,
+          allowedFunctionNames,
+        ).filter((content) => (content.parts?.length ?? 0) > 0);
+    }
+
+    let afterModelModifiedResponse = false;
 
     // Trigger AfterModel hook
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
@@ -554,22 +686,36 @@ export class DirectMessageProcessor {
       const hookSystem = config.getHookSystem?.();
       if (hookSystem) {
         await hookSystem.initialize();
+        const filteredContent = filterHookRestrictedContent(
+          directResponse.candidates?.[0]?.content ?? {
+            role: 'model',
+            parts: [],
+          },
+          allowedFunctionNames,
+        );
         const afterModelResult = await hookSystem.fireAfterModelEvent(
           llmRequest ?? {},
-          lastResponse,
+          ContentConverters.toIContent(filteredContent),
         );
         if (afterModelResult) {
           const modifiedResponse = afterModelResult.getModifiedResponse();
           // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (modifiedResponse) {
-            directResponse = modifiedResponse;
+            directResponse = this._applyHookRestrictedAllowedTools(
+              modifiedResponse,
+              allowedFunctionNames,
+            );
+            afterModelModifiedResponse = true;
           }
         }
       }
     }
 
+    const canAppendAggregatedText =
+      aggregatedText.trim() !== '' && !afterModelModifiedResponse;
+
     // Ensure text content is included
-    if (aggregatedText.trim()) {
+    if (canAppendAggregatedText) {
       const candidate = directResponse.candidates?.[0];
       if (candidate) {
         const parts = candidate.content?.parts ?? [];
@@ -596,6 +742,13 @@ export class DirectMessageProcessor {
     }
 
     return directResponse;
+  }
+
+  private _applyHookRestrictedAllowedTools(
+    response: GenerateContentResponse,
+    allowedFunctionNames: string[] | undefined,
+  ): GenerateContentResponse {
+    return attachHookRestrictedAllowedTools(response, allowedFunctionNames);
   }
 
   /**

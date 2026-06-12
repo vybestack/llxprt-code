@@ -16,6 +16,7 @@ import {
   type CompletedToolCall,
   type CoreToolScheduler,
 } from './coreToolScheduler.js';
+import { canonicalizeToolName } from './toolGovernance.js';
 
 /**
  * Configuration subset required for non-interactive tool execution.
@@ -88,6 +89,14 @@ async function createScheduler(
     dependencies,
   );
 }
+function isBlockedByHookRestriction(request: ToolCallRequestInfo): boolean {
+  const allowedTools = request.hookRestrictedAllowedTools;
+  if (allowedTools === undefined) {
+    return false;
+  }
+  const allowed = new Set(allowedTools.map(canonicalizeToolName));
+  return !allowed.has(canonicalizeToolName(request.name));
+}
 
 export async function executeToolCall(
   config: ToolExecutionConfig,
@@ -98,6 +107,14 @@ export async function executeToolCall(
   },
 ): Promise<CompletedToolCall> {
   const startTime = Date.now();
+
+  if (isBlockedByHookRestriction(toolCallRequest)) {
+    return Promise.reject(
+      new Error(
+        `Tool "${toolCallRequest.name}" is disabled by hook restrictions.`,
+      ),
+    );
+  }
 
   const agentId = toolCallRequest.agentId ?? DEFAULT_AGENT_ID;
   toolCallRequest.agentId = agentId;

@@ -12,6 +12,7 @@ import {
   AfterModelHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { GeminiEventType } from './turn.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -293,10 +294,85 @@ describe('ChatSession hook execution control', () => {
       );
       expect(blockedEvent).toBeDefined();
       expect(blockedEvent?.reason).toBe('AfterModel blocked execution');
-
-      const chunkEvent = events.find((e) => e.type === StreamEventType.CHUNK);
-      expect(chunkEvent).toBeDefined();
     });
+  });
+
+  it('filters hook-disallowed tool calls from BeforeModel blocking synthetic responses', async () => {
+    (
+      mockHookSystem.fireBeforeToolSelectionEvent as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce({
+      applyToolConfigModifications: () => ({
+        toolConfig: { allowedFunctionNames: ['read_file'] },
+      }),
+    });
+    const beforeModelOutput = new BeforeModelHookOutput({
+      decision: 'block',
+      reason: 'BeforeModel blocked execution',
+    });
+    vi.spyOn(beforeModelOutput, 'getSyntheticResponse').mockReturnValue({
+      candidates: [
+        {
+          content: {
+            role: 'model' as const,
+            parts: [
+              {
+                functionCall: {
+                  id: 'allowed-call',
+                  name: 'read_file',
+                  args: { file_path: 'file.txt' },
+                },
+              },
+              {
+                functionCall: {
+                  id: 'blocked-call',
+                  name: 'run_shell_command',
+                  args: { command: 'echo blocked' },
+                },
+              },
+            ],
+          },
+          finishReason: 'STOP' as const,
+        },
+      ],
+    });
+    (
+      mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce(beforeModelOutput);
+    const chatWithTools = new ChatSession(
+      (
+        chat as unknown as {
+          runtimeContext: ConstructorParameters<typeof ChatSession>[0];
+        }
+      ).runtimeContext,
+      mockContentGenerator,
+      {
+        tools: [
+          {
+            functionDeclarations: [
+              { name: 'read_file' },
+              { name: 'run_shell_command' },
+            ],
+          },
+        ],
+      },
+      [],
+    );
+
+    const events = [];
+    const stream = await chatWithTools.sendMessageStream(
+      { message: 'test message' },
+      'test-prompt',
+    );
+    for await (const event of stream) {
+      events.push(event);
+    }
+
+    expect(
+      events.some((event) => event.type === GeminiEventType.ToolCallRequest),
+    ).toBe(false);
+    const chunk = events.find((event) => event.type === StreamEventType.CHUNK);
+    expect(JSON.stringify(chunk)).toContain('read_file');
+    expect(JSON.stringify(chunk)).not.toContain('run_shell_command');
   });
 
   describe('Hook control does not enter retry loop', () => {
