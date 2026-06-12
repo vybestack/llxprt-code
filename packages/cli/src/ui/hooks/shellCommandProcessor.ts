@@ -372,7 +372,13 @@ function shellCleanup(
     fs.unlinkSync(pwdFilePath);
   }
   setActiveShellPtyId(null);
-  setShellInputFocused(false);
+  const lastActivePtyId = ShellExecutionService.getLastActivePtyId();
+  const ptyAlive =
+    lastActivePtyId !== null &&
+    ShellExecutionService.isActivePty(lastActivePtyId);
+  if (!ptyAlive) {
+    setShellInputFocused(false);
+  }
   resolve();
 }
 

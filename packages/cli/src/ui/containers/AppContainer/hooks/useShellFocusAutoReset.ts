@@ -7,7 +7,10 @@
 import { useEffect, useMemo } from 'react';
 import { ToolCallStatus, type HistoryItemWithoutId } from '../../../types.js';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../../constants.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  DebugLogger,
+  ShellExecutionService,
+} from '@vybestack/llxprt-code-core';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 
@@ -20,9 +23,11 @@ interface UseShellFocusAutoResetParams {
 /**
  * @hook useShellFocusAutoReset
  * @description Resets embedded shell focus when no shell tool is executing
+ * AND no live PTY still exists. Preserves focus when a PTY remains alive
+ * so users can continue typing into the embedded terminal.
  * @inputs pendingHistoryItems, embeddedShellFocused, setEmbeddedShellFocused
  * @outputs activeShellExecuting flag
- * @sideEffects Updates focus state when execution ends
+ * @sideEffects Updates focus state when execution ends and PTY is dead
  */
 export function useShellFocusAutoReset({
   pendingHistoryItems,
@@ -45,8 +50,14 @@ export function useShellFocusAutoReset({
 
   useEffect(() => {
     if (embeddedShellFocused && !anyShellExecuting) {
-      debug.log('Auto-resetting embeddedShellFocused: no shell executing');
-      setEmbeddedShellFocused(false);
+      const lastActivePtyId = ShellExecutionService.getLastActivePtyId();
+      const hasLivePty =
+        lastActivePtyId !== null &&
+        ShellExecutionService.isActivePty(lastActivePtyId);
+      if (!hasLivePty) {
+        debug.log('Auto-resetting embeddedShellFocused: no shell executing');
+        setEmbeddedShellFocused(false);
+      }
     }
   }, [embeddedShellFocused, anyShellExecuting, setEmbeddedShellFocused]);
 
