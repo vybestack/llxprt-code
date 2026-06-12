@@ -12,8 +12,6 @@ import type {
   WaitingToolCall,
   CompletedToolCall,
   ErroredToolCall,
-  ToolCall,
-  WaitingToolCall,
 } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { convertToFunctionResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
