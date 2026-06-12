@@ -9,18 +9,7 @@ import { BaseTool, type ToolResult, Kind } from './tools.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';
 import type { IToolHost } from '../interfaces/IToolHost.js';
-import { EmojiFilter, type EmojiFilterMode } from '../utils/EmojiFilter.js';
-
-const VALID_EMOJI_FILTER_MODES = new Set<string>([
-  'allowed',
-  'auto',
-  'warn',
-  'error',
-]);
-
-function isEmojiFilterMode(value: unknown): value is EmojiFilterMode {
-  return typeof value === 'string' && VALID_EMOJI_FILTER_MODES.has(value);
-}
+import { EmojiFilter, isEmojiFilterMode } from '../utils/EmojiFilter.js';
 
 export interface TodoPauseParams {
   reason: string;

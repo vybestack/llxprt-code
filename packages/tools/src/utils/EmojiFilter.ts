@@ -14,6 +14,17 @@
  */
 export type EmojiFilterMode = 'allowed' | 'auto' | 'warn' | 'error';
 
+export const VALID_EMOJI_FILTER_MODES = new Set<string>([
+  'allowed',
+  'auto',
+  'warn',
+  'error',
+]);
+
+export function isEmojiFilterMode(value: unknown): value is EmojiFilterMode {
+  return typeof value === 'string' && VALID_EMOJI_FILTER_MODES.has(value);
+}
+
 /**
  * Configuration for emoji filtering behavior
  * @requirement REQ-004.1 - Silent filtering in auto mode
