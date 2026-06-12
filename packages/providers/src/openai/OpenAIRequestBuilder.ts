@@ -16,7 +16,7 @@
 
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -29,14 +29,14 @@ import {
 import {
   getToolIdStrategy,
   type ToolIdMapper,
-} from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+} from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import {
   filterThinkingForContext,
   thinkingToReasoningField,
   extractThinkingBlocks,
   type StripPolicy,
 } from '../reasoning/reasoningUtils.js';
-import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import {
   normalizeMediaToDataUri,
   classifyMediaBlock,

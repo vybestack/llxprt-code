@@ -10,8 +10,9 @@ import process from 'node:process';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
-import { ActivateSkillTool } from '../tools/activate-skill.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { ActivateSkillTool } from '@vybestack/llxprt-code-tools';
+import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
 import type {
@@ -32,8 +33,8 @@ import {
   loadJitSubdirectoryMemory,
 } from '../utils/memoryDiscovery.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
-import { IdeClient } from '../ide/ide-client.js';
-import { ideContext } from '../ide/ideContext.js';
+import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
+import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import type { Content } from '@google/genai';
 import {
   getOrCreateScheduler as _getOrCreateScheduler,
@@ -157,7 +158,10 @@ export class Config extends ConfigBase {
       if (this.getSkillManager().getSkills().length > 0) {
         this.getToolRegistry().unregisterTool(ActivateSkillTool.Name);
         this.getToolRegistry().registerTool(
-          new ActivateSkillTool(this, initializationMessageBus),
+          new ActivateSkillTool(
+            new CoreSkillServiceAdapter(this),
+            initializationMessageBus,
+          ),
         );
       }
     }

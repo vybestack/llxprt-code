@@ -12,12 +12,12 @@ import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import toml from '@iarna/toml';
-import { ShellToolInvocation } from '../tools/shell.js';
-import { type Config } from '../config/config.js';
 import {
+  ShellToolInvocation,
   ToolConfirmationOutcome,
+  type IShellToolHost,
   type PolicyUpdateOptions,
-} from '../tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import * as shellUtils from '../utils/shell-utils.js';
 
 vi.mock('node:fs/promises');
@@ -138,12 +138,16 @@ describe('createPolicyUpdater', () => {
 });
 
 describe('ShellToolInvocation Policy Update', () => {
-  let mockConfig: Config;
+  let mockHost: IShellToolHost;
   let mockMessageBus: MessageBus;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    mockConfig = {} as Config;
+    mockHost = {
+      getCommandRoots: (command: string) => shellUtils.getCommandRoots(command),
+      stripShellWrapper: (command: string) =>
+        shellUtils.stripShellWrapper(command),
+    } as IShellToolHost;
     mockMessageBus = {} as MessageBus;
 
     vi.mocked(shellUtils.stripShellWrapper).mockImplementation(
@@ -155,12 +159,10 @@ describe('ShellToolInvocation Policy Update', () => {
     vi.mocked(shellUtils.getCommandRoots).mockReturnValue(['git', 'npm']);
 
     const invocation = new ShellToolInvocation(
-      mockConfig,
+      mockHost,
       { command: 'git status && npm test' },
       new Set(),
       mockMessageBus,
-      'run_shell_command',
-      'Shell',
     );
 
     // Accessing protected method for testing
@@ -177,12 +179,10 @@ describe('ShellToolInvocation Policy Update', () => {
     vi.mocked(shellUtils.getCommandRoots).mockReturnValue(['ls']);
 
     const invocation = new ShellToolInvocation(
-      mockConfig,
+      mockHost,
       { command: 'ls -la /tmp' },
       new Set(),
       mockMessageBus,
-      'run_shell_command',
-      'Shell',
     );
 
     // Accessing protected method for testing

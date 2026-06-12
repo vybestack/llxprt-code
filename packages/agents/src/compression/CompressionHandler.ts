@@ -13,6 +13,7 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   CompressionContext,
+  CompressionProviderResult,
   DensityConfig,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
@@ -78,7 +79,9 @@ export class CompressionHandler {
     private readonly runtimeContext: AgentRuntimeContext,
     private readonly historyService: HistoryService,
     private readonly generationConfig: GenerateContentConfig,
-    private readonly providerResolver: (contextLabel: string) => IProvider,
+    private readonly providerResolver: (
+      compressionProfileName: string | undefined,
+    ) => CompressionProviderResult | Promise<CompressionProviderResult>,
     private readonly hookTrigger: (
       context: CompressionContext,
     ) => Promise<void>,
@@ -803,7 +806,7 @@ export class CompressionHandler {
       currentTokenCount: this.historyService.getTotalTokens(),
       logger: this.logger,
       resolveProvider: (profileName?) =>
-        this.providerResolver(profileName ?? 'compression'),
+        Promise.resolve(this.providerResolver(profileName)),
       promptResolver,
       promptBaseDir,
       promptContext: {

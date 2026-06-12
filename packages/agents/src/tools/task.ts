@@ -11,7 +11,7 @@ import {
   BaseToolInvocation,
   Kind,
   type ToolResult,
-} from '@vybestack/llxprt-code-core/tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   SubagentOrchestrator,
@@ -26,9 +26,9 @@ import {
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';

@@ -37,6 +37,7 @@
     "sandboxImageUri": "ghcr.io/vybestack/llxprt-code/sandbox:0.10.0"
   },
   "dependencies": {
+    "@vybestack/llxprt-code-storage": "file:../storage",
     "@agentclientprotocol/sdk": "^0.14.1",
     "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "^1.0.21",
@@ -46,6 +47,7 @@
     "@types/update-notifier": "^6.0.8",
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
+    "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-providers": "file:../providers",
     "@vybestack/llxprt-code-agents": "file:../agents",

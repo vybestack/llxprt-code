@@ -13,14 +13,15 @@
 import type {
   GenerateContentResponseUsageMetadata,
   FinishReason,
+  Part,
+  FunctionDeclaration,
 } from '@google/genai';
-import { type Part, type FunctionDeclaration } from '@google/genai';
-import {
-  type ToolCallConfirmationDetails,
-  type ToolResult,
-  type ToolResultDisplay,
-} from '../tools/tools.js';
-import type { ToolErrorType } from '../tools/tool-error.js';
+import type {
+  ToolCallConfirmationDetails,
+  ToolResult,
+  ToolResultDisplay,
+  ToolErrorType,
+} from '@vybestack/llxprt-code-tools';
 import type { ThoughtSummary } from '../utils/thoughtUtils.js';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 

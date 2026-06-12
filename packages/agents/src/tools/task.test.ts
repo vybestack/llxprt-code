@@ -14,7 +14,7 @@ import {
   ContextState,
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 
 describe('TaskTool', () => {

@@ -4,15 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
-import { GlobTool } from '@vybestack/llxprt-code-core/tools/glob.js';
-import { GrepTool } from '@vybestack/llxprt-code-core/tools/grep.js';
-import { RipGrepTool } from '@vybestack/llxprt-code-core/tools/ripGrep.js';
-import { LSTool } from '@vybestack/llxprt-code-core/tools/ls.js';
-import { MemoryTool } from '@vybestack/llxprt-code-core/tools/memoryTool.js';
-import { ReadFileTool } from '@vybestack/llxprt-code-core/tools/read-file.js';
-import { ReadManyFilesTool } from '@vybestack/llxprt-code-core/tools/read-many-files.js';
-import { GoogleWebSearchTool } from '@vybestack/llxprt-code-core/tools/google-web-search.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import {
+  GlobTool,
+  GrepTool,
+  LSTool,
+  ReadFileTool,
+  ReadManyFilesTool,
+  RipGrepTool,
+  MemoryTool,
+  GoogleWebSearchTool,
+} from '@vybestack/llxprt-code-tools';
 
 /**
  * Tools that are currently approved for non-interactive execution while

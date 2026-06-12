@@ -24,7 +24,7 @@ import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Config } from '../config/config.js';
-import { ToolRegistry } from '../tools/tool-registry.js';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { MockTool } from '../test-utils/tools.js';
 import type {
   ContentGenerator,

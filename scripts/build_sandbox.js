@@ -89,25 +89,37 @@ if (!argv.s) {
 console.log('Binding release dependencies for sandbox tarballs...');
 execSync('node scripts/bind-release-deps.js --backup', { stdio: 'inherit' });
 
+const toolsPackageDir = join('packages', 'tools');
 const cliPackageDir = join('packages', 'cli');
 const authPackageDir = join('packages', 'auth');
 const settingsPackageDir = join('packages', 'settings');
+const storagePackageDir = join('packages', 'storage');
 const corePackageDir = join('packages', 'core');
 const mcpPackageDir = join('packages', 'mcp');
+const ideIntegrationPackageDir = join('packages', 'ide-integration');
 const providersPackageDir = join('packages', 'providers');
 const agentsPackageDir = join('packages', 'agents');
 const telemetryPackageDir = join('packages', 'telemetry');
+const policyPackageDir = join('packages', 'policy');
 
 try {
-  console.log('packing @vybestack/llxprt-code ...');
-  rmSync(join(cliPackageDir, 'dist', 'vybestack-llxprt-code-*.tgz'), {
+  console.log('packing @vybestack/llxprt-code-tools ...');
+  rmSync(join(toolsPackageDir, 'dist', 'vybestack-llxprt-code-tools-*.tgz'), {
     force: true,
   });
   execSync(
-    `npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist`,
-    {
-      stdio: 'ignore',
-    },
+    `npm pack -w @vybestack/llxprt-code-tools --pack-destination ./packages/tools/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-storage ...');
+  rmSync(
+    join(storagePackageDir, 'dist', 'vybestack-llxprt-code-storage-*.tgz'),
+    { force: true },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-storage --pack-destination ./packages/storage/dist`,
+    { stdio: 'ignore' },
   );
 
   console.log('packing @vybestack/llxprt-code-auth ...');
@@ -136,6 +148,31 @@ try {
   );
   execSync(
     `npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-ide-integration ...');
+  rmSync(
+    join(
+      ideIntegrationPackageDir,
+      'dist',
+      'vybestack-llxprt-code-ide-integration-*.tgz',
+    ),
+    {
+      force: true,
+    },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-ide-integration --pack-destination ./packages/ide-integration/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-policy ...');
+  rmSync(join(policyPackageDir, 'dist', 'vybestack-llxprt-code-policy-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-policy --pack-destination ./packages/policy/dist`,
     { stdio: 'ignore' },
   );
 
@@ -175,6 +212,16 @@ try {
     `npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist`,
     { stdio: 'ignore' },
   );
+  console.log('packing @vybestack/llxprt-code ...');
+  rmSync(join(cliPackageDir, 'dist', 'vybestack-llxprt-code-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist`,
+    {
+      stdio: 'ignore',
+    },
+  );
 } finally {
   // Restore workspace file: dependencies so local development is unaffected.
   console.log('Restoring workspace dependencies after sandbox pack...');
@@ -187,6 +234,14 @@ const packageVersion = JSON.parse(
 
 chmodSync(
   join(
+    toolsPackageDir,
+    'dist',
+    `vybestack-llxprt-code-tools-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
     settingsPackageDir,
     'dist',
     `vybestack-llxprt-code-settings-${packageVersion}.tgz`,
@@ -194,7 +249,11 @@ chmodSync(
   0o755,
 );
 chmodSync(
-  join(cliPackageDir, 'dist', `vybestack-llxprt-code-${packageVersion}.tgz`),
+  join(
+    storagePackageDir,
+    'dist',
+    `vybestack-llxprt-code-storage-${packageVersion}.tgz`,
+  ),
   0o755,
 );
 chmodSync(
@@ -214,6 +273,22 @@ chmodSync(
   0o755,
 );
 
+chmodSync(
+  join(
+    ideIntegrationPackageDir,
+    'dist',
+    `vybestack-llxprt-code-ide-integration-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    policyPackageDir,
+    'dist',
+    `vybestack-llxprt-code-policy-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
 chmodSync(
   join(
     mcpPackageDir,
@@ -244,6 +319,10 @@ chmodSync(
     'dist',
     `vybestack-llxprt-code-agents-${packageVersion}.tgz`,
   ),
+  0o755,
+);
+chmodSync(
+  join(cliPackageDir, 'dist', `vybestack-llxprt-code-${packageVersion}.tgz`),
   0o755,
 );
 

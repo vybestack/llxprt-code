@@ -41,18 +41,21 @@ run(`npm version ${versionCommand} --no-git-tag-version --allow-same-version`);
 // 3. Get all workspaces and filter out the one we don't want to version.
 // Define the actual workspaces in our monorepo (not external dependencies)
 const actualWorkspaces = [
-  '@vybestack/llxprt-code',
+  '@vybestack/llxprt-code-tools',
+  '@vybestack/llxprt-code-storage',
   '@vybestack/llxprt-code-auth',
   '@vybestack/llxprt-code-settings',
   '@vybestack/llxprt-code-telemetry',
+  '@vybestack/llxprt-code-ide-integration',
+  '@vybestack/llxprt-code-policy',
   '@vybestack/llxprt-code-mcp',
   '@vybestack/llxprt-code-core',
+  '@vybestack/llxprt-code-lsp',
   '@vybestack/llxprt-code-providers',
   '@vybestack/llxprt-code-agents',
-
+  '@vybestack/llxprt-code',
   '@vybestack/llxprt-code-test-utils',
   'llxprt-code-vscode-ide-companion',
-  '@vybestack/llxprt-code-lsp',
 ];
 
 // Filter for workspaces that actually exist (in case some are optional)

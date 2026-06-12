@@ -1,0 +1,6 @@
+./tools/doubleEscapeUtils.js
+./tools/IToolFormatter.js
+./tools/ToolFormatter.js
+./tools/ToolIdStrategy.js
+./tools/toolNameUtils.js
+./tools/toolIdNormalization.js

@@ -10,7 +10,7 @@ import path from 'node:path';
 import { type PartUnion } from '@google/genai';
 import mime from 'mime-types';
 import { type FileSystemService } from '../services/fileSystemService.js';
-import { ToolErrorType } from '../tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { BINARY_EXTENSIONS } from './ignorePatterns.js';
 import { debugLogger } from './debugLogger.js';
 

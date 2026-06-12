@@ -15,11 +15,11 @@ import { fileURLToPath } from 'node:url';
 import { Readable, Writable } from 'node:stream';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
-import type { LspConfig } from '../lsp/types.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import { initializeTestConfig } from '../test-utils/config.js';
 
-import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
-import * as lspServiceClientModule from '../lsp/lsp-service-client.js';
+import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
+import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 import { debugLogger } from '../utils/debugLogger.js';
 
 // Mock dependencies
@@ -35,12 +35,15 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('../tools/tool-registry', () => {
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
     const tools: Array<{
       serverName?: string;
       serverToolName?: string;
       name?: string;
+      displayName?: string;
     }> = [];
     return {
       registerTool: vi.fn(
@@ -48,6 +51,7 @@ vi.mock('../tools/tool-registry', () => {
           serverName?: string;
           serverToolName?: string;
           name?: string;
+          displayName?: string;
         }) => {
           tools.push(tool);
         },
@@ -64,25 +68,32 @@ vi.mock('../tools/tool-registry', () => {
       }),
     };
   });
-  return { ToolRegistry: ToolRegistryMock };
+  return {
+    ...actual,
+    ToolRegistry: ToolRegistryMock,
+    MemoryTool: vi.fn(),
+    setLlxprtMdFilename: vi.fn(),
+    getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
+    DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
+    LLXPRT_CONFIG_DIR: '.llxprt',
+    DiscoveredMCPTool: vi
+      .fn()
+      .mockImplementation(
+        (
+          _mcpToolService: unknown,
+          serverName: string,
+          serverToolName: string,
+          _description: string,
+          _inputSchema: unknown,
+        ) => ({
+          serverName,
+          serverToolName,
+          name: `${serverName}__${serverToolName}`,
+          displayName: `${serverName}__${serverToolName}`,
+        }),
+      ),
+  };
 });
-
-vi.mock('../tools/ls');
-vi.mock('../tools/read-file');
-vi.mock('../tools/grep');
-vi.mock('../tools/glob');
-vi.mock('../tools/edit');
-vi.mock('../tools/shell');
-vi.mock('../tools/write-file');
-vi.mock('../tools/google-web-fetch');
-vi.mock('../tools/read-many-files');
-vi.mock('../tools/memoryTool', () => ({
-  MemoryTool: vi.fn(),
-  setLlxprtMdFilename: vi.fn(),
-  getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
-  DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
-  LLXPRT_CONFIG_DIR: '.llxprt',
-}));
 
 vi.mock('../core/contentGenerator.js', async (importOriginal) => {
   const actual =
@@ -101,14 +112,21 @@ vi.mock('../telemetry/index.js', () => ({
   StartSessionEvent: vi.fn(),
 }));
 
-vi.mock('../ide/ide-client.js', () => ({
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-    }),
-  },
-}));
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    },
+  };
+});
 
 vi.mock('../services/fileDiscoveryService.js', () => ({
   FileDiscoveryService: vi.fn().mockImplementation(() => ({
@@ -127,6 +145,21 @@ vi.mock('@vybestack/llxprt-code-mcp', () => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
     getMcpInstructions: vi.fn().mockReturnValue(''),
   })),
+  DiscoveredMCPTool: vi
+    .fn()
+    .mockImplementation(
+      (
+        _callableTool: unknown,
+        serverName: string,
+        serverToolName: string,
+        _description: string,
+        _inputSchema: unknown,
+      ) => ({
+        serverName,
+        serverToolName,
+        name: `${serverName}__${serverToolName}`,
+      }),
+    ),
 }));
 
 vi.mock('../utils/extensionLoader.js', () => ({
@@ -198,29 +231,6 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
     }),
     close: vi.fn().mockResolvedValue(undefined),
   })),
-}));
-
-// Mock DiscoveredMCPTool
-vi.mock('@vybestack/llxprt-code-mcp', () => ({
-  McpClientManager: vi.fn().mockImplementation(() => ({
-    startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-    getMcpInstructions: vi.fn().mockReturnValue(''),
-  })),
-  DiscoveredMCPTool: vi
-    .fn()
-    .mockImplementation(
-      (
-        _callableTool: unknown,
-        serverName: string,
-        serverToolName: string,
-        _description: string,
-        _inputSchema: unknown,
-      ) => ({
-        serverName,
-        serverToolName,
-        name: `${serverName}__${serverToolName}`,
-      }),
-    ),
 }));
 
 vi.mock('../utils/memoryDiscovery.js', () => ({

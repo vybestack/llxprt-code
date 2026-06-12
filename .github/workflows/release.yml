@@ -317,6 +317,14 @@ jobs:
           fi
           npx @vscode/vsce publish --packagePath "${VSIX_PATH}" --skip-duplicate
 
+      - name: Publish @vybestack/llxprt-code-tools
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        run: npm publish --workspace=@vybestack/llxprt-code-tools --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Publish @vybestack/llxprt-code-storage
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        run: npm publish --workspace=@vybestack/llxprt-code-storage --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
       - name: Publish @vybestack/llxprt-code-auth
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-auth --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
@@ -328,6 +336,14 @@ jobs:
       - name: Publish @vybestack/llxprt-code-telemetry
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-telemetry --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Publish @vybestack/llxprt-code-ide-integration
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        run: npm publish --workspace=@vybestack/llxprt-code-ide-integration --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Publish @vybestack/llxprt-code-policy
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        run: npm publish --workspace=@vybestack/llxprt-code-policy --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-mcp
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
@@ -369,17 +385,20 @@ jobs:
       - name: Prepare sandbox package tarballs
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         run: |
-          mkdir -p packages/cli/dist packages/auth/dist packages/settings/dist packages/telemetry/dist packages/mcp/dist packages/core/dist packages/providers/dist packages/agents/dist
-          rm -f packages/cli/dist/vybestack-llxprt-code-*.tgz packages/auth/dist/vybestack-llxprt-code-auth-*.tgz packages/settings/dist/vybestack-llxprt-code-settings-*.tgz packages/telemetry/dist/vybestack-llxprt-code-telemetry-*.tgz packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz packages/core/dist/vybestack-llxprt-code-core-*.tgz packages/providers/dist/vybestack-llxprt-code-providers-*.tgz packages/agents/dist/vybestack-llxprt-code-agents-*.tgz
-          npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
+          mkdir -p packages/tools/dist packages/cli/dist packages/storage/dist packages/auth/dist packages/settings/dist packages/telemetry/dist packages/ide-integration/dist packages/policy/dist packages/mcp/dist packages/core/dist packages/providers/dist packages/agents/dist
+          rm -f packages/tools/dist/vybestack-llxprt-code-tools-*.tgz packages/cli/dist/vybestack-llxprt-code-*.tgz packages/storage/dist/vybestack-llxprt-code-storage-*.tgz packages/auth/dist/vybestack-llxprt-code-auth-*.tgz packages/settings/dist/vybestack-llxprt-code-settings-*.tgz packages/telemetry/dist/vybestack-llxprt-code-telemetry-*.tgz packages/ide-integration/dist/vybestack-llxprt-code-ide-integration-*.tgz packages/policy/dist/vybestack-llxprt-code-policy-*.tgz packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz packages/core/dist/vybestack-llxprt-code-core-*.tgz packages/providers/dist/vybestack-llxprt-code-providers-*.tgz packages/agents/dist/vybestack-llxprt-code-agents-*.tgz
+          npm pack -w @vybestack/llxprt-code-tools --pack-destination ./packages/tools/dist
+          npm pack -w @vybestack/llxprt-code-storage --pack-destination ./packages/storage/dist
           npm pack -w @vybestack/llxprt-code-auth --pack-destination ./packages/auth/dist
           npm pack -w @vybestack/llxprt-code-settings --pack-destination ./packages/settings/dist
           npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist
-
+          npm pack -w @vybestack/llxprt-code-policy --pack-destination ./packages/policy/dist
           npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist
+          npm pack -w @vybestack/llxprt-code-ide-integration --pack-destination ./packages/ide-integration/dist
           npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist
           npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist
           npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist
+          npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
 
       - name: Log in to Container Registry
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}

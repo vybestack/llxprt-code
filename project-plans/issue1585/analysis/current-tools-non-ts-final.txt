@@ -1,0 +1,2 @@
+packages/core/src/tools/__snapshots__/shell.test.ts.snap
+packages/core/src/tools/__tests__/__snapshots__/ast-query-extractor.test.ts.snap

@@ -43,9 +43,9 @@ import type {
   ModelConfig,
   RunConfig,
   SubAgentRuntimeOverrides,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { ToolRegistry } from '../../tools/tool-registry.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+} from '../subagentTypes.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ContentGenerator } from '../contentGenerator.js';
 import type { Part } from '@google/genai';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';

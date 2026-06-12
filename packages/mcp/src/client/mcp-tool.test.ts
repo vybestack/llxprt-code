@@ -15,10 +15,10 @@ import {
   generateValidName,
   generateMcpToolName,
 } from './mcp-tool.js'; // Added getStringifiedResultForDisplay
-import type { ToolResult } from '@vybestack/llxprt-code-core/tools/tools.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core/tools/tools.js'; // Added ToolConfirmationOutcome
+import type { ToolResult } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools'; // Added ToolConfirmationOutcome
 import type { CallableTool, Part } from '@google/genai';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 
 // We only need to mock the parts of CallableTool that DiscoveredMCPTool uses.
 const mockCallTool = vi.fn();

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   toSnakeCase,
@@ -79,7 +79,7 @@ describe('subagentToolProcessing', () => {
     it('should return message from object resultDisplay', () => {
       const display = {
         message: 'Some detail',
-      } as unknown as import('../tools/tools.js').ToolResultDisplay;
+      } as unknown as import('@vybestack/llxprt-code-tools').ToolResultDisplay;
       expect(extractToolDetail(display, undefined)).toBe('Some detail');
     });
 

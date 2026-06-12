@@ -12,13 +12,13 @@ import {
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
   type ToolResult,
-} from '@vybestack/llxprt-code-core/tools/tools.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
+} from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type { Part } from '@google/genai';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';

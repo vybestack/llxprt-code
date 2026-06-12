@@ -11,14 +11,14 @@ import {
 } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
   type ToolInvocation,
   type ToolResult,
-} from '@vybestack/llxprt-code-core/tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 

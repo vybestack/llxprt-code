@@ -10,9 +10,9 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   ApprovalMode,
   type ConfigParameters,
-} from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
-import { IdeClient } from '@vybestack/llxprt-code-core/ide/ide-client.js';
+  ToolRegistry,
+} from '@vybestack/llxprt-code-core/index.js';
+import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
   createProviderRuntimeContext,
@@ -24,14 +24,14 @@ import {
   Kind,
   type ToolCallConfirmationDetails,
   type ToolResult,
-} from '@vybestack/llxprt-code-core/tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   MessageBusType,
   type ToolConfirmationRequest,
   type ToolPolicyRejection,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core/tools/tool-confirmation-types.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 const baseConfigParams: ConfigParameters = {
   cwd: '/tmp',

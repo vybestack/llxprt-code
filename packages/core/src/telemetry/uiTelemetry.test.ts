@@ -18,9 +18,9 @@ import type {
   CompletedToolCall,
   ErroredToolCall,
   SuccessfulToolCall,
-} from '../scheduler/types.js';
-import { ToolErrorType } from '../tools/tool-error.js';
-import { ToolConfirmationOutcome } from '../tools/tools.js';
+} from '../core/coreToolScheduler.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { MockTool } from '../test-utils/tools.js';
 
 const createFakeCompletedToolCall = (

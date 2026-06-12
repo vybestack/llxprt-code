@@ -55,14 +55,14 @@ import {
   type TextBlock,
   type ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 import { type IModel } from '../IModel.js';
 import { type IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { convertToVercelMessages } from './messageConversion.js';
-import { getToolIdStrategy } from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+import { getToolIdStrategy } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { AuthenticationError, wrapError } from './errors.js';
@@ -81,7 +81,7 @@ import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
 import {
   normalizeToOpenAIToolId,
   normalizeToHistoryToolId,
-} from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+} from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 
 type VercelTools = Record<string, Tool<unknown, never>>;
 const streamText = Ai.streamText;

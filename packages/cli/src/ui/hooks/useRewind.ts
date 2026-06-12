@@ -8,7 +8,7 @@ import { useState, useCallback } from 'react';
 import type {
   ConversationRecord,
   BaseMessageRecord,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-storage';
 import {
   calculateTurnStats,
   calculateRewindImpact,

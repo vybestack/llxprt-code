@@ -13,7 +13,7 @@ import {
   llmSummarizer,
   defaultSummarizer,
 } from './summarizer.js';
-import type { ToolResult } from '../tools/tools.js';
+import type { ToolResult } from '@vybestack/llxprt-code-tools';
 
 describe('summarizers', () => {
   let mockAgentClient: AgentClientContract;

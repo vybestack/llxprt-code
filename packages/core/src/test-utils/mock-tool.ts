@@ -8,12 +8,12 @@ import type {
   ToolCallConfirmationDetails,
   ToolInvocation,
   ToolResult,
-} from '../tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-} from '../tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision } from '../policy/types.js';

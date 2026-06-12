@@ -31,7 +31,7 @@ import {
   UnauthorizedError,
   toFriendlyError,
 } from '@vybestack/llxprt-code-core/utils/errors.js';
-import { normalizeToolName } from '@vybestack/llxprt-code-core/tools/toolNameUtils.js';
+import { normalizeToolName } from '@vybestack/llxprt-code-tools';
 import type { ChatSession } from './chatSession.js';
 import {
   InvalidStreamError,

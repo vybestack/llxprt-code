@@ -50,9 +50,13 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 USER node
 
 # Copy packages with proper ownership
+COPY --chown=node:node packages/tools/dist/vybestack-llxprt-code-tools-*.tgz /tmp/
+COPY --chown=node:node packages/storage/dist/vybestack-llxprt-code-storage-*.tgz /tmp/
 COPY --chown=node:node packages/auth/dist/vybestack-llxprt-code-auth-*.tgz /tmp/
 COPY --chown=node:node packages/settings/dist/vybestack-llxprt-code-settings-*.tgz /tmp/
 COPY --chown=node:node packages/telemetry/dist/vybestack-llxprt-code-telemetry-*.tgz /tmp/
+COPY --chown=node:node packages/ide-integration/dist/vybestack-llxprt-code-ide-integration-*.tgz /tmp/
+COPY --chown=node:node packages/policy/dist/vybestack-llxprt-code-policy-*.tgz /tmp/
 COPY --chown=node:node packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz /tmp/
 COPY --chown=node:node packages/core/dist/vybestack-llxprt-code-core-*.tgz /tmp/
 COPY --chown=node:node packages/providers/dist/vybestack-llxprt-code-providers-*.tgz /tmp/
@@ -64,9 +68,13 @@ COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz /tmp/
 # Install all local tarballs in one transaction so unpublished package versions
 # satisfy each other without falling back to the npm registry.
 RUN npm install -g \
+      /tmp/vybestack-llxprt-code-tools-*.tgz \
+      /tmp/vybestack-llxprt-code-storage-*.tgz \
       /tmp/vybestack-llxprt-code-auth-*.tgz \
       /tmp/vybestack-llxprt-code-settings-*.tgz \
       /tmp/vybestack-llxprt-code-telemetry-*.tgz \
+      /tmp/vybestack-llxprt-code-ide-integration-*.tgz \
+      /tmp/vybestack-llxprt-code-policy-*.tgz \
       /tmp/vybestack-llxprt-code-mcp-*.tgz \
       /tmp/vybestack-llxprt-code-core-*.tgz \
       /tmp/vybestack-llxprt-code-providers-*.tgz \
@@ -74,6 +82,7 @@ RUN npm install -g \
       /tmp/vybestack-llxprt-code-*.tgz && \
     npm cache clean --force && \
     rm -f /tmp/*.tgz
+
 
 # Install experimental UI package into the sandbox so --experimental-ui works.
 # If it's not available on the registry yet (e.g. nightlies), users can still

@@ -39,8 +39,11 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
  * media classification owned by core while supporting provider-injected
  * MediaBlock flows.
  */
-import { classifyMediaBlock } from '@vybestack/llxprt-code-core/tools/mediaUtils.js';
+import { classifyMediaBlock } from '@vybestack/llxprt-code-tools';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 /**
  * Aggregate text from content blocks, handling spacing between text and
@@ -239,12 +242,16 @@ export function buildTriggerInstruction(toCompress: IContent[]): string {
  *
  * @param provider - the provider to use for the verification call
  * @param initialSummary - the summary produced by the initial compression call
- * @param config - optional config for bucket failover handling during verification
+ * @param context - the compression context providing runtime/settings for provider auth resolution
  */
 export async function runVerificationPass(
   provider: IProvider,
   initialSummary: string,
-  config?: CompressionContext['config'],
+  context: CompressionContext,
+  resolvedRuntime?: ProviderRuntimeContext,
+  resolvedConfig?: Config,
+  resolvedOptions?: RuntimeGenerateChatOptions['resolved'],
+  invocation?: RuntimeGenerateChatOptions['invocation'],
 ): Promise<string> {
   const verificationRequest: IContent[] = [
     COMPRESSION_SECURITY_PREAMBLE,
@@ -273,10 +280,22 @@ export async function runVerificationPass(
   ];
 
   try {
+    const providerRuntime =
+      resolvedRuntime ?? context.runtimeContext.providerRuntime;
     const stream = provider.generateChatCompletion({
       contents: verificationRequest,
       tools: undefined,
-      config,
+      config: resolvedConfig ?? context.config ?? providerRuntime.config,
+      runtime: providerRuntime,
+      invocation,
+
+      settings:
+        providerRuntime.settingsService as RuntimeGenerateChatOptions['settings'],
+      resolved: resolvedOptions,
+      metadata: {
+        ...(providerRuntime.metadata ?? {}),
+        source: 'runVerificationPass',
+      },
     });
 
     let verifiedText = '';

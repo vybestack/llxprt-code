@@ -17,11 +17,11 @@ import { CoreToolScheduler } from './coreToolScheduler.js';
 import { convertToFunctionResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   ToolConfirmationOutcome,
   type ToolConfirmationPayload,
-} from '@vybestack/llxprt-code-core/tools/tool-confirmation-types.js';
+} from '@vybestack/llxprt-code-tools';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -29,7 +29,7 @@ import {
   type ToolCallConfirmationDetails,
   type ToolInvocation,
   type ToolResult,
-} from '@vybestack/llxprt-code-core/tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { MockModifiableTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
@@ -38,13 +38,13 @@ import { type Content } from '@google/genai';
 import type {
   ContextAwareTool,
   ToolContext,
-} from '@vybestack/llxprt-code-core/tools/tool-context.js';
+} from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
   MessageBusType,
   type ToolConfirmationResponse,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';

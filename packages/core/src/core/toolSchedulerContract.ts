@@ -24,10 +24,10 @@ import type {
 } from '../scheduler/types.js';
 import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ToolCallRequestInfo } from './turn.js';
-import type { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
-import type { ToolConfirmationPayload } from '../tools/tools.js';
+import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
 import type { EditorType } from '../utils/editor.js';
 
 // Re-export types that staying consumers need

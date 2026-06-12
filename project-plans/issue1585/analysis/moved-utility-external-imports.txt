@@ -1,0 +1,96 @@
+# Moved Utility External Import Scan
+
+Plan ID: PLAN-20260608-ISSUE1585
+Issue: #1585
+Generated: 2026-06-08
+
+This document captures all external (non-Node-stdlib) imports from utility files that move from `packages/core/src/` to `packages/tools/src/`.
+
+## New Dependencies Required in packages/tools/package.json
+
+The following packages are imported by moved utility files but are not currently in `packages/tools/package.json`. All are runtime dependencies.
+
+| Package | Version (from core/package.json) | Used By | Type |
+| --- | --- | --- | --- |
+| `@ast-grep/lang-python` | `^0.0.5` | ast-grep-utils.ts | runtime |
+| `@ast-grep/lang-go` | `^0.0.5` | ast-grep-utils.ts | runtime |
+| `@ast-grep/lang-rust` | `^0.0.6` | ast-grep-utils.ts | runtime |
+| `@ast-grep/lang-java` | `^0.0.6` | ast-grep-utils.ts | runtime |
+| `@ast-grep/lang-cpp` | `^0.0.5` | ast-grep-utils.ts | runtime |
+| `@ast-grep/lang-c` | `^0.0.5` | ast-grep-utils.ts | runtime |
+| `@ast-grep/lang-json` | `^0.0.6` | ast-grep-utils.ts | runtime |
+| `@ast-grep/lang-ruby` | `^0.0.6` | ast-grep-utils.ts | runtime |
+| `undici` | `^7.18.2` | utils/fetch.ts | runtime |
+| `mime-types` | `^2.1.35` | utils/fileUtils.ts (getSpecificMimeType) | runtime |
+| `@dqbd/tiktoken` | `^1.0.21` | utils/toolOutputLimiter.ts | runtime |
+| `@xterm/headless` | `5.5.0` | utils/terminalSerializer.ts (type-only import for AnsiOutput type; runtime import for rendering) | runtime |
+| `debug` | `^4.3.4` | debug/DebugLogger.ts | runtime |
+| `ajv` | `^8.17.1` | utils/schemaValidator.ts | runtime |
+
+## Already Declared in packages/tools/package.json
+
+These packages are already in `packages/tools/package.json` (from dependency-relocation-final.md):
+
+- `@ast-grep/napi` `^0.40.5`
+- `@google/genai` `1.30.0`
+- `diff` `^8.0.3`
+- `glob` `^12.0.0`
+- `fast-glob` `^3.3.3`
+- `zod` `^3.25.76`
+- `shell-quote` `^1.8.3`
+- `node-fetch` `^3.3.2`
+- `cheerio` `^1.1.2`
+- `turndown` `^7.2.2`
+- `html-to-text` `^9.0.5`
+- `zod-to-json-schema` `^3.25.1`
+
+## Notes
+
+1. `@xterm/headless` has version `5.5.0` (exact version, not range) in core. The `terminalSerializer.ts` utility imports it as a type-only import (`import type { IBufferCell, Terminal }`), but the underlying runtime module may also be used. When `terminalSerializer.ts` moves, the AnsiOutput type will be a COPY_STRUCTURAL_TYPE_ONLY decision per the utility ownership final — only the type moves. However, `toolOutputLimiter.ts` imports `@dqbd/tiktoken` as a runtime import. Both `terminalSerializer.ts` (runtime) and `toolOutputLimiter.ts` move as MOVE_PURE_UTILITY.
+
+2. The `@ast-grep/lang-*` packages are peer dependencies of `@ast-grep/napi` which is already declared. However, since ast-grep-utils.ts directly imports them, they MUST be declared as direct runtime dependencies of `packages/tools`.
+
+3. `undici` is used by `utils/fetch.ts` (fetchWithTimeout, isPrivateIp) which moves as MOVE_PURE_UTILITY.
+
+4. `ajv` is used by `utils/schemaValidator.ts` which moves as MOVE_PURE_UTILITY.
+
+5. `debug` is used by `debug/DebugLogger.ts`. When DebugLogger moves to tools as a package-local logger, `debug` becomes a direct runtime dependency of `packages/tools`.
+
+6. `mime-types` is used by `utils/fileUtils.ts` (getSpecificMimeType) which moves as MOVE_PURE_UTILITY.
+
+## Updated packages/tools/package.json Dependencies
+
+```json
+{
+  "dependencies": {
+    "@ast-grep/napi": "^0.40.5",
+    "@ast-grep/lang-python": "^0.0.5",
+    "@ast-grep/lang-go": "^0.0.5",
+    "@ast-grep/lang-rust": "^0.0.6",
+    "@ast-grep/lang-java": "^0.0.6",
+    "@ast-grep/lang-cpp": "^0.0.5",
+    "@ast-grep/lang-c": "^0.0.5",
+    "@ast-grep/lang-json": "^0.0.6",
+    "@ast-grep/lang-ruby": "^0.0.6",
+    "@dqbd/tiktoken": "^1.0.21",
+    "@google/genai": "1.30.0",
+    "@xterm/headless": "5.5.0",
+    "ajv": "^8.17.1",
+    "cheerio": "^1.1.2",
+    "debug": "^4.3.4",
+    "diff": "^8.0.3",
+    "fast-glob": "^3.3.3",
+    "glob": "^12.0.0",
+    "html-to-text": "^9.0.5",
+    "mime-types": "^2.1.35",
+    "node-fetch": "^3.3.2",
+    "shell-quote": "^1.8.3",
+    "turndown": "^7.2.2",
+    "undici": "^7.18.2",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.1"
+  }
+}
+```
+
+**Note**: Adding these dependencies to `packages/tools/package.json` is a P11 task. P09 only documents what is required. The current `packages/tools/package.json` should not be modified in P09.

@@ -6,7 +6,7 @@
 
 import path from 'path';
 import type { Config } from '../config/config.js';
-import { getCurrentLlxprtMdFilename } from '../tools/memoryTool.js';
+import { getCurrentLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 
 /**
  * Common ignore patterns used across multiple tools for basic exclusions.

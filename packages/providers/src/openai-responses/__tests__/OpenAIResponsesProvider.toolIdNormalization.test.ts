@@ -20,7 +20,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { buildResponsesInputFromContent } from '../buildResponsesInputFromContent.js';
 
 describe('Tool ID Normalization for OpenAI Responses API', () => {

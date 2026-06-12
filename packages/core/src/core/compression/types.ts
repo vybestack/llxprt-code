@@ -22,9 +22,11 @@ import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
 import type { DebugLogger } from '../../debug/DebugLogger.js';
 import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions } from '../../runtime/contracts/RuntimeProviderChat.js';
 import type { PromptResolver } from '../../prompt-config/prompt-resolver.js';
 import type { PromptContext } from '../../prompt-config/types.js';
 import type { Config } from '../../config/config.js';
+import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
 
 // ---------------------------------------------------------------------------
 // Strategy trigger
@@ -105,6 +107,27 @@ export const COMPRESSION_STRATEGIES = [
 export type CompressionStrategyName = (typeof COMPRESSION_STRATEGIES)[number];
 
 // ---------------------------------------------------------------------------
+// Provider resolution result
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of resolving a compression provider. Contains not just the provider
+ * instance but also the runtime context, settings, and config that should be
+ * used for the compression LLM call.
+ *
+ * When no explicit compression.profile is set, all fields come from the
+ * session/subagent runtime. When an explicit profile is set, the fields
+ * come from the resolved profile's provider/credentials/settings.
+ */
+export interface CompressionProviderResult {
+  readonly provider: IProvider;
+  readonly runtime: ProviderRuntimeContext;
+  readonly config?: Config;
+  readonly resolved?: RuntimeGenerateChatOptions['resolved'];
+  readonly invocation?: RuntimeGenerateChatOptions['invocation'];
+}
+
+// ---------------------------------------------------------------------------
 // Core interfaces
 // ---------------------------------------------------------------------------
 
@@ -115,7 +138,9 @@ export interface CompressionContext {
   readonly estimateTokens: (contents: readonly IContent[]) => Promise<number>;
   readonly currentTokenCount: number;
   readonly logger: DebugLogger;
-  readonly resolveProvider: (profileName?: string) => IProvider;
+  readonly resolveProvider: (
+    profileName?: string,
+  ) => CompressionProviderResult | Promise<CompressionProviderResult>;
   readonly promptResolver: PromptResolver;
   readonly promptBaseDir: string;
   readonly promptContext: Readonly<Partial<PromptContext>>;
@@ -266,6 +291,23 @@ export class EmptySummaryError extends CompressionStrategyError {
       { strategy },
     );
     this.name = 'EmptySummaryError';
+  }
+}
+
+/**
+ * Thrown when an explicit compression.profile names a profile that cannot
+ * be found or loaded. This is a permanent (non-retryable) configuration error.
+ */
+export class CompressionProfileNotFoundError extends CompressionStrategyError {
+  constructor(profileName: string, cause?: string) {
+    super(
+      `Compression profile '${profileName}' not found${cause ? `: ${cause}` : ''}. ` +
+        `Available profiles can be listed with 'profile list'. ` +
+        `Check your compression.profile setting or create the profile.`,
+      'PROFILE_NOT_FOUND',
+      { profile: profileName },
+    );
+    this.name = 'CompressionProfileNotFoundError';
   }
 }
 

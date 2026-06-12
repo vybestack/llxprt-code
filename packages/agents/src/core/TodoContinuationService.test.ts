@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines -- Behavioral coverage intentionally keeps the post-turn continuation matrix together. */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   TodoContinuationService,
@@ -13,7 +15,7 @@ import {
 import { GeminiEventType } from './turn.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { Todo } from '@vybestack/llxprt-code-core/tools/todo-schemas.js';
+import type { Todo } from '@vybestack/llxprt-code-tools';
 
 // Mock TodoStore so readTodoSnapshot doesn't hit the filesystem
 const { todoStoreReadMock, mockTodoStoreConstructor } = vi.hoisted(() => {
@@ -27,9 +29,14 @@ const { todoStoreReadMock, mockTodoStoreConstructor } = vi.hoisted(() => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core/tools/todo-store.js', () => ({
-  TodoStore: mockTodoStoreConstructor,
-}));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
 
 vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',

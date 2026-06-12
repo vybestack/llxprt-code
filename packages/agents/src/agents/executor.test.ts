@@ -14,9 +14,10 @@ import {
   getTestRuntimeMessageBus,
   makeFakeConfig,
 } from '@vybestack/llxprt-code-core/test-utils/config.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
-import { LSTool } from '@vybestack/llxprt-code-core/tools/ls.js';
-import { ReadFileTool } from '@vybestack/llxprt-code-core/tools/read-file.js';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { LSTool } from '@vybestack/llxprt-code-tools';
+import { ReadFileTool } from '@vybestack/llxprt-code-tools';
+import { CoreToolHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolHostAdapter.js';
 import {
   ChatSession,
   StreamEventType,
@@ -221,8 +222,12 @@ describe('AgentExecutor', () => {
       mockConfig,
       getTestRuntimeMessageBus(mockConfig),
     );
-    parentToolRegistry.registerTool(new LSTool(mockConfig));
-    parentToolRegistry.registerTool(new ReadFileTool(mockConfig));
+    parentToolRegistry.registerTool(
+      new LSTool(new CoreToolHostAdapter(mockConfig)),
+    );
+    parentToolRegistry.registerTool(
+      new ReadFileTool(new CoreToolHostAdapter(mockConfig)),
+    );
     parentToolRegistry.registerTool(MOCK_TOOL_NOT_ALLOWED);
 
     vi.spyOn(mockConfig, 'getToolRegistry').mockReturnValue(parentToolRegistry);
@@ -1667,4 +1672,4 @@ describe('AgentExecutor', () => {
   });
 });
 
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';

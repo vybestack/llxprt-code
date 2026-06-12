@@ -9,11 +9,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {
-  SESSION_FILE_PREFIX,
-  type Config,
-  DebugLogger,
-} from '@vybestack/llxprt-code-core';
+import { type Config, DebugLogger } from '@vybestack/llxprt-code-core';
+import { SESSION_FILE_PREFIX } from '@vybestack/llxprt-code-storage';
 import type { Settings } from '../config/settings.js';
 import { cleanupExpiredSessions } from './sessionCleanup.js';
 import { type SessionInfo, getAllSessionFiles } from './sessionUtils.js';

@@ -24,10 +24,10 @@ import type { ToolCallResponseInfo } from '@vybestack/llxprt-code-core/core/turn
 import type {
   ToolCallConfirmationDetails,
   ToolResultDisplay,
-} from '@vybestack/llxprt-code-core/tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import type { SerializableConfirmationDetails } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core/tools/tool-confirmation-types.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 /**
  * Common context extracted from a non-terminal tool call for building transitions.

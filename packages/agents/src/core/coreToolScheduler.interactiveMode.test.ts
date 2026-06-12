@@ -27,7 +27,7 @@ import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils
 import type {
   ContextAwareTool,
   ToolContext,
-} from '@vybestack/llxprt-code-core/tools/tool-context.js';
+} from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 
 function createMockMessageBus() {
@@ -427,5 +427,5 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 });
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';

@@ -16,8 +16,11 @@ import {
   createToolRegistry,
   type TaskToolRegistration,
 } from './toolRegistryFactory.js';
-import { DeclarativeTool, type ToolInvocation } from '../tools/tools.js';
-import { Kind } from '../tools/tools.js';
+import {
+  DeclarativeTool,
+  Kind,
+  type ToolInvocation,
+} from '@vybestack/llxprt-code-tools';
 
 function baseParams(
   overrides: Partial<ConfigParameters> = {},

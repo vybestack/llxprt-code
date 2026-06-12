@@ -13,7 +13,9 @@
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
-      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"]
+      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"],
+      "@vybestack/llxprt-code-tools": ["../tools/index.ts"],
+      "@vybestack/llxprt-code-tools/*": ["../tools/src/*"]
     }
   },
   "include": [
@@ -22,7 +24,9 @@
     "src/**/*.json",
     "../core/src/types/wasm.d.ts",
     "../settings/index.ts",
-    "../settings/src/**/*.ts"
+    "../settings/src/**/*.ts",
+    "../tools/index.ts",
+    "../tools/src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
@@ -30,6 +34,8 @@
     "**/*.test.ts",
     "**/*.spec.ts",
     "../settings/src/**/*.test.ts",
-    "../settings/src/**/*.spec.ts"
+    "../settings/src/**/*.spec.ts",
+    "../tools/src/**/*.test.ts",
+    "../tools/src/**/*.spec.ts"
   ]
 }

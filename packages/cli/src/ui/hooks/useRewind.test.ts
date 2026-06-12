@@ -13,7 +13,7 @@ import type { FileChangeStats } from '../utils/rewindFileOps.js';
 import type {
   ConversationRecord,
   BaseMessageRecord,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-storage';
 
 // Mock the dependency
 vi.mock('../utils/rewindFileOps.js', () => ({

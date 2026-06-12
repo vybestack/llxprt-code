@@ -25,10 +25,10 @@ import path from 'node:path';
 
 import type {
   OAuthToken,
-  ProviderKeyStorage,
   TokenStore,
   BucketStats,
 } from '@vybestack/llxprt-code-core';
+import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import {
   ProxyProviderKeyStorage,
   ProxySocketClient,

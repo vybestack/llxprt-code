@@ -20,7 +20,7 @@ import type { McpContext } from '../hooks/types.js';
 import type {
   ToolResult,
   ToolCallConfirmationDetails,
-} from '../tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import { DebugLogger } from '../debug/index.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hook-triggers:tool');

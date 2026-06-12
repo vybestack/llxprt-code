@@ -15,12 +15,14 @@ import {
   type ToolCallConfirmationDetails,
   type ToolInvocation,
   type ToolResult,
-} from '@vybestack/llxprt-code-core/tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
-import type { ContextAwareTool } from '@vybestack/llxprt-code-core/tools/tool-context.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import type { ContextAwareTool } from '@vybestack/llxprt-code-tools';
+import type { Config } from '@vybestack/llxprt-code-core/index.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/index.js';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

@@ -11,18 +11,18 @@
  * decomposition (issue 1580).
  */
 
-import type { ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { ToolCallRequestInfo } from '../core/turn.js';
 import type {
   AnyDeclarativeTool,
   AnyToolInvocation,
-} from '@vybestack/llxprt-code-core/tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import type { ToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolGovernance } from '../core/toolGovernance.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createErrorResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { setToolContext } from './utils.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { isToolBlocked } from '../core/toolGovernance.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import levenshtein from 'fast-levenshtein';

@@ -9,7 +9,7 @@ import type {
   GeminiCLIExtension,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   McpClient,
   MCPDiscoveryState,

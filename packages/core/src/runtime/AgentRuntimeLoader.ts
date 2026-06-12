@@ -6,7 +6,7 @@
 
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { Config } from '../config/config.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 import type { RuntimeProviderManager as IRuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 import {
@@ -28,7 +28,7 @@ import {
   type ContentGenerator,
   type ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
-import { normalizeToolName } from '../tools/toolNameUtils.js';
+import { normalizeToolName } from '@vybestack/llxprt-code-tools';
 
 export interface AgentRuntimeProfileSnapshot {
   config: Config;

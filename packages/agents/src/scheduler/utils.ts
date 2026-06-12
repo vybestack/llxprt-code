@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-core/tools/tools.js';
-import type { ContextAwareTool } from '@vybestack/llxprt-code-core/tools/tool-context.js';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
+import type { ContextAwareTool } from '@vybestack/llxprt-code-tools';
 
 /**
  * Sets the execution context on a ContextAwareTool instance if the tool

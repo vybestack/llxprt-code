@@ -51,7 +51,7 @@ import {
   AgentExecutionBlockedError,
 } from './chatSession.js';
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
-import { hasCycleInSchema } from '@vybestack/llxprt-code-core/tools/tools.js';
+import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
 
 /**
  * Handles turn-level operations: sendMessage, sendMessageStream, waitForIdle.

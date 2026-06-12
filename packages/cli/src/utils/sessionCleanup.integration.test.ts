@@ -7,7 +7,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { cleanupExpiredSessions } from './sessionCleanup.js';
 import type { Settings } from '../config/settings.js';
-import { SESSION_FILE_PREFIX, type Config } from '@vybestack/llxprt-code-core';
+import { SESSION_FILE_PREFIX } from '@vybestack/llxprt-code-storage';
+import type { Config } from '@vybestack/llxprt-code-core';
 
 // Create a mock config for integration testing
 function createTestConfig(): Config {

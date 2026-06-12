@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/ide-integration.tsbuildinfo",
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "composite": true,
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-ide-integration": ["./index.ts"]
+    }
+  },
+  "include": ["index.ts", "src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}

@@ -53,7 +53,7 @@ interface AnthropicMessage {
   content: string | AnthropicContentBlock[];
 }
 
-vi.mock('@vybestack/llxprt-code-core/tools/ToolFormatter.js', () => ({
+vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
     toProviderFormat: vi.fn(() => []),
     fromProviderFormat: vi.fn(() => []),

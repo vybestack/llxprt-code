@@ -25,7 +25,7 @@ import {
   ProviderKeyStorage,
   SecureStore,
   type KeyringAdapter,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-storage';
 import { SecureInputHandler } from '../utils/secureInputHandler.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
@@ -85,9 +85,9 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
 
 let mockStorage: ProviderKeyStorage;
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-storage', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-storage')>();
   return {
     ...actual,
     getProviderKeyStorage: () => mockStorage,

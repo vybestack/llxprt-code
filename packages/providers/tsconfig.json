@@ -13,6 +13,8 @@
       "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-tools": ["../tools/index.ts"],
+      "@vybestack/llxprt-code-tools/*": ["../tools/src/*"],
       "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
       "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"],
       "@vybestack/llxprt-code-settings": ["../settings/index.ts"],

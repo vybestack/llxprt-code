@@ -14,14 +14,16 @@ import { fileURLToPath } from 'node:url';
 
 import type { ConfigParameters } from '../../config/config.js';
 import { Config } from '../../config/config.js';
-import type { LspConfig } from '../types.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import { initializeTestConfig } from '../../test-utils/config.js';
 
-import type { Diagnostic } from '../types.js';
-import * as lspServiceClientModule from '../lsp-service-client.js';
-import { LspServiceClient } from '../lsp-service-client.js';
+import type { Diagnostic } from '@vybestack/llxprt-code-ide-integration';
+import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
+import { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 
-vi.mock('../../tools/tool-registry', () => {
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
     const tools: Array<{
       serverName?: string;
@@ -50,25 +52,32 @@ vi.mock('../../tools/tool-registry', () => {
       }),
     };
   });
-  return { ToolRegistry: ToolRegistryMock };
+  return {
+    ...actual,
+    ToolRegistry: ToolRegistryMock,
+    MemoryTool: vi.fn(),
+    setLlxprtMdFilename: vi.fn(),
+    getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
+    DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
+    LLXPRT_CONFIG_DIR: '.llxprt',
+    DiscoveredMCPTool: vi
+      .fn()
+      .mockImplementation(
+        (
+          _mcpToolService: unknown,
+          serverName: string,
+          serverToolName: string,
+          _description: string,
+          _inputSchema: unknown,
+        ) => ({
+          serverName,
+          serverToolName,
+          name: `${serverName}__${serverToolName}`,
+          displayName: `${serverName}__${serverToolName}`,
+        }),
+      ),
+  };
 });
-
-vi.mock('../../tools/ls');
-vi.mock('../../tools/read-file');
-vi.mock('../../tools/grep');
-vi.mock('../../tools/glob');
-vi.mock('../../tools/edit');
-vi.mock('../../tools/shell');
-vi.mock('../../tools/write-file');
-vi.mock('../../tools/google-web-fetch');
-vi.mock('../../tools/read-many-files');
-vi.mock('../../tools/memoryTool', () => ({
-  MemoryTool: vi.fn(),
-  setLlxprtMdFilename: vi.fn(),
-  getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
-  DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
-  LLXPRT_CONFIG_DIR: '.llxprt',
-}));
 
 vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
   const actual =
@@ -87,14 +96,21 @@ vi.mock('../../telemetry/index.js', () => ({
   StartSessionEvent: vi.fn(),
 }));
 
-vi.mock('../../ide/ide-client.js', () => ({
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-    }),
-  },
-}));
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    },
+  };
+});
 
 vi.mock('../../services/fileDiscoveryService.js', () => ({
   FileDiscoveryService: vi.fn().mockImplementation(() => ({
@@ -113,6 +129,21 @@ vi.mock('@vybestack/llxprt-code-mcp', () => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
     getMcpInstructions: vi.fn().mockReturnValue(''),
   })),
+  DiscoveredMCPTool: vi
+    .fn()
+    .mockImplementation(
+      (
+        _callableTool: unknown,
+        serverName: string,
+        serverToolName: string,
+        _description: string,
+        _inputSchema: unknown,
+      ) => ({
+        serverName,
+        serverToolName,
+        name: `${serverName}__${serverToolName}`,
+      }),
+    ),
 }));
 
 vi.mock('../../utils/extensionLoader.js', () => ({
@@ -190,28 +221,6 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
     }),
     close: vi.fn().mockResolvedValue(undefined),
   })),
-}));
-
-vi.mock('@vybestack/llxprt-code-mcp', () => ({
-  McpClientManager: vi.fn().mockImplementation(() => ({
-    startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-    getMcpInstructions: vi.fn().mockReturnValue(''),
-  })),
-  DiscoveredMCPTool: vi
-    .fn()
-    .mockImplementation(
-      (
-        _callableTool: unknown,
-        serverName: string,
-        serverToolName: string,
-        _description: string,
-        _inputSchema: unknown,
-      ) => ({
-        serverName,
-        serverToolName,
-        name: `${serverName}__${serverToolName}`,
-      }),
-    ),
 }));
 
 vi.mock('../../utils/memoryDiscovery.js', () => ({
@@ -372,12 +381,12 @@ describe('LSP E2E integration (P36)', () => {
   // --- 4. Apply-Patch → Diagnostics ---
   it('apply-patch source contains LSP diagnostic integration call sites', () => {
     const applyPatchPath = fileURLToPath(
-      new URL('../../tools/apply-patch.ts', import.meta.url),
+      new URL('../../../../tools/src/tools/apply-patch.ts', import.meta.url),
     );
     const source = readFileSync(applyPatchPath, 'utf8');
 
-    expect(source).toContain('getLspServiceClient');
-    expect(source).toContain('checkFile');
+    expect(source).toContain('ILspService');
+    expect(source).toContain('waitForDiagnostics');
   });
 
   // --- 5. Graceful: No Service ---
@@ -650,33 +659,27 @@ describe('LSP E2E integration (P36)', () => {
     expect(transport).toBeNull();
   });
 
-  // --- 17. Edit + Write source integration call sites ---
-  it('edit and write tool sources contain LSP integration call sites', () => {
+  // --- 17. Edit source integration call sites ---
+  it('edit tool source contains LSP integration call sites', () => {
     const editPath = fileURLToPath(
-      new URL('../../tools/edit.ts', import.meta.url),
-    );
-    const writePath = fileURLToPath(
-      new URL('../../tools/write-file.ts', import.meta.url),
+      new URL('../../../../tools/src/tools/edit.ts', import.meta.url),
     );
     const helperPath = fileURLToPath(
-      new URL('../../tools/lsp-diagnostics-helper.ts', import.meta.url),
+      new URL(
+        '../../../../tools/src/utils/lsp-diagnostics-helper.ts',
+        import.meta.url,
+      ),
     );
 
     const editSource = readFileSync(editPath, 'utf8');
-    const writeSource = readFileSync(writePath, 'utf8');
     const helperSource = readFileSync(helperPath, 'utf8');
 
     // edit.ts uses the shared helper via import
     expect(editSource).toContain('collectLspDiagnosticsBlock');
 
-    // write-file.ts still has direct LSP calls for multi-file diagnostics
-    expect(writeSource).toContain('getLspServiceClient');
-    expect(writeSource).toContain('checkFile');
-    expect(writeSource).toContain('getAllDiagnostics');
-
     // The shared helper contains the actual LSP integration calls
-    expect(helperSource).toContain('getLspServiceClient');
-    expect(helperSource).toContain('checkFile');
+    expect(helperSource).toContain('ILspService');
+    expect(helperSource).toContain('waitForDiagnostics');
   });
 
   // --- 18. Shutdown then checkFile is safe ---

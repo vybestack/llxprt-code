@@ -78,19 +78,19 @@ const AGENT_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
 const CORE_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   [
     'packages/core/src/providers/openai-vercel/toolIdUtils.ts',
-    'packages/core/src/tools/toolIdNormalization.ts',
+    'packages/tools/src/formatters/toolIdNormalization.ts',
   ],
   [
     'packages/core/src/providers/openai-vercel/toolIdUtils.test.ts',
-    'packages/core/src/tools/toolIdNormalization.test.ts',
+    'packages/core/src/runtime/contracts/toolIdNormalization-contract.test.ts',
   ],
   [
     'packages/core/src/providers/utils/toolIdNormalization.ts',
-    'packages/core/src/tools/toolIdNormalization.ts',
+    'packages/tools/src/formatters/toolIdNormalization.ts',
   ],
   [
     'packages/core/src/providers/utils/toolIdNormalization.test.ts',
-    'packages/core/src/tools/toolIdNormalization.test.ts',
+    'packages/core/src/runtime/contracts/toolIdNormalization-contract.test.ts',
   ],
 ]);
 
@@ -509,10 +509,7 @@ describe('P09 Move-map completeness validation', () => {
       pkg.peerDependencies,
       pkg.optionalDependencies,
     ];
-    const forbiddenDependencies = [
-      '@vybestack/llxprt-code',
-      '@vybestack/llxprt-code-tools',
-    ];
+    const forbiddenDependencies = ['@vybestack/llxprt-code'];
 
     for (const deps of dependencySections) {
       for (const forbiddenDependency of forbiddenDependencies) {

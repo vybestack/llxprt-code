@@ -26,6 +26,7 @@
     "dist"
   ],
   "dependencies": {
+    "@vybestack/llxprt-code-storage": "file:../storage",
     "@a2a-js/sdk": "^0.3.7",
     "@google-cloud/storage": "^7.16.0",
     "@vybestack/llxprt-code-core": "file:../core",

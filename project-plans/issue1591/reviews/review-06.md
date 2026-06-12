@@ -1,0 +1,13 @@
+# Plan Review Feedback 06
+
+Required corrections:
+
+- Fix the TDD sequencing so RED tests fail behaviorally, not primarily from missing imports. P04 and P06 currently rely on import-resolution failure because source files do not exist; add explicit stub phases or create resolvable skeleton exports before RED tests, then make RED tests fail on real behavioral assertions.
+- Fix P10b/P10c consumer migration sequencing. P10b is after P09/P10, but its RED mechanism depends on core re-export shims/alias identity not being in place even though P09 requires them to be complete. As written, P10b will likely pass immediately or require artificial structural assertions. Move CLI/core-reexport consumer RED tests before P09, or remove the bogus RED/GREEN pair and make it a verification-only phase.
+- Add an explicit package-build/dist policy-file verification phase before final cleanup. The plan mentions source+dist TOML loading in the overview, but implementation phases do not give concrete commands for building `packages/policy/dist` and proving `loadDefaultPolicies()` loads bundled TOML files from dist.
+- Correct concrete command errors. In P10 verification, the `utils.test.ts` moved-test check is inverted and echoes FAIL when the file is absent.
+- Make `packages/policy` package configuration match repository conventions more closely: use the established `node ../../scripts/build_package.js` build script, include `files: ["dist"]`, and include standard metadata unless there is a documented reason not to.
+- Clarify and make exact the `packages/policy/src/index.ts` public API exports. The overview snippet incorrectly shows many unrelated exports coming from `./policy-engine.js` with “etc.”; provide exact barrel contents per source module so `PolicyEngine` is a clean public entry point and aliases are unambiguous.
+- Tighten confirmation-bus tests to avoid mock/implementation theater. Tests like “calls PolicyEngine.evaluate()” and “custom logger receives debug/error calls” should be framed as observable outcomes of real decisions/messages, not just call verification.
+- Add explicit verification that `packages/policy` source and `package.json` have no imports/dependencies on `packages/providers`, `packages/tools`, `packages/cli`, `packages/core`, `@google/genai`, or telemetry, including workspace/package manifest scans and source import scans.
+- Ensure full final verification includes exactly: `npm run test`, `npm run lint`, `npm run typecheck`, `npm run format`, `npm run build`, and `node scripts/start.js --profile-load ollamakimi "write me a haiku and nothing else"` after all changes, not only phase-local subsets.

@@ -25,10 +25,10 @@ import type {
   AgentRuntimeContext,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
-import { type ToolResultDisplay } from '@vybestack/llxprt-code-core/tools/tools.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { type ToolResultDisplay } from '@vybestack/llxprt-code-tools';
 import { type CompletedToolCall } from './coreToolScheduler.js';
-import { TodoStore } from '@vybestack/llxprt-code-core/tools/todo-store.js';
+import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
   SubagentTerminateMode,

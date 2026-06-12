@@ -16,10 +16,10 @@
  * after the loop exits but before the flag is cleared.
  */
 
-import type { ToolCallResponseInfo } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { ToolResult } from '@vybestack/llxprt-code-core/tools/tools.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
-import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { ToolCallResponseInfo } from '../core/turn.js';
+import type { ToolResult } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import {
   convertToFunctionResponse,
   extractAgentIdFromMetadata,

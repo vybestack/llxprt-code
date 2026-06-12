@@ -60,7 +60,7 @@ import {
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { analyzeResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import { hasCycleInSchema } from '@vybestack/llxprt-code-core/tools/tools.js';
+import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
 import { isStructuredError } from '@vybestack/llxprt-code-core/utils/quotaErrorDetection.js';
 import {
   AgentExecutionStoppedError,

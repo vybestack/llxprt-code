@@ -24,8 +24,8 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';
-import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
-import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 
 /**
  * Coerce provider "content" (which may be a string or an array-of-parts)

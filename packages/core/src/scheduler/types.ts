@@ -16,12 +16,12 @@ import type {
   AnyDeclarativeTool,
   AnyToolInvocation,
   ToolCallConfirmationDetails,
-} from '../tools/tools.js';
+} from '@vybestack/llxprt-code-tools';
 import type {
   ToolCallRequestInfo,
   ToolCallResponseInfo,
 } from '../core/turn.js';
-import type { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
+import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import type { SerializableConfirmationDetails } from '../confirmation-bus/types.js';
 

@@ -11,7 +11,7 @@ import {
   type ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
+import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 
 /**
  * Interface for cancelled tool information

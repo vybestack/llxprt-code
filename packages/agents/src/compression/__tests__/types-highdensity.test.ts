@@ -558,6 +558,7 @@ function buildMinimalContext(
     } as unknown as CompressionContext['logger'],
     resolveProvider: () => {
       throw new Error('No provider in minimal context');
+      return { provider: undefined as never, runtime: undefined as never };
     },
     promptResolver: {
       resolveFile: () => ({ found: false, path: null, source: null }),

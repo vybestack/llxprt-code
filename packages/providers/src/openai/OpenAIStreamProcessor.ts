@@ -30,8 +30,8 @@ import { normalizeToolName } from '../utils/toolNameNormalization.js';
 import {
   normalizeToHistoryToolId,
   normalizeToOpenAIToolId,
-} from '@vybestack/llxprt-code-core/tools/toolIdNormalization.js';
-import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+} from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 import {
   coerceMessageContentToString,
   sanitizeToolArgumentsString,
@@ -40,7 +40,7 @@ import {
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
 import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
-import { type ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import {
   type StreamingState,
   createStreamingState,

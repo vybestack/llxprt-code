@@ -50,6 +50,7 @@ function makeMinimalContext(
     } as unknown as Logger,
     resolveProvider: () => {
       throw new Error('Should not call resolveProvider for high-density');
+      return { provider: undefined as never, runtime: undefined as never };
     },
     promptResolver: { resolve: () => undefined } as unknown as PromptResolver,
     promptBaseDir: '/test',

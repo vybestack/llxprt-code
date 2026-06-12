@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import type { ToolFormat } from '@vybestack/llxprt-code-core/tools/IToolFormatter.js';
+import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import {
   isKimiModel,
   isMistralModel,
   isDeepSeekReasonerModel,
-} from '@vybestack/llxprt-code-core/tools/ToolIdStrategy.js';
+} from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /**

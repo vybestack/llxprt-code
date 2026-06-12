@@ -24,10 +24,10 @@ import {
   type ToolConfirmationResponse,
   type SerializableConfirmationDetails,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core/tools/tools.js';
-import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core/tools/tools.js';
-import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-core/tools/tool-confirmation-types.js';
-import type { ToolCallResponseInfo } from '@vybestack/llxprt-code-core/core/turn.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
+import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
+import type { ToolCallResponseInfo } from '../core/turn.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
   evaluatePolicyDecision,
@@ -39,7 +39,7 @@ import {
   isModifiableDeclarativeTool,
   modifyWithEditor,
   type ModifyContext,
-} from '@vybestack/llxprt-code-core/tools/modifiable-tool.js';
+} from '@vybestack/llxprt-code-tools';
 import { doesToolInvocationMatch } from '@vybestack/llxprt-code-core/utils/tool-utils.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type {

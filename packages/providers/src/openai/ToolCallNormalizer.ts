@@ -22,7 +22,7 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { processToolParameters } from '@vybestack/llxprt-code-core/tools/doubleEscapeUtils.js';
+import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 
 const logger = new DebugLogger('llxprt:providers:openai:toolCallNormalizer');
 

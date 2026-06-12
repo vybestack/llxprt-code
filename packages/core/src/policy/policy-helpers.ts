@@ -6,8 +6,8 @@
 
 import { randomUUID } from 'node:crypto';
 import type { FunctionCall } from '@google/genai';
-import type { AnyToolInvocation } from '../tools/tools.js';
-import { BaseToolInvocation } from '../tools/tools.js';
+import type { AnyToolInvocation } from '@vybestack/llxprt-code-tools';
+import { BaseToolInvocation } from '@vybestack/llxprt-code-tools';
 import type {
   ToolCallRequestInfo,
   ToolCallResponseInfo,

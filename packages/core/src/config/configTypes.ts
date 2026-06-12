@@ -30,10 +30,10 @@ import type { EnvironmentSanitizationConfig } from '../services/environmentSanit
 import type { PolicyEngineConfig } from '../policy/types.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
-import type { IdeClient } from '../ide/ide-client.js';
-import type { AnyToolInvocation } from '../tools/tools.js';
+import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
+import type { AnyToolInvocation } from '@vybestack/llxprt-code-tools';
 import { TelemetryTarget } from '../telemetry/index.js';
-import type { LspConfig } from '../lsp/types.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import type { AgentClientFactory } from '../core/clientContract.js';
 import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';

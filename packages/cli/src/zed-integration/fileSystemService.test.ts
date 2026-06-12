@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, type Mocked } from 'vitest';
 import { AcpFileSystemService } from './fileSystemService.js';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { FileSystemService } from '@vybestack/llxprt-code-core';
+import type { FileSystemService } from '@vybestack/llxprt-code-storage';
 
 describe('AcpFileSystemService', () => {
   let mockConnection: Mocked<acp.AgentSideConnection>;

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ideContext } from '../ide/ideContext.js';
+import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 
 /**
  * Gets the workspace trust from the IDE if available.

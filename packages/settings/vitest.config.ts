@@ -11,6 +11,28 @@ const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
 const settingsEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
 const settingsSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
 
+const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
+const storageEntry = fileURLToPath(
+  new URL('../storage/index.ts', import.meta.url),
+);
+const storageSrcDir = fileURLToPath(
+  new URL('../storage/src/', import.meta.url),
+);
+
+/**
+ * Storage deep-path export mapping mirrors package.json "exports" field.
+ * Export subpaths like "./storage/secure-store.js" map to source dirs like "secure-store/".
+ */
+const storageExportToSource: Record<string, string> = {
+  'config/storage': 'config/storage',
+  'services/fileSystemService': 'services/fileSystemService',
+  'services/fileDiscoveryService': 'services/fileDiscoveryService',
+  'storage/secure-store': 'secure-store/secure-store',
+  'storage/provider-key-storage': 'secure-store/provider-key-storage',
+  'storage/sessionTypes': 'session/sessionTypes',
+  'storage/ConversationFileWriter': 'conversation/ConversationFileWriter',
+};
+
 function resolveTsSource(baseDir: string, specifier: string): string | null {
   const direct = baseDir + specifier;
   if (direct.endsWith('.js')) {
@@ -36,6 +58,25 @@ const workspaceAliasPlugin = {
       return resolveTsSource(
         settingsSrcDir,
         source.slice(settingsPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-storage') {
+      return storageEntry;
+    }
+    if (source.startsWith(storagePackagePrefix)) {
+      const subPath = source
+        .slice(storagePackagePrefix.length)
+        .replace(/\.js$/, '');
+      const sourcePath = storageExportToSource[subPath];
+      if (sourcePath) {
+        const tsPath = storageSrcDir + sourcePath + '.ts';
+        if (existsSync(tsPath)) {
+          return tsPath;
+        }
+      }
+      return resolveTsSource(
+        storageSrcDir,
+        source.slice(storagePackagePrefix.length),
       );
     }
     return null;

@@ -25,8 +25,12 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   CompressionContext,
+  CompressionProviderResult,
   CompressionResult,
   CompressionResultMetadata,
   CompressionStrategy,
@@ -46,8 +50,23 @@ import {
   runVerificationPass,
   sanitizeHistoryForCompression,
 } from './utils.js';
-import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
 import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
+function destructureProviderResult(result: CompressionProviderResult): {
+  provider: IProvider;
+  resolvedRuntime: ProviderRuntimeContext;
+  resolvedConfig?: Config;
+  resolvedOptions?: RuntimeGenerateChatOptions['resolved'];
+  invocation?: RuntimeGenerateChatOptions['invocation'];
+} {
+  return {
+    provider: result.provider,
+    resolvedRuntime: result.runtime,
+    resolvedConfig: result.config,
+    resolvedOptions: result.resolved,
+    invocation: result.invocation,
+  };
+}
 
 const MINIMUM_COMPRESS_MESSAGES = 4;
 
@@ -64,6 +83,7 @@ export class OneShotStrategy implements CompressionStrategy {
     defaultThreshold: 0.85,
   };
 
+  // eslint-disable-next-line max-lines-per-function -- Strategy orchestration remains linear for readability.
   async compress(context: CompressionContext): Promise<CompressionResult> {
     const { history } = context;
 
@@ -84,7 +104,15 @@ export class OneShotStrategy implements CompressionStrategy {
     // Resolve the provider (compression profile may be undefined)
     const compressionProfile =
       context.runtimeContext.ephemerals.compressionProfile();
-    const provider = context.resolveProvider(compressionProfile);
+    const {
+      provider,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
+    } = destructureProviderResult(
+      await context.resolveProvider(compressionProfile),
+    );
 
     // Build the LLM request
     // @plan PLAN-20260211-HIGHDENSITY.P23
@@ -108,7 +136,11 @@ export class OneShotStrategy implements CompressionStrategy {
     const { text: summary, usage: capturedUsage } = await this.callProvider(
       provider,
       compressionRequest,
-      context.config,
+      context,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
     );
 
     if (!summary.trim()) {
@@ -121,7 +153,11 @@ export class OneShotStrategy implements CompressionStrategy {
       finalSummary = await runVerificationPass(
         provider,
         summary,
-        context.config,
+        context,
+        resolvedRuntime,
+        resolvedConfig,
+        resolvedOptions,
+        invocation,
       );
     }
 
@@ -215,13 +251,28 @@ export class OneShotStrategy implements CompressionStrategy {
   private async callProvider(
     provider: IProvider,
     request: IContent[],
-    config?: CompressionContext['config'],
+    context: CompressionContext,
+    resolvedRuntime: ProviderRuntimeContext,
+    resolvedConfig: Config | undefined,
+    resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
+    invocation: RuntimeGenerateChatOptions['invocation'] | undefined,
   ): Promise<{ text: string; usage?: UsageStats }> {
+    const providerRuntime = resolvedRuntime;
     try {
       const stream = provider.generateChatCompletion({
         contents: request,
         tools: undefined,
-        config,
+        config: resolvedConfig ?? context.config ?? providerRuntime.config,
+        runtime: providerRuntime,
+        invocation,
+
+        settings:
+          providerRuntime.settingsService as RuntimeGenerateChatOptions['settings'],
+        resolved: resolvedOptions,
+        metadata: {
+          ...(providerRuntime.metadata ?? {}),
+          source: 'OneShotStrategy.callProvider',
+        },
       });
 
       let summary = '';

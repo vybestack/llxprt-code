@@ -23,7 +23,7 @@ import type {
   ReadonlySettingsSnapshot,
 } from '../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { Config } from '../config/config.js';
 import type { ToolCallRequestInfo } from './turn.js';

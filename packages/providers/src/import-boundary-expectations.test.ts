@@ -193,10 +193,7 @@ describe('Providers package dependency direction', () => {
       pkg.peerDependencies,
       pkg.optionalDependencies,
     ] as Array<Record<string, string> | undefined>;
-    const forbiddenDependencies = [
-      '@vybestack/llxprt-code',
-      '@vybestack/llxprt-code-tools',
-    ];
+    const forbiddenDependencies = ['@vybestack/llxprt-code'];
 
     for (const deps of dependencySections) {
       for (const forbiddenDependency of forbiddenDependencies) {

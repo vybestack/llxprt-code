@@ -58,12 +58,14 @@ jobs:
 
       - name: Pack npm packages
         run: |
-          npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
+          npm pack -w @vybestack/llxprt-code-tools --pack-destination ./packages/tools/dist
+          npm pack -w @vybestack/llxprt-code-settings --pack-destination ./packages/settings/dist
           npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist
           npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist
           npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist
           npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist
           npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist
+          npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
 
       - name: Build and push Docker image
         uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # ratchet:docker/build-push-action@v6.9.0

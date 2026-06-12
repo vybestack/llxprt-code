@@ -12,8 +12,8 @@ import { DEFAULT_AGENT_ID } from './turn.js';
 
 import type { ComplexityAnalysisResult } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import type { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
-import { TodoStore } from '@vybestack/llxprt-code-core/tools/todo-store.js';
-import type { Todo } from '@vybestack/llxprt-code-core/tools/todo-schemas.js';
+import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
+import type { Todo } from '@vybestack/llxprt-code-tools';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';

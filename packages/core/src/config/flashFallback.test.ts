@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Config } from './config.js';
 import { DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
-import { IdeClient } from '../ide/ide-client.js';
+import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import fs from 'node:fs';
 
 vi.mock('node:fs');

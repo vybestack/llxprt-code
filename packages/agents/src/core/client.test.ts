@@ -67,7 +67,7 @@ import { GeminiEventType, Turn } from './turn.js';
 import { FileDiscoveryService } from '@vybestack/llxprt-code-core/services/fileDiscoveryService.js';
 import { setSimulate429 } from '@vybestack/llxprt-code-core/utils/testUtils.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
-import { ideContext } from '@vybestack/llxprt-code-core/ide/ideContext.js';
+import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import {
   getEnabledToolNamesForPrompt,
   shouldIncludeSubagentDelegationForConfig,
@@ -118,9 +118,14 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-core/tools/todo-store.js', () => ({
-  TodoStore: mockTodoStoreConstructor,
-}));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
 vi.mock('./turn', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./turn.js')>();
   // Define a mock class that has the same shape as the real Turn
@@ -164,7 +169,22 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-core/ide/ideContext.js');
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    ideContext: {
+      ...actual.ideContext,
+      getIdeContext: vi.fn(),
+      subscribeToIdeContext: vi.fn(),
+      setIdeContext: vi.fn(),
+      clearIdeContext: vi.fn(),
+    },
+  };
+});
 vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
   tokenLimit: vi.fn(),
 }));

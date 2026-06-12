@@ -56,6 +56,7 @@ function makeContext(
     } as unknown as Logger,
     resolveProvider: () => {
       throw new Error('resolveProvider should not be called in non-LLM tests');
+      return { provider: undefined as never, runtime: undefined as never };
     },
     promptResolver: {
       resolve: () => undefined,

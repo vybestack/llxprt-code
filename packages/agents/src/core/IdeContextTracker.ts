@@ -8,7 +8,7 @@ import {
   ideContext,
   type IdeContext,
   type File,
-} from '@vybestack/llxprt-code-core/ide/ideContext.js';
+} from '@vybestack/llxprt-code-ide-integration';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 

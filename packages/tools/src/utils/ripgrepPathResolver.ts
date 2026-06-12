@@ -1,0 +1,200 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { debugLogger } from './debugLogger.js';
+
+/**
+ * Cross-platform ripgrep path resolution
+ * Implements the robust solution described in issue 483
+ */
+
+let ripgrepAvailabilityCache: boolean | null = null;
+
+/**
+ * Check if ripgrep is available on the system.
+ * This is a non-throwing wrapper around getRipgrepPath that returns a boolean.
+ * Results are cached for performance.
+ *
+ * @returns true if ripgrep is available, false otherwise
+ */
+export async function isRipgrepAvailable(): Promise<boolean> {
+  if (ripgrepAvailabilityCache !== null) {
+    return ripgrepAvailabilityCache;
+  }
+
+  try {
+    await getRipgrepPath();
+    ripgrepAvailabilityCache = true;
+    return true;
+  } catch {
+    ripgrepAvailabilityCache = false;
+    return false;
+  }
+}
+
+/**
+ * Clear the ripgrep availability cache.
+ * Useful for testing or when configuration changes.
+ */
+export function clearRipgrepAvailabilityCache(): void {
+  ripgrepAvailabilityCache = null;
+}
+
+async function tryPackagedRipgrep(): Promise<string | null> {
+  try {
+    const { rgPath } = await import('@lvce-editor/ripgrep');
+    if (fs.existsSync(rgPath)) {
+      return rgPath;
+    }
+  } catch {
+    // Package not available or binary doesn't exist
+  }
+  return null;
+}
+
+async function trySystemRipgrep(isWindows: boolean): Promise<string | null> {
+  try {
+    const { execSync } = await import('child_process');
+    const checkCmd = isWindows ? 'where rg' : 'which rg';
+    const systemPath = execSync(checkCmd, { encoding: 'utf8' }).trim();
+    if (fs.existsSync(systemPath)) {
+      return systemPath;
+    }
+  } catch {
+    // System ripgrep not found
+  }
+  return null;
+}
+
+function findFirstExistingPath(paths: string[]): string | null {
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+function tryWindowsPaths(): string | null {
+  const envPaths = [
+    path.join(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var fallback for path
+      process.env.PROGRAMFILES || 'C:\\Program Files',
+      'ripgrep',
+      'rg.exe',
+    ),
+    path.join(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var fallback for path
+      process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
+      'ripgrep',
+      'rg.exe',
+    ),
+  ];
+  const result = findFirstExistingPath(envPaths);
+  if (result) return result;
+
+  const commonPaths = [
+    'C:\\Program Files\\ripgrep\\rg.exe',
+    'C:\\Program Files (x86)\\ripgrep\\rg.exe',
+    'C:\\tools\\ripgrep\\rg.exe',
+  ];
+  return findFirstExistingPath(commonPaths);
+}
+
+function tryUnixPaths(): string | null {
+  const unixPaths = [
+    '/usr/local/bin/rg',
+    '/usr/bin/rg',
+    '/opt/homebrew/bin/rg',
+    '/home/linuxbrew/.linuxbrew/bin/rg',
+  ];
+  return findFirstExistingPath(unixPaths);
+}
+
+function tryBundledPath(isWindows: boolean): string | null {
+  const projectRoot = process.cwd();
+  const pkgEntrypoint = (
+    process as unknown as { pkg?: { entrypoint?: string } }
+  ).pkg?.entrypoint;
+  const nodeModulesExists = fs.existsSync(
+    path.join(projectRoot, 'node_modules'),
+  );
+  const isBundled =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string property may be empty, check node_modules as fallback
+    Boolean(pkgEntrypoint || !nodeModulesExists);
+
+  if (isBundled) {
+    const bundleDir = path.join(projectRoot, 'bundle');
+    const bundledRgPath = path.join(bundleDir, isWindows ? 'rg.exe' : 'rg');
+    if (fs.existsSync(bundledRgPath)) {
+      return bundledRgPath;
+    }
+  }
+  return null;
+}
+
+export async function getRipgrepPath(): Promise<string> {
+  const isWindows = os.platform() === 'win32';
+
+  const packaged = await tryPackagedRipgrep();
+  if (packaged) return packaged;
+
+  const system = await trySystemRipgrep(isWindows);
+  if (system) return system;
+
+  if (isWindows) {
+    const windowsResult = tryWindowsPaths();
+    if (windowsResult) return windowsResult;
+  } else {
+    const unixResult = tryUnixPaths();
+    if (unixResult) return unixResult;
+  }
+
+  const bundled = tryBundledPath(isWindows);
+  if (bundled) return bundled;
+
+  throw new Error(
+    `ripgrep not found. Please install @lvce-editor/ripgrep or system ripgrep.\n` +
+      `Installation options:\n` +
+      `- npm install @lvce-editor/ripgrep\n` +
+      `- brew install ripgrep (macOS)\n` +
+      `- choco install ripgrep (Windows)\n` +
+      `- apt install ripgrep (Ubuntu/Debian)`,
+  );
+}
+
+/**
+ * Create Windows-specific symlink or copy if needed
+ */
+export function ensureWindowsShortcut(source: string, target: string): boolean {
+  if (os.platform() !== 'win32') {
+    return false;
+  }
+
+  try {
+    // On Windows, try creating a hard link first
+    if (fs.existsSync(source) && !fs.existsSync(target)) {
+      // Create target directory if it doesn't exist
+      const targetDir = path.dirname(target);
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+
+      try {
+        fs.linkSync(source, target);
+        return true;
+      } catch {
+        // Hard link failed (common on Windows without admin); copy instead.
+        fs.copyFileSync(source, target);
+        return true;
+      }
+    }
+  } catch (error) {
+    debugLogger.warn('Failed to create Windows shortcut for ripgrep:', error);
+  }
+  return false;
+}

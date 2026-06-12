@@ -46,7 +46,7 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
 import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-core/tools/tool-registry.js';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import type {
   Content,
@@ -57,7 +57,7 @@ import type {
   Part,
 } from '@google/genai';
 import { Type } from '@google/genai';
-import { ToolErrorType } from '@vybestack/llxprt-code-core/tools/tool-error.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
@@ -67,9 +67,14 @@ const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
   return { mockReadTodos, TodoStoreMock };
 });
 
-vi.mock('@vybestack/llxprt-code-core/tools/todo-store.js', () => ({
-  TodoStore: TodoStoreMock,
-}));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: TodoStoreMock,
+  };
+});
 
 vi.mock('./chatSession.js');
 vi.mock(
@@ -87,10 +92,35 @@ vi.mock(
 );
 vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
 vi.mock('./nonInteractiveToolExecutor.js');
-vi.mock('@vybestack/llxprt-code-core/ide/ide-client.js');
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
-}));
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        getConnectionStatus: vi.fn(),
+        initialize: vi.fn(),
+        shutdown: vi.fn(),
+      }),
+    },
+  };
+});
+vi.mock(
+  '@vybestack/llxprt-code-core/core/prompts.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/core/prompts.js')
+      >();
+    return {
+      ...actual,
+      getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+    };
+  },
+);
 
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 
