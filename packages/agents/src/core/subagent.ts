@@ -376,7 +376,7 @@ export class SubAgentScope {
     const setup = await this.prepareRun(context);
     if (!setup) return;
     const { chat, abortController } = setup;
-    const { scheduler, schedulerDispose } = await this.initScheduler(options);
+    let schedulerDispose: () => Promise<void> = async () => {};
 
     const execCtx = this.buildExecCtx();
     const startTime = Date.now();
@@ -384,6 +384,10 @@ export class SubAgentScope {
     let currentMessages = this.buildInitialMessages(context);
 
     try {
+      const { scheduler, schedulerDispose: disposeScheduler } =
+        await this.initScheduler(options);
+      schedulerDispose = disposeScheduler;
+
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Persisted subagent config and runtime tool payloads.
       while (true) {
         const check = checkTerminationConditions(
