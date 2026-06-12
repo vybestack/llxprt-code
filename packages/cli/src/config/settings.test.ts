@@ -1950,6 +1950,239 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
     });
 
+    it('should migrate ui.accessibility.disableLoadingPhrases to ui.accessibility.enableLoadingPhrases', () => {
+      const userSettingsContent = {
+        ui: {
+          accessibility: {
+            disableLoadingPhrases: true,
+          },
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value (inverted: disableLoadingPhrases=true → enableLoadingPhrases=false)
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+    });
+
+    it('should migrate ui.accessibility.disableLoadingPhrases false to ui.accessibility.enableLoadingPhrases true', () => {
+      const userSettingsContent = {
+        ui: {
+          accessibility: {
+            disableLoadingPhrases: false,
+          },
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value (inverted: disableLoadingPhrases=false → enableLoadingPhrases=true)
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(true);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(true);
+    });
+
+    it('should prefer ui.accessibility.disableLoadingPhrases over ui.disableLoadingPhrases when both are present', () => {
+      const userSettingsContent = {
+        ui: {
+          disableLoadingPhrases: false,
+          accessibility: {
+            disableLoadingPhrases: true,
+          },
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Nested ui.accessibility.disableLoadingPhrases=true should take priority over ui.disableLoadingPhrases=false
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+    });
+
+    it('should preserve existing ui.accessibility.enableLoadingPhrases when ui.accessibility.disableLoadingPhrases is also present', () => {
+      const userSettingsContent = {
+        ui: {
+          accessibility: {
+            disableLoadingPhrases: true,
+            enableLoadingPhrases: true,
+          },
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Existing enableLoadingPhrases=true should NOT be overwritten
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(true);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(true);
+    });
+
+    it('should remove ui.accessibility.disableLoadingPhrases during cleanup while preserving other ui settings', () => {
+      const userSettingsContent = {
+        ui: {
+          theme: 'dark',
+          accessibility: {
+            disableLoadingPhrases: true,
+            enableLoadingPhrases: false,
+          },
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // enableLoadingPhrases should be preserved
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+
+      // Run cleanup to remove deprecated keys
+      migrateDeprecatedSettings(settings, true);
+
+      // The deprecated nested key should now be removed from ui.accessibility
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'disableLoadingPhrases'
+        ],
+      ).toBeUndefined();
+      // Other ui settings should still be preserved
+      expect(
+        (settings.user.settings.ui as Record<string, unknown>)['theme'],
+      ).toBe('dark');
+      // enableLoadingPhrases should still be preserved
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+    });
+
+    it('should remove both ui.disableLoadingPhrases and ui.accessibility.disableLoadingPhrases during cleanup', () => {
+      const userSettingsContent = {
+        ui: {
+          disableLoadingPhrases: true,
+          theme: 'dark',
+          accessibility: {
+            disableLoadingPhrases: true,
+          },
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value exists
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+
+      // Run cleanup to remove deprecated keys
+      migrateDeprecatedSettings(settings, true);
+
+      // Both deprecated keys should now be removed
+      expect(
+        (settings.user.settings.ui as Record<string, unknown>)[
+          'disableLoadingPhrases'
+        ],
+      ).toBeUndefined();
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'disableLoadingPhrases'
+        ],
+      ).toBeUndefined();
+      // Other ui settings should still be preserved
+      expect(
+        (settings.user.settings.ui as Record<string, unknown>)['theme'],
+      ).toBe('dark');
+      // enableLoadingPhrases should still be preserved
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+    });
+
     it('should migrate fileFiltering.disableFuzzySearch to fileFiltering.enableFuzzySearch', () => {
       const userSettingsContent = {
         fileFiltering: {
