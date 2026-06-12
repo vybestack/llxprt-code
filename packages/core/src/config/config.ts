@@ -15,7 +15,10 @@ import { ActivateSkillTool } from '@vybestack/llxprt-code-tools';
 import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
-import { AgentClient } from '../core/client.js';
+import type {
+  AgentClientContract,
+  AgentClientFactory,
+} from '../core/clientContract.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import { HookSystem } from '../hooks/hookSystem.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
@@ -30,8 +33,8 @@ import {
   loadJitSubdirectoryMemory,
 } from '../utils/memoryDiscovery.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
-import { IdeClient } from '../ide/ide-client.js';
-import { ideContext } from '../ide/ideContext.js';
+import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
+import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import type { Content } from '@google/genai';
 import {
   getOrCreateScheduler as _getOrCreateScheduler,
@@ -99,7 +102,7 @@ import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { getCoreVersion } from '../utils/version.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
-import type { CoreToolScheduler } from '../core/coreToolScheduler.js';
+import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 
 export class Config extends ConfigBase {
   constructor(params: ConfigParameters) {
@@ -199,7 +202,10 @@ export class Config extends ConfigBase {
 
     // Create AgentClient instance immediately without authentication
     // This ensures agentClient is available for providers on startup
-    this.agentClient = new AgentClient(this, this.runtimeState);
+    // @plan PLAN-20260610-ISSUE1592.P01
+    // @requirement REQ-INV-001
+    const clientFactory = this.requireAgentClientFactory('initialize');
+    this.agentClient = clientFactory(this, this.runtimeState);
 
     if (this.getJitContextEnabled()) {
       this.contextManager = new ContextManager(this);
@@ -230,6 +236,19 @@ export class Config extends ConfigBase {
       }
       return newContent;
     });
+  }
+
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-001
+   */
+  private requireAgentClientFactory(operation: string): AgentClientFactory {
+    if (!this.agentClientFactory) {
+      throw new Error(
+        `agentClientFactory is required before Config.${operation}() can create an AgentClient`,
+      );
+    }
+    return this.agentClientFactory;
   }
 
   private async extractExistingState(logger: DebugLogger): Promise<{
@@ -275,7 +294,7 @@ export class Config extends ConfigBase {
 
   private transferHistoryToNewClient(
     logger: DebugLogger,
-    newAgentClient: AgentClient,
+    newAgentClient: AgentClientContract,
     existingHistory: Content[],
     existingHistoryService: HistoryService | null,
     newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
@@ -316,7 +335,12 @@ export class Config extends ConfigBase {
       await this.extractExistingState(logger);
 
     const newContentGeneratorConfig = this.buildNewContentGeneratorConfig();
-    const newAgentClient = new AgentClient(this, this.runtimeState);
+    // @plan PLAN-20260610-ISSUE1592.P01
+    // @requirement REQ-INV-001
+    const clientFactory = this.requireAgentClientFactory(
+      'initializeContentGeneratorConfig',
+    );
+    const newAgentClient = clientFactory(this, this.runtimeState);
 
     this.transferHistoryToNewClient(
       logger,
@@ -804,7 +828,7 @@ export class Config extends ConfigBase {
       messageBus?: MessageBus;
       toolRegistry?: ToolRegistry;
     },
-  ): Promise<CoreToolScheduler> {
+  ): Promise<ToolSchedulerContract> {
     const schedulerMessageBus = dependencies?.messageBus;
     if (!schedulerMessageBus) {
       throw new Error(

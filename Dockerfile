@@ -55,10 +55,13 @@ COPY --chown=node:node packages/storage/dist/vybestack-llxprt-code-storage-*.tgz
 COPY --chown=node:node packages/auth/dist/vybestack-llxprt-code-auth-*.tgz /tmp/
 COPY --chown=node:node packages/settings/dist/vybestack-llxprt-code-settings-*.tgz /tmp/
 COPY --chown=node:node packages/telemetry/dist/vybestack-llxprt-code-telemetry-*.tgz /tmp/
+COPY --chown=node:node packages/ide-integration/dist/vybestack-llxprt-code-ide-integration-*.tgz /tmp/
 COPY --chown=node:node packages/policy/dist/vybestack-llxprt-code-policy-*.tgz /tmp/
 COPY --chown=node:node packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz /tmp/
 COPY --chown=node:node packages/core/dist/vybestack-llxprt-code-core-*.tgz /tmp/
 COPY --chown=node:node packages/providers/dist/vybestack-llxprt-code-providers-*.tgz /tmp/
+COPY --chown=node:node packages/agents/dist/vybestack-llxprt-code-agents-*.tgz /tmp/
+
 COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz /tmp/
 
 # Install packages globally
@@ -70,10 +73,12 @@ RUN npm install -g \
       /tmp/vybestack-llxprt-code-auth-*.tgz \
       /tmp/vybestack-llxprt-code-settings-*.tgz \
       /tmp/vybestack-llxprt-code-telemetry-*.tgz \
+      /tmp/vybestack-llxprt-code-ide-integration-*.tgz \
       /tmp/vybestack-llxprt-code-policy-*.tgz \
       /tmp/vybestack-llxprt-code-mcp-*.tgz \
       /tmp/vybestack-llxprt-code-core-*.tgz \
       /tmp/vybestack-llxprt-code-providers-*.tgz \
+      /tmp/vybestack-llxprt-code-agents-*.tgz \
       /tmp/vybestack-llxprt-code-*.tgz && \
     npm cache clean --force && \
     rm -f /tmp/*.tgz

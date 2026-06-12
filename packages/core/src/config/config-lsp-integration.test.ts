@@ -15,11 +15,11 @@ import { fileURLToPath } from 'node:url';
 import { Readable, Writable } from 'node:stream';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
-import type { LspConfig } from '../lsp/types.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import { initializeTestConfig } from '../test-utils/config.js';
 
 import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
-import * as lspServiceClientModule from '../lsp/lsp-service-client.js';
+import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 import { debugLogger } from '../utils/debugLogger.js';
 
 // Mock dependencies
@@ -104,16 +104,6 @@ vi.mock('../core/contentGenerator.js', async (importOriginal) => {
   };
 });
 
-vi.mock('../core/client.js', () => ({
-  AgentClient: vi.fn().mockImplementation(() => ({
-    initialize: vi.fn().mockResolvedValue(undefined),
-    isInitialized: vi.fn().mockReturnValue(false),
-    getHistory: vi.fn().mockReturnValue([]),
-    getHistoryService: vi.fn().mockReturnValue(null),
-    dispose: vi.fn(),
-  })),
-}));
-
 vi.mock('../telemetry/index.js', () => ({
   initializeTelemetry: vi.fn(),
   DEFAULT_TELEMETRY_TARGET: 'local',
@@ -122,14 +112,21 @@ vi.mock('../telemetry/index.js', () => ({
   StartSessionEvent: vi.fn(),
 }));
 
-vi.mock('../ide/ide-client.js', () => ({
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-    }),
-  },
-}));
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    },
+  };
+});
 
 vi.mock('../services/fileDiscoveryService.js', () => ({
   FileDiscoveryService: vi.fn().mockImplementation(() => ({

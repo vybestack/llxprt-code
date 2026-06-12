@@ -20,7 +20,6 @@ export default defineConfig({
     outputFile: {
       junit: 'junit.xml',
     },
-    dangerouslyIgnoreUnhandledErrors: isWindows,
     pool: shouldUseForkPool ? 'forks' : undefined,
     poolOptions: shouldUseForkPool
       ? {

@@ -6,10 +6,10 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { CoreSubagentServiceAdapter } from './CoreSubagentServiceAdapter.js';
-import {
-  SubagentOrchestrator,
-  type SubagentLaunchResult,
-} from '../core/subagentOrchestrator.js';
+import type {
+  CoreSubagentLauncher,
+  CoreSubagentLaunchResult,
+} from './CoreSubagentServiceAdapter.js';
 import { SubagentTerminateMode } from '../core/subagentTypes.js';
 import type { Config } from '../config/config.js';
 import type { SubagentManager } from '../config/subagentManager.js';
@@ -21,7 +21,7 @@ interface ScopeSpies {
   dispose: ReturnType<typeof vi.fn>;
 }
 
-function createLaunchResult(spies: ScopeSpies): SubagentLaunchResult {
+function createLaunchResult(spies: ScopeSpies): CoreSubagentLaunchResult {
   const scope = {
     output: {
       terminate_reason: SubagentTerminateMode.GOAL,
@@ -36,7 +36,7 @@ function createLaunchResult(spies: ScopeSpies): SubagentLaunchResult {
     agentId: 'agent-test',
     scope,
     dispose: spies.dispose,
-  } as unknown as SubagentLaunchResult;
+  } as unknown as CoreSubagentLaunchResult;
 }
 
 function createAdapter(
@@ -47,7 +47,7 @@ function createAdapter(
 
   const fakeOrchestrator = {
     launch: vi.fn().mockResolvedValue(launchResult),
-  } as unknown as SubagentOrchestrator;
+  } as unknown as CoreSubagentLauncher;
 
   const config = {
     getEphemeralSettings: () => ({}),

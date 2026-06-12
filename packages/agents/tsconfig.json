@@ -1,0 +1,49 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/agents.tsbuildinfo",
+    "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
+    "composite": false,
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-agents": ["./index.ts"],
+      "@vybestack/llxprt-code-agents/*": ["./src/*"],
+      "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
+      "@vybestack/llxprt-code-auth/*": ["../auth/src/*"],
+      "@vybestack/llxprt-code-core": ["../core/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-ide-integration": ["../ide-integration/index.ts"],
+      "@vybestack/llxprt-code-ide-integration/*": ["../ide-integration/src/*"],
+      "@vybestack/llxprt-code-policy": ["../policy/index.ts"],
+      "@vybestack/llxprt-code-policy/*": ["../policy/src/*"],
+      "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
+      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"],
+      "@vybestack/llxprt-code-storage": ["../storage/index.ts"],
+      "@vybestack/llxprt-code-storage/*": ["../storage/src/*"],
+      "@vybestack/llxprt-code-tools": ["../tools/index.ts"],
+      "@vybestack/llxprt-code-tools/*": ["../tools/src/*"],
+      "@vybestack/llxprt-code-test-utils": ["../test-utils/index.ts"],
+      "@vybestack/llxprt-code-test-utils/*": ["../test-utils/src/*"]
+    }
+  },
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.json",
+    "../core/src/types/wasm.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "../auth/src/**/*.test.ts",
+    "../auth/src/**/*.spec.ts",
+    "../settings/src/**/*.test.ts",
+    "../settings/src/**/*.spec.ts",
+    "../test-utils/src/**/*.test.ts",
+    "../test-utils/src/**/*.spec.ts"
+  ]
+}

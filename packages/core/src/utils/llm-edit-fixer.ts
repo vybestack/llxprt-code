@@ -6,7 +6,7 @@
 
 import { createHash } from 'node:crypto';
 import { type Content, Type } from '@google/genai';
-import { type AgentClient } from '../core/client.js';
+import { type AgentClientContract } from '../core/clientContract.js';
 import { LruCache } from './LruCache.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 
@@ -104,7 +104,7 @@ export async function FixLLMEditWithInstruction(
   new_string: string,
   error: string,
   current_content: string,
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   abortSignal: AbortSignal,
 ): Promise<SearchReplaceEdit> {
   const cacheKey = createHash('sha256')

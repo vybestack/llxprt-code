@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_read_png","name":"read_file","parameters":{"file_path":"{{CWD}}/gemini-screenshot.png"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"The image shows the LLxprt Code interface."}]}]}

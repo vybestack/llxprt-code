@@ -33,7 +33,6 @@ import {
   type AnyToolInvocation,
   type CompletedToolCall,
   type Config,
-  type CoreToolScheduler,
   type MessageBus,
   DebugLogger,
   PolicyDecision,
@@ -48,6 +47,7 @@ import {
   type ToolResult,
   type WaitingToolCall,
 } from '@vybestack/llxprt-code-core';
+import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { ToolCallStatus } from '../types.js';
 

@@ -20,7 +20,7 @@ import path from 'path';
 import { promises as nodeFs } from 'fs';
 import type {
   Config,
-  AgentClient,
+  AgentClientContract,
   GitService,
 } from '@vybestack/llxprt-code-core';
 import { getErrorMessage, isNodeError } from '@vybestack/llxprt-code-core';
@@ -55,7 +55,7 @@ export async function createToolCheckpoint(
   toolCall: TrackedToolCall,
   checkpointDir: string,
   gitService: GitService,
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   history: HistoryItem[],
   onDebugMessage: (message: string) => void,
   fsOps: FsOps = {
@@ -139,7 +139,7 @@ async function saveRestorableToolCalls(
   config: Config,
   gitService: GitService | undefined,
   history: HistoryItem[],
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   storage: Config['storage'],
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
@@ -223,7 +223,7 @@ export function useCheckpointPersistence(
   config: Config,
   gitService: GitService | undefined,
   history: HistoryItem[],
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
   storage: Config['storage'],
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,

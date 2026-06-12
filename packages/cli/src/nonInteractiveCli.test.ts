@@ -10,7 +10,6 @@ import type {
   ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import {
-  executeToolCall,
   ToolErrorType,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
@@ -20,6 +19,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
+import { executeToolCall } from '@vybestack/llxprt-code-agents';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LoadedSettings } from './config/settings.js';
@@ -30,12 +30,19 @@ import {
 
 // Mock core modules
 vi.mock('./ui/hooks/atCommandProcessor.js');
+vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
+  return {
+    ...original,
+    executeToolCall: vi.fn(),
+  };
+});
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
     await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
   return {
     ...original,
-    executeToolCall: vi.fn(),
     shutdownTelemetry: vi.fn(),
     isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
     delay: original.delay,

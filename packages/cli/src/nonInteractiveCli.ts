@@ -92,14 +92,14 @@ function createUserFeedbackHandler(
   };
 }
 
-function createStdinCancellation(abortController: AbortController): {
+export function createStdinCancellation(abortController: AbortController): {
   setup: () => void;
   cleanup: () => void;
 } {
   let isAborting = false;
-  let cancelMessageTimer: NodeJS.Timeout | null = null;
   let stdinWasRaw = false;
   let rl: readline.Interface | null = null;
+  let listenerAttached = false;
   const keypressHandler = (
     str: string,
     key: { name?: string; ctrl?: boolean },
@@ -109,10 +109,9 @@ function createStdinCancellation(abortController: AbortController): {
         return;
       }
       isAborting = true;
-      cancelMessageTimer = setTimeout(() => {
-        process.stderr.write('\nCancelling...\n');
-      }, 200);
       abortController.abort();
+      process.stderr.write('\nCancelled.\n');
+      process.exit(130);
     }
   };
   return {
@@ -129,15 +128,15 @@ function createStdinCancellation(abortController: AbortController): {
       });
       readline.emitKeypressEvents(process.stdin, rl);
       process.stdin.on('keypress', keypressHandler);
+      listenerAttached = true;
     },
     cleanup: () => {
-      if (cancelMessageTimer) {
-        clearTimeout(cancelMessageTimer);
-        cancelMessageTimer = null;
-      }
       rl?.close();
       rl = null;
-      process.stdin.removeAllListeners('keypress');
+      if (listenerAttached) {
+        process.stdin.removeListener('keypress', keypressHandler);
+        listenerAttached = false;
+      }
       if (process.stdin.isTTY) {
         process.stdin.setRawMode(stdinWasRaw);
         process.stdin.pause();

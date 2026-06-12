@@ -115,7 +115,9 @@ export function isParserAvailable(): boolean {
 
 /**
  * Parse a shell command string and return the syntax tree.
- * Returns null if parser is not available or if parsing times out.
+ * Returns null if parser is not available, the command is empty, or parsing
+ * times out (default 1 s). Callers that receive null should either fall back
+ * to regex parsing or reject the command outright.
  */
 export function parseShellCommand(
   command: string,
@@ -286,7 +288,13 @@ export function collectCommandDetails(
 
 /**
  * Check if a tree contains prompt command transformations like ${variable@P}.
- * These are dangerous because they can execute arbitrary commands via PS1/PS2/PS4 expansion.
+ *
+ * The `@P` transform performs prompt-string expansion: the variable's value is
+ * interpreted as a PS1/PS2/PS4 prompt string, which can itself contain command
+ * substitutions (`$(...)`, backticks), escape sequences, and other expansions.
+ * This means an attacker who controls a variable value can execute arbitrary
+ * commands via `${attacker_controlled@P}` — even if the surrounding command
+ * appears harmless.  Detection here causes the command to be hard-denied.
  */
 function hasPromptCommandTransform(root: Node): boolean {
   const stack: Node[] = [root];
@@ -409,7 +417,11 @@ export interface SplitCommandsTreeOptions {
   /**
    * Whether to split on pipe operators (|).
    * Default: true (split pipes for security checks).
-   * Set to false for command instrumentation where pipelines should stay intact.
+   *
+   * Originally added for now-removed command instrumentation (PR #1546);
+   * retained because it is zero-cost, tested, and useful for future
+   * pipeline-aware display. Security validation always uses the default
+   * (true) so every pipeline stage is validated individually.
    */
   splitOnPipes?: boolean;
 }

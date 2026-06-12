@@ -12,8 +12,8 @@ import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { createToolRegistry as _createToolRegistry } from './toolRegistryFactory.js';
 import { shutdownLsp } from './lspIntegration.js';
-import type { LspServiceClient } from '../lsp/lsp-service-client.js';
-import type { LspConfig } from '../lsp/types.js';
+import type { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import {
   normalizeStreamingValue,
   normalizeContextLimit,

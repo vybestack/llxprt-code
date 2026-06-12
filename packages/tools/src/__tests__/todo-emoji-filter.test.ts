@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { TodoWriteTool, TodoReadTool } from '../index.js';
+import { TodoPauseTool, TodoWriteTool, TodoReadTool } from '../index.js';
 import type { ITodoService, TodoStore } from '../interfaces/index.js';
 import type { Todo } from '../types/todo-schemas.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
@@ -798,6 +798,81 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         'Emoji filtering produced invalid todo content',
       );
       expect(service.getStoredTodos().length).toBe(0);
+    });
+  });
+
+  describe('TodoPause reason filtering', () => {
+    it('auto mode filters emojis from pause reason display and LLM content', async () => {
+      const service = createFakeTodoService();
+      const host = createToolHostWithEmojiMode('auto');
+      const tool = new TodoPauseTool(service, host);
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.returnDisplay).toContain('[OK] sample placeholder');
+      expect(result.returnDisplay).not.toContain(CHECK_MARK_EMOJI);
+      expect(result.llmContent).not.toContain(CHECK_MARK_EMOJI);
+    });
+
+    it('auto mode filters emojis from pause tool description', () => {
+      const service = createFakeTodoService();
+      const host = createToolHostWithEmojiMode('auto');
+      const tool = new TodoPauseTool(service, host);
+
+      const description = tool.getDescription({
+        reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
+      });
+
+      expect(description).toContain('[OK] sample placeholder');
+      expect(description).not.toContain(CHECK_MARK_EMOJI);
+    });
+
+    it('warn mode filters pause reason and returns warning only in LLM content', async () => {
+      const service = createFakeTodoService();
+      const host = createToolHostWithEmojiMode('warn');
+      const tool = new TodoPauseTool(service, host);
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.returnDisplay).toContain('[OK] sample placeholder');
+      expect(result.returnDisplay).not.toContain('system-reminder');
+      expect(result.llmContent).toContain('system-reminder');
+      expect(result.llmContent).toContain('avoid using emojis');
+    });
+
+    it('error mode blocks pause reason emojis', async () => {
+      const service = createFakeTodoService();
+      const host = createToolHostWithEmojiMode('error');
+      const tool = new TodoPauseTool(service, host);
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
+      });
+
+      expect(result.error).toBeDefined();
+      expect(result.error?.message.toLowerCase()).toContain('emoji');
+      expect(result.returnDisplay).not.toContain(CHECK_MARK_EMOJI);
+      expect(service.getStoredTodos().length).toBe(0);
+    });
+
+    it('allowed mode preserves pause reason emojis', async () => {
+      const service = createFakeTodoService();
+      const host = createToolHostWithEmojiMode('allowed');
+      const tool = new TodoPauseTool(service, host);
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.returnDisplay).toContain(CHECK_MARK_EMOJI);
+      expect(result.llmContent).toContain(CHECK_MARK_EMOJI);
     });
   });
 });

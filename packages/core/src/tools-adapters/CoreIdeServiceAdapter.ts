@@ -12,7 +12,7 @@ import type {
   OpenDiffParams,
 } from '@vybestack/llxprt-code-tools';
 import type { Config } from '../config/config.js';
-import { IDEConnectionStatus as CoreIDEConnectionStatus } from '../ide/ide-client.js';
+import { IDEConnectionStatus as CoreIDEConnectionStatus } from '@vybestack/llxprt-code-ide-integration';
 
 export class CoreIdeServiceAdapter implements IIdeService {
   constructor(private readonly config: Config) {}

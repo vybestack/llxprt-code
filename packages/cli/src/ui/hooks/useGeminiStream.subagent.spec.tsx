@@ -18,7 +18,7 @@ import type {
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
   Config,
-  AgentClient,
+  AgentClientContract as AgentClient,
   EditorType,
   AnyToolInvocation,
 } from '@vybestack/llxprt-code-core';

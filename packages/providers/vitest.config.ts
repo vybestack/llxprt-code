@@ -177,7 +177,6 @@ export default defineConfig({
         ],
       },
     },
-    dangerouslyIgnoreUnhandledErrors: isWindows,
     pool: shouldUseForkPool ? 'forks' : undefined,
     poolOptions: shouldUseForkPool
       ? {

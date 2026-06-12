@@ -27,7 +27,10 @@ vi.mock('../../runtime/runtimeSettings.js', () => ({
   getCliRuntimeServices: vi.fn(),
 }));
 
-import type { Config, AgentClient } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  AgentClientContract as AgentClient,
+} from '@vybestack/llxprt-code-core';
 import {
   uiTelemetryService,
   triggerSessionEndHook,

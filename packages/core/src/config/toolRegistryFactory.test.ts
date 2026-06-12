@@ -41,6 +41,7 @@ function createHost(
     },
     getInteractiveSubagentSchedulerFactory: () => undefined,
     getAsyncTaskManager: () => asyncTaskManager,
+    getTaskToolRegistration: () => undefined,
   };
 }
 
@@ -213,5 +214,21 @@ describe('toolRegistryFactory adapter-backed runtime tools', () => {
       .execute(new AbortController().signal);
     expect(emojiResult.error).toBeDefined();
     expect(emojiResult.error!.message.toLowerCase()).toContain('emoji');
+  });
+
+  it('registers todo_pause through createToolRegistry: auto mode filters pause reason emojis', async () => {
+    const { registry } = await createRegistryWithEmojiMode('auto');
+
+    const tool = registry.getTool('todo_pause');
+    expect(tool).toBeDefined();
+
+    const result = await tool!
+      .build({
+        reason: '\u2705 Pause for real blocker',
+      })
+      .execute(new AbortController().signal);
+    expect(result.error).toBeUndefined();
+    expect(result.returnDisplay).toContain('[OK] Pause for real blocker');
+    expect(result.returnDisplay).not.toContain('\u2705');
   });
 });

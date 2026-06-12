@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { logToolCall } from './loggers.js';
 import { ToolCallEvent } from './types.js';
 import type { Config } from '../config/config.js';
-import { type CompletedToolCall } from '../core/coreToolScheduler.js';
+import { type CompletedToolCall } from '../scheduler/types.js';
 import {
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,

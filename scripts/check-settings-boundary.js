@@ -468,7 +468,7 @@ function check11_modelParamsSubpath(reportOnly) {
   }
 
   const scanPaths = [
-    'packages/core/src/agents',
+    'packages/agents/src',
     'packages/core/src/core',
     'packages/core/src/runtime',
     'packages/core/src/services',
@@ -503,6 +503,7 @@ function check11_modelParamsSubpath(reportOnly) {
  */
 function check12_relativeSettingsImports(reportOnly) {
   const scanPaths = [
+    'packages/agents/src',
     'packages/core/src',
     'packages/cli/test',
     'packages/providers/src',
@@ -752,6 +753,7 @@ function check18_coreBarrelShim(reportOnly) {
  */
 function check19_adapterSingleOwner() {
   const productionPaths = [
+    'packages/agents/src',
     'packages/core/src',
     'packages/cli/src',
     'packages/providers/src',

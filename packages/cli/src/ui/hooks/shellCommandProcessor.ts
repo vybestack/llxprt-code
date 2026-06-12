@@ -14,7 +14,7 @@ import {
 import { useCallback, useState } from 'react';
 import {
   type Config,
-  type AgentClient,
+  type AgentClientContract,
   isBinary,
   type ShellExecutionResult,
   ShellExecutionService,
@@ -44,7 +44,7 @@ interface ShellExecutionParams {
   userMessageTimestamp: number;
   pwdFilePath: string | undefined;
   config: Config;
-  agentClient: AgentClient | undefined;
+  agentClient: AgentClientContract | undefined;
   rawQuery: string;
   abortSignal: AbortSignal;
   onDebugMessage: (message: string) => void;
@@ -64,7 +64,7 @@ interface ShellExecutionParams {
 }
 
 function addShellCommandToAgentHistory(
-  agentClient: AgentClient | undefined,
+  agentClient: AgentClientContract | undefined,
   rawQuery: string,
   resultText: string,
 ) {
@@ -304,7 +304,7 @@ function handleShellResult(
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
-  agentClient: AgentClient | undefined,
+  agentClient: AgentClientContract | undefined,
   rawQuery: string,
 ) {
   setPendingHistoryItem(null);
@@ -372,7 +372,13 @@ function shellCleanup(
     fs.unlinkSync(pwdFilePath);
   }
   setActiveShellPtyId(null);
-  setShellInputFocused(false);
+  const lastActivePtyId = ShellExecutionService.getLastActivePtyId();
+  const ptyAlive =
+    lastActivePtyId !== null &&
+    ShellExecutionService.isActivePty(lastActivePtyId);
+  if (!ptyAlive) {
+    setShellInputFocused(false);
+  }
   resolve();
 }
 
@@ -577,7 +583,7 @@ export const useShellCommandProcessor = (
   onExec: (command: Promise<void>) => void | Promise<void>,
   onDebugMessage: (message: string) => void,
   config: Config,
-  agentClient: AgentClient | undefined,
+  agentClient: AgentClientContract | undefined,
   setShellInputFocused: (value: boolean) => void,
   terminalWidth?: number,
   terminalHeight?: number,

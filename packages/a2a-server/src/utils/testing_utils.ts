@@ -18,8 +18,8 @@ import type {
   ToolCallRequestInfo,
   ToolCall,
   CompletedToolCall,
-  CoreToolScheduler,
 } from '@vybestack/llxprt-code-core';
+import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
 import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core';
 
 import { expect, vi } from 'vitest';

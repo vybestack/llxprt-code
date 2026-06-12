@@ -7,16 +7,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   Config,
-  AgentClient,
   TodoStore,
   type Todo,
   ApprovalMode,
   todoEvents,
   createRuntimeStateFromConfig,
   type TodoUpdateEvent,
-  type Turn,
   type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
+import { AgentClient, type Turn } from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { PartListUnion } from '@google/genai';
 import {

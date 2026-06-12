@@ -8,7 +8,7 @@ import { useMemo, useRef } from 'react';
 import {
   type Config,
   type EditorType,
-  type AgentClient,
+  type AgentClientContract,
   type MessageBus,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
@@ -32,7 +32,7 @@ import {
 } from './useGeminiStreamLifecycle.js';
 
 export interface GeminiStreamOrchestrationDeps {
-  agentClient: AgentClient;
+  agentClient: AgentClientContract;
   addItem: UseHistoryManagerReturn['addItem'];
   config: Config;
   settings: LoadedSettings;

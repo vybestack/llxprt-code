@@ -1729,7 +1729,9 @@ const useRuntimeState = (
     pendingLargePastesRef,
     nextPlaceholderIdRef,
   });
-  useKeypress(state.handleInput, { isActive: true });
+  useKeypress(state.handleInput, {
+    isActive: props.isEmbeddedShellFocused !== true,
+  });
   return state;
 };
 
