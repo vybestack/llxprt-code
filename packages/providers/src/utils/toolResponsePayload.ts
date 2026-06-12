@@ -90,23 +90,13 @@ export function humanizeJsonForDisplay(value: unknown): string | undefined {
 
     if (hasStdout === true) {
       out.push('stdout:');
-      out.push(
-        String(stdout)
-          // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-          .replace(/[\r\n]+$/, '')
-          .trimEnd(),
-      );
+      out.push(String(stdout).trimEnd());
       out.push('');
     }
 
     if (hasStderr === true) {
       out.push('stderr:');
-      out.push(
-        String(stderr)
-          // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-          .replace(/[\r\n]+$/, '')
-          .trimEnd(),
-      );
+      out.push(String(stderr).trimEnd());
       out.push('');
     }
 
