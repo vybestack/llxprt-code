@@ -411,7 +411,8 @@ export async function main() {
   ) {
     // Only relaunch with a larger heap when the autosizing setting is enabled.
     const debugMode = isDebugMode();
-    const memoryArgs = shouldRelaunchForMemory(debugMode);
+    const maxHeapSizeMB = settings.merged.ui.maxHeapSizeMB;
+    const memoryArgs = shouldRelaunchForMemory(debugMode, maxHeapSizeMB);
     if (memoryArgs.length > 0) {
       const exitCode = await relaunchAppInChildProcess(memoryArgs);
       process.exit(exitCode);
@@ -826,6 +827,7 @@ export async function main() {
       sandboxMemoryArgs = computeSandboxMemoryArgs(
         config.getDebugMode(),
         containerMemoryMB,
+        settings.merged.ui.maxHeapSizeMB,
       );
     }
     const sandboxConfig = config.getSandbox();

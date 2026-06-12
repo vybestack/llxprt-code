@@ -555,6 +555,52 @@ function commitEditRestartRequired(
   });
 }
 
+type ParseEditResult = { ok: true; value: string | number } | { ok: false };
+
+function isValidNumericEdit(
+  value: number,
+  definition: ReturnType<typeof getSettingDefinition>,
+): boolean {
+  if (definition === undefined) {
+    return true;
+  }
+  if (typeof definition.minimum === 'number' && value < definition.minimum) {
+    return false;
+  }
+  if (typeof definition.maximum === 'number' && value > definition.maximum) {
+    return false;
+  }
+  if (
+    typeof definition.multipleOf === 'number' &&
+    definition.multipleOf > 0 &&
+    !Number.isInteger(value / definition.multipleOf)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function parseEditValue(
+  editBuffer: string,
+  definition: ReturnType<typeof getSettingDefinition>,
+): ParseEditResult {
+  if (definition?.type !== 'number') {
+    return { ok: true, value: editBuffer };
+  }
+
+  const trimmed = editBuffer.trim();
+  if (trimmed === '') {
+    return { ok: false };
+  }
+
+  const parsed = Number(trimmed);
+  if (Number.isNaN(parsed) || !isValidNumericEdit(parsed, definition)) {
+    return { ok: false };
+  }
+
+  return { ok: true, value: parsed };
+}
+
 function commitEdit(
   key: string,
   editBuffer: string,
@@ -572,36 +618,25 @@ function commitEdit(
   >,
 ): void {
   const definition = getSettingDefinition(key);
-  const type = definition?.type;
   const clearEditState = () => {
     setEditingKey(null);
     setEditBuffer('');
     setEditCursorPos(0);
   };
-
-  if (editBuffer.trim() === '' && type === 'number') {
+  const parsed = parseEditValue(editBuffer, definition);
+  if (!parsed.ok) {
     clearEditState();
     return;
   }
 
-  let parsed: string | number;
-  if (type === 'number') {
-    const numParsed = Number(editBuffer.trim());
-    if (Number.isNaN(numParsed)) {
-      clearEditState();
-      return;
-    }
-    parsed = numParsed;
-  } else {
-    parsed = editBuffer;
-  }
-
-  setPendingSettings((prev) => setPendingSettingValueAny(key, parsed, prev));
+  setPendingSettings((prev) =>
+    setPendingSettingValueAny(key, parsed.value, prev),
+  );
 
   if (!requiresRestart(key)) {
     commitEditImmediate(
       key,
-      parsed,
+      parsed.value,
       settings,
       selectedScope,
       setModifiedSettings,
@@ -611,7 +646,7 @@ function commitEdit(
   } else {
     commitEditRestartRequired(
       key,
-      parsed,
+      parsed.value,
       setShowRestartPrompt,
       setModifiedSettings,
       setRestartRequiredSettings,

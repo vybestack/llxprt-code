@@ -106,6 +106,11 @@ export interface SettingDefinition {
    * For number types, the maximum allowed value.
    */
   maximum?: number;
+  /**
+   * For number types, requires values to be multiples of this number
+   * (e.g. multipleOf 1 restricts to integers).
+   */
+  multipleOf?: number;
 }
 
 export interface SettingsSchema {

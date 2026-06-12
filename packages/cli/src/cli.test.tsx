@@ -682,7 +682,7 @@ describe('cli.tsx deferred initialization', () => {
     relaunchMock.mockResolvedValue(0);
     loadSettingsMock.mockReturnValue({
       merged: {
-        ui: { autoConfigureMaxOldSpaceSize: true },
+        ui: { autoConfigureMaxOldSpaceSize: true, maxHeapSizeMB: 8192 },
       },
       setValue: vi.fn(),
       forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
@@ -703,8 +703,8 @@ describe('cli.tsx deferred initialization', () => {
     // Expected to throw from process.exit mock
     expect(caughtError?.message).toBe('PROCESS_EXIT');
 
-    // Verify relaunch check happened
-    expect(shouldRelaunchMock).toHaveBeenCalled();
+    // Verify relaunch check happened with both debug mode and maxHeapSizeMB
+    expect(shouldRelaunchMock).toHaveBeenCalledWith(false, 8192);
     expect(relaunchMock).toHaveBeenCalledWith(['--max-old-space-size=4096']);
 
     // Verify loadCliConfig was NOT called
@@ -772,7 +772,7 @@ describe('cli.tsx deferred initialization', () => {
     expect(loadSettingsMock).toHaveBeenCalled();
   });
 
-  it('should use isDebugMode for early debug detection', async () => {
+  it('should use isDebugMode for early debug detection and pass maxHeapSizeMB', async () => {
     const isDebugModeMock = vi.mocked(isDebugMode);
     const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
     const loadSettingsMock = vi.mocked(loadSettings);
@@ -782,7 +782,7 @@ describe('cli.tsx deferred initialization', () => {
 
     loadSettingsMock.mockReturnValue({
       merged: {
-        ui: { autoConfigureMaxOldSpaceSize: true },
+        ui: { autoConfigureMaxOldSpaceSize: true, maxHeapSizeMB: 8192 },
       },
       setValue: vi.fn(),
       forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
@@ -797,7 +797,33 @@ describe('cli.tsx deferred initialization', () => {
 
     // Debug mode should be detected
     expect(isDebugModeMock).toHaveBeenCalled();
-    // And passed to shouldRelaunchForMemory
-    expect(shouldRelaunchMock).toHaveBeenCalledWith(true);
+    // And passed to shouldRelaunchForMemory with the maxHeapSizeMB from settings
+    expect(shouldRelaunchMock).toHaveBeenCalledWith(true, 8192);
+  });
+
+  it('should pass non-default maxHeapSizeMB to shouldRelaunchForMemory', async () => {
+    const isDebugModeMock = vi.mocked(isDebugMode);
+    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
+    const loadSettingsMock = vi.mocked(loadSettings);
+
+    isDebugModeMock.mockReturnValue(false);
+    shouldRelaunchMock.mockReturnValue([]);
+
+    loadSettingsMock.mockReturnValue({
+      merged: {
+        ui: { autoConfigureMaxOldSpaceSize: true, maxHeapSizeMB: 4096 },
+      },
+      setValue: vi.fn(),
+      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
+      errors: [],
+    } as unknown as LoadedSettings);
+
+    try {
+      await main();
+    } catch {
+      // Expected
+    }
+
+    expect(shouldRelaunchMock).toHaveBeenCalledWith(false, 4096);
   });
 });
