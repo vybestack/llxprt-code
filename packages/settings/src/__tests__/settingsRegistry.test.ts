@@ -99,9 +99,30 @@ describe('getSettingSpec — spec lookup', () => {
     expect(spec?.category).toBe('cli-behavior');
   });
 
-  it('returns a spec with category provider-config for apiKey', () => {
-    const spec = getSettingSpec('apiKey');
+  it('resolves apiKey alias to auth-key canonical spec', () => {
+    const spec = getSettingSpec('auth-key');
     expect(spec?.category).toBe('provider-config');
+    expect(spec?.aliases).toContain('apiKey');
+  });
+
+  it('resolves auth-key canonical spec directly', () => {
+    const spec = getSettingSpec('auth-key');
+    expect(spec?.category).toBe('provider-config');
+    expect(spec?.persistToProfile).toBe(true);
+  });
+
+  it('resolves auth-keyfile canonical spec with apiKeyfile alias', () => {
+    const spec = getSettingSpec('auth-keyfile');
+    expect(spec?.category).toBe('provider-config');
+    expect(spec?.aliases).toContain('apiKeyfile');
+  });
+
+  it('resolves apiKey to auth-key via resolveAlias', () => {
+    expect(resolveAlias('apiKey')).toBe('auth-key');
+  });
+
+  it('resolves apiKeyfile to auth-keyfile via resolveAlias', () => {
+    expect(resolveAlias('apiKeyfile')).toBe('auth-keyfile');
   });
 
   it('returns a spec with type enum for compression.strategy', () => {
@@ -287,9 +308,42 @@ describe('getProfilePersistableKeys — profile persistence', () => {
     expect(keys).toContain('reasoning.enabled');
   });
 
-  it('does not include apiKey (persistToProfile: false)', () => {
+  it('auth-key is persistable to profile (canonical)', () => {
     const keys = getProfilePersistableKeys();
-    expect(keys).not.toContain('apiKey');
+    expect(keys).toContain('auth-key');
+  });
+
+  it('auth-keyfile is persistable to profile (canonical)', () => {
+    const keys = getProfilePersistableKeys();
+    expect(keys).toContain('auth-keyfile');
+  });
+
+  it('apiKey alias resolves to auth-key spec via getSettingSpec', () => {
+    const spec = getSettingSpec('apiKey');
+    expect(spec).toBeDefined();
+    expect(spec?.key).toBe('auth-key');
+    expect(spec?.category).toBe('provider-config');
+    expect(spec?.aliases).toContain('apiKey');
+  });
+
+  it('apiKeyfile alias resolves to auth-keyfile spec via getSettingSpec', () => {
+    const spec = getSettingSpec('apiKeyfile');
+    expect(spec).toBeDefined();
+    expect(spec?.key).toBe('auth-keyfile');
+    expect(spec?.category).toBe('provider-config');
+    expect(spec?.aliases).toContain('apiKeyfile');
+  });
+
+  it('api-key alias resolves to auth-key spec via getSettingSpec', () => {
+    const spec = getSettingSpec('api-key');
+    expect(spec).toBeDefined();
+    expect(spec?.key).toBe('auth-key');
+  });
+
+  it('api-keyfile alias resolves to auth-keyfile spec via getSettingSpec', () => {
+    const spec = getSettingSpec('api-keyfile');
+    expect(spec).toBeDefined();
+    expect(spec?.key).toBe('auth-keyfile');
   });
 });
 
@@ -345,14 +399,19 @@ describe('getAutocompleteSuggestions — completion options', () => {
 });
 
 describe('getProtectedSettingKeys — protected/hidden keys', () => {
-  it('includes apiKey in protected keys', () => {
+  it('includes auth-key in protected keys', () => {
+    const keys = getProtectedSettingKeys();
+    expect(keys).toContain('auth-key');
+  });
+
+  it('includes apiKey alias in protected keys', () => {
     const keys = getProtectedSettingKeys();
     expect(keys).toContain('apiKey');
   });
 
-  it('includes auth-key in protected keys', () => {
+  it('includes auth-keyfile in protected keys', () => {
     const keys = getProtectedSettingKeys();
-    expect(keys).toContain('auth-key');
+    expect(keys).toContain('auth-keyfile');
   });
 
   it('includes model in protected keys', () => {
@@ -367,14 +426,24 @@ describe('getProtectedSettingKeys — protected/hidden keys', () => {
 });
 
 describe('getProviderConfigKeys — provider config key enumeration', () => {
-  it('includes apiKey', () => {
+  it('includes auth-key canonical', () => {
+    const keys = getProviderConfigKeys();
+    expect(keys).toContain('auth-key');
+  });
+
+  it('includes apiKey alias', () => {
     const keys = getProviderConfigKeys();
     expect(keys).toContain('apiKey');
   });
 
-  it('includes api-key alias', () => {
+  it('includes auth-keyfile canonical', () => {
     const keys = getProviderConfigKeys();
-    expect(keys).toContain('api-key');
+    expect(keys).toContain('auth-keyfile');
+  });
+
+  it('includes apiKeyfile alias', () => {
+    const keys = getProviderConfigKeys();
+    expect(keys).toContain('apiKeyfile');
   });
 
   it('includes base-url', () => {
@@ -437,7 +506,13 @@ describe('getDirectSettingSpecs — direct setting specifications', () => {
     expect(found).toBeUndefined();
   });
 
-  it('excludes apiKey (provider-config category)', () => {
+  it('excludes auth-key (provider-config category)', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'auth-key');
+    expect(found).toBeUndefined();
+  });
+
+  it('excludes apiKey alias from direct setting specs', () => {
     const specs = getDirectSettingSpecs();
     const found = specs.find((s) => s.value === 'apiKey');
     expect(found).toBeUndefined();

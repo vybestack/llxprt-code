@@ -674,8 +674,10 @@ export class GeminiProvider extends BaseProvider {
 
       const reservedKeys = new Set([
         'enabled',
+        'auth-key',
         'apiKey',
         'api-key',
+        'auth-keyfile',
         'apiKeyfile',
         'api-keyfile',
         'base-url',

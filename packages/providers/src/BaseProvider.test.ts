@@ -803,4 +803,114 @@ describe('BaseProvider', () => {
       );
     });
   });
+
+  describe('BaseProvider — model params defensive stripping', () => {
+    let originalEnv: NodeJS.ProcessEnv;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      originalEnv = { ...process.env };
+      delete process.env.TEST_API_KEY;
+      resetSettingsService();
+      registerSettingsService(new SettingsService());
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+      vi.restoreAllMocks();
+      clearActiveProviderRuntimeContext();
+    });
+
+    it('strips legacy apiKey from additionalSettings', async () => {
+      const settingsService = getSettingsService();
+      settingsService.setProviderSetting('test', 'apiKey', 'leaked-legacy-key');
+      settingsService.setProviderSetting('test', 'model', 'gpt-4');
+      settingsService.setProviderSetting('test', 'enabled', true);
+
+      const config: BaseProviderConfig = { name: 'test' };
+      const provider = new TestProvider(config);
+
+      const params = await (
+        provider as unknown as {
+          getModelParamsFromSettings(): Promise<
+            Record<string, unknown> | undefined
+          >;
+        }
+      ).getModelParamsFromSettings();
+
+      expect(params?.apiKey).toBeUndefined();
+    });
+
+    it('strips legacy apiKeyfile from additionalSettings', async () => {
+      const settingsService = getSettingsService();
+      settingsService.setProviderSetting(
+        'test',
+        'apiKeyfile',
+        '/path/to/keyfile',
+      );
+      settingsService.setProviderSetting('test', 'model', 'gpt-4');
+      settingsService.setProviderSetting('test', 'enabled', true);
+
+      const config: BaseProviderConfig = { name: 'test' };
+      const provider = new TestProvider(config);
+
+      const params = await (
+        provider as unknown as {
+          getModelParamsFromSettings(): Promise<
+            Record<string, unknown> | undefined
+          >;
+        }
+      ).getModelParamsFromSettings();
+
+      expect(params?.apiKeyfile).toBeUndefined();
+    });
+
+    it('strips legacy api-key and api-keyfile from additionalSettings', async () => {
+      const settingsService = getSettingsService();
+      settingsService.setProviderSetting('test', 'api-key', 'leaked-key');
+      settingsService.setProviderSetting(
+        'test',
+        'api-keyfile',
+        '/path/to/keyfile',
+      );
+      settingsService.setProviderSetting('test', 'model', 'gpt-4');
+      settingsService.setProviderSetting('test', 'enabled', true);
+
+      const config: BaseProviderConfig = { name: 'test' };
+      const provider = new TestProvider(config);
+
+      const params = await (
+        provider as unknown as {
+          getModelParamsFromSettings(): Promise<
+            Record<string, unknown> | undefined
+          >;
+        }
+      ).getModelParamsFromSettings();
+
+      expect(params?.['api-key']).toBeUndefined();
+      expect(params?.['api-keyfile']).toBeUndefined();
+    });
+
+    it('preserves non-sensitive custom params alongside stripping', async () => {
+      const settingsService = getSettingsService();
+      settingsService.setProviderSetting('test', 'apiKey', 'leaked');
+      settingsService.setProviderSetting('test', 'model', 'gpt-4');
+      settingsService.setProviderSetting('test', 'enabled', true);
+      settingsService.setProviderSetting('test', 'customParam', 'keep-me');
+
+      const config: BaseProviderConfig = { name: 'test' };
+      const provider = new TestProvider(config);
+
+      const params = await (
+        provider as unknown as {
+          getModelParamsFromSettings(): Promise<
+            Record<string, unknown> | undefined
+          >;
+        }
+      ).getModelParamsFromSettings();
+
+      expect(params?.apiKey).toBeUndefined();
+      expect(params?.customParam).toBe('keep-me');
+    });
+  });
 });

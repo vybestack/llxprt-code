@@ -74,7 +74,7 @@ describe('ChatSession runtime context', () => {
     config = new Config(createConfigParams(settingsService));
 
     settingsService.set('providers.stub.base-url', 'https://stub.example.com');
-    settingsService.set('providers.stub.apiKey', 'stub-api-key');
+    settingsService.set('providers.stub.auth-key', 'stub-api-key');
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({

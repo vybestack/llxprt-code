@@ -96,7 +96,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     settingsService = new SettingsService();
     config = new Config(createConfigParams(settingsService));
 
-    settingsService.set('providers.anthropic.apiKey', 'test-api-key');
+    settingsService.set('providers.anthropic.auth-key', 'test-api-key');
     settingsService.set(
       'providers.anthropic.model',
       'claude-sonnet-4-5-20250929',

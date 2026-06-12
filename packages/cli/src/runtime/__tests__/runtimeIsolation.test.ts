@@ -227,7 +227,7 @@ describe('CLI runtime isolation', () => {
       runtimeA.handle.config.getEphemeralSetting('custom-headers'),
     ).toStrictEqual({ 'x-runtime': runtimeA.id });
     expect(aSecondarySettings.temperature).toBe(0.6);
-    expect(aSecondarySettings.apiKey).toBe('alpha-updated-key');
+    expect(aSecondarySettings['auth-key']).toBe('alpha-updated-key');
     expect(aSecondarySettings['base-url']).toBe(
       'https://alpha.isolated.example.com',
     );
@@ -253,7 +253,7 @@ describe('CLI runtime isolation', () => {
       runtimeB.handle.config.getEphemeralSetting('custom-headers'),
     ).toStrictEqual({ 'x-runtime': runtimeB.id });
     expect(bSecondarySettings.temperature).toBe(0.4);
-    expect(bSecondarySettings.apiKey).toBe('beta-updated-key');
+    expect(bSecondarySettings['auth-key']).toBe('beta-updated-key');
     expect(bSecondarySettings['base-url']).toBe(
       'https://beta.isolated.example.com',
     );
@@ -514,7 +514,7 @@ async function bootstrapRuntimeFixture(options: {
       );
       settingsService.setProviderSetting(
         options.primaryProvider,
-        'apiKey',
+        'auth-key',
         `${options.id}-initial-key`,
       );
       config.setProvider(options.primaryProvider);

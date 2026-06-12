@@ -529,7 +529,7 @@ export class ProviderManager implements IProviderManager {
       baseURL: this.resolveBaseURLField(rawOptions, providerSettings),
       authToken:
         rawOptions.resolved?.authToken ??
-        (providerSettings.apiKey as string | undefined),
+        (providerSettings['auth-key'] as string | undefined),
       telemetry: {
         ...rawOptions.resolved?.telemetry,
         runtimeId,

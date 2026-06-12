@@ -567,7 +567,7 @@ describe('Authentication (REQ-OAV-003)', () => {
       );
       settingsService.setProviderSetting(
         'openaivercel',
-        'apiKey',
+        'auth-key',
         'keyfile-api-key',
       );
       settingsService.set('auth-key', 'keyfile-api-key');

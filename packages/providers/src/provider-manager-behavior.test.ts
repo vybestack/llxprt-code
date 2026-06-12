@@ -137,7 +137,7 @@ describe('ProviderManager behavioral tests', () => {
       const config = createTestConfig(settingsService);
       const manager = new ProviderManager({ settingsService, config });
       settingsService.set('activeProvider', 'fake');
-      settingsService.setProviderSetting('fake', 'apiKey', 'test-key');
+      settingsService.setProviderSetting('fake', 'auth-key', 'test-key');
       manager.registerProvider(provider);
       const providers = manager.listProviders();
       expect(providers).toContain('fake');
@@ -162,7 +162,7 @@ describe('ProviderManager behavioral tests', () => {
       const settingsService = new SettingsService();
       const config = createTestConfig(settingsService);
       const manager = new ProviderManager({ settingsService, config });
-      settingsService.setProviderSetting('fake', 'apiKey', 'test-key');
+      settingsService.setProviderSetting('fake', 'auth-key', 'test-key');
       manager.registerProvider(provider);
       manager.setActiveProvider('fake');
       expect(manager.getActiveProviderName()).toBe('fake');
@@ -200,7 +200,7 @@ describe('ProviderManager behavioral tests', () => {
       const settingsService = new SettingsService();
       const config = createTestConfig(settingsService);
       const manager = new ProviderManager({ settingsService, config });
-      settingsService.setProviderSetting('fake', 'apiKey', 'test-key');
+      settingsService.setProviderSetting('fake', 'auth-key', 'test-key');
       manager.registerProvider(provider);
       manager.setActiveProvider('fake');
       expect(manager.hasActiveProvider()).toBe(true);

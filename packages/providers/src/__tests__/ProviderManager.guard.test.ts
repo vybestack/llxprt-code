@@ -97,7 +97,7 @@ describe('ProviderManager runtime guard plumbing', () => {
     manager.registerProvider(provider);
     settingsService.set('activeProvider', provider.name);
     settingsService.setProviderSetting(provider.name, 'model', 'stub-model');
-    settingsService.setProviderSetting(provider.name, 'apiKey', 'stub-key');
+    settingsService.setProviderSetting(provider.name, 'auth-key', 'stub-key');
     settingsService.setProviderSetting(
       provider.name,
       'base-url',
@@ -143,7 +143,7 @@ describe('ProviderManager runtime guard plumbing', () => {
     manager.registerProvider(provider);
     settingsService.set('activeProvider', provider.name);
     settingsService.setProviderSetting(provider.name, 'model', 'stub-model');
-    settingsService.setProviderSetting(provider.name, 'apiKey', 'stub-key');
+    settingsService.setProviderSetting(provider.name, 'auth-key', 'stub-key');
     settingsService.setProviderSetting(
       provider.name,
       'base-url',
@@ -174,7 +174,7 @@ describe('ProviderManager runtime guard plumbing', () => {
     const settingsService = new SettingsService();
     settingsService.set('streaming', 'enabled');
     settingsService.setProviderSetting('openai', 'temperature', 0.5);
-    settingsService.setProviderSetting('openai', 'apiKey', 'test-key');
+    settingsService.setProviderSetting('openai', 'auth-key', 'test-key');
     const config = createRuntimeConfigStub(settingsService);
     const manager = new ProviderManager({ settingsService, config });
 
@@ -285,7 +285,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
 
     settingsService.set('activeProvider', 'stub-provider');
     settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
     settingsService.setProviderSetting(
       'stub-provider',
       'base-url',
@@ -325,7 +325,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
 
     settingsService.set('activeProvider', 'stub-provider');
     settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
 
     const normalized = manager.normalizeRuntimeInputs(
       {
@@ -537,7 +537,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
 
     settingsService.set('activeProvider', provider.name);
     settingsService.setProviderSetting(provider.name, 'model', 'test-model');
-    settingsService.setProviderSetting(provider.name, 'apiKey', 'test-key');
+    settingsService.setProviderSetting(provider.name, 'auth-key', 'test-key');
 
     const normalized = manager.normalizeRuntimeInputs(
       {
@@ -566,7 +566,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
 
     settingsService.set('activeProvider', 'stub-provider');
     settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
     settingsService.setProviderSetting(
       'stub-provider',
       'base-url',
@@ -609,7 +609,7 @@ describe('ProviderManager.normalizeRuntimeInputs empty/whitespace fallback seman
       'model',
       'settings-model',
     );
-    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
     settingsService.setProviderSetting(
       'stub-provider',
       'base-url',
@@ -645,7 +645,7 @@ describe('ProviderManager.normalizeRuntimeInputs empty/whitespace fallback seman
       'model',
       'settings-model',
     );
-    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
     settingsService.setProviderSetting(
       'stub-provider',
       'base-url',
@@ -680,7 +680,7 @@ describe('ProviderManager.normalizeRuntimeInputs empty/whitespace fallback seman
 
     settingsService.set('activeProvider', 'stub-provider');
     settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
 
     const normalized = manager.normalizeRuntimeInputs(
       {
@@ -712,7 +712,7 @@ describe('ProviderManager.normalizeRuntimeInputs empty/whitespace fallback seman
 
     settingsService.set('activeProvider', 'stub-provider');
     settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
 
     const normalized = manager.normalizeRuntimeInputs(
       {
@@ -805,7 +805,7 @@ describe('ProviderManager.normalizeRuntimeInputs empty/whitespace fallback seman
 
     settingsService.set('activeProvider', 'stub-provider');
     settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
     // Intentionally set base-url to empty string
     settingsService.setProviderSetting('stub-provider', 'base-url', '');
 

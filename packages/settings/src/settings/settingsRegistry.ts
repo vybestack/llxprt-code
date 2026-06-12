@@ -70,32 +70,18 @@ const HEADER_PRESERVE_SET = new Set([
 
 export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
   {
-    key: 'apiKey',
-    aliases: ['api-key'],
+    key: 'auth-key',
+    aliases: ['apiKey', 'api-key'],
     category: 'provider-config',
     description: 'Provider API authentication key',
-    type: 'string',
-    persistToProfile: false,
-  },
-  {
-    key: 'auth-key',
-    category: 'provider-config',
-    description: 'Auth key alias (saved to profiles for auth persistence)',
-    type: 'string',
-    persistToProfile: true,
-  },
-  {
-    key: 'apiKeyfile',
-    aliases: ['api-keyfile'],
-    category: 'provider-config',
-    description: 'Path to file containing API key',
     type: 'string',
     persistToProfile: true,
   },
   {
     key: 'auth-keyfile',
+    aliases: ['apiKeyfile', 'api-keyfile'],
     category: 'provider-config',
-    description: 'Auth keyfile alias (saved to profiles for auth persistence)',
+    description: 'Path to file containing API key',
     type: 'string',
     persistToProfile: true,
   },
@@ -1264,7 +1250,17 @@ export function resolveAlias(key: string): string {
 }
 
 export function getSettingSpec(key: string): SettingSpec | undefined {
-  return SETTINGS_REGISTRY.find((s) => s.key === key);
+  // Direct canonical-key match first (fast path)
+  const direct = SETTINGS_REGISTRY.find((s) => s.key === key);
+  if (direct) {
+    return direct;
+  }
+  // Resolve alias to canonical key and look up the spec
+  const resolved = resolveAlias(key);
+  if (resolved !== key) {
+    return SETTINGS_REGISTRY.find((s) => s.key === resolved);
+  }
+  return undefined;
 }
 
 export function normalizeSetting(key: string, value: unknown): unknown {

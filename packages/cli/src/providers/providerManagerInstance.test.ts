@@ -163,8 +163,8 @@ describe('bindOpenAIAliasIdentity', () => {
     provider.setRuntimeSettingsService(settingsService);
 
     settingsService.set('activeProvider', 'Synthetic');
-    settingsService.setProviderSetting('openai', 'apiKey', 'sk-openai');
-    settingsService.setProviderSetting('Synthetic', 'apiKey', 'sk-alias');
+    settingsService.setProviderSetting('openai', 'auth-key', 'sk-openai');
+    settingsService.setProviderSetting('Synthetic', 'auth-key', 'sk-alias');
 
     const resolver = provider as unknown as {
       getAuthToken(): Promise<string>;

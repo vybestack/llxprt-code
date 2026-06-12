@@ -537,7 +537,6 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
 
       const providerSettings =
         settingsService.getProviderSettings('test-provider');
-      providerSettings.apiKeyfile = '/tmp/test-provider.key';
       providerSettings['auth-keyfile'] = '/tmp/test-provider.key';
 
       await runtimeMod.updateActiveProviderApiKey(null);
@@ -545,7 +544,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
       expect(config.getEphemeralSetting('auth-key-name')).toBeUndefined();
       expect(config.getEphemeralSetting('auth-keyfile')).toBeUndefined();
       expect(
-        settingsService.getProviderSettings('test-provider').apiKeyfile,
+        settingsService.getProviderSettings('test-provider')['auth-keyfile'],
       ).toBeUndefined();
       expect(
         settingsService.getProviderSettings('test-provider')['auth-keyfile'],

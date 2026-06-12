@@ -283,4 +283,63 @@ describe('ProfileManager — save and load with SettingsService', () => {
     await pm.load('load-target', mockSettingsService);
     expect(appliedData['currentProfile']).toBe('load-target');
   });
+
+  it('save persists auth-keyfile in ephemeralSettings', async () => {
+    const mockSettingsService = {
+      exportForProfile: async () => ({
+        defaultProvider: 'openai',
+        providers: {
+          openai: {
+            model: 'gpt-4',
+            'auth-key': 'sk-secret',
+            'auth-keyfile': '/path/to/keyfile',
+          },
+        },
+        tools: { allowed: [], disabled: [] },
+      }),
+      setCurrentProfileName: (_name: string | null) => {},
+    };
+
+    await pm.save('authfile-profile', mockSettingsService);
+
+    const filePath = path.join(tempDir, 'authfile-profile.json');
+    const content = await fs.readFile(filePath, 'utf8');
+    const parsed = JSON.parse(content);
+    expect(parsed.ephemeralSettings['auth-key']).toBe('sk-secret');
+    expect(parsed.ephemeralSettings['auth-keyfile']).toBe('/path/to/keyfile');
+  });
+
+  it('load round-trips auth-keyfile back to settings', async () => {
+    const profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key': 'sk-roundtrip',
+        'auth-keyfile': '/roundtrip/keyfile',
+      },
+    };
+    await pm.saveProfile('rt-keyfile', profile);
+
+    let importedData: Record<string, unknown> | undefined;
+    const mockSettingsService = {
+      setCurrentProfileName: () => {},
+      importFromProfile: async (data: unknown) => {
+        importedData = data as Record<string, unknown>;
+      },
+      set: () => {},
+    };
+
+    await pm.load('rt-keyfile', mockSettingsService);
+
+    expect(importedData).toBeDefined();
+    const imported = importedData as Record<string, unknown>;
+    const providers = imported.providers as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(providers.openai['auth-key']).toBe('sk-roundtrip');
+    expect(providers.openai['auth-keyfile']).toBe('/roundtrip/keyfile');
+  });
 });
