@@ -830,6 +830,20 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       expect(description).not.toContain(CHECK_MARK_EMOJI);
     });
 
+    it('auto mode describes decorative-only pause reason without raw emojis', () => {
+      const service = createFakeTodoService();
+      const host = createToolHostWithEmojiMode('auto');
+      const tool = new TodoPauseTool(service, host);
+      const dogSequence = '\u{1F415}\u{1F436}\u{1F415}\u{1F436}';
+
+      const description = tool.getDescription({ reason: dogSequence });
+
+      expect(description).toContain(
+        'Pause reason is empty after emoji filtering',
+      );
+      expect(description).not.toContain(dogSequence);
+    });
+
     it('warn mode filters pause reason and returns warning only in LLM content', async () => {
       const service = createFakeTodoService();
       const host = createToolHostWithEmojiMode('warn');

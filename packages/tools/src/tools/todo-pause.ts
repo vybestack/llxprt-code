@@ -210,9 +210,12 @@ ${reasonResult.systemFeedback}
 
   private getReasonForDisplay(reason: string): string {
     const result = this.filterReason(reason);
-    return result.blocked
-      ? (result.errorMessage ?? 'Emojis detected in pause reason')
-      : result.reason;
+    if (result.blocked) {
+      return result.errorMessage ?? 'Emojis detected in pause reason';
+    }
+    return result.reason.length > 0
+      ? result.reason
+      : 'Pause reason is empty after emoji filtering';
   }
 
   private filterReason(reason: string): {
