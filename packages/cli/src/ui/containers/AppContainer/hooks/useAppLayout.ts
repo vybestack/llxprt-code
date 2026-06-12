@@ -82,6 +82,7 @@ export interface AppLayoutParams {
   handleSlashCommand: AppInputResult['handleSlashCommand'];
   inputHistoryStore: AppInputResult['inputHistoryStore'];
   submitQuery: AppInputResult['submitQuery'];
+  isMcpReady: AppInputResult['isMcpReady'];
   vimModeEnabled: AppInputResult['vimModeEnabled'];
   terminalHeight: AppInputResult['terminalHeight'];
   terminalWidth: AppInputResult['terminalWidth'];
@@ -239,6 +240,7 @@ function useLayoutContext(p: AppLayoutParams) {
     terminalHeight,
     terminalWidth,
     submitQuery,
+    isMcpReady,
     vimModeEnabled,
     startupGuardsInitialized,
   } = p;
@@ -271,6 +273,7 @@ function useLayoutContext(p: AppLayoutParams) {
       isFolderTrustDialogOpen,
     },
     startupGuardsInitialized,
+    isMcpReady,
   });
   const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
   const placeholder = usePowerShellPlaceholder({ vimModeEnabled });

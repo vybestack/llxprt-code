@@ -21,6 +21,18 @@ const blockedByDialogsClosed = {
   isFolderTrustDialogOpen: false,
 };
 
+type HookParams = Parameters<typeof useInitialPromptSubmit>[0];
+
+const createParams = (overrides: Partial<HookParams> = {}): HookParams => ({
+  initialPrompt: 'hello',
+  submitQuery: vi.fn().mockResolvedValue(undefined),
+  agentClientPresent: true,
+  blockedByDialogs: blockedByDialogsClosed,
+  startupGuardsInitialized: true,
+  isMcpReady: true,
+  ...overrides,
+});
+
 describe('useInitialPromptSubmit', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -35,13 +47,12 @@ describe('useInitialPromptSubmit', () => {
     const submitQuery = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
-      useInitialPromptSubmit({
-        initialPrompt: 'hello',
-        submitQuery,
-        agentClientPresent: true,
-        blockedByDialogs: blockedByDialogsClosed,
-        startupGuardsInitialized: true,
-      }),
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: 'hello',
+          submitQuery,
+        }),
+      ),
     );
 
     await act(async () => {
@@ -55,13 +66,13 @@ describe('useInitialPromptSubmit', () => {
     const submitQuery = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
-      useInitialPromptSubmit({
-        initialPrompt: 'hello',
-        submitQuery,
-        agentClientPresent: true,
-        blockedByDialogs: blockedByDialogsClosed,
-        startupGuardsInitialized: false,
-      }),
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: 'hello',
+          submitQuery,
+          startupGuardsInitialized: false,
+        }),
+      ),
     );
 
     await act(async () => {
@@ -76,13 +87,13 @@ describe('useInitialPromptSubmit', () => {
 
     const { rerender } = renderHook(
       ({ startupGuardsInitialized }: { startupGuardsInitialized: boolean }) =>
-        useInitialPromptSubmit({
-          initialPrompt: 'hello',
-          submitQuery,
-          agentClientPresent: true,
-          blockedByDialogs: blockedByDialogsClosed,
-          startupGuardsInitialized,
-        }),
+        useInitialPromptSubmit(
+          createParams({
+            initialPrompt: 'hello',
+            submitQuery,
+            startupGuardsInitialized,
+          }),
+        ),
       { initialProps: { startupGuardsInitialized: false } },
     );
 
@@ -102,20 +113,100 @@ describe('useInitialPromptSubmit', () => {
     expect(submitQuery).toHaveBeenCalledTimes(1);
   });
 
+  it('does not submit non-slash prompt when MCP is not ready', async () => {
+    const submitQuery = vi.fn().mockResolvedValue(undefined);
+
+    renderHook(() =>
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: 'hello',
+          submitQuery,
+          isMcpReady: false,
+        }),
+      ),
+    );
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitQuery).not.toHaveBeenCalled();
+  });
+
+  it('submits non-slash prompt once MCP becomes ready', async () => {
+    const submitQuery = vi.fn().mockResolvedValue(undefined);
+
+    const { rerender } = renderHook(
+      ({ isMcpReady }: { isMcpReady: boolean }) =>
+        useInitialPromptSubmit(
+          createParams({
+            initialPrompt: 'hello',
+            submitQuery,
+            isMcpReady,
+          }),
+        ),
+      { initialProps: { isMcpReady: false } },
+    );
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitQuery).not.toHaveBeenCalled();
+
+    rerender({ isMcpReady: true });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitQuery).toHaveBeenCalledWith('hello');
+    expect(submitQuery).toHaveBeenCalledTimes(1);
+
+    rerender({ isMcpReady: true });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it('submits slash command when MCP is not ready', async () => {
+    const submitQuery = vi.fn().mockResolvedValue(undefined);
+
+    renderHook(() =>
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: '  /help',
+          submitQuery,
+          isMcpReady: false,
+        }),
+      ),
+    );
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitQuery).toHaveBeenCalledWith('  /help');
+    expect(submitQuery).toHaveBeenCalledTimes(1);
+  });
+
   it('does not submit when a blocking dialog is open even with startup guards initialized', async () => {
     const submitQuery = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
-      useInitialPromptSubmit({
-        initialPrompt: 'hello',
-        submitQuery,
-        agentClientPresent: true,
-        blockedByDialogs: {
-          ...blockedByDialogsClosed,
-          isWelcomeDialogOpen: true,
-        },
-        startupGuardsInitialized: true,
-      }),
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: 'hello',
+          submitQuery,
+          blockedByDialogs: {
+            ...blockedByDialogsClosed,
+            isWelcomeDialogOpen: true,
+          },
+        }),
+      ),
     );
 
     await act(async () => {
@@ -130,13 +221,13 @@ describe('useInitialPromptSubmit', () => {
 
     const { rerender } = renderHook(
       ({ startupGuardsInitialized }: { startupGuardsInitialized: boolean }) =>
-        useInitialPromptSubmit({
-          initialPrompt: 'hello',
-          submitQuery,
-          agentClientPresent: true,
-          blockedByDialogs: blockedByDialogsClosed,
-          startupGuardsInitialized,
-        }),
+        useInitialPromptSubmit(
+          createParams({
+            initialPrompt: 'hello',
+            submitQuery,
+            startupGuardsInitialized,
+          }),
+        ),
       { initialProps: { startupGuardsInitialized: true } },
     );
 
@@ -163,16 +254,16 @@ describe('useInitialPromptSubmit', () => {
 
     const { rerender } = renderHook(
       ({ isFolderTrustDialogOpen }: { isFolderTrustDialogOpen: boolean }) =>
-        useInitialPromptSubmit({
-          initialPrompt: 'hello',
-          submitQuery,
-          agentClientPresent: true,
-          blockedByDialogs: {
-            ...blockedByDialogsClosed,
-            isFolderTrustDialogOpen,
-          },
-          startupGuardsInitialized: true,
-        }),
+        useInitialPromptSubmit(
+          createParams({
+            initialPrompt: 'hello',
+            submitQuery,
+            blockedByDialogs: {
+              ...blockedByDialogsClosed,
+              isFolderTrustDialogOpen,
+            },
+          }),
+        ),
       { initialProps: { isFolderTrustDialogOpen: false } },
     );
 
@@ -202,13 +293,13 @@ describe('useInitialPromptSubmit', () => {
     const submitQuery = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
-      useInitialPromptSubmit({
-        initialPrompt: 'hello',
-        submitQuery,
-        agentClientPresent: false,
-        blockedByDialogs: blockedByDialogsClosed,
-        startupGuardsInitialized: true,
-      }),
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: 'hello',
+          submitQuery,
+          agentClientPresent: false,
+        }),
+      ),
     );
 
     await act(async () => {
@@ -222,13 +313,12 @@ describe('useInitialPromptSubmit', () => {
     const submitQuery = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
-      useInitialPromptSubmit({
-        initialPrompt: undefined,
-        submitQuery,
-        agentClientPresent: true,
-        blockedByDialogs: blockedByDialogsClosed,
-        startupGuardsInitialized: true,
-      }),
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: undefined,
+          submitQuery,
+        }),
+      ),
     );
 
     await act(async () => {
@@ -242,16 +332,16 @@ describe('useInitialPromptSubmit', () => {
     const submitQuery = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
-      useInitialPromptSubmit({
-        initialPrompt: 'hello',
-        submitQuery,
-        agentClientPresent: true,
-        blockedByDialogs: {
-          ...blockedByDialogsClosed,
-          isFolderTrustDialogOpen: true,
-        },
-        startupGuardsInitialized: true,
-      }),
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: 'hello',
+          submitQuery,
+          blockedByDialogs: {
+            ...blockedByDialogsClosed,
+            isFolderTrustDialogOpen: true,
+          },
+        }),
+      ),
     );
 
     await act(async () => {
@@ -272,16 +362,17 @@ describe('useInitialPromptSubmit', () => {
         isFolderTrustDialogOpen: boolean;
         startupGuardsInitialized: boolean;
       }) =>
-        useInitialPromptSubmit({
-          initialPrompt: 'hello',
-          submitQuery,
-          agentClientPresent: true,
-          blockedByDialogs: {
-            ...blockedByDialogsClosed,
-            isFolderTrustDialogOpen,
-          },
-          startupGuardsInitialized,
-        }),
+        useInitialPromptSubmit(
+          createParams({
+            initialPrompt: 'hello',
+            submitQuery,
+            blockedByDialogs: {
+              ...blockedByDialogsClosed,
+              isFolderTrustDialogOpen,
+            },
+            startupGuardsInitialized,
+          }),
+        ),
       {
         initialProps: {
           isFolderTrustDialogOpen: true,
@@ -320,16 +411,17 @@ describe('useInitialPromptSubmit', () => {
         isFolderTrustDialogOpen: boolean;
         startupGuardsInitialized: boolean;
       }) =>
-        useInitialPromptSubmit({
-          initialPrompt: 'hello',
-          submitQuery,
-          agentClientPresent: true,
-          blockedByDialogs: {
-            ...blockedByDialogsClosed,
-            isFolderTrustDialogOpen,
-          },
-          startupGuardsInitialized,
-        }),
+        useInitialPromptSubmit(
+          createParams({
+            initialPrompt: 'hello',
+            submitQuery,
+            blockedByDialogs: {
+              ...blockedByDialogsClosed,
+              isFolderTrustDialogOpen,
+            },
+            startupGuardsInitialized,
+          }),
+        ),
       {
         initialProps: {
           isFolderTrustDialogOpen: true,

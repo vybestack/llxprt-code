@@ -22,6 +22,7 @@ interface UseInitialPromptSubmitParams {
     isFolderTrustDialogOpen: boolean;
   };
   startupGuardsInitialized: boolean;
+  isMcpReady: boolean;
 }
 
 export function useInitialPromptSubmit({
@@ -30,6 +31,7 @@ export function useInitialPromptSubmit({
   agentClientPresent,
   blockedByDialogs,
   startupGuardsInitialized,
+  isMcpReady,
 }: UseInitialPromptSubmitParams): void {
   const initialPromptSubmittedRef = useRef<'idle' | 'pending' | 'done'>('idle');
 
@@ -64,6 +66,10 @@ export function useInitialPromptSubmit({
       return;
     }
 
+    if (!isMcpReady && !initialPrompt.trimStart().startsWith('/')) {
+      return;
+    }
+
     initialPromptSubmittedRef.current = 'pending';
     void submitQuery(initialPrompt).then(
       () => {
@@ -87,5 +93,6 @@ export function useInitialPromptSubmit({
     blockedByDialogs.isWelcomeDialogOpen,
     blockedByDialogs.isFolderTrustDialogOpen,
     startupGuardsInitialized,
+    isMcpReady,
   ]);
 }

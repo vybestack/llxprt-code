@@ -186,6 +186,7 @@ function buildLayoutParams(
     handleSlashCommand: input.handleSlashCommand,
     inputHistoryStore: input.inputHistoryStore,
     submitQuery: input.submitQuery,
+    isMcpReady: input.isMcpReady,
     vimModeEnabled: input.vimModeEnabled,
     terminalHeight: input.terminalHeight,
     terminalWidth: input.terminalWidth,
