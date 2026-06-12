@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_activate_pr_creator","name":"activate_skill","parameters":{"name":"pr-creator"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Approval UI test complete."}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}

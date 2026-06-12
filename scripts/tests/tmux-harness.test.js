@@ -196,6 +196,50 @@ describe('buildStartArgs', () => {
 });
 
 // ---------------------------------------------------------------------------
+// resolveStartArgsForTmux
+// ---------------------------------------------------------------------------
+describe('resolveStartArgsForTmux', () => {
+  it('replaces exact node argv and embedded node placeholders with the current executable', async () => {
+    const { resolveStartArgsForTmux } = await importHarness();
+
+    expect(
+      resolveStartArgsForTmux([
+        'node',
+        'scripts/start.js',
+        'NODE_OPTIONS= ${node} packages/cli/dist/index.js',
+      ]),
+    ).toEqual([
+      process.execPath,
+      'scripts/start.js',
+      `NODE_OPTIONS= ${process.execPath} packages/cli/dist/index.js`,
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildTmuxStartCommand
+// ---------------------------------------------------------------------------
+describe('buildTmuxStartCommand', () => {
+  it('returns one-string commands unchanged after placeholder expansion', async () => {
+    const { buildTmuxStartCommand } = await importHarness();
+
+    expect(
+      buildTmuxStartCommand([
+        'NODE_OPTIONS= ${node} packages/cli/dist/index.js',
+      ]),
+    ).toBe(`NODE_OPTIONS= ${process.execPath} packages/cli/dist/index.js`);
+  });
+
+  it('shell-quotes multi-argument commands after resolving node', async () => {
+    const { buildTmuxStartCommand } = await importHarness();
+
+    expect(buildTmuxStartCommand(['node', 'scripts/start.js'])).toBe(
+      `${process.execPath} scripts/start.js`,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // compileMatcher / matchText / formatMatcher
 // ---------------------------------------------------------------------------
 describe('compileMatcher', () => {

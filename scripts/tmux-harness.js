@@ -17,6 +17,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { quote } from 'shell-quote';
 
 export function parseArgs(argv) {
   const args = [...argv];
@@ -183,7 +184,27 @@ function getHistorySize(sessionName) {
 }
 
 function captureScreen(sessionName) {
-  return runTmux(['capture-pane', '-p', '-t', sessionName]);
+  const screen = runTmux(['capture-pane', '-p', '-t', sessionName]);
+  if (screen.trim().length > 0) {
+    return screen;
+  }
+
+  try {
+    const alternateScreen = runTmux([
+      'capture-pane',
+      '-a',
+      '-p',
+      '-t',
+      sessionName,
+    ]);
+    return alternateScreen.trim().length > 0 ? alternateScreen : screen;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('no alternate screen')) {
+      throw error;
+    }
+    return screen;
+  }
 }
 
 function captureScrollback(sessionName, scrollbackLines) {
@@ -907,7 +928,7 @@ async function runScenarioScrollback({
   // If the shell command triggers a confirmation dialog (non-YOLO mode), accept
   // the default selection ("Yes, allow once") so the scenario can proceed.
   await sleep(600);
-  const maybeDialog = runTmux(['capture-pane', '-p', '-t', sessionName]);
+  const maybeDialog = captureScreen(sessionName);
   if (maybeDialog.includes('Shell Command Execution')) {
     runTmux(['send-keys', '-t', sessionName, 'Enter']);
   }
@@ -999,7 +1020,20 @@ function resolveTmuxConfig(options, script) {
   };
 }
 
-function startTmuxSession(sessionName, startArgs, tmuxConfig) {
+export function resolveStartArgsForTmux(startArgs) {
+  return startArgs.map((arg) =>
+    arg === 'node'
+      ? process.execPath
+      : arg.replaceAll('${node}', process.execPath),
+  );
+}
+
+export function buildTmuxStartCommand(startArgs) {
+  const resolved = resolveStartArgsForTmux(startArgs);
+  return resolved.length === 1 ? resolved[0] : quote(resolved);
+}
+
+function startTmuxSession(sessionName, startArgs, tmuxConfig, outDir) {
   // Ensure no stale session with the same name (unlikely, but safe).
   tryTmux(['kill-session', '-t', sessionName]);
 
@@ -1008,11 +1042,12 @@ function startTmuxSession(sessionName, startArgs, tmuxConfig) {
     '-d',
     '-s',
     sessionName,
+    '-c',
+    process.cwd(),
     '-x',
     String(tmuxConfig.cols),
     '-y',
     String(tmuxConfig.rows),
-    ...startArgs,
   ]);
   runTmux(['set-option', '-t', `${sessionName}:0`, 'remain-on-exit', 'on']);
   runTmux([
@@ -1021,6 +1056,20 @@ function startTmuxSession(sessionName, startArgs, tmuxConfig) {
     `${sessionName}:0`,
     'history-limit',
     String(tmuxConfig.historyLimit),
+  ]);
+  runTmux([
+    'pipe-pane',
+    '-o',
+    '-t',
+    sessionName,
+    `cat > ${quote([path.join(outDir, 'pane-output.log')])}`,
+  ]);
+  runTmux([
+    'respawn-pane',
+    '-k',
+    '-t',
+    sessionName,
+    `${buildTmuxStartCommand(startArgs)}; exit`,
   ]);
 }
 
@@ -1240,7 +1289,7 @@ async function main() {
   const tmuxConfig = resolveTmuxConfig(options, script);
   const shouldYolo = Boolean(options.yolo || script?.yolo);
   const startArgs = buildStartArgs(script, shouldYolo);
-  startTmuxSession(sessionName, startArgs, tmuxConfig);
+  startTmuxSession(sessionName, startArgs, tmuxConfig, outDir);
 
   // Let Ink render the initial UI.
   await sleep(tmuxConfig.initialWaitMs);

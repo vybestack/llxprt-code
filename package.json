@@ -58,6 +58,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:ci": "cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present && npm run test:scripts",
     "test:scripts": "vitest run --config ./scripts/tests/vitest.config.ts",
+    "test:interactive-ui": "cross-env LLXPRT_E2E_TMUX=1 vitest run --config ./scripts/tests/vitest.config.ts scripts/tests/interactive-ui.test.ts --reporter=verbose",
     "test:e2e": "cross-env VERBOSE=true KEEP_OUTPUT=true npm run test:integration:sandbox:none",
     "test:integration:all": "npm run test:integration:sandbox:none && npm run test:integration:sandbox:docker && npm run test:integration:sandbox:podman",
     "test:integration:sandbox:none": "cross-env LLXPRT_SANDBOX=false vitest run --root ./integration-tests",

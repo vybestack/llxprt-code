@@ -104,6 +104,18 @@ describe('setupTerminalAndTheme', () => {
       expect(terminalCapabilityManager.detectCapabilities).toHaveBeenCalled();
     });
 
+    it('should skip detectCapabilities when explicitly disabled', async () => {
+      process.env.LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION = 'true';
+      try {
+        await setupTerminalAndTheme(config, mockSettings);
+        expect(
+          terminalCapabilityManager.detectCapabilities,
+        ).not.toHaveBeenCalled();
+      } finally {
+        delete process.env.LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION;
+      }
+    });
+
     it('should load custom themes from settings', async () => {
       const customThemes = {
         myTheme: {

@@ -29,7 +29,11 @@ export async function setupTerminalAndTheme(
   settings: LoadedSettings,
 ): Promise<TerminalBackgroundColor> {
   let terminalBackground: TerminalBackgroundColor = undefined;
-  if (config.isInteractive() && process.stdin.isTTY) {
+  if (
+    config.isInteractive() &&
+    process.stdin.isTTY &&
+    process.env.LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION !== 'true'
+  ) {
     // Detect terminal capabilities (Kitty protocol, background color) in parallel.
     await terminalCapabilityManager.detectCapabilities();
     terminalBackground = terminalCapabilityManager.getTerminalBackgroundColor();
