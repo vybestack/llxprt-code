@@ -62,6 +62,7 @@ import {
   SettingScope,
   type Settings,
   loadEnvironment,
+  migrateDeprecatedSettings,
 } from './settings';
 import { getV2NamespacedSettingPath } from './settingsMerge.js';
 
@@ -1798,6 +1799,149 @@ describe('Settings Loading and Merging', () => {
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
       // Verify migrated value (inverted: disableLoadingPhrases=true → enableLoadingPhrases=false)
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+    });
+    it('should migrate ui.disableLoadingPhrases to ui.accessibility.enableLoadingPhrases', () => {
+      const userSettingsContent = {
+        ui: {
+          disableLoadingPhrases: true,
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value (inverted: disableLoadingPhrases=true → enableLoadingPhrases=false)
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+    });
+
+    it('should migrate ui.disableLoadingPhrases false to ui.accessibility.enableLoadingPhrases true', () => {
+      const userSettingsContent = {
+        ui: {
+          disableLoadingPhrases: false,
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value (inverted: disableLoadingPhrases=false → enableLoadingPhrases=true)
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(true);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(true);
+    });
+
+    it('should preserve existing ui.accessibility.enableLoadingPhrases when ui.disableLoadingPhrases is also present', () => {
+      const userSettingsContent = {
+        ui: {
+          disableLoadingPhrases: true,
+          accessibility: {
+            enableLoadingPhrases: true,
+          },
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // The existing enableLoadingPhrases=true should NOT be overwritten by disableLoadingPhrases=true
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(true);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(true);
+    });
+
+    it('should remove ui.disableLoadingPhrases during cleanup while preserving other ui settings', () => {
+      const userSettingsContent = {
+        ui: {
+          disableLoadingPhrases: true,
+          theme: 'dark',
+          accessibility: {
+            enableLoadingPhrases: false,
+          },
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // The existing enableLoadingPhrases should be preserved
+      expect(
+        (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+      // Other ui settings should be preserved
+      expect(
+        (settings.user.settings.ui as Record<string, unknown>)['theme'],
+      ).toBe('dark');
+
+      // Now explicitly run cleanup to remove deprecated keys
+      migrateDeprecatedSettings(settings, true);
+
+      // The deprecated key should now be removed from ui
+      expect(
+        (settings.user.settings.ui as Record<string, unknown>)[
+          'disableLoadingPhrases'
+        ],
+      ).toBeUndefined();
+      // Other ui settings should still be preserved
+      expect(
+        (settings.user.settings.ui as Record<string, unknown>)['theme'],
+      ).toBe('dark');
+      // enableLoadingPhrases should still be preserved
       expect(
         (settings.user.settings.ui?.accessibility as Record<string, unknown>)[
           'enableLoadingPhrases'
