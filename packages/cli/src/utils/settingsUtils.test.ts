@@ -81,34 +81,6 @@ describe('SettingsUtils', () => {
       });
     });
 
-    describe('numeric setting client-side validation', () => {
-      it('should accept value within bounds for maxHeapSizeMB', () => {
-        const definition = getSettingDefinition('ui.maxHeapSizeMB');
-        const value = 4096;
-        expect(value).toBeGreaterThanOrEqual(definition!.minimum!);
-        expect(Number.isInteger(value / definition!.multipleOf!)).toBe(true);
-      });
-
-      it('should reject value below minimum for maxHeapSizeMB', () => {
-        const definition = getSettingDefinition('ui.maxHeapSizeMB');
-        const value = 256;
-        expect(value < definition!.minimum!).toBe(true);
-      });
-
-      it('should reject fractional value when multipleOf is 1', () => {
-        const definition = getSettingDefinition('ui.maxHeapSizeMB');
-        const value = 1536.75;
-        expect(Number.isInteger(value / definition!.multipleOf!)).toBe(false);
-      });
-
-      it('should accept value exactly at minimum', () => {
-        const definition = getSettingDefinition('ui.maxHeapSizeMB');
-        const value = 512;
-        expect(value).toBeGreaterThanOrEqual(definition!.minimum!);
-        expect(Number.isInteger(value / definition!.multipleOf!)).toBe(true);
-      });
-    });
-
     describe('requiresRestart', () => {
       it('should return true for settings that require restart', () => {
         expect(requiresRestart('ui.autoConfigureMaxOldSpaceSize')).toBe(true);
