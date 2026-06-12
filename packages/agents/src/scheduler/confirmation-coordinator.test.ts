@@ -188,7 +188,7 @@ function createCoordinator(
   const onToolNotification = vi.fn().mockResolvedValue(undefined);
 
   const coordinator = new ConfirmationCoordinator(
-    messageBus as unknown as import('../confirmation-bus/message-bus.js').MessageBus,
+    messageBus as unknown as import('@vybestack/llxprt-code-core/confirmation-bus/message-bus.js').MessageBus,
     config,
     statusMutator,
     schedulerAccessor,
