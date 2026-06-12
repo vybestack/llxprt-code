@@ -73,7 +73,7 @@ async function dumpOpenAIErrorContext(
   if (ctx.requestBaseId) {
     await bestEffortDump('error-response', 'openai', () =>
       dumpSDKResponseContext(
-        ctx.requestBaseId!,
+        ctx.requestBaseId,
         'openai',
         { error: dumpErrorMessage },
         true,
@@ -223,7 +223,7 @@ async function executeStreamingRequest(
     return response;
   } catch (error) {
     const errorMessage = String(error);
-    const resolvedBaseURL = opts.getBaseURL();
+    const resolvedBaseURL = opts.baseURL ?? opts.getBaseURL();
 
     const ctx: ErrorContext = {
       requestBody,
@@ -299,7 +299,7 @@ async function executeNonStreamingRequest(
     return response;
   } catch (error) {
     const errorMessage = String(error);
-    const resolvedBaseURL = opts.getBaseURL();
+    const resolvedBaseURL = opts.baseURL ?? opts.getBaseURL();
 
     opts.logger.debug(() => `[OpenAIProvider] Chat request error`, {
       errorType: error?.constructor?.name,

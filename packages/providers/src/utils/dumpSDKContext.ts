@@ -128,7 +128,7 @@ export async function dumpSDKRequestContext(
  * Writes a response-only SDK dump file related to the given request base id.
  */
 export async function dumpSDKResponseContext(
-  baseId: string,
+  baseId: string | undefined,
   providerName: string,
   response: unknown,
   isError: boolean,
@@ -244,11 +244,9 @@ export async function dumpSDKErrorRequestResponse(
     dumpRequest(providerName, endpoint, requestParams, baseURL),
   );
 
-  if (reqResult?.baseId) {
-    await bestEffortDump('error-response', providerName, () =>
-      dumpResponse(reqResult.baseId, providerName, errorResponse, true),
-    );
-  }
+  await bestEffortDump('error-response', providerName, () =>
+    dumpResponse(reqResult?.baseId, providerName, errorResponse, true),
+  );
 }
 
 /**

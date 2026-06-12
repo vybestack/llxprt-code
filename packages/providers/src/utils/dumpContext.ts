@@ -43,14 +43,16 @@ export function redactSensitiveData(request: DumpRequest): DumpRequest {
     headers: request.headers ? { ...request.headers } : undefined,
   };
 
-  // Redact Authorization header
-  if (redacted.headers?.Authorization) {
-    redacted.headers.Authorization = '[REDACTED]';
-  }
-
-  // Redact x-api-key header
-  if (redacted.headers?.['x-api-key']) {
-    redacted.headers['x-api-key'] = '[REDACTED]';
+  if (redacted.headers) {
+    for (const headerName of Object.keys(redacted.headers)) {
+      const normalizedHeaderName = headerName.toLowerCase();
+      if (
+        normalizedHeaderName === 'authorization' ||
+        normalizedHeaderName === 'x-api-key'
+      ) {
+        redacted.headers[headerName] = '[REDACTED]';
+      }
+    }
   }
 
   // Redact key query parameter in URL
@@ -146,21 +148,22 @@ export async function dumpRequestContext(
  * Includes relatedRequestFile metadata linking back to the request file.
  */
 export async function dumpResponseContext(
-  baseId: string,
+  baseId: string | undefined,
   response: DumpResponse,
   provider: string,
 ): Promise<DumpResponseResult> {
   const dumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
   await fs.mkdir(dumpDir, { recursive: true });
 
-  const responseFilename = `${baseId}-response.json`;
+  const id = baseId ?? generateDumpBaseId(provider);
+  const responseFilename = `${id}-response.json`;
   const filepath = path.join(dumpDir, responseFilename);
 
   const data = {
     provider,
     timestamp: new Date().toISOString(),
     response,
-    relatedRequestFile: `${baseId}-request.json`,
+    ...(baseId ? { relatedRequestFile: `${baseId}-request.json` } : {}),
   };
 
   await fs.writeFile(filepath, JSON.stringify(data, null, 2), 'utf-8');

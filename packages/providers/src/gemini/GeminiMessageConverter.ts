@@ -104,17 +104,15 @@ export function convertToolContentToGeminiContents(
     },
   };
   if (mediaBlocks.length > 0 && isGemini3Model(currentModel)) {
-    frPart.functionResponse!.parts = mediaBlocks.map((mb) => ({
-      inlineData: { mimeType: mb.mimeType, data: mb.data },
-    }));
+    frPart.functionResponse!.parts = mediaBlocks.flatMap(
+      convertMediaBlockToGeminiParts,
+    );
     contents.push({ role: 'user', parts: [frPart] });
   } else if (mediaBlocks.length > 0) {
-    const parts: Part[] = [frPart];
-    for (const mb of mediaBlocks) {
-      parts.push({
-        inlineData: { mimeType: mb.mimeType, data: mb.data },
-      } as Part);
-    }
+    const parts: Part[] = [
+      frPart,
+      ...mediaBlocks.flatMap(convertMediaBlockToGeminiParts),
+    ];
     contents.push({ role: 'user', parts });
   } else {
     contents.push({ role: 'user', parts: [frPart] });

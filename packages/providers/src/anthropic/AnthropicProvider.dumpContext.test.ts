@@ -161,6 +161,7 @@ describe('AnthropicProvider dumpContext integration', () => {
     expect(respProvider).toBe('anthropic');
     expect(respIsError).toBe(false);
     expect(respBody).toBeDefined();
+    expect(dumpContextSpy).not.toHaveBeenCalled();
   });
 
   it('should dump context only on error when mode is error', async () => {

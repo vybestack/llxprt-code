@@ -46,6 +46,40 @@ describe('dumpSDKContext', () => {
   });
 });
 
+describe('dumpSDKErrorRequestResponse', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should write an error response dump even when request dumping fails', async () => {
+    const dumpSDKRequestContextSpy = vi
+      .spyOn(dumpSDKContextModule, 'dumpSDKRequestContext')
+      .mockRejectedValue(new Error('disk full'));
+    const dumpSDKResponseContextSpy = vi
+      .spyOn(dumpSDKContextModule, 'dumpSDKResponseContext')
+      .mockResolvedValue('fallback-response.json');
+    const requestBody = { model: 'test-model', messages: [] };
+
+    await dumpSDKContextModule.dumpSDKErrorRequestResponse(
+      'openai',
+      '/chat/completions',
+      requestBody,
+      { error: 'Rate limit' },
+      'https://api.openai.com/v1',
+      dumpSDKRequestContextSpy,
+      dumpSDKResponseContextSpy,
+    );
+
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+      undefined,
+      'openai',
+      { error: 'Rate limit' },
+      true,
+    );
+  });
+});
+
 describe('wrapStreamWithDump', () => {
   let dumpSDKResponseContextSpy: ReturnType<typeof vi.spyOn>;
 
@@ -200,6 +234,54 @@ describe('wrapStreamWithDump', () => {
       {
         streaming: true,
         chunks: [firstChunk],
+        error: 'Error: stream failed',
+        completed: false,
+      },
+      true,
+    );
+  });
+
+  it('should write an error response dump even when request dumping fails', async () => {
+    const dumpSDKRequestContextSpy = vi
+      .spyOn(dumpSDKContextModule, 'dumpSDKRequestContext')
+      .mockRejectedValue(new Error('disk full'));
+    const dumpSDKResponseContextSpy = vi
+      .spyOn(dumpSDKContextModule, 'dumpSDKResponseContext')
+      .mockResolvedValue('fallback-response.json');
+    const requestBody = { model: 'test-model', messages: [] };
+    const stream: AsyncIterable<unknown> = {
+      [Symbol.asyncIterator](): AsyncIterator<unknown> {
+        return {
+          async next(): Promise<IteratorResult<unknown>> {
+            throw new Error('stream failed');
+          },
+        };
+      },
+    };
+
+    const wrapped = wrapStreamWithSDKErrorDump(
+      stream,
+      'openai',
+      '/chat/completions',
+      requestBody,
+      'https://api.openai.com/v1',
+      dumpSDKRequestContextSpy,
+      dumpSDKResponseContextSpy,
+    );
+
+    await expect(async () => {
+      for await (const _chunk of wrapped) {
+        // Exhaust stream.
+      }
+    }).rejects.toThrow('stream failed');
+
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+      undefined,
+      'openai',
+      {
+        streaming: true,
+        chunks: [],
         error: 'Error: stream failed',
         completed: false,
       },

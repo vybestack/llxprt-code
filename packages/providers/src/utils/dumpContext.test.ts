@@ -74,6 +74,27 @@ describe('dumpContext', () => {
       expect(redacted.headers['x-api-key']).toBe('[REDACTED]');
     });
 
+    it('should redact credential headers case-insensitively', () => {
+      const request = {
+        url: 'https://api.example.com',
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer sk-lowercase',
+          AUTHORIZATION: 'Bearer sk-uppercase',
+          'X-API-KEY': 'secret-key-uppercase',
+          'Content-Type': 'application/json',
+        },
+        body: { test: 'data' },
+      };
+
+      const redacted = redactSensitiveData(request);
+
+      expect(redacted.headers.authorization).toBe('[REDACTED]');
+      expect(redacted.headers.AUTHORIZATION).toBe('[REDACTED]');
+      expect(redacted.headers['X-API-KEY']).toBe('[REDACTED]');
+      expect(redacted.headers['Content-Type']).toBe('application/json');
+    });
+
     it('should redact key query parameter in URL', () => {
       const request = {
         url: 'https://api.example.com/v1/models?key=AIzaSyABC123',

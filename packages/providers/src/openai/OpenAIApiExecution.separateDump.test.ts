@@ -339,6 +339,50 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
   });
 
+  it('should use request-scoped baseURL for streaming Cerebras/Qwen tool error handling', async () => {
+    const apiError = new Error(
+      '400 Tool is not present in the tools list: lookup_weather',
+    );
+    const client = {
+      chat: {
+        completions: {
+          create: vi.fn().mockRejectedValue(apiError),
+        },
+      },
+    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+
+    const opts = createBaseOptions({
+      client,
+      dumpMode: 'error',
+      baseURL: 'https://api.cerebras.ai/v1',
+      getBaseURL: () => 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      formattedTools: [
+        {
+          type: 'function',
+          function: {
+            name: 'lookup_weather',
+            description: 'Look up the weather',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      ],
+      streamingEnabled: true,
+    });
+
+    await expect(executeApiRequest(opts)).rejects.toThrow(
+      'Cerebras/Qwen API bug: Tool not found in list. We sent 1 tools. Known API issue.',
+    );
+
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
+      'openai',
+      '/chat/completions',
+      opts.requestBody,
+      'https://api.cerebras.ai/v1',
+    );
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
+  });
+
   it('should write separate error dumps before throwing enhanced Cerebras/Qwen tool errors', async () => {
     const apiError = new Error(
       '400 Tool is not present in the tools list: lookup_weather',
@@ -387,6 +431,50 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       true,
     );
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
+  });
+
+  it('should use request-scoped baseURL for non-streaming Cerebras/Qwen tool error handling', async () => {
+    const apiError = new Error(
+      '400 Tool is not present in the tools list: lookup_weather',
+    );
+    const client = {
+      chat: {
+        completions: {
+          create: vi.fn().mockRejectedValue(apiError),
+        },
+      },
+    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+
+    const opts = createBaseOptions({
+      client,
+      dumpMode: 'error',
+      baseURL: 'https://api.cerebras.ai/v1',
+      getBaseURL: () => 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      formattedTools: [
+        {
+          type: 'function',
+          function: {
+            name: 'lookup_weather',
+            description: 'Look up the weather',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      ],
+      streamingEnabled: false,
+    });
+
+    await expect(executeApiRequest(opts)).rejects.toThrow(
+      'Cerebras/Qwen API bug: Tool not found in list. We sent 1 tools. Known API issue.',
+    );
+
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
+      'openai',
+      '/chat/completions',
+      opts.requestBody,
+      'https://api.cerebras.ai/v1',
+    );
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
   });
 
   it('should send API request when request dump fails', async () => {
