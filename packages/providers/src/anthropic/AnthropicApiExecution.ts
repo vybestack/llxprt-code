@@ -15,7 +15,12 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { DumpMode } from '../utils/dumpContext.js';
 import {
   shouldDumpSDKContext,
-  dumpSDKContext,
+  dumpSDKRequestContext,
+  dumpSDKResponseContext,
+  wrapStreamWithDump,
+  wrapStreamWithSDKErrorDump,
+  bestEffortDump,
+  dumpSDKErrorRequestResponse,
 } from '../utils/dumpSDKContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -162,78 +167,148 @@ export interface ApiExecutionResult {
   rateLimitInfo?: AnthropicRateLimitInfo;
 }
 
+async function dumpAnthropicRequest(
+  params: ApiExecutionParams,
+  shouldDumpSuccess: boolean,
+): Promise<string | undefined> {
+  if (!shouldDumpSuccess) {
+    return undefined;
+  }
+  const reqResult = await bestEffortDump(
+    'request',
+    'anthropic',
+    () =>
+      dumpSDKRequestContext(
+        'anthropic',
+        '/v1/messages',
+        params.requestBody,
+        params.baseURL,
+      ),
+    params.rateLimitLogger,
+  );
+  return reqResult?.baseId;
+}
+
+async function dumpAnthropicApiError(
+  params: ApiExecutionParams,
+  error: unknown,
+  requestBaseId: string | undefined,
+): Promise<void> {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  if (requestBaseId) {
+    await bestEffortDump(
+      'error-response',
+      'anthropic',
+      () =>
+        dumpSDKResponseContext(
+          requestBaseId,
+          'anthropic',
+          { error: errorMessage },
+          true,
+        ),
+      params.rateLimitLogger,
+    );
+    return;
+  }
+  await dumpSDKErrorRequestResponse(
+    'anthropic',
+    '/v1/messages',
+    params.requestBody,
+    { error: errorMessage },
+    params.baseURL,
+    dumpSDKRequestContext,
+    dumpSDKResponseContext,
+  );
+}
+
+async function handleAnthropicSuccessDump(
+  params: ApiExecutionParams,
+  response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>,
+  shouldDumpSuccess: boolean,
+  shouldDumpError: boolean,
+  requestBaseId: string | undefined,
+): Promise<Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>> {
+  if (shouldDumpSuccess && requestBaseId) {
+    if (params.streamingEnabled) {
+      return wrapStreamWithDump(
+        response as AsyncIterable<Anthropic.MessageStreamEvent>,
+        requestBaseId,
+        'anthropic',
+        dumpSDKResponseContext,
+      );
+    }
+    await bestEffortDump(
+      'response',
+      'anthropic',
+      () => dumpSDKResponseContext(requestBaseId, 'anthropic', response, false),
+      params.rateLimitLogger,
+    );
+    return response;
+  }
+  if (params.streamingEnabled && shouldDumpError) {
+    return wrapStreamWithSDKErrorDump(
+      response as AsyncIterable<Anthropic.MessageStreamEvent>,
+      'anthropic',
+      '/v1/messages',
+      params.requestBody,
+      params.baseURL,
+      dumpSDKRequestContext,
+      dumpSDKResponseContext,
+    );
+  }
+  return response;
+}
+
+function extractAnthropicRateLimitInfo(
+  response: Response | undefined,
+  rateLimitLogger: ApiExecutionParams['rateLimitLogger'],
+): {
+  responseHeaders: Headers | undefined;
+  rateLimitInfo: AnthropicRateLimitInfo | undefined;
+} {
+  if (!response) {
+    return { responseHeaders: undefined, rateLimitInfo: undefined };
+  }
+  const responseHeaders = response.headers;
+  const rateLimitInfo = extractRateLimitHeaders(
+    responseHeaders,
+    rateLimitLogger,
+  );
+  rateLimitLogger.debug(() => formatRateLimitSummary(rateLimitInfo));
+  checkRateLimits(rateLimitInfo, rateLimitLogger);
+  return { responseHeaders, rateLimitInfo };
+}
+
 /**
  * Execute Anthropic API call with dump context handling and rate limit extraction
  */
 export async function executeAnthropicApiCall(
   params: ApiExecutionParams,
 ): Promise<ApiExecutionResult> {
-  const {
-    apiCallFn,
-    dumpMode,
-    baseURL,
-    requestBody,
-    streamingEnabled,
-    rateLimitLogger,
-  } = params;
-
-  const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
-  const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
-
-  let responseHeaders: Headers | undefined;
-  let response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
-  let rateLimitInfo: AnthropicRateLimitInfo | undefined;
+  const shouldDumpSuccess = shouldDumpSDKContext(params.dumpMode, false);
+  const shouldDumpError = shouldDumpSDKContext(params.dumpMode, true);
+  const requestBaseId = await dumpAnthropicRequest(params, shouldDumpSuccess);
 
   try {
-    // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
-    const result = await apiCallFn();
-
-    response = result.data as
+    const result = await params.apiCallFn();
+    const rawResponse = result.data as
       | Anthropic.Message
       | AsyncIterable<Anthropic.MessageStreamEvent>;
-
-    // Dump successful request if enabled
-    if (shouldDumpSuccess) {
-      await dumpSDKContext(
-        'anthropic',
-        '/v1/messages',
-        requestBody,
-        streamingEnabled ? { streaming: true } : response,
-        false,
-        baseURL,
-      );
-    }
-
-    if (result.response) {
-      responseHeaders = result.response.headers;
-
-      // Extract and process rate limit headers
-      rateLimitInfo = extractRateLimitHeaders(responseHeaders, rateLimitLogger);
-
-      const info = rateLimitInfo;
-      rateLimitLogger.debug(() => formatRateLimitSummary(info));
-
-      // Check and warn if approaching limits
-      checkRateLimits(info, rateLimitLogger);
-    }
+    const response = await handleAnthropicSuccessDump(
+      params,
+      rawResponse,
+      shouldDumpSuccess,
+      shouldDumpError,
+      requestBaseId,
+    );
+    return {
+      response,
+      ...extractAnthropicRateLimitInfo(result.response, params.rateLimitLogger),
+    };
   } catch (error) {
-    // Dump error if enabled
     if (shouldDumpError) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      await dumpSDKContext(
-        'anthropic',
-        '/v1/messages',
-        requestBody,
-        { error: errorMessage },
-        true,
-        baseURL,
-      );
+      await dumpAnthropicApiError(params, error, requestBaseId);
     }
-
-    // Re-throw the error
     throw error;
   }
-
-  return { response, responseHeaders, rateLimitInfo };
 }

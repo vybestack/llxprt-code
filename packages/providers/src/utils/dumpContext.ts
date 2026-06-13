@@ -29,8 +29,9 @@ export interface DumpResponse {
 export interface DumpData {
   provider: string;
   timestamp: string;
-  request: DumpRequest;
+  request?: DumpRequest;
   response?: DumpResponse;
+  relatedRequestFile?: string;
 }
 
 /**
@@ -42,14 +43,16 @@ export function redactSensitiveData(request: DumpRequest): DumpRequest {
     headers: request.headers ? { ...request.headers } : undefined,
   };
 
-  // Redact Authorization header
-  if (redacted.headers?.Authorization) {
-    redacted.headers.Authorization = '[REDACTED]';
-  }
-
-  // Redact x-api-key header
-  if (redacted.headers?.['x-api-key']) {
-    redacted.headers['x-api-key'] = '[REDACTED]';
+  if (redacted.headers) {
+    for (const headerName of Object.keys(redacted.headers)) {
+      const normalizedHeaderName = headerName.toLowerCase();
+      if (
+        normalizedHeaderName === 'authorization' ||
+        normalizedHeaderName === 'x-api-key'
+      ) {
+        redacted.headers[headerName] = '[REDACTED]';
+      }
+    }
   }
 
   // Redact key query parameter in URL
@@ -67,52 +70,6 @@ export function redactSensitiveData(request: DumpRequest): DumpRequest {
 }
 
 /**
- * Generates a unique filename for the dump
- */
-function generateFilename(provider: string): string {
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-  const timeStr = now.toISOString().slice(11, 19).replace(/:/g, '');
-  const randomStr = Math.random().toString(36).substring(2, 8);
-  return `${dateStr}-${timeStr}-${provider}-${randomStr}.json`;
-}
-
-/**
- * Dumps context (request and response) to a file in ~/.llxprt/dumps/
- * Returns the filename of the created dump file
- */
-export async function dumpContext(
-  request: DumpRequest,
-  response: DumpResponse | undefined,
-  provider: string,
-): Promise<string> {
-  try {
-    const dumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
-    await fs.mkdir(dumpDir, { recursive: true });
-
-    const redactedRequest = redactSensitiveData(request);
-
-    const dumpData: DumpData = {
-      provider,
-      timestamp: new Date().toISOString(),
-      request: redactedRequest,
-      response,
-    };
-
-    const filename = generateFilename(provider);
-    const filepath = path.join(dumpDir, filename);
-
-    await fs.writeFile(filepath, JSON.stringify(dumpData, null, 2), 'utf-8');
-
-    logger.debug(() => `Context dumped to: ${filepath}`);
-    return filename;
-  } catch (error) {
-    logger.error(() => `Failed to dump context: ${error}`);
-    throw error;
-  }
-}
-
-/**
  * Checks if dumping should occur based on mode and error status
  */
 export function shouldDump(
@@ -124,7 +81,7 @@ export function shouldDump(
   }
 
   if (mode === 'now') {
-    return true; // Special case handled by command
+    return false;
   }
 
   if (mode === 'on') {
@@ -132,4 +89,109 @@ export function shouldDump(
   }
 
   return isError;
+}
+
+export interface DumpRequestResult {
+  baseId: string;
+  requestFilename: string;
+  dumpDir: string;
+}
+
+export interface DumpResponseResult {
+  responseFilename: string;
+  dumpDir: string;
+}
+
+/**
+ * Generates a shared base id used to relate request and response dump files.
+ */
+export function generateDumpBaseId(provider: string): string {
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const timeStr = now.toISOString().slice(11, 19).replace(/:/g, '');
+  const randomStr = Math.random().toString(36).substring(2, 8);
+  return `${dateStr}-${timeStr}-${provider}-${randomStr}`;
+}
+
+/**
+ * Writes a request-only dump file named {baseId}-request.json.
+ * Returns the base id and filename so the caller can later write a related response.
+ */
+export async function dumpRequestContext(
+  request: DumpRequest,
+  provider: string,
+  baseId?: string,
+): Promise<DumpRequestResult> {
+  const dumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
+  await fs.mkdir(dumpDir, { recursive: true });
+
+  const id = baseId ?? generateDumpBaseId(provider);
+  const requestFilename = `${id}-request.json`;
+  const filepath = path.join(dumpDir, requestFilename);
+
+  const redactedRequest = redactSensitiveData(request);
+
+  const data = {
+    provider,
+    timestamp: new Date().toISOString(),
+    request: redactedRequest,
+  };
+
+  await fs.writeFile(filepath, JSON.stringify(data, null, 2), 'utf-8');
+  logger.debug(() => `Request context dumped to: ${filepath}`);
+
+  return { baseId: id, requestFilename, dumpDir };
+}
+
+/**
+ * Writes a response-only dump file named {baseId}-response.json.
+ * Includes relatedRequestFile metadata linking back to the request file.
+ */
+export async function dumpResponseContext(
+  baseId: string | undefined,
+  response: DumpResponse,
+  provider: string,
+): Promise<DumpResponseResult> {
+  const dumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
+  await fs.mkdir(dumpDir, { recursive: true });
+
+  const id = baseId ?? generateDumpBaseId(provider);
+  const responseFilename = `${id}-response.json`;
+  const filepath = path.join(dumpDir, responseFilename);
+
+  const data = {
+    provider,
+    timestamp: new Date().toISOString(),
+    response,
+    ...(baseId ? { relatedRequestFile: `${baseId}-request.json` } : {}),
+  };
+
+  await fs.writeFile(filepath, JSON.stringify(data, null, 2), 'utf-8');
+  logger.debug(() => `Response context dumped to: ${filepath}`);
+
+  return { responseFilename, dumpDir };
+}
+
+/**
+ * Dumps context to separate related request and response files in ~/.llxprt/dumps/.
+ * Returns the shared base id used by the generated filenames.
+ */
+export async function dumpContext(
+  request: DumpRequest,
+  response: DumpResponse | undefined,
+  provider: string,
+): Promise<string> {
+  try {
+    const baseId = generateDumpBaseId(provider);
+    await dumpRequestContext(request, provider, baseId);
+    if (response !== undefined) {
+      await dumpResponseContext(baseId, response, provider);
+    }
+
+    logger.debug(() => `Context dumped with base id: ${baseId}`);
+    return baseId;
+  } catch (error) {
+    logger.error(() => `Failed to dump context: ${error}`);
+    throw error;
+  }
 }

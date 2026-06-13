@@ -20,7 +20,12 @@ import type OpenAI from 'openai';
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   shouldDumpSDKContext,
-  dumpSDKContext,
+  dumpSDKRequestContext,
+  dumpSDKResponseContext,
+  wrapStreamWithDump,
+  wrapStreamWithSDKErrorDump,
+  bestEffortDump,
+  dumpSDKErrorRequestResponse,
 } from '../utils/dumpSDKContext.js';
 import { type DumpMode } from '../utils/dumpContext.js';
 import { type OpenAITool } from './schemaConverter.js';
@@ -42,6 +47,7 @@ export interface ApiExecutionOptions {
 interface ErrorContext {
   requestBody: OpenAI.Chat.ChatCompletionCreateParams;
   shouldDumpError: boolean;
+  requestBaseId: string | undefined;
   baseURL: string | undefined;
   model: string;
   formattedTools: OpenAITool[] | undefined;
@@ -51,15 +57,51 @@ interface ErrorContext {
 }
 
 /**
+ * Write OpenAI request/response error dumps when error-mode dumping is enabled.
+ */
+async function dumpOpenAIErrorContext(
+  error: unknown,
+  resolvedBaseURL: string | undefined,
+  ctx: ErrorContext,
+): Promise<void> {
+  if (!ctx.shouldDumpError) {
+    return;
+  }
+
+  const dumpErrorMessage =
+    error instanceof Error ? error.message : String(error);
+  if (ctx.requestBaseId) {
+    await bestEffortDump('error-response', 'openai', () =>
+      dumpSDKResponseContext(
+        ctx.requestBaseId,
+        'openai',
+        { error: dumpErrorMessage },
+        true,
+      ),
+    );
+  } else {
+    await dumpSDKErrorRequestResponse(
+      'openai',
+      '/chat/completions',
+      ctx.requestBody,
+      { error: dumpErrorMessage },
+      resolvedBaseURL ?? 'https://api.openai.com/v1',
+      dumpSDKRequestContext,
+      dumpSDKResponseContext,
+    );
+  }
+}
+
+/**
  * Check for Cerebras/Qwen "Tool not present" errors and throw enhanced error.
  * Returns true if the error was a Cerebras tool error (caller should not continue).
  */
-function handleCerebrasToolError(
+async function handleCerebrasToolError(
   error: unknown,
   errorMessage: string,
   resolvedBaseURL: string | undefined,
   ctx: ErrorContext,
-): boolean {
+): Promise<boolean> {
   if (
     !errorMessage.includes('Tool is not present in the tools list') ||
     (!ctx.model.toLowerCase().includes('qwen') &&
@@ -67,6 +109,9 @@ function handleCerebrasToolError(
   ) {
     return false;
   }
+
+  await dumpOpenAIErrorContext(error, resolvedBaseURL, ctx);
+
   ctx.logger.error(
     'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
     {
@@ -93,18 +138,7 @@ async function handleApiError(
 ): Promise<never> {
   const resolvedBaseURL = ctx.baseURL ?? ctx.getBaseURL();
 
-  if (ctx.shouldDumpError) {
-    const dumpErrorMessage =
-      error instanceof Error ? error.message : String(error);
-    await dumpSDKContext(
-      'openai',
-      '/chat/completions',
-      ctx.requestBody,
-      { error: dumpErrorMessage },
-      true,
-      resolvedBaseURL ?? 'https://api.openai.com/v1',
-    );
-  }
+  await dumpOpenAIErrorContext(error, resolvedBaseURL, ctx);
 
   const capturedErrorMessage =
     error instanceof Error ? error.message : String(error);
@@ -141,31 +175,60 @@ async function executeStreamingRequest(
 ): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
   const { client, requestBody, abortSignal, mergedHeaders, baseURL } = opts;
 
+  let requestBaseId: string | undefined;
+
+  if (shouldDumpSuccess) {
+    const reqResult = await bestEffortDump(
+      'request',
+      'openai',
+      () =>
+        dumpSDKRequestContext(
+          'openai',
+          '/chat/completions',
+          requestBody,
+          baseURL ?? 'https://api.openai.com/v1',
+        ),
+      opts.logger,
+    );
+    requestBaseId = reqResult?.baseId;
+  }
+
   try {
     const response = (await client.chat.completions.create(requestBody, {
       ...(abortSignal ? { signal: abortSignal } : {}),
       ...(mergedHeaders ? { headers: mergedHeaders } : {}),
     })) as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
 
-    if (shouldDumpSuccess) {
-      await dumpSDKContext(
+    if (shouldDumpSuccess && requestBaseId) {
+      return wrapStreamWithDump(
+        response,
+        requestBaseId,
+        'openai',
+        dumpSDKResponseContext,
+      );
+    }
+
+    if (shouldDumpError) {
+      return wrapStreamWithSDKErrorDump(
+        response,
         'openai',
         '/chat/completions',
         requestBody,
-        { streaming: true },
-        false,
         baseURL ?? 'https://api.openai.com/v1',
+        dumpSDKRequestContext,
+        dumpSDKResponseContext,
       );
     }
 
     return response;
   } catch (error) {
     const errorMessage = String(error);
-    const resolvedBaseURL = opts.getBaseURL();
+    const resolvedBaseURL = opts.baseURL ?? opts.getBaseURL();
 
     const ctx: ErrorContext = {
       requestBody,
       shouldDumpError,
+      requestBaseId,
       baseURL,
       model: opts.model,
       formattedTools: opts.formattedTools,
@@ -174,7 +237,14 @@ async function executeStreamingRequest(
       getBaseURL: opts.getBaseURL,
     };
 
-    if (!handleCerebrasToolError(error, errorMessage, resolvedBaseURL, ctx)) {
+    if (
+      !(await handleCerebrasToolError(
+        error,
+        errorMessage,
+        resolvedBaseURL,
+        ctx,
+      ))
+    ) {
       await handleApiError(error, ctx);
     }
     // handleApiError always throws; handleCerebrasToolError throws on match
@@ -193,27 +263,43 @@ async function executeNonStreamingRequest(
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   const { client, requestBody, abortSignal, mergedHeaders, baseURL } = opts;
 
+  let requestBaseId: string | undefined;
+
+  if (shouldDumpSuccess) {
+    const reqResult = await bestEffortDump(
+      'request',
+      'openai',
+      () =>
+        dumpSDKRequestContext(
+          'openai',
+          '/chat/completions',
+          requestBody,
+          baseURL ?? 'https://api.openai.com/v1',
+        ),
+      opts.logger,
+    );
+    requestBaseId = reqResult?.baseId;
+  }
+
   try {
     const response = (await client.chat.completions.create(requestBody, {
       ...(abortSignal ? { signal: abortSignal } : {}),
       ...(mergedHeaders ? { headers: mergedHeaders } : {}),
     })) as OpenAI.Chat.Completions.ChatCompletion;
 
-    if (shouldDumpSuccess) {
-      await dumpSDKContext(
+    if (shouldDumpSuccess && requestBaseId) {
+      await bestEffortDump(
+        'response',
         'openai',
-        '/chat/completions',
-        requestBody,
-        response,
-        false,
-        baseURL ?? 'https://api.openai.com/v1',
+        () => dumpSDKResponseContext(requestBaseId, 'openai', response, false),
+        opts.logger,
       );
     }
 
     return response;
   } catch (error) {
     const errorMessage = String(error);
-    const resolvedBaseURL = opts.getBaseURL();
+    const resolvedBaseURL = opts.baseURL ?? opts.getBaseURL();
 
     opts.logger.debug(() => `[OpenAIProvider] Chat request error`, {
       errorType: error?.constructor?.name,
@@ -228,6 +314,7 @@ async function executeNonStreamingRequest(
     const ctx: ErrorContext = {
       requestBody,
       shouldDumpError,
+      requestBaseId,
       baseURL,
       model: opts.model,
       formattedTools: opts.formattedTools,
@@ -236,7 +323,14 @@ async function executeNonStreamingRequest(
       getBaseURL: opts.getBaseURL,
     };
 
-    if (!handleCerebrasToolError(error, errorMessage, resolvedBaseURL, ctx)) {
+    if (
+      !(await handleCerebrasToolError(
+        error,
+        errorMessage,
+        resolvedBaseURL,
+        ctx,
+      ))
+    ) {
       await handleApiError(error, ctx);
     }
     // handleApiError always throws; handleCerebrasToolError throws on match

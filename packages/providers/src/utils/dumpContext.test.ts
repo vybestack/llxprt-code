@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { dumpContext, redactSensitiveData } from './dumpContext.js';
+import { dumpContext, redactSensitiveData, shouldDump } from './dumpContext.js';
 
 describe('dumpContext', () => {
   const testDumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
@@ -34,6 +34,13 @@ describe('dumpContext', () => {
     } catch {
       // Ignore cleanup errors
     }
+  });
+
+  describe('shouldDump', () => {
+    it('should not let now mode trigger provider dumps', () => {
+      expect(shouldDump('now', false)).toBe(false);
+      expect(shouldDump('now', true)).toBe(false);
+    });
   });
 
   describe('redactSensitiveData', () => {
@@ -65,6 +72,27 @@ describe('dumpContext', () => {
 
       const redacted = redactSensitiveData(request);
       expect(redacted.headers['x-api-key']).toBe('[REDACTED]');
+    });
+
+    it('should redact credential headers case-insensitively', () => {
+      const request = {
+        url: 'https://api.example.com',
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer sk-lowercase',
+          AUTHORIZATION: 'Bearer sk-uppercase',
+          'X-API-KEY': 'secret-key-uppercase',
+          'Content-Type': 'application/json',
+        },
+        body: { test: 'data' },
+      };
+
+      const redacted = redactSensitiveData(request);
+
+      expect(redacted.headers.authorization).toBe('[REDACTED]');
+      expect(redacted.headers.AUTHORIZATION).toBe('[REDACTED]');
+      expect(redacted.headers['X-API-KEY']).toBe('[REDACTED]');
+      expect(redacted.headers['Content-Type']).toBe('application/json');
     });
 
     it('should redact key query parameter in URL', () => {
@@ -147,12 +175,16 @@ describe('dumpContext', () => {
         },
       };
 
-      const filename = await dumpContext(request, response, 'openai');
-      createdFiles.push(filename);
+      const baseId = await dumpContext(request, response, 'openai');
+      const requestFilename = `${baseId}-request.json`;
+      const responseFilename = `${baseId}-response.json`;
+      createdFiles.push(requestFilename, responseFilename);
+      // dumpContext returns a dump base id, not a generated filename.
+      expect(baseId).not.toMatch(/\.json$/);
       // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(filename).toMatch(/^\d{8}-\d{6}-openai-\w+\.json$/);
+      expect(baseId).toMatch(/^\d{8}-\d{6}-openai-\w+$/);
 
-      const filepath = path.join(testDumpDir, filename);
+      const filepath = path.join(testDumpDir, requestFilename);
       const content = await fs.readFile(filepath, 'utf-8');
       const dump = JSON.parse(content);
 
@@ -161,8 +193,16 @@ describe('dumpContext', () => {
       expect(dump.request.url).toBe(request.url);
       expect(dump.request.headers.Authorization).toBe('[REDACTED]');
       expect(dump.request.body.model).toBe('gpt-4');
-      expect(dump.response.status).toBe(200);
-      expect(dump.response.body.choices).toHaveLength(1);
+      expect(dump).not.toHaveProperty('response');
+
+      const responseFilepath = path.join(testDumpDir, responseFilename);
+      const responseContent = await fs.readFile(responseFilepath, 'utf-8');
+      const responseDump = JSON.parse(responseContent);
+      expect(responseDump.provider).toBe('openai');
+      expect(responseDump.relatedRequestFile).toBe(requestFilename);
+      expect(responseDump).not.toHaveProperty('request');
+      expect(responseDump.response.status).toBe(200);
+      expect(responseDump.response.body.choices).toHaveLength(1);
     });
   });
 
@@ -195,18 +235,23 @@ describe('dumpContext', () => {
         },
       };
 
-      const filename = await dumpContext(request, response, 'anthropic');
-      createdFiles.push(filename);
+      const baseId = await dumpContext(request, response, 'anthropic');
+      const requestFilename = `${baseId}-request.json`;
+      const responseFilename = `${baseId}-response.json`;
+      createdFiles.push(requestFilename, responseFilename);
       // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(filename).toMatch(/^\d{8}-\d{6}-anthropic-\w+\.json$/);
+      expect(baseId).toMatch(/^\d{8}-\d{6}-anthropic-\w+$/);
 
-      const filepath = path.join(testDumpDir, filename);
+      const filepath = path.join(testDumpDir, requestFilename);
       const content = await fs.readFile(filepath, 'utf-8');
       const dump = JSON.parse(content);
 
       expect(dump.provider).toBe('anthropic');
       expect(dump.request.headers['x-api-key']).toBe('[REDACTED]');
       expect(dump.request.body.model).toBe('claude-3-opus-20240229');
+      await expect(
+        fs.access(path.join(testDumpDir, responseFilename)),
+      ).resolves.toBeUndefined();
     });
   });
 
@@ -244,18 +289,52 @@ describe('dumpContext', () => {
         },
       };
 
-      const filename = await dumpContext(request, response, 'gemini');
-      createdFiles.push(filename);
+      const baseId = await dumpContext(request, response, 'gemini');
+      const requestFilename = `${baseId}-request.json`;
+      const responseFilename = `${baseId}-response.json`;
+      createdFiles.push(requestFilename, responseFilename);
       // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(filename).toMatch(/^\d{8}-\d{6}-gemini-\w+\.json$/);
+      expect(baseId).toMatch(/^\d{8}-\d{6}-gemini-\w+$/);
 
-      const filepath = path.join(testDumpDir, filename);
+      const filepath = path.join(testDumpDir, requestFilename);
       const content = await fs.readFile(filepath, 'utf-8');
       const dump = JSON.parse(content);
 
       expect(dump.provider).toBe('gemini');
       expect(dump.request.url).toMatch(/key=\[REDACTED\]/);
       expect(dump.request.body.contents).toHaveLength(1);
+      await expect(
+        fs.access(path.join(testDumpDir, responseFilename)),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('response handling', () => {
+    it('should create related response file when response body is falsy', async () => {
+      const request = {
+        url: 'https://api.example.com/v1/chat/completions',
+        method: 'POST',
+        headers: {},
+        body: { prompt: 'Return false' },
+      };
+      const response = {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: false,
+      };
+
+      const baseId = await dumpContext(request, response, 'openai');
+      const requestFilename = `${baseId}-request.json`;
+      const responseFilename = `${baseId}-response.json`;
+      createdFiles.push(requestFilename, responseFilename);
+
+      const responseContent = await fs.readFile(
+        path.join(testDumpDir, responseFilename),
+        'utf-8',
+      );
+      const responseDump = JSON.parse(responseContent);
+      expect(responseDump.relatedRequestFile).toBe(requestFilename);
+      expect(responseDump.response.body).toBe(false);
     });
   });
 
@@ -275,9 +354,9 @@ describe('dumpContext', () => {
       };
 
       // Should not throw even if there are issues
-      const filename = await dumpContext(request, response, 'openai');
-      createdFiles.push(filename);
-      expect(filename).toBeDefined();
+      const baseId = await dumpContext(request, response, 'openai');
+      createdFiles.push(`${baseId}-request.json`, `${baseId}-response.json`);
+      expect(baseId).toBeDefined();
     });
   });
 
@@ -302,9 +381,11 @@ describe('dumpContext', () => {
         body: { id: 'test' },
       };
 
-      const filename = await dumpContext(request, response, 'openai');
-      createdFiles.push(filename);
-      const filepath = path.join(testDumpDir, filename);
+      const baseId = await dumpContext(request, response, 'openai');
+      const requestFilename = `${baseId}-request.json`;
+      const responseFilename = `${baseId}-response.json`;
+      createdFiles.push(requestFilename, responseFilename);
+      const filepath = path.join(testDumpDir, requestFilename);
       const content = await fs.readFile(filepath, 'utf-8');
       const dump = JSON.parse(content);
 

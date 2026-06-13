@@ -139,6 +139,27 @@ world
 stderr:
 warn`);
     });
+
+    it('should trim repeated trailing newlines from stdout and stderr', () => {
+      const repeatedNewlines = '\n'.repeat(10000);
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'test_tool',
+        result: {
+          stdout: `done${repeatedNewlines}`,
+          stderr: `warn${repeatedNewlines}`,
+        },
+      };
+
+      const payload = buildToolResponsePayload(block, undefined, true);
+
+      expect(payload.result).toBe(`stdout:
+done
+
+stderr:
+warn`);
+    });
   });
 
   describe('unicode sanitization', () => {

@@ -7,20 +7,39 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import * as dumpContextModule from '../utils/dumpContext.js';
+import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 describe('AnthropicProvider dumpContext integration', () => {
   let provider: AnthropicProvider;
   let dumpContextSpy: ReturnType<typeof vi.spyOn>;
+  let dumpSDKRequestContextSpy: ReturnType<typeof vi.spyOn>;
+  let dumpSDKResponseContextSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    // Create provider with mock API key
     provider = new AnthropicProvider('sk-ant-test-key');
 
-    // Spy on dumpContext function
     dumpContextSpy = vi.spyOn(dumpContextModule, 'dumpContext');
     dumpContextSpy.mockResolvedValue('test-dump-file.json');
+
+    dumpSDKRequestContextSpy = vi.spyOn(
+      dumpSDKContextModule,
+      'dumpSDKRequestContext',
+    );
+    dumpSDKRequestContextSpy.mockResolvedValue({
+      baseId: '20260101-120000-anthropic-test12',
+      requestFilename: '20260101-120000-anthropic-test12-request.json',
+      dumpDir: '/tmp/.llxprt/dumps',
+    });
+
+    dumpSDKResponseContextSpy = vi.spyOn(
+      dumpSDKContextModule,
+      'dumpSDKResponseContext',
+    );
+    dumpSDKResponseContextSpy.mockResolvedValue(
+      '20260101-120000-anthropic-test12-response.json',
+    );
   });
 
   afterEach(() => {
@@ -129,16 +148,20 @@ describe('AnthropicProvider dumpContext integration', () => {
       results.push(chunk);
     }
 
-    // Should have called dumpContext with SDK-level data
-    expect(dumpContextSpy).toHaveBeenCalledOnce();
-    const [request, response, providerName] = dumpContextSpy.mock.calls[0];
-    expect(providerName).toBe('anthropic');
-    expect(request.url).toContain('anthropic.com');
-    expect(request.method).toBe('POST');
-    expect(request.body).toHaveProperty('model');
-    expect(request.body).toHaveProperty('messages');
-    expect(response).toHaveProperty('status');
-    expect(response).toHaveProperty('body');
+    // Should have called separate request and response dumps
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
+
+    const [reqProvider, reqEndpoint] = dumpSDKRequestContextSpy.mock.calls[0];
+    expect(reqProvider).toBe('anthropic');
+    expect(reqEndpoint).toBe('/v1/messages');
+
+    const [, respProvider, respBody, respIsError] =
+      dumpSDKResponseContextSpy.mock.calls[0];
+    expect(respProvider).toBe('anthropic');
+    expect(respIsError).toBe(false);
+    expect(respBody).toBeDefined();
+    expect(dumpContextSpy).not.toHaveBeenCalled();
   });
 
   it('should dump context only on error when mode is error', async () => {
@@ -238,23 +261,24 @@ describe('AnthropicProvider dumpContext integration', () => {
       }
     }).rejects.toThrow(/API Error/);
 
-    // Should have called dumpContext on error
-    expect(dumpContextSpy).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        url: expect.stringContaining('anthropic.com'),
-        method: 'POST',
-      }),
-      expect.objectContaining({
-        status: expect.any(Number),
-        body: expect.objectContaining({
-          error: expect.any(String),
-        }),
-      }),
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
       'anthropic',
+      '/v1/messages',
+      expect.objectContaining({
+        model: 'claude-sonnet-4-5-20250929',
+      }),
+      'https://api.anthropic.com',
     );
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+      '20260101-120000-anthropic-test12',
+      'anthropic',
+      { error: 'API Error: Rate limit exceeded' },
+      true,
+    );
+    expect(dumpContextSpy).not.toHaveBeenCalled();
   });
 
-  it('should dump context once and reset mode to off when mode is now', async () => {
+  it('should not dump context in provider when mode is now', async () => {
     const options: NormalizedGenerateChatOptions = {
       contents: [
         {
@@ -307,14 +331,8 @@ describe('AnthropicProvider dumpContext integration', () => {
       results.push(chunk);
     }
 
-    // Should have called dumpContext exactly once
-    expect(dumpContextSpy).toHaveBeenCalledExactlyOnceWith(
-      expect.any(Object),
-      expect.any(Object),
-      'anthropic',
-    );
-
-    // Note: The 'now' mode reset to 'off' is handled by the command layer,
-    // not by the provider, so we don't expect setEphemeralSettings to be called here
+    expect(dumpSDKRequestContextSpy).not.toHaveBeenCalled();
+    expect(dumpSDKResponseContextSpy).not.toHaveBeenCalled();
+    expect(dumpContextSpy).not.toHaveBeenCalled();
   });
 });
