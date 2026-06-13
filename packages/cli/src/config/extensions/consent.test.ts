@@ -530,8 +530,9 @@ describe('consent', () => {
       );
 
       const consentArg = requestConsent.mock.calls[0][0] as string;
-      // Raw ESC characters must never appear in the consent string
-      expect(consentArg).not.toContain('\u001b');
+      // Raw malicious name/description must not appear verbatim
+      expect(consentArg).not.toContain('evil\u001b[31mSkill');
+      expect(consentArg).not.toContain('bad\u001b[2Kdesc');
       // Escaped representations should be visible instead
       expect(consentArg).toContain('\\u001b[');
     });
@@ -552,8 +553,38 @@ describe('consent', () => {
 
       const result = await skillsConsentString([maliciousSkill], 'test-source');
 
-      expect(result).not.toContain('\u001b');
+      // Raw malicious name/description must not appear verbatim
+      expect(result).not.toContain('evil\u001b[31mSkill');
+      expect(result).not.toContain('bad\u001b[2Kdesc');
+      // Escaped representations should be visible instead
       expect(result).toContain('\\u001b[');
+    });
+
+    it('should escape ANSI control codes in skill location', async () => {
+      const ansiLocationDir = path.join(tempDir, 'ansi-location-skill');
+      await fs.mkdir(ansiLocationDir, { recursive: true });
+      await fs.writeFile(path.join(ansiLocationDir, 'SKILL.md'), 'body');
+
+      const maliciousSkill: SkillDefinition = {
+        name: 'loc-skill',
+        description: 'A skill with ANSI in location',
+        location: path.join(
+          ansiLocationDir,
+          '\u001b[31mfake\u001b[0m',
+          'SKILL.md',
+        ),
+        body: 'body',
+      };
+
+      const result = await skillsConsentString([maliciousSkill], 'test-source');
+
+      // Raw malicious location path must not appear verbatim
+      expect(result).not.toContain('\u001b[31mfake');
+      // Escaped representation should be visible
+      expect(result).toContain('\\u001b[');
+      // Sanitized name/description should be present
+      expect(result).toContain('loc-skill');
+      expect(result).toContain('A skill with ANSI in location');
     });
 
     it('should preserve normal skill metadata unchanged', async () => {
