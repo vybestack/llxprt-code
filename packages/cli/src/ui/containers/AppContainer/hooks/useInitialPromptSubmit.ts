@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { isSlashCommand } from '../../../utils/commandUtils.js';
 
 interface UseInitialPromptSubmitParams {
   initialPrompt: string | undefined;
@@ -62,7 +63,9 @@ export function useInitialPromptSubmit({
       return;
     }
 
-    if (!startupGuardsInitialized || !interactiveRuntimeReady) {
+    const trimmedPrompt = initialPrompt.trim();
+    const isCommand = isSlashCommand(trimmedPrompt);
+    if (!startupGuardsInitialized || (!interactiveRuntimeReady && !isCommand)) {
       return;
     }
 

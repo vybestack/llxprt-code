@@ -113,6 +113,27 @@ describe('useInitialPromptSubmit', () => {
     expect(submitPrompt).toHaveBeenCalledTimes(1);
   });
 
+  it('submits slash initial prompts before interactive runtime readiness', async () => {
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
+
+    renderHook(() =>
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: '  /help',
+          submitPrompt,
+          interactiveRuntimeReady: false,
+        }),
+      ),
+    );
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitPrompt).toHaveBeenCalledWith('  /help');
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
+  });
+
   it('submits once startup guards become initialized after being initially false', async () => {
     const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
