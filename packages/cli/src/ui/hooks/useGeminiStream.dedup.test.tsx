@@ -84,6 +84,8 @@ vi.mock('./useReactToolScheduler.js', () => ({
       scheduleFn,
       vi.fn(), // markToolsAsSubmitted
       vi.fn(), // cancelAllToolCalls
+      0,
+      true,
     ];
   }),
 }));

@@ -5,11 +5,13 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { isSlashCommand } from '../../../utils/commandUtils.js';
 
 interface UseInitialPromptSubmitParams {
   initialPrompt: string | undefined;
-  submitQuery: (query: string) => Promise<void>;
+  submitPrompt: (query: string) => void | Promise<void>;
   agentClientPresent: boolean;
+  interactiveRuntimeReady: boolean;
   blockedByDialogs: {
     isAuthDialogOpen: boolean;
     isThemeDialogOpen: boolean;
@@ -26,8 +28,9 @@ interface UseInitialPromptSubmitParams {
 
 export function useInitialPromptSubmit({
   initialPrompt,
-  submitQuery,
+  submitPrompt,
   agentClientPresent,
+  interactiveRuntimeReady,
   blockedByDialogs,
   startupGuardsInitialized,
 }: UseInitialPromptSubmitParams): void {
@@ -60,23 +63,30 @@ export function useInitialPromptSubmit({
       return;
     }
 
-    if (!startupGuardsInitialized) {
+    const trimmedPrompt = initialPrompt.trim();
+    const isCommand = isSlashCommand(trimmedPrompt);
+    if (!startupGuardsInitialized || (!interactiveRuntimeReady && !isCommand)) {
       return;
     }
 
     initialPromptSubmittedRef.current = 'pending';
-    void submitQuery(initialPrompt).then(
-      () => {
-        initialPromptSubmittedRef.current = 'done';
-      },
-      () => {
-        initialPromptSubmittedRef.current = 'idle';
-      },
-    );
+    try {
+      void Promise.resolve(submitPrompt(initialPrompt)).then(
+        () => {
+          initialPromptSubmittedRef.current = 'done';
+        },
+        () => {
+          initialPromptSubmittedRef.current = 'idle';
+        },
+      );
+    } catch {
+      initialPromptSubmittedRef.current = 'idle';
+    }
   }, [
     initialPrompt,
-    submitQuery,
+    submitPrompt,
     agentClientPresent,
+    interactiveRuntimeReady,
     blockedByDialogs.isAuthDialogOpen,
     blockedByDialogs.isThemeDialogOpen,
     blockedByDialogs.isEditorDialogOpen,

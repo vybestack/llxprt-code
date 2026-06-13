@@ -81,7 +81,8 @@ export interface AppLayoutParams {
   requestCtrlDExit: AppInputResult['requestCtrlDExit'];
   handleSlashCommand: AppInputResult['handleSlashCommand'];
   inputHistoryStore: AppInputResult['inputHistoryStore'];
-  submitQuery: AppInputResult['submitQuery'];
+  handleUserInputSubmit: AppInputResult['handleUserInputSubmit'];
+  interactiveRuntimeReady: AppInputResult['interactiveRuntimeReady'];
   vimModeEnabled: AppInputResult['vimModeEnabled'];
   terminalHeight: AppInputResult['terminalHeight'];
   terminalWidth: AppInputResult['terminalWidth'];
@@ -238,7 +239,8 @@ function useLayoutContext(p: AppLayoutParams) {
     isFolderTrustDialogOpen,
     terminalHeight,
     terminalWidth,
-    submitQuery,
+    handleUserInputSubmit,
+    interactiveRuntimeReady,
     vimModeEnabled,
     startupGuardsInitialized,
   } = p;
@@ -257,8 +259,9 @@ function useLayoutContext(p: AppLayoutParams) {
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
   useInitialPromptSubmit({
     initialPrompt,
-    submitQuery,
+    submitPrompt: handleUserInputSubmit,
     agentClientPresent: Boolean(config.getAgentClient()),
+    interactiveRuntimeReady,
     blockedByDialogs: {
       isAuthDialogOpen,
       isThemeDialogOpen,

@@ -657,6 +657,26 @@ describe('useReactToolScheduler', () => {
     expect(result.current[0]).toStrictEqual([]);
   });
 
+  it('reports interactive runtime ready after main scheduler and subagent scheduler factory are registered', async () => {
+    vi.useRealTimers();
+    vi.mocked(mockConfig.setInteractiveSubagentSchedulerFactory).mockClear();
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
+
+    expect(result.current[5]).toBe(false);
+
+    await vi.waitFor(() => expect(result.current[5]).toBe(true), {
+      interval: 10,
+      timeout: 5000,
+    });
+    expect(
+      mockConfig.setInteractiveSubagentSchedulerFactory,
+    ).toHaveBeenCalledWith(expect.any(Function));
+  });
+
   it('should schedule and execute a tool call successfully', async () => {
     vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(mockTool);

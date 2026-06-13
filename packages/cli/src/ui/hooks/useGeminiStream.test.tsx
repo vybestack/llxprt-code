@@ -228,8 +228,9 @@ describe('useGeminiStream', () => {
       [], // Default to empty array for toolCalls
       mockScheduleToolCalls,
       mockMarkToolsAsSubmitted,
-      vi.fn(), // setToolCallsForDisplay
       mockCancelAllToolCalls,
+      0,
+      true,
     ]);
 
     // Reset mocks for AgentClient instance methods (startChat and sendMessageStream)
@@ -274,14 +275,6 @@ describe('useGeminiStream', () => {
 
     const { result, rerender } = renderHook(
       (props: typeof initialProps) => {
-        // This mock needs to be stateful. When setToolCallsForDisplay is called,
-        // it should trigger a rerender with the new state.
-        const mockSetToolCallsForDisplay = vi.fn((updater) => {
-          const newToolCalls =
-            typeof updater === 'function' ? updater(props.toolCalls) : updater;
-          rerender({ ...props, toolCalls: newToolCalls });
-        });
-
         // Create a stateful mock for cancellation that updates the toolCalls state.
         const statefulCancelAllToolCalls = vi.fn((...args) => {
           // Call the original spy so `toHaveBeenCalled` checks still work.
@@ -317,8 +310,9 @@ describe('useGeminiStream', () => {
           props.toolCalls,
           mockScheduleToolCalls,
           mockMarkToolsAsSubmitted,
-          mockSetToolCallsForDisplay,
           statefulCancelAllToolCalls, // Use the stateful mock
+          0,
+          true,
         ]);
 
         return useGeminiStream(
@@ -555,12 +549,23 @@ describe('useGeminiStream', () => {
 
     // Capture the onComplete callback
     let capturedOnComplete:
-      | ((completedTools: TrackedToolCall[]) => Promise<void>)
+      | ((
+          schedulerId: symbol,
+          completedTools: TrackedToolCall[],
+          metadata: { isPrimary: boolean },
+        ) => Promise<void>)
       | null = null;
 
     mockUseReactToolScheduler.mockImplementation((onComplete) => {
       capturedOnComplete = onComplete;
-      return [[], mockScheduleToolCalls, mockMarkToolsAsSubmitted, vi.fn()];
+      return [
+        [],
+        mockScheduleToolCalls,
+        mockMarkToolsAsSubmitted,
+        mockCancelAllToolCalls,
+        0,
+        true,
+      ];
     });
 
     renderHook(() =>
@@ -588,7 +593,9 @@ describe('useGeminiStream', () => {
     // Trigger the onComplete callback with completed tools
     await act(async () => {
       if (capturedOnComplete) {
-        await capturedOnComplete(completedToolCalls);
+        await capturedOnComplete(Symbol('test-scheduler'), completedToolCalls, {
+          isPrimary: true,
+        });
       }
     });
 
@@ -652,12 +659,23 @@ describe('useGeminiStream', () => {
     ];
 
     let capturedOnComplete:
-      | ((completedTools: TrackedToolCall[]) => Promise<void>)
+      | ((
+          schedulerId: symbol,
+          completedTools: TrackedToolCall[],
+          metadata: { isPrimary: boolean },
+        ) => Promise<void>)
       | null = null;
 
     mockUseReactToolScheduler.mockImplementation((onComplete) => {
       capturedOnComplete = onComplete;
-      return [[], mockScheduleToolCalls, mockMarkToolsAsSubmitted];
+      return [
+        [],
+        mockScheduleToolCalls,
+        mockMarkToolsAsSubmitted,
+        mockCancelAllToolCalls,
+        0,
+        true,
+      ];
     });
 
     renderHook(() =>
@@ -683,7 +701,9 @@ describe('useGeminiStream', () => {
 
     await act(async () => {
       if (capturedOnComplete) {
-        await capturedOnComplete(completedToolCalls);
+        await capturedOnComplete(Symbol('test-scheduler'), completedToolCalls, {
+          isPrimary: true,
+        });
       }
     });
 
@@ -739,12 +759,23 @@ describe('useGeminiStream', () => {
 
     // Capture the onComplete callback
     let capturedOnComplete:
-      | ((completedTools: TrackedToolCall[]) => Promise<void>)
+      | ((
+          schedulerId: symbol,
+          completedTools: TrackedToolCall[],
+          metadata: { isPrimary: boolean },
+        ) => Promise<void>)
       | null = null;
 
     mockUseReactToolScheduler.mockImplementation((onComplete) => {
       capturedOnComplete = onComplete;
-      return [[], mockScheduleToolCalls, mockMarkToolsAsSubmitted, vi.fn()];
+      return [
+        [],
+        mockScheduleToolCalls,
+        mockMarkToolsAsSubmitted,
+        mockCancelAllToolCalls,
+        0,
+        true,
+      ];
     });
 
     renderHook(() =>
@@ -772,7 +803,9 @@ describe('useGeminiStream', () => {
     // Trigger the onComplete callback with cancelled tools
     await act(async () => {
       if (capturedOnComplete) {
-        await capturedOnComplete(cancelledToolCalls);
+        await capturedOnComplete(Symbol('test-scheduler'), cancelledToolCalls, {
+          isPrimary: true,
+        });
       }
     });
 
@@ -850,12 +883,23 @@ describe('useGeminiStream', () => {
     const client = new MockedAgentClientClass(mockConfig);
 
     let capturedOnComplete:
-      | ((completedTools: TrackedToolCall[]) => Promise<void>)
+      | ((
+          schedulerId: symbol,
+          completedTools: TrackedToolCall[],
+          metadata: { isPrimary: boolean },
+        ) => Promise<void>)
       | null = null;
 
     mockUseReactToolScheduler.mockImplementation((onComplete) => {
       capturedOnComplete = onComplete;
-      return [[], mockScheduleToolCalls, mockMarkToolsAsSubmitted, vi.fn()];
+      return [
+        [],
+        mockScheduleToolCalls,
+        mockMarkToolsAsSubmitted,
+        mockCancelAllToolCalls,
+        0,
+        true,
+      ];
     });
 
     renderHook(() =>
@@ -883,7 +927,9 @@ describe('useGeminiStream', () => {
     // Trigger the onComplete callback with multiple cancelled tools
     await act(async () => {
       if (capturedOnComplete) {
-        await capturedOnComplete(allCancelledTools);
+        await capturedOnComplete(Symbol('test-scheduler'), allCancelledTools, {
+          isPrimary: true,
+        });
       }
     });
 
@@ -957,7 +1003,11 @@ describe('useGeminiStream', () => {
 
     // Capture the onComplete callback
     let capturedOnComplete:
-      | ((completedTools: TrackedToolCall[]) => Promise<void>)
+      | ((
+          schedulerId: symbol,
+          completedTools: TrackedToolCall[],
+          metadata: { isPrimary: boolean },
+        ) => Promise<void>)
       | null = null;
     let currentToolCalls = initialToolCalls;
 
@@ -967,7 +1017,9 @@ describe('useGeminiStream', () => {
         currentToolCalls,
         mockScheduleToolCalls,
         mockMarkToolsAsSubmitted,
-        vi.fn(), // setToolCallsForDisplay
+        mockCancelAllToolCalls,
+        0,
+        true,
       ];
     });
 
@@ -1004,7 +1056,9 @@ describe('useGeminiStream', () => {
         completedToolCalls,
         mockScheduleToolCalls,
         mockMarkToolsAsSubmitted,
-        vi.fn(), // setToolCallsForDisplay
+        mockCancelAllToolCalls,
+        0,
+        true,
       ];
     });
 
@@ -1019,7 +1073,9 @@ describe('useGeminiStream', () => {
     // 4. Trigger the onComplete callback to simulate tool completion
     await act(async () => {
       if (capturedOnComplete) {
-        await capturedOnComplete(completedToolCalls);
+        await capturedOnComplete(Symbol('test-scheduler'), completedToolCalls, {
+          isPrimary: true,
+        });
       }
     });
 
@@ -1545,12 +1601,23 @@ describe('useGeminiStream', () => {
 
       // Capture the onComplete callback
       let capturedOnComplete:
-        | ((completedTools: TrackedToolCall[]) => Promise<void>)
+        | ((
+            schedulerId: symbol,
+            completedTools: TrackedToolCall[],
+            metadata: { isPrimary: boolean },
+          ) => Promise<void>)
         | null = null;
 
       mockUseReactToolScheduler.mockImplementation((onComplete) => {
         capturedOnComplete = onComplete;
-        return [[], mockScheduleToolCalls, mockMarkToolsAsSubmitted, vi.fn()];
+        return [
+          [],
+          mockScheduleToolCalls,
+          mockMarkToolsAsSubmitted,
+          mockCancelAllToolCalls,
+          0,
+          true,
+        ];
       });
 
       renderHook(() =>
@@ -1578,7 +1645,13 @@ describe('useGeminiStream', () => {
       // Trigger the onComplete callback with the completed save_memory tool
       await act(async () => {
         if (capturedOnComplete) {
-          await capturedOnComplete([completedToolCall]);
+          await capturedOnComplete(
+            Symbol('test-scheduler'),
+            [completedToolCall],
+            {
+              isPrimary: true,
+            },
+          );
         }
       });
 
@@ -2184,7 +2257,9 @@ describe('useGeminiStream', () => {
         startTime: Date.now(),
         endTime: Date.now(),
       }));
-      await capturedOnComplete(tools);
+      await capturedOnComplete(Symbol('test-scheduler'), tools, {
+        isPrimary: true,
+      });
       addItemOrder.push('scheduleToolCalls_END');
     });
 
@@ -2200,9 +2275,9 @@ describe('useGeminiStream', () => {
         [], // toolCalls
         mockScheduleToolCalls,
         vi.fn(), // markToolsAsSubmitted
-        vi.fn(), // setToolCallsForDisplay
         vi.fn(), // cancelAllToolCalls
         0, // lastToolOutputTime
+        true, // interactiveRuntimeReady
       ];
     });
 
@@ -2418,8 +2493,10 @@ describe('useGeminiStream', () => {
       mockUseReactToolScheduler.mockReturnValue([
         [],
         mockScheduleToolCalls,
-        mockCancelAllToolCalls,
         mockMarkToolsAsSubmitted,
+        mockCancelAllToolCalls,
+        0,
+        true,
       ]);
 
       const { result, rerender } = renderHook(() =>
@@ -2469,8 +2546,10 @@ describe('useGeminiStream', () => {
       mockUseReactToolScheduler.mockReturnValue([
         newToolCalls,
         mockScheduleToolCalls,
-        mockCancelAllToolCalls,
         mockMarkToolsAsSubmitted,
+        mockCancelAllToolCalls,
+        0,
+        true,
       ]);
 
       rerender();
@@ -2500,8 +2579,10 @@ describe('useGeminiStream', () => {
       mockUseReactToolScheduler.mockReturnValue([
         [pendingToolCall],
         mockScheduleToolCalls,
-        mockCancelAllToolCalls,
         mockMarkToolsAsSubmitted,
+        mockCancelAllToolCalls,
+        0,
+        true,
       ]);
 
       const { result } = renderHook(() =>
@@ -3129,8 +3210,9 @@ describe('useGeminiStream', () => {
             props.toolCalls,
             mockScheduleToolCalls,
             mockMarkToolsAsSubmitted,
-            vi.fn(),
             mockCancelAllToolCalls,
+            0,
+            true,
           ]);
           return useGeminiStream(
             props.client,
@@ -3264,8 +3346,9 @@ describe('useGeminiStream', () => {
             props.toolCalls,
             mockScheduleToolCalls,
             mockMarkToolsAsSubmitted,
-            vi.fn(),
             mockCancelAllToolCalls,
+            0,
+            true,
           ]);
           return useGeminiStream(
             props.client,

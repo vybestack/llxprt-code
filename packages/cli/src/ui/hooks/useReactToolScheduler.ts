@@ -96,6 +96,18 @@ export type TrackedToolCall =
   | TrackedCancelledToolCall;
 
 export type CancelAllFn = () => void;
+export type ReactToolSchedulerResult = readonly [
+  TrackedToolCall[],
+  ScheduleFn,
+  MarkToolsAsSubmittedFn,
+  CancelAllFn,
+  number,
+  boolean,
+];
+type PendingScheduleRequests = Array<{
+  request: ToolCallRequestInfo | ToolCallRequestInfo[];
+  signal: AbortSignal;
+}>;
 
 /**
  * Ensures a request has an agentId, defaulting to DEFAULT_AGENT_ID.
@@ -209,10 +221,7 @@ function markCallsAsSubmitted(
  */
 function processPendingRequests(
   instance: CoreToolScheduler,
-  requests: Array<{
-    request: ToolCallRequestInfo | ToolCallRequestInfo[];
-    signal: AbortSignal;
-  }>,
+  requests: PendingScheduleRequests,
 ): void {
   for (const { request, signal } of requests) {
     if (signal.aborted) continue;
@@ -428,12 +437,7 @@ function useSchedulerEffect(
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
-  pendingScheduleRequests: React.MutableRefObject<
-    Array<{
-      request: ToolCallRequestInfo | ToolCallRequestInfo[];
-      signal: AbortSignal;
-    }>
-  >,
+  pendingScheduleRequests: React.MutableRefObject<PendingScheduleRequests>,
   setScheduler: (s: CoreToolScheduler | null) => void,
 ): void {
   useEffect(() => {
@@ -488,12 +492,7 @@ function useScheduler(
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
-  pendingScheduleRequests: React.MutableRefObject<
-    Array<{
-      request: ToolCallRequestInfo | ToolCallRequestInfo[];
-      signal: AbortSignal;
-    }>
-  >,
+  pendingScheduleRequests: React.MutableRefObject<PendingScheduleRequests>,
 ): CoreToolScheduler | null {
   const [scheduler, setScheduler] = useState<CoreToolScheduler | null>(null);
   useSchedulerEffect(
@@ -547,6 +546,7 @@ function useExternalSchedulerFactoryCreator(
 function useExternalSchedulerSetup(
   config: Config,
   createExternalScheduler: ExternalSchedulerFactory,
+  setExternalSchedulerRegistered: (registered: boolean) => void,
 ): void {
   type ConfigWithSchedulerFactory = Config & {
     setInteractiveSubagentSchedulerFactory?: (
@@ -560,15 +560,18 @@ function useExternalSchedulerSetup(
       typeof configWithFactory.setInteractiveSubagentSchedulerFactory !==
       'function'
     ) {
-      return undefined;
+      setExternalSchedulerRegistered(true);
+      return () => setExternalSchedulerRegistered(false);
     }
     configWithFactory.setInteractiveSubagentSchedulerFactory(
       createExternalScheduler,
     );
+    setExternalSchedulerRegistered(true);
     return () => {
+      setExternalSchedulerRegistered(false);
       configWithFactory.setInteractiveSubagentSchedulerFactory(undefined);
     };
-  }, [config, createExternalScheduler]);
+  }, [config, createExternalScheduler, setExternalSchedulerRegistered]);
 }
 
 /**
@@ -576,12 +579,7 @@ function useExternalSchedulerSetup(
  */
 function useScheduleFn(
   scheduler: CoreToolScheduler | null,
-  pendingScheduleRequests: React.MutableRefObject<
-    Array<{
-      request: ToolCallRequestInfo | ToolCallRequestInfo[];
-      signal: AbortSignal;
-    }>
-  >,
+  pendingScheduleRequests: React.MutableRefObject<PendingScheduleRequests>,
 ): ScheduleFn {
   return useCallback(
     (request, signal) => {
@@ -714,6 +712,31 @@ function useSchedulerRefs(
   );
 }
 
+function useToolSchedulerReadiness(
+  scheduler: CoreToolScheduler | null,
+  externalSchedulerRegistered: boolean,
+): boolean {
+  return scheduler !== null && externalSchedulerRegistered;
+}
+
+function buildReactToolSchedulerResult(
+  toolCalls: TrackedToolCall[],
+  schedule: ScheduleFn,
+  markToolsAsSubmitted: MarkToolsAsSubmittedFn,
+  cancelAllToolCalls: CancelAllFn,
+  lastToolOutputTime: number,
+  interactiveRuntimeReady: boolean,
+): ReactToolSchedulerResult {
+  return [
+    toolCalls,
+    schedule,
+    markToolsAsSubmitted,
+    cancelAllToolCalls,
+    lastToolOutputTime,
+    interactiveRuntimeReady,
+  ] as const;
+}
+
 export function useReactToolScheduler(
   onComplete: (
     schedulerId: symbol,
@@ -728,25 +751,16 @@ export function useReactToolScheduler(
   onEditorClose: () => void,
   onEditorOpen: () => void = () => {},
   runtimeMessageBus?: MessageBus,
-): readonly [
-  TrackedToolCall[],
-  ScheduleFn,
-  MarkToolsAsSubmittedFn,
-  CancelAllFn,
-  number,
-] {
+): ReactToolSchedulerResult {
   const [toolCallsByScheduler, setToolCallsByScheduler] = useState<
     Map<symbol, TrackedToolCall[]>
   >(new Map());
   const [lastToolOutputTime, setLastToolOutputTime] = useState(0);
+  const [externalSchedulerRegistered, setExternalSchedulerRegistered] =
+    useState(false);
   const mainSchedulerId = useState(() => Symbol('main-scheduler'))[0];
   const sessionId = useMemo(() => config.getSessionId(), [config]);
-  const pendingScheduleRequests = useRef<
-    Array<{
-      request: ToolCallRequestInfo | ToolCallRequestInfo[];
-      signal: AbortSignal;
-    }>
-  >([]);
+  const pendingScheduleRequests = useRef<PendingScheduleRequests>([]);
 
   const syncedRefs = useRefState(
     onComplete,
@@ -776,7 +790,11 @@ export function useReactToolScheduler(
     refs,
     runtimeMessageBus,
   );
-  useExternalSchedulerSetup(config, createExternalScheduler);
+  useExternalSchedulerSetup(
+    config,
+    createExternalScheduler,
+    setExternalSchedulerRegistered,
+  );
 
   const schedule = useScheduleFn(scheduler, pendingScheduleRequests);
   const markToolsAsSubmitted = useMarkToolsAsSubmitted(setToolCallsByScheduler);
@@ -789,11 +807,17 @@ export function useReactToolScheduler(
     [toolCallsByScheduler],
   );
 
-  return [
+  const interactiveRuntimeReady = useToolSchedulerReadiness(
+    scheduler,
+    externalSchedulerRegistered,
+  );
+
+  return buildReactToolSchedulerResult(
     toolCalls,
     schedule,
     markToolsAsSubmitted,
     cancelAllToolCalls,
     lastToolOutputTime,
-  ] as const;
+    interactiveRuntimeReady,
+  );
 }
