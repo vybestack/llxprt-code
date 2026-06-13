@@ -199,4 +199,47 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
 
     expect(response.text).toBe('plain provider text');
   });
+
+  it('excludes thought parts from hook-modified response text', async () => {
+    registerStubProvider('original provider text');
+
+    const afterModelResult = new AfterModelHookOutput({});
+    vi.spyOn(afterModelResult, 'getModifiedResponse').mockReturnValue({
+      candidates: [
+        {
+          content: {
+            role: 'model' as const,
+            parts: [
+              { thought: true, text: 'internal reasoning' },
+              { text: 'visible answer' },
+            ],
+          },
+          finishReason: 'STOP' as const,
+        },
+      ],
+    } as unknown as ReturnType<AfterModelHookOutput['getModifiedResponse']>);
+
+    const hookConfig = Object.create(config) as Config;
+    Object.defineProperties(hookConfig, {
+      getEnableHooks: { value: () => true },
+      getHookSystem: {
+        value: () => ({
+          initialize: async () => undefined,
+          fireBeforeToolSelectionEvent: async () => undefined,
+          fireBeforeModelEvent: async () => undefined,
+          fireAfterModelEvent: async () => afterModelResult,
+        }),
+      },
+    });
+
+    const chat = buildChatSession(hookConfig);
+
+    const response = await chat.generateDirectMessage(
+      { message: 'Trigger thought filtering' },
+      'prompt-issue-1749-thought',
+    );
+
+    expect(response.text).toBe('visible answer');
+    expect(response.text).not.toContain('internal reasoning');
+  });
 });

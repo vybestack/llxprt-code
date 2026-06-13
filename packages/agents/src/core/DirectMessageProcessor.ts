@@ -36,6 +36,7 @@ import {
   nextStreamEventWithIdleTimeout,
   resolveStreamIdleTimeoutMs,
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { getResponseTextFromParts } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{
@@ -773,13 +774,16 @@ export class DirectMessageProcessor {
   }
 
   /**
-   * Concatenates the text from the first candidate's parts.
+   * Concatenates the visible (non-thought) text from the first candidate's
+   * parts. Delegates to the canonical helper so thinking content is excluded
+   * (see #721, #1730).
    */
   private _extractResponseText(response: GenerateContentResponse): string {
-    return (response.candidates?.[0]?.content?.parts ?? [])
-      .filter((part) => typeof part.text === 'string')
-      .map((part) => part.text)
-      .join('');
+    return (
+      getResponseTextFromParts(
+        response.candidates?.[0]?.content?.parts ?? [],
+      ) ?? ''
+    );
   }
 
   /**
