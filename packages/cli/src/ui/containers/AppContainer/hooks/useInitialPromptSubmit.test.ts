@@ -25,11 +25,11 @@ type HookParams = Parameters<typeof useInitialPromptSubmit>[0];
 
 const createParams = (overrides: Partial<HookParams> = {}): HookParams => ({
   initialPrompt: 'hello',
-  submitQuery: vi.fn().mockResolvedValue(undefined),
+  submitPrompt: vi.fn().mockResolvedValue(undefined),
   agentClientPresent: true,
+  interactiveRuntimeReady: true,
   blockedByDialogs: blockedByDialogsClosed,
   startupGuardsInitialized: true,
-  isMcpReady: true,
   ...overrides,
 });
 
@@ -44,13 +44,13 @@ describe('useInitialPromptSubmit', () => {
   });
 
   it('submits initial prompt when all conditions are met and startup guards are initialized', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
       useInitialPromptSubmit(
         createParams({
           initialPrompt: 'hello',
-          submitQuery,
+          submitPrompt,
         }),
       ),
     );
@@ -59,17 +59,17 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).toHaveBeenCalledWith('hello');
+    expect(submitPrompt).toHaveBeenCalledWith('hello');
   });
 
   it('does not submit when startup guards are not yet initialized', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
       useInitialPromptSubmit(
         createParams({
           initialPrompt: 'hello',
-          submitQuery,
+          submitPrompt,
           startupGuardsInitialized: false,
         }),
       ),
@@ -79,18 +79,49 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).not.toHaveBeenCalled();
+    expect(submitPrompt).not.toHaveBeenCalled();
+  });
+
+  it('does not submit until the interactive runtime is ready for tool and subagent scheduling', async () => {
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
+
+    const { rerender } = renderHook(
+      ({ interactiveRuntimeReady }: { interactiveRuntimeReady: boolean }) =>
+        useInitialPromptSubmit(
+          createParams({
+            initialPrompt: 'delegate to a subagent',
+            submitPrompt,
+            interactiveRuntimeReady,
+          }),
+        ),
+      { initialProps: { interactiveRuntimeReady: false } },
+    );
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitPrompt).not.toHaveBeenCalled();
+
+    rerender({ interactiveRuntimeReady: true });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitPrompt).toHaveBeenCalledWith('delegate to a subagent');
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
   });
 
   it('submits once startup guards become initialized after being initially false', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     const { rerender } = renderHook(
       ({ startupGuardsInitialized }: { startupGuardsInitialized: boolean }) =>
         useInitialPromptSubmit(
           createParams({
             initialPrompt: 'hello',
-            submitQuery,
+            submitPrompt,
             startupGuardsInitialized,
           }),
         ),
@@ -101,7 +132,7 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).not.toHaveBeenCalled();
+    expect(submitPrompt).not.toHaveBeenCalled();
 
     rerender({ startupGuardsInitialized: true });
 
@@ -109,19 +140,40 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).toHaveBeenCalledWith('hello');
-    expect(submitQuery).toHaveBeenCalledTimes(1);
+    expect(submitPrompt).toHaveBeenCalledWith('hello');
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
   });
 
-  it('does not submit non-slash prompt when MCP is not ready', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+  it('passes the raw initial prompt to the user input submit handler', async () => {
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
+
+    renderHook(() =>
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: '  hello from prompt-interactive  ',
+          submitPrompt,
+        }),
+      ),
+    );
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitPrompt).toHaveBeenCalledWith(
+      '  hello from prompt-interactive  ',
+    );
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not duplicate readiness gates handled by the user input submit handler', async () => {
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
       useInitialPromptSubmit(
         createParams({
           initialPrompt: 'hello',
-          submitQuery,
-          isMcpReady: false,
+          submitPrompt,
         }),
       ),
     );
@@ -130,77 +182,18 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).not.toHaveBeenCalled();
-  });
-
-  it('submits non-slash prompt once MCP becomes ready', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
-
-    const { rerender } = renderHook(
-      ({ isMcpReady }: { isMcpReady: boolean }) =>
-        useInitialPromptSubmit(
-          createParams({
-            initialPrompt: 'hello',
-            submitQuery,
-            isMcpReady,
-          }),
-        ),
-      { initialProps: { isMcpReady: false } },
-    );
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    expect(submitQuery).not.toHaveBeenCalled();
-
-    rerender({ isMcpReady: true });
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    expect(submitQuery).toHaveBeenCalledWith('hello');
-    expect(submitQuery).toHaveBeenCalledTimes(1);
-
-    rerender({ isMcpReady: true });
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    expect(submitQuery).toHaveBeenCalledTimes(1);
-  });
-
-  it('submits slash command when MCP is not ready', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
-
-    renderHook(() =>
-      useInitialPromptSubmit(
-        createParams({
-          initialPrompt: '  /help',
-          submitQuery,
-          isMcpReady: false,
-        }),
-      ),
-    );
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    expect(submitQuery).toHaveBeenCalledWith('  /help');
-    expect(submitQuery).toHaveBeenCalledTimes(1);
+    expect(submitPrompt).toHaveBeenCalledWith('hello');
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
   });
 
   it('does not submit when a blocking dialog is open even with startup guards initialized', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
       useInitialPromptSubmit(
         createParams({
           initialPrompt: 'hello',
-          submitQuery,
+          submitPrompt,
           blockedByDialogs: {
             ...blockedByDialogsClosed,
             isWelcomeDialogOpen: true,
@@ -213,18 +206,18 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).not.toHaveBeenCalled();
+    expect(submitPrompt).not.toHaveBeenCalled();
   });
 
   it('does not re-submit after startup guards transition when prompt was already submitted', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     const { rerender } = renderHook(
       ({ startupGuardsInitialized }: { startupGuardsInitialized: boolean }) =>
         useInitialPromptSubmit(
           createParams({
             initialPrompt: 'hello',
-            submitQuery,
+            submitPrompt,
             startupGuardsInitialized,
           }),
         ),
@@ -235,7 +228,7 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).toHaveBeenCalledTimes(1);
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
 
     rerender({ startupGuardsInitialized: true });
 
@@ -243,11 +236,11 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).toHaveBeenCalledTimes(1);
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
   });
 
   it('retries submission after submit failure when a blockedByDialogs dependency changes', async () => {
-    const submitQuery = vi
+    const submitPrompt = vi
       .fn()
       .mockRejectedValueOnce(new Error('fail'))
       .mockResolvedValueOnce(undefined);
@@ -257,7 +250,7 @@ describe('useInitialPromptSubmit', () => {
         useInitialPromptSubmit(
           createParams({
             initialPrompt: 'hello',
-            submitQuery,
+            submitPrompt,
             blockedByDialogs: {
               ...blockedByDialogsClosed,
               isFolderTrustDialogOpen,
@@ -271,7 +264,7 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).toHaveBeenCalledTimes(1);
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
 
     rerender({ isFolderTrustDialogOpen: true });
 
@@ -285,18 +278,60 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).toHaveBeenCalledTimes(2);
-    expect(submitQuery).toHaveBeenLastCalledWith('hello');
+    expect(submitPrompt).toHaveBeenCalledTimes(2);
+    expect(submitPrompt).toHaveBeenLastCalledWith('hello');
+  });
+
+  it('retries submission after submit handler throws synchronously', async () => {
+    const submitPrompt = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('sync fail');
+      })
+      .mockResolvedValueOnce(undefined);
+
+    const { rerender } = renderHook(
+      ({ interactiveRuntimeReady }: { interactiveRuntimeReady: boolean }) =>
+        useInitialPromptSubmit(
+          createParams({
+            initialPrompt: 'hello',
+            submitPrompt,
+            interactiveRuntimeReady,
+          }),
+        ),
+      { initialProps: { interactiveRuntimeReady: true } },
+    );
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
+
+    rerender({ interactiveRuntimeReady: false });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    rerender({ interactiveRuntimeReady: true });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(submitPrompt).toHaveBeenCalledTimes(2);
+    expect(submitPrompt).toHaveBeenLastCalledWith('hello');
   });
 
   it('does not submit when gemini client is absent even with startup guards initialized', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
       useInitialPromptSubmit(
         createParams({
           initialPrompt: 'hello',
-          submitQuery,
+          submitPrompt,
           agentClientPresent: false,
         }),
       ),
@@ -306,17 +341,17 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).not.toHaveBeenCalled();
+    expect(submitPrompt).not.toHaveBeenCalled();
   });
 
   it('does not submit when initial prompt is empty even with startup guards initialized', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
       useInitialPromptSubmit(
         createParams({
           initialPrompt: undefined,
-          submitQuery,
+          submitPrompt,
         }),
       ),
     );
@@ -325,17 +360,17 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).not.toHaveBeenCalled();
+    expect(submitPrompt).not.toHaveBeenCalled();
   });
 
   it('does not submit when folder trust dialog is open even with startup guards initialized', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
       useInitialPromptSubmit(
         createParams({
           initialPrompt: 'hello',
-          submitQuery,
+          submitPrompt,
           blockedByDialogs: {
             ...blockedByDialogsClosed,
             isFolderTrustDialogOpen: true,
@@ -348,11 +383,11 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).not.toHaveBeenCalled();
+    expect(submitPrompt).not.toHaveBeenCalled();
   });
 
   it('submits after folder trust dialog closes following startup guard initialization', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     const { rerender } = renderHook(
       ({
@@ -365,7 +400,7 @@ describe('useInitialPromptSubmit', () => {
         useInitialPromptSubmit(
           createParams({
             initialPrompt: 'hello',
-            submitQuery,
+            submitPrompt,
             blockedByDialogs: {
               ...blockedByDialogsClosed,
               isFolderTrustDialogOpen,
@@ -385,7 +420,7 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).not.toHaveBeenCalled();
+    expect(submitPrompt).not.toHaveBeenCalled();
 
     rerender({
       isFolderTrustDialogOpen: false,
@@ -396,12 +431,12 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).toHaveBeenCalledWith('hello');
-    expect(submitQuery).toHaveBeenCalledTimes(1);
+    expect(submitPrompt).toHaveBeenCalledWith('hello');
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
   });
 
   it('waits for startup guards even when folder trust resolves first', async () => {
-    const submitQuery = vi.fn().mockResolvedValue(undefined);
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
 
     const { rerender } = renderHook(
       ({
@@ -414,7 +449,7 @@ describe('useInitialPromptSubmit', () => {
         useInitialPromptSubmit(
           createParams({
             initialPrompt: 'hello',
-            submitQuery,
+            submitPrompt,
             blockedByDialogs: {
               ...blockedByDialogsClosed,
               isFolderTrustDialogOpen,
@@ -434,7 +469,7 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).not.toHaveBeenCalled();
+    expect(submitPrompt).not.toHaveBeenCalled();
 
     rerender({
       isFolderTrustDialogOpen: false,
@@ -445,7 +480,7 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).not.toHaveBeenCalled();
+    expect(submitPrompt).not.toHaveBeenCalled();
 
     rerender({
       isFolderTrustDialogOpen: false,
@@ -456,7 +491,7 @@ describe('useInitialPromptSubmit', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(submitQuery).toHaveBeenCalledWith('hello');
-    expect(submitQuery).toHaveBeenCalledTimes(1);
+    expect(submitPrompt).toHaveBeenCalledWith('hello');
+    expect(submitPrompt).toHaveBeenCalledTimes(1);
   });
 });

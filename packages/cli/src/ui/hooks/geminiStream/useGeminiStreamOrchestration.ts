@@ -63,6 +63,7 @@ export interface GeminiStreamOrchestrationResult {
   toolCalls: TrackedToolCall[];
   lastToolOutputTime: number;
   lastShellOutputTime: number;
+  interactiveRuntimeReady: boolean;
   cancelOngoingRequest: () => void;
   activeShellPtyId: number | null;
 }
@@ -74,6 +75,7 @@ interface ToolSchedulerState {
   markToolsAsSubmitted: (callIds: string[]) => void;
   cancelAllToolCalls: () => void;
   lastToolOutputTime: number;
+  interactiveRuntimeReady: boolean;
 }
 
 export function useGeminiStreamOrchestration(
@@ -152,6 +154,7 @@ function useToolSchedulerState(
     markToolsAsSubmitted,
     cancelAllToolCalls,
     lastToolOutputTime,
+    interactiveRuntimeReady,
   ] = scheduler.toolSchedulerResult;
   return {
     scheduler,
@@ -160,6 +163,7 @@ function useToolSchedulerState(
     markToolsAsSubmitted,
     cancelAllToolCalls,
     lastToolOutputTime,
+    interactiveRuntimeReady,
   };
 }
 
@@ -229,6 +233,7 @@ function buildResult(
     toolCalls: scheduler.toolCalls,
     lastToolOutputTime: scheduler.lastToolOutputTime,
     lastShellOutputTime: shell.lastShellOutputTime,
+    interactiveRuntimeReady: scheduler.interactiveRuntimeReady,
     cancelOngoingRequest,
     activeShellPtyId: shell.activeShellPtyId,
   };

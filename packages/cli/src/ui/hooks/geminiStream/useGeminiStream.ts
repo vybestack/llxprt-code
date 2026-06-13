@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
+/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 /**
  * Manages the Gemini stream, including user input, command processing,
@@ -170,6 +170,7 @@ function useGeminiStreamReturn(
     initError: orchestration.st.initError,
     pendingHistoryItems,
     thought: orchestration.st.thought,
+    interactiveRuntimeReady: orchestration.interactiveRuntimeReady,
     cancelOngoingRequest: orchestration.cancelOngoingRequest,
     activeShellPtyId: orchestration.activeShellPtyId,
     lastOutputTime: getLastOutputTime(orchestration),

@@ -8,8 +8,9 @@ import { useEffect, useRef } from 'react';
 
 interface UseInitialPromptSubmitParams {
   initialPrompt: string | undefined;
-  submitQuery: (query: string) => Promise<void>;
+  submitPrompt: (query: string) => void | Promise<void>;
   agentClientPresent: boolean;
+  interactiveRuntimeReady: boolean;
   blockedByDialogs: {
     isAuthDialogOpen: boolean;
     isThemeDialogOpen: boolean;
@@ -22,16 +23,15 @@ interface UseInitialPromptSubmitParams {
     isFolderTrustDialogOpen: boolean;
   };
   startupGuardsInitialized: boolean;
-  isMcpReady: boolean;
 }
 
 export function useInitialPromptSubmit({
   initialPrompt,
-  submitQuery,
+  submitPrompt,
   agentClientPresent,
+  interactiveRuntimeReady,
   blockedByDialogs,
   startupGuardsInitialized,
-  isMcpReady,
 }: UseInitialPromptSubmitParams): void {
   const initialPromptSubmittedRef = useRef<'idle' | 'pending' | 'done'>('idle');
 
@@ -62,27 +62,28 @@ export function useInitialPromptSubmit({
       return;
     }
 
-    if (!startupGuardsInitialized) {
-      return;
-    }
-
-    if (!isMcpReady && !initialPrompt.trimStart().startsWith('/')) {
+    if (!startupGuardsInitialized || !interactiveRuntimeReady) {
       return;
     }
 
     initialPromptSubmittedRef.current = 'pending';
-    void submitQuery(initialPrompt).then(
-      () => {
-        initialPromptSubmittedRef.current = 'done';
-      },
-      () => {
-        initialPromptSubmittedRef.current = 'idle';
-      },
-    );
+    try {
+      void Promise.resolve(submitPrompt(initialPrompt)).then(
+        () => {
+          initialPromptSubmittedRef.current = 'done';
+        },
+        () => {
+          initialPromptSubmittedRef.current = 'idle';
+        },
+      );
+    } catch {
+      initialPromptSubmittedRef.current = 'idle';
+    }
   }, [
     initialPrompt,
-    submitQuery,
+    submitPrompt,
     agentClientPresent,
+    interactiveRuntimeReady,
     blockedByDialogs.isAuthDialogOpen,
     blockedByDialogs.isThemeDialogOpen,
     blockedByDialogs.isEditorDialogOpen,
@@ -93,6 +94,5 @@ export function useInitialPromptSubmit({
     blockedByDialogs.isWelcomeDialogOpen,
     blockedByDialogs.isFolderTrustDialogOpen,
     startupGuardsInitialized,
-    isMcpReady,
   ]);
 }
