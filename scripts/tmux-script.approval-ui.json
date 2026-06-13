@@ -7,23 +7,17 @@
     "initialWaitMs": 6000
   },
   "startCommand": [
-    "env NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/approval-ui.responses.jsonl ${node} packages/cli/dist/index.js --provider fake --model fake-model"
+    "env NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_CODE_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/approval-ui.responses.jsonl ${node} packages/cli/dist/index.js --provider fake --model fake-model"
   ],
   "yolo": false,
   "steps": [
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "Tips for getting started:",
-      "timeoutMs": 30000
-    },
-    { "type": "capture", "label": "initial-ui", "scope": "screen" },
-    {
-      "type": "waitFor",
-      "scope": "screen",
       "contains": "Type your message",
       "timeoutMs": 30000
     },
+    { "type": "capture", "label": "initial-ui", "scope": "screen" },
 
     {
       "type": "line",
