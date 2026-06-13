@@ -7,7 +7,7 @@
     "initialWaitMs": 6000
   },
   "startCommand": [
-    "env CI=0 CONTINUOUS_INTEGRATION=0 NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_CODE_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/approval-ui.responses.jsonl ${node} packages/cli/dist/index.js --provider fake --model fake-model"
+    "env CI=0 CONTINUOUS_INTEGRATION=0 NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_CODE_WELCOME_CONFIG_PATH=scripts/fixtures/welcome-completed.json LLXPRT_CODE_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/approval-ui.responses.jsonl ${node} packages/cli/dist/index.js --provider fake --model fake-model"
   ],
   "yolo": false,
   "steps": [
