@@ -71,30 +71,45 @@ function migrateUiAccessibility(
   const uiAccessibility = uiSettings?.['accessibility'] as
     | Record<string, unknown>
     | undefined;
-  if (
-    uiSettings == null ||
-    uiAccessibility == null ||
-    typeof uiAccessibility['disableLoadingPhrases'] !== 'boolean'
-  ) {
+  const hasUiDeprecated =
+    uiSettings != null &&
+    typeof uiSettings['disableLoadingPhrases'] === 'boolean';
+  const hasNestedDeprecated =
+    uiAccessibility != null &&
+    typeof uiAccessibility['disableLoadingPhrases'] === 'boolean';
+  if (uiSettings == null || (!hasUiDeprecated && !hasNestedDeprecated)) {
     return false;
   }
   const hasNewValue =
-    typeof uiAccessibility['enableLoadingPhrases'] === 'boolean';
+    typeof uiAccessibility?.['enableLoadingPhrases'] === 'boolean';
   if (hasNewValue && !removeDeprecated) {
     return false;
   }
-  const newUiAccessibility: Record<string, unknown> = { ...uiAccessibility };
+  const newUiAccessibility: Record<string, unknown> = {
+    ...(uiAccessibility ?? {}),
+  };
   if (!hasNewValue) {
-    newUiAccessibility['enableLoadingPhrases'] =
-      !uiAccessibility['disableLoadingPhrases'];
+    const nestedVal =
+      uiAccessibility != null
+        ? uiAccessibility['disableLoadingPhrases']
+        : undefined;
+    const uiVal = uiSettings['disableLoadingPhrases'];
+    const deprecatedValue: boolean = hasNestedDeprecated
+      ? nestedVal === true
+      : uiVal === true;
+    newUiAccessibility['enableLoadingPhrases'] = !deprecatedValue;
   }
   if (removeDeprecated) {
     delete newUiAccessibility['disableLoadingPhrases'];
   }
-  loadedSettings.setValue(scope, 'ui', {
+  const newUiSettings: Record<string, unknown> = {
     ...uiSettings,
     accessibility: newUiAccessibility,
-  });
+  };
+  if (removeDeprecated) {
+    delete newUiSettings['disableLoadingPhrases'];
+  }
+  loadedSettings.setValue(scope, 'ui', newUiSettings);
   return true;
 }
 
