@@ -13,6 +13,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -218,6 +219,54 @@ function captureScrollback(sessionName, scrollbackLines) {
   ]);
 }
 
+function readPaneOutputFallback(outDir) {
+  if (typeof outDir !== 'string' || outDir.length === 0) {
+    return '';
+  }
+
+  const paneOutputPath = path.join(outDir, 'pane-output.log');
+  try {
+    return fsSync.readFileSync(paneOutputPath, 'utf8');
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') {
+      return '';
+    }
+    throw error;
+  }
+}
+
+function captureScreenWithFallback(sessionName, outDir) {
+  const screen = captureScreen(sessionName);
+  if (screen.trim().length > 0) {
+    return screen;
+  }
+
+  const paneOutput = readPaneOutputFallback(outDir);
+  return paneOutput.trim().length > 0 ? paneOutput : screen;
+}
+
+function resolveCapturedText({
+  sessionName,
+  scope,
+  scrollbackLines,
+  outDir,
+  allowPaneOutputFallback = true,
+}) {
+  if (scope === 'scrollback') {
+    const scrollback = captureScrollback(sessionName, scrollbackLines);
+    if (!allowPaneOutputFallback || scrollback.trim().length > 0) {
+      return scrollback;
+    }
+
+    const paneOutput = readPaneOutputFallback(outDir);
+    return paneOutput.trim().length > 0 ? paneOutput : scrollback;
+  }
+
+  return allowPaneOutputFallback
+    ? captureScreenWithFallback(sessionName, outDir)
+    : captureScreen(sessionName);
+}
+
 export function compileMatcher(step) {
   if (typeof step.contains === 'string') {
     return { kind: 'contains', value: step.contains };
@@ -413,13 +462,16 @@ async function waitFor({
   pollMs,
   scrollbackLines,
   description,
+  outDir,
 }) {
   const start = Date.now();
   while (Date.now() - start <= timeoutMs) {
-    const text =
-      scope === 'scrollback'
-        ? captureScrollback(sessionName, scrollbackLines)
-        : captureScreen(sessionName);
+    const text = resolveCapturedText({
+      sessionName,
+      scope,
+      scrollbackLines,
+      outDir,
+    });
     if (matchText(text, matcher)) {
       return;
     }
@@ -438,13 +490,17 @@ async function waitForNot({
   pollMs,
   scrollbackLines,
   description,
+  outDir,
 }) {
   const start = Date.now();
   while (Date.now() - start <= timeoutMs) {
-    const text =
-      scope === 'scrollback'
-        ? captureScrollback(sessionName, scrollbackLines)
-        : captureScreen(sessionName);
+    const text = resolveCapturedText({
+      sessionName,
+      scope,
+      scrollbackLines,
+      outDir,
+      allowPaneOutputFallback: false,
+    });
     if (!matchText(text, matcher)) {
       return;
     }
@@ -590,7 +646,7 @@ async function executeCaptureStep(step, i, sessionName, outDir, defaults) {
   }
 }
 
-async function executeWaitForStep(step, i, sessionName, defaults) {
+async function executeWaitForStep(step, i, sessionName, outDir, defaults) {
   const matcher = compileMatcher(step);
   const timeoutMs = Number(step.timeoutMs ?? defaults.timeoutMs);
   const pollMs = Number(step.pollMs ?? defaults.pollMs);
@@ -603,10 +659,11 @@ async function executeWaitForStep(step, i, sessionName, defaults) {
     pollMs,
     scrollbackLines,
     description: `step ${i} (${formatMatcher(matcher)})`,
+    outDir,
   });
 }
 
-async function executeWaitForNotStep(step, i, sessionName, defaults) {
+async function executeWaitForNotStep(step, i, sessionName, outDir, defaults) {
   const matcher = compileMatcher(step);
   const timeoutMs = Number(step.timeoutMs ?? defaults.timeoutMs);
   const pollMs = Number(step.pollMs ?? defaults.pollMs);
@@ -619,16 +676,19 @@ async function executeWaitForNotStep(step, i, sessionName, defaults) {
     pollMs,
     scrollbackLines,
     description: `step ${i} (${formatMatcher(matcher)})`,
+    outDir,
   });
 }
 
-async function executeExpectStep(step, sessionName, defaults) {
+async function executeExpectStep(step, sessionName, outDir, defaults) {
   const matcher = compileMatcher(step);
   const { scope, scrollbackLines } = resolveScopeAndScrollback(step, defaults);
-  const text =
-    scope === 'scrollback'
-      ? captureScrollback(sessionName, scrollbackLines)
-      : captureScreen(sessionName);
+  const text = resolveCapturedText({
+    sessionName,
+    scope,
+    scrollbackLines,
+    outDir,
+  });
 
   if (step.lineNumber !== undefined) {
     const n = Number(step.lineNumber);
@@ -647,13 +707,16 @@ async function executeExpectStep(step, sessionName, defaults) {
   }
 }
 
-async function executeExpectCountStep(step, sessionName, defaults) {
+async function executeExpectCountStep(step, sessionName, outDir, defaults) {
   const matcher = compileMatcher(step);
   const { scope, scrollbackLines } = resolveScopeAndScrollback(step, defaults);
-  const text =
-    scope === 'scrollback'
-      ? captureScrollback(sessionName, scrollbackLines)
-      : captureScreen(sessionName);
+  const text = resolveCapturedText({
+    sessionName,
+    scope,
+    scrollbackLines,
+    outDir,
+    allowPaneOutputFallback: false,
+  });
   const count = countMatches(text, matcher);
 
   if (step.equals !== undefined && count !== Number(step.equals)) {
@@ -683,6 +746,7 @@ async function executeApproveShellStep(
   step,
   i,
   sessionName,
+  outDir,
   sendKeys,
   defaults,
 ) {
@@ -695,6 +759,7 @@ async function executeApproveShellStep(
     pollMs: 200,
     scrollbackLines: defaults.scrollbackLines,
     description: `step ${i} (shell confirmation dialog)`,
+    outDir,
   });
 
   await sendApprovalChoice(step.choice ?? 'once', sendKeys);
@@ -704,6 +769,7 @@ async function executeApproveToolStep(
   step,
   i,
   sessionName,
+  outDir,
   sendKeys,
   defaults,
 ) {
@@ -720,11 +786,12 @@ async function executeApproveToolStep(
     pollMs: 200,
     scrollbackLines: defaults.scrollbackLines,
     description: `step ${i} (tool confirmation)`,
+    outDir,
   });
 
   const choice = step.choice ?? 'once';
   if (choice === 'always') {
-    const screen = captureScreen(sessionName);
+    const screen = captureScreenWithFallback(sessionName, outDir);
     if (!screen.includes('Yes, allow always')) {
       throw new Error(
         `Requested choice "always" but no "Yes, allow always" option is visible`,
@@ -820,17 +887,31 @@ async function executeStepDispatch(
     case 'capture':
       return executeCaptureStep(step, i, sessionName, outDir, defaults);
     case 'waitFor':
-      return executeWaitForStep(step, i, sessionName, defaults);
+      return executeWaitForStep(step, i, sessionName, outDir, defaults);
     case 'waitForNot':
-      return executeWaitForNotStep(step, i, sessionName, defaults);
+      return executeWaitForNotStep(step, i, sessionName, outDir, defaults);
     case 'expect':
-      return executeExpectStep(step, sessionName, defaults);
+      return executeExpectStep(step, sessionName, outDir, defaults);
     case 'expectCount':
-      return executeExpectCountStep(step, sessionName, defaults);
+      return executeExpectCountStep(step, sessionName, outDir, defaults);
     case 'approveShell':
-      return executeApproveShellStep(step, i, sessionName, sendKeys, defaults);
+      return executeApproveShellStep(
+        step,
+        i,
+        sessionName,
+        outDir,
+        sendKeys,
+        defaults,
+      );
     case 'approveTool':
-      return executeApproveToolStep(step, i, sessionName, sendKeys, defaults);
+      return executeApproveToolStep(
+        step,
+        i,
+        sessionName,
+        outDir,
+        sendKeys,
+        defaults,
+      );
     case 'historySample':
       return executeHistorySampleStep(step, i, sessionName, scriptState);
     case 'expectHistoryDelta':
