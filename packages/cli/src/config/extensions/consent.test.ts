@@ -15,6 +15,7 @@ import {
   requestConsentNonInteractive,
   requestConsentInteractive,
   maybeRequestConsentOrFail,
+  skillsConsentString,
   INSTALL_WARNING_MESSAGE,
   SKILLS_WARNING_MESSAGE,
 } from './consent.js';
@@ -504,6 +505,74 @@ describe('consent', () => {
           `    (Location: ${skill.location}) ${chalk.red('(Could not count items in directory)')}`,
         ),
       );
+    });
+
+    it('should escape ANSI control codes in skill metadata before rendering', async () => {
+      const maliciousSkill: SkillDefinition = {
+        name: 'evil\u001b[31mSkill\u001b[0m',
+        description: 'bad\u001b[2Kdesc',
+        location: path.join(tempDir, 'skill-ansi', 'SKILL.md'),
+        body: 'body',
+      };
+      await fs.mkdir(path.dirname(maliciousSkill.location), {
+        recursive: true,
+      });
+      await fs.writeFile(maliciousSkill.location, 'body');
+
+      const requestConsent = vi.fn().mockResolvedValue(true);
+      await maybeRequestConsentOrFail(
+        baseConfig,
+        requestConsent,
+        false,
+        undefined,
+        false,
+        [maliciousSkill],
+      );
+
+      const consentArg = requestConsent.mock.calls[0][0] as string;
+      // Raw ESC characters must never appear in the consent string
+      expect(consentArg).not.toContain('\u001b');
+      // Escaped representations should be visible instead
+      expect(consentArg).toContain('\\u001b[');
+    });
+  });
+
+  describe('skillsConsentString', () => {
+    it('should escape ANSI control codes in standalone skill metadata', async () => {
+      const skillDir = path.join(tempDir, 'ansi-skill');
+      await fs.mkdir(skillDir, { recursive: true });
+      await fs.writeFile(path.join(skillDir, 'SKILL.md'), 'body');
+
+      const maliciousSkill: SkillDefinition = {
+        name: 'evil\u001b[31mSkill\u001b[0m',
+        description: 'bad\u001b[2Kdesc',
+        location: path.join(skillDir, 'SKILL.md'),
+        body: 'body',
+      };
+
+      const result = await skillsConsentString([maliciousSkill], 'test-source');
+
+      expect(result).not.toContain('\u001b');
+      expect(result).toContain('\\u001b[');
+    });
+
+    it('should preserve normal skill metadata unchanged', async () => {
+      const skillDir = path.join(tempDir, 'normal-skill');
+      await fs.mkdir(skillDir, { recursive: true });
+      await fs.writeFile(path.join(skillDir, 'SKILL.md'), 'body');
+
+      const normalSkill: SkillDefinition = {
+        name: 'my-skill',
+        description: 'A normal description',
+        location: path.join(skillDir, 'SKILL.md'),
+        body: 'body',
+      };
+
+      const result = await skillsConsentString([normalSkill], 'test-source');
+
+      expect(result).toContain('my-skill');
+      expect(result).toContain('A normal description');
+      expect(result).toContain(normalSkill.location);
     });
   });
 });

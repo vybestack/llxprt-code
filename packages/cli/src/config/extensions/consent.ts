@@ -254,8 +254,11 @@ async function promptForConsentInteractive(
 async function renderSkillsList(skills: SkillDefinition[]): Promise<string[]> {
   const output: string[] = [];
   for (const skill of skills) {
-    output.push(`  * ${chalk.bold(skill.name)}: ${skill.description}`);
-    const skillDir = path.dirname(skill.location);
+    const sanitizedSkill = escapeAnsiCtrlCodes(skill);
+    output.push(
+      `  * ${chalk.bold(sanitizedSkill.name)}: ${sanitizedSkill.description}`,
+    );
+    const skillDir = path.dirname(sanitizedSkill.location);
     let fileCountStr = '';
     try {
       const skillDirItems = await fs.readdir(skillDir);
@@ -263,7 +266,7 @@ async function renderSkillsList(skills: SkillDefinition[]): Promise<string[]> {
     } catch {
       fileCountStr = ` ${chalk.red('(Could not count items in directory)')}`;
     }
-    output.push(`    (Location: ${skill.location})${fileCountStr}`);
+    output.push(`    (Location: ${sanitizedSkill.location})${fileCountStr}`);
     output.push('');
   }
   return output;
