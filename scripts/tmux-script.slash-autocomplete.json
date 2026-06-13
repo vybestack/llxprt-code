@@ -14,10 +14,10 @@
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "Type your message",
+      "contains": "Tips for getting started:",
       "timeoutMs": 30000
     },
-    { "type": "capture", "label": "initial-prompt", "scope": "screen" },
+    { "type": "capture", "label": "initial-ui", "scope": "screen" },
     {
       "type": "line",
       "text": "/",
@@ -57,7 +57,7 @@
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "Type your message",
+      "contains": "Memory:",
       "timeoutMs": 15000
     },
     {

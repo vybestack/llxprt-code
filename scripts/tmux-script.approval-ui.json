@@ -14,10 +14,10 @@
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "Type your message",
+      "contains": "Tips for getting started:",
       "timeoutMs": 30000
     },
-    { "type": "capture", "label": "initial-prompt", "scope": "screen" },
+    { "type": "capture", "label": "initial-ui", "scope": "screen" },
     {
       "type": "line",
       "text": "Run the approval UI test command.",
@@ -47,12 +47,6 @@
       "type": "waitFor",
       "scope": "scrollback",
       "contains": "Approval UI test complete.",
-      "timeoutMs": 30000
-    },
-    {
-      "type": "waitFor",
-      "scope": "screen",
-      "contains": "Type your message",
       "timeoutMs": 30000
     },
     { "type": "capture", "label": "after-approval", "scope": "screen" },
