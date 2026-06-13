@@ -58,13 +58,13 @@
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "Memory:",
+      "contains": "Type your message",
       "timeoutMs": 15000
     },
     {
       "type": "expect",
       "scope": "screen",
-      "contains": "Memory:",
+      "contains": "Type your message",
       "timeoutMs": 0
     },
     {
