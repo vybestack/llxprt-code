@@ -13,10 +13,12 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { quote } from 'shell-quote';
 
 export function parseArgs(argv) {
   const args = [...argv];
@@ -183,7 +185,27 @@ function getHistorySize(sessionName) {
 }
 
 function captureScreen(sessionName) {
-  return runTmux(['capture-pane', '-p', '-t', sessionName]);
+  const screen = runTmux(['capture-pane', '-p', '-t', sessionName]);
+  if (screen.trim().length > 0) {
+    return screen;
+  }
+
+  try {
+    const alternateScreen = runTmux([
+      'capture-pane',
+      '-a',
+      '-p',
+      '-t',
+      sessionName,
+    ]);
+    return alternateScreen.trim().length > 0 ? alternateScreen : screen;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('no alternate screen')) {
+      throw error;
+    }
+    return screen;
+  }
 }
 
 function captureScrollback(sessionName, scrollbackLines) {
@@ -195,6 +217,54 @@ function captureScrollback(sessionName, scrollbackLines) {
     '-S',
     `-${scrollbackLines}`,
   ]);
+}
+
+function readPaneOutputFallback(outDir) {
+  if (typeof outDir !== 'string' || outDir.length === 0) {
+    return '';
+  }
+
+  const paneOutputPath = path.join(outDir, 'pane-output.log');
+  try {
+    return fsSync.readFileSync(paneOutputPath, 'utf8');
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') {
+      return '';
+    }
+    throw error;
+  }
+}
+
+function captureScreenWithFallback(sessionName, outDir) {
+  const screen = captureScreen(sessionName);
+  if (screen.trim().length > 0) {
+    return screen;
+  }
+
+  const paneOutput = readPaneOutputFallback(outDir);
+  return paneOutput.trim().length > 0 ? paneOutput : screen;
+}
+
+function resolveCapturedText({
+  sessionName,
+  scope,
+  scrollbackLines,
+  outDir,
+  allowPaneOutputFallback = true,
+}) {
+  if (scope === 'scrollback') {
+    const scrollback = captureScrollback(sessionName, scrollbackLines);
+    if (!allowPaneOutputFallback || scrollback.trim().length > 0) {
+      return scrollback;
+    }
+
+    const paneOutput = readPaneOutputFallback(outDir);
+    return paneOutput.trim().length > 0 ? paneOutput : scrollback;
+  }
+
+  return allowPaneOutputFallback
+    ? captureScreenWithFallback(sessionName, outDir)
+    : captureScreen(sessionName);
 }
 
 export function compileMatcher(step) {
@@ -392,13 +462,16 @@ async function waitFor({
   pollMs,
   scrollbackLines,
   description,
+  outDir,
 }) {
   const start = Date.now();
   while (Date.now() - start <= timeoutMs) {
-    const text =
-      scope === 'scrollback'
-        ? captureScrollback(sessionName, scrollbackLines)
-        : captureScreen(sessionName);
+    const text = resolveCapturedText({
+      sessionName,
+      scope,
+      scrollbackLines,
+      outDir,
+    });
     if (matchText(text, matcher)) {
       return;
     }
@@ -417,13 +490,17 @@ async function waitForNot({
   pollMs,
   scrollbackLines,
   description,
+  outDir,
 }) {
   const start = Date.now();
   while (Date.now() - start <= timeoutMs) {
-    const text =
-      scope === 'scrollback'
-        ? captureScrollback(sessionName, scrollbackLines)
-        : captureScreen(sessionName);
+    const text = resolveCapturedText({
+      sessionName,
+      scope,
+      scrollbackLines,
+      outDir,
+      allowPaneOutputFallback: false,
+    });
     if (!matchText(text, matcher)) {
       return;
     }
@@ -569,7 +646,7 @@ async function executeCaptureStep(step, i, sessionName, outDir, defaults) {
   }
 }
 
-async function executeWaitForStep(step, i, sessionName, defaults) {
+async function executeWaitForStep(step, i, sessionName, outDir, defaults) {
   const matcher = compileMatcher(step);
   const timeoutMs = Number(step.timeoutMs ?? defaults.timeoutMs);
   const pollMs = Number(step.pollMs ?? defaults.pollMs);
@@ -582,10 +659,11 @@ async function executeWaitForStep(step, i, sessionName, defaults) {
     pollMs,
     scrollbackLines,
     description: `step ${i} (${formatMatcher(matcher)})`,
+    outDir,
   });
 }
 
-async function executeWaitForNotStep(step, i, sessionName, defaults) {
+async function executeWaitForNotStep(step, i, sessionName, outDir, defaults) {
   const matcher = compileMatcher(step);
   const timeoutMs = Number(step.timeoutMs ?? defaults.timeoutMs);
   const pollMs = Number(step.pollMs ?? defaults.pollMs);
@@ -598,16 +676,19 @@ async function executeWaitForNotStep(step, i, sessionName, defaults) {
     pollMs,
     scrollbackLines,
     description: `step ${i} (${formatMatcher(matcher)})`,
+    outDir,
   });
 }
 
-async function executeExpectStep(step, sessionName, defaults) {
+async function executeExpectStep(step, sessionName, outDir, defaults) {
   const matcher = compileMatcher(step);
   const { scope, scrollbackLines } = resolveScopeAndScrollback(step, defaults);
-  const text =
-    scope === 'scrollback'
-      ? captureScrollback(sessionName, scrollbackLines)
-      : captureScreen(sessionName);
+  const text = resolveCapturedText({
+    sessionName,
+    scope,
+    scrollbackLines,
+    outDir,
+  });
 
   if (step.lineNumber !== undefined) {
     const n = Number(step.lineNumber);
@@ -626,13 +707,16 @@ async function executeExpectStep(step, sessionName, defaults) {
   }
 }
 
-async function executeExpectCountStep(step, sessionName, defaults) {
+async function executeExpectCountStep(step, sessionName, outDir, defaults) {
   const matcher = compileMatcher(step);
   const { scope, scrollbackLines } = resolveScopeAndScrollback(step, defaults);
-  const text =
-    scope === 'scrollback'
-      ? captureScrollback(sessionName, scrollbackLines)
-      : captureScreen(sessionName);
+  const text = resolveCapturedText({
+    sessionName,
+    scope,
+    scrollbackLines,
+    outDir,
+    allowPaneOutputFallback: false,
+  });
   const count = countMatches(text, matcher);
 
   if (step.equals !== undefined && count !== Number(step.equals)) {
@@ -662,6 +746,7 @@ async function executeApproveShellStep(
   step,
   i,
   sessionName,
+  outDir,
   sendKeys,
   defaults,
 ) {
@@ -674,6 +759,7 @@ async function executeApproveShellStep(
     pollMs: 200,
     scrollbackLines: defaults.scrollbackLines,
     description: `step ${i} (shell confirmation dialog)`,
+    outDir,
   });
 
   await sendApprovalChoice(step.choice ?? 'once', sendKeys);
@@ -683,6 +769,7 @@ async function executeApproveToolStep(
   step,
   i,
   sessionName,
+  outDir,
   sendKeys,
   defaults,
 ) {
@@ -699,11 +786,12 @@ async function executeApproveToolStep(
     pollMs: 200,
     scrollbackLines: defaults.scrollbackLines,
     description: `step ${i} (tool confirmation)`,
+    outDir,
   });
 
   const choice = step.choice ?? 'once';
   if (choice === 'always') {
-    const screen = captureScreen(sessionName);
+    const screen = captureScreenWithFallback(sessionName, outDir);
     if (!screen.includes('Yes, allow always')) {
       throw new Error(
         `Requested choice "always" but no "Yes, allow always" option is visible`,
@@ -799,17 +887,31 @@ async function executeStepDispatch(
     case 'capture':
       return executeCaptureStep(step, i, sessionName, outDir, defaults);
     case 'waitFor':
-      return executeWaitForStep(step, i, sessionName, defaults);
+      return executeWaitForStep(step, i, sessionName, outDir, defaults);
     case 'waitForNot':
-      return executeWaitForNotStep(step, i, sessionName, defaults);
+      return executeWaitForNotStep(step, i, sessionName, outDir, defaults);
     case 'expect':
-      return executeExpectStep(step, sessionName, defaults);
+      return executeExpectStep(step, sessionName, outDir, defaults);
     case 'expectCount':
-      return executeExpectCountStep(step, sessionName, defaults);
+      return executeExpectCountStep(step, sessionName, outDir, defaults);
     case 'approveShell':
-      return executeApproveShellStep(step, i, sessionName, sendKeys, defaults);
+      return executeApproveShellStep(
+        step,
+        i,
+        sessionName,
+        outDir,
+        sendKeys,
+        defaults,
+      );
     case 'approveTool':
-      return executeApproveToolStep(step, i, sessionName, sendKeys, defaults);
+      return executeApproveToolStep(
+        step,
+        i,
+        sessionName,
+        outDir,
+        sendKeys,
+        defaults,
+      );
     case 'historySample':
       return executeHistorySampleStep(step, i, sessionName, scriptState);
     case 'expectHistoryDelta':
@@ -907,7 +1009,7 @@ async function runScenarioScrollback({
   // If the shell command triggers a confirmation dialog (non-YOLO mode), accept
   // the default selection ("Yes, allow once") so the scenario can proceed.
   await sleep(600);
-  const maybeDialog = runTmux(['capture-pane', '-p', '-t', sessionName]);
+  const maybeDialog = captureScreen(sessionName);
   if (maybeDialog.includes('Shell Command Execution')) {
     runTmux(['send-keys', '-t', sessionName, 'Enter']);
   }
@@ -999,7 +1101,23 @@ function resolveTmuxConfig(options, script) {
   };
 }
 
-function startTmuxSession(sessionName, startArgs, tmuxConfig) {
+export function resolveStartArgsForTmux(startArgs) {
+  return startArgs.map((arg) =>
+    arg === 'node'
+      ? process.execPath
+      : arg.replaceAll('${node}', process.execPath),
+  );
+}
+
+export function buildTmuxStartCommand(startArgs, outDir) {
+  const resolved = resolveStartArgsForTmux(startArgs);
+  const artifactEnv = outDir
+    ? `LLXPRT_TMUX_ARTIFACT_DIR=${quote([outDir])} `
+    : '';
+  return `${artifactEnv}${resolved.length === 1 ? resolved[0] : quote(resolved)}`;
+}
+
+function startTmuxSession(sessionName, startArgs, tmuxConfig, outDir) {
   // Ensure no stale session with the same name (unlikely, but safe).
   tryTmux(['kill-session', '-t', sessionName]);
 
@@ -1008,11 +1126,12 @@ function startTmuxSession(sessionName, startArgs, tmuxConfig) {
     '-d',
     '-s',
     sessionName,
+    '-c',
+    process.cwd(),
     '-x',
     String(tmuxConfig.cols),
     '-y',
     String(tmuxConfig.rows),
-    ...startArgs,
   ]);
   runTmux(['set-option', '-t', `${sessionName}:0`, 'remain-on-exit', 'on']);
   runTmux([
@@ -1021,6 +1140,20 @@ function startTmuxSession(sessionName, startArgs, tmuxConfig) {
     `${sessionName}:0`,
     'history-limit',
     String(tmuxConfig.historyLimit),
+  ]);
+  runTmux([
+    'pipe-pane',
+    '-o',
+    '-t',
+    sessionName,
+    `cat > ${quote([path.join(outDir, 'pane-output.log')])}`,
+  ]);
+  runTmux([
+    'respawn-pane',
+    '-k',
+    '-t',
+    sessionName,
+    `${buildTmuxStartCommand(startArgs, outDir)}; exit`,
   ]);
 }
 
@@ -1240,7 +1373,7 @@ async function main() {
   const tmuxConfig = resolveTmuxConfig(options, script);
   const shouldYolo = Boolean(options.yolo || script?.yolo);
   const startArgs = buildStartArgs(script, shouldYolo);
-  startTmuxSession(sessionName, startArgs, tmuxConfig);
+  startTmuxSession(sessionName, startArgs, tmuxConfig, outDir);
 
   // Let Ink render the initial UI.
   await sleep(tmuxConfig.initialWaitMs);

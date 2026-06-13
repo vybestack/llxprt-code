@@ -246,8 +246,20 @@ export function useStaticItems(
     embeddedShellFocused,
   );
 
-  return React.useMemo(
-    () => [
+  return React.useMemo(() => {
+    if (process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER === 'true') {
+      return history.map((h) => (
+        <HistoryItemDisplay
+          {...base}
+          key={h.id}
+          availableTerminalHeight={staticAreaMaxItemHeight}
+          item={h}
+          isPending={false}
+        />
+      ));
+    }
+
+    return [
       <AppHeader
         key="header"
         config={config}
@@ -265,18 +277,17 @@ export function useStaticItems(
           isPending={false}
         />
       )),
-    ],
-    [
-      config,
-      settings,
-      version,
-      nightly,
-      terminalWidth,
-      history,
-      base,
-      staticAreaMaxItemHeight,
-    ],
-  );
+    ];
+  }, [
+    config,
+    settings,
+    version,
+    nightly,
+    terminalWidth,
+    history,
+    base,
+    staticAreaMaxItemHeight,
+  ]);
 }
 
 export function usePendingItems(

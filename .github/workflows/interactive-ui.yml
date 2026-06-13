@@ -1,0 +1,126 @@
+name: 'Interactive UI Tests'
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+      - 'release/**'
+    paths:
+      # Harness infrastructure
+      - 'scripts/tmux-harness.js'
+      - 'scripts/tmux-script*.json'
+      - 'scripts/tests/**'
+      - 'scripts/fixtures/**'
+      # CLI UI layer (dialogs, autocomplete, input handling)
+      - 'packages/cli/src/ui/**'
+      - 'packages/cli/src/commands/**'
+      # Core tool approval, skills, fake provider, and policy logic
+      - 'packages/agents/src/scheduler/**'
+      - 'packages/cli/src/providers/providerManagerInstance.ts'
+      - 'packages/core/src/policy/**'
+      - 'packages/core/src/skills/**'
+      - 'packages/core/src/tools/**'
+      - 'packages/providers/src/fake/**'
+      - 'packages/tools/src/tools/**'
+      - '.llxprt/skills/**'
+      # OpenTUI UI package
+      - 'packages/ui/**'
+      # Workflow and package scripts
+      - '.github/workflows/interactive-ui.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'scripts/tmux-harness.js'
+      - 'scripts/tmux-script*.json'
+      - 'scripts/tests/**'
+      - 'scripts/fixtures/**'
+      - 'packages/cli/src/ui/**'
+      - 'packages/cli/src/commands/**'
+      - 'packages/agents/src/scheduler/**'
+      - 'packages/cli/src/providers/providerManagerInstance.ts'
+      - 'packages/core/src/policy/**'
+      - 'packages/core/src/skills/**'
+      - 'packages/core/src/tools/**'
+      - 'packages/providers/src/fake/**'
+      - 'packages/tools/src/tools/**'
+      - '.llxprt/skills/**'
+      - 'packages/ui/**'
+      - '.github/workflows/interactive-ui.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: 'read'
+
+defaults:
+  run:
+    shell: 'bash'
+
+jobs:
+  interactive_ui:
+    name: 'Interactive UI (tmux)'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: 'Install tmux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes tmux
+          tmux -V
+
+      - name: 'Install dependencies'
+        run: 'npm ci'
+
+      - name: 'Fix rollup platform dependency'
+        run: 'npm install @rollup/rollup-linux-x64-gnu --no-save || true'
+
+      - name: 'Build project'
+        run: 'npm run build'
+
+      - name: 'Create bundle'
+        run: 'npm run bundle'
+
+      - name: 'Validate interactive UI runtime'
+        env:
+          NODE_OPTIONS: ''
+        run: |
+          set -euo pipefail
+          node --version
+          tmux -V
+          test -x packages/cli/dist/index.js
+          node packages/cli/dist/index.js --help >/tmp/llxprt-cli-help.txt
+          head -n 5 /tmp/llxprt-cli-help.txt
+
+      - name: 'Run interactive UI tests'
+        env:
+          CI: 'true'
+          NO_COLOR: 'true'
+          FORCE_COLOR: '0'
+          NODE_OPTIONS: ''
+          TERM: 'xterm-256color'
+          TERM_PROGRAM: 'tmux'
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
+          LLXPRT_AUTH_TYPE: 'provider'
+          LLXPRT_E2E_TMUX: '1'
+          LLXPRT_TMUX_ARTIFACT_DIR: '${{ runner.temp }}/interactive-ui-artifacts'
+        run: 'npm run test:interactive-ui'
+
+      - name: 'Upload test artifacts'
+        if: 'always()'
+        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        with:
+          name: 'interactive-ui-artifacts'
+          path: '${{ runner.temp }}/interactive-ui-artifacts'
+          retention-days: 14

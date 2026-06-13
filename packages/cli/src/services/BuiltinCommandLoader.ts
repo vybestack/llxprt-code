@@ -99,6 +99,10 @@ export class BuiltinCommandLoader implements ICommandLoader {
    * @requirement:REQ-010
    */
   async loadCommands(_signal: AbortSignal): Promise<SlashCommand[]> {
+    return this.loadCommandsSync();
+  }
+
+  loadCommandsSync(): SlashCommand[] {
     const allCommands = this.registerBuiltinCommands();
 
     // Filter out commands from disabled extensions

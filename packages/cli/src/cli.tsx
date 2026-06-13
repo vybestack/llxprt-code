@@ -248,7 +248,12 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
   );
 };
 
-import { existsSync, mkdirSync, promises as fsPromises } from 'fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  promises as fsPromises,
+} from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
@@ -256,6 +261,7 @@ import { ExtensionEnablementManager } from './config/extensions/extensionEnablem
 export function setupUnhandledRejectionHandler() {
   let unhandledRejectionOccurred = false;
   process.on('unhandledRejection', (reason, _promise) => {
+    appendInteractiveUiDebug(`unhandled-rejection ${String(reason)}`);
     const errorMessage = `=========================================
 This is an unexpected error. Please file a bug report using the /bug tool.
 CRITICAL: Unhandled Promise Rejection!
@@ -275,7 +281,20 @@ ${reason.stack}`
   });
 }
 
+function appendInteractiveUiDebug(message: string): void {
+  const artifactDir = process.env.LLXPRT_TMUX_ARTIFACT_DIR;
+  if (!artifactDir) return;
+  try {
+    appendFileSync(join(artifactDir, 'cli-debug.log'), `${message}\n`);
+  } catch {
+    // Ignore diagnostics failures; they should not affect CLI startup.
+  }
+}
+
 function handleError(error: Error, errorInfo: ErrorInfo) {
+  appendInteractiveUiDebug(
+    `error-boundary ${error.message}\n${error.stack ?? ''}\n${errorInfo.componentStack}`,
+  );
   // Log to console for debugging
   debugLogger.error('Application Error:', error);
   debugLogger.error('Component Stack:', errorInfo.componentStack);
@@ -308,9 +327,15 @@ export async function startInteractiveUI(
 ) {
   const version = await getCliVersion();
 
+  appendInteractiveUiDebug(
+    `startInteractiveUI version=${version} stdoutTTY=${String(process.stdout.isTTY)} columns=${String(process.stdout.columns)} rows=${String(process.stdout.rows)} builtinOnly=${String(process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY)} suppressStatic=${String(process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER)}`,
+  );
   setWindowTitle(basename(workspaceRoot), settings);
 
   const renderOptions = inkRenderOptions(config, settings);
+  appendInteractiveUiDebug(
+    `renderOptions alternateBuffer=${String(renderOptions.alternateBuffer)} incrementalRendering=${String(renderOptions.incrementalRendering)} stdoutColumns=${String(renderOptions.stdout?.columns)} stdoutRows=${String(renderOptions.stdout?.rows)}`,
+  );
   const mouseEventsEnabled = isMouseEventsEnabled(renderOptions, settings);
   if (mouseEventsEnabled) {
     enableMouseEvents();
@@ -351,6 +376,7 @@ export async function startInteractiveUI(
     </React.StrictMode>,
     renderOptions,
   );
+  appendInteractiveUiDebug('render returned');
 
   checkForUpdates(settings)
     .then((info) => {

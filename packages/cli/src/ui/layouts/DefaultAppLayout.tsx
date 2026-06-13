@@ -335,9 +335,11 @@ function StandardBufferLayout({
 }) {
   return (
     <Box flexDirection="column" width="90%" ref={rootUiRef}>
-      <Static key={staticKey} items={staticItems}>
-        {(item) => item}
-      </Static>
+      {staticItems.length > 0 ? (
+        <Static key={staticKey} items={staticItems}>
+          {(item) => item}
+        </Static>
+      ) : null}
       <OverflowProvider>
         <Box ref={pendingHistoryItemRef} flexDirection="column">
           {pendingItems}
