@@ -1,7 +1,7 @@
 {
   "tmux": {
     "cols": 110,
-    "rows": 28,
+    "rows": 40,
     "historyLimit": 20000,
     "scrollbackLines": 3000,
     "initialWaitMs": 6000
