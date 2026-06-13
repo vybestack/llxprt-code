@@ -7,7 +7,7 @@
     "initialWaitMs": 6000
   },
   "startCommand": [
-    "env NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json ${node} packages/cli/dist/index.js"
+    "env NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json ${node} packages/cli/dist/index.js"
   ],
   "yolo": false,
   "steps": [

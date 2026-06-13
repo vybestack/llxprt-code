@@ -34,6 +34,7 @@ import { CommandService } from '../../services/CommandService.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
+import type { ICommandLoader } from '../../services/types.js';
 import type { ExtensionUpdateState } from '../state/extensions.js';
 import {
   slashCommandLogger,
@@ -279,11 +280,11 @@ async function loadSlashCommands(
   setCommands: (commands: readonly SlashCommand[]) => void,
 ): Promise<void> {
   try {
-    const loaders = [
-      new McpPromptLoader(config),
-      new BuiltinCommandLoader(config),
-      new FileCommandLoader(config),
-    ];
+    const loaders: ICommandLoader[] = [new BuiltinCommandLoader(config)];
+    if (process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY !== 'true') {
+      loaders.unshift(new McpPromptLoader(config));
+      loaders.push(new FileCommandLoader(config));
+    }
     const commandService = await CommandService.create(loaders, signal);
     if (!signal.aborted) {
       setCommands(commandService.getCommands());
