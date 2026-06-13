@@ -3257,5 +3257,126 @@ describe('Settings Loading and Merging', () => {
         userHooks.BeforeTool,
       );
     });
+
+    it('hooksConfig preserves all nested keys when workspace overrides only disabled (issue #1802)', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userSettingsContent = {
+        hooksConfig: {
+          enabled: true,
+          disabled: ['hookA'],
+          notifications: false,
+        },
+      };
+      const workspaceSettingsContent = {
+        hooksConfig: {
+          disabled: [],
+        },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // User enabled and notifications are preserved; workspace disabled wins
+      expect(settings.merged.hooksConfig.enabled).toBe(true);
+      expect(settings.merged.hooksConfig.notifications).toBe(false);
+      expect(settings.merged.hooksConfig.disabled).toStrictEqual([]);
+    });
+
+    it('system override for hooksConfig wins over workspace and user while preserving unrelated keys (issue #1802)', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const systemSettingsContent = {
+        hooksConfig: {
+          enabled: true,
+        },
+      };
+      const userSettingsContent = {
+        hooksConfig: {
+          enabled: true,
+          notifications: false,
+        },
+      };
+      const workspaceSettingsContent = {
+        hooksConfig: {
+          enabled: false,
+        },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === getSystemSettingsPath())
+            return JSON.stringify(systemSettingsContent);
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // System enabled=true wins over workspace enabled=false; user notifications=false is preserved
+      expect(settings.merged.hooksConfig.enabled).toBe(true);
+      expect(settings.merged.hooksConfig.notifications).toBe(false);
+    });
+
+    it('workspace trust disabled preserves user hooksConfig and hooks, ignoring workspace (issue #1802)', () => {
+      vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+      vi.mocked(isFolderTrustEnabled).mockReturnValue(true);
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userSettingsContent = {
+        hooksConfig: { enabled: true },
+        hooks: {
+          BeforeTool: [
+            {
+              matcher: 'ReadFile',
+              hooks: [{ type: 'command', command: 'user-before.sh' }],
+            },
+          ],
+        },
+        folderTrustFeature: true,
+        folderTrust: true,
+      };
+      const workspaceSettingsContent = {
+        hooksConfig: { enabled: false, notifications: false },
+        hooks: {
+          AfterTool: [
+            {
+              matcher: 'WriteFile',
+              hooks: [{ type: 'command', command: 'workspace-after.sh' }],
+            },
+          ],
+        },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // User settings are preserved; workspace is ignored
+      expect(settings.merged.hooksConfig.enabled).toBe(true);
+      expect(settings.merged.hooksConfig.notifications).toBe(true); // schema default
+      expect(settings.merged.hooks.BeforeTool).toStrictEqual(
+        userSettingsContent.hooks.BeforeTool,
+      );
+      expect(settings.merged.hooks.AfterTool).toBeUndefined();
+    });
   });
 });
