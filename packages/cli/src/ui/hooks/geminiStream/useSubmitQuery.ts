@@ -83,6 +83,8 @@ export interface UseSubmitQueryDeps {
   shellModeActive: boolean;
   loopDetectedRef: React.MutableRefObject<boolean>;
   lastProfileNameRef: React.MutableRefObject<string | undefined>;
+  lastModelInfoRef: React.MutableRefObject<string | null>;
+  lastModelIdentityRef: React.MutableRefObject<string | null>;
   abortControllerRef: React.MutableRefObject<AbortController | null>;
   submitQueryRef: React.MutableRefObject<
     | ((
@@ -124,6 +126,7 @@ export interface UseSubmitQueryReturn {
   handleLoopDetectedEvent: () => void;
 }
 
+/* eslint-disable max-lines-per-function */
 export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
   const { startNewPrompt, getPromptCount } = useSessionStats();
 
@@ -156,6 +159,8 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     shellModeActive: deps.shellModeActive,
     loopDetectedRef: deps.loopDetectedRef,
     lastProfileNameRef: deps.lastProfileNameRef,
+    lastModelInfoRef: deps.lastModelInfoRef,
+    lastModelIdentityRef: deps.lastModelIdentityRef,
   });
 
   const scheduleNextQueuedSubmission = useScheduleNext(deps);

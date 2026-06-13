@@ -261,6 +261,9 @@ export type ServerGeminiCitationEvent = {
 
 export interface ModelInfo {
   model: string;
+  providerName?: string;
+  profileName?: string | null;
+  displayLabel?: string;
 }
 
 export type ServerGeminiModelInfoEvent = {

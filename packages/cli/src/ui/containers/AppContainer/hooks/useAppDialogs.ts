@@ -134,7 +134,12 @@ function useDialogsCore(
   st: ReturnType<typeof useDialogsState>,
 ) {
   const { config, settings, addItem, consoleMessages } = p;
-  const { currentModel, setCurrentModel } = useModelTracking({ config });
+  const {
+    currentModel,
+    setCurrentModel,
+    currentModelLabel,
+    setCurrentModelLabel,
+  } = useModelTracking({ config });
   const [contextLimit, setContextLimit] = useState<number | undefined>(
     () => config.getEphemeralSetting('context-limit') as number | undefined,
   );
@@ -161,6 +166,8 @@ function useDialogsCore(
   return {
     currentModel,
     setCurrentModel,
+    currentModelLabel,
+    setCurrentModelLabel,
     contextLimit,
     setContextLimit,
     ...displayPrefs,
@@ -193,6 +200,8 @@ function useDialogsAuthProviders(
   st: ReturnType<typeof useDialogsState>,
   currentModel: string,
   setCurrentModel: (model: string) => void,
+  currentModelLabel: string,
+  setCurrentModelLabel: (label: string) => void,
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,
   setShowErrorDetails: (value: boolean) => void,
@@ -227,7 +236,10 @@ function useDialogsAuthProviders(
     config,
     currentModel,
     setCurrentModel,
+    currentModelLabel,
+    setCurrentModelLabel,
     getActiveModelName: runtime.getActiveModelName,
+    getActiveProviderName: runtime.getActiveProviderName,
     contextLimit,
     setContextLimit,
   });
@@ -259,6 +271,8 @@ function useDialogsAuth(
   st: ReturnType<typeof useDialogsState>,
   currentModel: string,
   setCurrentModel: (model: string) => void,
+  currentModelLabel: string,
+  setCurrentModelLabel: (label: string) => void,
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,
   setShowErrorDetails: (value: boolean) => void,
@@ -278,6 +292,8 @@ function useDialogsAuth(
     st,
     currentModel,
     setCurrentModel,
+    currentModelLabel,
+    setCurrentModelLabel,
     contextLimit,
     setContextLimit,
     setShowErrorDetails,
@@ -389,6 +405,8 @@ export function useAppDialogs(params: AppDialogsParams) {
     st,
     core.currentModel,
     core.setCurrentModel,
+    core.currentModelLabel,
+    core.setCurrentModelLabel,
     core.contextLimit,
     core.setContextLimit,
     core.setShowErrorDetails,

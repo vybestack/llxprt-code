@@ -35,7 +35,6 @@ import {
 import { type PartListUnion } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
-  type HistoryItem,
   type HistoryItemWithoutId,
   type HistoryItemToolGroup,
   MessageType,
@@ -157,6 +156,8 @@ interface StreamEventHandlerDeps {
   shellModeActive: boolean;
   loopDetectedRef: React.MutableRefObject<boolean>;
   lastProfileNameRef: React.MutableRefObject<string | undefined>;
+  lastModelInfoRef: React.MutableRefObject<string | null>;
+  lastModelIdentityRef: React.MutableRefObject<string | null>;
 }
 
 export function useStreamEventHandlers(
@@ -514,38 +515,20 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
 }
 
 function useDisplayUserMessage(deps: StreamEventHandlerDeps) {
-  const { addItem, config, lastProfileNameRef, settings } = deps;
+  const { addItem, config, lastProfileNameRef } = deps;
   return useCallback(
     (trimmedQuery: string, userMessageTimestamp: number) => {
       addItem(
         { type: MessageType.USER, text: trimmedQuery },
         userMessageTimestamp,
       );
-      const showProfileChangeInChat =
-        settings.merged.showProfileChangeInChat ?? true;
+      // Inline profile_change notifications are now owned exclusively by the
+      // ModelInfo event path (streamEventDispatcher.handleModelInfoEvent).
+      // We still track lastProfileNameRef for backward-compatible diagnostics.
       const liveProfileName = getCurrentProfileName(config);
-      if (
-        showProfileChangeInChat &&
-        liveProfileName !== null &&
-        lastProfileNameRef.current !== undefined &&
-        liveProfileName !== lastProfileNameRef.current
-      ) {
-        addItem(
-          { type: 'profile_change', profileName: liveProfileName } as Omit<
-            HistoryItem,
-            'id'
-          >,
-          userMessageTimestamp,
-        );
-      }
       lastProfileNameRef.current = liveProfileName ?? undefined;
     },
-    [
-      addItem,
-      config,
-      settings.merged.showProfileChangeInChat,
-      lastProfileNameRef,
-    ],
+    [addItem, config, lastProfileNameRef],
   );
 }
 
@@ -662,6 +645,8 @@ async function consumeStreamEvents(
         thinkingBlocksRef: deps.thinkingBlocksRef,
         turnCancelledRef: deps.turnCancelledRef,
         loopDetectedRef: deps.loopDetectedRef,
+        lastModelInfoRef: deps.lastModelInfoRef,
+        lastModelIdentityRef: deps.lastModelIdentityRef,
         setPendingHistoryItem: deps.setPendingHistoryItem,
         setLastGeminiActivityTime: deps.setLastGeminiActivityTime,
         setThought: deps.setThought,

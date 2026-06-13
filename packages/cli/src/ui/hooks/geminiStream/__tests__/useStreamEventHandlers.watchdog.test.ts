@@ -104,6 +104,8 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
         shellModeActive: false,
         loopDetectedRef: { current: false },
         lastProfileNameRef: { current: undefined as string | undefined },
+        lastModelInfoRef: { current: null as string | null },
+        lastModelIdentityRef: { current: null as string | null },
       }),
     );
 
@@ -147,6 +149,8 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const loopDetectedRef = { current: false };
     const lastProfileNameRef = { current: undefined as string | undefined };
+    const lastModelInfoRef = { current: null as string | null };
+    const lastModelIdentityRef = { current: null as string | null };
 
     const { result } = renderHook(() =>
       useStreamEventHandlers({
@@ -173,6 +177,8 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
         shellModeActive: false,
         loopDetectedRef,
         lastProfileNameRef,
+        lastModelInfoRef,
+        lastModelIdentityRef,
       }),
     );
 
@@ -238,6 +244,8 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const loopDetectedRef = { current: false };
     const lastProfileNameRef = { current: undefined as string | undefined };
+    const lastModelInfoRef = { current: null as string | null };
+    const lastModelIdentityRef = { current: null as string | null };
 
     const { result } = renderHook(() =>
       useStreamEventHandlers({
@@ -264,6 +272,8 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
         shellModeActive: false,
         loopDetectedRef,
         lastProfileNameRef,
+        lastModelInfoRef,
+        lastModelIdentityRef,
       }),
     );
 
@@ -320,6 +330,8 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const loopDetectedRef = { current: false };
     const lastProfileNameRef = { current: undefined as string | undefined };
+    const lastModelInfoRef = { current: null as string | null };
+    const lastModelIdentityRef = { current: null as string | null };
 
     const { result } = renderHook(() =>
       useStreamEventHandlers({
@@ -346,6 +358,8 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
         shellModeActive: false,
         loopDetectedRef,
         lastProfileNameRef,
+        lastModelInfoRef,
+        lastModelIdentityRef,
       }),
     );
 
@@ -417,6 +431,8 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const loopDetectedRef = { current: false };
     const lastProfileNameRef = { current: undefined as string | undefined };
+    const lastModelInfoRef = { current: null as string | null };
+    const lastModelIdentityRef = { current: null as string | null };
 
     const { result } = renderHook(() =>
       useStreamEventHandlers({
@@ -443,6 +459,8 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
         shellModeActive: false,
         loopDetectedRef,
         lastProfileNameRef,
+        lastModelInfoRef,
+        lastModelIdentityRef,
       }),
     );
 
@@ -548,6 +566,8 @@ describe('useStreamEventHandlers stream idle timeout behavioral tests', () => {
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const loopDetectedRef = { current: false };
     const lastProfileNameRef = { current: undefined as string | undefined };
+    const lastModelInfoRef = { current: null as string | null };
+    const lastModelIdentityRef = { current: null as string | null };
 
     const { result } = renderHook(() =>
       useStreamEventHandlers({
@@ -574,6 +594,8 @@ describe('useStreamEventHandlers stream idle timeout behavioral tests', () => {
         shellModeActive: false,
         loopDetectedRef,
         lastProfileNameRef,
+        lastModelInfoRef,
+        lastModelIdentityRef,
       }),
     );
 
@@ -651,6 +673,8 @@ describe('useStreamEventHandlers stream idle timeout behavioral tests', () => {
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const loopDetectedRef = { current: false };
     const lastProfileNameRef = { current: undefined as string | undefined };
+    const lastModelInfoRef = { current: null as string | null };
+    const lastModelIdentityRef = { current: null as string | null };
 
     let resolveIterator: () => void;
     const iteratorPromise = new Promise<void>((resolve) => {
@@ -682,6 +706,8 @@ describe('useStreamEventHandlers stream idle timeout behavioral tests', () => {
         shellModeActive: false,
         loopDetectedRef,
         lastProfileNameRef,
+        lastModelInfoRef,
+        lastModelIdentityRef,
       }),
     );
 
@@ -759,6 +785,8 @@ describe('useStreamEventHandlers stream idle timeout behavioral tests', () => {
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const loopDetectedRef = { current: false };
     const lastProfileNameRef = { current: undefined as string | undefined };
+    const lastModelInfoRef = { current: null as string | null };
+    const lastModelIdentityRef = { current: null as string | null };
 
     const { result } = renderHook(() =>
       useStreamEventHandlers({
@@ -785,6 +813,8 @@ describe('useStreamEventHandlers stream idle timeout behavioral tests', () => {
         shellModeActive: false,
         loopDetectedRef,
         lastProfileNameRef,
+        lastModelInfoRef,
+        lastModelIdentityRef,
       }),
     );
 

@@ -6,7 +6,11 @@
 
 /* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  DebugLogger,
+  coreEvents,
+  type ModelProfileInfoPayload,
+} from '@vybestack/llxprt-code-core';
 import {
   ProfileManager,
   getProfilePersistableKeys,
@@ -461,6 +465,38 @@ function buildProfileLoadResult(
   };
 }
 
+export interface ModelProfileInfoInput {
+  model: string;
+  providerName?: string;
+  profileName?: string | null;
+  /**
+   * Explicit human-readable display name. When supplied and non-empty, takes
+   * precedence over profileName and model for the computed displayLabel.
+   */
+  displayName?: string;
+}
+
+export function buildModelProfileInfoPayload(
+  input: ModelProfileInfoInput,
+): ModelProfileInfoPayload {
+  const profileName = input.profileName ?? null;
+  const hasProfile = typeof profileName === 'string' && profileName !== '';
+  const trimmedDisplayName = input.displayName?.trim();
+  const hasDisplayName =
+    typeof trimmedDisplayName === 'string' && trimmedDisplayName !== '';
+  const profileLabel = hasProfile ? profileName : undefined;
+  const displayLabel = hasDisplayName
+    ? trimmedDisplayName
+    : (profileLabel ?? input.model);
+  return {
+    model: input.model,
+    providerName: input.providerName,
+    profileName,
+    ...(hasDisplayName ? { displayName: trimmedDisplayName } : {}),
+    displayLabel,
+  };
+}
+
 export async function applyProfileSnapshot(
   profile: Profile,
   options: ProfileLoadOptions = {},
@@ -480,7 +516,17 @@ export async function applyProfileSnapshot(
     }
   }
 
-  return buildProfileLoadResult(options.profileName, applicationResult);
+  const result = buildProfileLoadResult(options.profileName, applicationResult);
+
+  coreEvents.emitModelProfileChanged(
+    buildModelProfileInfoPayload({
+      model: result.modelName,
+      providerName: result.providerName,
+      profileName: result.profileName,
+    }),
+  );
+
+  return result;
 }
 
 export async function saveProfileSnapshot(

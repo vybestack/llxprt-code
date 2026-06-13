@@ -41,12 +41,19 @@ export interface UseModelTrackingParams {
 export interface UseModelTrackingResult {
   currentModel: string;
   setCurrentModel: (model: string) => void;
+  /**
+   * Profile-aware display label for the footer. Reflects profile/provider/model
+   * identity so the footer updates even when the raw model string is unchanged.
+   */
+  currentModelLabel: string;
+  setCurrentModelLabel: (label: string) => void;
 }
 
 export function useModelTracking({
   config,
 }: UseModelTrackingParams): UseModelTrackingResult {
   const [currentModel, setCurrentModel] = useState(config.getModel());
+  const [currentModelLabel, setCurrentModelLabel] = useState(config.getModel());
 
   // Update currentModel when settings change - get it from the SAME place as diagnostics
   useEffect(() => {
@@ -109,5 +116,7 @@ export function useModelTracking({
   return {
     currentModel,
     setCurrentModel,
+    currentModelLabel,
+    setCurrentModelLabel,
   };
 }

@@ -347,7 +347,7 @@ describe('<HistoryItemDisplay />', () => {
       <HistoryItemDisplay {...baseItem} item={item} />,
     );
     const output = lastFrame();
-    expect(output).toContain('Switched to profile: production');
+    expect(output).toContain('Responding with: production');
     // Should not use warning icon semantics
     expect(output).not.toContain('ℹ');
   });

@@ -12,11 +12,14 @@ describe('AgentClient.dispose', () => {
     const client = Object.create(AgentClient.prototype) as AgentClient & {
       _unsubscribe?: () => void;
       handleModelChanged?: () => void;
+      handleModelProfileChanged?: () => void;
     };
     const unsubscribe = vi.fn();
     const handleModelChanged = vi.fn();
+    const handleModelProfileChanged = vi.fn();
     client['_unsubscribe'] = unsubscribe;
     client['handleModelChanged'] = handleModelChanged;
+    client['handleModelProfileChanged'] = handleModelProfileChanged;
 
     client.dispose();
     expect(unsubscribe).toHaveBeenCalledTimes(1);

@@ -88,6 +88,7 @@ export interface UIState {
   providerOptions: string[];
   selectedProvider: string;
   currentModel: string;
+  currentModelLabel?: string;
   contextLimit: number | undefined;
   profiles: string[];
   toolsDialogAction: 'enable' | 'disable';

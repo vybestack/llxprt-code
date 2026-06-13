@@ -9,6 +9,7 @@ import {
   CoreEventEmitter,
   CoreEvent,
   type UserFeedbackPayload,
+  type ModelProfileInfoPayload,
 } from './events.js';
 
 describe('CoreEventEmitter', () => {
@@ -155,5 +156,95 @@ describe('CoreEventEmitter', () => {
       message: 'Re-entrant message',
     });
     expect(listener.mock.calls[2][0]).toMatchObject({ message: 'Buffered 2' });
+  });
+
+  describe('ModelProfileChanged event', () => {
+    it('emits ModelProfileChanged with model, provider, profile, and display label', () => {
+      const listener = vi.fn();
+      events.on(CoreEvent.ModelProfileChanged, listener);
+
+      const payload: ModelProfileInfoPayload = {
+        model: 'gpt-4o',
+        providerName: 'openai',
+        profileName: 'production',
+        displayLabel: 'production',
+      };
+
+      events.emitModelProfileChanged(payload);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(payload);
+    });
+
+    it('emits ModelProfileChanged with only model when profile/provider unknown', () => {
+      const listener = vi.fn();
+      events.on(CoreEvent.ModelProfileChanged, listener);
+
+      const payload: ModelProfileInfoPayload = {
+        model: 'gemini-2.0-flash',
+        displayLabel: 'gemini-2.0-flash',
+      };
+
+      events.emitModelProfileChanged(payload);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(payload);
+    });
+
+    it('carries optional displayName for profile-aware UI', () => {
+      const listener = vi.fn();
+      events.on(CoreEvent.ModelProfileChanged, listener);
+
+      const payload: ModelProfileInfoPayload = {
+        model: 'claude-sonnet',
+        providerName: 'anthropic',
+        profileName: 'work',
+        displayName: 'Work Profile',
+        displayLabel: 'Work Profile',
+      };
+
+      events.emitModelProfileChanged(payload);
+
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          displayName: 'Work Profile',
+          displayLabel: 'Work Profile',
+        }),
+      );
+    });
+
+    it('allows null profileName for no-profile state', () => {
+      const listener = vi.fn();
+      events.on(CoreEvent.ModelProfileChanged, listener);
+
+      events.emitModelProfileChanged({
+        model: 'llama3',
+        providerName: 'ollama',
+        profileName: null,
+        displayLabel: 'llama3',
+      });
+
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ profileName: null }),
+      );
+    });
+
+    it('stop receiving ModelProfileChanged after off()', () => {
+      const listener = vi.fn();
+      events.on(CoreEvent.ModelProfileChanged, listener);
+
+      events.emitModelProfileChanged({
+        model: 'm1',
+        displayLabel: 'm1',
+      });
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      events.off(CoreEvent.ModelProfileChanged, listener);
+      events.emitModelProfileChanged({
+        model: 'm2',
+        displayLabel: 'm2',
+      });
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
   });
 });

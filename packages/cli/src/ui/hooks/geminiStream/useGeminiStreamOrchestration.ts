@@ -284,6 +284,8 @@ function buildSubmitQueryDeps({
     shellModeActive: args.shellModeActive,
     loopDetectedRef,
     lastProfileNameRef: st.lastProfileNameRef,
+    lastModelInfoRef: st.lastModelInfoRef,
+    lastModelIdentityRef: st.lastModelIdentityRef,
     abortControllerRef: st.abortControllerRef,
     submitQueryRef: st.submitQueryRef,
     isResponding: st.isResponding,

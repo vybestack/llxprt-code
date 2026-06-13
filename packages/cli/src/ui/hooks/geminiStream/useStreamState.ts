@@ -37,6 +37,8 @@ export interface UseStreamStateReturn {
   isResponding: boolean;
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>;
   lastProfileNameRef: React.MutableRefObject<string | undefined>;
+  lastModelInfoRef: React.MutableRefObject<string | null>;
+  lastModelIdentityRef: React.MutableRefObject<string | null>;
   thought: ThoughtSummary | null;
   setThought: React.Dispatch<React.SetStateAction<ThoughtSummary | null>>;
   pendingHistoryItem: HistoryItemWithoutId | null;
@@ -200,6 +202,8 @@ export function useStreamState(
   const turnCancelledRef = useRef(false);
   const [isResponding, setIsResponding] = useState<boolean>(false);
   const lastProfileNameRef = useRef<string | undefined>(undefined);
+  const lastModelInfoRef = useRef<string | null>(null);
+  const lastModelIdentityRef = useRef<string | null>(null);
   const [thought, setThought] = useState<ThoughtSummary | null>(null);
   const [pendingHistoryItem, pendingHistoryItemRef, setPendingHistoryItem] =
     useStateAndRef<HistoryItemWithoutId | null>(null);
@@ -244,6 +248,8 @@ export function useStreamState(
     isResponding,
     setIsResponding,
     lastProfileNameRef,
+    lastModelInfoRef,
+    lastModelIdentityRef,
     thought,
     setThought,
     pendingHistoryItem,

@@ -20,15 +20,25 @@ function getRenderedOutput(stdout: RenderStdout): string {
 }
 
 describe('ProfileChangeMessage', () => {
-  it('renders profile name in message text', async () => {
+  it('renders display label in "Responding with" message', async () => {
     const { stdout } = renderWithProviders(
       <ProfileChangeMessage profileName="production" />,
     );
 
     await waitFor(() => {
       expect(getRenderedOutput(stdout)).toContain(
-        'Switched to profile: production',
+        'Responding with: production',
       );
+    });
+  });
+
+  it('renders model name as display label when no profile is active', async () => {
+    const { stdout } = renderWithProviders(
+      <ProfileChangeMessage profileName="llama3" />,
+    );
+
+    await waitFor(() => {
+      expect(getRenderedOutput(stdout)).toContain('Responding with: llama3');
     });
   });
 
@@ -40,7 +50,7 @@ describe('ProfileChangeMessage', () => {
     await waitFor(() => {
       const output = getRenderedOutput(stdout);
       expect(output).toBeTruthy();
-      expect(output).toContain('Switched to profile:');
+      expect(output).toContain('Responding with');
     });
   });
 
@@ -51,23 +61,8 @@ describe('ProfileChangeMessage', () => {
 
     await waitFor(() => {
       const output = getRenderedOutput(stdout);
-      expect(output).toContain('Switched to profile: dev');
-      // Should not contain the info icon 'ℹ' or warning icon '!'
-      expect(output).not.toContain('ℹ');
+      expect(output).toContain('Responding with: dev');
       expect(output).not.toContain('!');
-    });
-  });
-
-  it('uses sentence-case capitalization', async () => {
-    const { stdout } = renderWithProviders(
-      <ProfileChangeMessage profileName="staging" />,
-    );
-
-    await waitFor(() => {
-      // Message should start with capital 'S' in 'Switched'
-      expect(getRenderedOutput(stdout)).toContain(
-        'Switched to profile: staging',
-      );
     });
   });
 });

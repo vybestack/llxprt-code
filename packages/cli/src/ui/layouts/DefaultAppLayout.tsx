@@ -253,6 +253,7 @@ function buildMainControlsProps(
     vimModeEnabled: uiState.vimModeEnabled,
     vimMode: uiState.vimMode,
     currentModel: uiState.currentModel,
+    currentModelLabel: uiState.currentModelLabel,
     contextLimit: uiState.contextLimit,
     branchName: uiState.branchName,
     debugMessage: uiState.debugMessage,
