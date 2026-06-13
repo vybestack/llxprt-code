@@ -19,6 +19,13 @@
     },
     { "type": "capture", "label": "initial-ui", "scope": "screen" },
     {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+
+    {
       "type": "line",
       "text": "Run the approval UI test command.",
       "submitKeys": ["Enter"],
