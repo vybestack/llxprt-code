@@ -274,6 +274,16 @@ function subscribeToExternalCommandChanges(
   };
 }
 
+function shouldUseBuiltinCommandsOnly(): boolean {
+  return process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY === 'true';
+}
+
+export function loadBuiltinSlashCommandsForTesting(
+  config: Config | null,
+): readonly SlashCommand[] {
+  return new BuiltinCommandLoader(config).loadCommandsSync();
+}
+
 async function loadSlashCommands(
   config: Config | null,
   signal: AbortSignal,
@@ -281,7 +291,7 @@ async function loadSlashCommands(
 ): Promise<void> {
   try {
     const loaders: ICommandLoader[] = [new BuiltinCommandLoader(config)];
-    if (process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY !== 'true') {
+    if (!shouldUseBuiltinCommandsOnly()) {
       loaders.unshift(new McpPromptLoader(config));
       loaders.push(new FileCommandLoader(config));
     }

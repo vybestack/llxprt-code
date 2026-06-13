@@ -28,6 +28,7 @@ import {
   type SlashCommandProcessorActions,
 } from './slashCommandProcessor.js';
 import {
+  loadBuiltinSlashCommandsForTesting,
   useCommandContext,
   useCommandReload,
   useManagers,
@@ -95,9 +96,14 @@ interface SlashCommandProcessorState {
   ) => void;
 }
 
-function useSlashCommandProcessorState(): SlashCommandProcessorState {
+function useSlashCommandProcessorState(
+  config: Config | null,
+): SlashCommandProcessorState {
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
-    undefined,
+    () =>
+      process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY === 'true'
+        ? loadBuiltinSlashCommandsForTesting(config)
+        : undefined,
   );
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const [localIsProcessing, setLocalIsProcessing] = useState(false);
@@ -129,7 +135,7 @@ export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
   const session = useSessionStats();
-  const state = useSlashCommandProcessorState();
+  const state = useSlashCommandProcessorState(args.config);
   const managers = useManagers(args.config);
   const pending = usePendingHistory(args.addItem);
   const commandContext = useCommandContext({
