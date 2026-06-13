@@ -15,6 +15,22 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 const logger = new DebugLogger('llxprt:core:dumpSDKContext');
 
+function buildSDKDumpUrl(
+  providerName: string,
+  endpoint: string,
+  baseURL?: string,
+): string {
+  if (!baseURL) {
+    return `https://api.${providerName}.com${endpoint}`;
+  }
+
+  if (baseURL.endsWith('/') && endpoint.startsWith('/')) {
+    return `${baseURL}${endpoint.slice(1)}`;
+  }
+
+  return `${baseURL}${endpoint}`;
+}
+
 type DumpFailureLogger = Pick<DebugLogger, 'debug'>;
 
 function logDumpFailure(
@@ -58,9 +74,7 @@ export async function dumpSDKContext(
   isError: boolean,
   baseURL?: string,
 ): Promise<string> {
-  const url = baseURL
-    ? `${baseURL}${endpoint}`
-    : `https://api.${providerName}.com${endpoint}`;
+  const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
 
   const request = {
     url,
@@ -102,9 +116,7 @@ export async function dumpSDKRequestContext(
   requestParams: unknown,
   baseURL?: string,
 ): Promise<DumpRequestResult> {
-  const url = baseURL
-    ? `${baseURL}${endpoint}`
-    : `https://api.${providerName}.com${endpoint}`;
+  const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
 
   const request = {
     url,

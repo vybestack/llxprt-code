@@ -12,6 +12,7 @@ import * as os from 'node:os';
 import * as dumpSDKContextModule from './dumpSDKContext.js';
 import {
   dumpSDKContext,
+  dumpSDKRequestContext,
   wrapStreamWithDump,
   wrapStreamWithSDKErrorDump,
 } from './dumpSDKContext.js';
@@ -43,6 +44,24 @@ describe('dumpSDKContext', () => {
     expect(parts[1]).toHaveLength(6);
     expect(parts[2]).toBe('openai');
     expect(parts[3]).toBeTruthy();
+  });
+
+  it('should build dump URLs like the OpenAI SDK when the base URL has a trailing slash', async () => {
+    const result = await dumpSDKRequestContext(
+      'openai',
+      '/chat/completions',
+      { model: 'test-model', messages: [] },
+      'https://ollama.com/v1/',
+    );
+    createdFiles.push(result.requestFilename);
+
+    const content = await fs.readFile(
+      path.join(result.dumpDir, result.requestFilename),
+      'utf-8',
+    );
+    const dump = JSON.parse(content) as { request: { url: string } };
+
+    expect(dump.request.url).toBe('https://ollama.com/v1/chat/completions');
   });
 });
 
