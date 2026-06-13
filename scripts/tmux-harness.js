@@ -1109,9 +1109,12 @@ export function resolveStartArgsForTmux(startArgs) {
   );
 }
 
-export function buildTmuxStartCommand(startArgs) {
+export function buildTmuxStartCommand(startArgs, outDir) {
   const resolved = resolveStartArgsForTmux(startArgs);
-  return resolved.length === 1 ? resolved[0] : quote(resolved);
+  const artifactEnv = outDir
+    ? `LLXPRT_TMUX_ARTIFACT_DIR=${quote([outDir])} `
+    : '';
+  return `${artifactEnv}${resolved.length === 1 ? resolved[0] : quote(resolved)}`;
 }
 
 function startTmuxSession(sessionName, startArgs, tmuxConfig, outDir) {
@@ -1150,7 +1153,7 @@ function startTmuxSession(sessionName, startArgs, tmuxConfig, outDir) {
     '-k',
     '-t',
     sessionName,
-    `${buildTmuxStartCommand(startArgs)}; exit`,
+    `${buildTmuxStartCommand(startArgs, outDir)}; exit`,
   ]);
 }
 

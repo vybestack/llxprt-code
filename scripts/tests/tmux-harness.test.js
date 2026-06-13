@@ -237,6 +237,16 @@ describe('buildTmuxStartCommand', () => {
       `${process.execPath} scripts/start.js`,
     );
   });
+
+  it('prefixes artifact directory env when provided', async () => {
+    const { buildTmuxStartCommand } = await importHarness();
+
+    expect(
+      buildTmuxStartCommand(['node', 'scripts/start.js'], '/tmp/artifacts'),
+    ).toBe(
+      `LLXPRT_TMUX_ARTIFACT_DIR=/tmp/artifacts ${process.execPath} scripts/start.js`,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
