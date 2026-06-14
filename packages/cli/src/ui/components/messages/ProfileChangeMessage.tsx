@@ -16,8 +16,6 @@ export const ProfileChangeMessage: React.FC<ProfileChangeMessageProps> = ({
   profileName,
 }) => (
   <Box marginLeft={2} marginTop={1}>
-    <Text color={theme.ui.comment}>
-      {`Switched to profile: ${profileName}`}
-    </Text>
+    <Text color={theme.ui.comment}>{`Responding with: ${profileName}`}</Text>
   </Box>
 );

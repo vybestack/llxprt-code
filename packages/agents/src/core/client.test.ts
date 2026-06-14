@@ -63,7 +63,12 @@ import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config
 import type { ChatSession } from './chatSession.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { GeminiEventType, Turn } from './turn.js';
+import {
+  GeminiEventType,
+  Turn,
+  type ServerGeminiStreamEvent,
+  type ModelInfo,
+} from './turn.js';
 import { FileDiscoveryService } from '@vybestack/llxprt-code-core/services/fileDiscoveryService.js';
 import { setSimulate429 } from '@vybestack/llxprt-code-core/utils/testUtils.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
@@ -76,6 +81,7 @@ import { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complex
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
+import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 
 // --- Mocks ---
 const mockChatCreateFn = vi.fn();
@@ -1532,7 +1538,18 @@ sub memory
       }
 
       // Verify that the max session turns limit was respected
-      expect(events).toStrictEqual([{ type: GeminiEventType.MaxSessionTurns }]);
+      expect(events).toStrictEqual([
+        {
+          type: GeminiEventType.ModelInfo,
+          value: {
+            model: 'test-model',
+            providerName: 'backend',
+            profileName: null,
+            displayLabel: 'test-model',
+          },
+        },
+        { type: GeminiEventType.MaxSessionTurns },
+      ]);
     });
 
     it('should yield ContextWindowWillOverflow when the context window is about to overflow', async () => {
@@ -1739,6 +1756,15 @@ sub memory
 
       // Assert
       expect(events).toStrictEqual([
+        {
+          type: GeminiEventType.ModelInfo,
+          value: {
+            model: 'test-model',
+            providerName: 'backend',
+            profileName: null,
+            displayLabel: 'test-model',
+          },
+        },
         { type: GeminiEventType.InvalidStream },
         { type: GeminiEventType.Content, value: 'Continued content' },
       ]);
@@ -1788,7 +1814,18 @@ sub memory
       const events = await fromAsync(stream);
 
       // Assert
-      expect(events).toStrictEqual([{ type: GeminiEventType.InvalidStream }]);
+      expect(events).toStrictEqual([
+        {
+          type: GeminiEventType.ModelInfo,
+          value: {
+            model: 'test-model',
+            providerName: 'backend',
+            profileName: null,
+            displayLabel: 'test-model',
+          },
+        },
+        { type: GeminiEventType.InvalidStream },
+      ]);
 
       // Verify that turn.run was called only once
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
@@ -1852,6 +1889,15 @@ sub memory
       ).toBe(false);
       expect(events).toStrictEqual([
         {
+          type: GeminiEventType.ModelInfo,
+          value: {
+            model: 'test-model',
+            providerName: 'backend',
+            profileName: null,
+            displayLabel: 'test-model',
+          },
+        },
+        {
           type: GeminiEventType.Thought,
           value: {
             subject: 'Planning',
@@ -1890,10 +1936,11 @@ sub memory
       const events = await fromAsync(stream);
 
       // Assert
-      // We expect 2 InvalidStream events (original + 1 retry)
-      expect(events.length).toBe(2);
+      // We expect 1 ModelInfo + 2 InvalidStream events (original + 1 retry)
+      expect(events.length).toBe(3);
+      expect(events[0]?.type).toBe(GeminiEventType.ModelInfo);
       expect(
-        events.every((e) => e.type === GeminiEventType.InvalidStream),
+        events.slice(1).every((e) => e.type === GeminiEventType.InvalidStream),
       ).toBe(true);
 
       // Verify that turn.run was called twice
@@ -1951,8 +1998,17 @@ sub memory
       const stream = client.sendMessageStream(initialRequest, signal, promptId);
       const events = await fromAsync(stream);
 
-      // Assert: both the error event and the retried content should appear
+      // Assert: model_info, then error event and retried content
       expect(events).toStrictEqual([
+        {
+          type: GeminiEventType.ModelInfo,
+          value: {
+            model: 'test-model',
+            providerName: 'backend',
+            profileName: null,
+            displayLabel: 'test-model',
+          },
+        },
         {
           type: GeminiEventType.Error,
           value: {
@@ -2008,8 +2064,17 @@ sub memory
       const stream = client.sendMessageStream(initialRequest, signal, promptId);
       const events = await fromAsync(stream);
 
-      // Assert: only the error event, no retry
+      // Assert: model_info, then only the error event, no retry
       expect(events).toStrictEqual([
+        {
+          type: GeminiEventType.ModelInfo,
+          value: {
+            model: 'test-model',
+            providerName: 'backend',
+            profileName: null,
+            displayLabel: 'test-model',
+          },
+        },
         {
           type: GeminiEventType.Error,
           value: {
@@ -2053,14 +2118,17 @@ sub memory
       const stream = client.sendMessageStream(initialRequest, signal, promptId);
       const events = await fromAsync(stream);
 
-      // Assert: exactly 2 Error events (original + 1 retry), no infinite loop
-      expect(events.length).toBe(2);
+      // Assert: 1 ModelInfo + exactly 2 Error events (original + 1 retry), no infinite loop
+      expect(events.length).toBe(3);
+      expect(events[0]?.type).toBe(GeminiEventType.ModelInfo);
       expect(
-        events.every(
-          (e) =>
-            e.type === GeminiEventType.Error &&
-            (e.value as { error: { status?: number } }).error.status === 413,
-        ),
+        events
+          .slice(1)
+          .every(
+            (e) =>
+              e.type === GeminiEventType.Error &&
+              (e.value as { error: { status?: number } }).error.status === 413,
+          ),
       ).toBe(true);
 
       // turn.run should be called exactly twice
@@ -3268,6 +3336,223 @@ sub memory
           part.text === 'Additional context from hook',
       );
       expect(hasAdditionalContext).toBe(true);
+    });
+  });
+
+  describe('ModelProfileChanged resets sequence model (issue #1770)', () => {
+    it('resets currentSequenceModel when ModelProfileChanged fires', () => {
+      // Set a sticky model
+      client['currentSequenceModel'] = 'sticky-model';
+      expect(client.getCurrentSequenceModel()).toBe('sticky-model');
+
+      // Emit ModelProfileChanged — should reset the sticky model
+      coreEvents.emitModelProfileChanged({
+        model: 'new-model',
+        providerName: 'anthropic',
+        profileName: null,
+        displayLabel: 'new-model',
+      });
+
+      // currentSequenceModel should now be null
+      expect(client.getCurrentSequenceModel()).toBeNull();
+    });
+
+    it('also resets currentSequenceModel on ModelChanged', () => {
+      client['currentSequenceModel'] = 'sticky-model';
+      coreEvents.emitModelChanged('other-model');
+      expect(client.getCurrentSequenceModel()).toBeNull();
+    });
+  });
+
+  describe('ModelInfo during InvalidStream continuation when model changes mid-sequence (issue #1770)', () => {
+    let getModelSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as ChatSession;
+      getModelSpy = vi.spyOn(client['config'], 'getModel');
+    });
+
+    afterEach(() => {
+      getModelSpy.mockRestore();
+    });
+
+    /**
+     * Helper: collect only ModelInfo events from a stream.
+     */
+    async function collectModelInfos(
+      stream: AsyncIterable<ServerGeminiStreamEvent>,
+    ): Promise<ModelInfo[]> {
+      const events = await fromAsync(stream);
+      return events
+        .filter(
+          (
+            e,
+          ): e is ServerGeminiStreamEvent & {
+            type: typeof GeminiEventType.ModelInfo;
+            value: ModelInfo;
+          } => e.type === GeminiEventType.ModelInfo,
+        )
+        .map((e) => e.value);
+    }
+
+    it('emits exactly one additional ModelInfo when model changes during InvalidStream continuation', async () => {
+      // Stream 2: continuation succeeds
+      const mockStream2 = (async function* () {
+        yield { type: GeminiEventType.Content, value: 'Continued' };
+        yield { type: GeminiEventType.Finished, value: { reason: 'STOP' } };
+      })();
+
+      getModelSpy.mockReturnValue('test-model');
+
+      // Intercept between stream1 and stream2 to simulate a model change.
+      // After the first Turn.run returns InvalidStream, change config.getModel
+      // so the continuation's _buildModelInfo reads a different effective model.
+      mockTurnRunFn.mockReset();
+      let callCount = 0;
+      mockTurnRunFn.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          const stream = (async function* () {
+            yield { type: GeminiEventType.InvalidStream };
+          })();
+          // Simulate model change before continuation
+          getModelSpy.mockReturnValue('changed-model');
+          // Reset sequence model so orchestrator re-reads from config
+          coreEvents.emitModelProfileChanged({
+            model: 'changed-model',
+            providerName: 'anthropic',
+            profileName: null,
+            displayLabel: 'changed-model',
+          });
+          return stream;
+        }
+        return mockStream2;
+      });
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Hi' }],
+        new AbortController().signal,
+        'prompt-change-mid-seq',
+      );
+
+      const infos = await collectModelInfos(stream);
+
+      // First emission for the initial model, then exactly one additional
+      // ModelInfo for the changed identity — no duplicates.
+      expect(infos).toHaveLength(2);
+      expect(infos[0]?.model).toBe('test-model');
+      expect(infos[1]?.model).toBe('changed-model');
+    });
+
+    it('does not emit additional ModelInfo when identity is unchanged during continuation', async () => {
+      const mockStream1 = (async function* () {
+        yield { type: GeminiEventType.InvalidStream };
+      })();
+      const mockStream2 = (async function* () {
+        yield { type: GeminiEventType.Content, value: 'Continued' };
+        yield { type: GeminiEventType.Finished, value: { reason: 'STOP' } };
+      })();
+
+      getModelSpy.mockReturnValue('test-model');
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn
+        .mockReturnValueOnce(mockStream1)
+        .mockReturnValue(mockStream2);
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Hi' }],
+        new AbortController().signal,
+        'prompt-same-identity',
+      );
+
+      const infos = await collectModelInfos(stream);
+
+      // Same model/provider/profile across continuation → only one ModelInfo
+      expect(infos).toHaveLength(1);
+      expect(infos[0]?.model).toBe('test-model');
+    });
+
+    it('emits exactly one additional ModelInfo when provider changes during continuation', async () => {
+      const mockStream2 = (async function* () {
+        yield { type: GeminiEventType.Content, value: 'ok' };
+        yield { type: GeminiEventType.Finished, value: { reason: 'STOP' } };
+      })();
+
+      getModelSpy.mockReturnValue('test-model');
+
+      // The orchestrator's _getProviderName reads from
+      // getContentGeneratorConfig().providerManager?.getActiveProviderName().
+      // We spy on getContentGeneratorConfig to return different provider info
+      // after the first stream.
+      const getContentGenSpy = vi.spyOn(
+        client['config'],
+        'getContentGeneratorConfig',
+      );
+      getContentGenSpy.mockReturnValue({
+        model: 'test-model',
+        apiKey: 'test-key',
+        vertexai: false,
+      });
+
+      mockTurnRunFn.mockReset();
+      let callCount = 0;
+      mockTurnRunFn.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          const stream = (async function* () {
+            yield { type: GeminiEventType.InvalidStream };
+          })();
+          // Simulate provider change before continuation: now the config
+          // returns a providerManager with a different active provider.
+          getContentGenSpy.mockReturnValue({
+            model: 'test-model',
+            apiKey: 'test-key',
+            vertexai: false,
+            providerManager: {
+              getActiveProviderName: () => 'anthropic',
+              getActiveProvider: () => ({
+                name: 'anthropic',
+                getDefaultModel: () => 'test-model',
+              }),
+            },
+          } as unknown as ContentGeneratorConfig);
+          // Reset sequence model so orchestrator re-reads
+          coreEvents.emitModelProfileChanged({
+            model: 'test-model',
+            providerName: 'anthropic',
+            profileName: null,
+            displayLabel: 'test-model',
+          });
+          return stream;
+        }
+        return mockStream2;
+      });
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Hi' }],
+        new AbortController().signal,
+        'prompt-provider-change',
+      );
+
+      const infos = await collectModelInfos(stream);
+
+      getContentGenSpy.mockRestore();
+
+      // First emission (provider 'backend' — no providerManager), then one
+      // additional for provider change to 'anthropic' — exactly one, not
+      // duplicates.
+      expect(infos).toHaveLength(2);
+      expect(infos[0]?.providerName).toBe('backend');
+      expect(infos[1]?.providerName).toBe('anthropic');
     });
   });
 });

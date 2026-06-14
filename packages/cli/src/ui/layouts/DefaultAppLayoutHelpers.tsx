@@ -464,6 +464,7 @@ export interface FooterProps {
   vimModeEnabled: boolean;
   vimMode: string | undefined;
   currentModel: string;
+  currentModelLabel?: string;
   contextLimit: number | undefined;
   branchName: string | undefined;
   debugMessage: string;
@@ -488,6 +489,7 @@ export function FooterSection(props: FooterProps) {
     vimModeEnabled,
     vimMode,
     currentModel,
+    currentModelLabel,
     contextLimit,
     branchName,
     debugMessage,
@@ -503,7 +505,7 @@ export function FooterSection(props: FooterProps) {
 
   return (
     <Footer
-      model={currentModel}
+      model={currentModelLabel ?? currentModel}
       targetDir={config.getTargetDir()}
       debugMode={config.getDebugMode()}
       branchName={branchName}
@@ -567,6 +569,7 @@ export interface MainControlsProps {
   vimModeEnabled: boolean;
   vimMode: string | undefined;
   currentModel: string;
+  currentModelLabel?: string;
   contextLimit: number | undefined;
   branchName: string | undefined;
   debugMessage: string;
@@ -614,6 +617,7 @@ export function MainControls(props: MainControlsProps) {
         vimModeEnabled={props.vimModeEnabled}
         vimMode={props.vimMode}
         currentModel={props.currentModel}
+        currentModelLabel={props.currentModelLabel}
         contextLimit={props.contextLimit}
         branchName={props.branchName}
         debugMessage={props.debugMessage}

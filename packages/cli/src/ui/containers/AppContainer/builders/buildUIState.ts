@@ -85,6 +85,7 @@ export interface UIStateParams {
   providerOptions: string[];
   selectedProvider: string;
   currentModel: string;
+  currentModelLabel?: string;
   contextLimit: number | undefined;
   profiles: string[];
   toolsDialogAction: 'enable' | 'disable';
@@ -286,6 +287,7 @@ function buildDialogData(p: UIStateParams) {
     providerOptions: p.providerOptions,
     selectedProvider: p.selectedProvider,
     currentModel: p.currentModel,
+    currentModelLabel: p.currentModelLabel,
     contextLimit: p.contextLimit,
     profiles: p.profiles,
     toolsDialogAction: p.toolsDialogAction,

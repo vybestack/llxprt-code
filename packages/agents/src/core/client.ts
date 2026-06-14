@@ -186,6 +186,10 @@ export class AgentClient implements AgentClientContract {
     );
 
     coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged);
+    coreEvents.on(
+      CoreEvent.ModelProfileChanged,
+      this.handleModelProfileChanged,
+    );
   }
 
   private _buildOrchestratorDeps(): MessageStreamDeps {
@@ -228,8 +232,16 @@ export class AgentClient implements AgentClientContract {
     this.currentSequenceModel = null;
   };
 
+  private handleModelProfileChanged = () => {
+    this.currentSequenceModel = null;
+  };
+
   dispose(): void {
     coreEvents.off(CoreEvent.ModelChanged, this.handleModelChanged);
+    coreEvents.off(
+      CoreEvent.ModelProfileChanged,
+      this.handleModelProfileChanged,
+    );
     if (this._unsubscribe) {
       this._unsubscribe();
       this._unsubscribe = undefined;

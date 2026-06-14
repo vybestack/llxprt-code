@@ -22,6 +22,8 @@ import {
   getErrorMessage,
   loadCoreMemoryContent,
   debugLogger,
+  coreEvents,
+  CoreEvent,
 } from '@vybestack/llxprt-code-core';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 import { loadSettings } from '../../config/settings.js';
@@ -267,9 +269,18 @@ function useModelChangeWatcher(
       scheduleWarningClear(currentTimerRef, dispatch);
     };
     checkModelChange();
-    const interval = setInterval(checkModelChange, 1000);
+
+    // Event-driven updates replace the former 1-second setInterval polling.
+    // These coreEvents fire on model/profile/provider/settings changes.
+    const handleChange = () => checkModelChange();
+    coreEvents.on(CoreEvent.ModelChanged, handleChange);
+    coreEvents.on(CoreEvent.ModelProfileChanged, handleChange);
+    coreEvents.on(CoreEvent.SettingsChanged, handleChange);
+
     return () => {
-      clearInterval(interval);
+      coreEvents.off(CoreEvent.ModelChanged, handleChange);
+      coreEvents.off(CoreEvent.ModelProfileChanged, handleChange);
+      coreEvents.off(CoreEvent.SettingsChanged, handleChange);
       if (currentTimerRef.current) clearTimeout(currentTimerRef.current);
     };
   }, [

@@ -11,6 +11,7 @@ import {
   GeminiEventType,
   DEFAULT_AGENT_ID,
   type ServerGeminiFinishedOutcome,
+  type ModelInfo,
 } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ChatSession } from './chatSession.js';
@@ -88,6 +89,8 @@ export const MAX_TURNS = 100;
 const MAX_RETRIES = 3;
 
 export class MessageStreamOrchestrator {
+  #lastModelIdentity: string | null = null;
+
   constructor(private readonly deps: MessageStreamDeps) {}
 
   async *execute(
@@ -169,6 +172,8 @@ export class MessageStreamOrchestrator {
       resetCurrentSequenceModel();
       await todoContinuationService.clearPausedState();
 
+      yield* this._emitModelInfoForNewSequence();
+
       const hookOutput = await agentHookManager.fireBeforeAgentHookSafe(
         ctx.prompt_id,
         ctx.promptText,
@@ -199,6 +204,11 @@ export class MessageStreamOrchestrator {
         const requestArray = Array.isArray(request) ? request : [request];
         request = [...requestArray, { text: additionalContext }];
       }
+    } else {
+      // Continuation / retry of the same prompt — emit ModelInfo only when
+      // the composite provider/profile/model identity has changed since the
+      // last emission. Duplicates for the same identity are suppressed.
+      yield* this._emitModelInfoIfChanged();
     }
 
     incrementSessionTurnCount();
@@ -744,6 +754,93 @@ export class MessageStreamOrchestrator {
     const providerManager = contentGenConfig?.providerManager;
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty provider name should fall back to 'backend'
     return providerManager?.getActiveProviderName() || 'backend';
+  }
+
+  /**
+   * Resolves the effective model for ModelInfo, preferring the provider
+   * manager's active provider default model where available.
+   */
+  private _resolveModelForInfo(): string {
+    const contentGenConfig = this.deps.config.getContentGeneratorConfig();
+    const providerManager = contentGenConfig?.providerManager;
+    const providerDefault = providerManager
+      ?.getActiveProvider()
+      ?.getDefaultModel?.();
+    if (providerDefault && providerDefault.trim() !== '') {
+      return providerDefault;
+    }
+    return this.deps.getEffectiveModel();
+  }
+
+  private _buildModelInfo(): ModelInfo {
+    const model = this._resolveModelForInfo();
+    const providerName = this._getProviderName();
+    const profileName = this._getProfileName();
+    const hasProfile = typeof profileName === 'string' && profileName !== '';
+    const displayLabel = hasProfile ? profileName : model;
+    return { model, providerName, profileName, displayLabel };
+  }
+
+  /**
+   * Computes a collision-safe composite identity key from provider, profile,
+   * and model. Uses JSON.stringify to guarantee unambiguous delimiting — a
+   * null-byte-joined approach can still collide when a field value itself
+   * contains a null byte.
+   */
+  private _modelIdentityKey(info: ModelInfo): string {
+    return JSON.stringify([
+      info.providerName ?? '',
+      info.profileName ?? '',
+      info.model,
+    ]);
+  }
+
+  private async *_emitModelInfoForNewSequence(): AsyncGenerator<
+    ServerGeminiStreamEvent,
+    void
+  > {
+    const info = this._buildModelInfo();
+    this.#lastModelIdentity = this._modelIdentityKey(info);
+    yield { type: GeminiEventType.ModelInfo, value: info };
+  }
+
+  /**
+   * Emits a ModelInfo event only when the current composite identity
+   * (model/provider/profile) differs from the last emission.
+   * Suppresses duplicates for the same identity.
+   */
+  private async *_emitModelInfoIfChanged(): AsyncGenerator<
+    ServerGeminiStreamEvent,
+    void
+  > {
+    const info = this._buildModelInfo();
+    const key = this._modelIdentityKey(info);
+    if (key === this.#lastModelIdentity) return;
+    this.#lastModelIdentity = key;
+    yield { type: GeminiEventType.ModelInfo, value: info };
+  }
+
+  private _getProfileName(): string | null {
+    try {
+      const settingsService = (
+        this.deps.config as unknown as {
+          getSettingsService?: () => {
+            getCurrentProfileName?: () => string | null;
+            get?: (key: string) => unknown;
+          };
+        }
+      ).getSettingsService?.();
+      if (settingsService?.getCurrentProfileName) {
+        return settingsService.getCurrentProfileName();
+      }
+      if (settingsService?.get) {
+        const profile = settingsService.get('currentProfile');
+        return typeof profile === 'string' ? profile : null;
+      }
+    } catch {
+      // Settings service unavailable — no profile info
+    }
+    return null;
   }
 
   private _resetTodoState(

@@ -60,10 +60,28 @@ export interface McpClientUpdatePayload {
   readonly clients: ReadonlyMap<string, McpClient>;
 }
 
+/**
+ * Payload for the 'model-profile-changed' event.
+ * Carries enough data for UI footer updates and inline chat notifications.
+ */
+export interface ModelProfileInfoPayload {
+  /** The active model name. */
+  model: string;
+  /** The active provider name, when available. */
+  providerName?: string;
+  /** The active profile name, when available; null when no profile is active. */
+  profileName?: string | null;
+  /** Human-readable display name for the profile, when available. */
+  displayName?: string;
+  /** Computed label for UI display (profile name, display name, or model). */
+  displayLabel: string;
+}
+
 export enum CoreEvent {
   UserFeedback = 'user-feedback',
   MemoryChanged = 'memory-changed',
   ModelChanged = 'model-changed',
+  ModelProfileChanged = 'model-profile-changed',
   ConsoleLog = 'console-log',
   Output = 'output',
   ExternalEditorClosed = 'external-editor-closed',
@@ -134,6 +152,10 @@ export class CoreEventEmitter extends EventEmitter {
     listener: (model: string) => void,
   ): this;
   override on(
+    event: CoreEvent.ModelProfileChanged,
+    listener: (payload: ModelProfileInfoPayload) => void,
+  ): this;
+  override on(
     event: CoreEvent.ConsoleLog,
     listener: (payload: ConsoleLogPayload) => void,
   ): this;
@@ -167,6 +189,10 @@ export class CoreEventEmitter extends EventEmitter {
     listener: (model: string) => void,
   ): this;
   override off(
+    event: CoreEvent.ModelProfileChanged,
+    listener: (payload: ModelProfileInfoPayload) => void,
+  ): this;
+  override off(
     event: CoreEvent.ConsoleLog,
     listener: (payload: ConsoleLogPayload) => void,
   ): this;
@@ -197,6 +223,10 @@ export class CoreEventEmitter extends EventEmitter {
   ): boolean;
   override emit(event: CoreEvent.ModelChanged, model: string): boolean;
   override emit(
+    event: CoreEvent.ModelProfileChanged,
+    payload: ModelProfileInfoPayload,
+  ): boolean;
+  override emit(
     event: CoreEvent.ConsoleLog,
     payload: ConsoleLogPayload,
   ): boolean;
@@ -217,6 +247,14 @@ export class CoreEventEmitter extends EventEmitter {
    */
   emitModelChanged(model: string): void {
     this.emit(CoreEvent.ModelChanged, model);
+  }
+
+  /**
+   * Emits a model-profile-changed event carrying model, provider, profile,
+   * and display label data for event-driven UI/footer updates.
+   */
+  emitModelProfileChanged(payload: ModelProfileInfoPayload): void {
+    this.emit(CoreEvent.ModelProfileChanged, payload);
   }
 
   /**

@@ -23,6 +23,7 @@ import {
   type Config,
   type ThoughtSummary,
   type ThinkingBlock,
+  type ModelInfo,
   uiTelemetryService,
 } from '@vybestack/llxprt-code-core';
 import type React from 'react';
@@ -44,6 +45,13 @@ export interface StreamEventDeps {
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
   loopDetectedRef: React.MutableRefObject<boolean>;
+  lastModelInfoRef: React.MutableRefObject<string | null>;
+  /**
+   * Composite identity (provider|profile|model) tracked across ModelInfo
+   * events so that same-displayLabel but different provider/model/profile
+   * changes still produce an inline notification.
+   */
+  lastModelIdentityRef: React.MutableRefObject<string | null>;
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >;
@@ -294,9 +302,60 @@ function handleNotificationStreamEvent(
           event.value.promptTokenCount,
         );
       return true;
+    case ServerGeminiEventType.ModelInfo:
+      handleModelInfoEvent(deps, event.value, userMessageTimestamp);
+      return true;
     default:
       return false;
   }
+}
+
+function handleModelInfoEvent(
+  deps: StreamEventDeps,
+  info: ModelInfo,
+  userMessageTimestamp: number,
+): void {
+  const displayLabel = info.displayLabel ?? info.model;
+  const identity = computeModelIdentity(info);
+  const previousLabel = deps.lastModelInfoRef.current;
+  const previousIdentity = deps.lastModelIdentityRef.current;
+  deps.lastModelInfoRef.current = displayLabel;
+  deps.lastModelIdentityRef.current = identity;
+
+  // Baseline behavior: always show a "Responding with: {label}" notification
+  // on the first assistant response (previousIdentity === null) so users see
+  // model/profile context for every prompt. Suppress duplicates when the
+  // composite identity is unchanged across retries/continuations.
+  if (previousIdentity !== null && previousIdentity === identity) {
+    return;
+  }
+
+  void previousLabel; // tracked for diagnostics; identity is the dedup key
+
+  deps.addItem(
+    {
+      type: 'profile_change',
+      profileName: displayLabel,
+    },
+    userMessageTimestamp,
+  );
+}
+
+/**
+ * Computes a collision-safe composite identity string from provider, profile,
+ * and model so that deduplication distinguishes changes even when the
+ * displayLabel is the same (e.g. two profiles named identically on different
+ * providers).
+ *
+ * Uses JSON.stringify to guarantee unambiguous delimiting — a pipe-joined
+ * approach can collide when a field value itself contains the delimiter.
+ */
+function computeModelIdentity(info: ModelInfo): string {
+  return JSON.stringify([
+    info.providerName ?? '',
+    info.profileName ?? '',
+    info.model,
+  ]);
 }
 
 function handleContentLikeStreamEvent(

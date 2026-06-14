@@ -448,11 +448,12 @@ describe('SessionController', () => {
     unmount();
   });
 
-  it('should handle model changes via polling', async () => {
+  it('should handle model changes via events (not polling)', async () => {
     const providerModule = await import(
       '../../providers/providerManagerInstance.js'
     );
     const mockGetProviderManager = vi.mocked(providerModule.getProviderManager);
+    const { coreEvents } = await import('@vybestack/llxprt-code-core');
 
     let contextValue: SessionContextType | undefined;
 
@@ -485,8 +486,8 @@ describe('SessionController', () => {
         }) as Partial<IProvider>,
     } as ReturnType<typeof providerModule.getProviderManager>);
 
-    // Advance timer to trigger the interval
-    vi.advanceTimersByTime(1100);
+    // Emit event instead of advancing timer
+    coreEvents.emitModelChanged('new-model');
 
     // Re-render to get updated state
     rerender(
@@ -495,11 +496,34 @@ describe('SessionController', () => {
       </SessionController>,
     );
 
-    // The polling should have updated the state
+    // The event should have updated the state
     expect(contextValue!.sessionState.currentModel).toBe(
       'new-provider:new-model',
     );
 
+    unmount();
+  });
+
+  it('does not use setInterval polling', async () => {
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+
+    const TestComponent = () => {
+      React.useContext(SessionContext);
+      return null;
+    };
+
+    const { unmount } = render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    // No 1-second polling intervals should be created
+    const pollingIntervals = setIntervalSpy.mock.calls.filter(
+      ([, delay]) => delay === 1000,
+    );
+    expect(pollingIntervals).toHaveLength(0);
+    setIntervalSpy.mockRestore();
     unmount();
   });
 

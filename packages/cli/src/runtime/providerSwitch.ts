@@ -11,7 +11,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger, coreEvents } from '@vybestack/llxprt-code-core';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import {
@@ -29,6 +29,7 @@ import {
 } from '../providers/providerAliases.js';
 import { ensureOAuthProviderRegistered } from '../providers/oauth-provider-registration.js';
 import { configureProviderRuntimeFactories } from '../providers/providerManagerInstance.js';
+import { getActiveProfileName } from './profileSnapshot.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
 
@@ -836,6 +837,30 @@ export async function switchActiveProvider(
   applyModelDefaults(context);
   addProviderInfoMessages(context);
   await initializeContentGeneratorConfigIfSupported(context.config);
+
+  const profileName = getActiveProfileName();
+
+  // Context-scoped model resolution (issue #1770): prefer the context-local
+  // model sources over the stale global getActiveModelName().
+  // Fallback chain: modelToApply → provider-scoped default → config model
+  // → provider name. Must NEVER emit empty string for model.
+  const providerDefaultModel =
+    context.providerManager.getActiveProvider()?.getDefaultModel?.() ?? '';
+  const effectiveModel =
+    context.modelToApply ||
+    providerDefaultModel ||
+    context.config.getModel() ||
+    context.name;
+
+  // displayLabel: profile → model → provider name. Must NEVER be empty.
+  const displayLabel = profileName ?? effectiveModel;
+
+  coreEvents.emitModelProfileChanged({
+    model: effectiveModel,
+    providerName: context.name,
+    profileName,
+    displayLabel,
+  });
 
   return {
     changed: true,
