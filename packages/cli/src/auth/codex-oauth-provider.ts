@@ -7,6 +7,9 @@
 import {
   CodexDeviceFlow,
   CodexOAuthTokenSchema,
+  type OAuthUIEvent,
+  type OAuthUICallback,
+  oauthUIBridge,
 } from '@vybestack/llxprt-code-auth';
 import type {
   CodexOAuthToken,
@@ -22,8 +25,6 @@ import {
 import { CODEX_CONFIG } from '@vybestack/llxprt-code-auth';
 import type { OAuthProvider } from './types.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
-import type { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
-import { globalOAuthUI } from './global-oauth-ui.js';
 import { ClipboardService } from '../services/ClipboardService.js';
 import { InitializationGuard } from './oauth-provider-base.js';
 
@@ -44,20 +45,11 @@ export class CodexOAuthProvider implements OAuthProvider {
   private deviceFlow: CodexDeviceFlow;
   private logger: DebugLogger;
   private tokenStore: TokenStore;
-  private addItem?: (
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ) => number;
+  private addItem?: OAuthUICallback;
   private initGuard: InitializationGuard;
   private authInProgress: Promise<CodexOAuthToken> | null = null;
 
-  constructor(
-    tokenStore: TokenStore,
-    addItem?: (
-      itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp?: number,
-    ) => number,
-  ) {
+  constructor(tokenStore: TokenStore, addItem?: OAuthUICallback) {
     this.deviceFlow = new CodexDeviceFlow();
     this.logger = new DebugLogger('llxprt:auth:codex');
     this.tokenStore = tokenStore;
@@ -69,12 +61,7 @@ export class CodexOAuthProvider implements OAuthProvider {
   /**
    * Set the addItem callback for displaying messages in the UI
    */
-  setAddItem(
-    addItem: (
-      itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp?: number,
-    ) => number,
-  ): void {
+  setAddItem(addItem: OAuthUICallback): void {
     this.addItem = addItem;
   }
 
@@ -196,7 +183,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     debugLogger.log('\nCodex OAuth Authentication');
     debugLogger.log('─'.repeat(40));
 
-    const historyItem: HistoryItemOAuthURL = {
+    const historyItem: OAuthUIEvent = {
       type: 'oauth_url',
       text: `Please visit the following URL to authenticate with Codex:\n${authUrl}`,
       url: authUrl,
@@ -204,7 +191,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     if (this.addItem) {
       this.addItem(historyItem);
     } else {
-      globalOAuthUI.callAddItem(historyItem);
+      oauthUIBridge.emit(historyItem);
     }
 
     debugLogger.log('Please visit the following URL to authenticate:');
@@ -346,7 +333,7 @@ export class CodexOAuthProvider implements OAuthProvider {
         () => '[DEVICE-FLOW] Device flow completed successfully',
       );
 
-      const successMessage: HistoryItemWithoutId = {
+      const successMessage: OAuthUIEvent = {
         type: 'info',
         text: 'Successfully authenticated with Codex!',
       };
@@ -372,17 +359,15 @@ export class CodexOAuthProvider implements OAuthProvider {
    */
   private displayDeviceCodeToUser(
     userCode: string,
-  ):
-    | ((item: Omit<HistoryItemWithoutId, 'id'>, ts?: number) => number)
-    | undefined {
+  ): OAuthUICallback | undefined {
     const authUrl = 'https://auth.openai.com/codex/device';
-    const urlHistoryItem: HistoryItemOAuthURL = {
+    const urlHistoryItem: OAuthUIEvent = {
       type: 'oauth_url',
       text: `Please visit the following URL to authorize with Codex:\n${authUrl}`,
       url: authUrl,
     };
 
-    const deviceCodeItem: Omit<HistoryItemWithoutId, 'id'> = {
+    const deviceCodeItem: OAuthUIEvent = {
       type: 'info',
       text: `Enter this code in your browser:\n\n    ${userCode}\n\n(Code expires in 15 minutes)`,
     };
@@ -393,14 +378,12 @@ export class CodexOAuthProvider implements OAuthProvider {
       return this.addItem;
     }
 
-    const urlDelivered = globalOAuthUI.callAddItem(urlHistoryItem);
-    globalOAuthUI.callAddItem(deviceCodeItem);
+    const urlDelivered = oauthUIBridge.emit(urlHistoryItem);
+    oauthUIBridge.emit(deviceCodeItem);
 
     if (urlDelivered !== undefined) {
-      return (
-        itemData: Omit<HistoryItemWithoutId, 'id'>,
-        baseTimestamp?: number,
-      ): number => globalOAuthUI.callAddItem(itemData, baseTimestamp) ?? -1;
+      return (event: OAuthUIEvent, timestamp?: number): number =>
+        oauthUIBridge.emit(event, timestamp) ?? -1;
     }
 
     process.stdout.write('\nCodex Device Authorization\n');
@@ -417,9 +400,7 @@ export class CodexOAuthProvider implements OAuthProvider {
    */
   private async copyDeviceCodeToClipboard(
     userCode: string,
-    addItem:
-      | ((item: Omit<HistoryItemWithoutId, 'id'>, ts?: number) => number)
-      | undefined,
+    addItem: OAuthUICallback | undefined,
   ): Promise<void> {
     try {
       await ClipboardService.copyToClipboard(userCode);

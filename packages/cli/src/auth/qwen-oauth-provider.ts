@@ -21,6 +21,9 @@ import {
   OAuthErrorFactory,
   GracefulErrorHandler,
   RetryHandler,
+  type OAuthUIEvent,
+  type OAuthUICallback,
+  oauthUIBridge,
 } from '@vybestack/llxprt-code-auth';
 import {
   openBrowserSecurely,
@@ -29,8 +32,6 @@ import {
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { ClipboardService } from '../services/ClipboardService.js';
-import type { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
-import { globalOAuthUI } from './global-oauth-ui.js';
 import { InitializationGuard, isTokenExpired } from './oauth-provider-base.js';
 
 export class QwenOAuthProvider implements OAuthProvider {
@@ -45,10 +46,7 @@ export class QwenOAuthProvider implements OAuthProvider {
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
   private logger: DebugLogger;
-  private addItem?: (
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ) => number;
+  private addItem?: OAuthUICallback;
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P05
@@ -59,10 +57,7 @@ export class QwenOAuthProvider implements OAuthProvider {
    */
   constructor(
     private tokenStore?: TokenStore,
-    addItem?: (
-      itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp?: number,
-    ) => number,
+    addItem?: OAuthUICallback,
   ) {
     // Line 7: SET this.tokenStore = tokenStore
     this.tokenStore = tokenStore;
@@ -101,12 +96,7 @@ export class QwenOAuthProvider implements OAuthProvider {
   /**
    * Set the addItem callback for displaying messages in the UI
    */
-  setAddItem(
-    addItem: (
-      itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp?: number,
-    ) => number,
-  ): void {
+  setAddItem(addItem: OAuthUICallback): void {
     this.addItem = addItem;
   }
 
@@ -183,11 +173,8 @@ export class QwenOAuthProvider implements OAuthProvider {
    */
   private async displayQwenAuthUrl(
     authUrl: string,
-  ): Promise<
-    | ((item: Omit<HistoryItemWithoutId, 'id'>, ts?: number) => number)
-    | undefined
-  > {
-    const historyItem: HistoryItemOAuthURL = {
+  ): Promise<OAuthUICallback | undefined> {
+    const historyItem: OAuthUIEvent = {
       type: 'oauth_url',
       text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
       url: authUrl,
@@ -196,7 +183,7 @@ export class QwenOAuthProvider implements OAuthProvider {
     if (this.addItem) {
       this.addItem(historyItem);
     } else {
-      const delivered = globalOAuthUI.callAddItem(historyItem);
+      const delivered = oauthUIBridge.emit(historyItem);
       if (delivered === undefined) {
         debugLogger.log('\nQwen OAuth Authentication');
         debugLogger.log('─'.repeat(40));
@@ -222,18 +209,13 @@ export class QwenOAuthProvider implements OAuthProvider {
   /**
    * Emit a UI message via the instance addItem or the global buffer.
    */
-  private emitUIMessage(
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ): void {
+  private emitUIMessage(event: OAuthUIEvent, baseTimestamp?: number): void {
     if (this.addItem) {
-      this.addItem(itemData, baseTimestamp);
+      this.addItem(event, baseTimestamp);
     } else {
-      const delivered = globalOAuthUI.callAddItem(itemData, baseTimestamp);
+      const delivered = oauthUIBridge.emit(event, baseTimestamp);
       if (delivered === undefined) {
-        debugLogger.log(
-          'text' in itemData ? (itemData.text as string) : 'OAuth event',
-        );
+        debugLogger.log('text' in event ? event.text : 'OAuth event');
       }
     }
   }
@@ -374,7 +356,7 @@ export class QwenOAuthProvider implements OAuthProvider {
               Date.now(),
             );
           } else {
-            const delivered = globalOAuthUI.callAddItem(
+            const delivered = oauthUIBridge.emit(
               { type: 'info', text: 'Successfully logged out from Qwen' },
               Date.now(),
             );

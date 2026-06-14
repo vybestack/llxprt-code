@@ -17,6 +17,9 @@ import {
   OAuthErrorType,
   GracefulErrorHandler,
   RetryHandler,
+  type OAuthUICallback,
+  type OAuthUIEvent,
+  oauthUIBridge,
 } from '@vybestack/llxprt-code-auth';
 import {
   openBrowserSecurely,
@@ -25,10 +28,8 @@ import {
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { ClipboardService } from '../services/ClipboardService.js';
-import type { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
 import type { LocalOAuthCallbackServer } from './local-oauth-callback.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
-import { globalOAuthUI } from './global-oauth-ui.js';
 import {
   InitializationGuard,
   AuthCodeDialog,
@@ -65,10 +66,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private retryHandler: RetryHandler;
   private logger: DebugLogger;
   private currentAuthAttemptId?: string;
-  private addItem?: (
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ) => number;
+  private addItem?: OAuthUICallback;
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P06
@@ -79,10 +77,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    */
   constructor(
     private _tokenStore?: TokenStore,
-    addItem?: (
-      itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp?: number,
-    ) => number,
+    addItem?: OAuthUICallback,
   ) {
     this.deviceFlow = new AnthropicDeviceFlow();
     this.retryHandler = new RetryHandler();
@@ -110,12 +105,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   /**
    * Set the addItem callback for displaying messages in the UI
    */
-  setAddItem(
-    addItem: (
-      itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp?: number,
-    ) => number,
-  ): void {
+  setAddItem(addItem: OAuthUICallback): void {
     this.addItem = addItem;
   }
 
@@ -223,7 +213,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       ? this.deviceFlow.buildAuthorizationUrl(localCallback.redirectUri)
       : null;
 
-    const historyItem: HistoryItemOAuthURL = {
+    const historyItem: OAuthUIEvent = {
       type: 'oauth_url',
       text: `Please visit the following URL to authorize with Anthropic Claude:\n${deviceCodeUrl}`,
       url: deviceCodeUrl,
@@ -231,7 +221,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     if (this.addItem) {
       this.addItem(historyItem);
     } else {
-      globalOAuthUI.callAddItem(historyItem);
+      oauthUIBridge.emit(historyItem);
     }
     debugLogger.log('Visit the following URL to authorize:');
     debugLogger.log(deviceCodeUrl);

@@ -16,6 +16,8 @@ import {
   OAuthErrorFactory,
   GracefulErrorHandler,
   RetryHandler,
+  type OAuthUICallback,
+  oauthUIBridge,
 } from '@vybestack/llxprt-code-auth';
 import {
   clearOauthClientCache,
@@ -27,8 +29,6 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { Credentials } from 'google-auth-library';
-import type { HistoryItemWithoutId } from '../ui/types.js';
-import { globalOAuthUI } from './global-oauth-ui.js';
 import { InitializationGuard, AuthCodeDialog } from './oauth-provider-base.js';
 
 export class GeminiOAuthProvider implements OAuthProvider {
@@ -40,18 +40,9 @@ export class GeminiOAuthProvider implements OAuthProvider {
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
   private logger: DebugLogger;
-  private addItem?: (
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ) => number;
+  private addItem?: OAuthUICallback;
 
-  constructor(
-    tokenStore?: TokenStore,
-    addItem?: (
-      itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp?: number,
-    ) => number,
-  ) {
+  constructor(tokenStore?: TokenStore, addItem?: OAuthUICallback) {
     this.tokenStore = tokenStore;
     this.retryHandler = new RetryHandler();
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
@@ -75,12 +66,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
   /**
    * Set the addItem callback for displaying messages in the UI
    */
-  setAddItem(
-    addItem: (
-      itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp?: number,
-    ) => number,
-  ): void {
+  setAddItem(addItem: OAuthUICallback): void {
     this.addItem = addItem;
   }
 
@@ -193,7 +179,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
             Date.now(),
           );
         } else {
-          globalOAuthUI.callAddItem(
+          oauthUIBridge.emit(
             {
               type: 'error',
               text: `Browser authentication failed: ${error.message}\nPlease try again or use an API key with /keyfile <path-to-your-gemini-key>`,
@@ -232,7 +218,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
     if (this.addItem) {
       this.addItem({ type: 'info', text: fallbackMessage }, Date.now());
     } else {
-      const delivered = globalOAuthUI.callAddItem(
+      const delivered = oauthUIBridge.emit(
         { type: 'info', text: fallbackMessage },
         Date.now(),
       );
@@ -290,7 +276,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
         Date.now(),
       );
     } else {
-      const delivered = globalOAuthUI.callAddItem(
+      const delivered = oauthUIBridge.emit(
         {
           type: 'info',
           text: 'Successfully authenticated with Google Gemini!',
