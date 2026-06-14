@@ -36,6 +36,7 @@ import {
   nextStreamEventWithIdleTimeout,
   resolveStreamIdleTimeoutMs,
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { getResponseTextFromParts } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{
@@ -678,6 +679,7 @@ export class DirectMessageProcessor {
     }
 
     let afterModelModifiedResponse = false;
+    let afterModelModifiedText = false;
 
     // Trigger AfterModel hook
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
@@ -706,42 +708,62 @@ export class DirectMessageProcessor {
               allowedFunctionNames,
             );
             afterModelModifiedResponse = true;
+            // Re-derive aggregatedText from the hook-modified response so the
+            // text getter reflects the hook's intended text rather than the
+            // stale pre-hook provider output (issue #1749).
+            const modifiedText = this._extractResponseText(directResponse);
+            if (modifiedText !== '') {
+              aggregatedText = modifiedText;
+              afterModelModifiedText = true;
+            }
           }
         }
       }
     }
 
     const canAppendAggregatedText =
-      aggregatedText.trim() !== '' && !afterModelModifiedResponse;
+      aggregatedText.trim() !== '' &&
+      (!afterModelModifiedResponse || afterModelModifiedText);
 
     // Ensure text content is included
     if (canAppendAggregatedText) {
-      const candidate = directResponse.candidates?.[0];
-      if (candidate) {
-        const parts = candidate.content?.parts ?? [];
-        const hasText = parts.some(
-          (part) => typeof part.text === 'string' && part.text.trim() !== '',
-        );
-        if (!hasText) {
-          candidate.content = candidate.content ?? {
-            role: 'model',
-            parts: [],
-          };
-          candidate.content.parts = [
-            ...(candidate.content.parts ?? []),
-            { text: aggregatedText },
-          ];
-        }
-      }
-      Object.defineProperty(directResponse, 'text', {
-        configurable: true,
-        get() {
-          return aggregatedText;
-        },
-      });
+      this._ensureResponseText(directResponse, aggregatedText);
     }
 
     return directResponse;
+  }
+
+  /**
+   * Ensures the response exposes the provided text via a candidate part and a
+   * stable `text` getter. Existing non-empty text parts are left untouched.
+   */
+  private _ensureResponseText(
+    response: GenerateContentResponse,
+    text: string,
+  ): void {
+    const candidate = response.candidates?.[0];
+    if (candidate) {
+      const parts = candidate.content?.parts ?? [];
+      const hasText = parts.some(
+        (part) => typeof part.text === 'string' && part.text.trim() !== '',
+      );
+      if (!hasText) {
+        candidate.content = candidate.content ?? {
+          role: 'model',
+          parts: [],
+        };
+        candidate.content.parts = [
+          ...(candidate.content.parts ?? []),
+          { text },
+        ];
+      }
+    }
+    Object.defineProperty(response, 'text', {
+      configurable: true,
+      get() {
+        return text;
+      },
+    });
   }
 
   private _applyHookRestrictedAllowedTools(
@@ -749,6 +771,19 @@ export class DirectMessageProcessor {
     allowedFunctionNames: string[] | undefined,
   ): GenerateContentResponse {
     return attachHookRestrictedAllowedTools(response, allowedFunctionNames);
+  }
+
+  /**
+   * Concatenates the visible (non-thought) text from the first candidate's
+   * parts. Delegates to the canonical helper so thinking content is excluded
+   * (see #721, #1730).
+   */
+  private _extractResponseText(response: GenerateContentResponse): string {
+    return (
+      getResponseTextFromParts(
+        response.candidates?.[0]?.content?.parts ?? [],
+      ) ?? ''
+    );
   }
 
   /**
