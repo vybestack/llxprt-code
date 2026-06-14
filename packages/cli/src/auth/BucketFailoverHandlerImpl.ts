@@ -575,6 +575,21 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
         () =>
           `Bucket failover: switched from ${currentBucket} to ${candidateBucket} after reauth`,
       );
+
+      // @fix issue1658
+      // After a successful foreground reauth, eagerly authenticate any
+      // remaining unauthenticated buckets so subsequent failovers do not
+      // trigger additional mid-turn browser prompts. Best-effort: a failure
+      // here must not block the already-successful primary reauth.
+      try {
+        await this.ensureBucketsAuthenticated();
+      } catch (eagerAuthError) {
+        logger.warn(
+          `Eager bucket authentication after pass-3 reauth failed (continuing with successful reauth):`,
+          eagerAuthError,
+        );
+      }
+
       return true;
     } catch (reauthError) {
       logger.warn(
