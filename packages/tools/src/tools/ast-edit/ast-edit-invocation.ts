@@ -6,8 +6,6 @@
  * AST Edit Tool Invocation - Handles execution of edit operations
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import * as path from 'path';
 import { promises as fsPromises } from 'fs';
 import * as Diff from 'diff';
@@ -24,7 +22,6 @@ import {
 } from '../tools.js';
 import { ToolErrorType } from '../../types/tool-error.js';
 import { makeRelative, shortenPath } from '../../utils/paths.js';
-import { isNodeError } from '../../utils/errors.js';
 import type {
   Diagnostic,
   IToolHost,
@@ -38,7 +35,6 @@ import { ensureParentDirectoriesExist } from '../../utils/ensure-dirs.js';
 import type { ASTEditToolParams } from './types.js';
 import { ASTConfig } from './ast-config.js';
 import type { ASTContextCollector } from './context-collector.js';
-import { applyReplacement } from './edit-helpers.js';
 import {
   calculateEdit,
   validateASTSyntax,
@@ -163,16 +159,20 @@ export class ASTEditToolInvocation
 
   private async executePreview(_signal: AbortSignal): Promise<ToolResult> {
     try {
-      const rawCurrentContent = await this.readFileContent();
-      const currentContent = rawCurrentContent.replace(/\r\n/g, '\n');
-      const currentMtime = await this.getFileLastModified(
-        this.params.file_path,
-      );
+      const editData = await this.calculateEdit(this.params, _signal);
+      if (editData.error) {
+        return {
+          llmContent: editData.error.raw,
+          returnDisplay: `Error: ${editData.error.display}`,
+          error: {
+            message: editData.error.raw,
+            type: editData.error.type,
+          },
+        };
+      }
 
-      const isNewFile = this.detectNewFile(rawCurrentContent, currentMtime);
-
-      const freshnessError = this.checkFreshness(currentMtime);
-      if (freshnessError) return freshnessError;
+      const currentContent = editData.currentContent ?? '';
+      const currentMtime = editData.fileFreshness ?? null;
 
       const workspaceRoot = this.host.getTargetDir();
       const enhancedContext =
@@ -182,22 +182,15 @@ export class ASTEditToolInvocation
           workspaceRoot,
         );
 
-      const newContent = applyReplacement(
-        currentContent,
-        this.params.old_string,
-        this.params.new_string,
-        isNewFile,
-      );
-      const astValidation = this.validateASTSyntax(
-        this.params.file_path,
-        newContent,
-      );
+      const astValidation =
+        editData.astValidation ??
+        this.validateASTSyntax(this.params.file_path, editData.newContent);
 
       const fileName = path.basename(this.params.file_path);
       const fileDiff = Diff.createPatch(
         fileName,
         currentContent,
-        newContent,
+        editData.newContent,
         'Current',
         'Proposed',
         DEFAULT_CREATE_PATCH_OPTIONS,
@@ -214,7 +207,7 @@ export class ASTEditToolInvocation
         fileDiff,
         fileName,
         originalContent: currentContent,
-        newContent,
+        newContent: editData.newContent,
         metadata: { astValidation, currentMtime },
       };
 
@@ -233,41 +226,6 @@ export class ASTEditToolInvocation
         },
       };
     }
-  }
-
-  private detectNewFile(
-    rawCurrentContent: string,
-    mtime: number | null,
-  ): boolean {
-    if (this.params.old_string === '' && rawCurrentContent === '') {
-      return mtime === null;
-    }
-    return false;
-  }
-
-  private checkFreshness(currentMtime: number | null): ToolResult | null {
-    if (
-      this.params.last_modified !== undefined &&
-      currentMtime !== null &&
-      currentMtime > this.params.last_modified
-    ) {
-      const errorMessage = `File ${this.params.file_path} mismatch. Expected mtime <= ${this.params.last_modified}, but found ${currentMtime}.`;
-      const displayMessage = `File has been modified since it was last read. Please read the file again to get the latest content.`;
-      const rawErrorMessage = JSON.stringify({
-        message: errorMessage,
-        current_mtime: currentMtime,
-        your_mtime: this.params.last_modified,
-      });
-      return {
-        llmContent: rawErrorMessage,
-        returnDisplay: `Error: ${displayMessage}`,
-        error: {
-          message: rawErrorMessage,
-          type: ToolErrorType.FILE_MODIFIED_CONFLICT,
-        },
-      };
-    }
-    return null;
   }
 
   private buildPreviewLlmContent(
@@ -578,22 +536,6 @@ export class ASTEditToolInvocation
     abortSignal: AbortSignal,
   ): Promise<CalculatedEdit> {
     return calculateEdit(params, this.host, abortSignal);
-  }
-
-  private async readFileContent(): Promise<string> {
-    try {
-      const fileSystemService = this.host.getFileSystemService?.() as
-        | { readTextFile?: (filePath: string) => Promise<string> }
-        | undefined;
-      return fileSystemService?.readTextFile
-        ? await fileSystemService.readTextFile(this.params.file_path)
-        : await fsPromises.readFile(this.params.file_path, 'utf-8');
-    } catch (error) {
-      if (isNodeError(error) && error.code === 'ENOENT') {
-        return '';
-      }
-      throw error;
-    }
   }
 
   private validateASTSyntax(
