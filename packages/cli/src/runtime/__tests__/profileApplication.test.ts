@@ -1355,6 +1355,33 @@ describe('STEP 5 workflow: non-auth ephemerals', () => {
     expect(configStub.getEphemeralSetting('custom-setting')).toBe('value');
   });
 
+  it('keeps explicit profile context-limit after model default recomputation', async () => {
+    providerManagerStub.available = ['anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+    configStub.setEphemeralSetting('context-limit', 200000);
+
+    setActiveModelMock.mockImplementationOnce(async (model: string) => {
+      configStub.setEphemeralSetting('context-limit', undefined);
+      return { nextModel: model };
+    });
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'claude-opus-4-8',
+      modelParams: {},
+      ephemeralSettings: {
+        'context-limit': 200000,
+      },
+    };
+
+    await applyProfileWithGuards(profile);
+
+    expect(configStub.getEphemeralSetting('context-limit')).toBe(200000);
+  });
+
   it('does not re-apply auth-key, auth-keyfile, base-url, or GCP settings in non-auth step', async () => {
     const ephemeralSetCalls: Array<{ key: string; value: unknown }> = [];
     setEphemeralSettingMock.mockImplementation((key, value) => {
