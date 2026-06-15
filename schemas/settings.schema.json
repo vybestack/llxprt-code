@@ -183,8 +183,8 @@
     "defaultDisabledTools": {
       "title": "Default Disabled Tools",
       "description": "Tool names disabled by default. Users can re-enable them with /tools enable.",
-      "markdownDescription": "Tool names disabled by default. Users can re-enable them with /tools enable.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `[\n  \"google_web_fetch\"\n]`",
-      "default": ["google_web_fetch"],
+      "markdownDescription": "Tool names disabled by default. Users can re-enable them with /tools enable.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `[\n  \"google_web_fetch\",\n  \"google_web_search\"\n]`",
+      "default": ["google_web_fetch", "google_web_search"],
       "type": "array",
       "items": {}
     },

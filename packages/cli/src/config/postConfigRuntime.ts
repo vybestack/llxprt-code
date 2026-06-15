@@ -11,10 +11,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { getCliRuntimeContext } from '../runtime/runtimeAccessors.js';
-import { setCliRuntimeContext } from '../runtime/runtimeLifecycle.js';
-import { switchActiveProvider } from '../runtime/providerSwitch.js';
-import { applyCliSetArguments } from './cliEphemeralSettings.js';
+import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js';
+import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js';
+import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import { applyCliSetArguments } from '@vybestack/llxprt-code-providers/runtime/cliEphemeralSettings.js';
 import {
   READ_ONLY_TOOL_NAMES,
   EDIT_TOOL_NAME,
@@ -129,7 +129,7 @@ async function setupRuntimeContext(
 
   // Re-register provider infrastructure AFTER runtime context (step 11)
   const { registerCliProviderInfrastructure } = await import(
-    '../runtime/runtimeSettings.js'
+    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
   );
   if (runtimeState.oauthManager) {
     registerCliProviderInfrastructure(
@@ -254,7 +254,7 @@ async function reapplyCliOverrides(
     (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0)
   ) {
     const { applyCliArgumentOverrides } = await import(
-      '../runtime/runtimeSettings.js'
+      '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
     );
     await applyCliArgumentOverrides(
       {

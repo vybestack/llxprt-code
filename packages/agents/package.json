@@ -33,6 +33,7 @@
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
     "@vybestack/llxprt-code-policy": "file:../policy",
+    "@vybestack/llxprt-code-providers": "file:../providers",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "diff": "^8.0.3",

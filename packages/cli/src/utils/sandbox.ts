@@ -32,7 +32,7 @@ import {
   createAndStartProxy,
   stopProxy,
   getProxySocketPath,
-} from '../auth/proxy/sandbox-proxy-lifecycle.js';
+} from '@vybestack/llxprt-code-providers/auth.js';
 
 const execAsync = promisify(exec);
 

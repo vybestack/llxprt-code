@@ -29,7 +29,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
   describe('R25.1: Proxy Server Created Before Container', () => {
     it('imports createAndStartProxy from sandbox-proxy-lifecycle', () => {
       expect(sandboxSource).toContain(
-        "import {\n  createAndStartProxy,\n  stopProxy,\n  getProxySocketPath,\n} from '../auth/proxy/sandbox-proxy-lifecycle.js';",
+        "import {\n  createAndStartProxy,\n  stopProxy,\n  getProxySocketPath,\n} from '@vybestack/llxprt-code-providers/auth.js';",
       );
     });
 

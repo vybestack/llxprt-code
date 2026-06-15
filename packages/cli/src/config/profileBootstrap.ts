@@ -17,9 +17,10 @@ import {
 import { resolveRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { createProviderManager } from '../providers/providerManagerInstance.js';
-import { registerCliProviderInfrastructure } from '../runtime/runtimeLifecycle.js';
-import type { OAuthManager } from '../auth/oauth-manager.js';
+import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
+import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
+import { registerCliProviderInfrastructure } from '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
@@ -407,6 +408,7 @@ export async function prepareRuntimeForProfile(
     {
       config: runtime.config,
       runtimeMessageBus,
+      oauthSettings: createOAuthSettingsAdapter(),
     },
   );
 

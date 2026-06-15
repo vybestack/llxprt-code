@@ -10,7 +10,9 @@ import { parseZedAuthMethodId } from './zedIntegration.js';
 // Mock runtimeSettings to test credential cache clearing logic
 const mockGetActiveProfileName = vi.fn<() => string | null>();
 const mockLoadProfileByName = vi.fn<(name: string) => Promise<void>>();
-vi.mock('../runtime/runtimeSettings.js', () => ({
+vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({
+  registerAgentRuntimeFactories: vi.fn(),
+  resetAgentRuntimeFactories: vi.fn(),
   clearActiveModelParam: vi.fn(),
   getActiveModelParams: vi.fn(),
   getActiveProfileName: (...args: unknown[]) =>

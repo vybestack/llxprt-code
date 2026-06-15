@@ -106,9 +106,12 @@ if (existsSync(promptManifestPath)) {
 }
 
 // Copy provider alias config files preserving directory structure
-const aliasFiles = glob.sync('packages/cli/src/providers/aliases/*.config', {
-  cwd: root,
-});
+const aliasFiles = glob.sync(
+  'packages/providers/src/composition/aliases/*.config',
+  {
+    cwd: root,
+  },
+);
 for (const file of aliasFiles) {
   const sourcePath = join(root, file);
   const targetPath = join(bundleDir, 'providers', 'aliases', basename(file));

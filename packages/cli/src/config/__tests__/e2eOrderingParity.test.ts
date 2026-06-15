@@ -138,7 +138,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
 }));
 
 // Mock applyProfileSnapshot (static import in config.ts from profileSnapshot.js)
-vi.mock('../../runtime/profileSnapshot.js', () => ({
+vi.mock('@vybestack/llxprt-code-providers/runtime/profileSnapshot.js', () => ({
   applyProfileSnapshot: vi.fn(
     async (profile: { provider?: string; model?: string }) => {
       callLog.entries.push('applyProfileSnapshot');
@@ -152,7 +152,7 @@ vi.mock('../../runtime/profileSnapshot.js', () => ({
 }));
 
 // Mock switchActiveProvider (static import in config.ts from providerSwitch.js)
-vi.mock('../../runtime/providerSwitch.js', () => ({
+vi.mock('@vybestack/llxprt-code-providers/runtime/providerSwitch.js', () => ({
   switchActiveProvider: vi.fn(async (providerName: string) => {
     callLog.entries.push(`switchActiveProvider:${providerName}`);
     return {
@@ -165,7 +165,7 @@ vi.mock('../../runtime/providerSwitch.js', () => ({
 }));
 
 // Mock setCliRuntimeContext (static import in config.ts from runtimeLifecycle.js)
-vi.mock('../../runtime/runtimeLifecycle.js', () => ({
+vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js', () => ({
   setCliRuntimeContext: vi.fn(
     (
       svc: SettingsService,
@@ -184,7 +184,7 @@ vi.mock('../../runtime/runtimeLifecycle.js', () => ({
 }));
 
 // Mock runtimeAccessors (static import in config.ts)
-vi.mock('../../runtime/runtimeAccessors.js', () => ({
+vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js', () => ({
   getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
   getCliRuntimeConfig: vi.fn(
     () => runtimeSettingsState.context?.config ?? null,
@@ -213,7 +213,7 @@ vi.mock('../../runtime/runtimeAccessors.js', () => ({
   getEphemeralSetting: vi.fn(() => undefined),
 }));
 
-vi.mock('../../runtime/runtimeSettings.js', () => {
+vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -225,6 +225,8 @@ vi.mock('../../runtime/runtimeSettings.js', () => {
     } as unknown as ProviderManager);
 
   return {
+    registerAgentRuntimeFactories: vi.fn(),
+    resetAgentRuntimeFactories: vi.fn(),
     applyProfileSnapshot: vi.fn(
       async (profile: { provider?: string; model?: string }) => ({
         providerName: profile.provider ?? '',

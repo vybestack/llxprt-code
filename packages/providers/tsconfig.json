@@ -9,6 +9,7 @@
     "baseUrl": ".",
     "paths": {
       "@vybestack/llxprt-code-providers": ["./index.ts"],
+      "@vybestack/llxprt-code-providers/auth.js": ["./src/auth/index.ts"],
       "@vybestack/llxprt-code-providers/*": ["./src/*"],
       "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
       "@vybestack/llxprt-code-core": ["../core/index.ts"],

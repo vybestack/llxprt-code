@@ -26,11 +26,11 @@ import {
   updateActiveProviderBaseUrl,
   resetCliProviderInfrastructure,
   getCliStatelessHardeningOverride,
-} from '../runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 import {
   runWithRuntimeScope,
   type IsolatedRuntimeContextHandle,
-} from '../runtimeContextFactory.js';
+} from '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js';
 import {
   cleanupTempDirectory,
   createTempDirectory,
@@ -384,7 +384,9 @@ describe('CLI runtime isolation', () => {
     try {
       resetCliProviderInfrastructure();
 
-      const { getCliRuntimeContext } = await import('../runtimeSettings.js');
+      const { getCliRuntimeContext } = await import(
+        '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
+      );
 
       // Try to get context with stateless mode enabled but no runtime registered
       // This simulates missing SettingsService scenario
@@ -404,7 +406,9 @@ describe('CLI runtime isolation', () => {
     resetCliProviderInfrastructure();
 
     try {
-      const { getCliRuntimeContext } = await import('../runtimeSettings.js');
+      const { getCliRuntimeContext } = await import(
+        '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
+      );
 
       // Try to get context without any runtime registration
       expect(() => getCliRuntimeContext()).toThrow(
@@ -439,7 +443,7 @@ describe('CLI runtime isolation', () => {
       });
 
       const { ensureStatelessProviderReady } = await import(
-        '../runtimeSettings.js'
+        '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
       );
 
       // Should not throw - runtime properly registered
@@ -460,7 +464,7 @@ describe('CLI runtime isolation', () => {
       resetCliProviderInfrastructure();
 
       const { ensureStatelessProviderReady } = await import(
-        '../runtimeSettings.js'
+        '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
       );
 
       // Try to ensure ready with no runtime registered - should throw

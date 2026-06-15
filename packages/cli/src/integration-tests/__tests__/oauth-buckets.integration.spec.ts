@@ -25,8 +25,8 @@ import {
   type KeyringAdapter,
 } from '@vybestack/llxprt-code-storage';
 import type { StandardProfile } from '@vybestack/llxprt-code-settings';
-import { OAuthManager } from '../../auth/oauth-manager.js';
-import type { OAuthProvider } from '../../auth/types.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthProvider } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,

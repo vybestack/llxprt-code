@@ -154,7 +154,7 @@ function getIdeClientDisplayName(context: CommandContext): string {
 async function getKeyfilePath(context: CommandContext): Promise<string> {
   try {
     const { getProviderManager } = await import(
-      '../../providers/providerManagerInstance.js'
+      '@vybestack/llxprt-code-providers/composition.js'
     );
     const providerManager = getProviderManager();
     const providerName = providerManager.getActiveProviderName();

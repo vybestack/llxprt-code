@@ -3,7 +3,7 @@ import {
   runWithRuntimeScope,
   registerIsolatedRuntimeBindings,
   createIsolatedRuntimeContext,
-} from '../../src/runtime/runtimeContextFactory.js';
+} from '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js';
 import {
   AuthPrecedenceResolver,
   type AuthPrecedenceConfig,

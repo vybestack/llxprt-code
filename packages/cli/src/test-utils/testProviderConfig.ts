@@ -10,7 +10,7 @@
  *
  * @example
  * ```typescript
- * import { getProviderManager } from '../providers/providerManagerInstance';
+ * import { getProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
  *
  * // In your test
  * const manager = getProviderManager(undefined, true); // Enable browser environment

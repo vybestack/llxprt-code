@@ -101,7 +101,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
   oauthManager: null as unknown,
 }));
 
-vi.mock('../runtime/runtimeSettings.js', () => {
+vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -113,6 +113,8 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     } as unknown as ServerConfig.ProviderManager);
 
   return {
+    registerAgentRuntimeFactories: vi.fn(),
+    resetAgentRuntimeFactories: vi.fn(),
     applyProfileSnapshot: vi.fn(
       async (profile: {
         provider?: string;
@@ -1795,6 +1797,28 @@ describe('defaultDisabledTools', () => {
     const disabled = config.getEphemeralSetting('tools.disabled');
     expect(disabled).toStrictEqual(
       expect.arrayContaining(['google_web_fetch']),
+    );
+  });
+
+  it('should seed tools.disabled with both default-disabled tools', async () => {
+    const settings: Settings = {
+      defaultDisabledTools: ['google_web_fetch', 'google_web_search'],
+    };
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    const disabled = config.getEphemeralSetting('tools.disabled');
+    expect(disabled).toStrictEqual(
+      expect.arrayContaining(['google_web_fetch', 'google_web_search']),
     );
   });
 

@@ -25,14 +25,14 @@ import {
   cleanupTempDirectory,
   initializeTestConfig,
 } from './test-utils.js';
-import { createProviderManager } from '../providers/providerManagerInstance.js';
+import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   setCliRuntimeContext,
   switchActiveProvider,
   registerCliProviderInfrastructure,
   resetCliProviderInfrastructure,
-} from '../runtime/runtimeSettings.js';
-import { setProviderBaseUrl } from '../providers/providerConfigUtils.js';
+} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+import { setProviderBaseUrl } from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
 
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P07

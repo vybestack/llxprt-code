@@ -64,7 +64,10 @@ const createAbortError = (message: string): Error => {
   return error;
 };
 
-const DEFAULT_DISABLED_TOOLS = ['google_web_fetch'] as const;
+const DEFAULT_DISABLED_TOOLS = [
+  'google_web_fetch',
+  'google_web_search',
+] as const;
 
 const normalizeDefaultToolSet = (tools: readonly string[]): Set<string> =>
   new Set(tools.map((tool) => canonicalizeToolName(tool)).filter(Boolean));
