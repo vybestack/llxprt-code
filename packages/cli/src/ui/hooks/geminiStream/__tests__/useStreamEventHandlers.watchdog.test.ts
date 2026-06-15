@@ -14,10 +14,7 @@ import {
   type ThoughtSummary,
 } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../../../test-utils/render.js';
-import {
-  useStreamEventHandlers,
-  __testing,
-} from '../useStreamEventHandlers.js';
+import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import { MessageType, type HistoryItemWithoutId } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';

@@ -366,6 +366,41 @@ describe('createChatSession', () => {
     );
   });
 
+  it('passes profile context-limit into the rebuilt runtime settings', async () => {
+    const config = makeConfig({
+      getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
+        if (key === 'context-limit') return 200000;
+        return undefined;
+      }),
+    });
+    const runtimeState = makeRuntimeState({
+      provider: 'anthropic',
+      model: 'claude-opus-4-8',
+    });
+    const todoContinuationService = makeTodoContinuationService();
+
+    await createChatSession({
+      config,
+      runtimeState,
+      contentGenerator: makeContentGenerator(),
+      storedHistoryService: undefined,
+      clearStoredHistoryService: vi.fn(),
+      generateContentConfig: {},
+      todoContinuationService,
+      toolRegistry: undefined,
+    });
+
+    expect(vi.mocked(loadAgentRuntime)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile: expect.objectContaining({
+          settings: expect.objectContaining({
+            contextLimit: 200000,
+          }),
+        }),
+      }),
+    );
+  });
+
   it('creates a new HistoryService when none is stored', async () => {
     const config = makeConfig();
     const runtimeState = makeRuntimeState();

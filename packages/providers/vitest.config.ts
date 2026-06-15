@@ -19,11 +19,14 @@ const isMacCi = process.platform === 'darwin' && process.env.CI === 'true';
 const shouldUseForkPool = isWindows || isMacCi;
 
 const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
+const authPackagePrefix = '@vybestack/llxprt-code-auth/';
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
 const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
 const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
 const providersEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
 const providersSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
+const authEntry = fileURLToPath(new URL('../auth/index.ts', import.meta.url));
+const authSrcDir = fileURLToPath(new URL('../auth/src/', import.meta.url));
 const coreEntry = fileURLToPath(new URL('../core/index.ts', import.meta.url));
 const coreSrcDir = fileURLToPath(new URL('../core/src/', import.meta.url));
 const storageEntry = fileURLToPath(
@@ -75,6 +78,15 @@ const workspaceAliasPlugin = {
       return resolveTsSource(
         providersSrcDir,
         source.slice(providersPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-auth') {
+      return authEntry;
+    }
+    if (source.startsWith(authPackagePrefix)) {
+      return resolveTsSource(
+        authSrcDir,
+        source.slice(authPackagePrefix.length),
       );
     }
     if (source === '@vybestack/llxprt-code-core') {
@@ -170,6 +182,7 @@ export default defineConfig({
       deps: {
         inline: [
           '@vybestack/llxprt-code-core',
+          '@vybestack/llxprt-code-auth',
           '@vybestack/llxprt-code-storage',
           '@vybestack/llxprt-code-providers',
           '@vybestack/llxprt-code-settings',

@@ -799,10 +799,7 @@ export async function applyProfileWithGuards(
     infoMessages,
   );
 
-  // STEP 5: Apply non-auth ephemerals
-  applyNonAuthEphemerals(sanitizedProfile);
-
-  // STEP 6: Apply model and modelParams
+  // STEP 5: Apply model and modelParams
   const { appliedModelName, provider } = await applyModelAndParams({
     sanitizedProfile,
     actualProfile,
@@ -811,6 +808,9 @@ export async function applyProfileWithGuards(
     providerManager,
     targetProviderName,
   });
+
+  // STEP 6: Apply non-auth ephemerals after model defaults so profile values win
+  applyNonAuthEphemerals(sanitizedProfile);
 
   if (appliedModelName) {
     infoMessages.push(
