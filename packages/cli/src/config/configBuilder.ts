@@ -20,9 +20,23 @@ import {
   CoreToolScheduler,
   createTaskToolRegistration,
 } from '@vybestack/llxprt-code-agents';
+import { registerAgentRuntimeFactories } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
 import { loadSettings } from './settings.js';
 import { appEvents } from '../utils/events.js';
+
+// @plan PLAN-20260610-ISSUE1592.P01
+// @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
+// Register the concrete agent runtime factories with the providers package's
+// dependency-inversion seam. The implementations live in the agents package,
+// which depends on providers; importing them directly inside providers would
+// create a providers→agents cycle, so the CLI (composition root) injects them.
+registerAgentRuntimeFactories({
+  agentClientFactory: (config, runtimeState) =>
+    new AgentClient(config, runtimeState),
+  toolSchedulerFactory: (options) => new CoreToolScheduler(options),
+  taskToolRegistration: () => createTaskToolRegistration(),
+});
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';

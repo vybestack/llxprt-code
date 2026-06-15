@@ -38,8 +38,10 @@ import {
   createTempProfile,
   createTempKeyfile,
 } from './test-utils.js';
-import { OAuthManager } from '../auth/oauth-manager.js';
-import { KeyringTokenStore } from '../auth/types.js';
+import {
+  OAuthManager,
+  KeyringTokenStore,
+} from '@vybestack/llxprt-code-providers/auth.js';
 
 /**
  * Creates an in-memory mock keyring adapter for testing.

@@ -32,3 +32,5 @@ export type {
   IProviderRuntimeContext,
   GetActiveRuntimeContext,
 } from './runtime-context.js';
+
+export type { IOAuthSettingsProvider } from './oauth-settings-provider.js';

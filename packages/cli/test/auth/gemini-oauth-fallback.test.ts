@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GeminiOAuthProvider } from '../../src/auth/gemini-oauth-provider.js';
+import { GeminiOAuthProvider } from '@vybestack/llxprt-code-providers/auth.js';
 import { KeyringTokenStore } from '@vybestack/llxprt-code-core';
 import { HistoryItemWithoutId } from '../../src/ui/types.js';
 

@@ -36,26 +36,31 @@ vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn(),
 }));
 
-vi.mock('./runtime/runtimeSettings.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('./runtime/runtimeSettings.js')>();
-  return {
-    ...actual,
-    setCliRuntimeContext: vi.fn(),
-    switchActiveProvider: vi.fn(async () => ({
-      changed: true,
-      previousProvider: null,
-      nextProvider: 'gemini',
-      infoMessages: [],
-    })),
-    setActiveModel: vi.fn(),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-    getActiveModelParams: vi.fn(() => ({})),
-    loadProfileByName: vi.fn(),
-    applyCliArgumentOverrides: vi.fn(async () => {}),
-  };
-});
+vi.mock(
+  '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js')
+      >();
+    return {
+      ...actual,
+      setCliRuntimeContext: vi.fn(),
+      switchActiveProvider: vi.fn(async () => ({
+        changed: true,
+        previousProvider: null,
+        nextProvider: 'gemini',
+        infoMessages: [],
+      })),
+      setActiveModel: vi.fn(),
+      setActiveModelParam: vi.fn(),
+      clearActiveModelParam: vi.fn(),
+      getActiveModelParams: vi.fn(() => ({})),
+      loadProfileByName: vi.fn(),
+      applyCliArgumentOverrides: vi.fn(async () => {}),
+    };
+  },
+);
 
 vi.mock('./config/extension.js', () => ({
   ExtensionStorage: {

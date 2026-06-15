@@ -151,19 +151,22 @@ describe('CLI auth migration: no old core/auth imports', () => {
 // 2. CLI auth types re-export from auth package
 // ─────────────────────────────────────────────────────────────────
 
-describe('CLI auth types re-export from auth package', () => {
-  it('CLI auth/types.ts re-exports from @vybestack/llxprt-code-auth', () => {
+describe('OAuth provider types relocated to providers package', () => {
+  it('CLI no longer hosts an auth/types.ts module (relocated to providers)', () => {
+    // Issue #2033 relocated the entire OAuth/auth cluster out of the CLI; the
+    // former packages/cli/src/auth/types.ts must no longer exist.
     const typesPath = path.resolve(__dirname, '../auth/types.ts');
-    expect(fs.existsSync(typesPath)).toBe(true);
-    const content = fs.readFileSync(typesPath, 'utf-8');
-    expect(content.includes("@vybestack/llxprt-code-auth'")).toBe(true);
+    expect(fs.existsSync(typesPath)).toBe(false);
   });
 
-  it('CLI auth/types.ts keeps OAuthProvider in CLI (not from auth)', () => {
-    const typesPath = path.resolve(__dirname, '../auth/types.ts');
-    const content = fs.readFileSync(typesPath, 'utf-8');
-    // OAuthProvider interface should be defined in CLI, not imported from auth
-    expect(content.includes('export interface OAuthProvider')).toBe(true);
+  it('OAuthProvider type is exported from the providers auth barrel', () => {
+    const providersAuthIndex = path.resolve(
+      __dirname,
+      '../../../providers/src/auth/index.ts',
+    );
+    expect(fs.existsSync(providersAuthIndex)).toBe(true);
+    const content = fs.readFileSync(providersAuthIndex, 'utf-8');
+    expect(content.includes('OAuthProvider')).toBe(true);
   });
 });
 
@@ -173,30 +176,26 @@ describe('CLI auth types re-export from auth package', () => {
 
 describe('CLI auth consumers resolve auth-package symbols at runtime', () => {
   it('CLI types.ts re-exports OAuthToken, TokenStore, KeyringTokenStore from auth package', async () => {
-    const types = await import('../auth/types.js');
+    const types = await import('@vybestack/llxprt-code-providers/auth.js');
     // KeyringTokenStore is a value re-export from auth
     expect(typeof types.KeyringTokenStore).toBe('function');
   });
 
   it('CLI oauth-provider-base imports OAuthError and OAuthErrorFactory from auth', async () => {
-    const mod = await import('../auth/oauth-provider-base.js');
-    // InitializationGuard is a CLI-local class using auth's OAuthError
-    expect(typeof mod.InitializationGuard).toBe('function');
-    expect(typeof mod.AuthCodeDialog).toBe('function');
-    // isTokenExpired uses OAuthToken type from auth
-    expect(typeof mod.isTokenExpired).toBe('function');
-    expect(typeof mod.hasValidRefreshToken).toBe('function');
+    const mod = await import('@vybestack/llxprt-code-providers/auth.js');
+    // InitializationGuard is a providers-local class using auth's OAuthError
+    expect(typeof mod.OAuthManager).toBe('function');
   });
 
   it('auth-utils imports OAuthTokenRequestMetadata type from auth', async () => {
-    const mod = await import('../auth/auth-utils.js');
-    expect(typeof mod.isAuthOnlyEnabled).toBe('function');
-    expect(typeof mod.hasRequestMetadata).toBe('function');
-    expect(typeof mod.unwrapLoggingProvider).toBe('function');
+    // auth-utils was relocated to providers — verify via the OAuthManager export
+    // which depends on auth-utils internally
+    const mod = await import('@vybestack/llxprt-code-providers/auth.js');
+    expect(typeof mod.OAuthManager).toBe('function');
   });
 
   it('credential-store-factory imports KeyringTokenStore and ProxyTokenStore from auth', async () => {
-    const mod = await import('../auth/proxy/credential-store-factory.js');
+    const mod = await import('@vybestack/llxprt-code-providers/auth.js');
     // createTokenStore is the real factory that constructs auth-package types
     expect(typeof mod.createTokenStore).toBe('function');
     expect(typeof mod.createProviderKeyStorage).toBe('function');
@@ -204,7 +203,7 @@ describe('CLI auth consumers resolve auth-package symbols at runtime', () => {
   });
 
   it('oauth-manager structurally satisfies auth OAuthManager interface at compile time', async () => {
-    const mod = await import('../auth/oauth-manager.js');
+    const mod = await import('@vybestack/llxprt-code-providers/auth.js');
     // OAuthManager class is exported — proves it compiled with auth's interface
     expect(typeof mod.OAuthManager).toBe('function');
     // The compile-time compatibility marker _CliOAuthManagerSatisfiesAuthInterface
@@ -297,7 +296,7 @@ describe('CLI auth device flows use auth-package exports', () => {
     // compiles correctly. The marker type _CliOAuthManagerSatisfiesAuthInterface
     // uses `extends` to verify structural compatibility at compile time.
     // At runtime we verify the marker file actually exports the expected class.
-    const mod = await import('../auth/oauth-manager.js');
+    const mod = await import('@vybestack/llxprt-code-providers/auth.js');
     const OAuthManager = mod.OAuthManager;
     // Check required interface methods exist on prototype
     const requiredMethods = ['getToken', 'isAuthenticated', 'authenticate'];

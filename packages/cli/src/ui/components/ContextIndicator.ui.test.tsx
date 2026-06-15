@@ -13,7 +13,7 @@
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Footer } from './Footer.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { getProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 
@@ -23,9 +23,12 @@ vi.mock('../hooks/useResponsive.js', () => ({
 }));
 
 // Mock the provider manager
-vi.mock('../../providers/providerManagerInstance.js', () => ({
-  getProviderManager: vi.fn(),
-}));
+vi.mock(
+  '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
+  () => ({
+    getProviderManager: vi.fn(),
+  }),
+);
 
 describe('ContextIndicator UI', () => {
   let mockProviderManager: ProviderManager;

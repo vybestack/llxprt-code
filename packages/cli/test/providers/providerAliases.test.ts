@@ -10,15 +10,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // This integration test needs real config files, not the global mock
-vi.unmock('../../src/providers/providerAliases.js');
+vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
 import {
   getProviderManager,
   resetProviderManager,
   setFileSystem,
   createProviderManager,
   registerProviderManagerSingleton,
-} from '../../src/providers/providerManagerInstance.js';
-import { NodeFileSystem } from '../../src/providers/IFileSystem.js';
+} from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
+import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition/IFileSystem.js';
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,

@@ -15,6 +15,102 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./auth.js": {
+      "types": "./dist/src/auth/index.d.ts",
+      "import": "./dist/src/auth/index.js"
+    },
+    "./composition.js": {
+      "types": "./dist/src/composition/index.d.ts",
+      "import": "./dist/src/composition/index.js"
+    },
+    "./composition/providerManagerInstance.js": {
+      "types": "./dist/src/composition/providerManagerInstance.d.ts",
+      "import": "./dist/src/composition/providerManagerInstance.js"
+    },
+    "./composition/providerAliases.js": {
+      "types": "./dist/src/composition/providerAliases.d.ts",
+      "import": "./dist/src/composition/providerAliases.js"
+    },
+    "./composition/oauth-provider-registration.js": {
+      "types": "./dist/src/composition/oauth-provider-registration.d.ts",
+      "import": "./dist/src/composition/oauth-provider-registration.js"
+    },
+    "./composition/IFileSystem.js": {
+      "types": "./dist/src/composition/IFileSystem.d.ts",
+      "import": "./dist/src/composition/IFileSystem.js"
+    },
+    "./runtime.js": {
+      "types": "./dist/src/runtime/index.d.ts",
+      "import": "./dist/src/runtime/index.js"
+    },
+    "./runtime/runtimeSettings.js": {
+      "types": "./dist/src/runtime/runtimeSettings.d.ts",
+      "import": "./dist/src/runtime/runtimeSettings.js"
+    },
+    "./runtime/runtimeAccessors.js": {
+      "types": "./dist/src/runtime/runtimeAccessors.d.ts",
+      "import": "./dist/src/runtime/runtimeAccessors.js"
+    },
+    "./runtime/runtimeLifecycle.js": {
+      "types": "./dist/src/runtime/runtimeLifecycle.d.ts",
+      "import": "./dist/src/runtime/runtimeLifecycle.js"
+    },
+    "./runtime/runtimeRegistry.js": {
+      "types": "./dist/src/runtime/runtimeRegistry.d.ts",
+      "import": "./dist/src/runtime/runtimeRegistry.js"
+    },
+    "./runtime/runtimeContextFactory.js": {
+      "types": "./dist/src/runtime/runtimeContextFactory.d.ts",
+      "import": "./dist/src/runtime/runtimeContextFactory.js"
+    },
+    "./runtime/providerSwitch.js": {
+      "types": "./dist/src/runtime/providerSwitch.d.ts",
+      "import": "./dist/src/runtime/providerSwitch.js"
+    },
+    "./runtime/providerMutations.js": {
+      "types": "./dist/src/runtime/providerMutations.d.ts",
+      "import": "./dist/src/runtime/providerMutations.js"
+    },
+    "./runtime/providerConfigUtils.js": {
+      "types": "./dist/src/runtime/providerConfigUtils.d.ts",
+      "import": "./dist/src/runtime/providerConfigUtils.js"
+    },
+    "./runtime/profileSnapshot.js": {
+      "types": "./dist/src/runtime/profileSnapshot.d.ts",
+      "import": "./dist/src/runtime/profileSnapshot.js"
+    },
+    "./runtime/profileApplication.js": {
+      "types": "./dist/src/runtime/profileApplication.d.ts",
+      "import": "./dist/src/runtime/profileApplication.js"
+    },
+    "./runtime/settingsResolver.js": {
+      "types": "./dist/src/runtime/settingsResolver.d.ts",
+      "import": "./dist/src/runtime/settingsResolver.js"
+    },
+    "./runtime/statelessHardening.js": {
+      "types": "./dist/src/runtime/statelessHardening.d.ts",
+      "import": "./dist/src/runtime/statelessHardening.js"
+    },
+    "./runtime/bucketFailover.js": {
+      "types": "./dist/src/runtime/bucketFailover.d.ts",
+      "import": "./dist/src/runtime/bucketFailover.js"
+    },
+    "./runtime/messages.js": {
+      "types": "./dist/src/runtime/messages.d.ts",
+      "import": "./dist/src/runtime/messages.js"
+    },
+    "./runtime/cliEphemeralSettings.js": {
+      "types": "./dist/src/runtime/cliEphemeralSettings.d.ts",
+      "import": "./dist/src/runtime/cliEphemeralSettings.js"
+    },
+    "./runtime/ephemeralSettings.js": {
+      "types": "./dist/src/runtime/ephemeralSettings.d.ts",
+      "import": "./dist/src/runtime/ephemeralSettings.js"
+    },
+    "./runtime/modelParamParser.js": {
+      "types": "./dist/src/runtime/modelParamParser.d.ts",
+      "import": "./dist/src/runtime/modelParamParser.js"
+    },
     "./BaseProvider.js": "./dist/src/BaseProvider.js",
     "./IModel.js": "./dist/src/IModel.js",
     "./IProvider.js": "./dist/src/IProvider.js",
@@ -57,7 +153,9 @@
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "ai": "^5.0.104",
+    "comment-json": "^4.5.0",
     "openai": "^5.10.1",
+    "strip-json-comments": "^3.1.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {

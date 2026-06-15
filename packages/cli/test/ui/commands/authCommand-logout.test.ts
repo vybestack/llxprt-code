@@ -14,7 +14,6 @@ import { describe, expect, beforeEach, afterEach } from 'vitest';
 import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import { AuthCommandExecutor } from '../../../src/ui/commands/authCommand.js';
-import { OAuthManager } from '../../../src/auth/oauth-manager.js';
 import {
   KeyringTokenStore,
   OAuthToken,
@@ -24,9 +23,12 @@ import {
   SecureStore,
   type KeyringAdapter,
 } from '@vybestack/llxprt-code-storage';
-import { QwenOAuthProvider } from '../../../src/auth/qwen-oauth-provider.js';
-import { GeminiOAuthProvider } from '../../../src/auth/gemini-oauth-provider.js';
-import { AnthropicOAuthProvider } from '../../../src/auth/anthropic-oauth-provider.js';
+import {
+  OAuthManager,
+  QwenOAuthProvider,
+  GeminiOAuthProvider,
+  AnthropicOAuthProvider,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import {
   CommandContext,
   MessageActionReturn,

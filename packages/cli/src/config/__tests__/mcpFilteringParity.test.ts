@@ -123,7 +123,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
   oauthManager: null as unknown,
 }));
 
-vi.mock('../runtime/runtimeSettings.js', () => {
+vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -135,6 +135,8 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     } as unknown as ProviderManager);
 
   return {
+    registerAgentRuntimeFactories: vi.fn(),
+    resetAgentRuntimeFactories: vi.fn(),
     applyProfileSnapshot: vi.fn(async () => ({
       providerName: '',
       modelName: '',

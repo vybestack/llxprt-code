@@ -16,19 +16,22 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { OAuthManager } from '../../auth/oauth-manager.js';
+import {
+  OAuthManager,
+  QwenOAuthProvider,
+  GeminiOAuthProvider,
+  AnthropicOAuthProvider,
+  CodexOAuthProvider,
+  createTokenStore,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import { LoadedSettingsOAuthAdapter } from '../../auth/oauth-settings-adapter.js';
 import { DebugLogger, MessageBus } from '@vybestack/llxprt-code-core';
-import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
-import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
-import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
-import { CodexOAuthProvider } from '../../auth/codex-oauth-provider.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   type CommandArgumentSchema,
   type CompleterFn,
 } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import { createTokenStore } from '../../auth/proxy/credential-store-factory.js';
 
 const logger = new DebugLogger('llxprt:ui:auth-command');
 
@@ -679,10 +682,14 @@ export const authCommand: SlashCommand = {
         config.getPolicyEngine(),
         config.getDebugMode(),
       );
-      oauthManager = new OAuthManager(tokenStore, context.services.settings, {
-        messageBus: runtimeMessageBus,
-        config,
-      });
+      oauthManager = new OAuthManager(
+        tokenStore,
+        new LoadedSettingsOAuthAdapter(context.services.settings),
+        {
+          messageBus: runtimeMessageBus,
+          config,
+        },
+      );
 
       // Register OAuth providers
       oauthManager.registerProvider(new GeminiOAuthProvider());

@@ -24,7 +24,7 @@ import type { CommandArgumentSchema, CompleterFn } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { maskKeyForDisplay, debugLogger } from '@vybestack/llxprt-code-core';
 import { SecureStoreError } from '@vybestack/llxprt-code-storage';
-import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
+import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 
 /**
  * @plan PLAN-20260211-SECURESTORE.P13
