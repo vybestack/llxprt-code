@@ -58,9 +58,17 @@ const ideIntegrationSrcDir =
 function resolveTsSource(baseDir: string, specifier: string): string {
   const direct = baseDir + specifier;
   if (direct.endsWith('.js')) {
-    const tsPath = direct.slice(0, -3) + '.ts';
+    const withoutExt = direct.slice(0, -3);
+    const tsPath = withoutExt + '.ts';
     if (existsSync(tsPath)) {
       return tsPath;
+    }
+    // Barrel exports (e.g. "./auth.js" -> "dist/src/auth/index.js") map a
+    // file-like subpath onto a directory's index module. Mirror that here so
+    // vitest source resolution finds "<subpath>/index.ts".
+    const indexTsPath = withoutExt + '/index.ts';
+    if (existsSync(indexTsPath)) {
+      return indexTsPath;
     }
   }
   return direct;

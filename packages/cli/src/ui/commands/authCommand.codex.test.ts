@@ -12,7 +12,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AuthCommandExecutor } from './authCommand.js';
-import type { OAuthManager } from '../../auth/oauth-manager.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { CommandContext } from './types.js';
 
 describe('AuthCommand Codex OAuth Integration', () => {

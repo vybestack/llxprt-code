@@ -14,7 +14,7 @@ import {
   MCPOAuthTokenStorage,
   type MCPOAuthCredentials,
 } from '@vybestack/llxprt-code-core';
-import type { OAuthToken } from '../../auth/types.js';
+import type { OAuthToken } from '@vybestack/llxprt-code-providers/auth.js';
 
 // Helper functions
 function createTestToken(expiryInSeconds: number): OAuthToken {

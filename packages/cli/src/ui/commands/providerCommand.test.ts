@@ -19,7 +19,7 @@ import * as path from 'path';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
 // This test writes real alias files, needs real providerAliases module
-vi.unmock('../../providers/providerAliases.js');
+vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
 
 const mocks = vi.hoisted(() => {
   const runtimeApi = {
@@ -34,10 +34,13 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('../../providers/providerManagerInstance.js', () => ({
-  getProviderManager: mocks.getProviderManagerMock,
-  refreshAliasProviders: mocks.refreshAliasProvidersMock,
-}));
+vi.mock(
+  '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
+  () => ({
+    getProviderManager: mocks.getProviderManagerMock,
+    refreshAliasProviders: mocks.refreshAliasProvidersMock,
+  }),
+);
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: mocks.getRuntimeApiMock,

@@ -24,13 +24,13 @@ import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 
 describe('OpenAIResponsesProvider - Codex Model Listing', () => {
   describe('getDefaultModel', () => {
-    it('should return gpt-5.3-codex as default model when in Codex mode', () => {
+    it('should return gpt-5.5 as default model when in Codex mode', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         'https://chatgpt.com/backend-api/codex',
       );
       const defaultModel = provider.getDefaultModel();
-      expect(defaultModel).toBe('gpt-5.3-codex');
+      expect(defaultModel).toBe('gpt-5.5');
     });
 
     it('should return o3-mini as default model when in standard OpenAI mode', () => {
@@ -59,6 +59,7 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
 
       // Verify all expected Codex models are present (based on codex-rs list_models.rs + #1308 update + #1433 gpt-5.3-codex-spark)
       const modelIds = models.map((m) => m.id);
+      expect(modelIds).toContain('gpt-5.5');
       expect(modelIds).toContain('gpt-5.4');
       expect(modelIds).toContain('gpt-5.3-codex');
       expect(modelIds).toContain('gpt-5.3-codex-spark');
@@ -69,8 +70,8 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       expect(modelIds).toContain('gpt-5.2');
       expect(modelIds).toContain('gpt-5.1');
 
-      // Verify gpt-5.4 is first (highest priority)
-      expect(models[0].id).toBe('gpt-5.4');
+      // Verify gpt-5.5 is first (highest priority)
+      expect(models[0].id).toBe('gpt-5.5');
 
       // Verify all models have correct provider and tool format
       for (const model of models) {
@@ -104,8 +105,9 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       );
       const models = await provider.getModels();
 
-      // Expected models in priority order (with #1308 gpt-5.3-codex addition + #1433 gpt-5.3-codex-spark + #1684 gpt-5.4)
+      // Expected models in priority order (with #1308 gpt-5.3-codex addition + #1433 gpt-5.3-codex-spark + #1684 gpt-5.4 + #2037 gpt-5.5)
       const expectedModelIds = [
+        'gpt-5.5',
         'gpt-5.4',
         'gpt-5.3-codex',
         'gpt-5.3-codex-spark',

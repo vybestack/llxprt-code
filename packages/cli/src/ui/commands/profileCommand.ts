@@ -28,7 +28,7 @@ import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { getProtectedSettingKeys } from '@vybestack/llxprt-code-settings';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import { createTokenStore } from '../../auth/proxy/credential-store-factory.js';
+import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
 
 type ProfileConfigService = Partial<
   Pick<

@@ -15,7 +15,7 @@ import { Config, MessageBus } from '@vybestack/llxprt-code-core';
 import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
-import type { OAuthManager } from '../auth/oauth-manager.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   setCliRuntimeContext,
   registerCliProviderInfrastructure,
@@ -27,7 +27,7 @@ import {
   buildRuntimeProfileSnapshot,
   applyProfileSnapshot,
   setActiveModel,
-} from '../runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,

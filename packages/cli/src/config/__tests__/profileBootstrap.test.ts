@@ -14,7 +14,9 @@ import {
   parseInlineProfile,
 } from '../profileBootstrap.js';
 
-vi.mock('../../runtime/runtimeSettings.js', () => ({
+vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({
+  registerAgentRuntimeFactories: vi.fn(),
+  resetAgentRuntimeFactories: vi.fn(),
   registerCliProviderInfrastructure: vi.fn(),
 }));
 

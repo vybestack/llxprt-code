@@ -1,0 +1,866 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
+ */
+
+import type { Config } from '@vybestack/llxprt-code-core';
+import { DebugLogger, coreEvents } from '@vybestack/llxprt-code-core';
+import type { IProvider } from '../IProvider.js';
+import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
+import {
+  getCliOAuthManager,
+  getCliRuntimeServices,
+  _internal as runtimeAccessorsInternal,
+} from './runtimeAccessors.js';
+import {
+  computeModelDefaults,
+  extractProviderBaseUrl,
+} from './providerMutations.js';
+import {
+  loadProviderAliasEntries,
+  type ProviderAliasConfig,
+} from '../composition/index.js';
+import { ensureOAuthProviderRegistered } from '../composition/index.js';
+import { configureProviderRuntimeFactories } from '../composition/index.js';
+import { getActiveProfileName } from './profileSnapshot.js';
+
+const logger = new DebugLogger('llxprt:runtime:settings');
+
+const { getProviderSettingsSnapshot, extractModelParams } =
+  runtimeAccessorsInternal;
+
+/**
+ * Default ephemeral settings to preserve across provider switches.
+ * These are context-related settings that should not be cleared when
+ * switching providers, as they represent user preferences for the session.
+ */
+export const DEFAULT_PRESERVE_EPHEMERALS = [
+  'context-limit',
+  'max_tokens',
+  'streaming',
+] as const;
+
+export interface ProviderSwitchResult {
+  changed: boolean;
+  previousProvider: string | null;
+  nextProvider: string;
+  defaultModel?: string;
+  infoMessages: string[];
+}
+
+interface ProviderSwitchOptions {
+  autoOAuth?: boolean;
+  preserveEphemerals?: string[];
+  skipModelDefaults?: boolean;
+  addItem?: OAuthUICallback;
+}
+
+interface ProviderSwitchContext {
+  name: string;
+  currentProvider: string | null;
+  autoOAuth: boolean;
+  skipModelDefaults: boolean;
+  preserveEphemerals: string[];
+  config: Config;
+  settingsService: ReturnType<typeof getCliRuntimeServices>['settingsService'];
+  providerManager: ReturnType<typeof getCliRuntimeServices>['providerManager'];
+  activeProvider: ReturnType<
+    ReturnType<
+      typeof getCliRuntimeServices
+    >['providerManager']['getActiveProvider']
+  >;
+  providerForBaseUrl: IProvider | undefined;
+
+  baseProvider: {
+    hasNonOAuthAuthentication?: () => Promise<boolean>;
+  };
+  aliasConfig?: ProviderAliasConfig;
+  modelToApply: string;
+  providerBaseUrl?: string;
+  finalBaseUrl?: string;
+  explicitBaseUrl?: string;
+  hadCustomBaseUrl: boolean;
+  preAliasEphemeralKeys: Set<string>;
+  authOnlyBeforeSwitch: unknown;
+  contextLimitBeforeSwitch: unknown;
+  maxTokensBeforeSwitch: unknown;
+  maxOutputTokensBeforeSwitch: unknown;
+  infoMessages: string[];
+  addItem?: OAuthUICallback;
+}
+
+function normalizeSetting(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed === '' || trimmed.toLowerCase() === 'none') {
+    return undefined;
+  }
+  return trimmed;
+}
+
+function getWrappedProvider(provider: unknown): unknown {
+  if (typeof provider !== 'object' || provider === null) {
+    return undefined;
+  }
+  if (!('wrappedProvider' in provider)) {
+    return undefined;
+  }
+  return (provider as { wrappedProvider?: unknown }).wrappedProvider;
+}
+
+function unwrapProvider(provider: unknown): {
+  hasNonOAuthAuthentication?: () => Promise<boolean>;
+} {
+  const visited = new Set<unknown>();
+  let current: unknown = provider;
+  let wrappedProvider = getWrappedProvider(current);
+
+  while (wrappedProvider !== undefined && wrappedProvider !== null) {
+    if (visited.has(current)) {
+      return current as {
+        hasNonOAuthAuthentication?: () => Promise<boolean>;
+      };
+    }
+
+    visited.add(current);
+    current = wrappedProvider;
+    wrappedProvider = getWrappedProvider(current);
+  }
+
+  return current as {
+    hasNonOAuthAuthentication?: () => Promise<boolean>;
+  };
+}
+
+function getProviderForBaseUrl(context: ProviderSwitchContext): IProvider {
+  const providerManager =
+    context.providerManager as typeof context.providerManager & {
+      getProviderByName?: (name: string) => IProvider | undefined;
+    };
+  const provider =
+    providerManager.getProviderByName(context.name) ?? context.activeProvider;
+  if (!provider) {
+    throw new Error(`Provider '${context.name}' is not available.`);
+  }
+  return provider as IProvider;
+}
+
+function isScalarAliasEphemeralValue(
+  value: unknown,
+): value is string | number | boolean {
+  return (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  );
+}
+
+function applyAliasEphemeralSetting(
+  context: ProviderSwitchContext,
+  protectedAliasEphemeralKeys: ReadonlySet<string>,
+  rawKey: string,
+  rawValue: unknown,
+): void {
+  const key = rawKey.trim();
+  if (key === '') {
+    return;
+  }
+
+  const normalizedKey = key.toLowerCase();
+  if (protectedAliasEphemeralKeys.has(normalizedKey)) {
+    logger.warn(
+      () =>
+        `[cli-runtime] Skipping protected alias ephemeral setting '${key}' for provider '${context.name}'.`,
+    );
+    return;
+  }
+
+  if (context.config.getEphemeralSetting(key) !== undefined) {
+    return;
+  }
+
+  if (!isScalarAliasEphemeralValue(rawValue)) {
+    logger.warn(
+      () =>
+        `[cli-runtime] Skipping non-scalar alias ephemeral setting '${key}' for provider '${context.name}'.`,
+    );
+    return;
+  }
+
+  if (typeof rawValue === 'number' && !Number.isFinite(rawValue)) {
+    logger.warn(
+      () =>
+        `[cli-runtime] Skipping non-finite alias ephemeral setting '${key}' for provider '${context.name}'.`,
+    );
+    return;
+  }
+
+  context.config.setEphemeralSetting(key, rawValue);
+}
+
+function resetBucketFailoverHandler(config: Config): void {
+  const candidate = config as Config & {
+    setBucketFailoverHandler?: (handler: undefined) => void;
+  };
+
+  if (typeof candidate.setBucketFailoverHandler !== 'function') {
+    return;
+  }
+
+  candidate.setBucketFailoverHandler(undefined);
+}
+
+function getAliasConfig(providerName: string): ProviderAliasConfig | undefined {
+  try {
+    return loadProviderAliasEntries().find(
+      (entry) => entry.alias === providerName,
+    )?.config;
+  } catch {
+    return undefined;
+  }
+}
+
+function clearPreviousProviderSettings(context: ProviderSwitchContext): void {
+  const { currentProvider, settingsService } = context;
+  if (!currentProvider) {
+    return;
+  }
+
+  /**
+   * @plan:PLAN-20260603-ISSUE1584.P14
+   * @requirement:REQ-API-001
+   * @pseudocode consumer-migration.md lines 10-18
+   */
+  const legacyProviderManager = context.providerManager as {
+    getServerToolsProvider?: () => { name?: string } | null | undefined;
+  };
+  const serverToolsProviderName =
+    legacyProviderManager.getServerToolsProvider?.()?.name;
+  if (serverToolsProviderName === currentProvider) {
+    return;
+  }
+
+  const previousSettings = getProviderSettingsSnapshot(
+    settingsService,
+    currentProvider,
+  );
+  for (const key of Object.keys(previousSettings)) {
+    settingsService.setProviderSetting(currentProvider, key, undefined);
+  }
+}
+
+function clearEphemeralsForSwitch(
+  context: Pick<ProviderSwitchContext, 'config' | 'preserveEphemerals'>,
+): {
+  authOnlyBeforeSwitch: unknown;
+  contextLimitBeforeSwitch: unknown;
+  maxTokensBeforeSwitch: unknown;
+  maxOutputTokensBeforeSwitch: unknown;
+  preAliasEphemeralKeys: Set<string>;
+} {
+  const existingEphemerals =
+    typeof context.config.getEphemeralSettings === 'function'
+      ? context.config.getEphemeralSettings()
+      : {};
+
+  const authOnlyBeforeSwitch = existingEphemerals.authOnly;
+  const contextLimitBeforeSwitch = existingEphemerals['context-limit'];
+  const maxTokensBeforeSwitch = existingEphemerals.max_tokens;
+  const maxOutputTokensBeforeSwitch = existingEphemerals.maxOutputTokens;
+
+  for (const key of Object.keys(existingEphemerals)) {
+    const shouldPreserve =
+      key === 'activeProvider' || context.preserveEphemerals.includes(key);
+    if (!shouldPreserve) {
+      context.config.setEphemeralSetting(key, undefined);
+    }
+  }
+
+  return {
+    authOnlyBeforeSwitch,
+    contextLimitBeforeSwitch,
+    maxTokensBeforeSwitch,
+    maxOutputTokensBeforeSwitch,
+    preAliasEphemeralKeys: new Set(
+      Object.keys(context.config.getEphemeralSettings()),
+    ),
+  };
+}
+
+function activateProviderContext(context: ProviderSwitchContext): void {
+  const { name, config, providerManager } = context;
+  void providerManager.setActiveProvider(name);
+  configureProviderRuntimeFactories(config, providerManager);
+  config.setProvider(name);
+  logger.debug(() => `[cli-runtime] set config provider=${name}`);
+  config.setEphemeralSetting('activeProvider', name);
+  logger.debug(
+    () =>
+      `[cli-runtime] config ephemeral activeProvider=${config.getEphemeralSetting('activeProvider')}`,
+  );
+}
+
+async function switchSettingsProvider(
+  context: ProviderSwitchContext,
+): Promise<void> {
+  const { name, settingsService, providerManager } = context;
+  const activeProvider = providerManager.getActiveProvider();
+  const providerSettings = getProviderSettingsSnapshot(settingsService, name);
+  const existingParams = extractModelParams(providerSettings);
+  for (const key of Object.keys(existingParams)) {
+    settingsService.setProviderSetting(name, key, undefined);
+  }
+
+  await settingsService.switchProvider(name);
+  logger.debug(
+    () =>
+      `[cli-runtime] settingsService activeProvider now=${settingsService.get('activeProvider')}`,
+  );
+
+  context.activeProvider = activeProvider;
+  context.providerForBaseUrl = getProviderForBaseUrl(context);
+
+  context.baseProvider = unwrapProvider(activeProvider);
+}
+
+function getProviderSettingsAndStoredValues(context: ProviderSwitchContext): {
+  providerSettingsBefore: Record<string, unknown>;
+  storedModelSetting: string | undefined;
+  storedBaseUrlSetting: string | undefined;
+} {
+  const providerSettingsBefore = getProviderSettingsSnapshot(
+    context.settingsService,
+    context.name,
+  );
+  return {
+    providerSettingsBefore,
+    storedModelSetting: normalizeSetting(providerSettingsBefore.model),
+    storedBaseUrlSetting: normalizeSetting(providerSettingsBefore['base-url']),
+  };
+}
+
+function getExplicitConfigOverrides(context: ProviderSwitchContext): {
+  explicitConfigModel: string | undefined;
+  explicitConfigBaseUrl: string | undefined;
+} {
+  const explicitConfigModel =
+    context.currentProvider === context.name
+      ? normalizeSetting(context.config.getModel())
+      : undefined;
+
+  const explicitConfigBaseUrl =
+    context.currentProvider === context.name ||
+    context.preserveEphemerals.includes('base-url')
+      ? normalizeSetting(context.config.getEphemeralSetting('base-url'))
+      : undefined;
+
+  return { explicitConfigModel, explicitConfigBaseUrl };
+}
+
+function clearProviderSettingsForSwitch(
+  context: ProviderSwitchContext,
+  providerSettingsBefore: Record<string, unknown>,
+): void {
+  for (const key of Object.keys(providerSettingsBefore)) {
+    context.settingsService.setProviderSetting(context.name, key, undefined);
+  }
+}
+
+function resolveProviderBaseUrlFromProvider(
+  context: ProviderSwitchContext,
+): string | undefined {
+  if (context.name === 'qwen') {
+    return 'https://portal.qwen.ai/v1';
+  }
+  return extractProviderBaseUrl(context.providerForBaseUrl);
+}
+
+function applyProviderBaseUrlSettings(
+  context: ProviderSwitchContext,
+  finalBaseUrl: string | undefined,
+): void {
+  context.config.setEphemeralSetting('base-url', finalBaseUrl);
+  context.settingsService.setProviderSetting(
+    context.name,
+    'base-url',
+    finalBaseUrl,
+  );
+}
+
+function applyAliasProviderSettings(context: ProviderSwitchContext): void {
+  const aliasConfig = context.aliasConfig;
+  if (aliasConfig?.['sandbox-base-url']) {
+    context.settingsService.setProviderSetting(
+      context.name,
+      'sandbox-base-url',
+      aliasConfig['sandbox-base-url'],
+    );
+  }
+  if (aliasConfig?.['requires-auth'] !== undefined) {
+    context.settingsService.setProviderSetting(
+      context.name,
+      'requires-auth',
+      aliasConfig['requires-auth'],
+    );
+  }
+}
+
+function resolveModelToApply(
+  context: ProviderSwitchContext,
+  storedModelSetting: string | undefined,
+  explicitConfigModel: string | undefined,
+): string {
+  const aliasDefaultModel = normalizeSetting(context.aliasConfig?.defaultModel);
+  const defaultModel =
+    aliasDefaultModel ??
+    normalizeSetting(context.activeProvider?.getDefaultModel?.());
+  const maybeStoredModel =
+    context.currentProvider === context.name &&
+    storedModelSetting &&
+    storedModelSetting !== defaultModel
+      ? storedModelSetting
+      : undefined;
+  return (explicitConfigModel ?? maybeStoredModel ?? defaultModel ?? '').trim();
+}
+
+function applyModelSettings(
+  context: ProviderSwitchContext,
+  modelToApply: string,
+): void {
+  context.settingsService.setProviderSetting(
+    context.name,
+    'model',
+    modelToApply || undefined,
+  );
+  context.config.setModel(modelToApply);
+}
+
+function resolveProviderBaseUrl(context: ProviderSwitchContext): void {
+  const { providerSettingsBefore, storedModelSetting, storedBaseUrlSetting } =
+    getProviderSettingsAndStoredValues(context);
+  const { explicitConfigModel, explicitConfigBaseUrl } =
+    getExplicitConfigOverrides(context);
+
+  context.hadCustomBaseUrl = Boolean(storedBaseUrlSetting);
+  clearProviderSettingsForSwitch(context, providerSettingsBefore);
+
+  const providerBaseUrl = resolveProviderBaseUrlFromProvider(context);
+  const explicitBaseUrl =
+    explicitConfigBaseUrl ??
+    (context.currentProvider === context.name
+      ? storedBaseUrlSetting
+      : undefined);
+  const finalBaseUrl = explicitBaseUrl ?? providerBaseUrl ?? undefined;
+
+  applyProviderBaseUrlSettings(context, finalBaseUrl);
+  applyAliasProviderSettings(context);
+
+  context.modelToApply = resolveModelToApply(
+    context,
+    storedModelSetting,
+    explicitConfigModel,
+  );
+  applyModelSettings(context, context.modelToApply);
+
+  context.providerBaseUrl = providerBaseUrl;
+  context.explicitBaseUrl = explicitBaseUrl;
+  context.finalBaseUrl = finalBaseUrl;
+}
+
+async function handleAnthropicOAuth(
+  context: ProviderSwitchContext,
+): Promise<void> {
+  if (context.name !== 'anthropic') {
+    return;
+  }
+
+  const oauthManager = getCliOAuthManager();
+  if (!oauthManager) {
+    return;
+  }
+
+  ensureOAuthProviderRegistered(
+    'anthropic',
+    oauthManager,
+    undefined,
+    context.addItem,
+  );
+
+  if (!context.autoOAuth) {
+    return;
+  }
+
+  try {
+    const hasNonOAuth =
+      typeof context.baseProvider.hasNonOAuthAuthentication === 'function'
+        ? await context.baseProvider.hasNonOAuthAuthentication()
+        : true;
+
+    if (hasNonOAuth) {
+      return;
+    }
+
+    logger.debug(
+      () =>
+        `[cli-runtime] Anthropic OAuth check: hasNonOAuth=${hasNonOAuth} manager=${Boolean(oauthManager)}`,
+    );
+
+    if (!oauthManager.isOAuthEnabled('anthropic')) {
+      await oauthManager.toggleOAuthEnabled('anthropic');
+    }
+
+    logger.debug(() => '[cli-runtime] Initiating Anthropic OAuth flow');
+    await oauthManager.authenticate('anthropic', undefined, {
+      signalAuthCompletion: true,
+    });
+    context.infoMessages.push(
+      'Anthropic OAuth authentication completed. Use /auth anthropic to view status.',
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    context.infoMessages.push(
+      `Anthropic OAuth authentication failed: ${message}`,
+    );
+    logger.warn(
+      () => `[cli-runtime] Anthropic OAuth authentication failed: ${message}`,
+    );
+  }
+}
+
+function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
+  if (context.name !== 'anthropic') {
+    return;
+  }
+
+  const oauthManager = getCliOAuthManager();
+  const authOnlyEnabled =
+    context.authOnlyBeforeSwitch === true ||
+    context.authOnlyBeforeSwitch === 'true';
+  const oauthIsEnabled = oauthManager?.isOAuthEnabled('anthropic') ?? false;
+
+  if (!authOnlyEnabled && !oauthIsEnabled) {
+    return;
+  }
+
+  if (context.contextLimitBeforeSwitch !== undefined) {
+    context.config.setEphemeralSetting(
+      'context-limit',
+      context.contextLimitBeforeSwitch,
+    );
+    logger.debug(
+      () =>
+        `[cli-runtime] Preserved user-set context-limit=${context.contextLimitBeforeSwitch} for Anthropic OAuth mode (Issue #181)`,
+    );
+  }
+
+  if (context.maxTokensBeforeSwitch !== undefined) {
+    context.config.setEphemeralSetting(
+      'max_tokens',
+      context.maxTokensBeforeSwitch,
+    );
+    logger.debug(
+      () =>
+        `[cli-runtime] Preserved user-set max_tokens=${context.maxTokensBeforeSwitch} for Anthropic OAuth mode (Issue #181)`,
+    );
+  } else if (
+    typeof context.maxOutputTokensBeforeSwitch === 'number' &&
+    Number.isFinite(context.maxOutputTokensBeforeSwitch) &&
+    context.maxOutputTokensBeforeSwitch > 0
+  ) {
+    context.config.setEphemeralSetting(
+      'maxOutputTokens',
+      context.maxOutputTokensBeforeSwitch,
+    );
+    logger.debug(
+      () =>
+        `[cli-runtime] Restored maxOutputTokens=${context.maxOutputTokensBeforeSwitch} for Anthropic OAuth mode (Issue #1769)`,
+    );
+  }
+
+  if (context.authOnlyBeforeSwitch !== undefined) {
+    context.config.setEphemeralSetting(
+      'authOnly',
+      context.authOnlyBeforeSwitch,
+    );
+  }
+}
+
+function applyAliasEphemeralSettings(context: ProviderSwitchContext): void {
+  const aliasEphemeralSettings = context.aliasConfig?.ephemeralSettings;
+  if (
+    !aliasEphemeralSettings ||
+    typeof aliasEphemeralSettings !== 'object' ||
+    Array.isArray(aliasEphemeralSettings)
+  ) {
+    return;
+  }
+
+  const protectedAliasEphemeralKeys = new Set([
+    'activeprovider',
+    'base-url',
+    'baseurl',
+    'base_url',
+    'model',
+    'auth-key',
+    'auth-keyfile',
+    'authkey',
+    'authkeyfile',
+    'api-key',
+    'api-keyfile',
+    'api_key',
+    'api_keyfile',
+    'apikey',
+    'apikeyfile',
+  ]);
+
+  Object.entries(aliasEphemeralSettings).forEach(([rawKey, rawValue]) => {
+    applyAliasEphemeralSetting(
+      context,
+      protectedAliasEphemeralKeys,
+      rawKey,
+      rawValue,
+    );
+  });
+}
+
+function applyModelDefaults(context: ProviderSwitchContext): void {
+  if (
+    context.skipModelDefaults ||
+    !context.modelToApply ||
+    !context.aliasConfig?.modelDefaults
+  ) {
+    return;
+  }
+
+  const modelDefaults = computeModelDefaults(
+    context.modelToApply,
+    context.aliasConfig.modelDefaults,
+  );
+
+  for (const [key, value] of Object.entries(modelDefaults)) {
+    if (!context.preAliasEphemeralKeys.has(key)) {
+      context.config.setEphemeralSetting(key, value);
+    }
+  }
+}
+
+function addProviderInfoMessages(context: ProviderSwitchContext): void {
+  if (context.hadCustomBaseUrl) {
+    const baseUrlChanged =
+      !context.finalBaseUrl ||
+      context.finalBaseUrl === context.providerBaseUrl ||
+      !context.explicitBaseUrl;
+
+    if (baseUrlChanged) {
+      context.infoMessages.push(
+        `Cleared custom base URL for provider '${context.name}'; default endpoint restored.`,
+      );
+    } else if (
+      context.finalBaseUrl &&
+      context.finalBaseUrl !== context.providerBaseUrl
+    ) {
+      context.infoMessages.push(
+        `Preserved custom base URL '${context.finalBaseUrl}' for provider '${context.name}'.`,
+      );
+    }
+  } else if (
+    context.providerBaseUrl &&
+    context.finalBaseUrl === context.providerBaseUrl
+  ) {
+    context.infoMessages.push(
+      `Base URL set to '${context.providerBaseUrl}' for provider '${context.name}'.`,
+    );
+  }
+
+  if (context.modelToApply) {
+    context.infoMessages.push(
+      `Active model is '${context.modelToApply}' for provider '${context.name}'.`,
+    );
+  }
+
+  if (context.name !== 'gemini') {
+    context.infoMessages.push('Use /key to set API key if needed.');
+  }
+}
+
+async function initializeContentGeneratorConfigIfSupported(
+  config: Config,
+): Promise<void> {
+  const candidate = config as Config & {
+    initializeContentGeneratorConfig?: () => Promise<void>;
+  };
+
+  if (typeof candidate.initializeContentGeneratorConfig !== 'function') {
+    return;
+  }
+
+  try {
+    await candidate.initializeContentGeneratorConfig();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(
+      () =>
+        `[cli-runtime] Failed to initialize content generator config: ${message}`,
+    );
+  }
+}
+
+function createProviderSwitchContext(
+  providerName: string,
+  options: ProviderSwitchOptions,
+): ProviderSwitchContext {
+  const name = providerName.trim();
+  if (!name) {
+    throw new Error('Provider name is required.');
+  }
+
+  const { config, settingsService, providerManager } = getCliRuntimeServices();
+  const currentProvider = providerManager.getActiveProviderName() ?? null;
+
+  if (currentProvider === name) {
+    return {
+      name,
+      currentProvider,
+      autoOAuth: false,
+      skipModelDefaults: true,
+      preserveEphemerals: [],
+      config,
+      settingsService,
+      providerManager,
+      activeProvider: providerManager.getActiveProvider(),
+      providerForBaseUrl: undefined,
+
+      baseProvider: {},
+      aliasConfig: undefined,
+      modelToApply: '',
+      providerBaseUrl: undefined,
+      finalBaseUrl: undefined,
+      explicitBaseUrl: undefined,
+      hadCustomBaseUrl: false,
+      preAliasEphemeralKeys: new Set<string>(),
+      authOnlyBeforeSwitch: undefined,
+      contextLimitBeforeSwitch: undefined,
+      maxTokensBeforeSwitch: undefined,
+      maxOutputTokensBeforeSwitch: undefined,
+      infoMessages: [],
+      addItem: options.addItem,
+    };
+  }
+
+  const preserveEphemerals = [
+    ...DEFAULT_PRESERVE_EPHEMERALS,
+    ...(options.preserveEphemerals ?? []),
+  ];
+
+  const context: ProviderSwitchContext = {
+    name,
+    currentProvider,
+    autoOAuth: options.autoOAuth ?? false,
+    skipModelDefaults: options.skipModelDefaults ?? false,
+    preserveEphemerals,
+    config,
+    settingsService,
+    providerManager,
+    providerForBaseUrl: undefined,
+
+    activeProvider: providerManager.getActiveProvider(),
+    baseProvider: {},
+    aliasConfig: getAliasConfig(name),
+    modelToApply: '',
+    providerBaseUrl: undefined,
+    finalBaseUrl: undefined,
+    explicitBaseUrl: undefined,
+    hadCustomBaseUrl: false,
+    preAliasEphemeralKeys: new Set<string>(),
+    authOnlyBeforeSwitch: undefined,
+    contextLimitBeforeSwitch: undefined,
+    maxTokensBeforeSwitch: undefined,
+    maxOutputTokensBeforeSwitch: undefined,
+    infoMessages: [],
+    addItem: options.addItem,
+  };
+
+  const ephemeralSnapshot = clearEphemeralsForSwitch(context);
+  context.authOnlyBeforeSwitch = ephemeralSnapshot.authOnlyBeforeSwitch;
+  context.contextLimitBeforeSwitch = ephemeralSnapshot.contextLimitBeforeSwitch;
+  context.maxTokensBeforeSwitch = ephemeralSnapshot.maxTokensBeforeSwitch;
+  context.maxOutputTokensBeforeSwitch =
+    ephemeralSnapshot.maxOutputTokensBeforeSwitch;
+  context.preAliasEphemeralKeys = ephemeralSnapshot.preAliasEphemeralKeys;
+
+  return context;
+}
+
+export async function switchActiveProvider(
+  providerName: string,
+  options: ProviderSwitchOptions = {},
+): Promise<ProviderSwitchResult> {
+  const context = createProviderSwitchContext(providerName, options);
+
+  if (context.currentProvider === context.name) {
+    return {
+      changed: false,
+      previousProvider: context.currentProvider,
+      nextProvider: context.name,
+      infoMessages: [],
+    };
+  }
+
+  resetBucketFailoverHandler(context.config);
+  logger.debug(
+    () =>
+      `[cli-runtime] Switching provider from ${context.currentProvider ?? 'none'} to ${context.name}`,
+  );
+
+  clearPreviousProviderSettings(context);
+  activateProviderContext(context);
+  await switchSettingsProvider(context);
+  resolveProviderBaseUrl(context);
+  await handleAnthropicOAuth(context);
+  applyAnthropicOAuthDefaults(context);
+  applyAliasEphemeralSettings(context);
+  applyModelDefaults(context);
+  addProviderInfoMessages(context);
+  await initializeContentGeneratorConfigIfSupported(context.config);
+
+  const profileName = getActiveProfileName();
+
+  // Context-scoped model resolution (issue #1770): prefer the context-local
+  // model sources over the stale global getActiveModelName().
+  // Fallback chain: modelToApply → provider-scoped default → config model
+  // → provider name. Must NEVER emit empty string for model.
+  const providerDefaultModel =
+    context.providerManager.getActiveProvider()?.getDefaultModel?.() ?? '';
+  const effectiveModel =
+    context.modelToApply ||
+    providerDefaultModel ||
+    context.config.getModel() ||
+    context.name;
+
+  // displayLabel: profile → model → provider name. Must NEVER be empty.
+  const displayLabel = profileName ?? effectiveModel;
+
+  coreEvents.emitModelProfileChanged({
+    model: effectiveModel,
+    providerName: context.name,
+    profileName,
+    displayLabel,
+  });
+
+  return {
+    changed: true,
+    previousProvider: context.currentProvider,
+    nextProvider: context.name,
+    defaultModel: context.modelToApply || undefined,
+    infoMessages: context.infoMessages,
+  };
+}

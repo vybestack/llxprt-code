@@ -159,7 +159,7 @@ import {
   getActiveModelParams,
   loadProfileByName,
   applyCliArgumentOverrides,
-} from './runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 import { writeFileSync } from 'node:fs';
 
 export function formatNonInteractiveError(error: unknown): string {

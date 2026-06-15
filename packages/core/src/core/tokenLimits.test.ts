@@ -56,6 +56,35 @@ describe('tokenLimit', () => {
     });
   });
 
+  describe('Anthropic models', () => {
+    // Opus 4.6/4.7/4.8 default to the Claude Code / subscription 200K context
+    // window. The API-only 1M window is plan-gated and can be raised via /set
+    // or a profile (context-limit).
+    it('should return 200K (auth default) limit for claude-opus-4-8', () => {
+      expect(tokenLimit('claude-opus-4-8')).toBe(200_000);
+    });
+
+    it('should return 200K (auth default) limit for claude-opus-4-7', () => {
+      expect(tokenLimit('claude-opus-4-7')).toBe(200_000);
+    });
+
+    it('should return 200K (auth default) limit for claude-opus-4-latest', () => {
+      expect(tokenLimit('claude-opus-4-latest')).toBe(200_000);
+    });
+
+    it('should return 200K limit for claude-opus-4-6', () => {
+      expect(tokenLimit('claude-opus-4-6')).toBe(200_000);
+    });
+
+    it('should return 200K limit for claude-sonnet-4-6', () => {
+      expect(tokenLimit('claude-sonnet-4-6')).toBe(200_000);
+    });
+
+    it('honors a user-supplied context limit override (e.g. /set or profile)', () => {
+      expect(tokenLimit('claude-opus-4-8', 1_000_000)).toBe(1_000_000);
+    });
+  });
+
   describe('Default behavior', () => {
     it('should return default limit for unknown models', () => {
       expect(tokenLimit('unknown-model')).toBe(DEFAULT_TOKEN_LIMIT);

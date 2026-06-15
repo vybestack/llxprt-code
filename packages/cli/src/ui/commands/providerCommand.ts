@@ -22,12 +22,12 @@ import { CommandKind } from './types.js';
 import {
   getProviderManager,
   refreshAliasProviders,
-} from '../../providers/providerManagerInstance.js';
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { MessageType } from '../types.js';
 import {
   writeProviderAliasConfig,
   type ProviderAliasConfig,
-} from '../../providers/providerAliases.js';
+} from '@vybestack/llxprt-code-providers/composition.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 

@@ -27,12 +27,11 @@ import {
   flushRuntimeAuthScope,
   getValidCachedEntry,
   invalidateEntry,
-  invalidateMatchingEntries,
+  invalidateProviderRuntimeCache,
   recordCacheHit,
   recordCacheMiss,
   registerSettingsSubscriptions,
   resolveProfileId,
-  runtimeScopedStates,
   storeRuntimeScopedToken,
 } from './precedence.js';
 
@@ -719,18 +718,6 @@ export class AuthPrecedenceResolver {
    * @fix issue1861 - Token revocation handling
    */
   invalidateProviderCache(providerId: string, profileId?: string): void {
-    for (const [, state] of runtimeScopedStates) {
-      invalidateMatchingEntries(
-        state,
-        (entry) => {
-          if (entry.providerId !== providerId) return false;
-          if (profileId !== undefined && entry.profileId !== profileId) {
-            return false;
-          }
-          return true;
-        },
-        'token-revoked',
-      );
-    }
+    invalidateProviderRuntimeCache(providerId, profileId);
   }
 }

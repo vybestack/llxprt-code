@@ -15,6 +15,18 @@
 // ─── DI interface exports (type-only) ────────────────────────────────────────
 export type * from './interfaces/index.js';
 
+// ─── OAuth UI Event Seam (Phase 1) ───────────────────────────────────────────
+export type {
+  OAuthUIEvent,
+  OAuthUIEventType,
+  OAuthUICallback,
+} from './oauth-ui-events.js';
+export {
+  OAuthUIBridge,
+  oauthUIBridge,
+  OAUTH_UI_MAX_PENDING,
+} from './oauth-ui-bridge.js';
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 export type {
   OAuthToken,
@@ -71,6 +83,7 @@ export {
   invalidateMatchingEntries,
   storeRuntimeScopedToken,
   invalidateEntry,
+  invalidateProviderRuntimeCache,
   runtimeScopedStates,
 } from './precedence.js';
 

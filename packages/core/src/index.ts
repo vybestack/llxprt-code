@@ -165,6 +165,7 @@ export {
   type AuthPrecedenceConfig,
   type OAuthManager,
   flushRuntimeAuthScope,
+  invalidateProviderRuntimeCache,
   type RuntimeAuthScopeFlushResult,
   type RuntimeAuthScopeCacheEntrySummary,
   type OAuthTokenRequestMetadata,
