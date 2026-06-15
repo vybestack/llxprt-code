@@ -365,7 +365,30 @@ describe('AnthropicProvider', () => {
       expect(opus46).toBeDefined();
       expect(opus46?.name).toBe('Claude Opus 4.6');
       expect(opus46?.contextWindow).toBe(200000);
-      expect(opus46?.maxOutputTokens).toBe(128000);
+      expect(opus46?.maxOutputTokens).toBe(32000);
+    });
+
+    it('should include Claude Opus 4.8 model in OAuth model list', async () => {
+      const oauthProvider = new AnthropicProvider(
+        'sk-ant-oat-test-token',
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(oauthProvider, 'getAuthToken').mockResolvedValue(
+        'sk-ant-oat-test-token',
+      );
+
+      const models = await oauthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toContain('claude-opus-4-8');
+
+      const opus48 = models.find((m) => m.id === 'claude-opus-4-8');
+      expect(opus48).toBeDefined();
+      expect(opus48?.name).toBe('Claude Opus 4.8');
+      expect(opus48?.contextWindow).toBe(200000);
+      expect(opus48?.maxOutputTokens).toBe(32000);
     });
 
     it('should include Claude Opus 4.6 model in default list when auth is unavailable', async () => {
@@ -384,7 +407,28 @@ describe('AnthropicProvider', () => {
 
       const opus46 = models.find((m) => m.id === 'claude-opus-4-6');
       expect(opus46?.contextWindow).toBe(200000);
-      expect(opus46?.maxOutputTokens).toBe(128000);
+      expect(opus46?.maxOutputTokens).toBe(32000);
+    });
+
+    it('should include Claude Opus 4.8 model in default list when auth is unavailable', async () => {
+      const noAuthProvider = new AnthropicProvider(
+        undefined,
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(noAuthProvider, 'getAuthToken').mockResolvedValue(undefined);
+
+      const models = await noAuthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toContain('claude-opus-4-8');
+
+      const opus48 = models.find((m) => m.id === 'claude-opus-4-8');
+      expect(opus48).toBeDefined();
+      expect(opus48?.name).toBe('Claude Opus 4.8');
+      expect(opus48?.contextWindow).toBe(200000);
+      expect(opus48?.maxOutputTokens).toBe(32000);
     });
 
     it('should return models with correct structure', async () => {
@@ -519,7 +563,7 @@ describe('AnthropicProvider', () => {
 
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-sonnet-4-5-20250929',
+          model: 'claude-sonnet-4-6',
           messages: [{ role: 'user', content: 'Say hello' }],
           max_tokens: 64000,
           stream: true,
@@ -798,7 +842,7 @@ describe('AnthropicProvider', () => {
 
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-sonnet-4-5-20250929',
+          model: 'claude-sonnet-4-6',
           messages: [{ role: 'user', content: 'What is the weather?' }],
           max_tokens: 64000,
           stream: true,

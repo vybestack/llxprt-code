@@ -38,11 +38,25 @@ export const MODEL_TOKEN_PATTERNS: Array<{ pattern: RegExp; tokens: number }> =
  */
 export const OAUTH_MODELS: Array<Omit<IModel, 'provider'>> = [
   {
+    id: 'claude-opus-4-8',
+    name: 'Claude Opus 4.8',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 200000,
+    maxOutputTokens: 32000,
+  },
+  {
+    id: 'claude-opus-4-7',
+    name: 'Claude Opus 4.7',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 200000,
+    maxOutputTokens: 32000,
+  },
+  {
     id: 'claude-opus-4-6',
     name: 'Claude Opus 4.6',
     supportedToolFormats: ['anthropic'],
     contextWindow: 200000,
-    maxOutputTokens: 128000,
+    maxOutputTokens: 32000,
   },
   {
     id: 'claude-opus-4-5-20251101',
@@ -128,11 +142,25 @@ export const OAUTH_MODELS: Array<Omit<IModel, 'provider'>> = [
  */
 export const DEFAULT_MODELS: Array<Omit<IModel, 'provider'>> = [
   {
+    id: 'claude-opus-4-8',
+    name: 'Claude Opus 4.8',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 200000,
+    maxOutputTokens: 32000,
+  },
+  {
+    id: 'claude-opus-4-7',
+    name: 'Claude Opus 4.7',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 200000,
+    maxOutputTokens: 32000,
+  },
+  {
     id: 'claude-opus-4-6',
     name: 'Claude Opus 4.6',
     supportedToolFormats: ['anthropic'],
     contextWindow: 200000,
-    maxOutputTokens: 128000,
+    maxOutputTokens: 32000,
   },
   {
     id: 'claude-opus-4-5-20251101',
@@ -194,21 +222,24 @@ export function getLatestClaude4Model(
 }
 
 /**
- * Whether the model is Claude Opus 4.6 or later (supports adaptive thinking, higher output limits)
+ * Whether the model is Claude Opus 4.6 or later (supports adaptive thinking, 128K output)
  */
 export function isOpus46Plus(modelId: string): boolean {
-  return modelId.includes('claude-opus-4-6');
+  return (
+    modelId === 'claude-opus-4-latest' ||
+    modelId.includes('claude-opus-4-6') ||
+    modelId.includes('claude-opus-4-7') ||
+    modelId.includes('claude-opus-4-8')
+  );
 }
 
 /**
  * Get max output tokens for a given model
  */
 export function getMaxTokensForModel(modelId: string): number {
-  // Handle Opus 4.6 first - it has 128K max output (different from other opus-4 models)
-  if (isOpus46Plus(modelId)) {
-    return 128000;
-  }
-  // Handle latest aliases and other opus-4 models explicitly
+  // Opus 4 models (including 4.6+ and the "latest" alias) default to the
+  // Claude Code / subscription max output of 32K. The 128K ceiling is
+  // API-only and can be raised via /set or a profile (maxOutputTokens).
   if (modelId === 'claude-opus-4-latest' || modelId.includes('claude-opus-4')) {
     return 32000;
   }
@@ -234,8 +265,15 @@ export function getMaxTokensForModel(modelId: string): number {
  * Get context window for a given model
  */
 export function getContextWindowForModel(modelId: string): number {
-  // Claude Opus 4.6 has 200K context (different from other opus-4 models)
-  if (isOpus46Plus(modelId)) {
+  // Claude Opus 4.6/4.7/4.8 (and the "latest" alias) default to the
+  // Claude Code / subscription 200K context window. The 1M window is
+  // API-only and plan-gated; raise it via /set or a profile (context-limit).
+  if (
+    modelId === 'claude-opus-4-latest' ||
+    modelId.includes('claude-opus-4-6') ||
+    modelId.includes('claude-opus-4-7') ||
+    modelId.includes('claude-opus-4-8')
+  ) {
     return 200000;
   }
   // Other Claude 4 opus models have larger context windows
