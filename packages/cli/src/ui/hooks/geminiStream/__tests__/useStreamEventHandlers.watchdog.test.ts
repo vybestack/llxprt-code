@@ -14,31 +14,10 @@ import {
   type ThoughtSummary,
 } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../../../test-utils/render.js';
-import {
-  useStreamEventHandlers,
-  __testing,
-} from '../useStreamEventHandlers.js';
+import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import { MessageType, type HistoryItemWithoutId } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
-
-describe('useStreamEventHandlers context-limit helpers', () => {
-  it('uses configured context-limit for overflow guidance token limits', () => {
-    const configWithContextLimit = {
-      getModel: vi.fn(() => 'gemini-2.5-pro'),
-      getEphemeralSetting: vi.fn((key: string) => {
-        if (key === 'context-limit') {
-          return 200_000;
-        }
-        return undefined;
-      }),
-    } as unknown as Config;
-
-    expect(
-      __testing.getTokenLimitForConfiguredContext(configWithContextLimit),
-    ).toBe(200_000);
-  });
-});
 
 describe('useStreamEventHandlers stalled-stream watchdog', () => {
   const testTimeoutMs = 30_000; // 30 second timeout for watchdog tests

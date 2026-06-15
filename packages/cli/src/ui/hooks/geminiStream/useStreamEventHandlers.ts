@@ -26,7 +26,6 @@ import {
   nextStreamEventWithIdleTimeout,
   StreamIdleTimeoutError,
   resolveStreamIdleTimeoutMs,
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   type ThinkingBlock,
   tokenLimit,
   type ThoughtSummary,
@@ -121,7 +120,7 @@ function getConfiguredContextLimit(config: Config): number | undefined {
     : undefined;
 }
 
-function getTokenLimitForConfiguredContext(config: Config): number {
+export function getTokenLimitForConfiguredContext(config: Config): number {
   const contextLimit = getConfiguredContextLimit(config);
   const model = config.getModel();
   return contextLimit === undefined
@@ -712,8 +711,3 @@ async function getNextStreamEvent(
   }
   return iterator.next();
 }
-
-export const __testing = {
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-  getTokenLimitForConfiguredContext,
-};
