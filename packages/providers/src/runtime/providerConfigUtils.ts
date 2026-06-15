@@ -12,7 +12,7 @@ import {
 import {
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
-} from '../runtime/runtimeSettings.js';
+} from './runtimeSettings.js';
 
 /**
  * Sanitizes API keys to remove problematic characters that cause ByteString errors.

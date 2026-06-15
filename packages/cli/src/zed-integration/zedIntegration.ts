@@ -64,7 +64,7 @@ import { randomUUID } from 'crypto';
 import {
   setProviderApiKey,
   setProviderBaseUrl,
-} from '../providers/providerConfigUtils.js';
+} from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
 import {
   clearActiveModelParam,
   getActiveModelParams,
@@ -73,7 +73,7 @@ import {
   loadProfileByName,
   setCliRuntimeContext,
   switchActiveProvider,
-} from '../runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 

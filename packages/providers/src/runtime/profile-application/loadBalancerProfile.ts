@@ -8,7 +8,7 @@ import {
   type LoadBalancingProviderConfig,
   type LoadBalancerSubProfile,
   type ResolvedSubProfile,
-} from '@vybestack/llxprt-code-providers';
+} from '../../LoadBalancingProvider.js';
 import {
   ProfileManager,
   isLoadBalancerProfile,

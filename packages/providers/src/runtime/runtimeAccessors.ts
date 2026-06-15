@@ -36,8 +36,8 @@ import type {
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
 import { getProviderConfigKeys } from '@vybestack/llxprt-code-settings';
-import { type OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { HistoryItemWithoutId } from '../ui/types.js';
+import { type OAuthManager } from '../auth/index.js';
+import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
 import {
   runtimeRegistry,
@@ -172,10 +172,7 @@ export function getCliProviderManager(
   options: {
     allowBrowserEnvironment?: boolean;
     settings?: { get: (key: string) => unknown };
-    addItem?: (
-      itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp?: number,
-    ) => number;
+    addItem?: OAuthUICallback;
   } = {},
 ): RuntimeProviderManager {
   const services = getCliRuntimeServices();
@@ -193,12 +190,7 @@ export function getCliProviderManager(
       for (const provider of providersMap.values()) {
         const p = provider as {
           name?: string;
-          setAddItem?: (
-            callback: (
-              itemData: Omit<HistoryItemWithoutId, 'id'>,
-              baseTimestamp?: number,
-            ) => number,
-          ) => void;
+          setAddItem?: (callback: OAuthUICallback) => void;
         };
         // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (p.name && p.setAddItem) {

@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { parseEphemeralSettingValue } from '../settings/ephemeralSettings.js';
-import { parseModelParamValue } from '../settings/modelParamParser.js';
+import { parseEphemeralSettingValue } from './ephemeralSettings.js';
+import { parseModelParamValue } from './modelParamParser.js';
 
 export interface EphemeralSettingTarget {
   setEphemeralSetting(key: string, value: unknown): void;

@@ -216,7 +216,7 @@ describe('Deprecation Guards (P36)', () => {
       const runtimeMatches = grepFiles(
         'createTokenStore',
         '*.ts',
-        path.resolve(cliSrcRoot, 'runtime'),
+        path.resolve(providersSrcRoot, 'runtime'),
         ['node_modules', 'dist', '__tests__'],
       );
 

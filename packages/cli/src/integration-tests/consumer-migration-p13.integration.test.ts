@@ -55,14 +55,14 @@ import {
   listProviders,
   getActiveProviderStatus,
   getCliProviderManager,
-} from '../runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
   initializeTestConfig,
 } from './test-utils.js';
 import { resetProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
-import { resetCliRuntimeRegistryForTesting } from '../runtime/runtimeRegistry.js';
+import { resetCliRuntimeRegistryForTesting } from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
 
 // ─────────────────────────────────────────────────────────────────
 // Requirement 1: CLI provider manager creation

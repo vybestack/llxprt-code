@@ -9,9 +9,9 @@ import {
   getCliProviderManager,
   getCliRuntimeContext,
   getCliRuntimeServices,
-} from '../runtime/runtimeAccessors.js';
-import { oauthRuntimeBridge } from '@vybestack/llxprt-code-providers/auth.js';
-import type { OAuthRuntimeAccessors } from '@vybestack/llxprt-code-providers/auth.js';
+} from './runtimeAccessors.js';
+import { oauthRuntimeBridge } from '../auth/index.js';
+import type { OAuthRuntimeAccessors } from '../auth/index.js';
 
 /**
  * Build the concrete {@link OAuthRuntimeAccessors} backed by the real CLI

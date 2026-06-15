@@ -36,12 +36,12 @@ import type {
   SettingsService,
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
-import { type OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { type OAuthManager } from '../auth/index.js';
 import {
   configureProviderRuntimeFactories,
   registerProviderManagerSingleton,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { registerOAuthRuntimeAccessors } from '../auth/oauth-runtime-accessors.js';
+} from '../composition/index.js';
+import { registerOAuthRuntimeAccessors } from './oauth-runtime-accessors.js';
 import {
   type IsolatedRuntimeActivationOptions,
   type IsolatedRuntimeContextHandle,

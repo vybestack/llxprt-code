@@ -22,7 +22,7 @@ vi.mock('@vybestack/llxprt-code-core', () => ({
   needsSanitization: needsSanitizationMock,
 }));
 
-vi.mock('../runtime/runtimeSettings.js', () => ({
+vi.mock('./runtimeSettings.js', () => ({
   updateActiveProviderApiKey: updateActiveProviderApiKeyMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,
 }));
@@ -30,7 +30,7 @@ vi.mock('../runtime/runtimeSettings.js', () => ({
 import {
   setProviderApiKey,
   setProviderBaseUrl,
-} from '../providers/providerConfigUtils.js';
+} from './providerConfigUtils.js';
 
 describe('providerConfigUtils runtime wrappers', () => {
   beforeEach(() => {

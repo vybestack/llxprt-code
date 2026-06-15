@@ -13,7 +13,6 @@
 /* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 /**
@@ -30,11 +29,9 @@ import {
   SubagentManager,
   type ConfigParameters,
 } from '@vybestack/llxprt-code-core';
-import {
-  AgentClient,
-  CoreToolScheduler,
-  createTaskToolRegistration,
-} from '@vybestack/llxprt-code-agents';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import {
   clearSettingsProviderRuntimeContext,
   createSettingsProviderRuntimeContext,
@@ -42,50 +39,67 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import {
-  OAuthManager,
-  createTokenStore,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import { LoadedSettingsOAuthAdapter } from '../auth/oauth-settings-adapter.js';
-import { LoadedSettings, USER_SETTINGS_PATH } from '../config/settings.js';
-import type { Settings } from '../config/settings.js';
-import stripJsonComments from 'strip-json-comments';
+import { ProviderManager } from '../ProviderManager.js';
+import { OAuthManager, createTokenStore } from '../auth/index.js';
+import { createFileOAuthSettingsProvider } from '../auth/file-oauth-settings.js';
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const DEFAULT_DEBUG_MODE = false;
 
+/**
+ * Dependency-inversion seam for agent runtime factories.
+ *
+ * The concrete implementations (AgentClient, CoreToolScheduler,
+ * createTaskToolRegistration) live in `@vybestack/llxprt-code-agents`, which
+ * depends on this package. Importing them here would create a providers→agents
+ * dependency cycle. Instead, the composition root (the CLI) registers the
+ * concrete factories at bootstrap via `registerAgentRuntimeFactories`.
+ */
+export interface AgentRuntimeFactoryBindings {
+  agentClientFactory: AgentClientFactory;
+  toolSchedulerFactory: ToolSchedulerFactory;
+  taskToolRegistration: () => TaskToolRegistration;
+}
+
+let agentRuntimeFactoryBindings: AgentRuntimeFactoryBindings | null = null;
+
+export function registerAgentRuntimeFactories(
+  bindings: AgentRuntimeFactoryBindings,
+): void {
+  agentRuntimeFactoryBindings = bindings;
+}
+
+export function resetAgentRuntimeFactories(): void {
+  agentRuntimeFactoryBindings = null;
+}
+
 function attachAgentRuntimeFactories(config: Config): void {
+  if (!agentRuntimeFactoryBindings) {
+    // No-op when bindings are unregistered. This is intentional and safe:
+    //   - In production the CLI composition root registers the concrete
+    //     factories at module load (configBuilder.ts) AND passes them directly
+    //     into `new Config({...})`, so this path is always populated.
+    //   - The only callers of `createIsolatedRuntimeContext` that may reach
+    //     here without bindings are providers-side tests, which cannot register
+    //     concrete agent factories without reintroducing a providers→agents
+    //     cycle. Those tests never drive an agent-client/scheduler through this
+    //     Config.
+    //   - If an agent client/scheduler is ever needed without a factory, core
+    //     fails fast at the point of use (Config.requireAgentClientFactory
+    //     throws "agentClientFactory is required ..."), so a missing binding
+    //     surfaces as a clear error rather than silent incorrect behavior.
+    return;
+  }
   const mutableConfig = config as unknown as Pick<
     ConfigParameters,
     'agentClientFactory' | 'toolSchedulerFactory' | 'taskToolRegistration'
   >;
-  mutableConfig.agentClientFactory ??= (config, runtimeState) =>
-    new AgentClient(config, runtimeState);
-  mutableConfig.toolSchedulerFactory ??= (schedulerOptions) =>
-    new CoreToolScheduler(schedulerOptions);
-  mutableConfig.taskToolRegistration ??= createTaskToolRegistration();
-}
-
-function loadSettingsForIsolatedRuntime(): LoadedSettings | undefined {
-  try {
-    if (fs.existsSync(USER_SETTINGS_PATH)) {
-      const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
-      const userSettings = JSON.parse(
-        stripJsonComments(userContent),
-      ) as Settings;
-      return new LoadedSettings(
-        { path: '', settings: {} as Settings },
-        { path: '', settings: {} as Settings },
-        { path: USER_SETTINGS_PATH, settings: userSettings },
-        { path: '', settings: {} as Settings },
-        true,
-      );
-    }
-  } catch {
-    // Failed to load user settings; fall back to no settings.
-  }
-  return undefined;
+  mutableConfig.agentClientFactory ??=
+    agentRuntimeFactoryBindings.agentClientFactory;
+  mutableConfig.toolSchedulerFactory ??=
+    agentRuntimeFactoryBindings.toolSchedulerFactory;
+  mutableConfig.taskToolRegistration ??=
+    agentRuntimeFactoryBindings.taskToolRegistration();
 }
 
 let sharedTokenStore: KeyringTokenStore | null = null;
@@ -244,19 +258,12 @@ function resolveRuntimeConfig(
       cwd: workspaceDir,
       model,
       settingsService,
-      // @plan PLAN-20260610-ISSUE1592.P01
-      // @requirement REQ-INV-001
-      agentClientFactory: (config, runtimeState) =>
-        new AgentClient(config, runtimeState),
-      // @plan PLAN-20260610-ISSUE1592.P01
-      // @requirement REQ-INV-002
-      toolSchedulerFactory: (schedulerOptions) =>
-        new CoreToolScheduler(schedulerOptions),
-      // @plan PLAN-20260610-ISSUE1592.P03
-      // @requirement REQ-INV-003
-      taskToolRegistration: createTaskToolRegistration(),
     });
 
+  // @plan PLAN-20260610-ISSUE1592.P01
+  // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
+  // Agent runtime factories are injected via the dependency-inversion seam
+  // (registerAgentRuntimeFactories) to avoid a providers→agents cycle.
   attachAgentRuntimeFactories(config);
 
   const llxprtDir = path.join(os.homedir(), '.llxprt');
@@ -284,18 +291,12 @@ function resolveOAuthManager(
   const tokenStore =
     sharedTokenStore ??
     (sharedTokenStore = createTokenStore() as KeyringTokenStore);
-  const loadedSettings = loadSettingsForIsolatedRuntime();
+  const oauthSettings = createFileOAuthSettingsProvider();
   return (
     optionsOAuthManager ??
-    new OAuthManager(
-      tokenStore,
-      loadedSettings
-        ? new LoadedSettingsOAuthAdapter(loadedSettings)
-        : undefined,
-      {
-        messageBus: sessionMessageBus,
-      },
-    )
+    new OAuthManager(tokenStore, oauthSettings, {
+      messageBus: sessionMessageBus,
+    })
   );
 }
 

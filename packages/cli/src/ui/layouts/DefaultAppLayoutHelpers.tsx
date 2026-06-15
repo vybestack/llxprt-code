@@ -23,7 +23,7 @@ import type { UIState } from '../contexts/UIStateContext.js';
 import type { UIActions } from '../contexts/UIActionsContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { Colors } from '../colors.js';
-import { getCliRuntimeContext } from '../../runtime/runtimeSettings.js';
+import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 import { themeManager } from '../themes/theme-manager.js';
 import type { SlashCommand } from '../commands/types.js';
 

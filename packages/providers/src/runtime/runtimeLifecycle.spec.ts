@@ -29,7 +29,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthManager } from '../auth/index.js';
 import { getCliProviderManager } from './runtimeAccessors.js';
 
 /**

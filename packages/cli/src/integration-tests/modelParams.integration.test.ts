@@ -25,7 +25,7 @@ import {
   getActiveModelParams,
   buildRuntimeProfileSnapshot,
   clearActiveModelParam,
-} from '../runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,

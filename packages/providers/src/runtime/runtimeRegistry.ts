@@ -31,8 +31,8 @@ import type {
   SettingsService,
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
-import { type OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { resetProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
+import { type OAuthManager } from '../auth/index.js';
+import { resetProviderManager } from '../composition/index.js';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
 import { formatMissingRuntimeMessage } from './messages.js';
 

@@ -98,7 +98,9 @@ vi.mock('../colors.js', () => ({
   SemanticColors: new Proxy({}, { get: () => '#808080' }),
 }));
 
-vi.mock('../../runtime/runtimeSettings.js', () => ({
+vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({
+  registerAgentRuntimeFactories: vi.fn(),
+  resetAgentRuntimeFactories: vi.fn(),
   getCliRuntimeContext: () => ({
     messageBus: {
       subscribe: vi.fn(),

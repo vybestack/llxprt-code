@@ -22,7 +22,7 @@ import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
-} from '../../settings/ephemeralSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
 import {
   getDirectSettingSpecs,
   resolveAlias,

@@ -11,7 +11,7 @@ import type {
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderRuntimeFactories } from '../composition/index.js';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,

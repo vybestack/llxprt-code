@@ -16,13 +16,13 @@ import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { applyCliSetArguments } from '../config/cliEphemeralSettings.js';
+import { applyCliSetArguments } from './cliEphemeralSettings.js';
 import { getCliRuntimeServices } from './runtimeAccessors.js';
 import {
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
 } from './providerMutations.js';
-import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
+import { createProviderKeyStorage } from '../auth/index.js';
 
 /**
  * Apply CLI argument overrides to configuration.

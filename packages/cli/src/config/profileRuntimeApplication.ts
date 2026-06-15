@@ -8,7 +8,7 @@
 
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { applyProfileSnapshot } from '../runtime/profileSnapshot.js';
+import { applyProfileSnapshot } from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { BootstrapProfileArgs } from './profileBootstrap.js';
 

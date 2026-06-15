@@ -12,8 +12,8 @@
 
 import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger, coreEvents } from '@vybestack/llxprt-code-core';
-import type { IProvider } from '@vybestack/llxprt-code-providers';
-import type { HistoryItemWithoutId } from '../ui/types.js';
+import type { IProvider } from '../IProvider.js';
+import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 import {
   getCliOAuthManager,
   getCliRuntimeServices,
@@ -26,9 +26,9 @@ import {
 import {
   loadProviderAliasEntries,
   type ProviderAliasConfig,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { ensureOAuthProviderRegistered } from '@vybestack/llxprt-code-providers/composition.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+} from '../composition/index.js';
+import { ensureOAuthProviderRegistered } from '../composition/index.js';
+import { configureProviderRuntimeFactories } from '../composition/index.js';
 import { getActiveProfileName } from './profileSnapshot.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
@@ -59,10 +59,7 @@ interface ProviderSwitchOptions {
   autoOAuth?: boolean;
   preserveEphemerals?: string[];
   skipModelDefaults?: boolean;
-  addItem?: (
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ) => number;
+  addItem?: OAuthUICallback;
 }
 
 interface ProviderSwitchContext {
@@ -96,10 +93,7 @@ interface ProviderSwitchContext {
   maxTokensBeforeSwitch: unknown;
   maxOutputTokensBeforeSwitch: unknown;
   infoMessages: string[];
-  addItem?: (
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ) => number;
+  addItem?: OAuthUICallback;
 }
 
 function normalizeSetting(value: unknown): string | undefined {

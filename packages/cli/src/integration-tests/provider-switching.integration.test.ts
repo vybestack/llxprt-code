@@ -37,8 +37,8 @@ import {
   getActiveModelParams,
   registerCliProviderInfrastructure,
   resetCliProviderInfrastructure,
-} from '../runtime/runtimeSettings.js';
-import { setProviderApiKey } from '../providers/providerConfigUtils.js';
+} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+import { setProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
 
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P07

@@ -11,7 +11,7 @@ import {
   getOAuthManager,
   getProviderManager,
   resetProviderManager,
-} from '@vybestack/llxprt-code-providers/composition.js';
+} from '../composition/index.js';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
