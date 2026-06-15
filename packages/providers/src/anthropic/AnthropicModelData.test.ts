@@ -50,6 +50,10 @@ describe('AnthropicModelData latest Opus models', () => {
       expect(isOpus46Plus('claude-opus-4-8')).toBe(true);
     });
 
+    it('returns true for the claude-opus-4-latest alias (tracks newest Opus)', () => {
+      expect(isOpus46Plus('claude-opus-4-latest')).toBe(true);
+    });
+
     it('returns false for older opus and non-opus models', () => {
       expect(isOpus46Plus('claude-opus-4-1-20250805')).toBe(false);
       expect(isOpus46Plus('claude-sonnet-4-6')).toBe(false);
@@ -63,12 +67,20 @@ describe('AnthropicModelData latest Opus models', () => {
       expect(getMaxTokensForModel('claude-opus-4-7')).toBe(128000);
       expect(getMaxTokensForModel('claude-opus-4-6')).toBe(128000);
     });
+
+    it('returns 128000 for the claude-opus-4-latest alias', () => {
+      expect(getMaxTokensForModel('claude-opus-4-latest')).toBe(128000);
+    });
   });
 
   describe('getContextWindowForModel', () => {
     it('returns 1000000 for opus 4.7 and 4.8', () => {
       expect(getContextWindowForModel('claude-opus-4-8')).toBe(1000000);
       expect(getContextWindowForModel('claude-opus-4-7')).toBe(1000000);
+    });
+
+    it('returns 1000000 for the claude-opus-4-latest alias (tracks newest Opus)', () => {
+      expect(getContextWindowForModel('claude-opus-4-latest')).toBe(1000000);
     });
 
     it('returns 200000 for opus 4.6 (distinct from 4.7/4.8)', () => {

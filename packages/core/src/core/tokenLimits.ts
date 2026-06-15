@@ -90,11 +90,10 @@ export function tokenLimit(
     // Claude 4 series - larger context windows
     case 'claude-opus-4-8':
     case 'claude-opus-4-7':
+    case 'claude-opus-4-latest':
       return 1_000_000;
     case 'claude-opus-4-6':
       return 200_000;
-    case 'claude-opus-4-latest':
-      return 500_000;
     case 'claude-sonnet-4-6':
       return 200_000;
     case 'claude-sonnet-4-latest':

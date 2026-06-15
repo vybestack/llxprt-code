@@ -65,6 +65,10 @@ describe('tokenLimit', () => {
       expect(tokenLimit('claude-opus-4-7')).toBe(1_000_000);
     });
 
+    it('should return 1M limit for claude-opus-4-latest (tracks newest Opus)', () => {
+      expect(tokenLimit('claude-opus-4-latest')).toBe(1_000_000);
+    });
+
     it('should return 200K limit for claude-opus-4-6', () => {
       expect(tokenLimit('claude-opus-4-6')).toBe(200_000);
     });

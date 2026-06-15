@@ -226,6 +226,7 @@ export function getLatestClaude4Model(
  */
 export function isOpus46Plus(modelId: string): boolean {
   return (
+    modelId === 'claude-opus-4-latest' ||
     modelId.includes('claude-opus-4-6') ||
     modelId.includes('claude-opus-4-7') ||
     modelId.includes('claude-opus-4-8')
@@ -236,12 +237,12 @@ export function isOpus46Plus(modelId: string): boolean {
  * Get max output tokens for a given model
  */
 export function getMaxTokensForModel(modelId: string): number {
-  // Handle Opus 4.6 first - it has 128K max output (different from other opus-4 models)
+  // Handle Opus 4.6+ first (including the "latest" alias) - 128K max output
   if (isOpus46Plus(modelId)) {
     return 128000;
   }
-  // Handle latest aliases and other opus-4 models explicitly
-  if (modelId === 'claude-opus-4-latest' || modelId.includes('claude-opus-4')) {
+  // Other (older) opus-4 models
+  if (modelId.includes('claude-opus-4')) {
     return 32000;
   }
   if (
@@ -266,8 +267,9 @@ export function getMaxTokensForModel(modelId: string): number {
  * Get context window for a given model
  */
 export function getContextWindowForModel(modelId: string): number {
-  // Claude Opus 4.7 and 4.8 have 1M context
+  // Claude Opus 4.7 and 4.8 have 1M context; the "latest" alias tracks 4.8
   if (
+    modelId === 'claude-opus-4-latest' ||
     modelId.includes('claude-opus-4-7') ||
     modelId.includes('claude-opus-4-8')
   ) {
