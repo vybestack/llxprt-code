@@ -16,7 +16,6 @@ import {
   DebugLogger,
   type Config,
   type OAuthTokenRequestMetadata,
-  type OAuthTokenWithExtras,
 } from '@vybestack/llxprt-code-core';
 import type {
   OAuthToken,
@@ -33,6 +32,12 @@ import {
   executeTokenRefresh,
   performDiskCheckUnderLock,
 } from './token-refresh-helper.js';
+import {
+  resolveForceRefreshBaseline,
+  loadTokenForForceRefresh,
+  refreshStoredToken,
+  invalidateRuntimeCacheAfterRefresh,
+} from './token-force-refresh-helper.js';
 import {
   resolveProfileBuckets,
   resolveCurrentProfileSessionMetadata,
@@ -854,98 +859,19 @@ export class TokenAccessCoordinator {
     return lockAcquired;
   }
 
-  private async loadTokenForForceRefresh(
-    providerName: string,
-    failedAccessToken: string,
-    bucket: string | undefined,
-  ): Promise<OAuthToken | null> {
-    const storedToken = await this.tokenStore.getToken(providerName, bucket);
-
-    if (!storedToken) {
-      logger.debug(
-        () =>
-          `[FLOW] No stored token found for forceRefreshToken() on ${providerName}`,
-      );
-      return null;
-    }
-
-    if (storedToken.access_token !== failedAccessToken) {
-      logger.debug(
-        () =>
-          `[FLOW] Token already refreshed by another process for ${providerName}`,
-      );
-      return storedToken;
-    }
-
-    if (
-      !storedToken.refresh_token ||
-      typeof storedToken.refresh_token !== 'string' ||
-      storedToken.refresh_token === ''
-    ) {
-      logger.debug(
-        () =>
-          `[FLOW] No refresh token available for forceRefreshToken() on ${providerName}`,
-      );
-      return null;
-    }
-
-    return storedToken;
-  }
-
-  private async refreshStoredToken(
-    providerName: string,
-    storedToken: OAuthToken,
-    bucket: string | undefined,
-  ): Promise<OAuthToken | null> {
-    const provider = this.providerRegistry.getProvider(providerName);
-    if (!provider) {
-      return null;
-    }
-
-    logger.debug(
-      () =>
-        `[FLOW] Executing force refresh for ${providerName} (token matches failed token)`,
-    );
-
-    const refreshedToken = await provider.refreshToken(storedToken);
-
-    if (!refreshedToken) {
-      logger.debug(
-        () => `[FLOW] Force refresh returned null for ${providerName}`,
-      );
-      return null;
-    }
-
-    const { mergeRefreshedToken } = await import('@vybestack/llxprt-code-core');
-    const mergedToken = mergeRefreshedToken(
-      storedToken as OAuthTokenWithExtras,
-      refreshedToken as Partial<OAuthTokenWithExtras>,
-    );
-
-    logger.debug(
-      () =>
-        `[FLOW] Force refresh successful for ${providerName}, saving token...`,
-    );
-
-    await this.tokenStore.saveToken(providerName, mergedToken, bucket);
-    this.proactiveRenewalManager.scheduleProactiveRenewal(
-      providerName,
-      bucket,
-      mergedToken,
-    );
-
-    return mergedToken;
-  }
-
   /**
    * Force refresh a token when we know it has been revoked (401/403 error).
    * Uses TOCTOU pattern with refresh lock to prevent race conditions.
    *
    * @param providerName - Name of the provider
-   * @param failedAccessToken - The access token that was rejected (for comparison)
+   * @param failedAccessToken - The access token that was rejected (for
+   *   comparison). May be an empty string when the caller resolves OAuth tokens
+   *   below the retry layer and cannot supply the concrete token; in that case
+   *   the current stored token is used as the refresh baseline (issue2035).
    * @param bucket - Optional bucket name
    * @returns The new OAuth token, or null if refresh was not possible
    * @fix issue1861 - Token revocation handling
+   * @fix issue2035 - Refresh on empty failed token (OAuth resolved below retry layer)
    */
   async forceRefreshToken(
     providerName: string,
@@ -965,6 +891,22 @@ export class TokenAccessCoordinator {
       return null;
     }
 
+    // @fix issue2035: capture the baseline BEFORE acquiring the lock so the
+    // TOCTOU comparison stays meaningful even when no failed token was supplied.
+    const effectiveFailedToken = await resolveForceRefreshBaseline(
+      providerName,
+      failedAccessToken,
+      bucket,
+      this.tokenStore,
+    );
+    if (effectiveFailedToken === '') {
+      logger.debug(
+        () =>
+          `[FLOW] No baseline token available for forceRefreshToken() on ${providerName}; nothing to refresh`,
+      );
+      return null;
+    }
+
     const lockAcquired = await this.acquireForceRefreshLock(
       providerName,
       bucket,
@@ -974,15 +916,37 @@ export class TokenAccessCoordinator {
     }
 
     try {
-      const storedToken = await this.loadTokenForForceRefresh(
+      const storedToken = await loadTokenForForceRefresh(
         providerName,
-        failedAccessToken,
+        effectiveFailedToken,
         bucket,
+        this.tokenStore,
       );
-      if (!storedToken || storedToken.access_token !== failedAccessToken) {
+      // @fix issue2035: if another process already refreshed the disk token,
+      // invalidate the stale in-memory cache before returning so the retry
+      // resolves the fresh token. If there is no stored token, do NOT
+      // invalidate (nothing fresh to switch to).
+      if (!storedToken) {
+        return null;
+      }
+      if (storedToken.access_token !== effectiveFailedToken) {
+        invalidateRuntimeCacheAfterRefresh(providerName);
         return storedToken;
       }
-      return await this.refreshStoredToken(providerName, storedToken, bucket);
+      // @fix issue2035: after a successful local refresh, invalidate the
+      // stale in-memory cache so retries resolve the fresh disk token.
+      const refreshedToken = await refreshStoredToken(
+        providerName,
+        storedToken,
+        bucket,
+        this.tokenStore,
+        this.providerRegistry,
+        this.proactiveRenewalManager,
+      );
+      if (refreshedToken) {
+        invalidateRuntimeCacheAfterRefresh(providerName);
+      }
+      return refreshedToken;
     } catch (refreshError) {
       logger.debug(
         () =>

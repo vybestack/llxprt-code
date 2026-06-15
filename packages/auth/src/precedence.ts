@@ -504,4 +504,39 @@ export function flushRuntimeAuthScope(
   return { runtimeId, revokedTokens };
 }
 
+/**
+ * Invalidate cached runtime-scoped tokens for a provider across ALL runtimes.
+ *
+ * @fix issue2035
+ * Used by TokenAccessCoordinator.forceRefreshToken() to ensure that after a
+ * token is refreshed on disk, every agent/runtime's in-memory cache no longer
+ * serves the now-revoked token. Returns the number of entries invalidated so
+ * callers can log it for observability.
+ *
+ * @param providerId - Provider whose entries should be invalidated
+ * @param profileId - Optional profile to scope invalidation to
+ * @returns number of cache entries invalidated across all runtimes
+ */
+export function invalidateProviderRuntimeCache(
+  providerId: string,
+  profileId?: string,
+): number {
+  let invalidatedCount = 0;
+  for (const [, state] of runtimeScopedStates) {
+    const summaries = invalidateMatchingEntries(
+      state,
+      (entry) => {
+        if (entry.providerId !== providerId) return false;
+        if (profileId !== undefined && entry.profileId !== profileId) {
+          return false;
+        }
+        return true;
+      },
+      'token-revoked',
+    );
+    invalidatedCount += summaries.length;
+  }
+  return invalidatedCount;
+}
+
 export { AuthPrecedenceResolver } from './auth-precedence-resolver.js';

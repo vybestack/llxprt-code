@@ -94,3 +94,4 @@ gha-creds-*.json
 # Evals output
 evals/logs/
 .evals/
+.playwright-mcp/
