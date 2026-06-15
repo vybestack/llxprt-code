@@ -27,6 +27,10 @@ export {
   providerManager,
 } from './providerManagerInstance.js';
 
+// ─── Headless construction ───────────────────────────────────────────────────
+export { createHeadlessProviderManager } from './headlessFactory.js';
+export type { HeadlessProviderManagerOptions } from './headlessFactory.js';
+
 // ─── Provider aliases ────────────────────────────────────────────────────────
 export {
   getUserAliasDir,
