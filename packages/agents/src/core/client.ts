@@ -88,6 +88,8 @@ export class AgentClient implements AgentClientContract {
   private _previousHistory?: Content[];
   private _storedHistoryService?: HistoryService;
   private currentSequenceModel: string | null = null;
+  private activeStreamCount = 0;
+  private profileChangePendingChatInvalidation = false;
 
   private readonly loopDetector: LoopDetectionService;
   private lastPromptId?: string;
@@ -234,7 +236,23 @@ export class AgentClient implements AgentClientContract {
 
   private handleModelProfileChanged = () => {
     this.currentSequenceModel = null;
+    if (this.activeStreamCount > 0) {
+      this.profileChangePendingChatInvalidation = true;
+      return;
+    }
+    this.invalidateChatForProfileChange();
   };
+
+  private invalidateChatForProfileChange(): void {
+    this.profileChangePendingChatInvalidation = false;
+    if (!this.chat) {
+      return;
+    }
+    this._storedHistoryService = this.chat.getHistoryService();
+    this._previousHistory = undefined;
+    this.chat = undefined;
+    this._baseLlmClient = undefined;
+  }
 
   dispose(): void {
     coreEvents.off(CoreEvent.ModelChanged, this.handleModelChanged);
@@ -693,14 +711,25 @@ export class AgentClient implements AgentClientContract {
     isInvalidStreamRetry: boolean = false,
     is413Retry: boolean = false,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
-    return yield* this.messageStreamOrchestrator.execute(
-      initialRequest,
-      signal,
-      prompt_id,
-      turns,
-      isInvalidStreamRetry,
-      is413Retry,
-    );
+    this.activeStreamCount++;
+    try {
+      return yield* this.messageStreamOrchestrator.execute(
+        initialRequest,
+        signal,
+        prompt_id,
+        turns,
+        isInvalidStreamRetry,
+        is413Retry,
+      );
+    } finally {
+      this.activeStreamCount--;
+      if (
+        this.activeStreamCount === 0 &&
+        this.profileChangePendingChatInvalidation
+      ) {
+        this.invalidateChatForProfileChange();
+      }
+    }
   }
 
   async generateJson(
