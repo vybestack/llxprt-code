@@ -25,8 +25,16 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
+import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 
 const mockTurnRun = vi.fn();
+
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
+  tokenLimit: vi.fn(
+    (_model: string, userContextLimit?: number) =>
+      userContextLimit ?? 1_000_000,
+  ),
+}));
 
 vi.mock('./turn.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./turn.js')>();
@@ -52,6 +60,7 @@ interface HarnessState {
   providerManagerActiveModel?: string;
   lastPromptId?: string;
   currentSequenceModel: string | null;
+  contextLimit?: number;
 }
 
 interface BuildOptions extends Partial<HarnessState> {
@@ -70,6 +79,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     providerManagerActiveModel: options.providerManagerActiveModel,
     lastPromptId: options.lastPromptId,
     currentSequenceModel: options.currentSequenceModel ?? null,
+    contextLimit: options.contextLimit,
   };
 
   const mockChat = {
@@ -94,6 +104,9 @@ function buildOrchestrator(options: BuildOptions = {}): {
     getMaxSessionTurns: vi.fn(() => 0),
     getIdeMode: vi.fn(() => false),
     getModel: vi.fn(() => state.model),
+    getEphemeralSetting: vi.fn((key: string) =>
+      key === 'context-limit' ? state.contextLimit : undefined,
+    ),
     getSettingsService: vi.fn(() => ({
       getCurrentProfileName: vi.fn(() => state.profileName ?? null),
       get: vi.fn((key: string) =>
@@ -228,6 +241,10 @@ async function collectModelInfos(
 describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(tokenLimit).mockImplementation(
+      (_model: string, userContextLimit?: number) =>
+        userContextLimit ?? 1_000_000,
+    );
   });
 
   it('emits ModelInfo for a new prompt', async () => {
@@ -317,5 +334,21 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     // The ModelInfo should reflect provider manager active model,
     // not the config model
     expect(infos[0]?.model).toBe('provider-active-model');
+  });
+
+  it('uses the configured context-limit for preflight overflow checks', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'claude-opus-4-8',
+      providerName: 'anthropic',
+      profileName: 'opusthinking',
+      contextLimit: 200_000,
+    });
+
+    await collectModelInfos(orchestrator, 'prompt-context-limit');
+
+    expect(vi.mocked(tokenLimit).mock.calls).toContainEqual([
+      'claude-opus-4-8',
+      200_000,
+    ]);
   });
 });
