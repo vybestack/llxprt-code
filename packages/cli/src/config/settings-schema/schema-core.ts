@@ -235,7 +235,7 @@ export const CORE_SETTINGS_SCHEMA = {
     label: 'Default Disabled Tools',
     category: 'Advanced',
     requiresRestart: true,
-    default: ['google_web_fetch'] as string[] | undefined,
+    default: ['google_web_fetch', 'google_web_search'] as string[] | undefined,
     description:
       'Tool names disabled by default. Users can re-enable them with /tools enable.',
     showInDialog: false,

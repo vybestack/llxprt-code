@@ -182,7 +182,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:**
 
     ```json
-    ["google_web_fetch"]
+    ["google_web_fetch", "google_web_search"]
     ```
 
   - **Requires restart:** Yes

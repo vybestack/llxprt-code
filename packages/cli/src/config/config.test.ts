@@ -1798,6 +1798,28 @@ describe('defaultDisabledTools', () => {
     );
   });
 
+  it('should seed tools.disabled with both default-disabled tools', async () => {
+    const settings: Settings = {
+      defaultDisabledTools: ['google_web_fetch', 'google_web_search'],
+    };
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    const disabled = config.getEphemeralSetting('tools.disabled');
+    expect(disabled).toStrictEqual(
+      expect.arrayContaining(['google_web_fetch', 'google_web_search']),
+    );
+  });
+
   it('should merge defaultDisabledTools with existing tools.disabled', async () => {
     const settings: Settings = {
       defaultDisabledTools: ['google_web_fetch'],
