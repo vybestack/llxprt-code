@@ -365,7 +365,7 @@ describe('AnthropicProvider', () => {
       expect(opus46).toBeDefined();
       expect(opus46?.name).toBe('Claude Opus 4.6');
       expect(opus46?.contextWindow).toBe(200000);
-      expect(opus46?.maxOutputTokens).toBe(128000);
+      expect(opus46?.maxOutputTokens).toBe(32000);
     });
 
     it('should include Claude Opus 4.8 model in OAuth model list', async () => {
@@ -387,8 +387,8 @@ describe('AnthropicProvider', () => {
       const opus48 = models.find((m) => m.id === 'claude-opus-4-8');
       expect(opus48).toBeDefined();
       expect(opus48?.name).toBe('Claude Opus 4.8');
-      expect(opus48?.contextWindow).toBe(1000000);
-      expect(opus48?.maxOutputTokens).toBe(128000);
+      expect(opus48?.contextWindow).toBe(200000);
+      expect(opus48?.maxOutputTokens).toBe(32000);
     });
 
     it('should include Claude Opus 4.6 model in default list when auth is unavailable', async () => {
@@ -407,7 +407,7 @@ describe('AnthropicProvider', () => {
 
       const opus46 = models.find((m) => m.id === 'claude-opus-4-6');
       expect(opus46?.contextWindow).toBe(200000);
-      expect(opus46?.maxOutputTokens).toBe(128000);
+      expect(opus46?.maxOutputTokens).toBe(32000);
     });
 
     it('should include Claude Opus 4.8 model in default list when auth is unavailable', async () => {
@@ -427,8 +427,8 @@ describe('AnthropicProvider', () => {
       const opus48 = models.find((m) => m.id === 'claude-opus-4-8');
       expect(opus48).toBeDefined();
       expect(opus48?.name).toBe('Claude Opus 4.8');
-      expect(opus48?.contextWindow).toBe(1000000);
-      expect(opus48?.maxOutputTokens).toBe(128000);
+      expect(opus48?.contextWindow).toBe(200000);
+      expect(opus48?.maxOutputTokens).toBe(32000);
     });
 
     it('should return models with correct structure', async () => {

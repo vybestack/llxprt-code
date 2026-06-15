@@ -558,7 +558,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
 
     // From the specific "claude-opus-4-8" rule (merged on top)
     expect(defaults['reasoning.effort']).toBe('high');
-    expect(defaults['context-limit']).toBe(1000000);
+    expect(defaults['context-limit']).toBe(200000);
   });
 
   it('user anthropic.config with different modelDefaults shadows the builtin', async () => {

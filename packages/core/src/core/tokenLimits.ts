@@ -87,12 +87,13 @@ export function tokenLimit(
       return 32_000;
 
     // Anthropic models
-    // Claude 4 series - larger context windows
+    // Claude Opus 4.6/4.7/4.8 default to the Claude Code / subscription 200K
+    // context window. The 1M window is API-only and plan-gated; override via
+    // /set or a profile (context-limit).
     case 'claude-opus-4-8':
     case 'claude-opus-4-7':
-    case 'claude-opus-4-latest':
-      return 1_000_000;
     case 'claude-opus-4-6':
+    case 'claude-opus-4-latest':
       return 200_000;
     case 'claude-sonnet-4-6':
       return 200_000;
