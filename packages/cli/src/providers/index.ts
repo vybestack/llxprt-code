@@ -22,4 +22,4 @@ export {
 export type { IContent } from '@vybestack/llxprt-code-core';
 
 // Provider management
-export * from './providerManagerInstance.js';
+export * from '@vybestack/llxprt-code-providers/composition.js';

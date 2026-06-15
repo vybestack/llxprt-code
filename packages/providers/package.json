@@ -19,6 +19,26 @@
       "types": "./dist/src/auth/index.d.ts",
       "import": "./dist/src/auth/index.js"
     },
+    "./composition.js": {
+      "types": "./dist/src/composition/index.d.ts",
+      "import": "./dist/src/composition/index.js"
+    },
+    "./composition/providerManagerInstance.js": {
+      "types": "./dist/src/composition/providerManagerInstance.d.ts",
+      "import": "./dist/src/composition/providerManagerInstance.js"
+    },
+    "./composition/providerAliases.js": {
+      "types": "./dist/src/composition/providerAliases.d.ts",
+      "import": "./dist/src/composition/providerAliases.js"
+    },
+    "./composition/oauth-provider-registration.js": {
+      "types": "./dist/src/composition/oauth-provider-registration.d.ts",
+      "import": "./dist/src/composition/oauth-provider-registration.js"
+    },
+    "./composition/IFileSystem.js": {
+      "types": "./dist/src/composition/IFileSystem.d.ts",
+      "import": "./dist/src/composition/IFileSystem.js"
+    },
     "./BaseProvider.js": "./dist/src/BaseProvider.js",
     "./IModel.js": "./dist/src/IModel.js",
     "./IProvider.js": "./dist/src/IProvider.js",
@@ -62,6 +82,7 @@
     "@vybestack/llxprt-code-tools": "file:../tools",
     "ai": "^5.0.104",
     "openai": "^5.10.1",
+    "strip-json-comments": "^3.1.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {

@@ -18,6 +18,46 @@ import type { Config } from '@vybestack/llxprt-code-core';
 // This test tests provider registration behavior, needs real providerAliases
 vi.unmock('./providerAliases.js');
 
+/**
+ * Mock the concrete provider modules (imported relatively by the composition
+ * SUT chain) so registration can be observed without constructing real
+ * providers. ProviderManager is replaced wholesale, so its internal runtime
+ * context dependencies (sourced from core) are never loaded.
+ */
+function mockProviderModules(opts: {
+  openai: unknown;
+  openaiResponses: unknown;
+  openaiVercel: unknown;
+  anthropic: unknown;
+}): void {
+  vi.doMock('../ProviderManager.js', () => {
+    class MockProviderManager {
+      setConfig(): void {}
+      setActiveProvider(): void {}
+      registerProvider(): void {}
+    }
+    return { ProviderManager: MockProviderManager };
+  });
+  vi.doMock('../gemini/GeminiProvider.js', () => {
+    class MockGeminiProvider {
+      setConfig(): void {}
+    }
+    return { GeminiProvider: MockGeminiProvider };
+  });
+  vi.doMock('../openai/OpenAIProvider.js', () => ({
+    OpenAIProvider: opts.openai,
+  }));
+  vi.doMock('../openai-responses/OpenAIResponsesProvider.js', () => ({
+    OpenAIResponsesProvider: opts.openaiResponses,
+  }));
+  vi.doMock('../openai-vercel/index.js', () => ({
+    OpenAIVercelProvider: opts.openaiVercel,
+  }));
+  vi.doMock('../anthropic/AnthropicProvider.js', () => ({
+    AnthropicProvider: opts.anthropic,
+  }));
+}
+
 describe('Anthropic OAuth registration with environment key', () => {
   let ensureOAuthProviderRegisteredMock: ReturnType<typeof vi.fn>;
   let anthropicCtor: ReturnType<typeof vi.fn>;
@@ -54,38 +94,12 @@ describe('Anthropic OAuth registration with environment key', () => {
     }));
 
     const activeContext: any = { scope: 'test' };
-    vi.doMock('@vybestack/llxprt-code-providers', async () => {
-      const actual = await vi.importActual<
-        typeof import('@vybestack/llxprt-code-providers')
-      >('@vybestack/llxprt-code-providers');
-
-      class MockProviderManager {
-        setConfig(): void {}
-        setActiveProvider(): void {}
-        registerProvider(): void {}
-      }
-
-      class MockGeminiProvider {
-        setConfig(): void {}
-      }
-
-      class MockProvider {}
-
-      return {
-        ...actual,
-        ProviderManager: MockProviderManager,
-        GeminiProvider: MockGeminiProvider,
-        OpenAIProvider: MockProvider,
-        OpenAIResponsesProvider: MockProvider,
-        OpenAIVercelProvider: openaivercelCtor,
-        AnthropicProvider: anthropicCtor,
-        setActiveProviderRuntimeContext: vi.fn((ctx: any) => {
-          Object.assign(activeContext, ctx);
-        }),
-        getActiveProviderRuntimeContext: vi.fn(() => activeContext),
-        peekActiveProviderRuntimeContext: () => activeContext,
-        getCurrentRuntimeScope: () => undefined,
-      };
+    class MockProvider {}
+    mockProviderModules({
+      openai: MockProvider,
+      openaiResponses: MockProvider,
+      openaiVercel: openaivercelCtor,
+      anthropic: anthropicCtor,
     });
 
     vi.clearAllMocks();
@@ -128,39 +142,11 @@ describe('Anthropic OAuth registration with environment key', () => {
     }));
 
     const activeContext: any = { scope: 'test' };
-    vi.doMock('@vybestack/llxprt-code-providers', async () => {
-      const actual = await vi.importActual<
-        typeof import('@vybestack/llxprt-code-providers')
-      >('@vybestack/llxprt-code-providers');
-
-      class MockProviderManager {
-        setConfig(): void {}
-        setActiveProvider(): void {}
-        registerProvider(): void {}
-      }
-
-      class MockGeminiProvider {
-        setConfig(): void {}
-      }
-
-      return {
-        ...actual,
-        ProviderManager: MockProviderManager,
-        GeminiProvider: MockGeminiProvider,
-        OpenAIProvider: openaiCtor as unknown as typeof actual.OpenAIProvider,
-        OpenAIResponsesProvider:
-          openaiResponsesCtor as unknown as typeof actual.OpenAIResponsesProvider,
-        OpenAIVercelProvider:
-          openaivercelCtor as unknown as typeof actual.OpenAIVercelProvider,
-        AnthropicProvider:
-          anthropicCtor as unknown as typeof actual.AnthropicProvider,
-        setActiveProviderRuntimeContext: vi.fn((ctx: any) => {
-          Object.assign(activeContext, ctx);
-        }),
-        getActiveProviderRuntimeContext: vi.fn(() => activeContext),
-        peekActiveProviderRuntimeContext: () => activeContext,
-        getCurrentRuntimeScope: () => undefined,
-      };
+    mockProviderModules({
+      openai: openaiCtor,
+      openaiResponses: openaiResponsesCtor,
+      openaiVercel: openaivercelCtor,
+      anthropic: anthropicCtor,
     });
 
     vi.clearAllMocks();
@@ -211,39 +197,11 @@ describe('Anthropic OAuth registration with environment key', () => {
     }));
 
     const activeContext: any = { scope: 'test' };
-    vi.doMock('@vybestack/llxprt-code-providers', async () => {
-      const actual = await vi.importActual<
-        typeof import('@vybestack/llxprt-code-providers')
-      >('@vybestack/llxprt-code-providers');
-
-      class MockProviderManager {
-        setConfig(): void {}
-        setActiveProvider(): void {}
-        registerProvider(): void {}
-      }
-
-      class MockGeminiProvider {
-        setConfig(): void {}
-      }
-
-      return {
-        ...actual,
-        ProviderManager: MockProviderManager,
-        GeminiProvider: MockGeminiProvider,
-        OpenAIProvider: openaiCtor as unknown as typeof actual.OpenAIProvider,
-        OpenAIResponsesProvider:
-          openaiResponsesCtor as unknown as typeof actual.OpenAIResponsesProvider,
-        OpenAIVercelProvider:
-          openaivercelCtor as unknown as typeof actual.OpenAIVercelProvider,
-        AnthropicProvider:
-          anthropicCtor as unknown as typeof actual.AnthropicProvider,
-        setActiveProviderRuntimeContext: vi.fn((ctx: any) => {
-          Object.assign(activeContext, ctx);
-        }),
-        getActiveProviderRuntimeContext: vi.fn(() => activeContext),
-        peekActiveProviderRuntimeContext: () => activeContext,
-        getCurrentRuntimeScope: () => undefined,
-      };
+    mockProviderModules({
+      openai: openaiCtor,
+      openaiResponses: openaiResponsesCtor,
+      openaiVercel: openaivercelCtor,
+      anthropic: anthropicCtor,
     });
 
     vi.clearAllMocks();

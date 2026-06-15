@@ -22,34 +22,24 @@ import {
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import {
-  ProviderManager,
-  FakeProvider,
-  ProviderContentGenerator,
-  OpenAITokenizer,
-  AnthropicTokenizer,
-  type IProviderManager,
-} from '@vybestack/llxprt-code-providers';
+import { ProviderManager } from '../ProviderManager.js';
+import type { IProviderManager } from '../IProviderManager.js';
+import { FakeProvider } from '../fake/FakeProvider.js';
+import { ProviderContentGenerator } from '../ProviderContentGenerator.js';
+import { OpenAITokenizer } from '../tokenizers/OpenAITokenizer.js';
+import { AnthropicTokenizer } from '../tokenizers/AnthropicTokenizer.js';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
 import { type IFileSystem, NodeFileSystem } from './IFileSystem.js';
-import {
-  type Settings,
-  LoadedSettings,
-  USER_SETTINGS_PATH,
-  type MergedSettings,
-} from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
-import {
-  OAuthManager,
-  createTokenStore,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import type { OAuthManagerRuntimeMessageBusDeps } from '@vybestack/llxprt-code-providers/auth.js';
-import { LoadedSettingsOAuthAdapter } from '../auth/oauth-settings-adapter.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import { OAuthManager, createTokenStore } from '../auth/index.js';
+import type { OAuthManagerRuntimeMessageBusDeps } from '../auth/index.js';
+import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
-import { type HistoryItemWithoutId } from '../ui/types.js';
+import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 
-import { type IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
+import { type IProviderConfig } from '../types/IProviderConfig.js';
 import {
   loadProviderAliasEntries,
   type ProviderAliasEntry,
@@ -70,11 +60,15 @@ let openAIContexts = new WeakMap<ProviderManager, OpenAIRegistrationContext>();
 interface ProviderManagerFactoryOptions {
   config?: Config;
   allowBrowserEnvironment?: boolean;
-  settings?: LoadedSettings;
-  addItem?: (
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ) => number;
+  /**
+   * OAuth settings surface injected by the composition root (CLI). Supplies
+   * OAuth enablement read/write with full fidelity (comment-preserving writes
+   * live in the CLI's settings layer). When omitted, the OAuth manager runs
+   * without a settings provider — matching the prior behavior when no user
+   * settings file was present.
+   */
+  oauthSettings?: IOAuthSettingsProvider;
+  addItem?: OAuthUICallback;
   runtimeMessageBus?: MessageBus;
 }
 
@@ -211,41 +205,42 @@ function getFileSystem(): IFileSystem {
   return fileSystemInstance;
 }
 
-function resolveLoadedSettings(
-  fs: IFileSystem,
-  settings?: LoadedSettings,
-): LoadedSettings | undefined {
-  if (settings) {
-    return settings;
-  }
+/**
+ * Read-only view of the user settings fields this composition consumes.
+ *
+ * The OpenAI/authOnly fields read below are sourced from the raw user-scope
+ * settings file. None of these keys are v2-namespace-remapped, so the raw read
+ * matches `LoadedSettings.merged` with respect to path mapping. A subset of the
+ * OpenAI fields (enableTextToolCallParsing, textToolCallModels,
+ * openaiResponsesEnabled, providerToolFormatOverrides) DO carry SETTINGS_SCHEMA
+ * defaults that the old merged view layered in; to preserve that behavior those
+ * defaults are explicitly restored at the read site in resolveOpenaiSettings
+ * (via `?? false` / `?? []` / `?? {}`). OAuth enablement read/write is handled
+ * separately via the injected {@link IOAuthSettingsProvider} so that the CLI's
+ * comment-preserving write path is preserved.
+ */
+type UserSettingsView = Record<string, unknown>;
 
-  let userSettings: Settings | undefined;
+function resolveUserSettings(fs: IFileSystem): UserSettingsView | undefined {
+  let userSettings: UserSettingsView | undefined;
   try {
-    if (fs.existsSync(USER_SETTINGS_PATH)) {
-      const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
-      userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
+    const userSettingsPath = Storage.getGlobalSettingsPath();
+    if (fs.existsSync(userSettingsPath)) {
+      const userContent = fs.readFileSync(userSettingsPath, 'utf-8');
+      userSettings = JSON.parse(
+        stripJsonComments(userContent),
+      ) as UserSettingsView;
     }
   } catch {
     // Failed to load user settings, ignore and fall back to defaults.
   }
 
-  return userSettings
-    ? new LoadedSettings(
-        { path: '', settings: {} },
-        { path: '', settings: {} },
-        { path: USER_SETTINGS_PATH, settings: userSettings },
-        { path: '', settings: {} },
-        true,
-      )
-    : undefined;
+  return userSettings;
 }
 
 function attachAddItemToOAuthProviders(
   oauthManager: OAuthManager,
-  addItem?: (
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ) => number,
+  addItem?: OAuthUICallback,
 ): void {
   if (!addItem) {
     return;
@@ -340,7 +335,7 @@ function resolveOpenaiBaseUrl(
 
 function resolveAuthOnlyFlag(
   config?: Config,
-  loadedSettings?: LoadedSettings,
+  userSettings?: UserSettingsView,
 ): boolean {
   if (config && typeof config.getEphemeralSettings === 'function') {
     const authOnlyValue = config.getEphemeralSettings().authOnly;
@@ -352,9 +347,8 @@ function resolveAuthOnlyFlag(
     }
   }
 
-  if (loadedSettings?.merged) {
-    const mergedAuthOnly = (loadedSettings.merged as Record<string, unknown>)
-      .authOnly;
+  if (userSettings) {
+    const mergedAuthOnly = userSettings.authOnly;
     if (mergedAuthOnly !== undefined) {
       const coerced = coerceAuthOnly(mergedAuthOnly);
       if (typeof coerced === 'boolean') {
@@ -416,10 +410,10 @@ function registerOAuthProviders(
   );
 }
 
-/** Resolves OpenAI-specific settings from merged settings and ephemeral overrides. */
+/** Resolves OpenAI-specific settings from user settings and ephemeral overrides. */
 function resolveOpenaiSettings(
   config: Config | undefined,
-  loadedSettings: LoadedSettings | undefined,
+  userSettings: UserSettingsView | undefined,
   authOnlyEnabled: boolean,
   allowBrowserEnvironment: boolean,
 ): {
@@ -427,18 +421,23 @@ function resolveOpenaiSettings(
   openaiBaseUrl: string | undefined;
   openaiProviderConfig: IProviderConfig;
 } {
-  const settingsData =
-    loadedSettings?.merged ?? ({} as Partial<MergedSettings>);
+  const settingsData: Record<string, unknown> = userSettings ?? {};
   const ephemeralSettings = config?.getEphemeralSettings() ?? {};
+  // Apply the same schema defaults the CLI's merged-settings layer supplied for
+  // these keys (enableTextToolCallParsing/textToolCallModels/
+  // openaiResponsesEnabled/providerToolFormatOverrides). Reading the raw user
+  // settings file would otherwise yield `undefined` where the merged view
+  // previously yielded the schema default, changing the IProviderConfig.
+  const settingsOpenaiResponsesEnabled =
+    settingsData.openaiResponsesEnabled ?? false;
   const effectiveOpenaiResponsesEnabled = resolveOpenaiResponsesEnabled(
     ephemeralSettings.openaiResponsesEnabled,
     authOnlyEnabled,
-    settingsData.openaiResponsesEnabled,
+    settingsOpenaiResponsesEnabled,
   );
 
   const ephemeralAuthKey = ephemeralSettings['auth-key'];
-  const settingsProviders = settingsData as Record<string, unknown>;
-  const openaiProviderSettings = settingsProviders.providers as
+  const openaiProviderSettings = settingsData.providers as
     | Record<string, unknown>
     | undefined;
   const openaiSettings = openaiProviderSettings?.openai as
@@ -459,9 +458,14 @@ function resolveOpenaiSettings(
   const openaiBaseUrl = resolveOpenaiBaseUrl(ephemeralBaseUrl, providerBaseUrl);
 
   const openaiProviderConfig: IProviderConfig = {
-    enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
-    textToolCallModels: settingsData.textToolCallModels,
-    providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
+    enableTextToolCallParsing:
+      (settingsData.enableTextToolCallParsing as boolean | undefined) ?? false,
+    textToolCallModels:
+      (settingsData.textToolCallModels as string[] | undefined) ?? [],
+    providerToolFormatOverrides:
+      (settingsData.providerToolFormatOverrides as
+        | Record<string, string>
+        | undefined) ?? {},
     openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
     allowBrowserEnvironment,
     getEphemeralSettings: config
@@ -504,7 +508,7 @@ export function createProviderManager(
   options: ProviderManagerFactoryOptions = {},
 ): { manager: ProviderManager; oauthManager: OAuthManager } {
   const fs = getFileSystem();
-  const loadedSettings = resolveLoadedSettings(fs, options.settings);
+  const userSettings = resolveUserSettings(fs);
   const ManagerCtor = ProviderManager as unknown as {
     new (context?: unknown): ProviderManager;
   };
@@ -524,7 +528,7 @@ export function createProviderManager(
   };
   const oauthManager = new OAuthManager(
     tokenStore,
-    loadedSettings ? new LoadedSettingsOAuthAdapter(loadedSettings) : undefined,
+    options.oauthSettings,
     oauthRuntimeDeps,
   );
 
@@ -559,11 +563,11 @@ export function createProviderManager(
     configureProviderRuntimeFactories(config, manager);
   }
 
-  const authOnlyEnabled = resolveAuthOnlyFlag(config, loadedSettings);
+  const authOnlyEnabled = resolveAuthOnlyFlag(config, userSettings);
   const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
     resolveOpenaiSettings(
       config,
-      loadedSettings,
+      userSettings,
       authOnlyEnabled,
       allowBrowserEnvironment,
     );
@@ -616,15 +620,12 @@ export function registerProviderManagerSingleton(
 export function getProviderManager(
   config?: Config,
   allowBrowserEnvironment = false,
-  settings?: LoadedSettings,
-  addItem?: (
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ) => number,
+  oauthSettings?: IOAuthSettingsProvider,
+  addItem?: OAuthUICallback,
 ): ProviderManager {
   void config;
   void allowBrowserEnvironment;
-  void settings;
+  void oauthSettings;
   if (singletonManager && addItem && singletonOAuthManager) {
     attachAddItemToOAuthProviders(singletonOAuthManager, addItem);
   }

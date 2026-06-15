@@ -40,7 +40,7 @@ import { type OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   configureProviderRuntimeFactories,
   registerProviderManagerSingleton,
-} from '../providers/providerManagerInstance.js';
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { registerOAuthRuntimeAccessors } from '../auth/oauth-runtime-accessors.js';
 import {
   type IsolatedRuntimeActivationOptions,

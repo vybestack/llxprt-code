@@ -14,7 +14,7 @@ import {
   computeModelDefaults,
   normalizeProviderBaseUrl,
 } from './providerMutations.js';
-import type { ModelDefaultRule } from '../providers/providerAliases.js';
+import type { ModelDefaultRule } from '@vybestack/llxprt-code-providers/composition.js';
 
 describe('providerMutations', () => {
   describe('computeModelDefaults', () => {

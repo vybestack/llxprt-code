@@ -24,126 +24,129 @@ import { __resetCleanupStateForTesting } from './src/utils/cleanup.js';
 
 // Mock provider aliases globally so tests don't need real config files
 // This prevents "Provider not found" errors when fs is mocked
-vi.mock('./src/providers/providerAliases.js', () => ({
-  loadProviderAliasEntries: () => [
-    {
-      alias: 'gemini',
-      config: {
-        name: 'gemini',
-        modelsDevProviderId: 'google',
-        baseProvider: 'gemini',
-        'base-url': 'https://generativelanguage.googleapis.com/v1beta',
-        defaultModel: 'gemini-2.5-pro',
-        apiKeyEnv: 'GEMINI_API_KEY',
-      },
-      filePath: '/mock/aliases/gemini.config',
-      source: 'builtin',
-    },
-    {
-      alias: 'openai',
-      config: {
-        name: 'openai',
-        modelsDevProviderId: 'openai',
-        baseProvider: 'openai',
-        'base-url': 'https://api.openai.com/v1',
-        defaultModel: 'gpt-4o',
-        apiKeyEnv: 'OPENAI_API_KEY',
-      },
-      filePath: '/mock/aliases/openai.config',
-      source: 'builtin',
-    },
-    {
-      alias: 'anthropic',
-      config: {
-        name: 'anthropic',
-        modelsDevProviderId: 'anthropic',
-        baseProvider: 'anthropic',
-        'base-url': 'https://api.anthropic.com/v1',
-        defaultModel: 'claude-sonnet-4-20250514',
-        apiKeyEnv: 'ANTHROPIC_API_KEY',
-      },
-      filePath: '/mock/aliases/anthropic.config',
-      source: 'builtin',
-    },
-    {
-      alias: 'kimi',
-      config: {
-        name: 'kimi',
-        modelsDevProviderId: 'kimi-for-coding',
-        baseProvider: 'openai',
-        'base-url': 'https://api.kimi.com/coding/v1',
-        defaultModel: 'kimi-for-coding',
-        description: 'Kimi For Coding OpenAI-compatible endpoint',
-        ephemeralSettings: {
-          'context-limit': 262144,
-          max_tokens: 32768,
-          'user-agent': 'RooCode/1.0',
+vi.mock(
+  '@vybestack/llxprt-code-providers/composition/providerAliases.js',
+  () => ({
+    loadProviderAliasEntries: () => [
+      {
+        alias: 'gemini',
+        config: {
+          name: 'gemini',
+          modelsDevProviderId: 'google',
+          baseProvider: 'gemini',
+          'base-url': 'https://generativelanguage.googleapis.com/v1beta',
+          defaultModel: 'gemini-2.5-pro',
+          apiKeyEnv: 'GEMINI_API_KEY',
         },
-        modelDefaults: [
-          {
-            pattern: 'kimi.*',
-            ephemeralSettings: {
-              'reasoning.effort': 'medium',
-              'reasoning.enabled': true,
-              'reasoning.includeInResponse': true,
-              'reasoning.includeInContext': true,
-              'reasoning.stripFromContext': 'none',
-            },
+        filePath: '/mock/aliases/gemini.config',
+        source: 'builtin',
+      },
+      {
+        alias: 'openai',
+        config: {
+          name: 'openai',
+          modelsDevProviderId: 'openai',
+          baseProvider: 'openai',
+          'base-url': 'https://api.openai.com/v1',
+          defaultModel: 'gpt-4o',
+          apiKeyEnv: 'OPENAI_API_KEY',
+        },
+        filePath: '/mock/aliases/openai.config',
+        source: 'builtin',
+      },
+      {
+        alias: 'anthropic',
+        config: {
+          name: 'anthropic',
+          modelsDevProviderId: 'anthropic',
+          baseProvider: 'anthropic',
+          'base-url': 'https://api.anthropic.com/v1',
+          defaultModel: 'claude-sonnet-4-20250514',
+          apiKeyEnv: 'ANTHROPIC_API_KEY',
+        },
+        filePath: '/mock/aliases/anthropic.config',
+        source: 'builtin',
+      },
+      {
+        alias: 'kimi',
+        config: {
+          name: 'kimi',
+          modelsDevProviderId: 'kimi-for-coding',
+          baseProvider: 'openai',
+          'base-url': 'https://api.kimi.com/coding/v1',
+          defaultModel: 'kimi-for-coding',
+          description: 'Kimi For Coding OpenAI-compatible endpoint',
+          ephemeralSettings: {
+            'context-limit': 262144,
+            max_tokens: 32768,
+            'user-agent': 'RooCode/1.0',
           },
-        ],
-      },
-      filePath: '/mock/aliases/kimi.config',
-      source: 'builtin',
-    },
-    {
-      alias: 'openai-responses',
-      config: {
-        name: 'openai-responses',
-        modelsDevProviderId: 'openai',
-        baseProvider: 'openai-responses',
-        'base-url': 'https://api.openai.com/v1',
-        defaultModel: 'gpt-4o',
-        apiKeyEnv: 'OPENAI_API_KEY',
-      },
-      filePath: '/mock/aliases/openai-responses.config',
-      source: 'builtin',
-    },
-    {
-      alias: 'codex',
-      config: {
-        name: 'codex',
-        modelsDevProviderId: 'openai',
-        baseProvider: 'openai-responses',
-        'base-url': 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.2',
-        description: 'OpenAI Codex (ChatGPT backend with OAuth)',
-        ephemeralSettings: {
-          'context-limit': 262144,
+          modelDefaults: [
+            {
+              pattern: 'kimi.*',
+              ephemeralSettings: {
+                'reasoning.effort': 'medium',
+                'reasoning.enabled': true,
+                'reasoning.includeInResponse': true,
+                'reasoning.includeInContext': true,
+                'reasoning.stripFromContext': 'none',
+              },
+            },
+          ],
         },
+        filePath: '/mock/aliases/kimi.config',
+        source: 'builtin',
       },
-      filePath: '/mock/aliases/codex.config',
-      source: 'builtin',
-    },
-    {
-      alias: 'deepseek',
-      config: {
-        name: 'deepseek',
-        modelsDevProviderId: 'deepseek',
-        baseProvider: 'openai',
-        'base-url': 'https://api.deepseek.com/v1',
-        defaultModel: 'deepseek-chat',
-        description: 'DeepSeek OpenAI-compatible endpoint',
-        apiKeyEnv: 'DEEPSEEK_API_KEY',
+      {
+        alias: 'openai-responses',
+        config: {
+          name: 'openai-responses',
+          modelsDevProviderId: 'openai',
+          baseProvider: 'openai-responses',
+          'base-url': 'https://api.openai.com/v1',
+          defaultModel: 'gpt-4o',
+          apiKeyEnv: 'OPENAI_API_KEY',
+        },
+        filePath: '/mock/aliases/openai-responses.config',
+        source: 'builtin',
       },
-      filePath: '/mock/aliases/deepseek.config',
-      source: 'builtin',
-    },
-  ],
-  getUserAliasDir: () => '/mock/home/.llxprt/providers',
-  getAliasFilePath: (alias: string) =>
-    `/mock/home/.llxprt/providers/${alias}.config`,
-  writeProviderAliasConfig: vi.fn(),
-}));
+      {
+        alias: 'codex',
+        config: {
+          name: 'codex',
+          modelsDevProviderId: 'openai',
+          baseProvider: 'openai-responses',
+          'base-url': 'https://chatgpt.com/backend-api/codex',
+          defaultModel: 'gpt-5.2',
+          description: 'OpenAI Codex (ChatGPT backend with OAuth)',
+          ephemeralSettings: {
+            'context-limit': 262144,
+          },
+        },
+        filePath: '/mock/aliases/codex.config',
+        source: 'builtin',
+      },
+      {
+        alias: 'deepseek',
+        config: {
+          name: 'deepseek',
+          modelsDevProviderId: 'deepseek',
+          baseProvider: 'openai',
+          'base-url': 'https://api.deepseek.com/v1',
+          defaultModel: 'deepseek-chat',
+          description: 'DeepSeek OpenAI-compatible endpoint',
+          apiKeyEnv: 'DEEPSEEK_API_KEY',
+        },
+        filePath: '/mock/aliases/deepseek.config',
+        source: 'builtin',
+      },
+    ],
+    getUserAliasDir: () => '/mock/home/.llxprt/providers',
+    getAliasFilePath: (alias: string) =>
+      `/mock/home/.llxprt/providers/${alias}.config`,
+    writeProviderAliasConfig: vi.fn(),
+  }),
+);
 
 vi.mock('ink', () => import('./test-utils/ink-stub.ts'), {
   virtual: true,

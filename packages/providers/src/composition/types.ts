@@ -16,4 +16,4 @@
  * @pseudocode lines 10-18
  */
 // Re-export ContentGeneratorRole from providers package
-export { ContentGeneratorRole } from '@vybestack/llxprt-code-providers';
+export { ContentGeneratorRole } from '../ContentGeneratorRole.js';

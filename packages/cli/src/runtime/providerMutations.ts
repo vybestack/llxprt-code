@@ -19,7 +19,7 @@
 
 import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import type { ModelDefaultRule } from '../providers/providerAliases.js';
+import type { ModelDefaultRule } from '@vybestack/llxprt-code-providers/composition.js';
 import { getCliRuntimeServices, _internal } from './runtimeAccessors.js';
 
 const logger = new DebugLogger('llxprt:runtime:providerMutations');
@@ -440,7 +440,7 @@ export async function setActiveModel(
 
   // Load alias config for the current provider to apply model defaults
   const { loadProviderAliasEntries } = await import(
-    '../providers/providerAliases.js'
+    '@vybestack/llxprt-code-providers/composition.js'
   );
   let aliasConfig;
   try {

@@ -45,7 +45,7 @@ import {
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderManager } from '../providers/providerManagerInstance.js';
+import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   setCliRuntimeContext,
   registerCliProviderInfrastructure,
@@ -61,7 +61,7 @@ import {
   cleanupTempDirectory,
   initializeTestConfig,
 } from './test-utils.js';
-import { resetProviderManager } from '../providers/providerManagerInstance.js';
+import { resetProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import { resetCliRuntimeRegistryForTesting } from '../runtime/runtimeRegistry.js';
 
 // ─────────────────────────────────────────────────────────────────

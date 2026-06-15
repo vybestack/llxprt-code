@@ -29,7 +29,7 @@ import {
   cleanupTempDirectory,
   initializeTestConfig,
 } from './test-utils.js';
-import { createProviderManager } from '../providers/providerManagerInstance.js';
+import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   setCliRuntimeContext,
   switchActiveProvider,

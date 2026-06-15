@@ -11,12 +11,12 @@ import {
   getOAuthManager,
   getProviderManager,
   resetProviderManager,
-} from './providerManagerInstance.js';
+} from '@vybestack/llxprt-code-providers/composition.js';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
   registerCliProviderInfrastructure,
-} from '../runtime/runtimeSettings.js';
+} from './runtimeSettings.js';
 
 describe('getProviderManager runtime OAuth MessageBus composition', () => {
   beforeEach(() => {

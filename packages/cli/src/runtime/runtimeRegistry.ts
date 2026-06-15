@@ -32,7 +32,7 @@ import type {
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
 import { type OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { resetProviderManager } from '../providers/providerManagerInstance.js';
+import { resetProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
 import { formatMissingRuntimeMessage } from './messages.js';
 

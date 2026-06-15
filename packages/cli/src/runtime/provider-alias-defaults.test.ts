@@ -177,9 +177,12 @@ const mockProviderManager = {
 let stubSettingsService: StubSettingsServiceInstance;
 let stubConfig: StubConfigInstance;
 
-vi.mock('../providers/providerAliases.js', () => ({
-  loadProviderAliasEntries: () => aliasEntries,
-}));
+vi.mock(
+  '@vybestack/llxprt-code-providers/composition/providerAliases.js',
+  () => ({
+    loadProviderAliasEntries: () => aliasEntries,
+  }),
+);
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =

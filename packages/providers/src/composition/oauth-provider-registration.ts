@@ -14,18 +14,11 @@ import {
   QwenOAuthProvider,
   AnthropicOAuthProvider,
   CodexOAuthProvider,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import type {
-  OAuthProvider,
-  TokenStore,
-  OAuthManager,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import type { HistoryItemWithoutId } from '../ui/types.js';
+} from '../auth/index.js';
+import type { OAuthProvider, TokenStore, OAuthManager } from '../auth/index.js';
+import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 
-type AddItemCallback = (
-  itemData: Omit<HistoryItemWithoutId, 'id'>,
-  baseTimestamp?: number,
-) => number;
+type AddItemCallback = OAuthUICallback;
 
 type OAuthProviderWithAddItem = OAuthProvider & {
   setAddItem?: (addItem: AddItemCallback) => void;

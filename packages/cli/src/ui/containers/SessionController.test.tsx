@@ -43,16 +43,19 @@ import { useHistory } from '../hooks/useHistoryManager.js';
 const mockHistoryManager = vi.mocked(useHistory);
 
 // Mock dependencies
-vi.mock('../../providers/providerManagerInstance.js', () => ({
-  getProviderManager: vi.fn(() => ({
-    hasActiveProvider: () => true,
-    getActiveProvider: () => ({
-      name: 'test-provider',
-      getCurrentModel: () => 'test-model',
-      isPaidMode: () => false,
-    }),
-  })),
-}));
+vi.mock(
+  '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
+  () => ({
+    getProviderManager: vi.fn(() => ({
+      hasActiveProvider: () => true,
+      getActiveProvider: () => ({
+        name: 'test-provider',
+        getCurrentModel: () => 'test-model',
+        isPaidMode: () => false,
+      }),
+    })),
+  }),
+);
 
 vi.mock('../../config/environmentLoader.js', () => ({
   loadHierarchicalLlxprtMemory: vi.fn(() =>
@@ -224,7 +227,7 @@ describe('SessionController', () => {
 
   it('should handle payment mode changes properly', async () => {
     const providerModule = await import(
-      '../../providers/providerManagerInstance.js'
+      '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js'
     );
     const mockGetProviderManager = vi.mocked(providerModule.getProviderManager);
 
@@ -450,7 +453,7 @@ describe('SessionController', () => {
 
   it('should handle model changes via events (not polling)', async () => {
     const providerModule = await import(
-      '../../providers/providerManagerInstance.js'
+      '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js'
     );
     const mockGetProviderManager = vi.mocked(providerModule.getProviderManager);
     const { coreEvents } = await import('@vybestack/llxprt-code-core');

@@ -26,9 +26,9 @@ import {
 import {
   loadProviderAliasEntries,
   type ProviderAliasConfig,
-} from '../providers/providerAliases.js';
-import { ensureOAuthProviderRegistered } from '../providers/oauth-provider-registration.js';
-import { configureProviderRuntimeFactories } from '../providers/providerManagerInstance.js';
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { ensureOAuthProviderRegistered } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { getActiveProfileName } from './profileSnapshot.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');

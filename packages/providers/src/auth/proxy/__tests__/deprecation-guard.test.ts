@@ -68,6 +68,7 @@ describe('Deprecation Guards (P36)', () => {
   const projectRoot = path.resolve(__dirname, '../../../../../..');
   const packagesRoot = path.resolve(projectRoot, 'packages');
   const cliSrcRoot = path.join(packagesRoot, 'cli', 'src');
+  const providersSrcRoot = path.join(packagesRoot, 'providers', 'src');
   const providersAuthRoot = path.join(packagesRoot, 'providers', 'src', 'auth');
 
   describe('R2.3: No Direct KeyringTokenStore Instantiation at Consumer Sites', () => {
@@ -222,7 +223,7 @@ describe('Deprecation Guards (P36)', () => {
       const providerMatches = grepFiles(
         'createTokenStore',
         '*.ts',
-        path.resolve(cliSrcRoot, 'providers'),
+        path.resolve(providersSrcRoot, 'composition'),
         ['node_modules', 'dist', '__tests__'],
       );
 

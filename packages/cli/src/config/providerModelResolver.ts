@@ -5,7 +5,7 @@
  */
 
 import { DEFAULT_GEMINI_MODEL, DebugLogger } from '@vybestack/llxprt-code-core';
-import { loadProviderAliasEntries } from '../providers/providerAliases.js';
+import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
 
 const logger = new DebugLogger('llxprt:config:providerModelResolver');
 

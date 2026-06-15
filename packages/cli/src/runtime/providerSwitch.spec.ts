@@ -77,13 +77,19 @@ vi.mock('./providerMutations.js', () => ({
   updateActiveProviderApiKey: vi.fn(),
 }));
 
-vi.mock('../providers/providerAliases.js', () => ({
-  loadProviderAliasEntries: vi.fn(() => []),
-}));
+vi.mock(
+  '@vybestack/llxprt-code-providers/composition/providerAliases.js',
+  () => ({
+    loadProviderAliasEntries: vi.fn(() => []),
+  }),
+);
 
-vi.mock('../providers/oauth-provider-registration.js', () => ({
-  ensureOAuthProviderRegistered: vi.fn(),
-}));
+vi.mock(
+  '@vybestack/llxprt-code-providers/composition/oauth-provider-registration.js',
+  () => ({
+    ensureOAuthProviderRegistered: vi.fn(),
+  }),
+);
 
 describe('providerSwitch', () => {
   beforeEach(() => {

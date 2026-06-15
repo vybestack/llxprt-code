@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
-
 import * as fs from 'fs';
 import * as path from 'path';
 import stripJsonComments from 'strip-json-comments';
@@ -19,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Handle different directory structures between development and bundle environments
-// In development: packages/cli/src/providers/aliases/
+// In development: packages/providers/src/composition/aliases/
 // In bundle: bundle/providers/aliases/
 const BUNDLE_ALIAS_DIR = path.join(__dirname, 'providers', 'aliases');
 const DEV_ALIAS_DIR = path.join(__dirname, 'aliases');
@@ -102,7 +100,6 @@ function isValidModelDefaultRule(
   entry: unknown,
   filePath: string,
 ): entry is ModelDefaultRule {
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   if (
     entry === null ||
     entry === undefined ||

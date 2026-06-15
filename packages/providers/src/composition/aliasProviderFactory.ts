@@ -17,16 +17,14 @@ import {
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 
-import {
-  OpenAIProvider,
-  OpenAIResponsesProvider,
-  OpenAIVercelProvider,
-  AnthropicProvider,
-  GeminiProvider,
-} from '@vybestack/llxprt-code-providers';
-import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { type IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { OpenAIProvider } from '../openai/OpenAIProvider.js';
+import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
+import { OpenAIVercelProvider } from '../openai-vercel/index.js';
+import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
+import { GeminiProvider } from '../gemini/GeminiProvider.js';
+import type { ProviderManager } from '../ProviderManager.js';
+import { type IProviderConfig } from '../types/IProviderConfig.js';
+import type { OAuthManager } from '../auth/index.js';
 import { type ProviderAliasEntry } from './providerAliases.js';
 
 /**

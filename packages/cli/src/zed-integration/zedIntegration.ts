@@ -75,7 +75,7 @@ import {
   switchActiveProvider,
 } from '../runtime/runtimeSettings.js';
 import { runExitCleanup } from '../utils/cleanup.js';
-import { configureProviderRuntimeFactories } from '../providers/providerManagerInstance.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
 type ToolRunResult = {
   parts: Part[];

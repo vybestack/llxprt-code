@@ -11,11 +11,11 @@ import type {
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from './providerManagerInstance.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
-} from '../runtime/runtimeSettings.js';
+} from './runtimeSettings.js';
 
 interface ConfigWithRuntimeFactories extends Config {
   getContentGeneratorFactory():

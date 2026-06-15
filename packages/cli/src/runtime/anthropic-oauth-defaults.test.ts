@@ -220,9 +220,12 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-vi.mock('../providers/providerAliases.js', () => ({
-  loadProviderAliasEntries: () => [],
-}));
+vi.mock(
+  '@vybestack/llxprt-code-providers/composition/providerAliases.js',
+  () => ({
+    loadProviderAliasEntries: () => [],
+  }),
+);
 
 const {
   switchActiveProvider,
