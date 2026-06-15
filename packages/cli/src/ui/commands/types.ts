@@ -26,7 +26,7 @@ import type {
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import type { OAuthManager } from '../../auth/oauth-manager.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
 import type {

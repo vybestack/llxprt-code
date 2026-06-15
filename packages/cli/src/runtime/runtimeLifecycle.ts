@@ -36,11 +36,12 @@ import type {
   SettingsService,
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
-import { type OAuthManager } from '../auth/oauth-manager.js';
+import { type OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   configureProviderRuntimeFactories,
   registerProviderManagerSingleton,
 } from '../providers/providerManagerInstance.js';
+import { registerOAuthRuntimeAccessors } from '../auth/oauth-runtime-accessors.js';
 import {
   type IsolatedRuntimeActivationOptions,
   type IsolatedRuntimeContextHandle,
@@ -179,4 +180,9 @@ export function setCliRuntimeContext(
     metadata,
     profileManager: options.profileManager,
   });
+
+  // Register the OAuth runtime accessors so the providers-owned auth cluster
+  // can read runtime state without importing from the CLI package directly.
+  // This is called during every CLI startup (interactive and non-interactive).
+  registerOAuthRuntimeAccessors();
 }

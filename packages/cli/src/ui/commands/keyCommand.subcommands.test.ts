@@ -95,12 +95,21 @@ vi.mock('@vybestack/llxprt-code-storage', async (importOriginal) => {
 });
 
 // @plan:PLAN-20250214-CREDPROXY.P33
-// Mock the factory to use our test storage
-vi.mock('../../auth/proxy/credential-store-factory.js', () => ({
-  createProviderKeyStorage: () => mockStorage,
-  createTokenStore: () => ({}),
-  resetFactorySingletons: () => {},
-}));
+// Mock the factory to use our test storage. The credential-store factory now
+// lives in the providers package and is consumed via its "./auth.js" barrel,
+// so the mock must target that module to intercept keyCommand's import.
+vi.mock('@vybestack/llxprt-code-providers/auth.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-providers/auth.js')
+    >();
+  return {
+    ...actual,
+    createProviderKeyStorage: () => mockStorage,
+    createTokenStore: () => ({}),
+    resetFactorySingletons: () => {},
+  };
+});
 
 // ─── Test Setup ──────────────────────────────────────────────────────────────
 

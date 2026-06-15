@@ -49,4 +49,18 @@ export interface IOAuthSettingsProvider {
    * the distinction `provider-registry.ts` depends on.
    */
   getOAuthEnabledProviders(): Record<string, boolean>;
+
+  /**
+   * Persist OAuth enablement state for a provider.
+   *
+   * Mirrors the CLI's
+   * `settings.setValue(SettingScope.User, 'oauthEnabledProviders', merged)`
+   * call that `provider-registry.ts` previously made directly. Implementations
+   * should read the current map, apply the single-provider override, and write
+   * the result back.
+   *
+   * Added in Phase 2a so the relocated OAuth cluster can persist enablement
+   * without depending on `LoadedSettings`.
+   */
+  setOAuthEnabled(provider: string, enabled: boolean): void;
 }

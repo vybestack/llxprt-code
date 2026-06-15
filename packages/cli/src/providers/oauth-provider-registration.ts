@@ -9,12 +9,17 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { GeminiOAuthProvider } from '../auth/gemini-oauth-provider.js';
-import { QwenOAuthProvider } from '../auth/qwen-oauth-provider.js';
-import { AnthropicOAuthProvider } from '../auth/anthropic-oauth-provider.js';
-import { CodexOAuthProvider } from '../auth/codex-oauth-provider.js';
-import type { OAuthProvider, TokenStore } from '../auth/types.js';
-import type { OAuthManager } from '../auth/oauth-manager.js';
+import {
+  GeminiOAuthProvider,
+  QwenOAuthProvider,
+  AnthropicOAuthProvider,
+  CodexOAuthProvider,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import type {
+  OAuthProvider,
+  TokenStore,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 
 type AddItemCallback = (

@@ -15,7 +15,7 @@ import { Config, MessageBus } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
-import type { OAuthManager } from '../auth/oauth-manager.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import { setCommand } from '../ui/commands/setCommand.js';
 import {

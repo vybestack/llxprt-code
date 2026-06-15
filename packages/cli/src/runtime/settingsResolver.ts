@@ -22,7 +22,7 @@ import {
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
 } from './providerMutations.js';
-import { createProviderKeyStorage } from '../auth/proxy/credential-store-factory.js';
+import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 
 /**
  * Apply CLI argument overrides to configuration.

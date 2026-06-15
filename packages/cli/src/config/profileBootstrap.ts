@@ -19,7 +19,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createProviderManager } from '../providers/providerManagerInstance.js';
 import { registerCliProviderInfrastructure } from '../runtime/runtimeLifecycle.js';
-import type { OAuthManager } from '../auth/oauth-manager.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';

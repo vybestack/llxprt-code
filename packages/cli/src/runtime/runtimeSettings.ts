@@ -26,7 +26,7 @@ import {
   setCliRuntimeContext,
 } from './runtimeLifecycle.js';
 import { disposeCliRuntime } from './runtimeRegistry.js';
-import { createProviderKeyStorage } from '../auth/proxy/credential-store-factory.js';
+import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 import { configureProviderRuntimeFactories } from '../providers/providerManagerInstance.js';
 
 export { createProviderKeyStorage };

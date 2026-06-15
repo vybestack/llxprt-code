@@ -43,8 +43,11 @@ import {
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { OAuthManager } from '../auth/oauth-manager.js';
-import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
+import {
+  OAuthManager,
+  createTokenStore,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import { LoadedSettingsOAuthAdapter } from '../auth/oauth-settings-adapter.js';
 import { LoadedSettings, USER_SETTINGS_PATH } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
@@ -281,11 +284,18 @@ function resolveOAuthManager(
   const tokenStore =
     sharedTokenStore ??
     (sharedTokenStore = createTokenStore() as KeyringTokenStore);
+  const loadedSettings = loadSettingsForIsolatedRuntime();
   return (
     optionsOAuthManager ??
-    new OAuthManager(tokenStore, loadSettingsForIsolatedRuntime(), {
-      messageBus: sessionMessageBus,
-    })
+    new OAuthManager(
+      tokenStore,
+      loadedSettings
+        ? new LoadedSettingsOAuthAdapter(loadedSettings)
+        : undefined,
+      {
+        messageBus: sessionMessageBus,
+      },
+    )
   );
 }
 

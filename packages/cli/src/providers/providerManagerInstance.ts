@@ -40,10 +40,13 @@ import {
   type MergedSettings,
 } from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
-import { OAuthManager } from '../auth/oauth-manager.js';
-import type { OAuthManagerRuntimeMessageBusDeps } from '../auth/types.js';
+import {
+  OAuthManager,
+  createTokenStore,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthManagerRuntimeMessageBusDeps } from '@vybestack/llxprt-code-providers/auth.js';
+import { LoadedSettingsOAuthAdapter } from '../auth/oauth-settings-adapter.js';
 import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
-import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
 import { type HistoryItemWithoutId } from '../ui/types.js';
 
 import { type IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
@@ -521,7 +524,7 @@ export function createProviderManager(
   };
   const oauthManager = new OAuthManager(
     tokenStore,
-    loadedSettings,
+    loadedSettings ? new LoadedSettingsOAuthAdapter(loadedSettings) : undefined,
     oauthRuntimeDeps,
   );
 

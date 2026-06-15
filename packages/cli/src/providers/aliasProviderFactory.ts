@@ -26,7 +26,7 @@ import {
 } from '@vybestack/llxprt-code-providers';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { type IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
-import { type OAuthManager } from '../auth/oauth-manager.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { type ProviderAliasEntry } from './providerAliases.js';
 
 /**

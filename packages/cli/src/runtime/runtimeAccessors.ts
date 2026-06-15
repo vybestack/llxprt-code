@@ -36,7 +36,7 @@ import type {
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
 import { getProviderConfigKeys } from '@vybestack/llxprt-code-settings';
-import { type OAuthManager } from '../auth/oauth-manager.js';
+import { type OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
 import {

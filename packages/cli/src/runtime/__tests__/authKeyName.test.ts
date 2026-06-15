@@ -102,19 +102,16 @@ vi.mock('@vybestack/llxprt-code-storage', async (importOriginal) => {
 // @plan:PLAN-20250214-CREDPROXY.P35
 // Also mock the factory to use the same mockStorageRef since runtimeSettings
 // now uses createProviderKeyStorage from the factory instead of direct getProviderKeyStorage
-vi.mock(
-  '../../auth/proxy/credential-store-factory.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('../../auth/proxy/credential-store-factory.js')
-      >();
-    return {
-      ...actual,
-      createProviderKeyStorage: () => mockStorageRef,
-    };
-  },
-);
+vi.mock('@vybestack/llxprt-code-providers/auth.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-providers/auth.js')
+    >();
+  return {
+    ...actual,
+    createProviderKeyStorage: () => mockStorageRef,
+  };
+});
 
 const { parseBootstrapArgs } = await import('../../config/profileBootstrap.js');
 

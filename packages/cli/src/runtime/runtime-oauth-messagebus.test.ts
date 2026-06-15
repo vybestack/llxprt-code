@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageBus } from '@vybestack/llxprt-code-core';
-import { OAuthManager } from '../auth/oauth-manager.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   createIsolatedRuntimeContext,
   activateIsolatedRuntimeContext,
