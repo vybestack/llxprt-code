@@ -26,7 +26,16 @@ function readUserSettings(settingsPath: string): FileOAuthSettingsData {
   try {
     if (fs.existsSync(settingsPath)) {
       const content = fs.readFileSync(settingsPath, 'utf-8');
-      return JSON.parse(stripJsonComments(content)) as FileOAuthSettingsData;
+      const parsed: unknown = JSON.parse(stripJsonComments(content));
+      // Guard against non-object JSON roots (e.g. `null`, arrays, scalars);
+      // accessing settings fields on those would throw or misbehave.
+      if (
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed)
+      ) {
+        return parsed as FileOAuthSettingsData;
+      }
     }
   } catch {
     // Failed to load user settings; fall back to empty defaults.
@@ -99,7 +108,11 @@ export class FileOAuthSettingsProvider implements IOAuthSettingsProvider {
         ) as commentJson.CommentObject;
         const root = parsedWithComments as Record<string, unknown>;
         const existing = root.oauthEnabledProviders;
-        if (existing !== null && typeof existing === 'object') {
+        if (
+          existing !== null &&
+          typeof existing === 'object' &&
+          !Array.isArray(existing)
+        ) {
           // Update the existing comment-json node in place to keep its
           // attached comments; assign the single changed key only.
           (existing as Record<string, boolean>)[provider] = enabled;

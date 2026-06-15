@@ -255,23 +255,25 @@ describe('headless provider-manager construction (issue #1594)', () => {
       } as unknown as OpenAI);
 
     const results: IContent[] = [];
-    for await (const content of provider.generateChatCompletion(
-      createProviderCallOptions({
-        providerName: 'openai',
-        contents: [
-          {
-            speaker: 'human' as const,
-            blocks: [{ type: 'text' as const, text: 'ping' }],
-          },
-        ],
-        settings: settingsService,
-        runtimeId: 'headless-openai-completion',
-      }),
-    )) {
-      results.push(content);
+    try {
+      for await (const content of provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: 'openai',
+          contents: [
+            {
+              speaker: 'human' as const,
+              blocks: [{ type: 'text' as const, text: 'ping' }],
+            },
+          ],
+          settings: settingsService,
+          runtimeId: 'headless-openai-completion',
+        }),
+      )) {
+        results.push(content);
+      }
+    } finally {
+      getClientSpy.mockRestore();
     }
-
-    getClientSpy.mockRestore();
 
     const text = results
       .flatMap((r) => r.blocks)

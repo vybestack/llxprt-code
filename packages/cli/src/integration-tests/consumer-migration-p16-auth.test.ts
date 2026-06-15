@@ -184,7 +184,7 @@ describe('CLI auth consumers resolve auth-package symbols at runtime', () => {
   it('CLI oauth-provider-base imports OAuthError and OAuthErrorFactory from auth', async () => {
     const mod = await import('@vybestack/llxprt-code-providers/auth.js');
     // InitializationGuard is a providers-local class using auth's OAuthError
-    expect(typeof mod.OAuthManager).toBeDefined();
+    expect(typeof mod.OAuthManager).toBe('function');
   });
 
   it('auth-utils imports OAuthTokenRequestMetadata type from auth', async () => {

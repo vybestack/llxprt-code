@@ -165,15 +165,13 @@ describe('oauthRuntimeBridge', () => {
       );
     });
 
-    it('does NOT propagate errors from getEphemeralSetting (returns undefined on throw)', () => {
-      // Only getRuntimeContext is allowed to throw; the other accessors
-      // catch internally in the old code's try/catch. The bridge preserves
-      // this for getEphemeralSetting, getProviderManager, getCurrentProfileName
-      // by simply delegating — callers handle their own errors.
-      // However, the bridge itself does NOT catch for those three;
-      // the old dynamic-import try/catch only guarded the import, not the call.
-      // The call itself was always outside the import guard for these three.
-      // So this test documents: the bridge delegates faithfully.
+    it('delegates getEphemeralSetting to the accessor without bridge-level error handling', () => {
+      // The bridge does NOT add its own try/catch around getEphemeralSetting,
+      // getProviderManager, or getCurrentProfileName. The old dynamic-import
+      // try/catch only guarded the import, not the accessor call itself, so the
+      // call was always outside the import guard for these three. This test
+      // documents that the bridge delegates faithfully: when the accessor
+      // returns normally, so does the bridge (callers handle their own errors).
       const accessors: OAuthRuntimeAccessors = {
         getEphemeralSetting: () => 'value',
         getProviderManager: () => undefined,

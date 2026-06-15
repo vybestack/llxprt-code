@@ -85,6 +85,41 @@ describe('FileOAuthSettingsProvider', () => {
       expect(provider.getOAuthEnabledProviders()).toStrictEqual({});
       expect(provider.getProviderApiKey('openai')).toBeUndefined();
     });
+
+    it('returns safe defaults when the JSON root is null', () => {
+      fs.writeFileSync(settingsPath, 'null', 'utf-8');
+      const provider = new FileOAuthSettingsProvider(settingsPath);
+
+      // Without the guard, `null.oauthEnabledProviders` would throw.
+      expect(provider.isOAuthEnabled('gemini')).toBe(false);
+      expect(provider.getOAuthEnabledProviders()).toStrictEqual({});
+      expect(provider.getProviderApiKey('openai')).toBeUndefined();
+    });
+
+    it('returns safe defaults when the JSON root is an array', () => {
+      fs.writeFileSync(settingsPath, '[1, 2, 3]', 'utf-8');
+      const provider = new FileOAuthSettingsProvider(settingsPath);
+
+      expect(provider.isOAuthEnabled('gemini')).toBe(false);
+      expect(provider.getOAuthEnabledProviders()).toStrictEqual({});
+      expect(provider.getProviderApiKey('openai')).toBeUndefined();
+    });
+
+    it('returns safe defaults when the JSON root is a scalar', () => {
+      fs.writeFileSync(settingsPath, '"just a string"', 'utf-8');
+      const provider = new FileOAuthSettingsProvider(settingsPath);
+
+      expect(provider.isOAuthEnabled('gemini')).toBe(false);
+      expect(provider.getOAuthEnabledProviders()).toStrictEqual({});
+    });
+
+    it('returns safe defaults when the file contains invalid JSON', () => {
+      fs.writeFileSync(settingsPath, '{ not valid json ', 'utf-8');
+      const provider = new FileOAuthSettingsProvider(settingsPath);
+
+      expect(provider.isOAuthEnabled('gemini')).toBe(false);
+      expect(provider.getOAuthEnabledProviders()).toStrictEqual({});
+    });
   });
 
   describe('setOAuthEnabled', () => {
@@ -150,6 +185,26 @@ describe('FileOAuthSettingsProvider', () => {
       // the change was applied
       const reloaded = new FileOAuthSettingsProvider(settingsPath);
       expect(reloaded.isOAuthEnabled('gemini')).toBe(true);
+    });
+
+    it('replaces a malformed array oauthEnabledProviders node with an object', () => {
+      // A malformed file where oauthEnabledProviders is an array would, without
+      // the array guard, be mutated as if it were a record (array['gemini']=...),
+      // silently dropping the setting. The guard replaces it with a clean object.
+      fs.writeFileSync(
+        settingsPath,
+        JSON.stringify({ oauthEnabledProviders: [] }),
+        'utf-8',
+      );
+      const provider = new FileOAuthSettingsProvider(settingsPath);
+
+      provider.setOAuthEnabled('gemini', true);
+
+      const reloaded = new FileOAuthSettingsProvider(settingsPath);
+      expect(reloaded.isOAuthEnabled('gemini')).toBe(true);
+      expect(reloaded.getOAuthEnabledProviders()).toStrictEqual({
+        gemini: true,
+      });
     });
   });
 });
