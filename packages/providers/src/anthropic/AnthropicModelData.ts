@@ -38,6 +38,20 @@ export const MODEL_TOKEN_PATTERNS: Array<{ pattern: RegExp; tokens: number }> =
  */
 export const OAUTH_MODELS: Array<Omit<IModel, 'provider'>> = [
   {
+    id: 'claude-opus-4-8',
+    name: 'Claude Opus 4.8',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 1000000,
+    maxOutputTokens: 128000,
+  },
+  {
+    id: 'claude-opus-4-7',
+    name: 'Claude Opus 4.7',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 1000000,
+    maxOutputTokens: 128000,
+  },
+  {
     id: 'claude-opus-4-6',
     name: 'Claude Opus 4.6',
     supportedToolFormats: ['anthropic'],
@@ -128,6 +142,20 @@ export const OAUTH_MODELS: Array<Omit<IModel, 'provider'>> = [
  */
 export const DEFAULT_MODELS: Array<Omit<IModel, 'provider'>> = [
   {
+    id: 'claude-opus-4-8',
+    name: 'Claude Opus 4.8',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 1000000,
+    maxOutputTokens: 128000,
+  },
+  {
+    id: 'claude-opus-4-7',
+    name: 'Claude Opus 4.7',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 1000000,
+    maxOutputTokens: 128000,
+  },
+  {
     id: 'claude-opus-4-6',
     name: 'Claude Opus 4.6',
     supportedToolFormats: ['anthropic'],
@@ -194,10 +222,14 @@ export function getLatestClaude4Model(
 }
 
 /**
- * Whether the model is Claude Opus 4.6 or later (supports adaptive thinking, higher output limits)
+ * Whether the model is Claude Opus 4.6 or later (supports adaptive thinking, 128K output)
  */
 export function isOpus46Plus(modelId: string): boolean {
-  return modelId.includes('claude-opus-4-6');
+  return (
+    modelId.includes('claude-opus-4-6') ||
+    modelId.includes('claude-opus-4-7') ||
+    modelId.includes('claude-opus-4-8')
+  );
 }
 
 /**
@@ -234,8 +266,15 @@ export function getMaxTokensForModel(modelId: string): number {
  * Get context window for a given model
  */
 export function getContextWindowForModel(modelId: string): number {
+  // Claude Opus 4.7 and 4.8 have 1M context
+  if (
+    modelId.includes('claude-opus-4-7') ||
+    modelId.includes('claude-opus-4-8')
+  ) {
+    return 1000000;
+  }
   // Claude Opus 4.6 has 200K context (different from other opus-4 models)
-  if (isOpus46Plus(modelId)) {
+  if (modelId.includes('claude-opus-4-6')) {
     return 200000;
   }
   // Other Claude 4 opus models have larger context windows

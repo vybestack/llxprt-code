@@ -56,6 +56,24 @@ describe('tokenLimit', () => {
     });
   });
 
+  describe('Anthropic models', () => {
+    it('should return 1M limit for claude-opus-4-8', () => {
+      expect(tokenLimit('claude-opus-4-8')).toBe(1_000_000);
+    });
+
+    it('should return 1M limit for claude-opus-4-7', () => {
+      expect(tokenLimit('claude-opus-4-7')).toBe(1_000_000);
+    });
+
+    it('should return 200K limit for claude-opus-4-6', () => {
+      expect(tokenLimit('claude-opus-4-6')).toBe(200_000);
+    });
+
+    it('should return 200K limit for claude-sonnet-4-6', () => {
+      expect(tokenLimit('claude-sonnet-4-6')).toBe(200_000);
+    });
+  });
+
   describe('Default behavior', () => {
     it('should return default limit for unknown models', () => {
       expect(tokenLimit('unknown-model')).toBe(DEFAULT_TOKEN_LIMIT);
