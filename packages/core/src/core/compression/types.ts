@@ -17,7 +17,11 @@
  */
 
 import type { IContent, UsageStats } from '../../services/history/IContent.js';
-import { getErrorStatus, isNetworkTransientError } from '../../utils/retry.js';
+import {
+  getErrorStatus,
+  isNetworkTransientError,
+  isOverloadError,
+} from '../../utils/retry.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
 import type { DebugLogger } from '../../debug/DebugLogger.js';
@@ -321,6 +325,9 @@ export class CompressionProfileNotFoundError extends CompressionStrategyError {
  * Transient errors include:
  * - HTTP 429 (rate limit)
  * - HTTP 5xx (server errors)
+ * - Provider-specific overload / rate-limit errors (e.g. Anthropic's
+ *   `overloaded_error` and `rate_limit_error`), which carry no HTTP status
+ *   code but are transient — treated equivalently to HTTP 429. (Issue #2045)
  * - Network connectivity errors (ECONNRESET, ETIMEDOUT, etc.)
  *
  * Permanent errors include:
@@ -352,6 +359,13 @@ export function isTransientCompressionError(error: unknown): boolean {
     if (status >= 500 && status < 600) return true;
     // All other HTTP errors (4xx etc.) are permanent
     return false;
+  }
+
+  // Provider-specific overload / rate-limit errors (e.g. Anthropic's
+  // overloaded_error and rate_limit_error) carry no HTTP status code but
+  // are transient — treat them equivalently to HTTP 429. (Issue #2045)
+  if (isOverloadError(error)) {
+    return true;
   }
 
   // Network transient errors (ECONNRESET, ETIMEDOUT, etc.)
