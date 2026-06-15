@@ -543,6 +543,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loaderArgs = runtimeLoader.mock.calls[0][0];
     expect(loaderArgs.profile.settings.tools?.disabled).toStrictEqual([
       'google_web_fetch',
+      'google_web_search',
     ]);
   });
 
@@ -588,6 +589,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loaderArgs = runtimeLoader.mock.calls[0][0];
     expect(loaderArgs.profile.settings.tools?.disabled).toStrictEqual([
       'write_file',
+      'google_web_search',
     ]);
   });
 
