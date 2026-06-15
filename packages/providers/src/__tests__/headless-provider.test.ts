@@ -37,9 +37,12 @@ vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { MockFileSystem } from '../composition/IFileSystem.js';
 import { setFileSystem } from '../composition/providerManagerInstance.js';
 import { createHeadlessProviderManager } from '../composition/headlessFactory.js';
+import type { IProvider, GenerateChatOptions } from '../IProvider.js';
+import type { IModel } from '../IModel.js';
 
 describe('headless provider-manager construction (issue #1594)', () => {
   let mockFileSystem: MockFileSystem;
@@ -109,5 +112,78 @@ describe('headless provider-manager construction (issue #1594)', () => {
 
     const currentModel = manager.getActiveProvider().getCurrentModel!();
     expect(currentModel).toBe(requestedModel);
+  });
+
+  it('runs a completion through a headlessly-constructed manager without any CLI import', async () => {
+    // Proves acceptance criterion #4 end-to-end: a working provider can be
+    // constructed AND can run a completion with zero CLI involvement. A
+    // deterministic in-test provider (no network, no keys) is registered on the
+    // headless manager and driven through the real ProviderManager API.
+    const cannedReply: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'headless-pong' }],
+    };
+
+    class InlineFakeProvider implements IProvider {
+      name = 'inline-fake';
+      isDefault = false;
+      // Satisfies ProviderManager.normalizeRuntimeInputs base-url/auth checks.
+      baseProviderConfig = { baseURL: 'http://inline-fake.local' };
+
+      async getModels(): Promise<IModel[]> {
+        return [
+          {
+            id: 'inline-fake-model',
+            name: 'inline-fake-model',
+            provider: this.name,
+            supportedToolFormats: ['auto'],
+          },
+        ];
+      }
+
+      async *generateChatCompletion(
+        _options: GenerateChatOptions | IContent[],
+      ): AsyncIterableIterator<IContent> {
+        yield cannedReply;
+      }
+
+      getDefaultModel(): string {
+        return 'inline-fake-model';
+      }
+
+      getCurrentModel(): string {
+        return 'inline-fake-model';
+      }
+
+      async getAuthToken(): Promise<string> {
+        return 'inline-fake-token';
+      }
+
+      getServerTools(): string[] {
+        return [];
+      }
+
+      async invokeServerTool(): Promise<unknown> {
+        throw new Error('InlineFakeProvider does not support server tools');
+      }
+    }
+
+    const { manager } = createHeadlessProviderManager({ provider: 'openai' });
+    manager.registerProvider(new InlineFakeProvider());
+    manager.setActiveProvider('inline-fake');
+
+    const provider = manager.getActiveProvider();
+    const chunks: IContent[] = [];
+    for await (const chunk of provider.generateChatCompletion({
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'ping' }] },
+      ],
+    })) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toHaveLength(1);
+    const [block] = chunks[0].blocks;
+    expect(block).toStrictEqual({ type: 'text', text: 'headless-pong' });
   });
 });

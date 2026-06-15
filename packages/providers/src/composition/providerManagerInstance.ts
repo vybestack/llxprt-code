@@ -119,7 +119,7 @@ function matchesTokenizer(
   );
 }
 
-function createCliTokenizerFactory(): RuntimeTokenizerFactory {
+function createRuntimeTokenizerFactory(): RuntimeTokenizerFactory {
   const openaiTokenizer = new OpenAITokenizer();
   const anthropicTokenizer = new AnthropicTokenizer();
 
@@ -149,7 +149,7 @@ function createCliTokenizerFactory(): RuntimeTokenizerFactory {
   };
 }
 
-function createCliContentGeneratorFactory(
+function createRuntimeContentGeneratorFactory(
   config: Config,
 ): RuntimeContentGeneratorFactory<ContentGenerator> {
   return {
@@ -181,12 +181,12 @@ export function configureProviderRuntimeFactories(
   if (typeof setContentGeneratorFactory === 'function') {
     setContentGeneratorFactory.call(
       config,
-      createCliContentGeneratorFactory(config),
+      createRuntimeContentGeneratorFactory(config),
     );
   }
   const setTokenizerFactory = configWithFactories['setTokenizerFactory'];
   if (typeof setTokenizerFactory === 'function') {
-    setTokenizerFactory.call(config, createCliTokenizerFactory());
+    setTokenizerFactory.call(config, createRuntimeTokenizerFactory());
   }
 }
 
