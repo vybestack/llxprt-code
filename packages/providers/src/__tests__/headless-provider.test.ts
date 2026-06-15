@@ -37,10 +37,20 @@ vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 
+// Keep the concrete-provider completion proof hermetic: stub the system-prompt
+// resolution so no prompt files are read from disk.
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
+}));
+
+import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { MockFileSystem } from '../composition/IFileSystem.js';
 import { setFileSystem } from '../composition/providerManagerInstance.js';
 import { createHeadlessProviderManager } from '../composition/headlessFactory.js';
+import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
 
@@ -114,11 +124,12 @@ describe('headless provider-manager construction (issue #1594)', () => {
     expect(currentModel).toBe(requestedModel);
   });
 
-  it('runs a completion through a headlessly-constructed manager without any CLI import', async () => {
-    // Proves acceptance criterion #4 end-to-end: a working provider can be
-    // constructed AND can run a completion with zero CLI involvement. A
-    // deterministic in-test provider (no network, no keys) is registered on the
-    // headless manager and driven through the real ProviderManager API.
+  it('routes a completion through the active provider of a headlessly-constructed manager (no CLI import)', async () => {
+    // Proves the ProviderManager wiring end-to-end: the manager built by the
+    // headless factory hands off generateChatCompletion to whatever provider is
+    // active. A deterministic in-test provider (no network, no keys) is
+    // registered and activated, then driven through the public ProviderManager
+    // API — all without any CLI involvement.
     const cannedReply: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'headless-pong' }],
@@ -185,5 +196,89 @@ describe('headless provider-manager construction (issue #1594)', () => {
     expect(chunks).toHaveLength(1);
     const [block] = chunks[0].blocks;
     expect(block).toStrictEqual({ type: 'text', text: 'headless-pong' });
+  });
+
+  it('runs a completion through a CONCRETE OpenAIProvider with zero CLI imports (issue #2033 criterion 4)', async () => {
+    // The decisive #2033 unblock proof: a real, concrete provider implementation
+    // (OpenAIProvider) executes its actual completion code path and yields model
+    // text — entirely from the providers package, no CLI import, no network. The
+    // HTTP client is replaced at the protected getClient seam with a canned
+    // streaming response (the established OpenAIProvider unit-test pattern).
+    const mockChatCreate = vi.fn();
+    const mockStream = {
+      async *[Symbol.asyncIterator](): AsyncIterableIterator<OpenAI.Chat.Completions.ChatCompletionChunk> {
+        yield {
+          id: 'chatcmpl-headless',
+          object: 'chat.completion.chunk',
+          created: 1234567890,
+          model: 'gpt-4o',
+          choices: [
+            { index: 0, delta: { content: 'headless-' }, finish_reason: null },
+          ],
+        };
+        yield {
+          id: 'chatcmpl-headless',
+          object: 'chat.completion.chunk',
+          created: 1234567890,
+          model: 'gpt-4o',
+          choices: [
+            {
+              index: 0,
+              delta: { content: 'completion' },
+              finish_reason: 'stop',
+            },
+          ],
+        };
+      },
+    };
+    mockChatCreate.mockResolvedValueOnce(mockStream);
+
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', 'openai');
+    settingsService.set('streaming', 'enabled');
+    settingsService.setProviderSetting('openai', 'streaming', 'enabled');
+
+    const provider = new OpenAIProvider('test-key', undefined, {
+      getEphemeralSettings: () => ({ streaming: 'enabled' }),
+    });
+    provider.setRuntimeSettingsService(settingsService);
+
+    const getClientSpy = vi
+      .spyOn(
+        OpenAIProvider.prototype as unknown as {
+          getClient: () => Promise<OpenAI>;
+        },
+        'getClient',
+      )
+      .mockResolvedValue({
+        chat: { completions: { create: mockChatCreate } },
+      } as unknown as OpenAI);
+
+    const results: IContent[] = [];
+    for await (const content of provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: 'openai',
+        contents: [
+          {
+            speaker: 'human' as const,
+            blocks: [{ type: 'text' as const, text: 'ping' }],
+          },
+        ],
+        settings: settingsService,
+        runtimeId: 'headless-openai-completion',
+      }),
+    )) {
+      results.push(content);
+    }
+
+    getClientSpy.mockRestore();
+
+    const text = results
+      .flatMap((r) => r.blocks)
+      .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
+    expect(text).toBe('headless-completion');
+    expect(mockChatCreate).toHaveBeenCalledTimes(1);
   });
 });
