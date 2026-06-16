@@ -352,17 +352,14 @@ export class ConfirmationCoordinator {
       onConfirm: (
         outcome: ToolConfirmationOutcome,
         payload?: ToolConfirmationPayload,
-      ) => {
-        this.messageBus.respondToConfirmation(correlationId, outcome, payload);
-        return this.handleConfirmationResponse(
+      ) =>
+        this.handleConfirmationResponse(
           reqInfo.callId,
           originalOnConfirm,
           outcome,
           signal,
           payload,
-          true,
-        );
-      },
+        ),
     };
 
     this.pendingConfirmations.set(correlationId, reqInfo.callId);
@@ -520,7 +517,9 @@ export class ConfirmationCoordinator {
       waitingToolCall?.confirmationDetails,
     );
 
-    await originalOnConfirm(outcome, payload);
+    if (outcome !== ToolConfirmationOutcome.ModifyWithEditor) {
+      await originalOnConfirm(outcome, payload);
+    }
 
     if (outcome === ToolConfirmationOutcome.ProceedAlways) {
       await this.autoApproveCompatiblePendingTools(signal, callId);
@@ -669,21 +668,14 @@ export class ConfirmationCoordinator {
       onConfirm: (
         outcome: ToolConfirmationOutcome,
         payload?: ToolConfirmationPayload,
-      ) => {
-        this.messageBus.respondToConfirmation(
-          newCorrelationId,
-          outcome,
-          payload,
-        );
-        return this.handleConfirmationResponse(
+      ) =>
+        this.handleConfirmationResponse(
           callId,
           originalOnConfirm,
           outcome,
           signal,
           payload,
-          true,
-        );
-      },
+        ),
     } as ToolCallConfirmationDetails;
 
     this.pendingConfirmations.set(newCorrelationId, callId);

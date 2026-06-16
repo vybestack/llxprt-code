@@ -80,7 +80,7 @@ function makeEditorCallbacks(): EditorCallbacks {
 
 function makeMessageBus() {
   const handlers: Map<string, Array<(msg: unknown) => void>> = new Map();
-  return {
+  const bus = {
     subscribe: vi
       .fn()
       .mockImplementation((type: string, handler: (msg: unknown) => void) => {
@@ -92,11 +92,30 @@ function makeMessageBus() {
           if (idx >= 0) arr.splice(idx, 1);
         };
       }),
-    publish: vi.fn(),
+    publish: vi.fn((msg: { type?: string }) => {
+      if (typeof msg.type === 'string') {
+        (handlers.get(msg.type) ?? []).forEach((handler) => handler(msg));
+      }
+    }),
     emit: (type: string, msg: unknown) => {
       (handlers.get(type) ?? []).forEach((h) => h(msg));
     },
+    respondToConfirmation: vi.fn(
+      (
+        correlationId: string,
+        outcome: ToolConfirmationOutcome,
+        payload?: unknown,
+      ) => {
+        bus.publish({
+          type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+          correlationId,
+          outcome,
+          payload,
+        });
+      },
+    ),
   };
+  return bus;
 }
 
 function makeMockConfig(overrides: Partial<Config> = {}): Config {
@@ -890,6 +909,7 @@ describe('ConfirmationCoordinator', () => {
         .mockResolvedValue(confirmDetails);
 
       const statusMutator = makeStatusMutator();
+
       const { coordinator, messageBus } = createCoordinator({
         config,
         statusMutator,
@@ -907,6 +927,131 @@ describe('ConfirmationCoordinator', () => {
           type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
         }),
       );
+    });
+
+    it('UI ProceedOnce publishes one bus response and invokes original onConfirm once', async () => {
+      const config = makeMockConfig({
+        getPolicyEngine: vi.fn().mockReturnValue({
+          evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK),
+        }),
+        getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
+        getAllowedTools: vi.fn().mockReturnValue([]),
+        isInteractive: vi.fn().mockReturnValue(true),
+      });
+      const originalOnConfirm = vi.fn().mockResolvedValue(undefined);
+      const validatingCall = makeValidatingToolCall('call-1');
+      validatingCall.invocation.shouldConfirmExecute = vi
+        .fn()
+        .mockResolvedValue({
+          type: 'exec' as const,
+          title: 'Run cmd',
+          command: 'echo',
+          onConfirm: originalOnConfirm,
+        });
+      const statusMutator = makeStatusMutator();
+      const schedulerAccessor = makeSchedulerAccessor([
+        {
+          ...validatingCall,
+          status: 'awaiting_approval' as const,
+          confirmationDetails: makeConfirmationDetails('call-1', 'corr-1'),
+        },
+      ]);
+      const { coordinator, messageBus } = createCoordinator({
+        config,
+        statusMutator,
+        schedulerAccessor,
+      });
+      const signal = makeAbortSignal();
+      coordinator.registerSignal('call-1', signal);
+
+      await coordinator.evaluateAndRoute(validatingCall, signal);
+      const wrappedDetails = statusMutator.setAwaitingApproval.mock
+        .calls[0]?.[1] as ToolCallConfirmationDetails;
+      await wrappedDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
+
+      expect(messageBus.respondToConfirmation).not.toHaveBeenCalled();
+      expect(
+        messageBus.publish.mock.calls.filter(
+          ([message]) =>
+            (message as { type?: unknown }).type ===
+            MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+        ),
+      ).toHaveLength(1);
+      expect(originalOnConfirm).toHaveBeenCalledOnce();
+      expect(schedulerAccessor.attemptExecution).toHaveBeenCalledOnce();
+    });
+
+    it('ModifyWithEditor re-confirmation invokes original onConfirm once', async () => {
+      const config = makeMockConfig({
+        getPolicyEngine: vi.fn().mockReturnValue({
+          evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK),
+        }),
+        getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
+        getAllowedTools: vi.fn().mockReturnValue([]),
+        isInteractive: vi.fn().mockReturnValue(true),
+      });
+      const originalOnConfirm = vi.fn().mockResolvedValue(undefined);
+      const modifyContext = {
+        getFilePath: vi.fn().mockReturnValue('/tmp/file.txt'),
+        getCurrentContent: vi.fn().mockResolvedValue('old content'),
+        getProposedContent: vi.fn().mockResolvedValue('new content'),
+        createUpdatedParams: vi.fn().mockReturnValue({ content: 'updated' }),
+      };
+      const validatingCall = makeValidatingToolCall('call-1');
+      validatingCall.tool = {
+        ...validatingCall.tool,
+        getModifyContext: vi.fn().mockReturnValue(modifyContext),
+      } as unknown as typeof validatingCall.tool;
+      const editDetails = {
+        type: 'edit' as const,
+        title: 'Edit file',
+        fileDiff: '--- a\n+++ b',
+        fileName: 'file.txt',
+        filePath: '/tmp/file.txt',
+        originalContent: 'old',
+        newContent: 'new',
+        correlationId: 'corr-1',
+        onConfirm: originalOnConfirm,
+      } as ToolCallConfirmationDetails;
+      validatingCall.invocation.shouldConfirmExecute = vi
+        .fn()
+        .mockResolvedValue(editDetails);
+      const statusMutator = makeStatusMutator();
+      const waitingCall = {
+        ...validatingCall,
+        status: 'awaiting_approval' as const,
+        confirmationDetails: editDetails,
+      };
+      const schedulerAccessor = makeSchedulerAccessor([waitingCall]);
+      const editorCallbacks: EditorCallbacks = {
+        getPreferredEditor: vi.fn().mockReturnValue('vscode'),
+        onEditorClose: vi.fn(),
+        onEditorOpen: vi.fn(),
+      };
+      const { coordinator } = createCoordinator({
+        config,
+        statusMutator,
+        schedulerAccessor,
+        editorCallbacks,
+      });
+      const signal = makeAbortSignal();
+      coordinator.registerSignal('call-1', signal);
+
+      await coordinator.evaluateAndRoute(validatingCall, signal);
+      const initialDetails = statusMutator.setAwaitingApproval.mock
+        .calls[0]?.[1] as ToolCallConfirmationDetails;
+      await initialDetails.onConfirm(ToolConfirmationOutcome.ModifyWithEditor);
+      const awaitingCalls = statusMutator.setAwaitingApproval.mock.calls;
+      const reconfirmDetails = awaitingCalls[awaitingCalls.length - 1]?.[1] as
+        | ToolCallConfirmationDetails
+        | undefined;
+      expect(reconfirmDetails).toBeDefined();
+      await reconfirmDetails?.onConfirm(ToolConfirmationOutcome.ProceedOnce);
+      await vi.waitFor(() => {
+        expect(schedulerAccessor.attemptExecution).toHaveBeenCalledOnce();
+      });
+
+      expect(originalOnConfirm).toHaveBeenCalledOnce();
     });
 
     it('shouldConfirmExecute returns false → approves directly', async () => {

@@ -88,6 +88,25 @@ interface PostTurnResult {
 export const MAX_TURNS = 100;
 const MAX_RETRIES = 3;
 
+function getConfiguredContextLimit(config: Config): number | undefined {
+  const rawContextLimit = config.getEphemeralSetting('context-limit');
+  return typeof rawContextLimit === 'number' &&
+    Number.isFinite(rawContextLimit) &&
+    rawContextLimit > 0
+    ? rawContextLimit
+    : undefined;
+}
+
+function getTokenLimitForConfiguredContext(
+  model: string,
+  config: Config,
+): number {
+  const contextLimit = getConfiguredContextLimit(config);
+  return contextLimit === undefined
+    ? tokenLimit(model)
+    : tokenLimit(model, contextLimit);
+}
+
 export class MessageStreamOrchestrator {
   #lastModelIdentity: string | null = null;
 
@@ -255,7 +274,8 @@ export class MessageStreamOrchestrator {
       estimateTextOnlyLength(initialRequest) / 4,
     );
     const remainingTokenCount =
-      tokenLimit(modelForLimitCheck) - getChat().getLastPromptTokenCount();
+      getTokenLimitForConfiguredContext(modelForLimitCheck, config) -
+      getChat().getLastPromptTokenCount();
 
     if (estimatedRequestTokenCount > remainingTokenCount * 0.95) {
       yield {

@@ -16,10 +16,10 @@ describe('provider alias default models (#1543)', () => {
   const findAlias = (alias: string) =>
     entries.find((candidate) => candidate.alias === alias);
 
-  it('openai defaults to gpt-5.2', () => {
+  it('openai defaults to gpt-5.5', () => {
     const entry = findAlias('openai');
     expect(entry).toBeDefined();
-    expect(entry?.config.defaultModel).toBe('gpt-5.2');
+    expect(entry?.config.defaultModel).toBe('gpt-5.5');
   });
 
   it('xAI defaults to grok-4', () => {
@@ -46,10 +46,10 @@ describe('provider alias default models (#1543)', () => {
     expect(entry?.config.defaultModel).toBe('nvidia/nemotron-nano-9b-v2');
   });
 
-  it('Fireworks defaults to fireworks/minimax-m2p5', () => {
+  it('Fireworks defaults to fireworks/minimax-m3', () => {
     const entry = findAlias('Fireworks');
     expect(entry).toBeDefined();
-    expect(entry?.config.defaultModel).toBe('fireworks/minimax-m2p5');
+    expect(entry?.config.defaultModel).toBe('fireworks/minimax-m3');
   });
 
   describe('deepseek alias', () => {
@@ -63,7 +63,7 @@ describe('provider alias default models (#1543)', () => {
       const entry = findAlias('deepseek');
       expect(entry?.config.baseProvider).toBe('openai');
       expect(entry?.config['base-url']).toBe('https://api.deepseek.com/v1');
-      expect(entry?.config.defaultModel).toBe('deepseek-chat');
+      expect(entry?.config.defaultModel).toBe('deepseek-v4-flash');
       expect(entry?.config.apiKeyEnv).toBe('DEEPSEEK_API_KEY');
     });
   });

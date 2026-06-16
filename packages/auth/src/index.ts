@@ -83,6 +83,7 @@ export {
   invalidateMatchingEntries,
   storeRuntimeScopedToken,
   invalidateEntry,
+  invalidateProviderRuntimeCache,
   runtimeScopedStates,
 } from './precedence.js';
 

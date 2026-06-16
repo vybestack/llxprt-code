@@ -402,3 +402,61 @@ describe('RetryOrchestrator onAuthError handler', () => {
     );
   });
 });
+
+/**
+ * @fix issue2035
+ * In the real OAuth chat path the access token is resolved *below* the retry
+ * layer (inside BaseProvider), so the RetryOrchestrator's outer options carry no
+ * concrete authToken. This documents that, on a 401, the handler is still
+ * invoked with an empty failedAccessToken — the signal the TokenAccessCoordinator
+ * uses to fall back to the stored token as its refresh baseline (issue #2035).
+ */
+describe('RetryOrchestrator onAuthError handler (OAuth resolved below retry layer)', () => {
+  it('invokes the handler with an empty failedAccessToken when no token is on outer options', async () => {
+    const authError = createAuthError(
+      401,
+      'API Error: 401 {"type":"authentication_error","message":"Invalid authentication credentials"}',
+    );
+
+    const mockOnAuthError = vi.fn().mockResolvedValue(undefined);
+    const onAuthErrorHandler: OnAuthErrorHandler = {
+      handleAuthError: mockOnAuthError,
+    };
+
+    const provider = createTestProvider({
+      name: 'anthropic',
+      responses: [{ error: authError }, 'success'],
+    });
+
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 10,
+    });
+
+    // No `resolved.authToken` — mirrors the production OAuth path where the
+    // token is resolved inside BaseProvider, beneath the retry orchestrator.
+    const options: GenerateChatOptions = {
+      contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+      resolved: {},
+      runtime: {
+        config: {
+          getOnAuthErrorHandler: () => onAuthErrorHandler,
+        } as unknown as GenerateChatOptions['runtime'],
+      } as unknown as GenerateChatOptions['runtime'],
+    };
+
+    const result = await consumeStream(
+      orchestrator.generateChatCompletion(options),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(mockOnAuthError).toHaveBeenCalledTimes(1);
+    expect(mockOnAuthError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        failedAccessToken: '',
+        providerId: 'anthropic',
+        errorStatus: 401,
+      }),
+    );
+  });
+});

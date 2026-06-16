@@ -66,6 +66,27 @@ function makeNetworkError(code: string): Error {
   return err;
 }
 
+/**
+ * Creates an Anthropic-style overload/rate-limit error. The real provider
+ * attaches a structured `error` object to the thrown Error, e.g.
+ * `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`.
+ * These errors carry no HTTP status code, so they must be classified via
+ * {@link isOverloadError} rather than via status.
+ *
+ * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+ * @requirement REQ-CR-001, REQ-CR-002
+ */
+function makeAnthropicOverloadError(
+  type: 'overloaded_error' | 'rate_limit_error',
+  message = 'Overloaded',
+): Error {
+  const err = new Error(message) as Error & {
+    error?: { type?: string; message?: string };
+  };
+  err.error = { type, message };
+  return err;
+}
+
 // ---------------------------------------------------------------------------
 // Phase 1: isTransientCompressionError
 // ---------------------------------------------------------------------------
@@ -119,6 +140,27 @@ describe('isTransientCompressionError @plan PLAN-20260218-COMPRESSION-RETRY.P01'
   it('returns true for error with "network timeout" message', () => {
     const err = new Error('network timeout');
     expect(isTransientCompressionError(err)).toBe(true);
+  });
+
+  /**
+   * @requirement REQ-CR-001
+   * Anthropic overload errors (no HTTP status) are transient.
+   * Issue #2045: compression failed with overloaded_error and was not retried.
+   */
+  it('returns true for Anthropic overloaded_error (no HTTP status)', () => {
+    expect(
+      isTransientCompressionError(
+        makeAnthropicOverloadError('overloaded_error'),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns true for Anthropic rate_limit_error (no HTTP status)', () => {
+    expect(
+      isTransientCompressionError(
+        makeAnthropicOverloadError('rate_limit_error', 'Rate limited'),
+      ),
+    ).toBe(true);
   });
 
   /**
@@ -191,6 +233,26 @@ describe('shouldRetryCompressionError @plan PLAN-20260218-COMPRESSION-RETRY.P01'
     expect(shouldRetryCompressionError(makeNetworkError('ECONNRESET'))).toBe(
       true,
     );
+  });
+
+  /**
+   * @requirement REQ-CR-002
+   * Issue #2045: overload/rate-limit errors should trigger a retry.
+   */
+  it('returns true for Anthropic overloaded_error', () => {
+    expect(
+      shouldRetryCompressionError(
+        makeAnthropicOverloadError('overloaded_error'),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns true for Anthropic rate_limit_error', () => {
+    expect(
+      shouldRetryCompressionError(
+        makeAnthropicOverloadError('rate_limit_error', 'Rate limited'),
+      ),
+    ).toBe(true);
   });
 
   /**
@@ -449,6 +511,42 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
           callCount++;
           if (callCount < 3) {
             throw makeHttpError(503);
+          }
+          return {
+            newHistory: [],
+            metadata: {
+              originalMessageCount: 10,
+              compressedMessageCount: 5,
+              strategyUsed: 'middle-out' as const,
+              llmCallMade: true,
+            },
+          };
+        }),
+      }),
+    );
+
+    await chat.performCompression('test-prompt');
+    expect(callCount).toBe(3);
+  });
+
+  /**
+   * @requirement REQ-CR-003
+   * Issue #2045: performCompression retries an Anthropic overload error
+   * (which carries no HTTP status) and eventually succeeds.
+   */
+  it('retries an Anthropic overloaded_error and eventually succeeds', async () => {
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+    let callCount = 0;
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
+        name: 'middle-out' as const,
+        requiresLLM: true,
+        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+        compress: vi.fn().mockImplementation(async () => {
+          callCount++;
+          if (callCount < 3) {
+            throw makeAnthropicOverloadError('overloaded_error');
           }
           return {
             newHistory: [],

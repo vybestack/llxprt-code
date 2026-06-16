@@ -516,22 +516,31 @@ export class AgenticLoop {
         resolveCompletion([]);
       });
 
-    yield* this.drainWhileRunning(completionTask, state, queue, signal);
+    let normalExit = false;
+    try {
+      yield* this.drainWhileRunning(completionTask, state, queue, signal);
 
-    // On abort during scheduling/execution, cancel in-flight tools.
-    if (signal.aborted) {
-      scheduler.cancelAll();
-      await Promise.race([scheduleTask, completionTask]);
-    } else {
-      await scheduleTask;
+      // On abort during scheduling/execution, cancel in-flight tools.
+      if (signal.aborted) {
+        scheduler.cancelAll();
+        await Promise.race([scheduleTask, completionTask]);
+      } else {
+        await scheduleTask;
+      }
+
+      const completed = await Promise.race([completionTask, abortPromise]);
+      normalExit = true;
+      return { completed, events: queue };
+    } finally {
+      if (!normalExit) {
+        scheduler.cancelAll();
+        await Promise.race([scheduleTask, completionTask]);
+      }
+      forwardingActive = false;
+      queue.close();
+      cleanupAbortListener();
+      this.config.disposeScheduler(sessionId);
     }
-    forwardingActive = false;
-    queue.close();
-    this.config.disposeScheduler(sessionId);
-
-    const completed = await Promise.race([completionTask, abortPromise]);
-    cleanupAbortListener();
-    return { completed, events: queue };
   }
 
   /**

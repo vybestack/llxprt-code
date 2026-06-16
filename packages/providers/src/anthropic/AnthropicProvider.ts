@@ -316,7 +316,7 @@ export class AnthropicProvider extends BaseProvider {
 
   override getDefaultModel(): string {
     // Return hardcoded default - do NOT call getModel() to avoid circular dependency
-    return 'claude-sonnet-4-5-20250929';
+    return 'claude-sonnet-4-6';
   }
 
   /**

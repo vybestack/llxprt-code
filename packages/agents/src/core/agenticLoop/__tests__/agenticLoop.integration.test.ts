@@ -1073,6 +1073,55 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
     config.disposeScheduler(config.getSessionId());
   });
 
+  it('early generator return while a tool is running disposes the scheduler', async () => {
+    const tool = new MockTool({ name: 'early_return_tool' });
+    tool.executeFn.mockImplementation(
+      () => new Promise<never>(() => {}), // remains in-flight until the loop is closed
+    );
+
+    const toolRegistry = createToolRegistryForTest([tool]);
+    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAllowPolicyEngine(),
+      interactive: false,
+      approvalMode: ApprovalMode.YOLO,
+    });
+    const disposedSessionIds: string[] = [];
+    const originalDisposeScheduler = config.disposeScheduler.bind(config);
+    vi.spyOn(config, 'disposeScheduler').mockImplementation((sessionId) => {
+      disposedSessionIds.push(sessionId);
+      originalDisposeScheduler(sessionId);
+    });
+
+    const { client } = createScriptedAgentClient([
+      [
+        toolCallRequestEvent('early_return_tool', 'call-early'),
+        finishedEvent(),
+      ],
+    ]);
+    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const iterator = loop.run('go', new AbortController().signal);
+
+    let sawRunningTool = false;
+    let next = await iterator.next();
+    while (next.done !== true && !sawRunningTool) {
+      sawRunningTool =
+        next.value.kind === 'tool_update' &&
+        next.value.toolCalls.some((call) => call.status === 'executing');
+      if (!sawRunningTool) {
+        next = await iterator.next();
+      }
+    }
+
+    expect(sawRunningTool).toBe(true);
+    await expect(iterator.return(undefined)).resolves.toBeDefined();
+    expect(disposedSessionIds.some((id) => id.includes('#agentic-loop#'))).toBe(
+      true,
+    );
+  });
+
   it('tool_output emitted just before completion is observed by the consumer', async () => {
     // Regression: the drain loop must not stop merely because scheduling
     // finished — tool_output/tool_update events can still arrive between

@@ -58,6 +58,7 @@ import type {
   ContentGenerator,
   ContentGeneratorConfig,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { BaseLLMClient } from './baseLlmClient.js';
 
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ChatSession } from './chatSession.js';
@@ -3357,6 +3358,86 @@ sub memory
       expect(client.getCurrentSequenceModel()).toBeNull();
     });
 
+    it('invalidates active chat state when ModelProfileChanged fires so profile context-limit is rebuilt', () => {
+      const historyService = {
+        clear: vi.fn(),
+        findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+        getCurated: vi.fn().mockReturnValue([]),
+        getTotalTokens: vi.fn().mockReturnValue(0),
+      };
+      const mockChat: Partial<ChatSession> = {
+        getHistoryService: vi.fn().mockReturnValue(historyService),
+      };
+      const contentGenerator = {} as ContentGenerator;
+      client['chat'] = mockChat as ChatSession;
+      client['contentGenerator'] = contentGenerator;
+      client['_baseLlmClient'] = {} as BaseLLMClient;
+      client['_pendingConfig'] = {
+        model: 'test-model',
+        apiKey: 'old-key',
+        vertexai: false,
+      };
+
+      expect(client.hasChatInitialized()).toBe(true);
+
+      coreEvents.emitModelProfileChanged({
+        model: 'claude-opus-4-8',
+        providerName: 'anthropic',
+        profileName: 'opusthinking',
+        displayLabel: 'opusthinking',
+      });
+
+      expect(client.hasChatInitialized()).toBe(false);
+      expect(client['contentGenerator']).toBe(contentGenerator);
+      expect(client['_baseLlmClient']).toBeUndefined();
+      expect(client['_pendingConfig']).toStrictEqual({
+        model: 'test-model',
+        apiKey: 'old-key',
+        vertexai: false,
+      });
+      expect(client['_storedHistoryService']).toBe(historyService);
+      expect(client['_previousHistory']).toBeUndefined();
+    });
+
+    it('defers chat invalidation until active streams finish', async () => {
+      const historyService = {
+        clear: vi.fn(),
+        findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+        getCurated: vi.fn().mockReturnValue([]),
+        getTotalTokens: vi.fn().mockReturnValue(0),
+      };
+      const mockChat: Partial<ChatSession> = {
+        getHistoryService: vi.fn().mockReturnValue(historyService),
+      };
+      client['chat'] = mockChat as ChatSession;
+      client['contentGenerator'] = {} as ContentGenerator;
+      const executeSpy = vi
+        .spyOn(client['messageStreamOrchestrator'], 'execute')
+        .mockImplementation(async function* () {
+          coreEvents.emitModelProfileChanged({
+            model: 'claude-opus-4-8',
+            providerName: 'anthropic',
+            profileName: 'opusthinking',
+            displayLabel: 'opusthinking',
+          });
+          expect(client.hasChatInitialized()).toBe(true);
+          yield { type: GeminiEventType.Content, value: 'done' };
+          return {} as Turn;
+        });
+
+      await fromAsync(
+        client.sendMessageStream(
+          'hello',
+          new AbortController().signal,
+          'prompt',
+        ),
+      );
+
+      expect(executeSpy).toHaveBeenCalledOnce();
+      expect(client.hasChatInitialized()).toBe(false);
+      expect(client['_storedHistoryService']).toBe(historyService);
+    });
+
     it('also resets currentSequenceModel on ModelChanged', () => {
       client['currentSequenceModel'] = 'sticky-model';
       coreEvents.emitModelChanged('other-model');
@@ -3375,6 +3456,12 @@ sub memory
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
+        getHistoryService: vi.fn().mockReturnValue({
+          clear: vi.fn(),
+          findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+          getCurated: vi.fn().mockReturnValue([]),
+          getTotalTokens: vi.fn().mockReturnValue(0),
+        }),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       };
       client['chat'] = mockChat as ChatSession;

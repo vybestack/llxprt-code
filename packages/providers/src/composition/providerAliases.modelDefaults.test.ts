@@ -507,10 +507,10 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(entry.config.modelDefaults!.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('claude-opus-4-6 matches a rule with reasoning.effort: "high"', () => {
+  it('claude-opus-4-8 matches a rule with reasoning.effort: "high"', () => {
     const entry = getAnthropicEntry();
     const defaults = computeMatchedDefaults(
-      'claude-opus-4-6',
+      'claude-opus-4-8',
       entry.config.modelDefaults!,
     );
     expect(defaults['reasoning.effort']).toBe('high');
@@ -544,10 +544,10 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(Object.keys(defaults)).toHaveLength(0);
   });
 
-  it('rules merge in order — claude-opus-4-6 gets broad + specific settings', () => {
+  it('rules merge in order — claude-opus-4-8 gets broad + specific settings', () => {
     const entry = getAnthropicEntry();
     const defaults = computeMatchedDefaults(
-      'claude-opus-4-6',
+      'claude-opus-4-8',
       entry.config.modelDefaults!,
     );
 
@@ -556,8 +556,9 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(defaults['reasoning.adaptiveThinking']).toBe(true);
     expect(defaults['reasoning.includeInContext']).toBe(true);
 
-    // From the specific "claude-opus-4-6" rule (merged on top)
+    // From the specific "claude-opus-4-8" rule (merged on top)
     expect(defaults['reasoning.effort']).toBe('high');
+    expect(defaults['context-limit']).toBe(200000);
   });
 
   it('user anthropic.config with different modelDefaults shadows the builtin', async () => {

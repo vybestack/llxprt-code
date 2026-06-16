@@ -250,8 +250,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Use this.name so it works for providers that extend OpenAIProvider (e.g., Chutes.ai)
     return [
       {
-        id: 'gpt-5',
-        name: 'GPT-5',
+        id: 'gpt-5.5',
+        name: 'GPT-5.5',
+        provider: this.name,
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-5.4',
+        name: 'GPT-5.4',
         provider: this.name,
         supportedToolFormats: ['openai'],
       },
@@ -278,7 +284,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return process.env.LLXPRT_DEFAULT_MODEL || 'qwen3-coder-plus';
     }
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env var should fall through to default
-    return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5';
+    return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5.5';
   }
 
   /**

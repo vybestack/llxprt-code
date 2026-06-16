@@ -109,6 +109,23 @@ interface StreamEventHandlersResult {
   }>;
 }
 
+function getConfiguredContextLimit(config: Config): number | undefined {
+  const rawContextLimit = config.getEphemeralSetting('context-limit');
+  return typeof rawContextLimit === 'number' &&
+    Number.isFinite(rawContextLimit) &&
+    rawContextLimit > 0
+    ? rawContextLimit
+    : undefined;
+}
+
+export function getTokenLimitForConfiguredContext(config: Config): number {
+  const contextLimit = getConfiguredContextLimit(config);
+  const model = config.getModel();
+  return contextLimit === undefined
+    ? tokenLimit(model)
+    : tokenLimit(model, contextLimit);
+}
+
 interface StreamEventHandlerDeps {
   config: Config;
   settings: LoadedSettings;
@@ -426,7 +443,7 @@ function useContextOverflowHandler(deps: StreamEventHandlerDeps) {
   return useCallback(
     (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
       onCancelSubmit(true);
-      const limit = tokenLimit(config.getModel());
+      const limit = getTokenLimitForConfiguredContext(config);
       const isLessThan75Percent =
         limit > 0 && remainingTokenCount < limit * 0.75;
       let text = `Sending this message (${estimatedRequestTokenCount} tokens) might exceed the remaining context window limit (${remainingTokenCount} tokens).`;
