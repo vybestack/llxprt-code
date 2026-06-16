@@ -96,6 +96,16 @@ export type TrackedToolCall =
   | TrackedCancelledToolCall;
 
 export type CancelAllFn = () => void;
+/**
+ * Replaces the display tool-calls for the main scheduler, bound to the main
+ * scheduler ID so callers (e.g. the AgenticLoop's displayCallbacks) don't need
+ * to know the internal symbol.
+ */
+export type ReplaceToolCallsFn = (calls: ToolCall[]) => void;
+export type UpdateToolOutputFn = (
+  toolCallId: string,
+  chunk: string | AnsiOutput,
+) => void;
 export type ReactToolSchedulerResult = readonly [
   TrackedToolCall[],
   ScheduleFn,
@@ -103,6 +113,8 @@ export type ReactToolSchedulerResult = readonly [
   CancelAllFn,
   number,
   boolean,
+  ReplaceToolCallsFn,
+  UpdateToolOutputFn,
 ];
 type PendingScheduleRequests = Array<{
   request: ToolCallRequestInfo | ToolCallRequestInfo[];
@@ -719,6 +731,25 @@ function useToolSchedulerReadiness(
   return scheduler !== null && externalSchedulerRegistered;
 }
 
+/**
+ * Derives the flattened tool-call list and a cancel-all callback from the
+ * per-scheduler tracked tool-call state.
+ */
+function useDerivedToolCallState(
+  toolCallsByScheduler: Map<symbol, TrackedToolCall[]>,
+  scheduler: CoreToolScheduler | null,
+): { toolCalls: TrackedToolCall[]; cancelAllToolCalls: CancelAllFn } {
+  const cancelAllToolCalls = useCallback(
+    () => scheduler?.cancelAll(),
+    [scheduler],
+  );
+  const toolCalls = useMemo(
+    () => Array.from(toolCallsByScheduler.values()).flat(),
+    [toolCallsByScheduler],
+  );
+  return { toolCalls, cancelAllToolCalls };
+}
+
 function buildReactToolSchedulerResult(
   toolCalls: TrackedToolCall[],
   schedule: ScheduleFn,
@@ -726,6 +757,8 @@ function buildReactToolSchedulerResult(
   cancelAllToolCalls: CancelAllFn,
   lastToolOutputTime: number,
   interactiveRuntimeReady: boolean,
+  replaceToolCallsForScheduler: ReplaceToolCallsFn,
+  updateToolCallOutput: UpdateToolOutputFn,
 ): ReactToolSchedulerResult {
   return [
     toolCalls,
@@ -734,7 +767,37 @@ function buildReactToolSchedulerResult(
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
+    replaceToolCallsForScheduler,
+    updateToolCallOutput,
   ] as const;
+}
+
+/**
+ * Creates bound display-state updaters for the AgenticLoop's displayCallbacks.
+ * Binds the main scheduler ID so the loop's onToolCallsUpdate /
+ * outputUpdateHandler feed the SAME React display state.
+ */
+function useBoundDisplayUpdaters(
+  toolCallUpdaters: ReturnType<typeof useToolCallUpdaters>,
+  mainSchedulerId: symbol,
+): {
+  replaceToolCalls: ReplaceToolCallsFn;
+  updateToolOutput: UpdateToolOutputFn;
+} {
+  const replaceToolCalls = useCallback(
+    (calls: ToolCall[]) =>
+      toolCallUpdaters.replaceToolCallsForScheduler(mainSchedulerId, calls),
+    // Deps reference specific methods on the toolCallUpdaters object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [toolCallUpdaters.replaceToolCallsForScheduler, mainSchedulerId],
+  );
+  const updateToolOutput = useCallback(
+    (toolCallId: string, chunk: string | AnsiOutput) =>
+      toolCallUpdaters.updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [toolCallUpdaters.updateToolCallOutput, mainSchedulerId],
+  );
+  return { replaceToolCalls, updateToolOutput };
 }
 
 export function useReactToolScheduler(
@@ -798,19 +861,20 @@ export function useReactToolScheduler(
 
   const schedule = useScheduleFn(scheduler, pendingScheduleRequests);
   const markToolsAsSubmitted = useMarkToolsAsSubmitted(setToolCallsByScheduler);
-  const cancelAllToolCalls = useCallback(
-    () => scheduler?.cancelAll(),
-    [scheduler],
-  );
-  const toolCalls = useMemo(
-    () => Array.from(toolCallsByScheduler.values()).flat(),
-    [toolCallsByScheduler],
+  const { toolCalls, cancelAllToolCalls } = useDerivedToolCallState(
+    toolCallsByScheduler,
+    scheduler,
   );
 
   const interactiveRuntimeReady = useToolSchedulerReadiness(
     scheduler,
     externalSchedulerRegistered,
   );
+
+  const {
+    replaceToolCalls: boundReplaceToolCalls,
+    updateToolOutput: boundUpdateToolOutput,
+  } = useBoundDisplayUpdaters(toolCallUpdaters, mainSchedulerId);
 
   return buildReactToolSchedulerResult(
     toolCalls,
@@ -819,5 +883,7 @@ export function useReactToolScheduler(
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
+    boundReplaceToolCalls,
+    boundUpdateToolOutput,
   );
 }

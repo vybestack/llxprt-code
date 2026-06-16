@@ -231,6 +231,8 @@ describe('useGeminiStream subagent isolation', () => {
       mockCancelAllToolCalls,
       0,
       true,
+      vi.fn(),
+      vi.fn(),
     ] as const);
 
     mockStartChat.mockClear().mockResolvedValue({
@@ -261,6 +263,8 @@ describe('useGeminiStream subagent isolation', () => {
         vi.fn(),
         0,
         true,
+        vi.fn(),
+        vi.fn(),
       ] as const;
     });
 

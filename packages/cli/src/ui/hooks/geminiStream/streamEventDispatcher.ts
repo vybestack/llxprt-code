@@ -5,9 +5,9 @@
  */
 
 /**
- * Extracted stream event dispatch logic from processGeminiStreamEvents.
- * Contains the switch/case event dispatcher and post-loop tool call scheduling.
- * Keeps processGeminiStreamEvents under 80 lines.
+ * Stream event dispatch logic: the switch/case event dispatcher that maps a
+ * single ServerGeminiStreamEvent to the appropriate React state update. Used by
+ * the single-event router (processStreamEvent) that the AgenticLoop drives.
  * None of these functions call React hooks.
  */
 
@@ -19,7 +19,6 @@ import {
   type ServerGeminiFinishedEvent,
   type ServerGeminiErrorEvent as ErrorEvent,
   type ToolCallRequestInfo,
-  DEFAULT_AGENT_ID,
   type Config,
   type ThoughtSummary,
   type ThinkingBlock,
@@ -28,7 +27,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type React from 'react';
 import { type HistoryItemWithoutId, MessageType } from '../../types.js';
-import { deduplicateToolCallRequests } from './streamUtils.js';
 import { StreamProcessingStatus } from './types.js';
 import { applyThoughtToState } from './thoughtState.js';
 
@@ -131,7 +129,7 @@ function dispatchAgentExecutionEvent(
   return { geminiMessageBuffer };
 }
 
-function flushPendingGeminiContentForContextClear(
+function flushPendingGeminiContent(
   deps: StreamEventDeps,
   userMessageTimestamp: number,
 ): void {
@@ -142,6 +140,13 @@ function flushPendingGeminiContentForContextClear(
     deps.flushPendingHistoryItem(userMessageTimestamp);
     deps.setPendingHistoryItem(null);
   }
+}
+
+function flushPendingGeminiContentForContextClear(
+  deps: StreamEventDeps,
+  userMessageTimestamp: number,
+): void {
+  flushPendingGeminiContent(deps, userMessageTimestamp);
 
   deps.thinkingBlocksRef.current = [];
   deps.setThought(null);
@@ -151,7 +156,6 @@ function handleEarlyReturnEvent(
   event: GeminiEvent,
   eventType: ServerGeminiEventType,
   deps: StreamEventDeps,
-  toolCallRequests: ToolCallRequestInfo[],
   userMessageTimestamp: number,
   geminiMessageBuffer: string,
 ): {
@@ -159,7 +163,6 @@ function handleEarlyReturnEvent(
   processingResult: StreamProcessingStatus;
 } | null {
   if (eventType === ServerGeminiEventType.UserCancelled) {
-    toolCallRequests.length = 0;
     deps.handleUserCancelledEvent(userMessageTimestamp);
     return {
       geminiMessageBuffer,
@@ -167,7 +170,6 @@ function handleEarlyReturnEvent(
     };
   }
   if (eventType === ServerGeminiEventType.StreamIdleTimeout) {
-    toolCallRequests.length = 0;
     const errorEvent = event as Extract<
       GeminiEvent,
       { type: typeof ServerGeminiEventType.StreamIdleTimeout }
@@ -181,7 +183,6 @@ function handleEarlyReturnEvent(
     };
   }
   if (eventType === ServerGeminiEventType.Error) {
-    toolCallRequests.length = 0;
     const errorEvent = event as Extract<
       GeminiEvent,
       { type: typeof ServerGeminiEventType.Error }
@@ -199,30 +200,27 @@ export function dispatchStreamEvent(
   event: GeminiEvent,
   deps: StreamEventDeps,
   geminiMessageBuffer: string,
-  toolCallRequests: ToolCallRequestInfo[],
   userMessageTimestamp: number,
 ): DispatchResult {
   const earlyReturn = handleEarlyReturnEvent(
     event,
     event.type,
     deps,
-    toolCallRequests,
     userMessageTimestamp,
     geminiMessageBuffer,
   );
-  if (earlyReturn) return earlyReturn;
+  if (earlyReturn) return resetBufferAfterTerminal(event.type, earlyReturn);
 
   const coreResult = handleCoreStreamEvent(
     event,
     deps,
-    toolCallRequests,
     userMessageTimestamp,
     geminiMessageBuffer,
   );
-  if (coreResult) return coreResult;
+  if (coreResult) return resetBufferAfterTerminal(event.type, coreResult);
 
   if (handleNotificationStreamEvent(event, deps, userMessageTimestamp)) {
-    return { geminiMessageBuffer };
+    return resetBufferAfterTerminal(event.type, { geminiMessageBuffer });
   }
 
   return handleContentLikeStreamEvent(
@@ -233,23 +231,45 @@ export function dispatchStreamEvent(
   );
 }
 
+function resetBufferAfterTerminal(
+  eventType: ServerGeminiEventType,
+  result: DispatchResult,
+): DispatchResult {
+  if (!shouldResetGeminiMessageBuffer(eventType)) {
+    return result;
+  }
+  return { ...result, geminiMessageBuffer: '' };
+}
+
+const BUFFER_RESET_EVENTS = new Set<ServerGeminiEventType>([
+  ServerGeminiEventType.Finished,
+  ServerGeminiEventType.Error,
+  ServerGeminiEventType.StreamIdleTimeout,
+  ServerGeminiEventType.UserCancelled,
+  ServerGeminiEventType.LoopDetected,
+  ServerGeminiEventType.MaxSessionTurns,
+  ServerGeminiEventType.ContextWindowWillOverflow,
+  ServerGeminiEventType.AgentExecutionStopped,
+  ServerGeminiEventType.AgentExecutionBlocked,
+]);
+
+function shouldResetGeminiMessageBuffer(
+  eventType: ServerGeminiEventType,
+): boolean {
+  return BUFFER_RESET_EVENTS.has(eventType);
+}
+
 function handleCoreStreamEvent(
   event: GeminiEvent,
   deps: StreamEventDeps,
-  toolCallRequests: ToolCallRequestInfo[],
   userMessageTimestamp: number,
   geminiMessageBuffer: string,
 ): DispatchResult | null {
   switch (event.type) {
     case ServerGeminiEventType.ToolCallRequest:
-      toolCallRequests.push({
-        ...event.value,
-        agentId: event.value.agentId ?? DEFAULT_AGENT_ID,
-      });
       return { geminiMessageBuffer };
     case ServerGeminiEventType.LoopDetected:
       deps.loopDetectedRef.current = true;
-      toolCallRequests.length = 0;
       return { geminiMessageBuffer };
     case ServerGeminiEventType.AgentExecutionStopped:
       return dispatchAgentExecutionEvent(
@@ -291,6 +311,7 @@ function handleNotificationStreamEvent(
       );
       return true;
     case ServerGeminiEventType.Finished:
+      flushPendingGeminiContent(deps, userMessageTimestamp);
       deps.handleFinishedEvent(event, userMessageTimestamp);
       return true;
     case ServerGeminiEventType.Citation:
@@ -387,57 +408,5 @@ function handleContentLikeStreamEvent(
       };
     default:
       return { geminiMessageBuffer };
-  }
-}
-
-function shouldSkipToolScheduling(
-  processingResult: StreamProcessingStatus,
-  signal: AbortSignal,
-  turnCancelledRef: React.MutableRefObject<boolean>,
-  loopDetectedRef: React.MutableRefObject<boolean>,
-  toolCallRequests: ToolCallRequestInfo[],
-): boolean {
-  if (processingResult !== StreamProcessingStatus.Completed) return true;
-  if (signal.aborted) return true;
-  if (turnCancelledRef.current) return true;
-  if (loopDetectedRef.current) return true;
-  return toolCallRequests.length === 0;
-}
-
-export async function scheduleDedupedToolCalls(
-  toolCallRequests: ToolCallRequestInfo[],
-  processingResult: StreamProcessingStatus,
-  signal: AbortSignal,
-  turnCancelledRef: React.MutableRefObject<boolean>,
-  loopDetectedRef: React.MutableRefObject<boolean>,
-  pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>,
-  addItem: (item: HistoryItemWithoutId, timestamp: number) => void,
-  userMessageTimestamp: number,
-  setPendingHistoryItem: React.Dispatch<
-    React.SetStateAction<HistoryItemWithoutId | null>
-  >,
-  scheduleToolCalls: (
-    requests: ToolCallRequestInfo[],
-    signal: AbortSignal,
-  ) => Promise<void>,
-): Promise<void> {
-  if (
-    shouldSkipToolScheduling(
-      processingResult,
-      signal,
-      turnCancelledRef,
-      loopDetectedRef,
-      toolCallRequests,
-    )
-  ) {
-    return;
-  }
-  const deduped = deduplicateToolCallRequests(toolCallRequests);
-  if (deduped.length > 0) {
-    if (pendingHistoryItemRef.current) {
-      addItem(pendingHistoryItemRef.current, userMessageTimestamp);
-      setPendingHistoryItem(null);
-    }
-    await scheduleToolCalls(deduped, signal);
   }
 }

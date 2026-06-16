@@ -476,7 +476,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       }
 
       await this.attemptExecutionOfScheduledCalls(signal);
-      void this.checkAndNotifyCompletion();
+      await this.checkAndNotifyCompletion();
     } finally {
       this.isScheduling = false;
     }

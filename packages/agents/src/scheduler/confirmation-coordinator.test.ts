@@ -254,7 +254,31 @@ describe('ConfirmationCoordinator', () => {
       });
       const signal = makeAbortSignal();
       coordinator.registerSignal('call-1', signal);
+      (
+        coordinator as unknown as { pendingConfirmations: Map<string, string> }
+      ).pendingConfirmations.set('corr-1', 'call-1');
+      (
+        coordinator as unknown as {
+          pendingOriginalConfirmHandlers: Map<string, () => Promise<void>>;
+        }
+      ).pendingOriginalConfirmHandlers.set('corr-1', async () => {});
+
       coordinator.reset();
+
+      expect(
+        (
+          coordinator as unknown as {
+            pendingConfirmations: Map<string, string>;
+          }
+        ).pendingConfirmations.size,
+      ).toBe(0);
+      expect(
+        (
+          coordinator as unknown as {
+            pendingOriginalConfirmHandlers: Map<string, () => Promise<void>>;
+          }
+        ).pendingOriginalConfirmHandlers.size,
+      ).toBe(0);
       // After reset, the signal is gone; publishing a response should be a no-op
       // We verify indirectly: no attemptExecution called after reset
       expect(statusMutator.setScheduled).not.toHaveBeenCalled();

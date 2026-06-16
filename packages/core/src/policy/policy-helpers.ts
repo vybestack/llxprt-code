@@ -105,6 +105,7 @@ export function publishConfirmationRequest(
   messageBus: MessageBus,
 ): void {
   const toolCall: FunctionCall = {
+    ...(context.callId !== undefined ? { id: context.callId } : {}),
     name: context.toolName,
     args: context.args,
   };

@@ -8,12 +8,14 @@
 
 /**
  * Extracted stream event handler hooks from useGeminiStream.
- * Contains all event handler useCallbacks for stream event processing,
- * plus processGeminiStreamEvents and displayUserMessage.
+ * Contains the per-event handler useCallbacks plus the single-event router
+ * (processStreamEvent) consumed by the engine-owned AgenticLoop, and
+ * displayUserMessage. Multi-turn continuation is owned by the AgenticLoop in
+ * @vybestack/llxprt-code-agents, not by this module.
  */
 
 import type React from 'react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
   type Config,
   type ServerGeminiStreamEvent as GeminiEvent,
@@ -23,10 +25,6 @@ import {
   type MessageSenderType,
   type ToolCallRequestInfo,
   parseAndFormatApiError,
-  nextStreamEventWithIdleTimeout,
-  StreamIdleTimeoutError,
-  resolveStreamIdleTimeoutMs,
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   type ThinkingBlock,
   tokenLimit,
   type ThoughtSummary,
@@ -43,7 +41,6 @@ import {
 } from '../../types.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import {
-  SYSTEM_NOTICE_EVENT,
   showCitations,
   getCurrentProfileName,
   buildFinishReasonMessage,
@@ -52,15 +49,11 @@ import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
 } from '../../../utils/apiErrorFormatting.js';
-import { StreamProcessingStatus } from './types.js';
 import {
   processContentEvent,
   type ContentEventDeps,
 } from './contentEventProcessor.js';
-import {
-  dispatchStreamEvent,
-  scheduleDedupedToolCalls,
-} from './streamEventDispatcher.js';
+import { dispatchStreamEvent } from './streamEventDispatcher.js';
 import {
   prepareQueryForGemini as prepareQueryImpl,
   type PrepareQueryDeps,
@@ -92,11 +85,15 @@ interface StreamEventHandlersResult {
     remainingTokenCount: number,
   ) => void;
   handleLoopDetectedEvent: () => void;
-  processGeminiStreamEvents: (
-    stream: AsyncIterable<GeminiEvent>,
+  /**
+   * Processes a SINGLE stream event into React state. Used by the AgenticLoop's
+   * stream-event router. Does NOT schedule tools or trigger continuation — the
+   * loop owns those.
+   */
+  processStreamEvent: (
+    event: GeminiEvent,
     userMessageTimestamp: number,
-    signal: AbortSignal,
-  ) => Promise<StreamProcessingStatus>;
+  ) => void;
   displayUserMessage: (
     trimmedQuery: string,
     userMessageTimestamp: number,
@@ -180,13 +177,13 @@ export function useStreamEventHandlers(
     handleContentEvent,
     handleLoopDetectedEvent,
   );
-  const processGeminiStreamEvents = useProcessStream(deps, handlers);
+  const processStreamEvent = useProcessStreamEvent(deps, handlers);
   const displayUserMessage = useDisplayUserMessage(deps);
   const prepareQueryForGemini = usePrepareQueryForGemini(deps);
 
   return {
     ...handlers,
-    processGeminiStreamEvents,
+    processStreamEvent,
     displayUserMessage,
     prepareQueryForGemini,
   };
@@ -545,157 +542,43 @@ type HandlerMap = Pick<
   | 'handleLoopDetectedEvent'
 >;
 
-function useProcessStream(deps: StreamEventHandlerDeps, handlers: HandlerMap) {
+/**
+ * Processes a SINGLE stream event into React state without scheduling tools
+ * or triggering continuation. The AgenticLoop's stream-event router calls this
+ * per event. A ref-backed buffer accumulates gemini content across events
+ * within a turn.
+ */
+function useProcessStreamEvent(
+  deps: StreamEventHandlerDeps,
+  handlers: HandlerMap,
+) {
+  const bufferRef = useRef('');
   return useCallback(
-    async (
-      stream: AsyncIterable<GeminiEvent>,
-      userMessageTimestamp: number,
-      signal: AbortSignal,
-    ): Promise<StreamProcessingStatus> => {
-      const toolCallRequests: ToolCallRequestInfo[] = [];
-      let processingResult = StreamProcessingStatus.Completed;
-
-      const pendingHistoryAtTimeout = () => {
-        if (deps.pendingHistoryItemRef.current) {
-          deps.addItem(
-            deps.pendingHistoryItemRef.current,
-            userMessageTimestamp,
-          );
-          deps.setPendingHistoryItem(null);
-        }
-      };
-      const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(deps.config);
-      let iterator: AsyncIterator<GeminiEvent> | undefined;
-
-      try {
-        iterator = stream[Symbol.asyncIterator]();
-        const streamResult = await consumeStreamEvents(
-          iterator,
-          effectiveTimeoutMs,
-          signal,
-          pendingHistoryAtTimeout,
-          deps,
-          handlers,
-          '',
-          toolCallRequests,
-          userMessageTimestamp,
-        );
-        processingResult = streamResult.processingResult;
-
-        await scheduleDedupedToolCalls(
-          toolCallRequests,
-          processingResult,
-          signal,
-          deps.turnCancelledRef,
-          deps.loopDetectedRef,
-          deps.pendingHistoryItemRef,
-          deps.addItem,
-          userMessageTimestamp,
-          deps.setPendingHistoryItem,
-          deps.scheduleToolCalls,
-        );
-        return processingResult;
-      } finally {
-        iterator?.return?.().catch(() => {});
-        if (deps.pendingHistoryItemRef.current && signal.aborted)
-          deps.setPendingHistoryItem(null);
-      }
+    (event: GeminiEvent, userMessageTimestamp: number) => {
+      const result = dispatchStreamEvent(
+        event,
+        {
+          config: deps.config,
+          addItem: deps.addItem,
+          sanitizeContent: deps.sanitizeContent,
+          flushPendingHistoryItem: deps.flushPendingHistoryItem,
+          pendingHistoryItemRef: deps.pendingHistoryItemRef,
+          thinkingBlocksRef: deps.thinkingBlocksRef,
+          turnCancelledRef: deps.turnCancelledRef,
+          loopDetectedRef: deps.loopDetectedRef,
+          lastModelInfoRef: deps.lastModelInfoRef,
+          lastModelIdentityRef: deps.lastModelIdentityRef,
+          setPendingHistoryItem: deps.setPendingHistoryItem,
+          setLastGeminiActivityTime: deps.setLastGeminiActivityTime,
+          setThought: deps.setThought,
+          ...handlers,
+          scheduleToolCalls: deps.scheduleToolCalls,
+        },
+        bufferRef.current,
+        userMessageTimestamp,
+      );
+      bufferRef.current = result.geminiMessageBuffer;
     },
     [deps, handlers],
   );
 }
-
-async function consumeStreamEvents(
-  iterator: AsyncIterator<GeminiEvent>,
-  effectiveTimeoutMs: number,
-  signal: AbortSignal,
-  pendingHistoryAtTimeout: () => void,
-  deps: StreamEventHandlerDeps,
-  handlers: HandlerMap,
-  geminiMessageBuffer: string,
-  toolCallRequests: ToolCallRequestInfo[],
-  userMessageTimestamp: number,
-): Promise<{
-  geminiMessageBuffer: string;
-  processingResult: StreamProcessingStatus;
-}> {
-  let processingResult = StreamProcessingStatus.Completed;
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  for (;;) {
-    const nextEvent = await getNextStreamEvent(
-      iterator,
-      effectiveTimeoutMs,
-      signal,
-      pendingHistoryAtTimeout,
-      deps.setThought,
-      deps.abortActiveStream,
-    );
-    if (nextEvent.done === true) break;
-    const event = nextEvent.value;
-    if ((event as { type?: unknown }).type === SYSTEM_NOTICE_EVENT) continue;
-
-    const result = dispatchStreamEvent(
-      event,
-      {
-        config: deps.config,
-        addItem: deps.addItem,
-        sanitizeContent: deps.sanitizeContent,
-        flushPendingHistoryItem: deps.flushPendingHistoryItem,
-        pendingHistoryItemRef: deps.pendingHistoryItemRef,
-        thinkingBlocksRef: deps.thinkingBlocksRef,
-        turnCancelledRef: deps.turnCancelledRef,
-        loopDetectedRef: deps.loopDetectedRef,
-        lastModelInfoRef: deps.lastModelInfoRef,
-        lastModelIdentityRef: deps.lastModelIdentityRef,
-        setPendingHistoryItem: deps.setPendingHistoryItem,
-        setLastGeminiActivityTime: deps.setLastGeminiActivityTime,
-        setThought: deps.setThought,
-        ...handlers,
-        scheduleToolCalls: deps.scheduleToolCalls,
-      },
-      geminiMessageBuffer,
-      toolCallRequests,
-      userMessageTimestamp,
-    );
-    geminiMessageBuffer = result.geminiMessageBuffer;
-    if (result.processingResult !== undefined)
-      processingResult = result.processingResult;
-  }
-  return { geminiMessageBuffer, processingResult };
-}
-
-async function getNextStreamEvent(
-  iterator: AsyncIterator<GeminiEvent>,
-  effectiveTimeoutMs: number,
-  signal: AbortSignal,
-  pendingHistoryAtTimeout: () => void,
-  setThought: React.Dispatch<React.SetStateAction<ThoughtSummary | null>>,
-  abortActiveStream: (reason?: unknown) => void,
-): Promise<IteratorResult<GeminiEvent>> {
-  if (effectiveTimeoutMs > 0) {
-    return nextStreamEventWithIdleTimeout({
-      iterator,
-      timeoutMs: effectiveTimeoutMs,
-      signal,
-      onTimeout: () => {
-        if (signal.aborted) return;
-        pendingHistoryAtTimeout();
-        setThought(null);
-        abortActiveStream(
-          new StreamIdleTimeoutError(
-            'Stream idle timeout: no response received within the allowed time.',
-          ),
-        );
-      },
-      createTimeoutError: () =>
-        new StreamIdleTimeoutError(
-          'Stream idle timeout: no response received within the allowed time.',
-        ),
-    });
-  }
-  return iterator.next();
-}
-
-export const __testing = {
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-};
