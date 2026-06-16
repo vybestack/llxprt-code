@@ -691,7 +691,10 @@ describe('SecureStore — Encrypted File Fallback', () => {
     });
 
     await store.set('perm-key', 'perm-value');
-    const filePath = path.join(tempDir, encodeURIComponent('perm-key') + '.enc');
+    const safeKey = 'perm-key'.replace(/[*<>:"/\\|?]/g, (char) => {
+      return '%' + char.charCodeAt(0).toString(16).toUpperCase();
+    });
+    const filePath = path.join(tempDir, safeKey + '.enc');
     const stat = await fs.stat(filePath);
 
     // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context

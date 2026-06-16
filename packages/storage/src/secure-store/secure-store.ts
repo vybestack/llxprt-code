@@ -352,9 +352,17 @@ export class SecureStore {
   private getFallbackFilePath(key: string): string {
     this.validateKey(key);
     // Sanitize key for filesystem (especially Windows compatibility)
-    // We use encodeURIComponent to ensure all characters are safe for filenames.
-    const safeKey = encodeURIComponent(key);
+    // Escapes Windows-reserved characters: * < > : " / \ | ?
+    const safeKey = key.replace(/[*<>:"/\\|?]/g, (char) => {
+      return '%' + char.charCodeAt(0).toString(16).toUpperCase();
+    });
     return path.join(this.fallbackDir, safeKey + '.enc');
+  }
+
+  private getLegacyFallbackFilePath(key: string): string {
+    this.validateKey(key);
+    // Support legacy unencoded paths for backward compatibility
+    return path.join(this.fallbackDir, key + '.enc');
   }
 
   // ─── Consecutive Failure Tracking ────────────────────────────────────────
@@ -567,7 +575,15 @@ export class SecureStore {
     }
 
     // Try fallback file
-    const fallbackValue = await this.readFallbackFile(key);
+    let fallbackValue = await this.readFallbackFile(key);
+    if (fallbackValue === null) {
+      // Try legacy unencoded path
+      const legacyPath = this.getLegacyFallbackFilePath(key);
+      if (legacyPath !== this.getFallbackFilePath(key)) {
+        fallbackValue = await this.readFallbackFileAtPath(legacyPath);
+      }
+    }
+
     if (fallbackValue !== null) {
       this.logger.debug(
         () => `[get] key='${key}' → found in encrypted fallback file`,
@@ -610,6 +626,20 @@ export class SecureStore {
       }
     }
 
+    // Always try unlinking the legacy path too if it's different
+    const legacyPath = this.getLegacyFallbackFilePath(key);
+    if (legacyPath !== filePath) {
+      try {
+        await fs.unlink(legacyPath);
+        deletedFromFile = true;
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException;
+        if (err.code !== 'ENOENT') {
+          // Non-missing-file errors
+        }
+      }
+    }
+
     this.logger.debug(
       () =>
         `[delete] key='${key}' keyring=${deletedFromKeyring} fallback=${deletedFromFile}`,
@@ -641,14 +671,23 @@ export class SecureStore {
       const files = await fs.readdir(this.fallbackDir);
       for (const file of files) {
         if (file.endsWith('.enc')) {
-          const encodedKey = file.slice(0, -4);
+          const keyInFile = file.slice(0, -4);
           // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           try {
-            const keyName = decodeURIComponent(encodedKey);
-            this.validateKey(keyName);
-            keys.add(keyName);
+            // First try decoding as the new sanitizer (which uses %XX for reserved chars)
+            // or as encodeURIComponent (previous version).
+            // decodeURIComponent handles both.
+            const decodedKey = decodeURIComponent(keyInFile);
+            this.validateKey(decodedKey);
+            keys.add(decodedKey);
           } catch {
-            // Malformed filename or invalid encoded sequence — skip
+            // If decoding fails, it might be a legacy raw key filename.
+            try {
+              this.validateKey(keyInFile);
+              keys.add(keyInFile);
+            } catch {
+              // Truly malformed filename — skip
+            }
           }
         }
       }
@@ -693,6 +732,16 @@ export class SecureStore {
       await fs.access(filePath);
       return true;
     } catch {
+      // Try legacy path
+      const legacyPath = this.getLegacyFallbackFilePath(key);
+      if (legacyPath !== filePath) {
+        try {
+          await fs.access(legacyPath);
+          return true;
+        } catch {
+          return false;
+        }
+      }
       return false;
     }
   }
@@ -743,7 +792,7 @@ export class SecureStore {
       await fd.writeFile(JSON.stringify(envelope));
       await fd.sync();
       await fd.close();
-      
+
       // Retry rename for Windows concurrent write EPERM issues
       let renameAttempts = 0;
       while (renameAttempts < 3) {
@@ -752,13 +801,16 @@ export class SecureStore {
           break;
         } catch (error) {
           renameAttempts++;
-          if (renameAttempts >= 3 || (error as NodeJS.ErrnoException).code !== 'EPERM') {
+          if (
+            renameAttempts >= 3 ||
+            (error as NodeJS.ErrnoException).code !== 'EPERM'
+          ) {
             throw error;
           }
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
       }
-      
+
       await fs.chmod(finalPath, 0o600);
     } catch (error) {
       await fd.close().catch(() => {});
@@ -771,7 +823,12 @@ export class SecureStore {
 
   private async readFallbackFile(key: string): Promise<string | null> {
     const filePath = this.getFallbackFilePath(key);
+    return this.readFallbackFileAtPath(filePath);
+  }
 
+  private async readFallbackFileAtPath(
+    filePath: string,
+  ): Promise<string | null> {
     let content: string;
     try {
       content = await fs.readFile(filePath, 'utf8');
