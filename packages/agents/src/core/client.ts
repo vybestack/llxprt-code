@@ -524,9 +524,8 @@ export class AgentClient implements AgentClientContract {
     }
 
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
-    // Ensure chat is initialized before setting tools
     if (!this.hasChatInitialized()) {
-      await this.resetChat();
+      this.chat = await this.startChat(this._previousHistory ?? []);
     }
     this.getChat().setTools(tools);
   }

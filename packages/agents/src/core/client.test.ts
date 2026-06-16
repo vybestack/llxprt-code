@@ -3481,6 +3481,40 @@ sub memory
       expect(client['_previousHistory']).toBe(liveHistory);
     });
 
+    it('preserves stored conversation history when refreshing tools before the next turn', async () => {
+      const committedHistory: Content[] = [
+        { role: 'user', parts: [{ text: 'We are fixing issue 2049.' }] },
+        {
+          role: 'model',
+          parts: [{ text: 'Profile switches must preserve context.' }],
+        },
+      ];
+      client.storeHistoryForLaterUse(committedHistory);
+      client['chat'] = undefined;
+      const startChatSpy = vi
+        .spyOn(client, 'startChat')
+        .mockImplementation(async (extraHistory?: Content[]) => {
+          const restoredHistory = extraHistory ?? [];
+          return {
+            getHistory: vi.fn().mockReturnValue(restoredHistory),
+            getHistoryService: vi.fn().mockReturnValue({
+              clear: vi.fn(),
+              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+              getCurated: vi.fn().mockReturnValue([]),
+              getTotalTokens: vi.fn().mockReturnValue(0),
+            }),
+            getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+            setTools: vi.fn(),
+          } as unknown as ChatSession;
+        });
+
+      await client.setTools();
+
+      expect(startChatSpy).toHaveBeenCalledWith(committedHistory);
+      const restoredHistory =
+        await AgentClient.prototype.getHistory.call(client);
+      expect(restoredHistory).toStrictEqual(committedHistory);
+    });
     it('also resets currentSequenceModel on ModelChanged', () => {
       client['currentSequenceModel'] = 'sticky-model';
       coreEvents.emitModelChanged('other-model');
