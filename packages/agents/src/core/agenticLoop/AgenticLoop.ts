@@ -147,7 +147,6 @@ interface TurnState {
 /** Result of scheduling+awaiting tools for one turn. */
 interface TurnToolResult {
   completed: CompletedToolCall[] | null;
-  events: EventQueue;
 }
 
 interface StreamCollectionResult {
@@ -344,7 +343,6 @@ export class AgenticLoop {
     try {
       const result = yield* this.scheduleAndAwait(dedupedRequests, signal);
       completed = result.completed;
-      void result.events;
     } finally {
       for (const request of dedupedRequests) {
         this.ownedToolCallIds.delete(request.callId);
@@ -542,7 +540,7 @@ export class AgenticLoop {
 
       const completed = await Promise.race([completionTask, abortPromise]);
       normalExit = true;
-      return { completed, events: queue };
+      return { completed };
     } finally {
       if (!normalExit) {
         scheduler.cancelAll();
