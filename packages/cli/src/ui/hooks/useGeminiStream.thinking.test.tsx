@@ -296,6 +296,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       mockCancelAllToolCalls,
       0,
       true,
+      vi.fn(),
+      vi.fn(),
     ]);
 
     mockStartChat.mockClear().mockResolvedValue({
@@ -331,6 +333,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       mockCancelAllToolCalls,
       0,
       true,
+      vi.fn(),
+      vi.fn(),
     ]);
 
     const client = agentClient ?? mockConfig.getAgentClient();

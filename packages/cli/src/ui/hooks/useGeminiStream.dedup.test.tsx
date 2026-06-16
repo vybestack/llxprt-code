@@ -86,6 +86,8 @@ vi.mock('./useReactToolScheduler.js', () => ({
       vi.fn(), // cancelAllToolCalls
       0,
       true,
+      vi.fn(), // replaceToolCalls
+      vi.fn(), // updateToolOutput
     ];
   }),
 }));
@@ -147,6 +149,25 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
       },
       getMessageBus: () => mockMessageBus,
       getEphemeralSetting: () => undefined,
+      getOrCreateScheduler: vi.fn(
+        (
+          _sessionId: string,
+          callbacks: {
+            onAllToolCallsComplete?: (calls: unknown[]) => Promise<void>;
+          },
+        ) => ({
+          schedule: (requests: ToolCallRequestInfo | ToolCallRequestInfo[]) => {
+            const arr = Array.isArray(requests) ? requests : [requests];
+            scheduledToolCalls.push([...arr]);
+            // Immediately complete so the AgenticLoop's turn resolves.
+            void callbacks.onAllToolCallsComplete?.([]);
+            return Promise.resolve();
+          },
+          cancelAll: vi.fn(),
+          dispose: vi.fn(),
+        }),
+      ),
+      disposeScheduler: vi.fn(),
     } as unknown as Config;
 
     // Create mock stream generator that emits duplicate tool call requests

@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { FinishReason } from '@google/genai';
 import type React from 'react';
 import {
   GeminiEventType,
@@ -92,7 +93,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'production',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     expect(addItem).toHaveBeenCalledTimes(1);
     const [item, timestamp] = addItem.mock.calls[0];
@@ -121,7 +122,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'production',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     expect(addItem).not.toHaveBeenCalled();
   });
@@ -135,7 +136,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'work',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     expect(lastModelInfoRef.current).toBe('work');
   });
@@ -155,7 +156,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'llama3',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     // Baseline: first response always shows a notification so the user sees
     // which model/profile is handling their prompt.
@@ -181,7 +182,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'work',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     expect(addItem).toHaveBeenCalledTimes(1);
     expect(addItem.mock.calls[0][0].profileName).toBe('work');
@@ -204,11 +205,11 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
     });
 
     // First response: notification shown
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
     expect(addItem).toHaveBeenCalledTimes(1);
 
     // Second response, same identity: no duplicate
-    dispatchStreamEvent(event, deps, '', [], 2000);
+    dispatchStreamEvent(event, deps, '', 2000);
     expect(addItem).toHaveBeenCalledTimes(1);
   });
 
@@ -231,7 +232,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'My Custom Label',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     expect(addItem).toHaveBeenCalledTimes(1);
     expect(addItem.mock.calls[0][0].profileName).toBe('My Custom Label');
@@ -254,7 +255,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'new-model',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     expect(addItem).toHaveBeenCalledTimes(1);
     expect(addItem.mock.calls[0][0].profileName).toBe('new-model');
@@ -279,7 +280,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'My Label',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     expect(addItem).toHaveBeenCalledTimes(1);
     expect(addItem.mock.calls[0][0].profileName).toBe('My Label');
@@ -304,7 +305,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'work',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     expect(addItem).toHaveBeenCalledTimes(1);
     expect(addItem.mock.calls[0][0].profileName).toBe('work');
@@ -329,7 +330,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'gpt-4o',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     expect(addItem).toHaveBeenCalledTimes(1);
     expect(addItem.mock.calls[0][0].profileName).toBe('gpt-4o');
@@ -353,7 +354,7 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'work',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     expect(addItem).not.toHaveBeenCalled();
   });
@@ -380,9 +381,125 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
       displayLabel: 'model-label',
     });
 
-    dispatchStreamEvent(event, deps, '', [], 1000);
+    dispatchStreamEvent(event, deps, '', 1000);
 
     // Identity is different: ['a','b','model'] !== ['a|b','','model']
     expect(addItem).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('dispatchStreamEvent - stream buffer lifecycle', () => {
+  it.each([
+    GeminiEventType.Finished,
+    GeminiEventType.Error,
+    GeminiEventType.StreamIdleTimeout,
+    GeminiEventType.UserCancelled,
+    GeminiEventType.LoopDetected,
+    GeminiEventType.MaxSessionTurns,
+    GeminiEventType.ContextWindowWillOverflow,
+    GeminiEventType.AgentExecutionStopped,
+    GeminiEventType.AgentExecutionBlocked,
+  ])('clears accumulated content buffer after %s', (eventType) => {
+    const deps = createDeps();
+    const event = createTerminalEvent(eventType);
+
+    const result = dispatchStreamEvent(
+      event,
+      deps,
+      'stale assistant text',
+      1000,
+    );
+
+    expect(result.geminiMessageBuffer).toBe('');
+  });
+
+  it('does not prepend content from a finished turn to the next turn', () => {
+    const handleContentEvent = vi.fn(
+      (value: string, buffer: string) => buffer + value,
+    );
+    const deps = createDeps({ handleContentEvent });
+
+    const first = dispatchStreamEvent(
+      { type: GeminiEventType.Content, value: 'first' },
+      deps,
+      '',
+      1000,
+    );
+    const finished = dispatchStreamEvent(
+      { type: GeminiEventType.Finished, value: { reason: FinishReason.STOP } },
+      deps,
+      first.geminiMessageBuffer,
+      1000,
+    );
+    const next = dispatchStreamEvent(
+      { type: GeminiEventType.Content, value: 'second' },
+      deps,
+      finished.geminiMessageBuffer,
+      1001,
+    );
+
+    expect(next.geminiMessageBuffer).toBe('second');
+  });
+
+  it('flushes pending Gemini content before clearing buffer on Finished', () => {
+    const pendingHistoryItemRef = {
+      current: { type: 'gemini', text: 'first' },
+    } as React.MutableRefObject<HistoryItemWithoutId | null>;
+    const flushPendingHistoryItem = vi.fn();
+    const setPendingHistoryItem = vi.fn((value) => {
+      if (value === null) {
+        pendingHistoryItemRef.current = null;
+      }
+    });
+    const deps = createDeps({
+      pendingHistoryItemRef,
+      flushPendingHistoryItem,
+      setPendingHistoryItem,
+    });
+
+    const result = dispatchStreamEvent(
+      { type: GeminiEventType.Finished, value: { reason: FinishReason.STOP } },
+      deps,
+      'first',
+      1000,
+    );
+
+    expect(result.geminiMessageBuffer).toBe('');
+    expect(flushPendingHistoryItem).toHaveBeenCalledWith(1000);
+    expect(pendingHistoryItemRef.current).toBeNull();
+  });
+});
+
+function createTerminalEvent(eventType: GeminiEventType): GeminiEvent {
+  switch (eventType) {
+    case GeminiEventType.Finished:
+      return {
+        type: eventType,
+        value: { reason: FinishReason.STOP },
+      } as GeminiEvent;
+    case GeminiEventType.Error:
+      return {
+        type: eventType,
+        value: { error: { message: 'failed' } },
+      } as GeminiEvent;
+    case GeminiEventType.StreamIdleTimeout:
+      return {
+        type: eventType,
+        value: { error: { message: 'idle' } },
+      } as GeminiEvent;
+    case GeminiEventType.ContextWindowWillOverflow:
+      return {
+        type: eventType,
+        value: { estimatedRequestTokenCount: 100, remainingTokenCount: 1 },
+      } as GeminiEvent;
+    case GeminiEventType.AgentExecutionStopped:
+    case GeminiEventType.AgentExecutionBlocked:
+      return {
+        type: eventType,
+        reason: 'hook',
+        systemMessage: 'hook',
+      } as GeminiEvent;
+    default:
+      return { type: eventType } as GeminiEvent;
+  }
+}

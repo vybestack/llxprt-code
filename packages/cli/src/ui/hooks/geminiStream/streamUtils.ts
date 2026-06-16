@@ -149,33 +149,6 @@ export function mergePendingToolGroupsForDisplay(
 }
 
 /**
- * Separates a flat Part[] into functionCalls, functionResponses, and otherParts.
- * Used to maintain proper history ordering: functionCalls go to 'model' role,
- * functionResponses + otherParts go to 'user' role.
- */
-export function splitPartsByRole(parts: Part[]): {
-  functionCalls: Part[];
-  functionResponses: Part[];
-  otherParts: Part[];
-} {
-  const functionCalls: Part[] = [];
-  const functionResponses: Part[] = [];
-  const otherParts: Part[] = [];
-
-  for (const part of parts) {
-    if ('functionCall' in part) {
-      functionCalls.push(part);
-    } else if ('functionResponse' in part) {
-      functionResponses.push(part);
-    } else {
-      otherParts.push(part);
-    }
-  }
-
-  return { functionCalls, functionResponses, otherParts };
-}
-
-/**
  * Filters primary tools to those that are NOT client-initiated (Gemini-bound tools).
  */
 export function collectGeminiTools<

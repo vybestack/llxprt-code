@@ -160,4 +160,5 @@ export type PolicyContext = {
   toolName: string;
   args: Record<string, unknown>;
   serverName?: string;
+  callId?: string;
 };
