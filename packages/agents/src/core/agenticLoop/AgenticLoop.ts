@@ -110,23 +110,25 @@ class EventQueue {
     }
     return new Promise<void>((resolve) => {
       let settled = false;
-      const onAbort = () => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        this.resolveWait = null;
-        resolve();
-      };
-      this.resolveWait = () => {
+      const settle = () => {
         if (settled) {
           return;
         }
         settled = true;
         signal.removeEventListener('abort', onAbort);
+        this.resolveWait = null;
         resolve();
       };
+      const onAbort = () => {
+        settle();
+      };
+      this.resolveWait = () => {
+        settle();
+      };
       signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) {
+        settle();
+      }
     });
   }
 
