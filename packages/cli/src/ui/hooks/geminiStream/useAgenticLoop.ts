@@ -189,6 +189,8 @@ function handleToolsComplete(
 
 export function useAgenticLoop(args: UseAgenticLoopArgs): UseAgenticLoopReturn {
   const processedMemoryTools = useMemo(() => new Set<string>(), []);
+  const latestArgs = useRef(args);
+  latestArgs.current = args;
 
   // The loop instance must stay stable across renders (recreating it would
   // tear down an in-flight turn). But the CLI's display callbacks are recreated
@@ -253,10 +255,15 @@ export function useAgenticLoop(args: UseAgenticLoopArgs): UseAgenticLoopReturn {
       const iterator = loop.run(message, signal, promptId);
       for await (const event of iterator) {
         if (signal.aborted) break;
-        routeLoopEvent(event, args, userMessageTimestamp, processedMemoryTools);
+        routeLoopEvent(
+          event,
+          latestArgs.current,
+          userMessageTimestamp,
+          processedMemoryTools,
+        );
       }
     },
-    [loop, args, processedMemoryTools],
+    [loop, processedMemoryTools],
   );
 
   return { runLoop, displayCallbacks, loop };

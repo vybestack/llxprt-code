@@ -82,9 +82,9 @@ function isTerminalStreamOutcome(type: GeminiEventType): boolean {
 }
 
 /**
- * A bounded buffer the loop's scheduler callbacks push events into and `run`
- * drains. Resolves the tension between callback-driven scheduler events and
- * the generator-based loop body.
+ * A callback-to-generator bridge: scheduler callbacks push events into this
+ * queue and `run` drains them. Resolves the tension between callback-driven
+ * scheduler events and the generator-based loop body.
  */
 class EventQueue {
   private readonly buffered: AgenticLoopEvent[] = [];
@@ -211,7 +211,8 @@ export class AgenticLoop {
     }
     const handler = this.approvalHandler;
     const bus = this.messageBus;
-    return bus.subscribe<ToolConfirmationRequest>(
+    let active = true;
+    const unsubscribe = bus.subscribe<ToolConfirmationRequest>(
       MessageBusType.TOOL_CONFIRMATION_REQUEST,
       (request) => {
         const callId = request.toolCall.id;
@@ -220,6 +221,9 @@ export class AgenticLoop {
         }
         void handler(request)
           .then((result) => {
+            if (!active || !this.ownedToolCallIds.has(callId)) {
+              return;
+            }
             bus.respondToConfirmation(
               request.correlationId,
               result.outcome,
@@ -227,6 +231,9 @@ export class AgenticLoop {
             );
           })
           .catch((error: unknown) => {
+            if (!active || !this.ownedToolCallIds.has(callId)) {
+              return;
+            }
             // A rejecting approval handler must not leave the confirmation
             // unanswered (which would hang the loop). Respond with a safe
             // denial so the scheduler cancels the tool and the loop proceeds.
@@ -243,6 +250,10 @@ export class AgenticLoop {
           });
       },
     );
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }
 
   /**
@@ -523,7 +534,8 @@ export class AgenticLoop {
       // On abort during scheduling/execution, cancel in-flight tools.
       if (signal.aborted) {
         scheduler.cancelAll();
-        await Promise.race([scheduleTask, completionTask]);
+        await Promise.race([scheduleTask, completionTask, abortPromise]);
+        yield* flushBuffered(queue);
       } else {
         await scheduleTask;
       }
@@ -534,7 +546,7 @@ export class AgenticLoop {
     } finally {
       if (!normalExit) {
         scheduler.cancelAll();
-        await Promise.race([scheduleTask, completionTask]);
+        await Promise.race([scheduleTask, completionTask, abortPromise]);
       }
       forwardingActive = false;
       queue.close();

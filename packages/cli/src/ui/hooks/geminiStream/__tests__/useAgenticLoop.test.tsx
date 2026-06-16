@@ -539,4 +539,46 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
     });
     expect(tool.executeFn).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps runLoop stable while routing through the latest caller callbacks', async () => {
+    const { client } = createScriptedAgentClient([
+      [contentEvent('fresh-callback'), finishedEvent()],
+    ]);
+    const oldRouter = vi.fn();
+    const newRouter = vi.fn();
+    let processStreamEventRef = { current: oldRouter };
+
+    const { result, rerender } = renderHook(() =>
+      useAgenticLoop({
+        config,
+        agentClient: client,
+        messageBus,
+        interactiveMode: true,
+        addItem: vi.fn(),
+        onToolCallsUpdate: () => {},
+        outputUpdateHandler: () => {},
+        getPreferredEditor: () => undefined,
+        onEditorOpen: () => {},
+        onEditorClose: () => {},
+        onTodoPause: () => {},
+        processStreamEventRef,
+        flushPendingHistoryItem: () => {},
+        clearPendingHistoryItem: () => {},
+        performMemoryRefresh: async () => {},
+      }),
+    );
+
+    const firstRunLoop = result.current.runLoop;
+    processStreamEventRef = { current: newRouter };
+    rerender();
+
+    expect(result.current.runLoop).toBe(firstRunLoop);
+
+    await act(async () => {
+      await result.current.runLoop('go', new AbortController().signal, 'p1');
+    });
+
+    expect(oldRouter).not.toHaveBeenCalled();
+    expect(newRouter).toHaveBeenCalled();
+  });
 });
