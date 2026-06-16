@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { PartListUnion } from '@google/genai';
+import type { Content, PartListUnion } from '@google/genai';
 import type { ServerGeminiStreamEvent, ModelInfo } from './turn.js';
 import { GeminiEventType } from './turn.js';
 import type { ChatSession } from './chatSession.js';
@@ -334,6 +334,23 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     // The ModelInfo should reflect provider manager active model,
     // not the config model
     expect(infos[0]?.model).toBe('provider-active-model');
+  });
+
+  it('restores all committed previous history when initializing the next chat', async () => {
+    const previousHistory: Content[] = [
+      { role: 'user', parts: [{ text: 'first user turn' }] },
+      { role: 'model', parts: [{ text: 'first model response' }] },
+      { role: 'user', parts: [{ text: 'second user turn' }] },
+      { role: 'model', parts: [{ text: 'second model response' }] },
+    ];
+    const { orchestrator } = buildOrchestrator();
+    const deps = orchestrator['deps'];
+    vi.mocked(deps.hasChat).mockReturnValue(false);
+    vi.mocked(deps.getPreviousHistory).mockReturnValue(previousHistory);
+
+    await collectModelInfos(orchestrator, 'prompt-restore-history');
+
+    expect(deps.startChat).toHaveBeenCalledWith(previousHistory);
   });
 
   it('uses the configured context-limit for preflight overflow checks', async () => {

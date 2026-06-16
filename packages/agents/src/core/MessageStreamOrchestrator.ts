@@ -156,8 +156,7 @@ export class MessageStreamOrchestrator {
       logger.debug('Restoring previous history during prompt generation', {
         historyLength: previousHistory.length,
       });
-      const conversationHistory = previousHistory.slice(2);
-      setChat(await startChat(conversationHistory));
+      setChat(await startChat(previousHistory));
     } else {
       setChat(await startChat());
     }
