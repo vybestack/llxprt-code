@@ -69,7 +69,7 @@ export function loadEnvironment(): void {
 /** Return true when debug mode is active via CLI flag or environment variable. */
 export function isDebugMode(argv: CliArgs): boolean {
   return (
-    argv.debug === true ||
+    !!argv.debug ||
     [process.env['DEBUG'], process.env['DEBUG_MODE']].some(
       (v) => v === 'true' || v === '1',
     )

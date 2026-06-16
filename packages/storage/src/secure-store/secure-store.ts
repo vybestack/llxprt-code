@@ -351,7 +351,10 @@ export class SecureStore {
 
   private getFallbackFilePath(key: string): string {
     this.validateKey(key);
-    return path.join(this.fallbackDir, key + '.enc');
+    // Sanitize key for filesystem (especially Windows compatibility)
+    // We use encodeURIComponent to ensure all characters are safe for filenames.
+    const safeKey = encodeURIComponent(key);
+    return path.join(this.fallbackDir, safeKey + '.enc');
   }
 
   // ─── Consecutive Failure Tracking ────────────────────────────────────────
@@ -638,13 +641,14 @@ export class SecureStore {
       const files = await fs.readdir(this.fallbackDir);
       for (const file of files) {
         if (file.endsWith('.enc')) {
-          const keyName = file.slice(0, -4);
+          const encodedKey = file.slice(0, -4);
           // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           try {
+            const keyName = decodeURIComponent(encodedKey);
             this.validateKey(keyName);
             keys.add(keyName);
           } catch {
-            // Malformed filename — skip
+            // Malformed filename or invalid encoded sequence — skip
           }
         }
       }
@@ -739,7 +743,22 @@ export class SecureStore {
       await fd.writeFile(JSON.stringify(envelope));
       await fd.sync();
       await fd.close();
-      await fs.rename(tempPath, finalPath);
+      
+      // Retry rename for Windows concurrent write EPERM issues
+      let renameAttempts = 0;
+      while (renameAttempts < 3) {
+        try {
+          await fs.rename(tempPath, finalPath);
+          break;
+        } catch (error) {
+          renameAttempts++;
+          if (renameAttempts >= 3 || (error as NodeJS.ErrnoException).code !== 'EPERM') {
+            throw error;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+      
       await fs.chmod(finalPath, 0o600);
     } catch (error) {
       await fd.close().catch(() => {});

@@ -395,6 +395,25 @@ describe('SecureStore — CRUD Operations', () => {
 
   /**
    * @plan PLAN-20260211-SECURESTORE.P05
+   * @requirement R3.5
+   */
+  it('handles keys with colons (Windows compatibility)', async () => {
+    const store = new SecureStore('test-service', {
+      keyringLoader: async () => null, // force fallback
+      fallbackDir: tempDir,
+    });
+
+    const keyWithColon = 'service:account';
+    await store.set(keyWithColon, 'secret-val');
+    const result = await store.get(keyWithColon);
+    expect(result).toBe('secret-val');
+
+    const list = await store.list();
+    expect(list).toContain(keyWithColon);
+  });
+
+  /**
+   * @plan PLAN-20260211-SECURESTORE.P05
    * @requirement R3.6
    */
   it('delete() removes from both keyring and fallback', async () => {
@@ -672,12 +691,11 @@ describe('SecureStore — Encrypted File Fallback', () => {
     });
 
     await store.set('perm-key', 'perm-value');
-    const filePath = path.join(tempDir, 'perm-key.enc');
+    const filePath = path.join(tempDir, encodeURIComponent('perm-key') + '.enc');
     const stat = await fs.stat(filePath);
 
     // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (process.platform === 'win32')
-      throw new Error('unreachable: narrowing failed');
+    if (process.platform === 'win32') return;
     const perms = stat.mode & 0o777;
     expect(perms).toBe(0o600);
   });

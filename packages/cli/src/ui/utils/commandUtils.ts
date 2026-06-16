@@ -95,6 +95,10 @@ const pickTty = (): Promise<TtyTarget> =>
       try {
         const devTty = fs.createWriteStream('/dev/tty');
 
+        // Immediately attach a no-op error listener to catch synchronous or near-synchronous
+        // 'error' events that would otherwise crash the process as 'Unhandled error'.
+        devTty.on('error', () => {});
+
         // Safety timeout: if /dev/tty doesn't respond quickly, fallback to avoid hanging.
         const timeout = setTimeout(() => {
           // Remove listeners to prevent them from firing after timeout.

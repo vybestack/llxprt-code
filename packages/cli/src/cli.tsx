@@ -52,6 +52,7 @@ import { AppWrapper } from './ui/App.js';
 import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
 import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
+import { parseBootstrapArgs } from './config/profileBootstrap.js';
 import {
   dynamicSettingsRegistry,
   generateDynamicToolSettings,
@@ -108,6 +109,7 @@ import {
   debugLogger,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
+  ConfigurationManager,
 } from '@vybestack/llxprt-code-core';
 import {
   ProfileManager,
@@ -397,6 +399,19 @@ export async function startInteractiveUI(
 }
 
 export async function main() {
+  // Handle debug mode as early as possible so that early logs are captured
+  const bootstrapParsed = parseBootstrapArgs();
+  if (bootstrapParsed.bootstrapArgs.debug) {
+    const namespaces =
+      typeof bootstrapParsed.bootstrapArgs.debug === 'string'
+        ? bootstrapParsed.bootstrapArgs.debug
+        : 'llxprt:*';
+    ConfigurationManager.getInstance().setCliConfig({
+      enabled: true,
+      namespaces: namespaces.split(','),
+    });
+  }
+
   // Handle --version and --help before patchStdio() redirects stdout.
   // patchStdio() redirects process.stdout.write to an internal event bus,
   // but no listeners are registered yet, so yargs output would be lost.

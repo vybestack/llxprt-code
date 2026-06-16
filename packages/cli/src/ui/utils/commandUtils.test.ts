@@ -417,6 +417,25 @@ describe('commandUtils', () => {
       expect(mockClipboardyWrite).toHaveBeenCalledWith(testText);
     });
 
+    it('handles synchronous error from /dev/tty creation (e.g. invalid path on weird platform)', async () => {
+      const testText = 'sync-error-fallback';
+      process.env['SSH_CONNECTION'] = '1';
+
+      mockFs.createWriteStream.mockImplementation(() => {
+        const stream = makeWritable({ isTTY: true });
+        // Emit error immediately
+        stream.emit('error', new Error('ENOENT: no such file or directory'));
+        return stream;
+      });
+
+      mockClipboardyWrite.mockResolvedValue(undefined);
+
+      await copyToClipboard(testText);
+
+      expect(mockFs.createWriteStream).toHaveBeenCalled();
+      expect(mockClipboardyWrite).toHaveBeenCalledWith(testText);
+    });
+
     it('falls back if /dev/tty hangs (timeout)', async () => {
       const testText = 'timeout-fallback';
       process.env['SSH_CONNECTION'] = '1';

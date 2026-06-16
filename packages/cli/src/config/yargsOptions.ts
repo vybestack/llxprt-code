@@ -143,6 +143,12 @@ export const rootOptions: Record<string, Options> = {
     description:
       'If true, when refreshing memory, LLXPRT.md files should be loaded from all directories that are added. If false, LLXPRT.md files should only be loaded from the primary working directory.',
   },
+  debug: {
+    alias: 'd',
+    type: 'string',
+    description:
+      'Run in debug mode? (Optional: specify comma-separated namespaces, e.g., llxprt:core:*,llxprt:openai:*)',
+  },
 };
 
 /**
@@ -192,9 +198,9 @@ export const innerCommandOptions: Record<string, Options> = {
   },
   debug: {
     alias: 'd',
-    type: 'boolean',
-    description: 'Run in debug mode?',
-    default: false,
+    type: 'string',
+    description:
+      'Run in debug mode? (Optional: specify comma-separated namespaces, e.g., llxprt:core:*,llxprt:openai:*)',
   },
   'show-memory-usage': {
     type: 'boolean',
