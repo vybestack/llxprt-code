@@ -42,10 +42,31 @@ vi.mock('./profileApplication.js', () => ({
   ),
 }));
 
+const profileManagerLoadProfileMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@vybestack/llxprt-code-settings', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-settings')
+  >('@vybestack/llxprt-code-settings');
+  return {
+    ...actual,
+    ProfileManager: vi.fn(() => ({
+      loadProfile: profileManagerLoadProfileMock,
+      listProfiles: vi.fn(),
+    })),
+  };
+});
+
 import {
   applyProfileSnapshot,
+  buildRuntimeProfileSnapshot,
   buildModelProfileInfoPayload,
+  getProfileByName,
 } from './profileSnapshot.js';
+import {
+  getCliRuntimeServices,
+  _internal as runtimeAccessorsInternal,
+} from './runtimeAccessors.js';
 
 describe('buildModelProfileInfoPayload', () => {
   it('builds payload with profile name as displayLabel when profile is active', () => {
@@ -267,5 +288,118 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
     await applyProfileSnapshot(profile, { profileName: 'prod' });
 
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('buildRuntimeProfileSnapshot', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('excludes internal settings from persisted ephemeralSettings', () => {
+    vi.mocked(getCliRuntimeServices).mockReturnValue({
+      config: {
+        getEphemeralSettings: () => ({
+          activeProvider: 'gemini',
+          currentProfile: 'glm',
+          tools: { disabled: ['google_web_fetch'] },
+          'context-limit': 190000,
+        }),
+      },
+      settingsService: { setCurrentProfileName: vi.fn() },
+      providerManager: {},
+    } as ReturnType<typeof getCliRuntimeServices>);
+    vi.mocked(
+      runtimeAccessorsInternal.resolveActiveProviderName,
+    ).mockReturnValue('openai');
+    vi.mocked(
+      runtimeAccessorsInternal.getProviderSettingsSnapshot,
+    ).mockReturnValue({
+      model: 'gpt-4o',
+    });
+
+    const snapshot = buildRuntimeProfileSnapshot();
+
+    expect(snapshot.ephemeralSettings).toMatchObject({
+      'context-limit': 190000,
+    });
+    expect(snapshot.ephemeralSettings).not.toHaveProperty('activeProvider');
+    expect(snapshot.ephemeralSettings).not.toHaveProperty('currentProfile');
+    expect(snapshot.ephemeralSettings).not.toHaveProperty('tools');
+  });
+});
+
+describe('getProfileByName', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('adds load balancer member details from referenced profiles', async () => {
+    profileManagerLoadProfileMock.mockImplementation(
+      async (profileName: string) => {
+        if (profileName === 'glm') {
+          return {
+            version: 1,
+            type: 'loadbalancer',
+            policy: 'failover',
+            profiles: ['zai', 'ollama'],
+            contextLimit: 190000,
+            provider: '',
+            model: '',
+            modelParams: {},
+            ephemeralSettings: {},
+          } satisfies Profile;
+        }
+
+        if (profileName === 'zai') {
+          return {
+            version: 1,
+            provider: 'openai',
+            model: 'glm-4.5',
+            modelParams: { topP: 0.8 },
+            ephemeralSettings: {
+              'context-limit': 200000,
+              'reasoning.enabled': true,
+              temperature: 0.4,
+            },
+          } satisfies Profile;
+        }
+
+        return {
+          version: 1,
+          provider: 'ollama',
+          model: 'glm-4.5-air',
+          modelParams: {},
+          ephemeralSettings: {
+            'context-limit': 190000,
+            'reasoning.enabled': false,
+          },
+        } satisfies Profile;
+      },
+    );
+
+    const profile = await getProfileByName('glm');
+
+    expect(profile).toMatchObject({
+      type: 'loadbalancer',
+      loadBalancerProfileDetails: [
+        {
+          name: 'zai',
+          provider: 'openai',
+          model: 'glm-4.5',
+          contextLimit: 200000,
+          reasoningEnabled: true,
+          temperature: 0.4,
+          modelParams: { topP: 0.8 },
+        },
+        {
+          name: 'ollama',
+          provider: 'ollama',
+          model: 'glm-4.5-air',
+          contextLimit: 190000,
+          reasoningEnabled: false,
+        },
+      ],
+    });
   });
 });

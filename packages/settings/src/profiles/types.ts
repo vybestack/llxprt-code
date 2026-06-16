@@ -173,6 +173,7 @@ export interface LoadBalancerProfile {
   type: 'loadbalancer';
   policy: 'roundrobin' | 'failover';
   profiles: string[];
+  contextLimit?: number;
   provider: string;
   model: string;
   modelParams: ModelParams;

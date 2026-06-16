@@ -199,9 +199,7 @@ describe('profileCommand - failover policy parsing', () => {
         provider: '',
         model: '',
         modelParams: {},
-        ephemeralSettings: {
-          'context-limit': 190000,
-        },
+        ephemeralSettings: {},
       });
     });
 
@@ -224,9 +222,7 @@ describe('profileCommand - failover policy parsing', () => {
         provider: '',
         model: '',
         modelParams: {},
-        ephemeralSettings: {
-          'context-limit': 190000,
-        },
+        ephemeralSettings: {},
       });
     });
 

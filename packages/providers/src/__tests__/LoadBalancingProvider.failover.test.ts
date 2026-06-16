@@ -818,6 +818,87 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
     });
   });
 
+  describe('ResolvedSubProfile settings propagation', () => {
+    it('applies sub-profile ephemerals and modelParams on the failover path', async () => {
+      const provider = new LoadBalancingProvider(
+        {
+          profileName: 'failover-settings-test',
+          strategy: 'failover',
+          subProfiles: [
+            {
+              name: 'primary',
+              providerName: 'gemini',
+              model: 'gemini-flash',
+              baseURL: 'https://primary.example.com',
+              authToken: 'primary-token',
+              ephemeralSettings: {
+                temperature: 0.2,
+                'reasoning.enabled': true,
+              },
+              modelParams: { topP: 0.8 },
+            },
+            {
+              name: 'secondary',
+              providerName: 'gemini',
+              model: 'gemini-pro',
+              ephemeralSettings: {},
+              modelParams: {},
+            },
+          ],
+          lbProfileModelParams: { topK: 40 },
+        },
+        providerManager,
+      );
+
+      let capturedOptions: GenerateChatOptions | undefined;
+      const mockProvider = {
+        name: 'gemini',
+        async *generateChatCompletion(
+          options: GenerateChatOptions,
+        ): AsyncIterableIterator<IContent> {
+          capturedOptions = options;
+          yield { role: 'model', parts: [{ text: 'response' }] };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'gemini-flash',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({}),
+      };
+
+      const originalGetProvider =
+        providerManager.getProviderByName.bind(providerManager);
+      providerManager.getProviderByName = () => mockProvider as IProvider;
+
+      try {
+        const iterator = provider.generateChatCompletion({
+          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          settings: settingsService,
+          config,
+          runtime: { settingsService, config },
+        });
+        for await (const _chunk of iterator) {
+          // Consume
+        }
+
+        expect(capturedOptions?.resolved).toMatchObject({
+          model: 'gemini-flash',
+          baseURL: 'https://primary.example.com',
+          authToken: 'primary-token',
+          temperature: 0.2,
+        });
+        expect(
+          capturedOptions?.invocation?.getModelBehavior('reasoning.enabled'),
+        ).toBe(true);
+        expect(capturedOptions?.invocation?.modelParams).toMatchObject({
+          topP: 0.8,
+          topK: 40,
+        });
+      } finally {
+        providerManager.getProviderByName = originalGetProvider;
+      }
+    });
+  });
+
   describe('Ephemeral Settings Extraction', () => {
     it('should extract failover_retry_count from lbProfileEphemeralSettings', async () => {
       const mockProvider: IProvider = {

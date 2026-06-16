@@ -22,6 +22,8 @@ import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderManager } from './ProviderManager.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import { LoadBalancerFailoverError } from './errors.js';
 import {
@@ -49,7 +51,9 @@ export interface LoadBalancingProviderConfig {
   profileName: string;
   strategy: 'round-robin' | 'failover';
   subProfiles: ResolvedSubProfile[] | LoadBalancerSubProfile[];
+  contextLimit?: number;
   lbProfileEphemeralSettings?: Record<string, unknown>;
+  lbProfileModelParams?: Record<string, unknown>;
 }
 
 /**
@@ -108,6 +112,7 @@ export interface ResolvedSubProfile {
   baseURL?: string;
   authToken?: string;
   authKeyfile?: string;
+  contextWindow?: number;
   ephemeralSettings: Record<string, unknown>;
   modelParams: Record<string, unknown>;
 }
@@ -289,15 +294,41 @@ export class LoadBalancingProvider implements IProvider {
   }
 
   /**
-   * Get available models (stub for Phase 1)
-   * Will be implemented in later phases to aggregate models from all sub-profiles
+   * Expose the load balancer profile as a synthetic model so runtime context
+   * surfaces the load balancer's effective context window instead of whichever
+   * delegate provider happened to be active previously.
    */
   async getModels(): Promise<IModel[]> {
-    // Stub implementation - returns empty array
-    // Later phases will use: this.config.subProfiles and this.providerManager
-    void this.config;
-    void this.providerManager;
-    return [];
+    const contextWindow = this.getEffectiveContextLimit();
+    return [
+      {
+        id: this.config.profileName,
+        name: this.config.profileName,
+        provider: this.name,
+        supportedToolFormats: [],
+        ...(contextWindow !== undefined && { contextWindow }),
+      },
+    ];
+  }
+
+  private getEffectiveContextLimit(): number | undefined {
+    return this.config.contextLimit;
+  }
+
+  private enforceContextLimit(options: GenerateChatOptions): void {
+    const contextLimit = this.getEffectiveContextLimit();
+    if (contextLimit === undefined) {
+      return;
+    }
+
+    const estimatedTokens = estimateTokens(JSON.stringify(options.contents));
+    if (estimatedTokens <= contextLimit) {
+      return;
+    }
+
+    throw new Error(
+      `Load balancer profile "${this.config.profileName}" context limit exceeded: estimated ${estimatedTokens} tokens exceeds configured limit ${contextLimit}`,
+    );
   }
 
   /**
@@ -326,6 +357,8 @@ export class LoadBalancingProvider implements IProvider {
     } else {
       options = optionsOrContent;
     }
+
+    this.enforceContextLimit(options);
 
     // Branch on strategy
     if (this.config.strategy === 'failover') {
@@ -385,50 +418,15 @@ export class LoadBalancingProvider implements IProvider {
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     options: GenerateChatOptions,
   ): GenerateChatOptions {
+    return this.buildDelegateResolvedOptions(subProfile, options);
+  }
+
+  private buildDelegateResolvedOptions(
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    options: GenerateChatOptions,
+  ): GenerateChatOptions {
     if (isResolvedSubProfile(subProfile)) {
-      const mergedEphemeralSettings = {
-        ...subProfile.ephemeralSettings,
-        ...this.config.lbProfileEphemeralSettings,
-      };
-
-      const temperature = mergedEphemeralSettings.temperature as
-        | number
-        | undefined;
-      const maxTokens = mergedEphemeralSettings.maxTokens as number | undefined;
-      const streaming = mergedEphemeralSettings.streaming as
-        | boolean
-        | undefined;
-
-      const resolvedOptions: GenerateChatOptions = {
-        ...options,
-        resolved: {
-          ...options.resolved,
-          model: subProfile.model,
-          ...(typeof subProfile.baseURL === 'string' &&
-            subProfile.baseURL !== '' && { baseURL: subProfile.baseURL }),
-          ...(typeof subProfile.authToken === 'string' &&
-            subProfile.authToken !== '' && { authToken: subProfile.authToken }),
-          ...(temperature !== undefined && { temperature }),
-          ...(maxTokens !== undefined && { maxTokens }),
-          ...(streaming !== undefined && { streaming }),
-        },
-        metadata: {
-          ...options.metadata,
-          ephemeralSettings: mergedEphemeralSettings,
-          modelParams: subProfile.modelParams,
-        },
-      };
-
-      this.logger.debug(
-        () =>
-          `Resolved settings (ResolvedSubProfile) - model: ${resolvedOptions.resolved?.model}, ` +
-          `baseURL: ${resolvedOptions.resolved?.baseURL}, ` +
-          `authToken: ${typeof resolvedOptions.resolved?.authToken === 'string' && resolvedOptions.resolved.authToken !== '' ? 'present' : 'missing'}, ` +
-          `temperature: ${temperature}, maxTokens: ${maxTokens}, ` +
-          `ephemeralSettings keys: ${Object.keys(mergedEphemeralSettings).join(', ')}, ` +
-          `modelParams keys: ${Object.keys(subProfile.modelParams).join(', ')}`,
-      );
-      return resolvedOptions;
+      return this.buildResolvedSubProfileOptions(subProfile, options);
     }
 
     // LoadBalancerSubProfile (legacy path)
@@ -443,6 +441,10 @@ export class LoadBalancingProvider implements IProvider {
         ...(typeof subProfile.authToken === 'string' &&
           subProfile.authToken !== '' && { authToken: subProfile.authToken }),
       },
+      metadata: {
+        ...options.metadata,
+        loadBalancerDelegate: true,
+      },
     };
 
     this.logger.debug(
@@ -452,6 +454,124 @@ export class LoadBalancingProvider implements IProvider {
         `authToken: ${typeof resolvedOptions.resolved?.authToken === 'string' && resolvedOptions.resolved.authToken !== '' ? 'present' : 'missing'}`,
     );
     return resolvedOptions;
+  }
+
+  private buildResolvedSubProfileOptions(
+    subProfile: ResolvedSubProfile,
+    options: GenerateChatOptions,
+  ): GenerateChatOptions {
+    const mergedEphemeralSettings = {
+      ...subProfile.ephemeralSettings,
+      ...this.config.lbProfileEphemeralSettings,
+    };
+    const contextLimit = this.getEffectiveContextLimit();
+    if (contextLimit !== undefined) {
+      mergedEphemeralSettings['context-limit'] = contextLimit;
+    }
+
+    const mergedModelParams = {
+      ...subProfile.modelParams,
+      ...this.config.lbProfileModelParams,
+    };
+    const mergedInvocationEphemerals = {
+      ...mergedEphemeralSettings,
+      ...mergedModelParams,
+    };
+
+    const temperature = this.getNumericSetting(
+      mergedEphemeralSettings,
+      'temperature',
+      'temperature',
+    );
+    const maxTokens = this.getNumericSetting(
+      mergedEphemeralSettings,
+      'maxTokens',
+      'max_tokens',
+    );
+    const streaming = this.getBooleanSetting(
+      mergedEphemeralSettings,
+      'streaming',
+      'stream',
+    );
+
+    const resolvedOptions: GenerateChatOptions = {
+      ...options,
+      resolved: {
+        ...options.resolved,
+        model: subProfile.model,
+        ...(typeof subProfile.baseURL === 'string' &&
+          subProfile.baseURL !== '' && { baseURL: subProfile.baseURL }),
+        ...(typeof subProfile.authToken === 'string' &&
+          subProfile.authToken !== '' && { authToken: subProfile.authToken }),
+        ...(temperature !== undefined && { temperature }),
+        ...(maxTokens !== undefined && { maxTokens }),
+        ...(streaming !== undefined && { streaming }),
+      },
+      metadata: {
+        ...options.metadata,
+        loadBalancerDelegate: true,
+        ephemeralSettings: mergedEphemeralSettings,
+        modelParams: mergedModelParams,
+      },
+    };
+
+    const invocation = this.createDelegateInvocation(
+      subProfile,
+      resolvedOptions,
+      mergedInvocationEphemerals,
+    );
+    if (invocation !== undefined) {
+      resolvedOptions.invocation = invocation;
+    }
+
+    this.logger.debug(
+      () =>
+        `Resolved settings (ResolvedSubProfile) - model: ${resolvedOptions.resolved?.model}, ` +
+        `baseURL: ${resolvedOptions.resolved?.baseURL}, ` +
+        `authToken: ${typeof resolvedOptions.resolved?.authToken === 'string' && resolvedOptions.resolved.authToken !== '' ? 'present' : 'missing'}, ` +
+        `temperature: ${temperature}, maxTokens: ${maxTokens}, ` +
+        `ephemeralSettings keys: ${Object.keys(mergedEphemeralSettings).join(', ')}, ` +
+        `modelParams keys: ${Object.keys(mergedModelParams).join(', ')}`,
+    );
+    return resolvedOptions;
+  }
+
+  private createDelegateInvocation(
+    subProfile: ResolvedSubProfile,
+    options: GenerateChatOptions,
+    ephemeralsSnapshot: Record<string, unknown>,
+  ): GenerateChatOptions['invocation'] | undefined {
+    if (options.runtime === undefined || options.settings === undefined) {
+      return undefined;
+    }
+
+    return createRuntimeInvocationContext({
+      runtime: options.runtime,
+      settings: options.settings,
+      providerName: subProfile.providerName,
+      ephemeralsSnapshot,
+      telemetry: options.resolved?.telemetry,
+      metadata: options.metadata,
+      fallbackRuntimeId: `${this.name}:${subProfile.name}`,
+    });
+  }
+
+  private getNumericSetting(
+    settings: Record<string, unknown>,
+    canonicalKey: string,
+    aliasKey: string,
+  ): number | undefined {
+    const value = settings[canonicalKey] ?? settings[aliasKey];
+    return typeof value === 'number' ? value : undefined;
+  }
+
+  private getBooleanSetting(
+    settings: Record<string, unknown>,
+    canonicalKey: string,
+    aliasKey: string,
+  ): boolean | undefined {
+    const value = settings[canonicalKey] ?? settings[aliasKey];
+    return typeof value === 'boolean' ? value : undefined;
   }
 
   /**
@@ -697,17 +817,7 @@ export class LoadBalancingProvider implements IProvider {
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     options: GenerateChatOptions,
   ): GenerateChatOptions {
-    return {
-      ...options,
-      resolved: {
-        ...options.resolved,
-        model: isResolvedSubProfile(subProfile)
-          ? subProfile.model
-          : (subProfile.modelId ?? ''),
-        ...(subProfile.baseURL && { baseURL: subProfile.baseURL }),
-        ...(subProfile.authToken && { authToken: subProfile.authToken }),
-      },
-    };
+    return this.buildDelegateResolvedOptions(subProfile, options);
   }
 
   /**

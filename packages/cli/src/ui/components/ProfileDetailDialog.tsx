@@ -26,6 +26,25 @@ interface ProfileDetailDialogProps {
   error?: string;
 }
 
+interface LoadBalancerMemberDetail {
+  name: string;
+  provider?: string;
+  model?: string;
+  contextLimit?: number;
+  reasoningEnabled?: boolean;
+  temperature?: unknown;
+  maxTokens?: unknown;
+  loadError?: boolean;
+}
+
+type LoadBalancerDisplayProfile = Profile & {
+  type: 'loadbalancer';
+  profiles: string[];
+  policy: string;
+  contextLimit?: number;
+  loadBalancerProfileDetails?: LoadBalancerMemberDetail[];
+};
+
 /**
  * Allowlist of ephemeralSettings keys that are safe to display.
  * Any key NOT in this set will be hidden to prevent accidental secret leakage.
@@ -76,6 +95,40 @@ function asRenderableRecord(
   }
 
   return value as Record<string, unknown>;
+}
+
+function getBooleanValue(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): boolean | undefined {
+  const value = record?.[key];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function getLoadBalancerContextLimit(
+  profile: LoadBalancerDisplayProfile,
+): number | undefined {
+  return profile.contextLimit;
+}
+
+function getLoadBalancerEffectiveMinimum(
+  profile: LoadBalancerDisplayProfile,
+): number | undefined {
+  const limits = profile.loadBalancerProfileDetails
+    ?.map((detail) => detail.contextLimit)
+    .filter(
+      (value): value is number =>
+        typeof value === 'number' && Number.isInteger(value) && value > 0,
+    );
+
+  return limits === undefined || limits.length === 0
+    ? undefined
+    : Math.min(...limits);
+}
+
+function formatDetailValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value);
 }
 
 function handleDetailKeypress(
@@ -129,32 +182,119 @@ function handleDetailKeypress(
   }
 }
 
-const LoadBalancerConfig: React.FC<{
-  profile: Profile & {
-    type: 'loadbalancer';
-    profiles: string[];
-    policy: string;
-  };
-}> = ({ profile }) => (
+const LoadBalancerMemberItem: React.FC<{
+  memberName: string;
+  detail: LoadBalancerMemberDetail | undefined;
+}> = ({ memberName, detail }) => (
   <Box flexDirection="column">
-    <Box marginBottom={1}>
-      <Text color={SemanticColors.text.secondary}>Type: </Text>
-      <Text color={SemanticColors.text.accent}>Load Balancer</Text>
-    </Box>
-    <Box marginBottom={1}>
-      <Text color={SemanticColors.text.secondary}>Policy: </Text>
-      <Text color={SemanticColors.text.primary}>{profile.policy}</Text>
-    </Box>
-    <Box flexDirection="column" marginBottom={1}>
-      <Text color={SemanticColors.text.secondary}>Member Profiles:</Text>
-      {profile.profiles.map((p: string) => (
-        <Text key={p} color={SemanticColors.text.primary}>
-          {'  '}- {p}
-        </Text>
-      ))}
-    </Box>
+    <Text color={SemanticColors.text.primary}>
+      {'  '}- {memberName}
+    </Text>
+    {detail?.loadError === true && (
+      <Text color={SemanticColors.status.warning}>
+        {'    '}details unavailable
+      </Text>
+    )}
+    {detail?.provider !== undefined && (
+      <Text color={SemanticColors.text.primary}>
+        {'    '}Provider: {detail.provider}
+      </Text>
+    )}
+    {detail?.model !== undefined && (
+      <Text color={SemanticColors.text.primary}>
+        {'    '}Model: {detail.model}
+      </Text>
+    )}
+    {detail?.contextLimit !== undefined && (
+      <Text color={SemanticColors.text.primary}>
+        {'    '}Context Limit: {detail.contextLimit}
+      </Text>
+    )}
+    {detail?.reasoningEnabled !== undefined && (
+      <Text color={SemanticColors.text.primary}>
+        {'    '}Reasoning: {detail.reasoningEnabled ? 'enabled' : 'disabled'}
+      </Text>
+    )}
+    {detail?.temperature !== undefined && (
+      <Text color={SemanticColors.text.primary}>
+        {'    '}temperature: {formatDetailValue(detail.temperature)}
+      </Text>
+    )}
+    {detail?.maxTokens !== undefined && (
+      <Text color={SemanticColors.text.primary}>
+        {'    '}maxTokens: {formatDetailValue(detail.maxTokens)}
+      </Text>
+    )}
   </Box>
 );
+
+const LoadBalancerConfig: React.FC<{
+  profile: LoadBalancerDisplayProfile;
+}> = ({ profile }) => {
+  const ephemeralSettings = asRenderableRecord(profile.ephemeralSettings);
+  const modelParams = asRenderableRecord(profile.modelParams);
+  const contextLimit = getLoadBalancerContextLimit(profile);
+  const effectiveMinimum = getLoadBalancerEffectiveMinimum(profile);
+  const reasoningEnabled = getBooleanValue(
+    ephemeralSettings,
+    'reasoning.enabled',
+  );
+
+  return (
+    <Box flexDirection="column">
+      <Box marginBottom={1}>
+        <Text color={SemanticColors.text.secondary}>Type: </Text>
+        <Text color={SemanticColors.text.accent}>Load Balancer</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text color={SemanticColors.text.secondary}>Policy: </Text>
+        <Text color={SemanticColors.text.primary}>{profile.policy}</Text>
+      </Box>
+      {contextLimit !== undefined && (
+        <Box marginBottom={1}>
+          <Text color={SemanticColors.text.secondary}>Context Limit: </Text>
+          <Text color={SemanticColors.text.primary}>{contextLimit}</Text>
+        </Box>
+      )}
+      {effectiveMinimum !== undefined && (
+        <Box marginBottom={1}>
+          <Text color={SemanticColors.text.secondary}>
+            Effective Minimum Context:{' '}
+          </Text>
+          <Text color={SemanticColors.text.primary}>{effectiveMinimum}</Text>
+        </Box>
+      )}
+
+      {reasoningEnabled !== undefined && (
+        <Box marginBottom={1}>
+          <Text color={SemanticColors.text.secondary}>Reasoning: </Text>
+          <Text color={SemanticColors.text.primary}>
+            {reasoningEnabled ? 'enabled' : 'disabled'}
+          </Text>
+        </Box>
+      )}
+      {modelParams !== undefined && (
+        <ModelParamsSection modelParams={modelParams} />
+      )}
+      <Box flexDirection="column" marginBottom={1}>
+        <Text color={SemanticColors.text.secondary}>Member Profiles:</Text>
+        {profile.profiles.map((memberName: string) => {
+          const detail = profile.loadBalancerProfileDetails?.find(
+            (candidate) => candidate.name === memberName,
+          );
+
+          return (
+            <LoadBalancerMemberItem
+              key={memberName}
+              memberName={memberName}
+              detail={detail}
+            />
+          );
+        })}
+      </Box>
+    </Box>
+  );
+};
 
 const ModelParamsSection: React.FC<{
   modelParams: Record<string, unknown>;

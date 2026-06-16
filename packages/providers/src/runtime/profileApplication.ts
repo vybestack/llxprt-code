@@ -1,5 +1,8 @@
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
+import {
+  isInternalSettingKey,
+  isLoadBalancerProfile,
+} from '@vybestack/llxprt-code-settings';
 import type { Profile, ModelParams } from '@vybestack/llxprt-code-settings';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -317,7 +320,10 @@ const PRE_APPLIED_EPHEMERAL_KEYS = new Set([
 function applyNonAuthEphemerals(sanitizedProfile: Profile): void {
   const otherEphemerals = Object.entries(
     getProfileEphemeralSettings(sanitizedProfile),
-  ).filter(([key]) => !PRE_APPLIED_EPHEMERAL_KEYS.has(key));
+  ).filter(
+    ([key]) =>
+      !PRE_APPLIED_EPHEMERAL_KEYS.has(key) && !isInternalSettingKey(key),
+  );
 
   for (const [key, value] of otherEphemerals) {
     logger.debug(

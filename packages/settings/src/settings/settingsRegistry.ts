@@ -1283,6 +1283,14 @@ const INTERNAL_SETTINGS_KEYS = new Set([
   'tools',
 ]);
 
+export function isInternalSettingKey(key: string): boolean {
+  return INTERNAL_SETTINGS_KEYS.has(key);
+}
+
+export function getInternalSettingKeys(): string[] {
+  return [...INTERNAL_SETTINGS_KEYS];
+}
+
 /** Extract custom headers from both global and provider-level settings. */
 function extractCustomHeaders(
   mixed: Record<string, unknown>,
