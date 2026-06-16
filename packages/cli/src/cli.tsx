@@ -408,7 +408,10 @@ export async function main() {
         : 'llxprt:*';
     ConfigurationManager.getInstance().setCliConfig({
       enabled: true,
-      namespaces: namespaces.split(','),
+      namespaces: namespaces
+        .split(',')
+        .map((ns) => ns.trim())
+        .filter((ns) => ns.length > 0),
     });
   }
 
