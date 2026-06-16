@@ -77,13 +77,34 @@ function makeNetworkError(code: string): Error {
  * @requirement REQ-CR-001, REQ-CR-002
  */
 function makeAnthropicOverloadError(
-  type: 'overloaded_error' | 'rate_limit_error',
+  type: 'overloaded_error' | 'rate_limit_error' | 'api_error',
   message = 'Overloaded',
 ): Error {
   const err = new Error(message) as Error & {
     error?: { type?: string; message?: string };
   };
   err.error = { type, message };
+  return err;
+}
+
+/**
+ * Creates an Anthropic SDK-wrapped error. The Anthropic SDK throws stream error
+ * events as an APIError whose `error` property holds the entire response body,
+ * so the meaningful type is nested at `error.error.error.type` while the
+ * intermediate `error.error.type` is the generic envelope value "error". This
+ * is the shape that actually reaches retry classification in production
+ * (issue #2053).
+ */
+function makeAnthropicSdkWrappedError(
+  type: 'overloaded_error' | 'rate_limit_error' | 'api_error',
+  message = 'Internal server error',
+): Error {
+  const err = new Error(message) as Error & {
+    status?: number;
+    error?: { type?: string; error?: { type?: string; message?: string } };
+  };
+  err.status = undefined;
+  err.error = { type: 'error', error: { type, message } };
   return err;
 }
 
@@ -159,6 +180,34 @@ describe('isTransientCompressionError @plan PLAN-20260218-COMPRESSION-RETRY.P01'
     expect(
       isTransientCompressionError(
         makeAnthropicOverloadError('rate_limit_error', 'Rate limited'),
+      ),
+    ).toBe(true);
+  });
+
+  /**
+   * @requirement REQ-CR-001
+   * Anthropic api_error (Internal server error) carries no HTTP status but is
+   * transient and must be retried. Issue #2053: api_error broke the agent loop
+   * and failed compression because it was not classified as retryable.
+   */
+  it('returns true for Anthropic api_error internal server error (no HTTP status)', () => {
+    expect(
+      isTransientCompressionError(
+        makeAnthropicOverloadError('api_error', 'Internal server error'),
+      ),
+    ).toBe(true);
+  });
+
+  /**
+   * @requirement REQ-CR-001
+   * The Anthropic SDK wraps stream error events so the retryable type is nested
+   * at error.error.error.type. This is the shape that actually reaches
+   * compression retry classification in production (issue #2053).
+   */
+  it('returns true for SDK-wrapped Anthropic api_error (nested, no HTTP status)', () => {
+    expect(
+      isTransientCompressionError(
+        makeAnthropicSdkWrappedError('api_error', 'Internal server error'),
       ),
     ).toBe(true);
   });
@@ -547,6 +596,47 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
           callCount++;
           if (callCount < 3) {
             throw makeAnthropicOverloadError('overloaded_error');
+          }
+          return {
+            newHistory: [],
+            metadata: {
+              originalMessageCount: 10,
+              compressedMessageCount: 5,
+              strategyUsed: 'middle-out' as const,
+              llmCallMade: true,
+            },
+          };
+        }),
+      }),
+    );
+
+    await chat.performCompression('test-prompt');
+    expect(callCount).toBe(3);
+  });
+
+  /**
+   * @requirement REQ-CR-001
+   * Issue #2053: performCompression retries an Anthropic api_error
+   * (Internal server error) delivered in the real SDK-wrapped shape
+   * (HTTP status undefined, retryable type nested at error.error.error.type)
+   * and eventually succeeds instead of breaking compression.
+   */
+  it('retries an SDK-wrapped Anthropic api_error and eventually succeeds', async () => {
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+    let callCount = 0;
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
+        name: 'middle-out' as const,
+        requiresLLM: true,
+        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+        compress: vi.fn().mockImplementation(async () => {
+          callCount++;
+          if (callCount < 3) {
+            throw makeAnthropicSdkWrappedError(
+              'api_error',
+              'Internal server error',
+            );
           }
           return {
             newHistory: [],
