@@ -49,6 +49,7 @@ export const PROVIDER_ID_MAP: Record<string, string[]> = {
   qwenvercel: ['alibaba'],
   codex: ['openai'],
   kimi: ['kimi-for-coding'],
+  'Ollama Cloud': ['ollama-cloud'],
 };
 
 /**
