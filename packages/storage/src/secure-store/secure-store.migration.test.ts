@@ -1,4 +1,3 @@
-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
@@ -9,7 +8,9 @@ describe('SecureStore — Migration and Sanitization', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'secure-store-migration-test-'));
+    tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'secure-store-migration-test-'),
+    );
   });
 
   afterEach(async () => {
@@ -26,12 +27,12 @@ describe('SecureStore — Migration and Sanitization', () => {
     const key = 'my*key:test?';
     // * -> %2A, : -> %3A, ? -> %3F
     const expectedSafeKey = 'my%2Akey%3Atest%3F';
-    
+
     await store.set(key, 'value');
-    
+
     const files = await fs.readdir(tempDir);
     expect(files).toContain(expectedSafeKey + '.enc');
-    
+
     const val = await store.get(key);
     expect(val).toBe('value');
   });
@@ -45,7 +46,7 @@ describe('SecureStore — Migration and Sanitization', () => {
 
     const key = 'legacy-key-with-chars';
     const legacyPath = path.join(tempDir, key + '.enc');
-    
+
     // We need to write a valid envelope for it to be readable
     await store.set('temp', 'secret-data');
     const tempPath = path.join(tempDir, 'temp.enc');
@@ -82,16 +83,26 @@ describe('SecureStore — Migration and Sanitization', () => {
     // For legacy path, we use a safe version to ensure it can be created on Windows
     const legacyKey = 'del-legacy-raw';
     const legacyPath = path.join(tempDir, legacyKey + '.enc');
-    
+
     await fs.writeFile(newPath, 'new');
     await fs.writeFile(legacyPath, 'legacy');
 
     // Manually test legacy path deletion by tricking the store or just using a key that matches
     await store.delete(key);
-    expect(await fs.access(newPath).then(() => true).catch(() => false)).toBe(false);
+    expect(
+      await fs
+        .access(newPath)
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(false);
 
     await store.delete(legacyKey);
-    expect(await fs.access(legacyPath).then(() => true).catch(() => false)).toBe(false);
+    expect(
+      await fs
+        .access(legacyPath)
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(false);
   });
 
   it('lists both encoded and unencoded legacy keys', async () => {
