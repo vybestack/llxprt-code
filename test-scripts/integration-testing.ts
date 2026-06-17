@@ -355,9 +355,8 @@ export class IntegrationTester {
 
       try {
         const stream = mockProvider.generateChatCompletion(messages);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        for await (const _chunk of stream) {
-          // Consume stream
+        for await (const chunk of stream) {
+          void chunk;
         }
       } catch (error) {
         console.warn(`Error in conversation ${i}:`, error);

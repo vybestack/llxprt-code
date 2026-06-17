@@ -15,7 +15,7 @@ import type { Suggestion } from './SuggestionsDisplay.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
 import type { TextBuffer } from './shared/text-buffer.js';
-import { logicalPosToOffset } from './shared/text-buffer.js';
+import { logicalPosToOffset } from './shared/buffer-operations.js';
 import {
   cpSlice,
   cpLen,

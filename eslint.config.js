@@ -67,6 +67,12 @@ export default tseslint.config(
       'packages/test-utils/**',
     ],
   },
+  {
+    // Issue #2079: stale disable directives are policy failures, not warnings.
+    linterOptions: {
+      reportUnusedDisableDirectives: 'error',
+    },
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   reactHooks.configs['recommended-latest'],
@@ -230,7 +236,6 @@ export default tseslint.config(
       '@typescript-eslint/prefer-optional-chain': 'error',
 
       // General code quality
-      'no-console': 'warn',
       'no-else-return': 'error',
       'no-lonely-if': 'error',
       'no-unneeded-ternary': 'error',
@@ -246,10 +251,15 @@ export default tseslint.config(
         { max: 80, skipBlankLines: true, skipComments: true },
       ],
 
-      // Sonarjs rules (spread recommended as warnings, then override specifics)
+      // Sonarjs rules (spread recommended as OFF, then promote selected rules
+      // to error below). Issue #2079: warning-only rules are not permitted
+      // because lint:ci uses --max-warnings 0. Each rule must be either
+      // 'error' (enforced) or 'off' (not useful signal). Cleanup issues
+      // (#2081–#2092) will promote additional rules to 'error' as code is
+      // fixed to comply.
       ...Object.fromEntries(
         Object.entries(sonarjs.configs.recommended.rules ?? {}).map(
-          ([rule, config]) => [rule, Array.isArray(config) ? ['warn', ...config.slice(1)] : 'warn'],
+          ([rule, config]) => [rule, Array.isArray(config) ? ['off', ...config.slice(1)] : 'off'],
         ),
       ),
       'sonarjs/cognitive-complexity': ['error', 30],
@@ -257,8 +267,10 @@ export default tseslint.config(
       'sonarjs/no-ignored-exceptions': 'error',
       'sonarjs/regular-expr': 'error',
       'sonarjs/slow-regex': 'error',
-      'sonarjs/os-command': 'error',
-      'sonarjs/no-os-command-from-path': 'error',
+      // Issue #2079: this CLI intentionally invokes user/platform tools such as
+      // git, shells, editors, and ripgrep. These rules are not useful signal.
+      'sonarjs/os-command': 'off', // eslint-policy-allow-off: #2079
+      'sonarjs/no-os-command-from-path': 'off', // eslint-policy-allow-off: #2079
       'sonarjs/no-all-duplicated-branches': 'error',
       'sonarjs/no-duplicated-branches': 'error',
       'sonarjs/no-identical-functions': 'error',
@@ -399,12 +411,18 @@ export default tseslint.config(
       'sonarjs/prefer-immediate-return': 'off', // Named intermediates improve readability/debuggability
       'sonarjs/pseudo-random': 'off', // CLI context: Math.random for IDs/jitter, not cryptography
 
-      // ESLint comments (recommended rules downgraded to warn)
+      // Issue #2079: ESLint directive comments are policy controls, not code fixes.
       ...Object.fromEntries(
         Object.entries(eslintComments.configs.recommended.rules ?? {}).map(
-          ([rule, config]) => [rule, Array.isArray(config) ? ['warn', ...config.slice(1)] : 'warn'],
+          ([rule, config]) => [rule, Array.isArray(config) ? ['error', ...config.slice(1)] : 'error'],
         ),
       ),
+      'eslint-comments/no-use': [
+        'error',
+        {
+          allow: ['eslint-env', 'global', 'globals', 'exported'],
+        },
+      ],
 
       // --- End strict rules ---
 
@@ -416,7 +434,7 @@ export default tseslint.config(
         },
       ],
       'react/jsx-no-bind': [
-        'warn',
+        'error',
         {
           ignoreDOMComponents: false,
           ignoreRefs: true,
@@ -429,7 +447,49 @@ export default tseslint.config(
     },
   },
 
+  // Issue #2079 temporary legacy directive scope.
+  // Existing package code still contains inline ESLint directives and is burned
+  // down by #2081-#2092. The CI guard added for #2080 blocks new directives in
+  // diffs immediately; each cleanup issue removes or narrows this override for
+  // its scope before fixing that scope.
+  {
+    files: ['packages/*/src/**/*.{ts,tsx}'],
+    linterOptions: {
+      reportUnusedDisableDirectives: 'off',
+    },
+    rules: {
+      'eslint-comments/disable-enable-pair': 'off',
+      'eslint-comments/no-aggregating-enable': 'off',
+      'eslint-comments/no-duplicate-disable': 'off',
+      'eslint-comments/no-restricted-disable': 'off',
+      'eslint-comments/no-unlimited-disable': 'off',
+      'eslint-comments/no-unused-disable': 'off',
+      'eslint-comments/no-unused-enable': 'off',
+      'eslint-comments/no-use': 'off',
+      'eslint-comments/require-description': 'off',
+    },
+  },
+
   // extra settings for scripts that we run directly with node
+  // Issue #2079 temporary warning burn-down scopes. These were warning-only
+  // before lint:ci started using --max-warnings 0 and are assigned to existing
+  // cleanup areas instead of being left as warnings.
+  {
+    files: ['packages/cli/src/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react/jsx-no-bind': 'off', // eslint-policy-allow-off: #2079 temporary #2087
+    },
+  },
+  {
+    files: [
+      'packages/core/src/config/subagentManager.ts',
+      'packages/core/src/skills/skillManager.ts',
+      'packages/telemetry/src/debug/**/*.ts',
+    ],
+    rules: {
+      'no-console': 'off', // eslint-policy-allow-off: #2079 temporary #2082/#2089
+    },
+  },
   {
     files: ['./scripts/**/*.js', './scripts/**/*.mjs', 'esbuild.config.js'],
     languageOptions: {
@@ -865,7 +925,7 @@ export default tseslint.config(
     ],
     rules: {
       'no-restricted-imports': [
-        'warn',
+        'error',
         {
           paths: [],
           patterns: [

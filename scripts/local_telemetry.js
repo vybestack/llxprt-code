@@ -105,11 +105,15 @@ async function main() {
   try {
     execSync('pkill -f "otelcol-contrib"');
     console.log('[OK] Stopped existing otelcol-contrib process.');
-  } catch (_e) {} // eslint-disable-line no-empty
+  } catch (_e) {
+    // Process was not running.
+  }
   try {
     execSync('pkill -f "jaeger"');
     console.log('[OK] Stopped existing jaeger process.');
-  } catch (_e) {} // eslint-disable-line no-empty
+  } catch (_e) {
+    // Process was not running.
+  }
   try {
     if (fileExists(OTEL_LOG_FILE)) fs.unlinkSync(OTEL_LOG_FILE);
     console.log('[OK] Deleted old collector log.');

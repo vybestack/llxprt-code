@@ -14,43 +14,13 @@
 import { Config } from '@vybestack/llxprt-code-core';
 import { ConversationDataRedactor } from '../packages/cli/src/utils/privacy/ConversationDataRedactor.js';
 import { PrivacyManager } from '../packages/cli/src/utils/privacy/PrivacyManager.js';
-import type { IProvider, IMessage } from '@vybestack/llxprt-code-core';
+import type { IMessage } from '@vybestack/llxprt-code-core';
 
 interface ValidationResult {
   test: string;
   passed: boolean;
   details: string;
   critical: boolean;
-}
-
-// Mock Provider for testing
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-class _MockProvider implements IProvider {
-  constructor(public name: string) {}
-
-  get isDefault(): boolean {
-    return false;
-  }
-
-  async getModels(): Promise<Array<{ id: string; name: string }>> {
-    return [{ id: 'mock-model', name: 'Mock Model' }];
-  }
-
-  async *generateChatCompletion(): AsyncIterableIterator<unknown> {
-    yield { content: `Mock response from ${this.name}`, role: 'assistant' };
-    yield { content: ' chunk 2', role: 'assistant' };
-    yield { content: ' complete', role: 'assistant' };
-  }
-
-  getCurrentModel?(): string {
-    return 'mock-model';
-  }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
-  }
 }
 
 export class PrivacyComplianceValidator {

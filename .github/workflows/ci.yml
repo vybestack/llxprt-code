@@ -225,6 +225,10 @@ jobs:
           # Check for changes, excluding project-plans directory
           git diff --exit-code -- . ':!project-plans/'
 
+      - name: 'Run ESLint policy guard'
+        run: |-
+          npm run lint:eslint-guard
+
       - name: 'Run linter'
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
