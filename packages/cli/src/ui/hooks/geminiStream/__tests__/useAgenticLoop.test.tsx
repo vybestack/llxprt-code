@@ -479,11 +479,11 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
     expect(settled).toBe(true);
   });
 
-  it('clears external (subagent) tools from the display via markToolsAsSubmitted', async () => {
+  it('clears external (subagent) tools from the display via markToolsAsDisplayCleared', async () => {
     // An external tool carries a non-default agentId. The subagent flow owns
-    // its results, so the loop's display handling must mark it submitted to
-    // remove it from the pending React display state. Primary tools must NOT
-    // be marked submitted (continuation owns them).
+    // its results, so the loop's display handling must mark it display-cleared
+    // to remove it from the pending React display state. Primary tools must NOT
+    // be marked cleared (continuation owns them).
     const tool = toolRegistry.getTool('record_tool') as MockTool;
 
     const externalRequest: ToolCallRequestInfo = {
@@ -503,7 +503,7 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
       [contentEvent('after-subagent'), finishedEvent()],
     ]);
 
-    const markedSubmitted: string[][] = [];
+    const markedDisplayCleared: string[][] = [];
 
     const { result } = renderHook(() =>
       useAgenticLoop({
@@ -512,8 +512,8 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
         messageBus,
         interactiveMode: true,
         addItem: vi.fn(),
-        markToolsAsSubmitted: (callIds) => {
-          markedSubmitted.push(callIds);
+        markToolsAsDisplayCleared: (callIds) => {
+          markedDisplayCleared.push(callIds);
         },
         onToolCallsUpdate: () => {},
         outputUpdateHandler: () => {},
@@ -532,10 +532,10 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
       await result.current.runLoop('go', new AbortController().signal, 'p1');
     });
 
-    // The external tool's callId was marked submitted exactly once so the
-    // display clears it. The tool itself still executed once (the loop ran it).
+    // The external tool's callId was marked display-cleared exactly once so
+    // the display clears it. The tool itself still executed once (the loop ran it).
     await waitFor(() => {
-      expect(markedSubmitted.flat()).toContain('subagent-call');
+      expect(markedDisplayCleared.flat()).toContain('subagent-call');
     });
     expect(tool.executeFn).toHaveBeenCalledTimes(1);
   });
@@ -580,5 +580,54 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
 
     expect(oldRouter).not.toHaveBeenCalled();
     expect(newRouter).toHaveBeenCalled();
+  });
+
+  it('drives primary continuation without ever display-clearing the primary tool', async () => {
+    // The display-clearing path is for external (subagent) tools only. A
+    // primary tool drives the loop's continuation turn (turn 2 carries the
+    // functionResponse the loop built) and is NEVER routed through
+    // markToolsAsDisplayCleared — proving continuation is decoupled from the
+    // display-state marker.
+    const { client, turnMessages } = createScriptedAgentClient([
+      [toolCallRequestEvent('record_tool', 'primary-call'), finishedEvent()],
+      [contentEvent('continuation-content'), finishedEvent()],
+    ]);
+
+    const markedDisplayCleared: string[][] = [];
+
+    const { result } = renderHook(() =>
+      useAgenticLoop({
+        config,
+        agentClient: client,
+        messageBus,
+        interactiveMode: true,
+        addItem: vi.fn(),
+        markToolsAsDisplayCleared: (callIds) => {
+          markedDisplayCleared.push(callIds);
+        },
+        onToolCallsUpdate: () => {},
+        outputUpdateHandler: () => {},
+        getPreferredEditor: () => undefined,
+        onEditorOpen: () => {},
+        onEditorClose: () => {},
+        onTodoPause: () => {},
+        processStreamEventRef: { current: () => {} },
+        flushPendingHistoryItem: () => {},
+        clearPendingHistoryItem: () => {},
+        performMemoryRefresh: async () => {},
+      }),
+    );
+
+    await act(async () => {
+      await result.current.runLoop('go', new AbortController().signal, 'p1');
+    });
+
+    // Two turns => the loop drove continuation for the primary tool.
+    expect(turnMessages).toHaveLength(2);
+    const turn2Parts = toParts(turnMessages[1]);
+    expect(turn2Parts.some((p) => 'functionResponse' in p)).toBe(true);
+    // The primary tool's callId was never passed to the display-clearing
+    // callback: continuation does not depend on (or trigger) display clearing.
+    expect(markedDisplayCleared.flat()).not.toContain('primary-call');
   });
 });
