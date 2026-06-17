@@ -152,6 +152,34 @@ describe('RetryOrchestrator invocation safety', () => {
     expect(normalized!.invocation.signal).toBe(abortController.signal);
   });
 
+  it('adds an explicit signal to an existing invocation object', async () => {
+    const baseProvider = new SafetyBaseProvider();
+    const settings = wireProvider(baseProvider);
+    const orchestrator = new RetryOrchestrator(baseProvider);
+
+    const existingInvocation = {
+      ephemerals: {},
+    } as GenerateChatOptions['invocation'];
+    const abortController = new AbortController();
+
+    await consumeStream(
+      orchestrator.generateChatCompletion(
+        {
+          contents: [prompt],
+          settings,
+          invocation: existingInvocation,
+        },
+        undefined,
+        abortController.signal,
+      ),
+    );
+
+    const normalized = baseProvider.lastNormalized;
+    expect(normalized).toBeDefined();
+    expect(typeof normalized!.invocation.getModelBehavior).toBe('function');
+    expect(normalized!.invocation.signal).toBe(abortController.signal);
+  });
+
   it('preserves abort propagation through the legacy signal signature', async () => {
     let providerCalls = 0;
 
@@ -160,7 +188,7 @@ describe('RetryOrchestrator invocation safety', () => {
       // eslint-disable-next-line require-yield -- intentionally throw-only generator to trigger retry/abort path
       async *generateChatCompletion(_options: GenerateChatOptions) {
         providerCalls++;
-        throw new Error('Aborted');
+        throw Object.assign(new Error('Transient failure'), { status: 500 });
       },
       async getModels(): Promise<IModel[]> {
         return [];

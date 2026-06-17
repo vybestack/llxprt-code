@@ -68,6 +68,22 @@ function withLegacySignal(
   return { signal } as unknown as GenerateChatOptions['invocation'];
 }
 
+function withSignal(
+  invocation: GenerateChatOptions['invocation'],
+  signal: AbortSignal | undefined,
+): GenerateChatOptions['invocation'] | undefined {
+  if (!signal) {
+    return invocation;
+  }
+  if (!invocation) {
+    return withLegacySignal(signal);
+  }
+  return {
+    ...invocation,
+    signal,
+  } as GenerateChatOptions['invocation'];
+}
+
 function extractSignal(
   invocation: GenerateChatOptions['invocation'],
 ): AbortSignal | undefined {
@@ -233,16 +249,10 @@ export class RetryOrchestrator implements IProvider {
       } as GenerateChatOptions;
     } else {
       // Modern signature: (options)
-      options = optionsOrContents;
-
-      // Ensure invocation.signal is propagated to options when only a signal
-      // was supplied and no invocation exists yet.
-      if (!options.invocation && signal) {
-        options = {
-          ...options,
-          invocation: withLegacySignal(signal),
-        };
-      }
+      options = {
+        ...optionsOrContents,
+        invocation: withSignal(optionsOrContents.invocation, signal),
+      };
     }
 
     return this.generateChatCompletionWithRetry(options);
