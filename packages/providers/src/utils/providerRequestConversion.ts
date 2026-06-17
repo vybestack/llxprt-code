@@ -43,7 +43,14 @@ function createOptions(
   return {
     contents: history,
     settings: createSettings(settings),
-    invocation: { ephemerals: {} },
+    invocation: {
+      ephemerals: {},
+      getModelBehavior: () => undefined,
+      getCliSetting: () => undefined,
+      getEphemeral: () => undefined,
+      getModelParam: () => undefined,
+      getProviderOverrides: () => undefined,
+    },
     metadata: {},
     resolved: {
       model: '',
