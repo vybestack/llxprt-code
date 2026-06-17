@@ -255,6 +255,28 @@ class TaskToolInvocation extends BaseToolInvocation<
     return deduped.length > 0 ? deduped : undefined;
   }
 
+  /**
+   * Filters excluded tools (task/list_subagents) from a whitelist when no
+   * registry is available to perform full governance validation. Non-excluded
+   * entries pass through unchanged. Returns undefined if the result is empty
+   * so the caller can apply fail-closed semantics for explicit whitelists.
+   */
+  private filterExcludedFromWhitelist(
+    candidateTools: string[] | undefined,
+  ): string[] | undefined {
+    if (!candidateTools || candidateTools.length === 0) {
+      return undefined;
+    }
+
+    const excluded = this.buildExcludedToolNames();
+    const filtered = candidateTools.filter(
+      (name) =>
+        typeof name === 'string' && !this.isExcludedToolName(name, excluded),
+    );
+
+    return filtered.length > 0 ? filtered : undefined;
+  }
+
   private createLaunchRequest(timeoutMs?: number): SubagentLaunchRequest {
     const { subagentName, behaviourPrompts, toolWhitelist, outputSpec } =
       this.normalized;
@@ -287,22 +309,21 @@ class TaskToolInvocation extends BaseToolInvocation<
       Array.isArray(this.params.tool_whitelist) ||
       Array.isArray(this.params.toolWhitelist);
 
-    if (registry) {
-      if (effectiveWhitelist && effectiveWhitelist.length > 0) {
+    // Issue #2069: no explicit whitelist must preserve omitted toolConfig so
+    // the subagent runtime/profile default tools apply. Do NOT synthesize a
+    // whitelist from the parent registry regardless of registry availability.
+    if (hasExplicitWhitelist) {
+      if (registry && effectiveWhitelist && effectiveWhitelist.length > 0) {
         effectiveWhitelist = this.buildGovernedToolWhitelist(
           effectiveWhitelist,
           registry,
         );
-      }
-
-      if (
-        !hasExplicitWhitelist &&
-        (!effectiveWhitelist || effectiveWhitelist.length === 0)
-      ) {
-        effectiveWhitelist = this.buildGovernedToolWhitelist(
-          registry.getEnabledTools().map((tool) => tool.name),
-          registry,
-        );
+      } else {
+        // No registry available: still filter excluded tools (task/list_subagents)
+        // so they can never be exposed to a subagent runtime. Non-excluded entries
+        // pass through unchanged (no registry validation possible).
+        effectiveWhitelist =
+          this.filterExcludedFromWhitelist(effectiveWhitelist);
       }
     }
 
@@ -313,6 +334,11 @@ class TaskToolInvocation extends BaseToolInvocation<
       launchRequest.toolConfig = {
         tools: Array.from(whitelistSet),
       };
+    } else if (hasExplicitWhitelist) {
+      // Explicit empty or fully-filtered-to-zero whitelist must remain fail-closed.
+      // toolConfig: { tools: [] } tells the runtime to expose no normal tools.
+      // Omitting toolConfig entirely (the else case) means runtime/profile defaults.
+      launchRequest.toolConfig = { tools: [] };
     }
 
     taskLogger.debug(() => {

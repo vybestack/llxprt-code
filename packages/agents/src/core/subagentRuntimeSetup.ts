@@ -36,6 +36,10 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import {
+  canonicalizeToolName,
+  INVALID_TOOL_NAME,
+} from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -58,9 +62,37 @@ import {
 // Simple utilities
 // ---------------------------------------------------------------------------
 
-/** Canonicalizes a tool name for whitelist matching (trim + lowercase). */
-export const canonicalizeToolName = (name: string): string =>
-  name.trim().toLowerCase();
+/**
+ * Tools that must never be exposed to a subagent because they would allow
+ * nested subagent spawning (recursive task delegation) or enumeration of the
+ * parent's subagent registry from within a sandboxed runtime.
+ */
+const SUBAGENT_EXCLUDED_TOOLS: ReadonlySet<string> = new Set(
+  ['task', 'list_subagents'].map(canonicalizeToolName),
+);
+
+/**
+ * Returns true when a canonical (or raw) tool name is excluded from subagent
+ * runtimes (task/list_subagents).
+ */
+function isSubagentExcludedToolName(name: string): boolean {
+  const canonical = canonicalizeToolName(name);
+  return Boolean(canonical) && SUBAGENT_EXCLUDED_TOOLS.has(canonical);
+}
+
+/**
+ * Returns true when a non-string FunctionDeclaration entry is excluded from
+ * subagent runtimes (task/list_subagents). Declarations without a usable
+ * string name are never excluded.
+ */
+function isSubagentExcludedDeclaration(decl: unknown): boolean {
+  if (typeof decl !== 'object' || decl === null || !('name' in decl)) {
+    return false;
+  }
+
+  const declName = decl.name;
+  return typeof declName === 'string' && isSubagentExcludedToolName(declName);
+}
 
 /**
  * Converts a ToolMetadata object into a FunctionDeclaration for the Gemini API.
@@ -203,7 +235,10 @@ export function createToolExecutionConfig(
     getToolRegistry: () => toolRegistry,
     getEphemeralSettings: () => ({ ...ephemerals }),
     getEphemeralSetting: (key: string) => ephemerals[key],
-    getExcludeTools: () => [],
+    // Issue #2069: scheduler governance must fail-closed for subagent-excluded
+    // tools (task/list_subagents) so they can never be executed by a subagent
+    // runtime, regardless of registry resolution or ephemeral whitelist state.
+    getExcludeTools: () => Array.from(SUBAGENT_EXCLUDED_TOOLS),
     getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),
@@ -224,17 +259,31 @@ function applyToolWhitelistToEphemerals(
 ): void {
   const normalizedWhitelist = toolConfig.tools
     .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
-    .map((entry) => entry.toLowerCase());
+    .map(canonicalizeToolName)
+    .filter(
+      (entry) =>
+        entry !== INVALID_TOOL_NAME &&
+        entry.length > 0 &&
+        !SUBAGENT_EXCLUDED_TOOLS.has(entry),
+    );
 
-  if (normalizedWhitelist.length === 0) return;
+  // Explicit empty/fail-closed: preserve tools.allowed=[] so the scheduler
+  // does not fall back to parent/default allowed tools.
+  if (normalizedWhitelist.length === 0) {
+    ephemerals['tools.allowed'] = [];
+    return;
+  }
 
   const existingAllowed = Array.isArray(ephemerals['tools.allowed'])
     ? (ephemerals['tools.allowed'] as string[])
-        .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
-        .filter((entry) => entry.length > 0)
-        .map((entry) => entry.toLowerCase())
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map(canonicalizeToolName)
+        .filter(
+          (entry) =>
+            entry !== INVALID_TOOL_NAME &&
+            entry.length > 0 &&
+            !SUBAGENT_EXCLUDED_TOOLS.has(entry),
+        )
     : [];
 
   const allowedSet =
@@ -272,36 +321,70 @@ export function buildRuntimeFunctionDeclarations(
   toolsView: ToolRegistryView,
   toolConfig: ToolConfig | undefined,
 ): FunctionDeclaration[] {
-  if (!toolConfig || toolConfig.tools.length === 0) {
-    const noFunctionDeclarations: FunctionDeclaration[] = [];
-    return noFunctionDeclarations;
-  }
-
   const listedNames =
     typeof toolsView.listToolNames === 'function'
       ? toolsView.listToolNames()
       : [];
-  const allowedNames = new Set(listedNames.map(canonicalizeToolName));
+  const registryNameByCanonical = new Map<string, string>();
+  for (const name of listedNames) {
+    const canonical = canonicalizeToolName(name);
+    if (canonical && !registryNameByCanonical.has(canonical)) {
+      registryNameByCanonical.set(canonical, name);
+    }
+  }
+  const allowedNames = new Set(registryNameByCanonical.keys());
 
   const declarations: FunctionDeclaration[] = [];
+
+  if (toolConfig === undefined) {
+    for (const name of listedNames) {
+      if (isSubagentExcludedToolName(name)) {
+        continue;
+      }
+      const metadata = toolsView.getToolMetadata(name);
+      if (metadata) {
+        declarations.push(convertMetadataToFunctionDeclaration(name, metadata));
+      } else {
+        debugLogger.warn(
+          `Tool "${name}" is not available in the runtime view and is skipped.`,
+        );
+      }
+    }
+    return declarations;
+  }
+
+  if (toolConfig.tools.length === 0) {
+    const noFunctionDeclarations: FunctionDeclaration[] = [];
+    return noFunctionDeclarations;
+  }
+
   // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const entry of toolConfig.tools) {
     if (typeof entry !== 'string') {
+      // Non-string FunctionDeclaration entries must still be filtered for
+      // subagent-excluded tools (task/list_subagents) to prevent a caller
+      // from injecting them via an explicit ToolConfig.
+      if (isSubagentExcludedDeclaration(entry)) {
+        continue;
+      }
       declarations.push(entry);
       continue;
     }
 
-    if (
-      allowedNames.size > 0 &&
-      !allowedNames.has(canonicalizeToolName(entry))
-    ) {
+    const canonical = canonicalizeToolName(entry);
+    if (SUBAGENT_EXCLUDED_TOOLS.has(canonical)) {
+      continue;
+    }
+
+    if (allowedNames.size > 0 && !allowedNames.has(canonical)) {
       debugLogger.warn(
         `Tool "${entry}" is not permitted by the runtime view and is skipped.`,
       );
       continue;
     }
 
-    const metadata = toolsView.getToolMetadata(entry);
+    const resolvedName = registryNameByCanonical.get(canonical) ?? entry;
+    const metadata = toolsView.getToolMetadata(resolvedName);
     if (!metadata) {
       debugLogger.warn(
         `Tool "${entry}" is not available in the runtime view and is skipped.`,
@@ -309,7 +392,9 @@ export function buildRuntimeFunctionDeclarations(
       continue;
     }
 
-    declarations.push(convertMetadataToFunctionDeclaration(entry, metadata));
+    declarations.push(
+      convertMetadataToFunctionDeclaration(resolvedName, metadata),
+    );
   }
   return declarations;
 }

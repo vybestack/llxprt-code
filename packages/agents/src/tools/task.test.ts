@@ -239,7 +239,10 @@ describe('TaskTool', () => {
       | { toolConfig?: unknown }
       | undefined;
     expect(launchRequest).toBeDefined();
-    expect(launchRequest).not.toHaveProperty('toolConfig');
+    // Explicit whitelist fully filtered to zero must preserve fail-closed
+    // toolConfig: { tools: [] }, NOT omit toolConfig (which means runtime defaults).
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig).toStrictEqual({ tools: [] });
   });
 
   it('filters excluded task tools from explicit whitelist using canonical tool names', async () => {
@@ -353,7 +356,10 @@ describe('TaskTool', () => {
       | { toolConfig?: unknown }
       | undefined;
     expect(launchRequest).toBeDefined();
-    expect(launchRequest).not.toHaveProperty('toolConfig');
+    // Explicit empty whitelist must preserve fail-closed toolConfig: { tools: [] },
+    // NOT omit toolConfig (which means runtime defaults).
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig).toStrictEqual({ tools: [] });
   });
 
   it('backfills sessionId from config when context does not provide one', async () => {
@@ -2014,6 +2020,213 @@ describe('TaskTool', () => {
       expect(updateOutput).toHaveBeenLastCalledWith(
         '</subagent name="async-helper" id="async-xml-agent">\n',
       );
+    });
+  });
+
+  describe('Issue #2069: toolConfig omission with output_spec', () => {
+    it('omits toolConfig (not empty) when no explicit whitelist and registry unavailable, so runtime uses profile defaults', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-2069-no-registry',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      // Config WITHOUT getToolRegistry — simulates registry unavailable
+      const configNoRegistry = {
+        getSessionId: () => 'session-2069',
+      } as unknown as Config;
+
+      const tool = new TaskTool(configNoRegistry, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'rustcoder',
+        goal_prompt: 'Write a function',
+        output_spec: { result: 'The implementation' },
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      const launchRequest = launch.mock.calls[0]?.[0] as
+        | { toolConfig?: unknown; outputConfig?: unknown }
+        | undefined;
+      expect(launchRequest).toBeDefined();
+      // toolConfig must be absent (undefined) so runtime uses profile defaults
+      expect(launchRequest).not.toHaveProperty('toolConfig');
+      // outputConfig must still be present
+      expect(launchRequest).toHaveProperty('outputConfig');
+    });
+
+    it('omits toolConfig (not parent registry-derived) when no explicit whitelist and registry available, so runtime uses profile defaults', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-2069-with-registry',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithRegistry = {
+        getSessionId: () => 'session-2069',
+        getEphemeralSettings: () => ({}),
+        getExcludeTools: () => [],
+        getToolRegistry: () => ({
+          getEnabledTools: () => [
+            { name: 'read_file' },
+            { name: 'write_file' },
+            { name: 'task' },
+            { name: 'list_subagents' },
+          ],
+        }),
+      } as unknown as Config;
+
+      const tool = new TaskTool(configWithRegistry, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'rustcoder',
+        goal_prompt: 'Write a function',
+        output_spec: { result: 'The implementation' },
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      const launchRequest = launch.mock.calls[0]?.[0] as
+        | { toolConfig?: unknown; outputConfig?: unknown }
+        | undefined;
+      expect(launchRequest).toBeDefined();
+      // Issue #2069: no explicit whitelist must NOT synthesize toolConfig from
+      // the parent registry. toolConfig omitted → runtime/profile defaults apply.
+      expect(launchRequest).not.toHaveProperty('toolConfig');
+      // outputConfig must still be present
+      expect(launchRequest).toHaveProperty('outputConfig');
+    });
+  });
+
+  describe('Issue #2069: no-registry explicit whitelist must strip task/list_subagents', () => {
+    it('filters task/list_subagents from explicit whitelist when registry is unavailable', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-2069-no-reg-filter',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      // Config WITHOUT getToolRegistry — simulates registry unavailable
+      const configNoRegistry = {
+        getSessionId: () => 'session-2069',
+      } as unknown as Config;
+
+      const tool = new TaskTool(configNoRegistry, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Do work',
+        tool_whitelist: ['read_file', 'task', 'list_subagents'],
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      const launchRequest = launch.mock.calls[0]?.[0] as
+        | { toolConfig?: { tools?: string[] } }
+        | undefined;
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest).toHaveProperty('toolConfig');
+      // task/list_subagents must be removed even without a registry;
+      // read_file is preserved (no-registry explicit whitelist semantics).
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual(['read_file']);
+    });
+
+    it('preserves fail-closed toolConfig { tools: [] } when explicit whitelist only contains task/list_subagents and registry unavailable', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-2069-no-reg-failclosed',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configNoRegistry = {
+        getSessionId: () => 'session-2069',
+      } as unknown as Config;
+
+      const tool = new TaskTool(configNoRegistry, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Do work',
+        tool_whitelist: ['task', 'list_subagents'],
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      const launchRequest = launch.mock.calls[0]?.[0] as
+        | { toolConfig?: { tools?: string[] } }
+        | undefined;
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest).toHaveProperty('toolConfig');
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
     });
   });
 });

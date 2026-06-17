@@ -42,6 +42,7 @@ describe('buildToolGovernance', () => {
       const governance = buildToolGovernance(config);
 
       expect(governance.allowed).toStrictEqual(new Set());
+      expect(governance.allowedExplicit).toBe(false);
     });
 
     it('should return empty allowed set when tools.allowed is not an array', () => {
@@ -52,6 +53,32 @@ describe('buildToolGovernance', () => {
       const governance = buildToolGovernance(config);
 
       expect(governance.allowed).toStrictEqual(new Set());
+      // Non-array values are not treated as an explicit allowlist; default
+      // (unrestricted) behavior applies.
+      expect(governance.allowedExplicit).toBe(false);
+    });
+
+    // Issue #2069: explicit empty tools.allowed must be distinguished from
+    // absent tools.allowed.
+    it('should set allowedExplicit=true for explicit empty tools.allowed', () => {
+      const config = createMockConfig({
+        ephemerals: { 'tools.allowed': [] },
+      });
+
+      const governance = buildToolGovernance(config);
+
+      expect(governance.allowed).toStrictEqual(new Set());
+      expect(governance.allowedExplicit).toBe(true);
+    });
+
+    it('should set allowedExplicit=true for non-empty tools.allowed', () => {
+      const config = createMockConfig({
+        ephemerals: { 'tools.allowed': ['read_file'] },
+      });
+
+      const governance = buildToolGovernance(config);
+
+      expect(governance.allowedExplicit).toBe(true);
     });
   });
 
@@ -225,6 +252,7 @@ describe('isToolBlocked', () => {
     it('should block excluded tools', () => {
       const governance: ToolGovernance = {
         allowed: new Set<string>(),
+        allowedExplicit: false,
         disabled: new Set<string>(),
         excluded: new Set(['shell']),
       };
@@ -235,6 +263,7 @@ describe('isToolBlocked', () => {
     it('should block excluded tools even if in allowed set', () => {
       const governance: ToolGovernance = {
         allowed: new Set(['shell']),
+        allowedExplicit: true,
         disabled: new Set<string>(),
         excluded: new Set(['shell']),
       };
@@ -247,6 +276,7 @@ describe('isToolBlocked', () => {
     it('should block disabled tools', () => {
       const governance: ToolGovernance = {
         allowed: new Set<string>(),
+        allowedExplicit: false,
         disabled: new Set(['write_file']),
         excluded: new Set<string>(),
       };
@@ -257,6 +287,7 @@ describe('isToolBlocked', () => {
     it('should block disabled tools even if in allowed set', () => {
       const governance: ToolGovernance = {
         allowed: new Set(['write_file']),
+        allowedExplicit: true,
         disabled: new Set(['write_file']),
         excluded: new Set<string>(),
       };
@@ -269,6 +300,7 @@ describe('isToolBlocked', () => {
     it('should block tools not in allowed set when allowed is non-empty', () => {
       const governance: ToolGovernance = {
         allowed: new Set(['read_file', 'glob']),
+        allowedExplicit: true,
         disabled: new Set<string>(),
         excluded: new Set<string>(),
       };
@@ -277,9 +309,10 @@ describe('isToolBlocked', () => {
       expect(isToolBlocked('read_file', governance)).toBe(false);
     });
 
-    it('should allow all tools when allowed set is empty', () => {
+    it('should allow all tools when allowed set is absent (unrestricted)', () => {
       const governance: ToolGovernance = {
         allowed: new Set<string>(),
+        allowedExplicit: false,
         disabled: new Set<string>(),
         excluded: new Set<string>(),
       };
@@ -290,10 +323,50 @@ describe('isToolBlocked', () => {
     });
   });
 
+  // Issue #2069: explicit empty allowlist must block all normal tools
+  describe('explicit empty allowlist (fail-closed)', () => {
+    it('should block all normal tools when allowed is explicit empty', () => {
+      const governance: ToolGovernance = {
+        allowed: new Set<string>(),
+        allowedExplicit: true,
+        disabled: new Set<string>(),
+        excluded: new Set<string>(),
+      };
+
+      expect(isToolBlocked('any_tool', governance)).toBe(true);
+      expect(isToolBlocked('write_file', governance)).toBe(true);
+      expect(isToolBlocked('shell', governance)).toBe(true);
+      expect(isToolBlocked('read_file', governance)).toBe(true);
+    });
+
+    it('should block all tools from buildToolGovernance with tools.allowed=[]', () => {
+      const config = createMockConfig({
+        ephemerals: { 'tools.allowed': [] },
+      });
+      const governance = buildToolGovernance(config);
+
+      expect(governance.allowedExplicit).toBe(true);
+      expect(isToolBlocked('read_file', governance)).toBe(true);
+      expect(isToolBlocked('shell', governance)).toBe(true);
+      expect(isToolBlocked('write_file', governance)).toBe(true);
+    });
+
+    it('should remain unrestricted when tools.allowed is absent', () => {
+      const config = createMockConfig({ ephemerals: {} });
+      const governance = buildToolGovernance(config);
+
+      expect(governance.allowedExplicit).toBe(false);
+      expect(isToolBlocked('read_file', governance)).toBe(false);
+      expect(isToolBlocked('shell', governance)).toBe(false);
+      expect(isToolBlocked('write_file', governance)).toBe(false);
+    });
+  });
+
   describe('priority order: excluded > disabled > allowed whitelist', () => {
     it('should prioritize excluded over disabled', () => {
       const governance: ToolGovernance = {
         allowed: new Set<string>(),
+        allowedExplicit: false,
         disabled: new Set(['shell']),
         excluded: new Set(['shell']),
       };
@@ -304,6 +377,7 @@ describe('isToolBlocked', () => {
     it('should prioritize disabled over allowed whitelist', () => {
       const governance: ToolGovernance = {
         allowed: new Set(['shell', 'read_file']),
+        allowedExplicit: true,
         disabled: new Set(['shell']),
         excluded: new Set<string>(),
       };
@@ -317,6 +391,7 @@ describe('isToolBlocked', () => {
     it('should normalize tool names when checking blocked status', () => {
       const governance: ToolGovernance = {
         allowed: new Set<string>(),
+        allowedExplicit: false,
         disabled: new Set(['write_file']),
         excluded: new Set<string>(),
       };
@@ -328,6 +403,7 @@ describe('isToolBlocked', () => {
     it('should handle camelCase tool names in blocking decisions', () => {
       const governance: ToolGovernance = {
         allowed: new Set<string>(),
+        allowedExplicit: false,
         disabled: new Set(['write_file']),
         excluded: new Set<string>(),
       };
