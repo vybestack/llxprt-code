@@ -353,9 +353,9 @@ export class SecureStore {
     this.validateKey(key);
     // Sanitize key for filesystem (especially Windows compatibility)
     // Escapes Windows-reserved characters: * < > : " / \ | ?
-    const safeKey = key.replace(/[*<>:"/\\|?]/g, (char) => {
-      return '%' + char.charCodeAt(0).toString(16).toUpperCase();
-    });
+    const safeKey = key.replace(/[*<>:"/\\|?]/g, (char) =>
+      '%' + char.charCodeAt(0).toString(16).toUpperCase(),
+    );
     return path.join(this.fallbackDir, safeKey + '.enc');
   }
 
@@ -793,29 +793,36 @@ export class SecureStore {
       await fd.sync();
       await fd.close();
 
-      // Retry rename for Windows concurrent write EPERM issues
-      let renameAttempts = 0;
-      while (renameAttempts < 3) {
-        try {
-          await fs.rename(tempPath, finalPath);
-          break;
-        } catch (error) {
-          renameAttempts++;
-          if (
-            renameAttempts >= 3 ||
-            (error as NodeJS.ErrnoException).code !== 'EPERM'
-          ) {
-            throw error;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
-      }
+      await this.renameWithRetry(tempPath, finalPath);
 
       await fs.chmod(finalPath, 0o600);
     } catch (error) {
       await fd.close().catch(() => {});
       await fs.unlink(tempPath).catch(() => {});
       throw error;
+    }
+  }
+
+  private async renameWithRetry(
+    tempPath: string,
+    finalPath: string,
+  ): Promise<void> {
+    // Retry rename for Windows concurrent write EPERM issues
+    let renameAttempts = 0;
+    while (renameAttempts < 3) {
+      try {
+        await fs.rename(tempPath, finalPath);
+        break;
+      } catch (error) {
+        renameAttempts++;
+        if (
+          renameAttempts >= 3 ||
+          (error as NodeJS.ErrnoException).code !== 'EPERM'
+        ) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
     }
   }
 

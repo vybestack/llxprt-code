@@ -74,7 +74,7 @@ export function isDebugMode(argv: CliArgs): boolean {
       ? false
       : argv.debug;
   return (
-    !!debug ||
+    (debug === true || (typeof debug === 'string' && debug !== '')) ||
     [process.env['DEBUG'], process.env['DEBUG_MODE']].some(
       (v) => v === 'true' || v === '1',
     )
