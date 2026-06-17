@@ -126,7 +126,7 @@ export class RetryOrchestrator implements IProvider {
   private isLoadBalancer(): boolean {
     // Check by name pattern rather than importing LoadBalancingProvider
     // to avoid circular dependency
-    return this.wrappedProvider.name.includes('-lb-');
+    return this.wrappedProvider.name === 'load-balancer';
   }
 
   private shouldBypassRetry(options: GenerateChatOptions): boolean {

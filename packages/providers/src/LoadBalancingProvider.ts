@@ -479,12 +479,12 @@ export class LoadBalancingProvider implements IProvider {
     };
 
     const temperature = this.getNumericSetting(
-      mergedEphemeralSettings,
+      mergedInvocationEphemerals,
       'temperature',
       'temperature',
     );
     const maxTokens = this.getNumericSetting(
-      mergedEphemeralSettings,
+      mergedInvocationEphemerals,
       'maxTokens',
       'max_tokens',
     );

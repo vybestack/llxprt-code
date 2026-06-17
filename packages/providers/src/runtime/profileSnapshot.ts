@@ -646,8 +646,8 @@ async function resolveLoadBalancerProfileDetail(
         typeof ephemerals['reasoning.enabled'] === 'boolean'
           ? ephemerals['reasoning.enabled']
           : undefined,
-      temperature: ephemerals.temperature,
-      maxTokens: ephemerals.maxTokens,
+      temperature: modelParams.temperature,
+      maxTokens: modelParams.max_tokens,
       ...(Object.keys(modelParams).length > 0 && { modelParams }),
     };
   } catch {

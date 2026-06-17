@@ -528,7 +528,7 @@ async function saveLoadBalancerProfile(
       type: 'message',
       messageType: 'error',
       content:
-        'Usage: /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
+        'Usage: /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]',
     };
   }
 

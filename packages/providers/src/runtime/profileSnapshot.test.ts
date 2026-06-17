@@ -356,11 +356,10 @@ describe('getProfileByName', () => {
             version: 1,
             provider: 'openai',
             model: 'glm-4.5',
-            modelParams: { topP: 0.8 },
+            modelParams: { topP: 0.8, temperature: 0.4 },
             ephemeralSettings: {
               'context-limit': 200000,
               'reasoning.enabled': true,
-              temperature: 0.4,
             },
           } satisfies Profile;
         }

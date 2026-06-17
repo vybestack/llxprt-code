@@ -851,12 +851,21 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       );
 
       let capturedOptions: GenerateChatOptions | undefined;
+      let invocationCount = 0;
       const mockProvider = {
         name: 'gemini',
         async *generateChatCompletion(
           options: GenerateChatOptions,
         ): AsyncIterableIterator<IContent> {
+          invocationCount += 1;
           capturedOptions = options;
+          if (invocationCount === 1) {
+            const error = new Error('primary rate limited') as Error & {
+              status: number;
+            };
+            error.status = 429;
+            throw error;
+          }
           yield { role: 'model', parts: [{ text: 'response' }] };
         },
         getModels: async () => [],
@@ -880,19 +889,22 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
           // Consume
         }
 
+        expect(invocationCount).toBe(2);
         expect(capturedOptions?.resolved).toMatchObject({
-          model: 'gemini-flash',
-          baseURL: 'https://primary.example.com',
-          authToken: 'primary-token',
-          temperature: 0.2,
+          model: 'gemini-pro',
         });
+        expect(capturedOptions?.resolved).not.toHaveProperty('baseURL');
+        expect(capturedOptions?.resolved).not.toHaveProperty('authToken');
+        expect(capturedOptions?.resolved).not.toHaveProperty('temperature');
         expect(
           capturedOptions?.invocation?.getModelBehavior('reasoning.enabled'),
-        ).toBe(true);
+        ).toBeUndefined();
         expect(capturedOptions?.invocation?.modelParams).toMatchObject({
-          topP: 0.8,
           topK: 40,
         });
+        expect(capturedOptions?.invocation?.modelParams).not.toHaveProperty(
+          'topP',
+        );
       } finally {
         providerManager.getProviderByName = originalGetProvider;
       }
