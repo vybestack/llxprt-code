@@ -486,6 +486,15 @@ function shouldPersistLoadBalancerEphemeral(
   return !isInternalSettingKey(key) && value !== undefined && value !== null;
 }
 
+function getAmbientLoadBalancerContextLimit(
+  currentEphemerals: Record<string, unknown>,
+): number | undefined {
+  const value = currentEphemerals['context-limit'];
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
 function buildLoadBalancerEphemeralSettings(
   currentEphemerals: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -503,15 +512,15 @@ function createLoadBalancerProfileDefinition(
   policy: 'roundrobin' | 'failover',
   selectedProfiles: string[],
   ephemeralSettings: Record<string, unknown>,
-  explicitContextLimit: number | undefined,
+  contextLimit: number | undefined,
 ): LoadBalancerProfile {
   return {
     version: 1,
     type: 'loadbalancer',
     policy,
     profiles: selectedProfiles,
-    ...(explicitContextLimit !== undefined && {
-      contextLimit: explicitContextLimit,
+    ...(contextLimit !== undefined && {
+      contextLimit,
     }),
     provider: '',
     model: '',
@@ -583,14 +592,17 @@ async function saveLoadBalancerProfile(
       }
     }
 
-    const filteredEphemerals = buildLoadBalancerEphemeralSettings(
-      runtime.getEphemeralSettings(),
-    );
+    const currentEphemerals = runtime.getEphemeralSettings();
+    const filteredEphemerals =
+      buildLoadBalancerEphemeralSettings(currentEphemerals);
+    const contextLimit =
+      explicitContextLimit.contextLimit ??
+      getAmbientLoadBalancerContextLimit(currentEphemerals);
     const lbProfile = createLoadBalancerProfileDefinition(
       policy,
       selectedProfiles,
       filteredEphemerals,
-      explicitContextLimit.contextLimit,
+      contextLimit,
     );
 
     await runtime.saveLoadBalancerProfile(lbProfileName, lbProfile);

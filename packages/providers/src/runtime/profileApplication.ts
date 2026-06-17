@@ -317,6 +317,10 @@ const PRE_APPLIED_EPHEMERAL_KEYS = new Set([
   'GOOGLE_CLOUD_LOCATION',
 ]);
 
+function isPositiveContextLimit(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
 function applyNonAuthEphemerals(sanitizedProfile: Profile): void {
   const otherEphemerals = Object.entries(
     getProfileEphemeralSettings(sanitizedProfile),
@@ -331,6 +335,17 @@ function applyNonAuthEphemerals(sanitizedProfile: Profile): void {
     );
     // null means "explicitly unset" – the profile wants to clear this key
     setEphemeralSetting(key, value === null ? undefined : value);
+  }
+
+  if (
+    isLoadBalancerProfile(sanitizedProfile) &&
+    isPositiveContextLimit(sanitizedProfile.contextLimit)
+  ) {
+    logger.debug(
+      () =>
+        `[profile] applying load balancer contextLimit => ${sanitizedProfile.contextLimit}`,
+    );
+    setEphemeralSetting('context-limit', sanitizedProfile.contextLimit);
   }
 }
 

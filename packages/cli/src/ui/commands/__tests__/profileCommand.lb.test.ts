@@ -148,6 +148,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
           type: 'loadbalancer',
           policy: 'roundrobin',
           profiles: ['profile1', 'profile2'],
+          contextLimit: 190000,
           provider: '',
           model: '',
           modelParams: {},

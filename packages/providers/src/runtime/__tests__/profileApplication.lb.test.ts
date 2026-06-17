@@ -744,6 +744,48 @@ describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)'
         'enabled',
       );
     });
+
+    it('should apply top-level contextLimit from LB profile as runtime context-limit', async () => {
+      const lbProfile: LoadBalancerProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['sub1'],
+        contextLimit: 200000,
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {
+          streaming: 'enabled',
+        },
+      };
+
+      profileManagerStub.loadProfile = vi.fn(
+        async (): Promise<Profile> => ({
+          version: 1,
+          provider: 'gemini',
+          model: 'gemini-flash',
+          modelParams: {},
+          ephemeralSettings: {},
+        }),
+      );
+      const { getLBProvider } = wrapRegisterProviderToCaptureLB();
+
+      await applyProfileWithGuards(lbProfile, {
+        profileName: 'myLB',
+      });
+
+      const models = await getLBProvider()?.getModels();
+      expect(models?.[0]?.contextWindow).toBe(200000);
+      expect(setEphemeralSettingMock).toHaveBeenCalledWith(
+        'context-limit',
+        200000,
+      );
+      expect(setEphemeralSettingMock).toHaveBeenCalledWith(
+        'streaming',
+        'enabled',
+      );
+    });
   });
 
   describe('Detection priority', () => {

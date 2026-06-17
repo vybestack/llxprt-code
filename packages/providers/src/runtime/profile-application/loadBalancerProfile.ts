@@ -193,6 +193,24 @@ async function resolveLoadBalancerSubProfile(
   };
 }
 
+function isPositiveContextLimit(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function getLoadBalancerContextLimit(
+  profileInput: LoadBalancerProfile,
+): number | undefined {
+  if (isPositiveContextLimit(profileInput.contextLimit)) {
+    return profileInput.contextLimit;
+  }
+
+  const ephemeralContextLimit =
+    getProfileEphemeralSettings(profileInput)['context-limit'];
+  return isPositiveContextLimit(ephemeralContextLimit)
+    ? ephemeralContextLimit
+    : undefined;
+}
+
 function createLoadBalancerConfig(
   profileInput: LoadBalancerProfile,
   lbName: string,
@@ -202,7 +220,7 @@ function createLoadBalancerConfig(
     profileName: lbName,
     strategy: profileInput.policy === 'failover' ? 'failover' : 'round-robin',
     subProfiles: resolvedSubProfiles,
-    contextLimit: profileInput.contextLimit,
+    contextLimit: getLoadBalancerContextLimit(profileInput),
     lbProfileEphemeralSettings: getProfileEphemeralSettings(profileInput),
     lbProfileModelParams: getProfileModelParams(profileInput),
   };
