@@ -500,12 +500,21 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
 
     // First turn: a tool call that blocks until its signal aborts.
     // Second turn (for the re-submit 'go2'): completes normally.
-    const { client } = createScriptedAgentClient([
+    const { client, turnMessages } = createScriptedAgentClient([
       [toolCallRequestEvent('record_tool', 'call-concurrent'), finishedEvent()],
       [contentEvent('second-turn'), finishedEvent()],
     ]);
 
     const addItem = vi.fn();
+
+    // Capture streamed content so we can prove the second run actually
+    // executed its model turn (not merely that it failed to throw).
+    let streamedContent = '';
+    const processStreamEventFn = (event: ServerGeminiStreamEvent) => {
+      if (event.type === GeminiEventType.Content) {
+        streamedContent += event.value;
+      }
+    };
 
     const { result } = renderHook(() =>
       useAgenticLoop({
@@ -520,7 +529,7 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
         onEditorOpen: () => {},
         onEditorClose: () => {},
         onTodoPause: () => {},
-        processStreamEventRef: { current: () => {} },
+        processStreamEventRef: { current: processStreamEventFn },
         flushPendingHistoryItem: () => {},
         clearPendingHistoryItem: () => {},
         performMemoryRefresh: async () => {},
@@ -567,6 +576,11 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
     const firstMsg =
       firstError instanceof Error ? firstError.message : String(firstError);
     expect(firstMsg).not.toContain('concurrent');
+
+    // Stronger proof the second run ACTUALLY RAN (not just didn't throw): its
+    // 'go2' message reached the model and its second-turn content streamed in.
+    expect(turnMessages).toContain('go2');
+    expect(streamedContent).toContain('second-turn');
   });
 
   it('clears external (subagent) tools from the display via markToolsAsDisplayCleared', async () => {

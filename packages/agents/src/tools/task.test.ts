@@ -1730,6 +1730,83 @@ describe('TaskTool', () => {
       expect(launchSignal!.aborted).toBe(true);
     });
 
+    it('aborts the launch signal when the foreground aborts DURING launch (before registration)', async () => {
+      // Regression for the relay-installed-after-launch gap: if the foreground
+      // turn is cancelled (ESC) while orchestrator.launch is still pending —
+      // e.g. loading config/profile — the launch signal must already observe
+      // the abort, because the relay is wired BEFORE launch is awaited.
+      const realAsyncTaskManager = new AsyncTaskManager();
+      let capturedLaunchSignal: AbortSignal | undefined;
+      let resolveLaunch: (() => void) | undefined;
+      const launchGate = new Promise<void>((resolve) => {
+        resolveLaunch = resolve;
+      });
+      const launchMock = vi
+        .fn()
+        .mockImplementation(
+          async (_request: unknown, launchSignal: AbortSignal) => {
+            capturedLaunchSignal = launchSignal;
+            // Simulate slow launch (config/profile loading) that has not yet
+            // returned a scope when the user presses ESC.
+            await launchGate;
+            return {
+              agentId: 'async-launch-abort-agent',
+              scope: {
+                runNonInteractive: vi.fn().mockImplementation(
+                  () =>
+                    new Promise<void>(() => {
+                      // never resolves
+                    }),
+                ),
+                output: {
+                  terminate_reason: SubagentTerminateMode.GOAL,
+                  emitted_vars: {},
+                },
+              },
+              dispose: vi.fn().mockResolvedValue(undefined),
+            };
+          },
+        );
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () => realAsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Slow launch work',
+        async: true,
+      };
+
+      const foregroundController = new AbortController();
+      const invocation = tool.build(params);
+      const executePromise = invocation.execute(foregroundController.signal);
+
+      // Wait until launch has been entered (signal captured) but is still gated.
+      while (capturedLaunchSignal === undefined) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      expect(capturedLaunchSignal.aborted).toBe(false);
+
+      // Press ESC while launch is still pending.
+      foregroundController.abort();
+      expect(capturedLaunchSignal.aborted).toBe(true);
+
+      // Let launch resolve so the invocation can settle cleanly.
+      resolveLaunch?.();
+      await executePromise;
+
+      // The task that registered after the gated launch carries the SAME
+      // (already-aborted) controller the relay aborted, so it is registered in
+      // an aborted state rather than as a live, unstoppable background task.
+      const registered = realAsyncTaskManager.getTask(
+        'async-launch-abort-agent',
+      );
+      expect(registered).toBeDefined();
+      expect(registered!.abortController?.signal.aborted).toBe(true);
+    });
+
     it('returns immediately with launch status when async=true (does not block)', async () => {
       const mockAsyncTaskManager = {
         canLaunchAsync: () => ({ allowed: true }),

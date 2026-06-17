@@ -105,6 +105,7 @@ interface AsyncSetupResult {
   asyncAbortController: AbortController;
   timeoutId: NodeJS.Timeout | null;
   timedOut: { value: boolean };
+  cleanupForegroundRelay: () => void;
 }
 
 function launchRequestName(
@@ -1058,10 +1059,13 @@ class TaskToolInvocation extends BaseToolInvocation<
   /**
    * @plan PLAN-20260130-ASYNCTASK.P11
    *
-   * Note: Async tasks are designed to run independently in the background.
-   * Unlike foreground task execution, they do NOT wire cancellation or timeout
-   * to the parent agent's signal. This is an intentional design choice to allow
-   * async tasks to continue running even if the foreground agent is interrupted.
+   * Note: Async tasks run in the background — the foreground agent does not
+   * await their completion. They ARE, however, linked to the launching
+   * foreground turn's abort signal (issue #2074): the async abort controller
+   * registered with the AsyncTaskManager is passed to orchestrator.launch and
+   * relayed from the foreground signal, so pressing ESC (which aborts the
+   * foreground turn) also cancels the detached subagent. The AsyncTaskManager
+   * still owns timeout-driven cancellation independently of the foreground.
    */
   /**
    * Validates async preconditions and reserves a booking slot. Returns either
@@ -1121,6 +1125,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     const { asyncTaskManager, orchestrator, bookingId } = ctx;
 
     const setupResult = await this.setupAsyncInfrastructure(
+      signal,
       orchestrator,
       asyncTaskManager,
       bookingId,
@@ -1138,17 +1143,13 @@ class TaskToolInvocation extends BaseToolInvocation<
       asyncAbortController,
       timeoutId,
       timedOut,
+      cleanupForegroundRelay,
     } = setupResult as AsyncSetupResult;
 
     const asyncStreaming = this.setupAsyncStreaming(
       scope,
       agentId,
       updateOutput,
-    );
-
-    const cleanupForegroundRelay = this.setupForegroundRelay(
-      signal,
-      asyncAbortController,
     );
 
     this.executeInBackground(
@@ -1238,6 +1239,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private async setupAsyncInfrastructure(
+    foregroundSignal: AbortSignal,
     orchestrator: SubagentOrchestrator,
     asyncTaskManager: AsyncTaskManager,
     bookingId: string | undefined,
@@ -1251,6 +1253,14 @@ class TaskToolInvocation extends BaseToolInvocation<
     let timeoutId: NodeJS.Timeout | null = null;
     let taskRegistered = false;
     const timedOut = { value: false };
+
+    // Relay the foreground signal BEFORE launch so an ESC pressed while the
+    // orchestrator is still loading config/profile (issue #2074) aborts the
+    // launch in-flight instead of being missed during that window.
+    const cleanupForegroundRelay = this.setupForegroundRelay(
+      foregroundSignal,
+      asyncAbortController,
+    );
 
     try {
       const launchRequest = this.createLaunchRequest();
@@ -1280,6 +1290,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       );
       taskRegistered = true;
     } catch (error) {
+      cleanupForegroundRelay();
       if (!taskRegistered && bookingId) {
         asyncTaskManager.cancelReservation(bookingId);
       }
@@ -1287,7 +1298,9 @@ class TaskToolInvocation extends BaseToolInvocation<
         clearTimeout(timeoutId);
       }
       if (dispose) {
-        void dispose();
+        // Defensively swallow disposal errors on the partial-launch path so a
+        // rejecting dispose() cannot surface as an unhandled rejection.
+        void dispose().catch(() => {});
       }
       return this.createErrorResult(
         error,
@@ -1304,6 +1317,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       asyncAbortController,
       timeoutId,
       timedOut,
+      cleanupForegroundRelay,
     };
   }
 

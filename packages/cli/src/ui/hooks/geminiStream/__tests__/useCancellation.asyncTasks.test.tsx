@@ -86,4 +86,79 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
     // The standard cancellation side effects still fire.
     expect(addedItems.some((i) => i.type === MessageType.INFO)).toBe(true);
   });
+
+  it('cancels a task launched by a PRIOR (already-settled) turn (issue #2074)', async () => {
+    // Locks in the intentional session-wide cancellation: an async task whose
+    // own foreground-signal relay was bound to an EARLIER turn (now settled and
+    // unable to abort) must still be cancelled by ESC on a LATER turn. This is
+    // why cancellation goes through the session-wide AsyncTaskManager rather
+    // than relying solely on the per-launch foreground relay.
+    const asyncTaskManager = new AsyncTaskManager();
+
+    // Simulate the prior turn's foreground signal: it already aborted/settled
+    // and is wired to the task via a relay, but that relay can no longer fire.
+    const priorTurnController = new AbortController();
+    const taskController = new AbortController();
+    const relay = () => taskController.abort();
+    priorTurnController.signal.addEventListener('abort', relay, { once: true });
+    asyncTaskManager.registerTask({
+      id: 'cross-turn-async-agent',
+      subagentName: 'helper',
+      goalPrompt: 'long-running work from a previous turn',
+      abortController: taskController,
+    });
+
+    // The prior turn has ended; its relay is detached and will never fire.
+    priorTurnController.signal.removeEventListener('abort', relay);
+    expect(taskController.signal.aborted).toBe(false);
+
+    const cancelRunningAsyncTasks = () => {
+      const mgr = asyncTaskManager;
+      mgr.getRunningTasks().forEach((t) => mgr.cancelTask(t.id));
+    };
+
+    // A NEW foreground turn with its own (different) abort controller.
+    const newTurnAbortRef = { current: new AbortController() };
+    const turnCancelledRef = { current: false };
+    const pendingHistoryItemRef = { current: null };
+    const queuedSubmissionsRef = { current: [] };
+    const addedItems: HistoryItemWithoutId[] = [];
+
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <KeypressProvider>{children}</KeypressProvider>
+    );
+
+    const { result } = renderHook(
+      () =>
+        useCancellation(
+          StreamingState.Responding,
+          turnCancelledRef,
+          newTurnAbortRef,
+          () => {},
+          pendingHistoryItemRef,
+          () => {},
+          (item: HistoryItemWithoutId) => {
+            addedItems.push(item);
+            return addedItems.length;
+          },
+          () => {},
+          () => {},
+          () => {},
+          queuedSubmissionsRef,
+          cancelRunningAsyncTasks,
+        ),
+      { wrapper },
+    );
+
+    act(() => {
+      result.current.cancelOngoingRequest();
+    });
+
+    // Even though the task's own relay (prior turn) can never fire, the
+    // session-wide cancellation aborts it.
+    expect(taskController.signal.aborted).toBe(true);
+    expect(asyncTaskManager.getTask('cross-turn-async-agent')?.status).toBe(
+      'cancelled',
+    );
+  });
 });
