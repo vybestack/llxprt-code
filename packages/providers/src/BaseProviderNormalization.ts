@@ -222,21 +222,40 @@ export function normalizeProviderGenerateChatOptions(
     metadata: guard.metadata,
     config: finalConfig,
   };
-  const invocation =
-    providedOptions.invocation ??
-    createRuntimeInvocationContext({
-      runtime: normalizedRuntime,
-      settings,
-      providerName: deps.providerName,
-      ephemeralsSnapshot: deps.buildEphemeralsSnapshot(settings),
-      telemetry: resolved.telemetry,
-      metadata: guard.metadata,
-      userMemory:
-        typeof providedOptions.userMemory === 'string'
-          ? providedOptions.userMemory
-          : undefined,
-      fallbackRuntimeId: `${deps.providerName}:normalizeGenerateChatOptions`,
-    });
+  const snapshot = deps.buildEphemeralsSnapshot(settings);
+  const fallbackInvocation = createRuntimeInvocationContext({
+    runtime: normalizedRuntime,
+    settings,
+    providerName: deps.providerName,
+    ephemeralsSnapshot: snapshot,
+    telemetry: resolved.telemetry,
+    metadata: guard.metadata,
+    userMemory:
+      typeof providedOptions.userMemory === 'string'
+        ? providedOptions.userMemory
+        : undefined,
+    fallbackRuntimeId: `${deps.providerName}:normalizeGenerateChatOptions`,
+  });
+
+  const invocation = providedOptions.invocation
+    ? createRuntimeInvocationContext({
+        runtime: {
+          ...normalizedRuntime,
+          runtimeId: providedOptions.invocation.runtimeId,
+        },
+        settings,
+        providerName: deps.providerName,
+        ephemeralsSnapshot: {
+          ...snapshot,
+          ...providedOptions.invocation.ephemerals,
+        },
+        telemetry: providedOptions.invocation.telemetry ?? resolved.telemetry,
+        metadata: providedOptions.invocation.metadata,
+        userMemory: providedOptions.invocation.userMemory,
+        redaction: providedOptions.invocation.redaction,
+        fallbackRuntimeId: providedOptions.invocation.runtimeId,
+      })
+    : fallbackInvocation;
 
   return {
     ...providedOptions,
