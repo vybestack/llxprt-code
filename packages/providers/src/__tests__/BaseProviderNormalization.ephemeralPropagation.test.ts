@@ -252,6 +252,11 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
       redactEmails: true,
       redactPersonalInfo: true,
     };
+    const providedTelemetry = {
+      providerName: provider.name,
+      modelId: 'stub-model',
+      tokenUsage: { input: 10, output: 20, total: 30 },
+    };
 
     const providedInvocation = createRuntimeInvocationContext({
       runtime: createProviderRuntimeContext({
@@ -265,6 +270,7 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
       metadata: providedMetadata,
       userMemory: providedUserMemory,
       redaction: providedRedaction,
+      telemetry: providedTelemetry,
       fallbackRuntimeId: 'ephemeral-preserve-all',
     });
 
@@ -287,5 +293,6 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
     expect(invocation?.metadata).toMatchObject(providedMetadata);
     expect(invocation?.userMemory).toBe(providedUserMemory);
     expect(invocation?.redaction).toMatchObject(providedRedaction);
+    expect(invocation?.telemetry).toBe(providedTelemetry);
   });
 });
