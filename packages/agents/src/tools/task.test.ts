@@ -763,6 +763,150 @@ describe('TaskTool', () => {
     expect(result.returnDisplay).toMatch(/abort/i);
   });
 
+  describe('max_turns handling', () => {
+    it('passes max_turns from params into launch request runConfig', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-max-turns',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        max_turns: 42,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_turns: 42,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+
+    it('passes max_turns alongside timeout into runConfig without losing either', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-max-turns-timeout',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithTimeout = {
+        ...config,
+        getEphemeralSettings: () => ({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
+        }),
+      } as unknown as Config;
+      const tool = new TaskTool(configWithTimeout, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        max_turns: 30,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_time_minutes: 1,
+            max_turns: 30,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+
+    it('passes max_turns alongside grace_period_seconds into runConfig', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-max-turns-grace',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        max_turns: 20,
+        grace_period_seconds: 15,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_turns: 20,
+            grace_period_seconds: 15,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
   describe('timeout_seconds handling', () => {
     beforeEach(() => {
       vi.useFakeTimers();

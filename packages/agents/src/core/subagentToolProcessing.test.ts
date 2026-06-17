@@ -198,6 +198,15 @@ describe('subagentToolProcessing', () => {
       expect(output.final_message).toContain('maximum number of turns');
     });
 
+    it('should include actionable max_turns guidance in MAX_TURNS message', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.MAX_TURNS,
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('max_turns');
+    });
+
     it('should set ERROR message', () => {
       const output: OutputObject = {
         emitted_vars: {},
