@@ -691,8 +691,9 @@ describe('SecureStore — Encrypted File Fallback', () => {
     });
 
     await store.set('perm-key', 'perm-value');
-    const safeKey = 'perm-key'.replace(/[*<>:"/\\|?]/g, (char) =>
-      '%' + char.charCodeAt(0).toString(16).toUpperCase(),
+    const safeKey = 'perm-key'.replace(
+      /[*<>:"/\\|?]/g,
+      (char) => '%' + char.charCodeAt(0).toString(16).toUpperCase(),
     );
     const filePath = path.join(tempDir, safeKey + '.enc');
     const stat = await fs.stat(filePath);

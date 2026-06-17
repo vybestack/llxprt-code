@@ -401,11 +401,14 @@ export async function startInteractiveUI(
 export async function main() {
   // Handle debug mode as early as possible so that early logs are captured
   const bootstrapParsed = parseBootstrapArgs();
-  if (bootstrapParsed.bootstrapArgs.debug === true || (typeof bootstrapParsed.bootstrapArgs.debug === 'string' && bootstrapParsed.bootstrapArgs.debug !== '')) {
-    const namespaces =
-      typeof bootstrapParsed.bootstrapArgs.debug === 'string'
-        ? bootstrapParsed.bootstrapArgs.debug
-        : 'llxprt:*';
+  const debugArg = bootstrapParsed.bootstrapArgs.debug;
+  const isDebugEnabled =
+    typeof debugArg === 'string'
+      ? debugArg.length > 0 &&
+        !['false', '0', 'no'].includes(debugArg.toLowerCase())
+      : debugArg === true;
+  if (isDebugEnabled) {
+    const namespaces = typeof debugArg === 'string' ? debugArg : 'llxprt:*';
     ConfigurationManager.getInstance().setCliConfig({
       enabled: true,
       namespaces: namespaces

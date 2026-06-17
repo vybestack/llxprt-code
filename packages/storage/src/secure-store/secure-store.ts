@@ -353,8 +353,9 @@ export class SecureStore {
     this.validateKey(key);
     // Sanitize key for filesystem (especially Windows compatibility)
     // Escapes Windows-reserved characters: * < > : " / \ | ?
-    const safeKey = key.replace(/[*<>:"/\\|?]/g, (char) =>
-      '%' + char.charCodeAt(0).toString(16).toUpperCase(),
+    const safeKey = key.replace(
+      /[*<>:"/\\|?]/g,
+      (char) => '%' + char.charCodeAt(0).toString(16).toUpperCase(),
     );
     return path.join(this.fallbackDir, safeKey + '.enc');
   }

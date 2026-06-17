@@ -702,9 +702,11 @@ describe('MemoryTool', () => {
       };
       const invocation = coreMemoryTool.build(params);
       const filePath = invocation.getMemoryFilePath();
-      expect(filePath).toContain(mockWorkingDir);
-      expect(filePath).toContain('.llxprt');
-      expect(filePath).toContain('.LLXPRT_SYSTEM');
+      // Normalize paths for cross-platform compatibility
+      const normalizedPath = filePath.replace(/\\/g, '/');
+      expect(normalizedPath).toContain(mockWorkingDir);
+      expect(normalizedPath).toContain('.llxprt');
+      expect(normalizedPath).toContain('.LLXPRT_SYSTEM');
     });
   });
 });
