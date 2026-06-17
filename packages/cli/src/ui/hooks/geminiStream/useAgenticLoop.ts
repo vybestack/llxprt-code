@@ -189,6 +189,28 @@ function handleToolsComplete(
   }
 }
 
+/**
+ * Iterates the AgenticLoop generator, routing each event until the loop ends or
+ * the signal aborts. Returns a promise that settles when iteration completes.
+ */
+function iterateLoop(
+  loop: AgenticLoop,
+  message: PartListUnion,
+  signal: AbortSignal,
+  promptId: string,
+  args: UseAgenticLoopArgs,
+  userMessageTimestamp: number,
+  processedMemoryTools: Set<string>,
+): Promise<void> {
+  return (async () => {
+    const iterator = loop.run(message, signal, promptId);
+    for await (const event of iterator) {
+      if (signal.aborted) break;
+      routeLoopEvent(event, args, userMessageTimestamp, processedMemoryTools);
+    }
+  })();
+}
+
 export function useAgenticLoop(args: UseAgenticLoopArgs): UseAgenticLoopReturn {
   const processedMemoryTools = useMemo(() => new Set<string>(), []);
   const latestArgs = useRef(args);
@@ -247,22 +269,45 @@ export function useAgenticLoop(args: UseAgenticLoopArgs): UseAgenticLoopReturn {
     ],
   );
 
+  // Serializes overlapping runLoop calls so a fast re-submit after a cancel
+  // does not collide with the previous run's async teardown. The loop instance
+  // is stable (memoized), and its `run()` rejects concurrent executions. We
+  // therefore await any in-flight previous run — swallowing its (expected)
+  // cancellation error — before starting the new run. The new run's own error
+  // still propagates to the caller.
+  const inflightRunRef = useRef<Promise<void> | null>(null);
+
   const runLoop = useCallback(
     async (
       message: PartListUnion,
       signal: AbortSignal,
       promptId: string,
     ): Promise<void> => {
+      const previous = inflightRunRef.current;
+      if (previous) {
+        await previous.catch(() => {
+          // Swallow the previous run's error; only the current run's error
+          // propagates.
+        });
+      }
+
       const userMessageTimestamp = Date.now();
-      const iterator = loop.run(message, signal, promptId);
-      for await (const event of iterator) {
-        if (signal.aborted) break;
-        routeLoopEvent(
-          event,
-          latestArgs.current,
-          userMessageTimestamp,
-          processedMemoryTools,
-        );
+      const currentRun = iterateLoop(
+        loop,
+        message,
+        signal,
+        promptId,
+        latestArgs.current,
+        userMessageTimestamp,
+        processedMemoryTools,
+      );
+      inflightRunRef.current = currentRun;
+      try {
+        await currentRun;
+      } finally {
+        if (inflightRunRef.current === currentRun) {
+          inflightRunRef.current = null;
+        }
       }
     },
     [loop, processedMemoryTools],

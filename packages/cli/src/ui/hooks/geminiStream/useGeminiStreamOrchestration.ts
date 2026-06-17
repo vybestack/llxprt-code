@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
   type Config,
   type EditorType,
@@ -98,6 +98,10 @@ export function useGeminiStreamOrchestration(
     st.isResponding,
     scheduler.toolCalls,
   );
+  const cancelRunningAsyncTasks = useCallback(() => {
+    const mgr = args.config.getAsyncTaskManager();
+    mgr?.getRunningTasks().forEach((t) => mgr.cancelTask(t.id));
+  }, [args.config]);
   const { cancelOngoingRequest } = useCancellation(
     streamingState,
     st.turnCancelledRef,
@@ -110,6 +114,7 @@ export function useGeminiStreamOrchestration(
     args.onCancelSubmit,
     st.setIsResponding,
     st.queuedSubmissionsRef,
+    cancelRunningAsyncTasks,
   );
   // Refs to break the circular dependency between useSubmitQuery (which
   // creates useStreamEventHandlers → processStreamEvent) and useAgenticLoop

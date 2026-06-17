@@ -220,6 +220,7 @@ export function useCancellation(
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void,
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>,
   queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>,
+  cancelRunningAsyncTasks: () => void = () => {},
 ) {
   const cancelOngoingRequest = useCallback(() => {
     if (
@@ -232,6 +233,7 @@ export function useCancellation(
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
     if (abortControllerRef.current) cancelAllToolCalls();
+    cancelRunningAsyncTasks();
     if (pendingHistoryItemRef.current) flushPendingHistoryItem(Date.now());
     addItem({ type: MessageType.INFO, text: 'Request cancelled.' }, Date.now());
     setPendingHistoryItem(null);
@@ -243,6 +245,7 @@ export function useCancellation(
     turnCancelledRef,
     abortControllerRef,
     cancelAllToolCalls,
+    cancelRunningAsyncTasks,
     pendingHistoryItemRef,
     flushPendingHistoryItem,
     addItem,

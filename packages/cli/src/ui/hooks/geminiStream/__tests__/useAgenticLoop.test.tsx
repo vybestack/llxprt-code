@@ -479,6 +479,92 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
     expect(settled).toBe(true);
   });
 
+  it('serializes overlapping runLoop calls so a fast re-submit after cancel does not throw concurrent-execution', async () => {
+    // Reproduces issue #2076: after cancelling (ESC), a new message submitted
+    // before the previous generator's async teardown finishes must NOT throw
+    // "AgenticLoop.run does not support concurrent executions". runLoop must
+    // await the previous in-flight run's settlement before starting a new one.
+    const tool = toolRegistry.getTool('record_tool') as MockTool;
+    tool.executeFn.mockImplementation(
+      (_p: Record<string, unknown>, signal: AbortSignal) =>
+        new Promise((_resolve, reject) => {
+          if (signal.aborted) {
+            reject(new Error('aborted'));
+            return;
+          }
+          signal.addEventListener('abort', () => reject(new Error('aborted')), {
+            once: true,
+          });
+        }),
+    );
+
+    // First turn: a tool call that blocks until its signal aborts.
+    // Second turn (for the re-submit 'go2'): completes normally.
+    const { client } = createScriptedAgentClient([
+      [toolCallRequestEvent('record_tool', 'call-concurrent'), finishedEvent()],
+      [contentEvent('second-turn'), finishedEvent()],
+    ]);
+
+    const addItem = vi.fn();
+
+    const { result } = renderHook(() =>
+      useAgenticLoop({
+        config,
+        agentClient: client,
+        messageBus,
+        interactiveMode: true,
+        addItem,
+        onToolCallsUpdate: () => {},
+        outputUpdateHandler: () => {},
+        getPreferredEditor: () => undefined,
+        onEditorOpen: () => {},
+        onEditorClose: () => {},
+        onTodoPause: () => {},
+        processStreamEventRef: { current: () => {} },
+        flushPendingHistoryItem: () => {},
+        clearPendingHistoryItem: () => {},
+        performMemoryRefresh: async () => {},
+      }),
+    );
+
+    const controllerA = new AbortController();
+    const controllerB = new AbortController();
+
+    const errors: unknown[] = [];
+
+    // Start the first run WITHOUT awaiting it.
+    const firstPromise = act(async () => {
+      try {
+        await result.current.runLoop('go', controllerA.signal, 'p1');
+      } catch (e) {
+        errors.push(e);
+      }
+    });
+
+    // Wait until the tool is in-flight.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Cancel the first run (ESC).
+    controllerA.abort();
+
+    // Immediately submit a second run BEFORE the first settles.
+    const secondPromise = act(async () => {
+      try {
+        await result.current.runLoop('go2', controllerB.signal, 'p2');
+      } catch (e) {
+        errors.push(e);
+      }
+    });
+
+    await Promise.all([firstPromise, secondPromise]);
+
+    // Neither run must have thrown the concurrent-execution error.
+    for (const e of errors) {
+      const msg = e instanceof Error ? e.message : String(e);
+      expect(msg).not.toContain('concurrent');
+    }
+  });
+
   it('clears external (subagent) tools from the display via markToolsAsDisplayCleared', async () => {
     // An external tool carries a non-default agentId. The subagent flow owns
     // its results, so the loop's display handling must mark it display-cleared
