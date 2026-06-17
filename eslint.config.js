@@ -251,15 +251,17 @@ export default tseslint.config(
         { max: 80, skipBlankLines: true, skipComments: true },
       ],
 
-      // Sonarjs rules (spread recommended as OFF, then promote selected rules
-      // to error below). Issue #2079: warning-only rules are not permitted
-      // because lint:ci uses --max-warnings 0. Each rule must be either
-      // 'error' (enforced) or 'off' (not useful signal). Cleanup issues
-      // (#2081–#2092) will promote additional rules to 'error' as code is
-      // fixed to comply.
+      // Issue #2079: warning-only SonarJS recommendations are not permitted
+      // because lint:ci uses --max-warnings 0. Start from off, then promote
+      // project-signal rules below to error. Future off decisions must be
+      // explicit and justified so the guard in scripts/check-eslint-guard.js
+      // can reject accidental policy weakening.
       ...Object.fromEntries(
         Object.entries(sonarjs.configs.recommended.rules ?? {}).map(
-          ([rule, config]) => [rule, Array.isArray(config) ? ['off', ...config.slice(1)] : 'off'],
+          ([rule, config]) => [
+            rule,
+            Array.isArray(config) ? ['off', ...config.slice(1)] : 'off', // eslint-policy-allow-off: #2079
+          ],
         ),
       ),
       'sonarjs/cognitive-complexity': ['error', 30],
@@ -455,18 +457,18 @@ export default tseslint.config(
   {
     files: ['packages/*/src/**/*.{ts,tsx}'],
     linterOptions: {
-      reportUnusedDisableDirectives: 'off',
+      reportUnusedDisableDirectives: 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
     },
     rules: {
-      'eslint-comments/disable-enable-pair': 'off',
-      'eslint-comments/no-aggregating-enable': 'off',
-      'eslint-comments/no-duplicate-disable': 'off',
-      'eslint-comments/no-restricted-disable': 'off',
-      'eslint-comments/no-unlimited-disable': 'off',
-      'eslint-comments/no-unused-disable': 'off',
-      'eslint-comments/no-unused-enable': 'off',
-      'eslint-comments/no-use': 'off',
-      'eslint-comments/require-description': 'off',
+      'eslint-comments/disable-enable-pair': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-aggregating-enable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-duplicate-disable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-restricted-disable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-unlimited-disable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-unused-disable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-unused-enable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-use': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/require-description': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
     },
   },
 

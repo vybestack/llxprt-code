@@ -12,6 +12,15 @@ const DEFAULT_BASE = process.env.GITHUB_BASE_REF
   ? 'origin/' + process.env.GITHUB_BASE_REF
   : 'origin/main';
 
+const POLICY_PATHS = [
+  '.github/workflows',
+  'eslint.config.js',
+  'package.json',
+  'packages',
+  'integration-tests',
+  'test-scripts',
+];
+
 function parseArgs(argv) {
   const args = {
     base: process.env.ESLINT_GUARD_BASE || DEFAULT_BASE,
@@ -51,18 +60,25 @@ function resolveBase(base, head) {
 
 function diffFromGit(base, head) {
   const resolvedBase = resolveBase(base, head);
+
+  if (head === 'HEAD') {
+    return git([
+      'diff',
+      '--unified=0',
+      '--no-ext-diff',
+      resolvedBase,
+      '--',
+      ...POLICY_PATHS,
+    ]);
+  }
+
   return git([
     'diff',
     '--unified=0',
     '--no-ext-diff',
     resolvedBase + '...' + head,
     '--',
-    '.github/workflows',
-    'eslint.config.js',
-    'package.json',
-    'packages',
-    'integration-tests',
-    'test-scripts',
+    ...POLICY_PATHS,
   ]);
 }
 
