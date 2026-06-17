@@ -17,7 +17,7 @@ import {
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
+import { PolicyEngine } from '@vybestack/llxprt-code-policy';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type { ContextAwareTool } from '@vybestack/llxprt-code-tools';
@@ -139,6 +139,7 @@ function makeGovernance(
 ): ToolGovernance {
   return {
     allowed: new Set<string>(),
+    allowedExplicit: false,
     disabled: new Set<string>(),
     excluded: new Set<string>(),
     ...overrides,
@@ -224,6 +225,55 @@ describe('ToolDispatcher', () => {
       if (results[0].status !== 'error')
         throw new Error('unreachable: narrowing failed');
       expect(results[0].response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
+    });
+
+    // Issue #2069: explicit empty allowlist (tools.allowed=[]) must block all
+    // normal tools at the dispatcher level, returning TOOL_DISABLED and never
+    // resolving the registry tool.
+    it('returns ErroredToolCall with TOOL_DISABLED for explicit empty allowlist and never resolves registry tool', () => {
+      const tool = new MockTool('my_tool');
+      const registry = makeMockRegistry(tool);
+      const dispatcher = new ToolDispatcher(registry as never, config);
+      const governance = makeGovernance({
+        allowed: new Set<string>(),
+        allowedExplicit: true,
+      });
+
+      const results = dispatcher.resolveAndValidate(
+        [makeRequest('my_tool')],
+        governance,
+        false,
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0].status).toBe('error');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
+      if (results[0].status !== 'error')
+        throw new Error('unreachable: narrowing failed');
+      expect(results[0].response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
+      // The tool must never have been resolved from the registry.
+      expect(registry.getTool).not.toHaveBeenCalled();
+    });
+
+    // Issue #2069: absent allowlist must remain unrestricted.
+    it('resolves registry tool normally when allowlist is absent (unrestricted)', () => {
+      const tool = new MockTool('my_tool');
+      const registry = makeMockRegistry(tool);
+      const dispatcher = new ToolDispatcher(registry as never, config);
+      const governance = makeGovernance({
+        allowed: new Set<string>(),
+        allowedExplicit: false,
+      });
+
+      const results = dispatcher.resolveAndValidate(
+        [makeRequest('my_tool')],
+        governance,
+        false,
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0].status).toBe('validating');
+      expect(registry.getTool).toHaveBeenCalledWith('my_tool');
     });
 
     it('drops requests blocked by hookRestrictedAllowed before validation', () => {

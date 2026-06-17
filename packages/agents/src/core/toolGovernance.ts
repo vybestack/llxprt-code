@@ -21,6 +21,15 @@ export interface ToolGovernanceConfig {
 
 export interface ToolGovernance {
   allowed: Set<string>;
+  /**
+   * Whether an explicit allowlist was provided (even if empty).
+   *
+   * - `false`: no explicit allowlist → unrestricted (runtime/profile defaults
+   *   apply). Disabled/excluded still block.
+   * - `true`: an explicit allowlist was provided. When `allowed` is empty,
+   *   this means "block all normal tools" (fail-closed).
+   */
+  allowedExplicit: boolean;
   disabled: Set<string>;
   excluded: Set<string>;
 }
@@ -33,9 +42,9 @@ export function buildToolGovernance(
       ? (config.getEphemeralSettings() ?? {})
       : {};
 
-  const allowedRaw = isStringArray(ephemerals['tools.allowed'])
-    ? ephemerals['tools.allowed']
-    : [];
+  const allowedValue = ephemerals['tools.allowed'];
+  const allowedExplicit = isStringArray(allowedValue);
+  const allowedRaw: string[] = allowedExplicit ? allowedValue : [];
 
   let disabledRaw: string[];
   if (isStringArray(ephemerals['tools.disabled'])) {
@@ -53,6 +62,7 @@ export function buildToolGovernance(
 
   return {
     allowed: new Set(allowedRaw.map(canonicalizeToolName)),
+    allowedExplicit,
     disabled: new Set(disabledRaw.map(canonicalizeToolName)),
     excluded: new Set(excludedRaw.map(canonicalizeToolName)),
   };
@@ -72,7 +82,7 @@ export function isToolBlocked(
     return true;
   }
 
-  if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
+  if (governance.allowedExplicit && !governance.allowed.has(canonical)) {
     return true;
   }
 
