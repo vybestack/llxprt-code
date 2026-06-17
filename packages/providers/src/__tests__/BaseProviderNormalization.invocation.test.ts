@@ -168,7 +168,7 @@ describe('BaseProvider normalization invocation safety', () => {
     ).toBe(true);
   });
 
-  it('reuses a valid RuntimeInvocationContext unchanged', async () => {
+  it('keeps a valid RuntimeInvocationContext coherent while refreshing current ephemerals', async () => {
     const { createProviderCallOptions } = await import(
       '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
     );
@@ -176,10 +176,12 @@ describe('BaseProvider normalization invocation safety', () => {
     const provider = new InvocationSafetyProvider();
     wireProviderWithAuth(provider);
     const settings = createSettings(provider);
+    settings.set('dumpcontext', 'on');
 
     const validOptions = createProviderCallOptions({
       providerName: PROVIDER_NAME,
       settings,
+      ephemerals: {},
     });
 
     const options = {
@@ -191,6 +193,10 @@ describe('BaseProvider normalization invocation safety', () => {
 
     const normalized = provider.lastNormalizedOptions;
     expect(normalized).toBeDefined();
-    expect(normalized!.invocation).toBe(validOptions.invocation);
+    expect(typeof normalized!.invocation.getModelBehavior).toBe('function');
+    expect(normalized!.invocation.runtimeId).toBe(
+      validOptions.invocation.runtimeId,
+    );
+    expect(normalized!.invocation.getEphemeral('dumpcontext')).toBe('on');
   });
 });

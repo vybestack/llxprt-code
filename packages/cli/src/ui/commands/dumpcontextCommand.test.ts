@@ -246,6 +246,51 @@ describe('dumpcontextCommand', () => {
       });
     });
 
+    it('should dump context immediately when getAgentClient relies on its receiver (this binding)', async () => {
+      vi.mocked(getRuntimeApi).mockReturnValue({
+        getEphemeralSetting: vi.fn(() => 'off'),
+        setEphemeralSetting: vi.fn(),
+      } as never);
+
+      const historyService = {
+        getAll: vi
+          .fn()
+          .mockReturnValue([
+            { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+          ]),
+      };
+
+      const configWithReceiverDependentMethod = {
+        agentClient: {
+          getHistoryService: () => historyService,
+        },
+        getAgentClient() {
+          return this.agentClient;
+        },
+        getProviderManager() {
+          return {
+            getActiveProviderName: () => 'anthropic',
+          };
+        },
+      };
+
+      const ctxWithHistory = createMockCommandContext();
+      ctxWithHistory.services.config =
+        configWithReceiverDependentMethod as unknown as CommandContext['services']['config'];
+
+      const result = await dumpcontextAction(ctxWithHistory, 'now');
+
+      expect(dumpRequestContext).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ url: 'immediate-context-dump' }),
+        'anthropic',
+      );
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: expect.stringContaining('Immediate request context dumped to'),
+      });
+    });
+
     it('should shape immediate dump body for OpenAI history', async () => {
       vi.mocked(getRuntimeApi).mockReturnValue({
         getEphemeralSetting: vi.fn(() => 'off'),

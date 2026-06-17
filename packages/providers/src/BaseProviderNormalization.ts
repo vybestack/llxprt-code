@@ -244,6 +244,63 @@ function extractLegacySignal(invocation: unknown): AbortSignal | undefined {
   return undefined;
 }
 
+interface InvocationNormalizationInput {
+  providedOptions: GenerateChatOptions;
+  normalizedRuntime: ProviderRuntimeContext;
+  settings: SettingsService;
+  providerName: string;
+  snapshot: Record<string, unknown>;
+  telemetry: NormalizedGenerateChatOptions['resolved']['telemetry'];
+  metadata: Record<string, unknown>;
+}
+
+function createNormalizedInvocation(
+  input: InvocationNormalizationInput,
+): RuntimeInvocationContext {
+  const providedInvocation = isRuntimeInvocationContext(
+    input.providedOptions.invocation,
+  )
+    ? input.providedOptions.invocation
+    : undefined;
+  const legacySignal = extractLegacySignal(input.providedOptions.invocation);
+  if (providedInvocation) {
+    const providedSignal = extractLegacySignal(providedInvocation);
+    return createRuntimeInvocationContext({
+      runtime: {
+        ...input.normalizedRuntime,
+        runtimeId: providedInvocation.runtimeId,
+      },
+      settings: input.settings,
+      providerName: input.providerName,
+      ephemeralsSnapshot: {
+        ...input.snapshot,
+        ...providedInvocation.ephemerals,
+      },
+      telemetry: providedInvocation.telemetry ?? input.telemetry,
+      metadata: providedInvocation.metadata,
+      userMemory: providedInvocation.userMemory,
+      redaction: providedInvocation.redaction,
+      ...(providedSignal ? { signal: providedSignal } : {}),
+      fallbackRuntimeId: providedInvocation.runtimeId,
+    });
+  }
+
+  return createRuntimeInvocationContext({
+    runtime: input.normalizedRuntime,
+    settings: input.settings,
+    providerName: input.providerName,
+    ephemeralsSnapshot: input.snapshot,
+    telemetry: input.telemetry,
+    metadata: input.metadata,
+    userMemory:
+      typeof input.providedOptions.userMemory === 'string'
+        ? input.providedOptions.userMemory
+        : undefined,
+    ...(legacySignal ? { signal: legacySignal } : {}),
+    fallbackRuntimeId: `${input.providerName}:normalizeGenerateChatOptions`,
+  });
+}
+
 export function normalizeProviderGenerateChatOptions(
   provider: BaseProvider,
   providedOptions: GenerateChatOptions,
@@ -270,23 +327,15 @@ export function normalizeProviderGenerateChatOptions(
     metadata: guard.metadata,
     config: finalConfig,
   };
-  const legacySignal = extractLegacySignal(providedOptions.invocation);
-  const invocation = isRuntimeInvocationContext(providedOptions.invocation)
-    ? providedOptions.invocation
-    : createRuntimeInvocationContext({
-        runtime: normalizedRuntime,
-        settings,
-        providerName: deps.providerName,
-        ephemeralsSnapshot: deps.buildEphemeralsSnapshot(settings),
-        telemetry: resolved.telemetry,
-        metadata: guard.metadata,
-        userMemory:
-          typeof providedOptions.userMemory === 'string'
-            ? providedOptions.userMemory
-            : undefined,
-        signal: legacySignal,
-        fallbackRuntimeId: `${deps.providerName}:normalizeGenerateChatOptions`,
-      });
+  const invocation = createNormalizedInvocation({
+    providedOptions,
+    normalizedRuntime,
+    settings,
+    providerName: deps.providerName,
+    snapshot: deps.buildEphemeralsSnapshot(settings),
+    telemetry: resolved.telemetry,
+    metadata: guard.metadata,
+  });
 
   return {
     ...providedOptions,
