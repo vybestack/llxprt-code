@@ -86,9 +86,8 @@ describe('profileCommand - load balancer save with protected settings', () => {
       );
 
       // Verify non-protected settings ARE preserved
-      expect(savedProfile.ephemeralSettings).toHaveProperty(
+      expect(savedProfile.ephemeralSettings).not.toHaveProperty(
         'context-limit',
-        190000,
       );
       expect(savedProfile.ephemeralSettings).toHaveProperty('streaming', true);
       expect(savedProfile.ephemeralSettings).toHaveProperty(
@@ -96,6 +95,37 @@ describe('profileCommand - load balancer save with protected settings', () => {
         1000,
       );
       expect(savedProfile.ephemeralSettings).toHaveProperty('retries', 3);
+    });
+
+    it('strips internal settings when saving loadbalancer profile', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({
+        activeProvider: 'gemini',
+        currentProfile: 'glm',
+        tools: { disabled: ['google_web_fetch'] },
+        'context-limit': 190000,
+        streaming: true,
+      });
+
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      await save.action!(
+        context,
+        'loadbalancer myLB roundrobin profile1 profile2',
+      );
+
+      const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
+        .calls[0][1] as LoadBalancerProfile;
+
+      expect(savedProfile.ephemeralSettings).not.toHaveProperty(
+        'activeProvider',
+      );
+      expect(savedProfile.ephemeralSettings).not.toHaveProperty(
+        'currentProfile',
+      );
+      expect(savedProfile.ephemeralSettings).not.toHaveProperty('tools');
+      expect(savedProfile.ephemeralSettings).toStrictEqual({
+        streaming: true,
+      });
     });
 
     it('saves loadbalancer profile with correct structure', async () => {
@@ -118,11 +148,11 @@ describe('profileCommand - load balancer save with protected settings', () => {
           type: 'loadbalancer',
           policy: 'roundrobin',
           profiles: ['profile1', 'profile2'],
+          contextLimit: 190000,
           provider: '',
           model: '',
           modelParams: {},
           ephemeralSettings: {
-            'context-limit': 190000,
             streaming: true,
           },
         },
@@ -219,6 +249,60 @@ describe('profileCommand - load balancer save with protected settings', () => {
       expect(savedProfile.ephemeralSettings).toStrictEqual({
         streaming: false,
       });
+    });
+  });
+
+  describe('explicit context limit option', () => {
+    it('saves explicit contextLimit from --context-limit', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({
+        'context-limit': 190000,
+        streaming: true,
+      });
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      await save.action!(
+        context,
+        'loadbalancer myLB roundrobin --context-limit 150000 profile1 profile2',
+      );
+
+      const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
+        .calls[0][1] as LoadBalancerProfile;
+      expect(savedProfile.contextLimit).toBe(150000);
+      expect(savedProfile.ephemeralSettings).toStrictEqual({
+        streaming: true,
+      });
+    });
+
+    it('rejects invalid explicit contextLimit values', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({});
+
+      const result = await save.action!(
+        context,
+        'loadbalancer myLB roundrobin --context-limit 0 profile1 profile2',
+      );
+
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'error',
+        content: 'context limit must be a positive integer',
+      });
+      expect(runtimeMocks.saveLoadBalancerProfile).not.toHaveBeenCalled();
+    });
+
+    it('rejects --context-limit when the value is missing', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({});
+
+      const result = await save.action!(
+        context,
+        'loadbalancer myLB roundrobin profile1 profile2 --context-limit',
+      );
+
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'error',
+        content: 'context limit must be a positive integer',
+      });
+      expect(runtimeMocks.saveLoadBalancerProfile).not.toHaveBeenCalled();
     });
   });
 

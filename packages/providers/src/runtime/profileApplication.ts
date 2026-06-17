@@ -1,5 +1,8 @@
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
+import {
+  isInternalSettingKey,
+  isLoadBalancerProfile,
+} from '@vybestack/llxprt-code-settings';
 import type { Profile, ModelParams } from '@vybestack/llxprt-code-settings';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -24,6 +27,7 @@ import {
   getProfileModelParams,
   getProfileProvider,
   getStringValue,
+  isPositiveContextLimit,
 } from './profile-application/profileAccessors.js';
 import { maybeRegisterLoadBalancerProfile } from './profile-application/loadBalancerProfile.js';
 
@@ -317,7 +321,10 @@ const PRE_APPLIED_EPHEMERAL_KEYS = new Set([
 function applyNonAuthEphemerals(sanitizedProfile: Profile): void {
   const otherEphemerals = Object.entries(
     getProfileEphemeralSettings(sanitizedProfile),
-  ).filter(([key]) => !PRE_APPLIED_EPHEMERAL_KEYS.has(key));
+  ).filter(
+    ([key]) =>
+      !PRE_APPLIED_EPHEMERAL_KEYS.has(key) && !isInternalSettingKey(key),
+  );
 
   for (const [key, value] of otherEphemerals) {
     logger.debug(
@@ -325,6 +332,17 @@ function applyNonAuthEphemerals(sanitizedProfile: Profile): void {
     );
     // null means "explicitly unset" – the profile wants to clear this key
     setEphemeralSetting(key, value === null ? undefined : value);
+  }
+
+  if (
+    isLoadBalancerProfile(sanitizedProfile) &&
+    isPositiveContextLimit(sanitizedProfile.contextLimit)
+  ) {
+    logger.debug(
+      () =>
+        `[profile] applying load balancer contextLimit => ${sanitizedProfile.contextLimit}`,
+    );
+    setEphemeralSetting('context-limit', sanitizedProfile.contextLimit);
   }
 }
 

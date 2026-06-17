@@ -196,12 +196,11 @@ describe('profileCommand - failover policy parsing', () => {
         type: 'loadbalancer',
         policy: 'failover',
         profiles: ['profile1', 'profile2'],
+        contextLimit: 190000,
         provider: '',
         model: '',
         modelParams: {},
-        ephemeralSettings: {
-          'context-limit': 190000,
-        },
+        ephemeralSettings: {},
       });
     });
 
@@ -221,12 +220,11 @@ describe('profileCommand - failover policy parsing', () => {
         type: 'loadbalancer',
         policy: 'roundrobin',
         profiles: ['profile1', 'profile2'],
+        contextLimit: 190000,
         provider: '',
         model: '',
         modelParams: {},
-        ephemeralSettings: {
-          'context-limit': 190000,
-        },
+        ephemeralSettings: {},
       });
     });
 

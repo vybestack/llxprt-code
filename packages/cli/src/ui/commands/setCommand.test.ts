@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 import { setCommand } from './setCommand.js';
+import { coreEvents } from '@vybestack/llxprt-code-core';
 
 const mockRuntime = {
   getActiveModelParams: vi.fn(() => ({})),
@@ -41,12 +42,15 @@ describe('setCommand runtime integration', () => {
   });
 
   it('stores numeric ephemeral settings via runtime helper', async () => {
+    const emitSettingsChanged = vi.spyOn(coreEvents, 'emitSettingsChanged');
+
     const result = await setCommand.action!(context, 'context-limit 32000');
 
     expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
       'context-limit',
       32000,
     );
+    expect(emitSettingsChanged).toHaveBeenCalledTimes(1);
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',

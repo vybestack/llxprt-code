@@ -170,7 +170,13 @@ export class RetryOrchestrator implements IProvider {
   private isLoadBalancer(): boolean {
     // Check by name pattern rather than importing LoadBalancingProvider
     // to avoid circular dependency
-    return this.wrappedProvider.name.includes('-lb-');
+    return this.wrappedProvider.name === 'load-balancer';
+  }
+
+  private shouldBypassRetry(options: GenerateChatOptions): boolean {
+    return (
+      this.isLoadBalancer() || options.metadata?.loadBalancerDelegate === true
+    );
   }
 
   // Delegate all IProvider methods to wrapped provider
@@ -267,7 +273,7 @@ export class RetryOrchestrator implements IProvider {
     // If the wrapped provider is a LoadBalancingProvider, pass through without retry logic
     // because LoadBalancingProvider already has its own failover and retry mechanisms.
     // Don't buffer chunks for LoadBalancingProvider to avoid timeout issues.
-    if (this.isLoadBalancer()) {
+    if (this.shouldBypassRetry(options)) {
       for await (const chunk of this.wrappedProvider.generateChatCompletion(
         options,
       )) {

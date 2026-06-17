@@ -52,3 +52,7 @@ export function getStringValue(
   }
   return undefined;
 }
+
+export function isPositiveContextLimit(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
