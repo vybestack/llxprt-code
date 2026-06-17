@@ -1474,6 +1474,17 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       return 'Task tool requires a goal_prompt describing the assignment.';
     }
 
+    if (params.max_turns !== undefined) {
+      const maxTurns = params.max_turns;
+      if (
+        !Number.isFinite(maxTurns) ||
+        !Number.isInteger(maxTurns) ||
+        (maxTurns !== -1 && maxTurns < 1)
+      ) {
+        return 'Task tool max_turns must be a positive integer or -1 for unlimited.';
+      }
+    }
+
     return null;
   }
 

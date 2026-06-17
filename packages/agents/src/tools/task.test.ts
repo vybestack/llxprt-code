@@ -1226,6 +1226,139 @@ describe('TaskTool', () => {
     );
   });
 
+  describe('max_turns validation', () => {
+    const createTool = () =>
+      new TaskTool(config, {
+        orchestratorFactory: () => {
+          throw new Error('should not be called');
+        },
+      });
+
+    it('rejects max_turns of 0', () => {
+      const tool = createTool();
+
+      expect(() =>
+        tool.build({
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          max_turns: 0,
+        }),
+      ).toThrow('Task tool max_turns must be a positive integer or -1');
+    });
+
+    it('rejects fractional max_turns like 0.5', () => {
+      const tool = createTool();
+
+      expect(() =>
+        tool.build({
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          max_turns: 0.5,
+        }),
+      ).toThrow('Task tool max_turns must be a positive integer or -1');
+    });
+
+    it('rejects negative max_turns other than -1', () => {
+      const tool = createTool();
+
+      expect(() =>
+        tool.build({
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          max_turns: -2,
+        }),
+      ).toThrow('Task tool max_turns must be a positive integer or -1');
+    });
+
+    it('accepts max_turns of -1 for unlimited and wires it through', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-unlimited-turns',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Do work',
+        max_turns: -1,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_turns: -1,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+
+    it('accepts positive integer max_turns and wires it through', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-fixed-turns',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Do work',
+        max_turns: 5,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_turns: 5,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
   it('streams subagent messages on separate lines with normalized newlines', async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
     const updateOutput = vi.fn();
