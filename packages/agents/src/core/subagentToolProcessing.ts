@@ -171,7 +171,9 @@ export function finalizeOutput(output: OutputObject): void {
       baseMessage = 'Stopped because the time limit was reached.';
       break;
     case SubagentTerminateMode.MAX_TURNS:
-      baseMessage = 'Stopped because the maximum number of turns was reached.';
+      baseMessage =
+        'Stopped because the maximum number of turns was reached. ' +
+        'Consider passing a higher max_turns value in the task tool invocation to allow more turns.';
       break;
     case SubagentTerminateMode.ERROR:
     default:

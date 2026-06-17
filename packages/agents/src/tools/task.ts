@@ -73,6 +73,7 @@ export interface TaskToolParams {
   contextVars?: Record<string, unknown>;
   timeout_seconds?: number;
   grace_period_seconds?: number;
+  max_turns?: number;
   async?: boolean;
 }
 
@@ -83,6 +84,7 @@ interface TaskToolInvocationParams {
   toolWhitelist?: string[];
   outputSpec?: Record<string, string>;
   context: Record<string, unknown>;
+  maxTurns?: number;
   async: boolean;
 }
 
@@ -296,6 +298,20 @@ class TaskToolInvocation extends BaseToolInvocation<
         max_time_minutes:
           launchRequest.runConfig?.max_time_minutes ?? Number.POSITIVE_INFINITY,
         grace_period_seconds: this.params.grace_period_seconds,
+      };
+    }
+
+    if (this.normalized.maxTurns !== undefined) {
+      launchRequest.runConfig = {
+        max_time_minutes:
+          launchRequest.runConfig?.max_time_minutes ?? Number.POSITIVE_INFINITY,
+        ...(launchRequest.runConfig?.grace_period_seconds !== undefined
+          ? {
+              grace_period_seconds:
+                launchRequest.runConfig.grace_period_seconds,
+            }
+          : {}),
+        max_turns: this.normalized.maxTurns,
       };
     }
 
@@ -1420,6 +1436,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
             description:
               'Optional grace period in seconds for recovery after a termination condition (TIMEOUT, MAX_TURNS, or protocol violation). Falls back to 60s if not specified or invalid.',
           },
+          max_turns: {
+            type: 'number',
+            description:
+              'Optional maximum number of turns for the subagent. Overrides the subagent profile and parent agent defaults when set.',
+          },
           async: {
             type: 'boolean',
             description:
@@ -1451,6 +1472,17 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       params.goal_prompt ?? params.goalPrompt ?? params.goalPrompt;
     if (!goalPrompt || goalPrompt.trim().length === 0) {
       return 'Task tool requires a goal_prompt describing the assignment.';
+    }
+
+    if (params.max_turns !== undefined) {
+      const maxTurns = params.max_turns;
+      if (
+        !Number.isFinite(maxTurns) ||
+        !Number.isInteger(maxTurns) ||
+        (maxTurns !== -1 && maxTurns < 1)
+      ) {
+        return 'Task tool max_turns must be a positive integer or -1 for unlimited.';
+      }
     }
 
     return null;
@@ -1520,6 +1552,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       toolWhitelist: toolWhitelist.length > 0 ? toolWhitelist : undefined,
       outputSpec,
       context,
+      maxTurns: params.max_turns,
       async: params.async ?? false,
     };
   }
