@@ -237,10 +237,12 @@ export function isNetworkTransientError(error: unknown): boolean {
  *
  * Decision precedence (CRITICAL - do not reorder):
  * 1. Network error codes (ETIMEDOUT, ECONNRESET, etc.) → ALWAYS retry (regardless of retryFetchErrors)
- * 2. retryFetchErrors=true + generic "fetch failed" message → retry
- * 3. ApiError with status 400 → NEVER retry
- * 4. ApiError or generic status 429 or 5xx → retry
- * 5. All others → do not retry
+ * 2. RetryableQuotaError → retry
+ * 3. Anthropic body-level errors (overloaded_error, rate_limit_error, api_error, no HTTP status) → retry
+ * 4. retryFetchErrors=true + generic "fetch failed" message → retry
+ * 5. ApiError with status 400 → NEVER retry; ApiError 401/403/429/5xx → retry
+ * 6. Generic status 401/403/429 or 5xx → retry
+ * 7. All others → do not retry
  *
  * @param error The error object.
  * @param retryFetchErrors Whether to retry generic fetch failures (default: false).
@@ -261,7 +263,14 @@ export function isRetryableError(
     return true;
   }
 
-  // PRIORITY 3: Generic "fetch failed" messages only retry when explicitly enabled
+  // PRIORITY 3: Anthropic body-level errors (overloaded_error, rate_limit_error,
+  // api_error) carry no HTTP status, so they must be classified here. They are
+  // transient and retryable like an HTTP 429/5xx. (Issue #2053)
+  if (isOverloadError(error)) {
+    return true;
+  }
+
+  // PRIORITY 4: Generic "fetch failed" messages only retry when explicitly enabled
   if (retryFetchErrors === true) {
     const { messages } = collectErrorDetails(error);
     if (messages.some((msg) => msg.toLowerCase().includes('fetch failed'))) {
@@ -269,7 +278,7 @@ export function isRetryableError(
     }
   }
 
-  // PRIORITY 4: ApiError with deterministic 400 is NEVER retryable
+  // PRIORITY 5: ApiError with deterministic 400 is NEVER retryable
   if (error instanceof ApiError) {
     if (error.status === 400) return false;
     return (
@@ -281,7 +290,7 @@ export function isRetryableError(
     );
   }
 
-  // PRIORITY 5: Generic status-based retry (handles non-ApiError shapes)
+  // PRIORITY 6: Generic status-based retry (handles non-ApiError shapes)
   const status = getErrorStatus(error);
   if (status !== undefined) {
     return (
@@ -822,23 +831,46 @@ export async function retryWithBackoff<T>(
 }
 
 /**
- * Determines if an error is an Anthropic overloaded_error or rate_limit_error.
- * Anthropic returns overloaded_error and rate_limit_error as error types (not HTTP status):
+ * Determines if an error is a retryable Anthropic body-level error.
+ *
+ * The name `isOverloadError` is historical: this predicate now covers multiple
+ * Anthropic body-level error types that warrant a retry. Anthropic returns
+ * these as error types in the response body (not as an HTTP status code), so
+ * they must be classified here rather than via {@link getErrorStatus}:
  * {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
  * {"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}
+ * {"type":"error","error":{"type":"api_error","message":"Internal server error"}}
+ *
+ * `api_error` is Anthropic's internal server error (equivalent to an HTTP 5xx)
+ * and is transient, so it is treated the same as overload and rate-limit
+ * errors. (Issue #2053)
+ *
+ * The Anthropic SDK wraps streaming error events in an `APIError` whose `error`
+ * property holds the entire parsed body. For these the retryable type lives one
+ * level deeper, at `error.error.error.type`, while the intermediate
+ * `error.error.type` is the generic envelope value `"error"`:
+ * {"error":{"type":"error","error":{"type":"api_error","message":"..."}}}
+ * Both the raw body shape and the SDK-wrapped shape are therefore inspected.
+ *
  * @param error The error object.
- * @returns True if the error is an overloaded_error or rate_limit_error, false otherwise.
+ * @returns True if the error is a retryable Anthropic body-level error
+ *   (overloaded_error, rate_limit_error, or api_error), false otherwise.
  */
 export function isOverloadError(error: unknown): boolean {
-  if (error !== null && error !== undefined && typeof error === 'object') {
-    const errorObj = error as {
-      error?: { type?: string; message?: string };
-      type?: string;
-    };
-    const errorType = errorObj.error?.type ?? errorObj.type;
-    return errorType === 'overloaded_error' || errorType === 'rate_limit_error';
+  if (error === null || error === undefined || typeof error !== 'object') {
+    return false;
   }
-  return false;
+  // Resolve the meaningful body-level type. The Anthropic SDK wraps stream
+  // errors so the type is nested at `error.error.error.type`; the intermediate
+  // `error.error.type` is the generic envelope value "error". Prefer the
+  // deepest available position, falling back to the raw body shapes.
+  const errorObj = error as {
+    error?: { type?: string; error?: { type?: string } };
+    type?: string;
+  };
+  const type =
+    errorObj.error?.error?.type ?? errorObj.error?.type ?? errorObj.type ?? '';
+  return ['overloaded_error', 'rate_limit_error', 'api_error'].includes(type);
 }
 
 /**

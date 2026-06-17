@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
+import type { Content } from '@google/genai';
 import type { ConfigParameters, SandboxConfig } from './config.js';
 import {
   Config,
@@ -435,6 +436,69 @@ describe('Server Config (config.ts)', () => {
       expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
     });
 
+    it('preserves committed chat history without waiting for an active turn to become idle', async () => {
+      const config = new Config(baseParams);
+      const mockContentConfig = {
+        model: 'gemini-pro',
+        apiKey: 'test-key',
+      };
+      const committedHistory: Content[] = [
+        {
+          role: 'user',
+          parts: [{ text: 'Remember we are fixing issue 2049' }],
+        },
+        { role: 'model', parts: [{ text: 'We are preserving history.' }] },
+      ];
+      const partialInFlightHistory: Content[] = [
+        ...committedHistory,
+        { role: 'user', parts: [{ text: 'This turn is still retrying' }] },
+      ];
+
+      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+
+      const chatGetHistory = vi.fn().mockReturnValue(committedHistory);
+      const mockHistoryService = { setTokenizerFactory: vi.fn() };
+      const mockExistingClient = {
+        isInitialized: vi.fn().mockReturnValue(true),
+        hasChatInitialized: vi.fn().mockReturnValue(true),
+        getChat: vi.fn().mockReturnValue({
+          getHistory: chatGetHistory,
+        }),
+        getHistory: vi.fn(async () => {
+          throw new Error('refreshAuth should not wait for idle history');
+        }),
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
+      };
+
+      const mockNewClient = {
+        isInitialized: vi.fn().mockReturnValue(true),
+        getHistory: vi.fn().mockReturnValue(committedHistory),
+        getHistoryService: vi.fn().mockReturnValue(null),
+        initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
+        storeHistoryServiceForReuse: vi.fn(),
+      };
+
+      (
+        config as unknown as { agentClient: typeof mockExistingClient }
+      ).agentClient = mockExistingClient;
+      AgentClient.mockImplementation(() => mockNewClient);
+
+      await config.refreshAuth();
+
+      expect(mockExistingClient.getHistory).not.toHaveBeenCalled();
+      expect(mockExistingClient.getChat).toHaveBeenCalled();
+      expect(chatGetHistory).toHaveBeenCalled();
+      expect(mockExistingClient.getHistoryService).not.toHaveBeenCalled();
+      expect(mockNewClient.storeHistoryServiceForReuse).not.toHaveBeenCalled();
+      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
+        committedHistory,
+      );
+      expect(mockNewClient.storeHistoryForLaterUse).not.toHaveBeenCalledWith(
+        partialInFlightHistory,
+      );
+    });
+
     it('should handle case when no existing client is initialized', async () => {
       const config = new Config(baseParams);
       const mockContentConfig = {
@@ -472,7 +536,7 @@ describe('Server Config (config.ts)', () => {
       expect(mockNewClient.setHistory).not.toHaveBeenCalled();
     });
 
-    it('should strip thoughts when switching from GenAI to Vertex', async () => {
+    it('should strip thought signatures when switching from GenAI to Vertex', async () => {
       const config = new Config(baseParams);
       const mockContentConfig = {
         model: 'gemini-pro',
@@ -488,13 +552,24 @@ describe('Server Config (config.ts)', () => {
         vertexai: true,
       });
 
-      const mockExistingHistory = [
-        { role: 'user', parts: [{ text: 'Hello' }] },
+      const mockExistingHistory: Content[] = [
+        {
+          role: 'model',
+          parts: [
+            {
+              text: 'Hidden reasoning',
+              thought: true,
+              thoughtSignature: 'genai-signature',
+            },
+            { text: 'Visible response' },
+          ],
+        },
       ];
+      const mockHistoryService = { setTokenizerFactory: vi.fn() };
       const mockExistingClient = {
         isInitialized: vi.fn().mockReturnValue(true),
         getHistory: vi.fn().mockReturnValue(mockExistingHistory),
-        getHistoryService: vi.fn().mockReturnValue(null),
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
       };
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
@@ -503,6 +578,7 @@ describe('Server Config (config.ts)', () => {
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
         storeHistoryForLaterUse: vi.fn(),
+        storeHistoryServiceForReuse: vi.fn(),
       };
 
       (
@@ -512,14 +588,23 @@ describe('Server Config (config.ts)', () => {
 
       await config.refreshAuth();
 
-      // When switching from GenAI to Vertex, thoughts should be stripped
-      // The history is stored with thoughts stripped before initialize
+      expect(mockNewClient.storeHistoryServiceForReuse).not.toHaveBeenCalled();
       expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalled();
 
-      // Get the actual call arguments to verify thoughts stripping
       const storedHistory =
         mockNewClient.storeHistoryForLaterUse.mock.calls[0][0];
-      expect(storedHistory).toStrictEqual(mockExistingHistory);
+      expect(storedHistory).toStrictEqual([
+        {
+          role: 'model',
+          parts: [
+            {
+              text: 'Hidden reasoning',
+              thought: true,
+            },
+            { text: 'Visible response' },
+          ],
+        },
+      ]);
     });
 
     it('should not strip thoughts when switching from Vertex to GenAI', async () => {
@@ -680,9 +765,7 @@ describe('Server Config (config.ts)', () => {
       expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
         mockExistingHistory,
       );
-      expect(mockNewClient.storeHistoryServiceForReuse).toHaveBeenCalledWith(
-        mockHistoryService,
-      );
+      expect(mockNewClient.storeHistoryServiceForReuse).not.toHaveBeenCalled();
 
       // CRITICAL: Verify OAuth was NOT triggered during refresh
       expect(mockOAuthManager.authenticate).not.toHaveBeenCalled();
