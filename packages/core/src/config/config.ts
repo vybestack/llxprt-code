@@ -260,8 +260,16 @@ export class Config extends ConfigBase {
     if (!previousAgentClient?.isInitialized()) {
       return { history: [], historyService: null };
     }
-    const existingHistory = await previousAgentClient.getHistory();
-    const existingHistoryService = previousAgentClient.getHistoryService();
+    const hasInitializedChat =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- preserve defensive runtime boundary guard for legacy AgentClient-compatible implementations.
+      typeof previousAgentClient.hasChatInitialized === 'function' &&
+      previousAgentClient.hasChatInitialized();
+    const existingHistory = hasInitializedChat
+      ? previousAgentClient.getChat().getHistory()
+      : await previousAgentClient.getHistory();
+    const existingHistoryService = hasInitializedChat
+      ? null
+      : previousAgentClient.getHistoryService();
     logger.debug('Retrieved existing state', {
       historyLength: existingHistory.length,
       hasHistoryService: !!existingHistoryService,
@@ -299,19 +307,19 @@ export class Config extends ConfigBase {
     existingHistoryService: HistoryService | null,
     newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
   ): void {
-    if (existingHistoryService) {
-      logger.debug('Storing existing HistoryService for reuse', {
-        historyLength: existingHistory.length,
-      });
-      newAgentClient.storeHistoryServiceForReuse(existingHistoryService);
-    }
-    if (existingHistory.length === 0) {
-      return;
-    }
     const fromGenaiToVertex =
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       this.contentGeneratorConfig?.vertexai === false &&
       newContentGeneratorConfig.vertexai === true;
+    if (existingHistoryService) {
+      logger.debug('Skipping existing HistoryService reuse', {
+        historyLength: existingHistory.length,
+        fromGenaiToVertex,
+      });
+    }
+    if (existingHistory.length === 0) {
+      return;
+    }
     logger.debug('Storing history for later use', {
       historyLength: existingHistory.length,
       fromGenaiToVertex,

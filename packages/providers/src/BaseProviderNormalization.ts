@@ -7,7 +7,10 @@
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import {
+  createRuntimeInvocationContext,
+  type RuntimeInvocationContext,
+} from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { MissingProviderRuntimeError } from './errors.js';
 import type { GenerateChatOptions, ProviderToolset } from './IProvider.js';
 import type {
@@ -196,6 +199,108 @@ function mergeInvocationMetadata(
   };
 }
 
+/**
+ * Determines whether a value conforms to the RuntimeInvocationContext contract.
+ * A malformed stub (e.g. { signal } or { ephemerals: {} }) created by retry
+ * orchestration or legacy callers lacks the helper methods and must not be
+ * trusted as a real invocation context.
+ */
+const INVOCATION_METHODS = [
+  'getModelBehavior',
+  'getCliSetting',
+  'getEphemeral',
+  'getModelParam',
+  'getProviderOverrides',
+] as const;
+
+function isRuntimeInvocationContext(
+  value: unknown,
+): value is GenerateChatOptions['invocation'] & RuntimeInvocationContext {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return INVOCATION_METHODS.every(
+    (method) => typeof candidate[method] === 'function',
+  );
+}
+
+/**
+ * Extracts a legacy AbortSignal smuggled onto a malformed invocation stub so
+ * it can be preserved when a fresh RuntimeInvocationContext is created.
+ */
+function extractLegacySignal(invocation: unknown): AbortSignal | undefined {
+  if (invocation === null || typeof invocation !== 'object') {
+    return undefined;
+  }
+  const signal = (invocation as { signal?: unknown }).signal;
+  if (
+    typeof signal === 'object' &&
+    signal !== null &&
+    typeof (signal as { aborted?: unknown }).aborted === 'boolean'
+  ) {
+    return signal as AbortSignal;
+  }
+  return undefined;
+}
+
+interface InvocationNormalizationInput {
+  providedOptions: GenerateChatOptions;
+  normalizedRuntime: ProviderRuntimeContext;
+  settings: SettingsService;
+  providerName: string;
+  snapshot: Record<string, unknown>;
+  telemetry: NormalizedGenerateChatOptions['resolved']['telemetry'];
+  metadata: Record<string, unknown>;
+}
+
+function createNormalizedInvocation(
+  input: InvocationNormalizationInput,
+): RuntimeInvocationContext {
+  const providedInvocation = isRuntimeInvocationContext(
+    input.providedOptions.invocation,
+  )
+    ? input.providedOptions.invocation
+    : undefined;
+  const legacySignal = extractLegacySignal(input.providedOptions.invocation);
+  if (providedInvocation) {
+    const providedSignal = extractLegacySignal(providedInvocation);
+    return createRuntimeInvocationContext({
+      runtime: {
+        ...input.normalizedRuntime,
+        runtimeId: providedInvocation.runtimeId,
+      },
+      settings: input.settings,
+      providerName: input.providerName,
+      ephemeralsSnapshot: {
+        ...input.snapshot,
+        ...providedInvocation.ephemerals,
+      },
+      telemetry: providedInvocation.telemetry ?? input.telemetry,
+      metadata: providedInvocation.metadata,
+      userMemory: providedInvocation.userMemory,
+      redaction: providedInvocation.redaction,
+      ...(providedSignal ? { signal: providedSignal } : {}),
+      fallbackRuntimeId: providedInvocation.runtimeId,
+    });
+  }
+
+  return createRuntimeInvocationContext({
+    runtime: input.normalizedRuntime,
+    settings: input.settings,
+    providerName: input.providerName,
+    ephemeralsSnapshot: input.snapshot,
+    telemetry: input.telemetry,
+    metadata: input.metadata,
+    userMemory:
+      typeof input.providedOptions.userMemory === 'string'
+        ? input.providedOptions.userMemory
+        : undefined,
+    ...(legacySignal ? { signal: legacySignal } : {}),
+    fallbackRuntimeId: `${input.providerName}:normalizeGenerateChatOptions`,
+  });
+}
+
 export function normalizeProviderGenerateChatOptions(
   provider: BaseProvider,
   providedOptions: GenerateChatOptions,
@@ -222,40 +327,15 @@ export function normalizeProviderGenerateChatOptions(
     metadata: guard.metadata,
     config: finalConfig,
   };
-  const snapshot = deps.buildEphemeralsSnapshot(settings);
-  const fallbackInvocation = createRuntimeInvocationContext({
-    runtime: normalizedRuntime,
+  const invocation = createNormalizedInvocation({
+    providedOptions,
+    normalizedRuntime,
     settings,
     providerName: deps.providerName,
-    ephemeralsSnapshot: snapshot,
+    snapshot: deps.buildEphemeralsSnapshot(settings),
     telemetry: resolved.telemetry,
     metadata: guard.metadata,
-    userMemory:
-      typeof providedOptions.userMemory === 'string'
-        ? providedOptions.userMemory
-        : undefined,
-    fallbackRuntimeId: `${deps.providerName}:normalizeGenerateChatOptions`,
   });
-
-  const invocation = providedOptions.invocation
-    ? createRuntimeInvocationContext({
-        runtime: {
-          ...normalizedRuntime,
-          runtimeId: providedOptions.invocation.runtimeId,
-        },
-        settings,
-        providerName: deps.providerName,
-        ephemeralsSnapshot: {
-          ...snapshot,
-          ...providedOptions.invocation.ephemerals,
-        },
-        telemetry: providedOptions.invocation.telemetry ?? resolved.telemetry,
-        metadata: providedOptions.invocation.metadata,
-        userMemory: providedOptions.invocation.userMemory,
-        redaction: providedOptions.invocation.redaction,
-        fallbackRuntimeId: providedOptions.invocation.runtimeId,
-      })
-    : fallbackInvocation;
 
   return {
     ...providedOptions,
