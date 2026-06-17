@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- behavioral coverage of async-task cancellation wiring. */
-
 /**
  * Behavioral tests proving that cancelOngoingRequest (ESC) cancels running
  * async subagent tasks via AsyncTaskManager. Uses a REAL AsyncTaskManager so
