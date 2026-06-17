@@ -283,24 +283,26 @@ export function useAgenticLoop(args: UseAgenticLoopArgs): UseAgenticLoopReturn {
       signal: AbortSignal,
       promptId: string,
     ): Promise<void> => {
-      const previous = inflightRunRef.current;
-      if (previous) {
-        await previous.catch(() => {
-          // Swallow the previous run's error; only the current run's error
-          // propagates.
-        });
-      }
-
       const userMessageTimestamp = Date.now();
-      const currentRun = iterateLoop(
-        loop,
-        message,
-        signal,
-        promptId,
-        latestArgs.current,
-        userMessageTimestamp,
-        processedMemoryTools,
-      );
+      // Chain on the current in-flight promise BEFORE assigning the new one so
+      // that multiple overlapping callers serialize correctly: if B and C both
+      // enter while A runs, C chains onto B's promise (which chains onto A).
+      // The previous run's error is swallowed; only the current run's error
+      // propagates to the caller.
+      const previous = inflightRunRef.current ?? Promise.resolve();
+      const currentRun = previous
+        .catch(() => {})
+        .then(() =>
+          iterateLoop(
+            loop,
+            message,
+            signal,
+            promptId,
+            latestArgs.current,
+            userMessageTimestamp,
+            processedMemoryTools,
+          ),
+        );
       inflightRunRef.current = currentRun;
       try {
         await currentRun;

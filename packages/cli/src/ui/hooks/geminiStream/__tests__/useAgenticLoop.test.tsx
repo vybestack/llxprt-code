@@ -530,14 +530,15 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
     const controllerA = new AbortController();
     const controllerB = new AbortController();
 
-    const errors: unknown[] = [];
+    let firstError: unknown;
+    let secondError: unknown;
 
     // Start the first run WITHOUT awaiting it.
     const firstPromise = act(async () => {
       try {
         await result.current.runLoop('go', controllerA.signal, 'p1');
       } catch (e) {
-        errors.push(e);
+        firstError = e;
       }
     });
 
@@ -552,17 +553,20 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
       try {
         await result.current.runLoop('go2', controllerB.signal, 'p2');
       } catch (e) {
-        errors.push(e);
+        secondError = e;
       }
     });
 
     await Promise.all([firstPromise, secondPromise]);
 
-    // Neither run must have thrown the concurrent-execution error.
-    for (const e of errors) {
-      const msg = e instanceof Error ? e.message : String(e);
-      expect(msg).not.toContain('concurrent');
-    }
+    // The second (re-submit) run must succeed without error — proving the
+    // serialization allowed it to run after the cancelled first run.
+    expect(secondError).toBeUndefined();
+    // The first run was cancelled, so it may throw, but must NOT be the
+    // concurrent-execution error.
+    const firstMsg =
+      firstError instanceof Error ? firstError.message : String(firstError);
+    expect(firstMsg).not.toContain('concurrent');
   });
 
   it('clears external (subagent) tools from the display via markToolsAsDisplayCleared', async () => {
