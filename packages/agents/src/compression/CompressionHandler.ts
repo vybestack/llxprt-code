@@ -57,6 +57,7 @@ import {
  */
 export class CompressionHandler {
   static readonly TOKEN_SAFETY_MARGIN = 1000;
+  static readonly CONTEXT_LIMIT_FUDGE_FACTOR = 0.005;
   static readonly DEFAULT_COMPLETION_BUDGET = 65_536;
   static readonly COMPRESSION_COOLDOWN_MS = 60_000;
   static readonly COMPRESSION_FAILURE_THRESHOLD = 3;
@@ -375,9 +376,16 @@ export class CompressionHandler {
     );
     const userContextLimit = this.runtimeContext.ephemerals.contextLimit();
     const limit = tokenLimit(this.runtimeContext.state.model, userContextLimit);
-    const marginAdjustedLimit = Math.max(
+    const safetyAdjustedLimit = Math.max(
       0,
       limit - CompressionHandler.TOKEN_SAFETY_MARGIN,
+    );
+    const marginAdjustedLimit = Math.min(
+      limit,
+      Math.floor(
+        safetyAdjustedLimit +
+          safetyAdjustedLimit * CompressionHandler.CONTEXT_LIMIT_FUDGE_FACTOR,
+      ),
     );
     return { completionBudget, limit, marginAdjustedLimit };
   }

@@ -1022,6 +1022,68 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
   }
 
   /**
+   * @requirement REQ-2067.1
+   * Hard-limit gate allows a small estimation cushion before mutating history.
+   */
+  it('allows projected tokens within the 0.5% context-limit fudge factor', async () => {
+    const chat = makeChatForEnforceContextWindow({
+      totalTokens: 149_002,
+      contextLimit: 200_000,
+      maxOutputTokens: 40_000,
+    });
+
+    const getStrategy = vi.spyOn(compressionFactory, 'getCompressionStrategy');
+
+    await expect(
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
+    ).resolves.toBeUndefined();
+
+    expect(getStrategy).not.toHaveBeenCalled();
+  });
+
+  /**
+   * @requirement REQ-2067.2
+   * Hard-limit gate still enforces requests beyond the estimation cushion.
+   */
+  it('still enforces projected tokens beyond the 0.5% context-limit fudge factor', async () => {
+    const chat = makeChatForEnforceContextWindow({
+      totalTokens: 150_000,
+      contextLimit: 200_000,
+      maxOutputTokens: 40_000,
+    });
+
+    let compressionAttempts = 0;
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
+        name: 'middle-out' as const,
+        requiresLLM: true,
+        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+        compress: vi.fn().mockImplementation(async () => {
+          compressionAttempts++;
+          return {
+            newHistory: [
+              { role: 'user', parts: [{ text: 'hello' }] },
+              { role: 'model', parts: [{ text: 'hi' }] },
+            ],
+            metadata: {
+              originalMessageCount: 10,
+              compressedMessageCount: 9,
+              strategyUsed: 'middle-out' as const,
+              llmCallMade: true,
+            },
+          };
+        }),
+      }),
+    );
+    vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(150_000);
+
+    await expect(
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
+    ).rejects.toThrow('tokensStillNeeded=5');
+
+    expect(compressionAttempts).toBeGreaterThan(0);
+  });
+  /**
    * @requirement REQ-1791.1
    * enforceContextWindow bypasses cooldown and still attempts compression.
    */
@@ -1376,13 +1438,13 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     }
 
     expect(errorMessage).toContain(
-      'Request still exceeds the safety-adjusted context limit (99000 tokens).',
+      'Request still exceeds the safety-adjusted context limit (99495 tokens).',
     );
     expect(errorMessage).toContain(
       'density optimization and compression reduced 0 tokens',
     );
     expect(errorMessage).toContain('completionBudget=90000');
-    expect(errorMessage).toContain('tokensStillNeeded=81000');
+    expect(errorMessage).toContain('tokensStillNeeded=80505');
     expect(errorMessage).toContain(
       'consumes more than 80% of the context window (100000)',
     );
