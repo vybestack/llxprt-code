@@ -57,6 +57,7 @@ interface HarnessState {
   model: string;
   providerName?: string;
   profileName?: string | null;
+  providerManagerDefaultModel?: string;
   providerManagerActiveModel?: string;
   lastPromptId?: string;
   currentSequenceModel: string | null;
@@ -76,6 +77,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     model: options.model ?? 'gpt-4',
     providerName: options.providerName,
     profileName: options.profileName ?? null,
+    providerManagerDefaultModel: options.providerManagerDefaultModel,
     providerManagerActiveModel: options.providerManagerActiveModel,
     lastPromptId: options.lastPromptId,
     currentSequenceModel: options.currentSequenceModel ?? null,
@@ -92,7 +94,8 @@ function buildOrchestrator(options: BuildOptions = {}): {
     getActiveProviderName: vi.fn(() => state.providerName ?? ''),
     getActiveProvider: vi.fn(() => ({
       name: state.providerName ?? 'openai',
-      getDefaultModel: vi.fn(() => state.providerManagerActiveModel ?? ''),
+      getCurrentModel: vi.fn(() => state.providerManagerActiveModel ?? ''),
+      getDefaultModel: vi.fn(() => state.providerManagerDefaultModel ?? ''),
     })),
   };
 
@@ -334,6 +337,23 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     // The ModelInfo should reflect provider manager active model,
     // not the config model
     expect(infos[0]?.model).toBe('provider-active-model');
+  });
+
+  it('does not report provider defaults as the active model when a user-selected provider model exists', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'selected-provider-model',
+      providerName: 'Makora',
+      providerManagerDefaultModel: 'nvidia/Kimi-K2.6-NVFP4',
+      providerManagerActiveModel: 'zai-org/GLM-5.1-FP8',
+    });
+
+    const infos = await collectModelInfos(
+      orchestrator,
+      'prompt-selected-model',
+    );
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.model).toBe('zai-org/GLM-5.1-FP8');
   });
 
   it('restores all committed previous history when initializing the next chat', async () => {
