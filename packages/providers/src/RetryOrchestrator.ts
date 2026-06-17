@@ -49,6 +49,34 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { AllBucketsExhaustedError } from './errors.js';
 import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
+/**
+ * Internal shape used to carry an AbortSignal through retry orchestration when
+ * no full RuntimeInvocationContext is available (e.g. legacy signal signature).
+ * BaseProvider normalization detects this shape and replaces it with a real
+ * RuntimeInvocationContext while preserving the signal via extractLegacySignal.
+ */
+interface SignalOnlyInvocation {
+  readonly signal?: AbortSignal;
+}
+
+function withLegacySignal(
+  signal: AbortSignal | undefined,
+): GenerateChatOptions['invocation'] | undefined {
+  if (!signal) {
+    return undefined;
+  }
+  return { signal } as unknown as GenerateChatOptions['invocation'];
+}
+
+function extractSignal(
+  invocation: GenerateChatOptions['invocation'],
+): AbortSignal | undefined {
+  if (!invocation) {
+    return undefined;
+  }
+  return (invocation as unknown as SignalOnlyInvocation).signal;
+}
+
 function isSignalAborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
 }
@@ -195,24 +223,24 @@ export class RetryOrchestrator implements IProvider {
 
     if (Array.isArray(optionsOrContents)) {
       // Legacy signature: (contents, tools?, signal?)
+      // The signal is carried on invocation so retry logic and the wrapped
+      // provider can read it; BaseProvider normalization replaces this stub
+      // with a real RuntimeInvocationContext (preserving the signal).
       options = {
         contents: optionsOrContents,
         tools,
-        invocation: signal
-          ? ({ signal } as unknown as GenerateChatOptions['invocation'])
-          : undefined,
+        invocation: withLegacySignal(signal),
       } as GenerateChatOptions;
     } else {
       // Modern signature: (options)
       options = optionsOrContents;
 
-      // Ensure invocation.signal is propagated to options
+      // Ensure invocation.signal is propagated to options when only a signal
+      // was supplied and no invocation exists yet.
       if (!options.invocation && signal) {
         options = {
           ...options,
-          invocation: {
-            signal,
-          } as unknown as GenerateChatOptions['invocation'],
+          invocation: withLegacySignal(signal),
         };
       }
     }
@@ -240,7 +268,7 @@ export class RetryOrchestrator implements IProvider {
 
     // Extract signal - it may be on invocation or in options directly
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
-    const signal = (options.invocation as { signal?: AbortSignal })?.signal;
+    const signal = extractSignal(options.invocation);
 
     // Check for abort before starting
     if (isSignalAborted(signal)) {

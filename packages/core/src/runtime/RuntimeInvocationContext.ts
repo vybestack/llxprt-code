@@ -56,6 +56,8 @@ export interface RuntimeInvocationContext {
   readonly userMemory?: string;
   /** Optional redaction configuration for logging/telemetry surfaces */
   readonly redaction?: Readonly<RedactionConfig>;
+  /** Optional AbortSignal propagated through retry orchestration and providers */
+  readonly signal?: AbortSignal;
   /** Helper to read a strongly-typed ephemeral override */
   getEphemeral<T = unknown>(key: string): T | undefined;
   /** Helper to read a CLI setting value */
@@ -81,6 +83,8 @@ export interface RuntimeInvocationContextInit {
   userMemory?: string;
   /** Optional redaction configuration override */
   redaction?: RedactionConfig;
+  /** Optional AbortSignal propagated to retry orchestration and providers */
+  signal?: AbortSignal;
   /** Optional fallback runtime id when runtime.runtimeId is missing */
   fallbackRuntimeId?: string;
 }
@@ -147,6 +151,7 @@ export function createRuntimeInvocationContext(
     telemetry: init.telemetry,
     userMemory,
     redaction,
+    signal: init.signal,
     getEphemeral<T = unknown>(key: string): T | undefined {
       return ephemerals[key] as T | undefined;
     },
