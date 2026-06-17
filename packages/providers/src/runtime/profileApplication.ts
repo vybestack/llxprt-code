@@ -27,6 +27,7 @@ import {
   getProfileModelParams,
   getProfileProvider,
   getStringValue,
+  isPositiveContextLimit,
 } from './profile-application/profileAccessors.js';
 import { maybeRegisterLoadBalancerProfile } from './profile-application/loadBalancerProfile.js';
 
@@ -316,10 +317,6 @@ const PRE_APPLIED_EPHEMERAL_KEYS = new Set([
   'GOOGLE_CLOUD_PROJECT',
   'GOOGLE_CLOUD_LOCATION',
 ]);
-
-function isPositiveContextLimit(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0;
-}
 
 function applyNonAuthEphemerals(sanitizedProfile: Profile): void {
   const otherEphemerals = Object.entries(

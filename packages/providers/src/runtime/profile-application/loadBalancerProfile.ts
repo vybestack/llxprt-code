@@ -25,6 +25,7 @@ import {
   getProfileModelParams,
   getProfileProvider,
   getStringValue,
+  isPositiveContextLimit,
 } from './profileAccessors.js';
 
 interface ModelMetadataProvider {
@@ -191,10 +192,6 @@ async function resolveLoadBalancerSubProfile(
     ephemeralSettings: subProfileEphemeralSettings,
     modelParams: getProfileModelParams(subProfile),
   };
-}
-
-function isPositiveContextLimit(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 function getLoadBalancerContextLimit(
