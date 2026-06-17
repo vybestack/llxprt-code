@@ -274,8 +274,10 @@ function applyToolWhitelistToEphemerals(
     return;
   }
 
-  const existingAllowed = Array.isArray(ephemerals['tools.allowed'])
-    ? (ephemerals['tools.allowed'] as string[])
+  const existingAllowedValue = ephemerals['tools.allowed'];
+  const hasExistingAllowed = Array.isArray(existingAllowedValue);
+  const existingAllowed = hasExistingAllowed
+    ? existingAllowedValue
         .filter((entry): entry is string => typeof entry === 'string')
         .map(canonicalizeToolName)
         .filter(
@@ -286,10 +288,9 @@ function applyToolWhitelistToEphemerals(
         )
     : [];
 
-  const allowedSet =
-    existingAllowed.length > 0
-      ? normalizedWhitelist.filter((entry) => existingAllowed.includes(entry))
-      : normalizedWhitelist;
+  const allowedSet = hasExistingAllowed
+    ? normalizedWhitelist.filter((entry) => existingAllowed.includes(entry))
+    : normalizedWhitelist;
 
   ephemerals['tools.allowed'] = Array.from(new Set(allowedSet));
 }

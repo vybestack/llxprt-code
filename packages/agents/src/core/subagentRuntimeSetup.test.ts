@@ -704,6 +704,19 @@ describe('subagentRuntimeSetup', () => {
       expect(config.getEphemeralSettings()['tools.allowed']).toStrictEqual([]);
     });
 
+    it('preserves parent explicit empty tools.allowed when intersecting with a non-empty whitelist', () => {
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+        undefined,
+        { tools: { allowed: [] } },
+        { tools: ['read_file'] },
+      );
+      expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
+      expect(config.getEphemeralSettings()['tools.allowed']).toStrictEqual([]);
+    });
     it('does not set tools.allowed when toolConfig is undefined', () => {
       const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
       const config = createToolExecutionConfig(
