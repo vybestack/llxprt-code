@@ -535,8 +535,9 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
     // The external tool's callId was marked display-cleared exactly once so
     // the display clears it. The tool itself still executed once (the loop ran it).
     await waitFor(() => {
-      expect(markedDisplayCleared.flat()).toContain('subagent-call');
+      expect(markedDisplayCleared).toHaveLength(1);
     });
+    expect(markedDisplayCleared[0]).toStrictEqual(['subagent-call']);
     expect(tool.executeFn).toHaveBeenCalledTimes(1);
   });
 
