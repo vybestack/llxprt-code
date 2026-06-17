@@ -29,6 +29,22 @@ const __dirname = path.dirname(__filename);
 // Determine the monorepo root (assuming eslint.config.js is at the root)
 const projectRoot = __dirname;
 
+const legacyDirectiveCleanupScopes = [
+  'packages/core/src/**/*.{ts,tsx}', // #2081/#2082
+  'packages/providers/src/**/*.{ts,tsx}', // #2083/#2084/#2092
+  'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
+  'packages/cli/src/**/*.{ts,tsx}', // #2086/#2087/#2091
+  'packages/tools/src/**/*.{ts,tsx}', // #2088
+  'packages/mcp/src/**/*.{ts,tsx}', // #2089/#2092
+  'packages/auth/src/**/*.{ts,tsx}', // #2089
+  'packages/settings/src/**/*.{ts,tsx}', // #2089
+  'packages/telemetry/src/**/*.{ts,tsx}', // #2089
+  'packages/ide-integration/src/**/*.{ts,tsx}', // #2089
+  'packages/a2a-server/src/**/*.{ts,tsx}', // #2089
+  'packages/policy/src/**/*.{ts,tsx}', // #2089
+  'packages/storage/src/**/*.{ts,tsx}', // #2092
+];
+
 export default tseslint.config(
   {
     // Global ignores
@@ -455,7 +471,7 @@ export default tseslint.config(
   // diffs immediately; each cleanup issue removes or narrows this override for
   // its scope before fixing that scope.
   {
-    files: ['packages/*/src/**/*.{ts,tsx}'],
+    files: legacyDirectiveCleanupScopes,
     linterOptions: {
       reportUnusedDisableDirectives: 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
     },

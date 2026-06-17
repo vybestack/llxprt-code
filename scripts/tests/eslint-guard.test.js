@@ -84,4 +84,41 @@ describe('check-eslint-guard', () => {
     expect(violations).toHaveLength(1);
     expect(violations[0].message).toContain('--max-warnings 0');
   });
+
+  it('allows moving the inline-disable ban without weakening it', () => {
+    const diff = [
+      'diff --git a/eslint.config.js b/eslint.config.js',
+      'index 0000000..1111111 100644',
+      '--- a/eslint.config.js',
+      '+++ b/eslint.config.js',
+      '@@ -1,1 +1,1 @@',
+      "-      'eslint-comments/no-use': ['error'],",
+      "+      'eslint-comments/no-use': ['error'],",
+    ].join('\n');
+
+    expect(checkDiff(diff)).toEqual([]);
+  });
+
+  it('allows moving max-warnings zero without removing it', () => {
+    const diff = [
+      'diff --git a/package.json b/package.json',
+      'index 0000000..1111111 100644',
+      '--- a/package.json',
+      '+++ b/package.json',
+      '@@ -1,1 +1,1 @@',
+      '-    "lint:ci": "eslint . --max-warnings 0",',
+      '+    "lint:ci": "cross-env eslint . --max-warnings 0",',
+    ].join('\n');
+
+    expect(checkDiff(diff)).toEqual([]);
+  });
+
+  it('rejects inline ESLint disables in scripts', () => {
+    const violations = checkDiff(
+      diffFor('scripts/example.js', '// eslint-disable-line no-console'),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].file).toBe('scripts/example.js');
+  });
 });

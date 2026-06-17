@@ -226,6 +226,13 @@ jobs:
           git diff --exit-code -- . ':!project-plans/'
 
       - name: 'Run ESLint policy guard'
+        env:
+          ESLINT_GUARD_BASE: >-
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha
+              || github.event_name == 'merge_group' && github.event.merge_group.base_sha
+              || github.event_name == 'push' && github.event.before
+              || 'origin/main' }}
+          ESLINT_GUARD_HEAD: ${{ github.sha }}
         run: |-
           npm run lint:eslint-guard
 

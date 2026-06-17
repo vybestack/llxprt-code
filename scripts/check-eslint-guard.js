@@ -12,14 +12,7 @@ const DEFAULT_BASE = process.env.GITHUB_BASE_REF
   ? 'origin/' + process.env.GITHUB_BASE_REF
   : 'origin/main';
 
-const POLICY_PATHS = [
-  '.github/workflows',
-  'eslint.config.js',
-  'package.json',
-  'packages',
-  'integration-tests',
-  'test-scripts',
-];
+const POLICY_PATHS = ['.'];
 
 function parseArgs(argv) {
   const args = {
@@ -130,6 +123,12 @@ function addViolation(violations, file, lineNumber, message, content) {
 
 export function checkDiff(diff) {
   const violations = [];
+  const policyState = {
+    removedInlineDisableBan: null,
+    addedInlineDisableBan: false,
+    removedMaxWarnings: null,
+    addedMaxWarnings: false,
+  };
   let file = '';
   let newLine = 0;
   let oldLine = 0;
@@ -185,6 +184,17 @@ export function checkDiff(diff) {
         );
       }
 
+      if (
+        file === 'eslint.config.js' &&
+        content.includes('eslint-comments/no-use') &&
+        !content.includes("'off'") &&
+        !content.includes('"off"')
+      ) {
+        policyState.addedInlineDisableBan = true;
+      }
+      if (file === 'package.json' && content.includes('--max-warnings 0')) {
+        policyState.addedMaxWarnings = true;
+      }
       newLine += 1;
       continue;
     }
@@ -194,24 +204,22 @@ export function checkDiff(diff) {
       const currentLine = oldLine;
       if (
         file === 'eslint.config.js' &&
-        content.includes('eslint-comments/no-use')
+        content.includes('eslint-comments/no-use') &&
+        !content.includes("'off'") &&
+        !content.includes('"off"')
       ) {
-        addViolation(
-          violations,
+        policyState.removedInlineDisableBan = {
           file,
-          currentLine,
-          'Do not remove or weaken the inline-disable ban from eslint.config.js.',
+          lineNumber: currentLine,
           content,
-        );
+        };
       }
       if (file === 'package.json' && content.includes('--max-warnings 0')) {
-        addViolation(
-          violations,
+        policyState.removedMaxWarnings = {
           file,
-          currentLine,
-          'Do not remove --max-warnings 0 from lint:ci.',
+          lineNumber: currentLine,
           content,
-        );
+        };
       }
       oldLine += 1;
       continue;
@@ -223,6 +231,27 @@ export function checkDiff(diff) {
     }
   }
 
+  if (
+    policyState.removedInlineDisableBan &&
+    !policyState.addedInlineDisableBan
+  ) {
+    addViolation(
+      violations,
+      policyState.removedInlineDisableBan.file,
+      policyState.removedInlineDisableBan.lineNumber,
+      'Do not remove or weaken the inline-disable ban from eslint.config.js.',
+      policyState.removedInlineDisableBan.content,
+    );
+  }
+  if (policyState.removedMaxWarnings && !policyState.addedMaxWarnings) {
+    addViolation(
+      violations,
+      policyState.removedMaxWarnings.file,
+      policyState.removedMaxWarnings.lineNumber,
+      'Do not remove --max-warnings 0 from lint:ci.',
+      policyState.removedMaxWarnings.content,
+    );
+  }
   return violations;
 }
 
