@@ -57,7 +57,7 @@ function makeCompletedTool(overrides: {
       agentId: overrides.agentId ?? DEFAULT_AGENT_ID,
     },
     status: overrides.status ?? 'success',
-    responseSubmittedToGemini: false,
+    displayCleared: false,
     response: {
       callId: overrides.callId,
       responseParts: overrides.responseParts ?? [functionResponsePart],

@@ -107,11 +107,11 @@ export interface UseAgenticLoopArgs {
   /** Invoked when the pause tool succeeds. */
   onTodoPause?: () => void;
   /**
-   * Marks the given tool callIds as submitted so the React display state clears
-   * them. Used for external (subagent) tools whose results are owned by the
+   * Marks the given tool callIds as cleared from the React display state.
+   * Used for external (subagent) tools whose results are owned by the
    * subagent flow, not the primary loop continuation. Display-only.
    */
-  markToolsAsSubmitted?: (callIds: string[]) => void;
+  markToolsAsDisplayCleared?: (callIds: string[]) => void;
   /** Display callbacks forwarded into the loop's scheduler. */
   onToolCallsUpdate?: (toolCalls: ToolCall[]) => void;
   outputUpdateHandler?: (callId: string, chunk: string | AnsiOutput) => void;
@@ -181,9 +181,11 @@ function handleToolsComplete(
 
   // Clear external (subagent) tools from the React display state. Their results
   // are owned by the subagent flow, not the primary loop continuation, so the
-  // display must mark them submitted to remove them from the pending view.
+  // display must mark them cleared to remove them from the pending view.
   if (externalTools.length > 0) {
-    args.markToolsAsSubmitted?.(externalTools.map((tc) => tc.request.callId));
+    args.markToolsAsDisplayCleared?.(
+      externalTools.map((tc) => tc.request.callId),
+    );
   }
 }
 

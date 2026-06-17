@@ -75,7 +75,7 @@ interface ToolSchedulerState {
   scheduler: ReturnType<typeof useToolSchedulerSetup>;
   toolCalls: TrackedToolCall[];
   scheduleToolCalls: UseSubmitQueryDeps['scheduleToolCalls'];
-  markToolsAsSubmitted: (callIds: string[]) => void;
+  markToolsAsDisplayCleared: (callIds: string[]) => void;
   cancelAllToolCalls: () => void;
   lastToolOutputTime: number;
   interactiveRuntimeReady: boolean;
@@ -177,7 +177,7 @@ function useToolSchedulerState(
   const [
     toolCalls,
     scheduleToolCalls,
-    markToolsAsSubmitted,
+    markToolsAsDisplayCleared,
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
@@ -188,7 +188,7 @@ function useToolSchedulerState(
     scheduler,
     toolCalls,
     scheduleToolCalls,
-    markToolsAsSubmitted,
+    markToolsAsDisplayCleared,
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
@@ -260,7 +260,7 @@ function useLoopForStream(
     clearPendingHistoryItem: () => st.setPendingHistoryItem(null),
     performMemoryRefresh: args.performMemoryRefresh,
     onTodoPause: args.onTodoPause,
-    markToolsAsSubmitted: scheduler.markToolsAsSubmitted,
+    markToolsAsDisplayCleared: scheduler.markToolsAsDisplayCleared,
     onToolCallsUpdate: scheduler.replaceToolCalls,
     outputUpdateHandler: scheduler.updateToolOutput,
     getPreferredEditor: args.getPreferredEditor,
