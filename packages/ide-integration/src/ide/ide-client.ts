@@ -28,10 +28,10 @@ import {
 import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
 const logger = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  debug: (...args: any[]) => debugLogger.debug('[DEBUG] [IDEClient]', ...args),
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  error: (...args: any[]) => debugLogger.error('[ERROR] [IDEClient]', ...args),
+  debug: (...args: unknown[]) =>
+    debugLogger.debug('[DEBUG] [IDEClient]', ...args),
+  error: (...args: unknown[]) =>
+    debugLogger.error('[ERROR] [IDEClient]', ...args),
 };
 
 type StdioConfig = {
@@ -428,8 +428,7 @@ export class IdeClient {
 
   private createProxyAwareFetch() {
     // ignore proxy for '127.0.0.1' by default to allow connecting to the ide mcp server
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var may be empty string, both cases need same handling
-    const existingNoProxy = process.env['NO_PROXY'] || '';
+    const existingNoProxy = process.env['NO_PROXY'] ?? '';
     const agent = new EnvHttpProxyAgent({
       noProxy: [existingNoProxy, '127.0.0.1'].filter(Boolean).join(','),
     });
