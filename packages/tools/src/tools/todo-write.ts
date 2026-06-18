@@ -181,9 +181,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     );
   }
 
-  private validateAndFilterTodos(
-    normalizedTodos: Todo[],
-  ):
+  private validateAndFilterTodos(normalizedTodos: Todo[]):
     | { error: { message: string }; llmContent: string; returnDisplay: string }
     | {
         todos: Todo[];
