@@ -15,7 +15,7 @@ import {
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
-import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -1584,7 +1584,7 @@ describe('TaskTool', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
-    it('passes undefined (not foreground signal) to orchestrator.launch for async tasks', async () => {
+    it('passes the async abort controller signal to orchestrator.launch so cancelTask can stop the subagent', async () => {
       const mockAsyncTaskManager = {
         canLaunchAsync: () => ({ allowed: true }),
         tryReserveAsyncSlot: () => 'booking-1',
@@ -1619,11 +1619,192 @@ describe('TaskTool', () => {
       const invocation = tool.build(params);
       await invocation.execute(new AbortController().signal);
 
-      // Async tasks must NOT pass the foreground signal to launch
-      // so the scope has no parent abort signal dependency
-      expect(launchMock).toHaveBeenCalledWith(expect.anything(), undefined);
+      // Async tasks MUST pass an AbortSignal (the async abort controller) to
+      // launch so AsyncTaskManager.cancelTask can abort the running subagent.
+      expect(launchMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.any(AbortSignal),
+      );
 
       await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    it('wires the async abort controller so cancelTask aborts the launch signal', async () => {
+      // End-to-end wiring at the task-tool boundary: the signal passed to
+      // launch is the SAME AbortController registered with the AsyncTaskManager.
+      // Aborting it via cancelTask flips that signal's .aborted to true,
+      // proving the subagent CAN be stopped by cancellation.
+      const realAsyncTaskManager = new AsyncTaskManager();
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-cancel-agent',
+        scope: {
+          runNonInteractive: vi.fn().mockImplementation(
+            () =>
+              new Promise<void>(() => {
+                // never resolves; we cancel via cancelTask
+              }),
+          ),
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () => realAsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Cancellable work',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      // The signal passed to launch is the async abort controller's signal.
+      const launchSignal = launchMock.mock.calls[0]?.[1] as
+        | AbortSignal
+        | undefined;
+      expect(launchSignal).toBeInstanceOf(AbortSignal);
+      expect(launchSignal!.aborted).toBe(false);
+
+      // Cancel via the real AsyncTaskManager → the launch signal aborts.
+      realAsyncTaskManager.cancelTask('async-cancel-agent');
+
+      expect(launchSignal!.aborted).toBe(true);
+    });
+
+    it('relays the foreground signal abort into the async abort controller', async () => {
+      // Fix (b): when the foreground signal passed to executeAsync aborts,
+      // the async abort controller's signal must also abort so the subagent
+      // stops.
+      const realAsyncTaskManager = new AsyncTaskManager();
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-relay-agent',
+        scope: {
+          runNonInteractive: vi.fn().mockImplementation(
+            () =>
+              new Promise<void>(() => {
+                // never resolves
+              }),
+          ),
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () => realAsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Relay work',
+        async: true,
+      };
+
+      const foregroundController = new AbortController();
+      const invocation = tool.build(params);
+      await invocation.execute(foregroundController.signal);
+
+      const launchSignal = launchMock.mock.calls[0]?.[1] as
+        | AbortSignal
+        | undefined;
+      expect(launchSignal).toBeInstanceOf(AbortSignal);
+      expect(launchSignal!.aborted).toBe(false);
+
+      // Abort the FOREGROUND signal (ESC) → the launch signal must also abort.
+      foregroundController.abort();
+
+      // Give the once-listener a tick to fire.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(launchSignal!.aborted).toBe(true);
+    });
+
+    it('aborts the launch signal when the foreground aborts DURING launch (before registration)', async () => {
+      // Regression for the relay-installed-after-launch gap: if the foreground
+      // turn is cancelled (ESC) while orchestrator.launch is still pending —
+      // e.g. loading config/profile — the launch signal must already observe
+      // the abort, because the relay is wired BEFORE launch is awaited.
+      const realAsyncTaskManager = new AsyncTaskManager();
+      let capturedLaunchSignal: AbortSignal | undefined;
+      let resolveLaunch: (() => void) | undefined;
+      const launchGate = new Promise<void>((resolve) => {
+        resolveLaunch = resolve;
+      });
+      const launchMock = vi
+        .fn()
+        .mockImplementation(
+          async (_request: unknown, launchSignal: AbortSignal) => {
+            capturedLaunchSignal = launchSignal;
+            // Simulate slow launch (config/profile loading) that has not yet
+            // returned a scope when the user presses ESC.
+            await launchGate;
+            return {
+              agentId: 'async-launch-abort-agent',
+              scope: {
+                runNonInteractive: vi.fn().mockImplementation(
+                  () =>
+                    new Promise<void>(() => {
+                      // never resolves
+                    }),
+                ),
+                output: {
+                  terminate_reason: SubagentTerminateMode.GOAL,
+                  emitted_vars: {},
+                },
+              },
+              dispose: vi.fn().mockResolvedValue(undefined),
+            };
+          },
+        );
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () => realAsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Slow launch work',
+        async: true,
+      };
+
+      const foregroundController = new AbortController();
+      const invocation = tool.build(params);
+      const executePromise = invocation.execute(foregroundController.signal);
+
+      // Wait until launch has been entered (signal captured) but is still gated.
+      while (capturedLaunchSignal === undefined) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      expect(capturedLaunchSignal.aborted).toBe(false);
+
+      // Press ESC while launch is still pending.
+      foregroundController.abort();
+      expect(capturedLaunchSignal.aborted).toBe(true);
+
+      // Let launch resolve so the invocation can settle cleanly.
+      resolveLaunch?.();
+      await executePromise;
+
+      // The task that registered after the gated launch carries the SAME
+      // (already-aborted) controller the relay aborted, so it is registered in
+      // an aborted state rather than as a live, unstoppable background task.
+      const registered = realAsyncTaskManager.getTask(
+        'async-launch-abort-agent',
+      );
+      expect(registered).toBeDefined();
+      expect(registered!.abortController?.signal.aborted).toBe(true);
     });
 
     it('returns immediately with launch status when async=true (does not block)', async () => {
@@ -1862,6 +2043,60 @@ describe('TaskTool', () => {
       expect(completeTaskMock).not.toHaveBeenCalled();
 
       vi.useRealTimers();
+    });
+
+    it('does NOT label a user-cancelled task as timeout (cancelTask sets status to cancelled)', async () => {
+      // Fix (d): when the signal aborts because the user cancelled (via
+      // AsyncTaskManager.cancelTask, which sets status='cancelled'), the
+      // background path must NOT call failTask with 'Async task timed out'.
+      // Only a true timeout should be labelled as such.
+      const realAsyncTaskManager = new AsyncTaskManager();
+      let resolveRun: (() => void) | undefined;
+      const failTaskSpy = vi.spyOn(realAsyncTaskManager, 'failTask');
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-cancel-status',
+        scope: {
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+          runNonInteractive: vi.fn(
+            () =>
+              new Promise<void>((resolve) => {
+                resolveRun = resolve;
+              }),
+          ),
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () => realAsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'User-cancelled task',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      // Cancel via cancelTask (sets status to 'cancelled').
+      realAsyncTaskManager.cancelTask('async-cancel-status');
+
+      // Let the scope return (simulating scope completing after cancellation).
+      resolveRun?.();
+      // Wait for the background execution to finish.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // The task must NOT be labelled as a timeout.
+      expect(failTaskSpy).not.toHaveBeenCalledWith(
+        'async-cancel-status',
+        'Async task timed out',
+      );
     });
 
     it('returns error when async=true but global subagents.asyncEnabled is false', async () => {
