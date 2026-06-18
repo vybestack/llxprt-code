@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
@@ -42,11 +40,11 @@ let promptServiceInitPromise: Promise<void> | null = null;
  */
 async function initializePromptService(): Promise<void> {
   promptServiceInitPromise ??= (async () => {
-    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env var should fall through to default path */
+    const envDir = process.env.LLXPRT_PROMPTS_DIR;
     const baseDir =
-      process.env.LLXPRT_PROMPTS_DIR ||
-      path.join(os.homedir(), '.llxprt', 'prompts');
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+      envDir !== undefined && envDir !== ''
+        ? envDir
+        : path.join(os.homedir(), '.llxprt', 'prompts');
     promptService = new PromptService({
       baseDir,
       debugMode: process.env.DEBUG === 'true',
@@ -343,8 +341,8 @@ function resolveEnabledTools(tools?: string[]): string[] {
 }
 
 function resolveProvider(provider?: string): string {
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider should fall through to 'gemini'
-  let resolvedProvider = provider || 'gemini';
+  let resolvedProvider =
+    provider !== undefined && provider !== '' ? provider : 'gemini';
   if (!provider) {
     try {
       const settingsService = getRuntimeSettingsService();
@@ -412,8 +410,7 @@ async function buildPromptContext(
 
   return {
     provider: resolvedProvider,
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string model should fall through to default
-    model: model || 'gemini-1.5-pro',
+    model: model !== undefined && model !== '' ? model : 'gemini-1.5-pro',
     enabledTools,
     environment,
     enableToolPrompts,

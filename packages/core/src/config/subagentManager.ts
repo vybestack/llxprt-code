@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { type SubagentConfig } from '../config/types.js';
@@ -18,7 +16,6 @@ import { debugLogger } from '../utils/debugLogger.js';
 const ERROR_MESSAGES = {
   INVALID_NAME:
     'Invalid subagent name. Only alphanumeric, hyphens, and underscores allowed.',
-  NAME_REQUIRED: 'Subagent name is required.',
   PROFILE_REQUIRED: 'Profile name is required.',
   PROMPT_REQUIRED: 'Empty system prompt not allowed.',
   PROFILE_NOT_FOUND:
@@ -209,13 +206,11 @@ export class SubagentManager {
     profile: string,
     systemPrompt: string,
   ): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
-    if (profile === undefined || profile.trim() === '') {
+    if (profile.trim() === '') {
       throw new Error('Profile name is required.');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
-    if (systemPrompt === undefined || systemPrompt.trim() === '') {
+    if (systemPrompt.trim() === '') {
       throw new Error(ERROR_MESSAGES.PROMPT_REQUIRED);
     }
 
@@ -626,13 +621,7 @@ export class SubagentManager {
    */
   async validateProfileReference(profileName: string): Promise<boolean> {
     // Validate input
-    if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
-      profileName === undefined ||
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
-      profileName === null ||
-      profileName.trim() === ''
-    ) {
+    if (profileName.trim() === '') {
       return false;
     }
 
@@ -658,43 +647,20 @@ export class SubagentManager {
    */
   private getSubagentPath(name: string): string {
     // Centralize all name validation in this helper
-    // 1. Validate name is not undefined or null
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
-    if (name === undefined || name === null) {
-      throw new Error(ERROR_MESSAGES.NAME_REQUIRED);
-    }
-
-    // 2. Validate name is not an empty string or just whitespace
+    // 1. Validate name is not an empty string or just whitespace
     if (name.trim() === '') {
       throw new Error(ERROR_MESSAGES.INVALID_NAME);
     }
 
-    // 3. Sanitize filename (prevent path traversal)
+    // 2. Sanitize filename (prevent path traversal)
     const sanitizedName = name.replace(/[^a-zA-Z0-9_-]/g, '');
 
-    // 4. Validate name after sanitization
+    // 3. Validate name after sanitization
     if (sanitizedName !== name) {
       throw new Error(ERROR_MESSAGES.INVALID_NAME);
     }
 
-    // 5. Validate baseDir is provided to the instance
-    if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
-      this.baseDir === undefined ||
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
-      this.baseDir === null ||
-      this.baseDir.trim() === ''
-    ) {
-      throw new Error('Base directory is required');
-    }
-
-    // 6. Validate profileManager is provided to the instance
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
-    if (this.profileManager === undefined || this.profileManager === null) {
-      throw new Error('ProfileManager instance is required');
-    }
-
-    // Construct full path
+    // 4. Construct full path
     return path.join(this.baseDir, `${sanitizedName}.json`);
   }
 

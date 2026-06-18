@@ -14,84 +14,53 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
-import {
-  type IContent,
-  ContentValidation,
-  type ToolCallBlock,
-  type ToolResponseBlock,
-  type MediaBlock,
-} from './IContent.js';
+import { type IContent, type ToolCallBlock } from './IContent.js';
 import { EventEmitter } from 'events';
 // @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
-import { type TokensUpdatedEvent } from './HistoryEvents.js';
 import { DebugLogger } from '../../debug/index.js';
 import { randomUUID } from 'crypto';
 import { canonicalizeToolCallId } from './canonicalToolIds.js';
-import { estimateTokens as estimateTextTokens } from '../../utils/toolOutputLimiter.js';
 import type { DensityResult } from '../../core/compression/types.js';
-import { CompressionStrategyError } from '../../core/compression/types.js';
+import {
+  estimateContentTokens as estimateContentTokensImpl,
+  estimateTokensForContents as estimateTokensForContentsImpl,
+  resolveModelName,
+  simpleTokenEstimateForText,
+  type TokenizerProvider,
+} from './historyTokenEstimation.js';
+import {
+  validateDensityResult,
+  applyDensityMutations,
+} from './densityValidation.js';
+import {
+  computeStatistics,
+  type ConversationStatistics,
+  logContentAdded,
+  logQueuedDuringCompression,
+} from './curationDebugLogger.js';
+import {
+  type HistoryServiceEventEmitter,
+  type CompressionConfig,
+} from './historyEventTypes.js';
+import { getTokenizerForModel } from './historyTokenizerAdapter.js';
+import {
+  collectRespondedCallIds,
+  getMissingToolCalls,
+  createSyntheticToolMessage,
+  findUnmatchedToolCalls as findUnmatchedToolCallsHelper,
+} from './historyToolPairing.js';
+import { buildCuratedHistory } from './historyCuration.js';
+import { buildProviderContent } from './historyProviderPipeline.js';
+import { getLastContentBySpeaker } from './historyQuery.js';
+import {
+  getWithinTokenLimit as getWithinTokenLimitHelper,
+  summarizeOldHistory as summarizeOldHistoryHelper,
+} from './historyContextWindow.js';
 
-/**
- * Helper predicate: checks if content has valid blocks array with at least one element.
- * Used for defensive runtime guards that tolerate malformed persisted/runtime history.
- * Preserves old !content.blocks optional-chain protections.
- * Uses runtime widening to handle potentially malformed persisted data while avoiding
- * type comparison warnings for non-nullable static types.
- */
-function hasValidBlocks(content: IContent): boolean {
-  // Widen to unknown for runtime check to handle malformed persisted history
-  // where blocks may not be an array despite static typing
-  const blocks: unknown = content.blocks;
-  return Array.isArray(blocks) && blocks.length > 0;
-}
-
-/**
- * Typed EventEmitter for HistoryService events
- */
-interface HistoryServiceEventEmitter {
-  on(
-    event: 'tokensUpdated',
-    listener: (eventData: TokensUpdatedEvent) => void,
-  ): this;
-  on(event: 'contentAdded', listener: (content: IContent) => void): this;
-  on(event: 'compressionStarted', listener: () => void): this;
-  on(
-    event: 'compressionEnded',
-    listener: (summary: IContent, itemsCompressed: number) => void,
-  ): this;
-  emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
-  emit(event: 'contentAdded', content: IContent): boolean;
-  emit(event: 'compressionStarted'): boolean;
-  emit(
-    event: 'compressionEnded',
-    summary: IContent,
-    itemsCompressed: number,
-  ): boolean;
-  off(
-    event: 'tokensUpdated',
-    listener: (eventData: TokensUpdatedEvent) => void,
-  ): this;
-  off(event: 'contentAdded', listener: (content: IContent) => void): this;
-  off(event: 'compressionStarted', listener: () => void): this;
-  off(
-    event: 'compressionEnded',
-    listener: (summary: IContent, itemsCompressed: number) => void,
-  ): this;
-}
-
-/**
- * Configuration for compression behavior
- */
-export interface CompressionConfig {
-  orphanTimeoutMs: number; // Time before considering a call orphaned
-  orphanMessageDistance: number; // Messages before considering orphaned
-  pendingGracePeriodMs: number; // Grace period for pending calls
-  minMessagesForCompression: number; // Minimum messages before compression
-}
+// Preserve the CompressionConfig export from the same path for consumers.
+export type { CompressionConfig };
 
 /**
  * Service for managing conversation history in a provider-agnostic way.
@@ -150,40 +119,10 @@ export class HistoryService
    * dependency when using the injection path.
    */
   private getTokenizerForModel(modelName: string): ITokenizer {
-    if (this.tokenizerCache.has(modelName)) {
-      return this.tokenizerCache.get(modelName)!;
-    }
-
-    // @plan:PLAN-20260603-ISSUE1584.P05
-    // @requirement:REQ-DEP-001
-    // Prefer injected factory when available — this is the injection path
-    if (this.tokenizerFactory) {
-      const runtimeTokenizer = this.tokenizerFactory.getTokenizer(modelName);
-      if (runtimeTokenizer) {
-        // Adapt RuntimeTokenizer to ITokenizer interface for backward compatibility
-        const adapter: ITokenizer = {
-          countTokens: (text: string, _model?: string) =>
-            Promise.resolve(runtimeTokenizer.countTokens(text)),
-        };
-        this.tokenizerCache.set(modelName, adapter);
-        return adapter;
-      }
-    }
-
-    // @plan:PLAN-20260603-ISSUE1584.P11
-    // @requirement:REQ-DEP-001
-    // Core fallback is estimate-only; concrete provider tokenizers are injected by CLI/providers.
-    const tokenizer: ITokenizer = {
-      countTokens: (content: unknown) => {
-        if (typeof content === 'string') {
-          return this.simpleTokenEstimateForText(content);
-        }
-        return estimateTextTokens(String(content ?? ''));
-      },
-    };
-
-    this.tokenizerCache.set(modelName, tokenizer);
-    return tokenizer;
+    return getTokenizerForModel(modelName, {
+      tokenizerCache: this.tokenizerCache,
+      tokenizerFactory: this.tokenizerFactory,
+    });
   }
 
   /**
@@ -252,7 +191,7 @@ export class HistoryService
         'Error counting tokens for raw text, using fallback:',
         error,
       );
-      return this.simpleTokenEstimateForText(text);
+      return simpleTokenEstimateForText(text);
     }
   }
 
@@ -324,11 +263,7 @@ export class HistoryService
   add(content: IContent, modelName?: string): void {
     // If compression is active, queue this operation
     if (this.isCompressing) {
-      this.logger.debug('Queueing add operation during compression', {
-        speaker: content.speaker,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        blockTypes: content.blocks?.map((b) => b.type),
-      });
+      logQueuedDuringCompression(this.logger, content);
 
       this.pendingOperations.push(() => {
         this.addInternal(content, modelName);
@@ -341,29 +276,10 @@ export class HistoryService
   }
 
   private addInternal(content: IContent, modelName?: string): void {
-    // Log content being added with any tool call/response IDs
-    this.logger.debug('Adding content to history:', {
-      speaker: content.speaker,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      blockTypes: content.blocks?.map((b) => b.type),
-      toolCallIds: content.blocks
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        ?.filter((b) => b.type === 'tool_call')
-        .map((b) => b.id),
-      toolResponseIds: content.blocks
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        ?.filter((b) => b.type === 'tool_response')
-        .map((b) => ({
-          callId: b.callId,
-          toolName: b.toolName,
-        })),
-      contentId: content.metadata?.id,
-      modelName,
-    });
+    logContentAdded(this.logger, content, modelName);
 
     // Only do basic validation - must have valid speaker
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (content.speaker && ['human', 'ai', 'tool'].includes(content.speaker)) {
+    if (['human', 'ai', 'tool'].includes(content.speaker)) {
       this.history.push(content);
 
       this.logger.debug(
@@ -422,103 +338,20 @@ export class HistoryService
     content: IContent,
     modelName: string,
   ): Promise<number> {
-    const tokenizer = this.getTokenizerForModel(modelName);
-    let totalTokens = 0;
-
-    for (const block of content.blocks) {
-      let blockText = '';
-
-      switch (block.type) {
-        case 'text':
-          blockText = block.text;
-          break;
-        case 'tool_call':
-          try {
-            blockText = JSON.stringify({
-              name: block.name,
-              parameters: block.parameters,
-            });
-          } catch (error) {
-            // Handle circular references or other JSON.stringify errors
-            this.logger.debug(
-              'Error stringifying tool_call parameters, using fallback:',
-              error,
-            );
-            // Fallback to just the tool name for token estimation
-            blockText = `tool_call: ${block.name}`;
-          }
-          break;
-        case 'tool_response':
-          // Check if result is already a string (common for tool responses)
-          if (typeof block.result === 'string') {
-            blockText = block.result;
-          } else if (block.error) {
-            blockText =
-              typeof block.error === 'string'
-                ? block.error
-                : JSON.stringify(block.error);
-          } else {
-            // Try to stringify the result
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            try {
-              blockText = JSON.stringify(block.result ?? '');
-            } catch (error) {
-              // Handle circular references or other JSON.stringify errors
-              this.logger.debug(
-                'Error stringifying tool_response result, using string conversion:',
-                error,
-              );
-              // Try to convert to string as fallback
-              try {
-                blockText = String(block.result);
-              } catch {
-                // Ultimate fallback
-                blockText = `[tool_response: ${block.toolName || 'unknown'} - content too large or complex to stringify]`;
-              }
-            }
-          }
-          break;
-        case 'thinking':
-          blockText = block.thought;
-          break;
-        case 'code':
-          blockText = block.code;
-          break;
-        case 'media':
-          // For media, just count the caption if any
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty caption same as no caption
-          blockText = block.caption || '';
-          break;
-        default:
-          // Unknown block type, skip
-          break;
-      }
-
-      if (blockText) {
-        try {
-          const blockTokens = await tokenizer.countTokens(blockText);
-          totalTokens += blockTokens;
-        } catch (error) {
-          this.logger.debug(
-            'Error counting tokens for block, using fallback:',
-            error,
-          );
-          totalTokens += this.simpleTokenEstimateForText(blockText);
-        }
-      }
-    }
-
-    return totalTokens;
+    return estimateContentTokensImpl(
+      content,
+      modelName,
+      this.tokenizerProvider(),
+      this.logger,
+    );
   }
 
-  /**
-   * Simple token estimation for text
-   */
-  private simpleTokenEstimateForText(text: string): number {
-    if (!text) return 0;
-    const wordCount = text.split(/\s+/).length;
-    const characterCount = text.length;
-    return Math.round(Math.max(wordCount * 1.3, characterCount / 4));
+  /** Provide the TokenizerProvider interface for the token estimation helpers. */
+  private tokenizerProvider(): TokenizerProvider {
+    return {
+      getTokenizerForModel: (modelName: string) =>
+        this.getTokenizerForModel(modelName),
+    };
   }
 
   /**
@@ -537,73 +370,12 @@ export class HistoryService
     contents: IContent[],
     modelName?: string,
   ): Promise<number> {
-    if (contents.length === 0) {
-      return 0;
-    }
-
-    let total = 0;
-    for (const content of contents) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty model name should fall back
-      const effectiveModel = content.metadata?.model || modelName || 'gpt-4.1';
-      try {
-        total += await this.estimateContentTokens(content, effectiveModel);
-      } catch (error) {
-        this.logger.debug(
-          'Error estimating tokens for content, using fallback:',
-          error,
-        );
-        let serialized = '';
-        try {
-          serialized = JSON.stringify(content);
-        } catch (stringifyError) {
-          this.logger.debug(
-            'Failed to stringify content for fallback token estimate:',
-            stringifyError,
-          );
-        }
-
-        if (serialized) {
-          total += estimateTextTokens(serialized);
-        } else {
-          const blockStrings = content.blocks
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            ?.map((block) => {
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              switch (block.type) {
-                case 'text':
-                  return block.text;
-                case 'tool_call':
-                  return JSON.stringify({
-                    name: block.name,
-                    parameters: block.parameters,
-                  });
-                case 'tool_response':
-                  return JSON.stringify({
-                    callId: block.callId,
-                    toolName: block.toolName,
-                    result: block.result,
-                    error: block.error,
-                  });
-                case 'thinking':
-                  return block.thought;
-                case 'code':
-                  return block.code;
-                case 'media':
-                  return block.caption ?? '';
-                default:
-                  return '';
-              }
-            })
-            .join('\n');
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (blockStrings) {
-            total += estimateTextTokens(blockStrings);
-          }
-        }
-      }
-    }
-
-    return total;
+    return estimateTokensForContentsImpl(
+      contents,
+      modelName,
+      this.tokenizerProvider(),
+      this.logger,
+    );
   }
 
   /**
@@ -621,63 +393,8 @@ export class HistoryService
    * @pseudocode history-service.md lines 20-82
    */
   async applyDensityResult(result: DensityResult): Promise<void> {
-    // === VALIDATION PHASE ===
-
-    // V1: Check for duplicates in removals
-    const removalSet = new Set(result.removals);
-    if (removalSet.size !== result.removals.length) {
-      throw new CompressionStrategyError(
-        'DensityResult contains duplicate removal indices',
-        'DENSITY_INVALID_RESULT',
-      );
-    }
-
-    // V2: Check no index appears in both removals and replacements
-    for (const index of result.replacements.keys()) {
-      if (removalSet.has(index)) {
-        throw new CompressionStrategyError(
-          `DensityResult conflict: index ${index} in both removals and replacements`,
-          'DENSITY_CONFLICT',
-        );
-      }
-    }
-
-    // V3: Validate removal indices are within bounds
-    for (const index of result.removals) {
-      if (index < 0 || index >= this.history.length) {
-        throw new CompressionStrategyError(
-          `DensityResult removal index ${index} out of bounds [0, ${this.history.length})`,
-          'DENSITY_INDEX_OUT_OF_BOUNDS',
-        );
-      }
-    }
-
-    // V4: Validate replacement indices are within bounds
-    for (const index of result.replacements.keys()) {
-      if (index < 0 || index >= this.history.length) {
-        throw new CompressionStrategyError(
-          `DensityResult replacement index ${index} out of bounds [0, ${this.history.length})`,
-          'DENSITY_INDEX_OUT_OF_BOUNDS',
-        );
-      }
-    }
-
-    // === MUTATION PHASE ===
-
-    // M1: Apply replacements first — indices are stable (no length changes)
-    for (const [index, replacement] of result.replacements) {
-      this.history[index] = replacement;
-      this.logger.debug('Density: replaced history entry', { index });
-    }
-
-    // M2: Sort removals in descending order to preserve earlier indices during splice
-    const sortedRemovals = [...result.removals].sort((a, b) => b - a);
-
-    // M3: Apply removals in reverse order
-    for (const index of sortedRemovals) {
-      this.history.splice(index, 1);
-      this.logger.debug('Density: removed history entry', { index });
-    }
+    validateDensityResult(result, this.history.length);
+    applyDensityMutations(this.history, result);
 
     this.logger.debug('Density: applied result', {
       replacements: result.replacements.size,
@@ -685,8 +402,6 @@ export class HistoryService
       newHistoryLength: this.history.length,
       metadata: result.metadata,
     });
-
-    // === TOKEN RECALCULATION PHASE ===
 
     // T1: Full recalculation through tokenizerLock
     await this.recalculateTotalTokens();
@@ -742,9 +457,7 @@ export class HistoryService
     return this.tokenizerLock;
   }
 
-  /**
-   * Get all history
-   */
+  /** Get all history (shallow copy). */
   getAll(): IContent[] {
     return [...this.history];
   }
@@ -802,9 +515,7 @@ export class HistoryService
     });
   }
 
-  /**
-   * Get the last N messages from history
-   */
+  /** Get the last N messages from history. */
   getRecent(count: number): IContent[] {
     return this.history.slice(-count);
   }
@@ -817,113 +528,15 @@ export class HistoryService
    * - Only includes AI messages if they are valid (have content)
    */
   getCurated(): IContent[] {
-    // Wait if compression is in progress
-    if (this.isCompressing) {
-      this.logger.debug(
-        'getCurated called during compression - returning snapshot',
-      );
-    }
-
-    // Build the curated list without modifying history
-    const curated: IContent[] = [];
-    let excludedCount = 0;
-    let aiMessagesAnalyzed = 0;
-    let aiMessagesIncluded = 0;
-
-    for (const content of this.history) {
-      if (content.speaker === 'human' || content.speaker === 'tool') {
-        // Always include user and tool messages
-        curated.push(content);
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      } else if (content.speaker === 'ai') {
-        aiMessagesAnalyzed++;
-        // Only include AI messages if they have valid content
-        const hasValidContent = ContentValidation.hasContent(content);
-
-        // Only do expensive debug logging if debug is enabled
-        if (this.logger.enabled) {
-          this.logger.debug('Analyzing AI message:', {
-            messageIndex: aiMessagesAnalyzed,
-            hasValidContent,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            blockCount: content.blocks?.length ?? 0,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            blocks: content.blocks?.map((b) => ({
-              type: b.type,
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-              textLength: b.type === 'text' ? b.text?.length : null,
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-              textPreview: b.type === 'text' ? b.text?.substring(0, 50) : null,
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-              isEmpty: b.type === 'text' ? !b.text?.trim() : false,
-            })),
-            metadata: {
-              hasUsage: !!content.metadata?.usage,
-              tokens: content.metadata?.usage?.totalTokens,
-            },
-          });
-        }
-
-        if (hasValidContent) {
-          curated.push(content);
-          aiMessagesIncluded++;
-        } else {
-          excludedCount++;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (this.logger.enabled) {
-            this.logger.debug('EXCLUDED AI message - no valid content');
-          }
-        }
-      }
-    }
-
-    // Only log summary if debug is enabled
-    if (this.logger.enabled) {
-      this.logger.debug('=== CURATED HISTORY SUMMARY ===', {
-        totalHistory: this.history.length,
-        curatedCount: curated.length,
-        breakdown: {
-          aiMessages: {
-            total: aiMessagesAnalyzed,
-            included: aiMessagesIncluded,
-            excluded: excludedCount,
-            exclusionRate:
-              aiMessagesAnalyzed > 0
-                ? `${((excludedCount / aiMessagesAnalyzed) * 100).toFixed(1)}%`
-                : '0%',
-          },
-          humanMessages: curated.filter((c) => c.speaker === 'human').length,
-          toolMessages: curated.filter((c) => c.speaker === 'tool').length,
-        },
-        toolActivity: {
-          toolCallsInCurated: curated.reduce(
-            (acc, c) =>
-              acc + c.blocks.filter((b) => b.type === 'tool_call').length,
-            0,
-          ),
-          toolResponsesInCurated: curated.reduce(
-            (acc, c) =>
-              acc + c.blocks.filter((b) => b.type === 'tool_response').length,
-            0,
-          ),
-        },
-        isCompressing: this.isCompressing,
-      });
-    }
-
-    return curated;
+    return buildCuratedHistory(this.logger, this.history, this.isCompressing);
   }
 
-  /**
-   * Get comprehensive history (all content including invalid/empty)
-   */
+  /** Get comprehensive history (all content including invalid/empty). */
   getComprehensive(): IContent[] {
-    return [...this.history];
+    return this.getAll();
   }
 
-  /**
-   * Remove the last content if it matches the provided content
-   */
+  /** Remove the last content if it matches the provided content. */
   removeLastIfMatches(content: IContent): boolean {
     const last = this.history[this.history.length - 1];
     if (last === content) {
@@ -933,9 +546,7 @@ export class HistoryService
     return false;
   }
 
-  /**
-   * Pop the last content from history
-   */
+  /** Pop the last content from history. */
   pop(): IContent | undefined {
     const removed = this.history.pop();
     if (removed) {
@@ -956,8 +567,10 @@ export class HistoryService
 
       for (const content of this.history) {
         // Use the model from content metadata, or fall back to provided default
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty model name should fall back
-        const modelToUse = content.metadata?.model || defaultModel;
+        const modelToUse = resolveModelName(
+          content.metadata?.model,
+          defaultModel,
+        );
         newTotal += await this.estimateContentTokens(content, modelToUse);
       }
 
@@ -979,24 +592,14 @@ export class HistoryService
    * Get the last user (human) content
    */
   getLastUserContent(): IContent | undefined {
-    for (let i = this.history.length - 1; i >= 0; i--) {
-      if (this.history[i].speaker === 'human') {
-        return this.history[i];
-      }
-    }
-    return undefined;
+    return getLastContentBySpeaker(this.history, 'human');
   }
 
   /**
    * Get the last AI content
    */
   getLastAIContent(): IContent | undefined {
-    for (let i = this.history.length - 1; i >= 0; i--) {
-      if (this.history[i].speaker === 'ai') {
-        return this.history[i];
-      }
-    }
-    return undefined;
+    return getLastContentBySpeaker(this.history, 'ai');
   }
 
   /**
@@ -1014,23 +617,17 @@ export class HistoryService
     }
   }
 
-  /**
-   * Get the number of messages in history
-   */
+  /** Get the number of messages in history. */
   length(): number {
     return this.history.length;
   }
 
-  /**
-   * Check if history is empty
-   */
+  /** Check if history is empty. */
   isEmpty(): boolean {
     return this.history.length === 0;
   }
 
-  /**
-   * Clone the history (deep copy)
-   */
+  /** Clone the history (deep copy). */
   clone(): IContent[] {
     return JSON.parse(JSON.stringify(this.history));
   }
@@ -1039,121 +636,32 @@ export class HistoryService
    * Find unmatched tool calls (tool calls without responses)
    */
   findUnmatchedToolCalls(): ToolCallBlock[] {
-    const respondedCallIds = new Set<string>();
-
-    for (const content of this.history) {
-      if (!hasValidBlocks(content)) continue;
-      for (const block of content.blocks) {
-        if (block.type === 'tool_response') {
-          const response = block;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (response.callId) {
-            respondedCallIds.add(response.callId);
-          }
-        }
-      }
-    }
-
-    const unmatched: ToolCallBlock[] = [];
-    const seenToolCallIds = new Set<string>();
-
-    for (const content of this.history) {
-      if (content.blocks.length === 0) continue;
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for (const block of content.blocks) {
-        if (block.type !== 'tool_call') continue;
-
-        const toolCall = block;
-        if (!toolCall.id) continue;
-        if (seenToolCallIds.has(toolCall.id)) continue;
-        seenToolCallIds.add(toolCall.id);
-
-        if (!respondedCallIds.has(toolCall.id)) {
-          unmatched.push(toolCall);
-        }
-      }
-    }
-
-    this.logger.debug('Unmatched tool calls detected:', {
-      unmatchedCount: unmatched.length,
-      unmatchedIds: unmatched.map((c) => c.id),
-    });
-
-    return unmatched;
+    return findUnmatchedToolCallsHelper(this.logger, this.history);
   }
 
   /**
    * Validate and fix the history to ensure proper tool call/response pairing
    */
   validateAndFix(): void {
-    const respondedCallIds = new Set<string>();
-    for (const content of this.history) {
-      if (!hasValidBlocks(content)) continue;
-      for (const block of content.blocks) {
-        if (block.type === 'tool_response') {
-          const response = block;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (response.callId) {
-            respondedCallIds.add(response.callId);
-          }
-        }
-      }
-    }
+    const respondedCallIds = collectRespondedCallIds(this.history);
 
     let insertedCount = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let i = 0; i < this.history.length; i++) {
-      const content = this.history[i];
-      if (content.speaker !== 'ai' || !hasValidBlocks(content)) continue;
+      const missing = getMissingToolCalls(this.history[i], respondedCallIds);
+      if (missing.length > 0) {
+        const syntheticToolMessage = createSyntheticToolMessage(missing);
 
-      const toolCalls = content.blocks.filter(
-        (b): b is ToolCallBlock => b.type === 'tool_call',
-      );
+        this.history.splice(i + 1, 0, syntheticToolMessage);
+        insertedCount += 1;
 
-      if (toolCalls.length === 0) continue;
+        for (const tc of missing) {
+          respondedCallIds.add(tc.id);
+        }
 
-      const missing = toolCalls.filter(
-        (tc) =>
-          typeof tc.id === 'string' &&
-          tc.id !== '' &&
-          !respondedCallIds.has(tc.id),
-      );
-
-      if (missing.length === 0) continue;
-
-      const syntheticToolMessage: IContent = {
-        speaker: 'tool',
-        blocks: missing.map(
-          (tc): ToolResponseBlock => ({
-            type: 'tool_response',
-            callId: tc.id,
-            toolName: tc.name || 'unknown_tool',
-            result: null,
-            error: 'Tool call interrupted or cancelled',
-            isComplete: true,
-          }),
-        ),
-        metadata: {
-          synthetic: true,
-          reason: 'orphaned_tool_call',
-        },
-      };
-
-      // Insert immediately after the assistant message so providers that
-      // require strict tool-response adjacency remain valid.
-      this.history.splice(i + 1, 0, syntheticToolMessage);
-      insertedCount += 1;
-
-      for (const tc of missing) {
-        respondedCallIds.add(tc.id);
+        void this.updateTokenCount(syntheticToolMessage);
+        i += 1;
       }
-
-      // Keep token counts consistent with the stored history.
-      void this.updateTokenCount(syntheticToolMessage);
-
-      // Skip over the inserted message.
-      i += 1;
     }
 
     this.logger.debug('History validation complete:', {
@@ -1167,573 +675,11 @@ export class HistoryService
    * This ensures the history can be safely serialized and sent to providers.
    */
   getCuratedForProvider(tailContents: IContent[] = []): IContent[] {
-    // Get the curated history
     const curated = this.getCurated();
-    const combined =
-      tailContents.length > 0 ? [...curated, ...tailContents] : curated;
-
-    // Defensive: if a tool-speaker message accidentally contains tool_call
-    // blocks (e.g., cancellation history recorded as a single "user" Content
-    // containing both functionCall + functionResponse parts), split them into
-    // provider-compliant turns.
-    const split = this.splitToolCallsOutOfToolMessages(combined);
-
-    // Ensure every tool response has a corresponding tool call for provider payloads
-    const normalized = this.ensureToolCallContinuity(split);
-
-    // Ensure every tool call has some corresponding tool response in provider
-    // payloads, even if the tool execution was interrupted or cancelled.
-    // All providers require strict tool call/response matching - orphaned tool
-    // calls cause 400 errors from Anthropic, Gemini, OpenAI, and others.
-    const completed = this.ensureToolResponseCompleteness(normalized);
-
-    // All providers require strict tool adjacency: tool results must appear
-    // directly after the assistant tool call message. Corrupted histories can
-    // contain duplicate or out-of-order tool results, which will 400 on provider
-    // switching. Normalize ordering and drop dupes.
-    const ordered = this.ensureToolResponseAdjacency(completed);
-
-    // Deep clone to avoid circular references in tool call parameters
-    // We need a clean copy that can be serialized
-    return this.deepCloneWithoutCircularRefs(ordered);
+    return buildProviderContent(curated, tailContents, this.logger);
   }
 
-  /**
-   * Providers expect tool calls to come from the assistant and tool results to
-   * come from the tool role. If history corruption produces a single "tool"
-   * message that contains both tool_call and tool_response blocks, split the
-   * tool_call blocks into a separate assistant message directly before the tool
-   * message.
-   */
-  private splitToolCallsOutOfToolMessages(contents: IContent[]): IContent[] {
-    const result: IContent[] = [];
-
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const content of contents) {
-      if (content.speaker !== 'tool' || !hasValidBlocks(content)) {
-        result.push(content);
-        continue;
-      }
-
-      const toolCalls = content.blocks.filter(
-        (b): b is ToolCallBlock => b.type === 'tool_call',
-      );
-
-      if (toolCalls.length === 0) {
-        result.push(content);
-        continue;
-      }
-
-      const remainingBlocks = content.blocks.filter(
-        (b) => b.type !== 'tool_call',
-      );
-
-      result.push({
-        speaker: 'ai',
-        blocks: toolCalls,
-        metadata: {
-          synthetic: true,
-          reason: 'extracted_tool_call_from_tool_message',
-        },
-      });
-
-      if (remainingBlocks.length > 0) {
-        result.push({
-          ...content,
-          blocks: remainingBlocks,
-        });
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Ensure every tool_response has a matching tool_call.
-   * If compression removed the original tool_call, synthesize a minimal placeholder
-   * so providers receive a structurally valid transcript without losing context.
-   */
-  private ensureToolCallContinuity(contents: IContent[]): IContent[] {
-    const seenToolCallIds = new Set<string>();
-    const normalized: IContent[] = [];
-
-    for (const content of contents) {
-      if (hasValidBlocks(content)) {
-        for (const block of content.blocks) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (block.type === 'tool_call') {
-            seenToolCallIds.add(block.id);
-          }
-        }
-      }
-
-      if (content.speaker === 'tool' && hasValidBlocks(content)) {
-        const missingResponses = content.blocks.filter(
-          (block) =>
-            block.type === 'tool_response' &&
-            !seenToolCallIds.has(block.callId),
-        ) as ToolResponseBlock[];
-
-        if (missingResponses.length > 0) {
-          const reconstructedBlocks = missingResponses.map((response) => {
-            const reconstructed: ToolCallBlock = {
-              type: 'tool_call',
-              id: response.callId,
-              name: response.toolName || 'unknown_tool',
-              parameters: { reconstructed: true },
-              description: 'Reconstructed tool call after compression',
-            };
-            return reconstructed;
-          });
-
-          this.logger.warn('Synthesizing missing tool_call for responses', {
-            callIds: reconstructedBlocks.map((block) => block.id),
-            toolNames: reconstructedBlocks.map((block) => block.name),
-          });
-
-          normalized.push({
-            speaker: 'ai',
-            blocks: reconstructedBlocks,
-            metadata: {
-              synthetic: true,
-              reason: 'reconstructed_tool_call',
-            },
-          });
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const block of reconstructedBlocks) {
-            seenToolCallIds.add(block.id);
-          }
-        }
-      }
-
-      normalized.push(content);
-    }
-
-    return normalized;
-  }
-
-  /**
-   * Ensure every tool_call has a corresponding tool_response.
-   *
-   * Provider transcripts with orphaned tool calls can hard-fail strict APIs
-   * (e.g., Anthropic requires tool_result blocks immediately after tool_use,
-   * Gemini returns 400 if function response count doesn't match function call count,
-   * OpenAI Chat tool messages must follow an assistant tool_calls message).
-   *
-   * For provider-visible payloads, synthesize a minimal "cancelled" tool result
-   * so the transcript remains structurally valid.
-   *
-   * This is intentionally non-mutating: it does not modify the stored history,
-   * only the provider-facing view.
-   */
-  private ensureToolResponseCompleteness(contents: IContent[]): IContent[] {
-    const respondedCallIds = new Set<string>();
-
-    for (const content of contents) {
-      if (!hasValidBlocks(content)) continue;
-      for (const block of content.blocks) {
-        if (block.type !== 'tool_response') continue;
-        const callId = block.callId;
-        if (callId) {
-          respondedCallIds.add(callId);
-        }
-      }
-    }
-
-    const result: IContent[] = [];
-
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (let i = 0; i < contents.length; i++) {
-      const content = contents[i];
-      result.push(content);
-
-      if (content.speaker !== 'ai' || !hasValidBlocks(content)) continue;
-
-      const toolCalls = content.blocks.filter(
-        (b): b is ToolCallBlock => b.type === 'tool_call',
-      );
-      if (toolCalls.length === 0) continue;
-
-      const missing = toolCalls.filter(
-        (tc) =>
-          typeof tc.id === 'string' &&
-          tc.id !== '' &&
-          !respondedCallIds.has(tc.id),
-      );
-      if (missing.length === 0) continue;
-
-      // Always synthesize tool responses for orphaned tool calls.
-      // All providers require strict tool call/response matching.
-      result.push({
-        speaker: 'tool',
-        blocks: missing.map(
-          (tc): ToolResponseBlock => ({
-            type: 'tool_response',
-            callId: tc.id,
-            toolName: tc.name || 'unknown_tool',
-            result: null,
-            error: 'Tool call interrupted or cancelled',
-            isComplete: true,
-          }),
-        ),
-        metadata: {
-          synthetic: true,
-          reason: 'orphaned_tool_call',
-        },
-      });
-
-      for (const tc of missing) {
-        respondedCallIds.add(tc.id);
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Ensure tool responses appear immediately after the assistant message that
-   * introduced their tool calls, and drop duplicate/out-of-order tool responses.
-   *
-   * Some providers strictly validate tool adjacency (e.g., OpenAI Chat tool
-   * messages must follow an assistant tool_calls message; Anthropic tool_results
-   * must correspond to tool_use blocks in the previous assistant message).
-   */
-  private ensureToolResponseAdjacency(contents: IContent[]): IContent[] {
-    const toolCallIndexById = this.buildToolCallIndexById(contents);
-
-    const adjState = this.stripAndReassignToolResponses(
-      contents,
-      toolCallIndexById,
-    );
-
-    return this.reassembleAdjacencyResult(
-      adjState.strippedContents,
-      adjState.responsesByToolCallIndex,
-      adjState.mediaBlocksByToolCallIndex,
-    );
-  }
-
-  /** Build a map from tool call ID to the index of the content containing it. */
-  private buildToolCallIndexById(contents: IContent[]): Map<string, number> {
-    const toolCallIndexById = new Map<string, number>();
-
-    for (let i = 0; i < contents.length; i++) {
-      const content = contents[i];
-      if (!hasValidBlocks(content)) continue;
-      for (const block of content.blocks) {
-        if (block.type !== 'tool_call') continue;
-        const id = block.id;
-        if (id && !toolCallIndexById.has(id)) {
-          toolCallIndexById.set(id, i);
-        }
-      }
-    }
-
-    return toolCallIndexById;
-  }
-
-  /** Score a tool response for dedup preference (higher is better). */
-  private static scoreResponse(response: ToolResponseBlock): number {
-    let score = 0;
-    if (response.isComplete === true) score += 2;
-    if (response.error) score -= 1;
-    if (response.result !== undefined && response.result !== null) score += 1;
-    return score;
-  }
-
-  /**
-   * Strip tool_response blocks from contents and reassign them to the
-   * tool-call index they belong to. Returns the stripped contents and the
-   * response/media maps needed for reassembly.
-   */
-  private stripAndReassignToolResponses(
-    contents: IContent[],
-    toolCallIndexById: Map<string, number>,
-  ): {
-    strippedContents: Array<IContent | null>;
-    responsesByToolCallIndex: Map<number, ToolResponseBlock[]>;
-    mediaBlocksByToolCallIndex: Map<number, MediaBlock[]>;
-  } {
-    const responsesByToolCallIndex = new Map<number, ToolResponseBlock[]>();
-    const mediaBlocksByToolCallIndex = new Map<number, MediaBlock[]>();
-    const keptResponseByCallId = new Map<
-      string,
-      {
-        toolCallIndex: number;
-        responseIndex: number;
-        response: ToolResponseBlock;
-      }
-    >();
-
-    const strippedContents: Array<IContent | null> = contents.map((content) =>
-      this.stripSingleContent(
-        content,
-        toolCallIndexById,
-        responsesByToolCallIndex,
-        mediaBlocksByToolCallIndex,
-        keptResponseByCallId,
-      ),
-    );
-
-    return {
-      strippedContents,
-      responsesByToolCallIndex,
-      mediaBlocksByToolCallIndex,
-    };
-  }
-
-  /** Strip tool responses from a single content entry and reassign to tool-call index. */
-  private stripSingleContent(
-    content: IContent,
-    toolCallIndexById: Map<string, number>,
-    responsesByToolCallIndex: Map<number, ToolResponseBlock[]>,
-    mediaBlocksByToolCallIndex: Map<number, MediaBlock[]>,
-    keptResponseByCallId: Map<
-      string,
-      {
-        toolCallIndex: number;
-        responseIndex: number;
-        response: ToolResponseBlock;
-      }
-    >,
-  ): IContent | null {
-    if (!hasValidBlocks(content)) return content;
-
-    const toolResponseBlocks = content.blocks.filter(
-      (b): b is ToolResponseBlock => b.type === 'tool_response',
-    );
-
-    if (toolResponseBlocks.length === 0) {
-      return content;
-    }
-
-    const mediaBlocks = content.blocks.filter(
-      (b): b is MediaBlock => b.type === 'media',
-    );
-    let mediaAssignedToIndex: number | undefined;
-
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const toolResponse of toolResponseBlocks) {
-      mediaAssignedToIndex = this.reassignSingleResponse(
-        toolResponse,
-        toolCallIndexById,
-        responsesByToolCallIndex,
-        mediaBlocksByToolCallIndex,
-        keptResponseByCallId,
-        mediaBlocks,
-        mediaAssignedToIndex,
-      );
-    }
-
-    const remainingBlocks = content.blocks.filter(
-      (b) => b.type !== 'tool_response' && b.type !== 'media',
-    );
-
-    if (content.speaker === 'tool') {
-      return null;
-    }
-
-    if (remainingBlocks.length === 0) {
-      return null;
-    }
-
-    return {
-      ...content,
-      blocks: remainingBlocks,
-    };
-  }
-
-  /** Reassign a single tool response to the correct tool-call index. */
-  private reassignSingleResponse(
-    toolResponse: ToolResponseBlock,
-    toolCallIndexById: Map<string, number>,
-    responsesByToolCallIndex: Map<number, ToolResponseBlock[]>,
-    mediaBlocksByToolCallIndex: Map<number, MediaBlock[]>,
-    keptResponseByCallId: Map<
-      string,
-      {
-        toolCallIndex: number;
-        responseIndex: number;
-        response: ToolResponseBlock;
-      }
-    >,
-    mediaBlocks: MediaBlock[],
-    mediaAssignedToIndex: number | undefined,
-  ): number | undefined {
-    const callId = toolResponse.callId;
-    if (!callId) return mediaAssignedToIndex;
-
-    const toolCallIndex = toolCallIndexById.get(callId);
-    if (toolCallIndex === undefined) {
-      this.logger.warn('Tool response missing matching tool call', {
-        callId,
-        toolName: toolResponse.toolName,
-      });
-      return mediaAssignedToIndex;
-    }
-
-    const existing = keptResponseByCallId.get(callId);
-    if (existing) {
-      const existingScore = HistoryService.scoreResponse(existing.response);
-      const newScore = HistoryService.scoreResponse(toolResponse);
-      if (newScore > existingScore) {
-        const list = responsesByToolCallIndex.get(existing.toolCallIndex);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (list) {
-          list[existing.responseIndex] = toolResponse;
-          keptResponseByCallId.set(callId, {
-            toolCallIndex: existing.toolCallIndex,
-            responseIndex: existing.responseIndex,
-            response: toolResponse,
-          });
-        }
-      }
-      return mediaAssignedToIndex;
-    }
-
-    const list = responsesByToolCallIndex.get(toolCallIndex) ?? [];
-    list.push(toolResponse);
-    responsesByToolCallIndex.set(toolCallIndex, list);
-    keptResponseByCallId.set(callId, {
-      toolCallIndex,
-      responseIndex: list.length - 1,
-      response: toolResponse,
-    });
-
-    if (mediaBlocks.length > 0 && mediaAssignedToIndex === undefined) {
-      const existingMedia = mediaBlocksByToolCallIndex.get(toolCallIndex) ?? [];
-      mediaBlocksByToolCallIndex.set(toolCallIndex, [
-        ...existingMedia,
-        ...mediaBlocks,
-      ]);
-      return toolCallIndex;
-    }
-
-    return mediaAssignedToIndex;
-  }
-
-  /** Reassemble stripped contents with tool responses inserted after their tool-call messages. */
-  private reassembleAdjacencyResult(
-    strippedContents: Array<IContent | null>,
-    responsesByToolCallIndex: Map<number, ToolResponseBlock[]>,
-    mediaBlocksByToolCallIndex: Map<number, MediaBlock[]>,
-  ): IContent[] {
-    const result: IContent[] = [];
-
-    for (let i = 0; i < strippedContents.length; i++) {
-      const content = strippedContents[i];
-      if (content) {
-        result.push(content);
-      }
-
-      const responses = responsesByToolCallIndex.get(i);
-      if (responses && responses.length > 0) {
-        const mediaForThisIndex = mediaBlocksByToolCallIndex.get(i) ?? [];
-        result.push({
-          speaker: 'tool',
-          blocks: [...responses, ...mediaForThisIndex],
-          metadata: {
-            synthetic: true,
-            reason: 'reordered_tool_responses',
-          },
-        });
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Deep clone content array, removing circular references
-   */
-  private deepCloneWithoutCircularRefs(contents: IContent[]): IContent[] {
-    return contents.map((content) => {
-      // Create a clean copy of the content
-      const cloned: IContent = {
-        speaker: content.speaker,
-        blocks: content.blocks.map((block) => {
-          if (block.type === 'tool_call') {
-            const toolCall = block;
-            // For tool calls, sanitize the parameters to remove circular refs
-            return {
-              type: 'tool_call',
-              id: toolCall.id,
-              name: toolCall.name,
-              parameters: this.sanitizeParams(toolCall.parameters),
-            } as ToolCallBlock;
-          } else if (block.type === 'tool_response') {
-            const toolResponse = block;
-            // For tool responses, sanitize the result to remove circular refs
-            return {
-              type: 'tool_response',
-              callId: toolResponse.callId,
-              toolName: toolResponse.toolName,
-              result: this.sanitizeParams(toolResponse.result),
-              error: toolResponse.error,
-              isComplete: toolResponse.isComplete,
-            } as ToolResponseBlock;
-          }
-          // Other blocks should be safe to clone
-          try {
-            return JSON.parse(JSON.stringify(block));
-          } catch {
-            // If any block fails, return minimal version
-            return { ...block };
-          }
-        }),
-        metadata: content.metadata ? { ...content.metadata } : {},
-      };
-      return cloned;
-    });
-  }
-
-  /**
-   * Sanitize parameters to remove circular references
-   */
-  private sanitizeParams(params: unknown): unknown {
-    const seen = new WeakSet();
-
-    const sanitize = (obj: unknown): unknown => {
-      // Handle primitives
-      if (obj === null || typeof obj !== 'object') {
-        return obj;
-      }
-
-      // Check for circular reference
-      if (seen.has(obj)) {
-        return { _circular: true };
-      }
-
-      seen.add(obj);
-
-      // Handle arrays
-      if (Array.isArray(obj)) {
-        return obj.map((item) => sanitize(item));
-      }
-
-      // Handle objects
-      const result: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(obj)) {
-        result[key] = sanitize(value);
-      }
-
-      return result;
-    };
-
-    try {
-      return sanitize(params);
-    } catch (error) {
-      this.logger.debug('Error sanitizing params:', error);
-      return {
-        _note: 'Parameters contained circular references and were sanitized',
-      };
-    }
-  }
-
-  /**
-   * Merge two histories, handling duplicates and conflicts
-   */
+  /** Merge two histories, handling duplicates and conflicts. */
   merge(other: HistoryService): void {
     // Simple append for now - could be made smarter to detect duplicates
     this.addAll(other.getAll());
@@ -1746,23 +692,7 @@ export class HistoryService
     maxTokens: number,
     countTokensFn: (content: IContent) => number,
   ): IContent[] {
-    const result: IContent[] = [];
-    let totalTokens = 0;
-
-    // Work backwards to keep most recent messages
-    for (let i = this.history.length - 1; i >= 0; i--) {
-      const content = this.history[i];
-      const tokens = countTokensFn(content);
-
-      if (totalTokens + tokens <= maxTokens) {
-        result.unshift(content);
-        totalTokens += tokens;
-      } else {
-        break;
-      }
-    }
-
-    return result;
+    return getWithinTokenLimitHelper(this.history, maxTokens, countTokensFn);
   }
 
   /**
@@ -1772,27 +702,23 @@ export class HistoryService
     keepRecentCount: number,
     summarizeFn: (contents: IContent[]) => Promise<IContent>,
   ): Promise<void> {
-    if (this.history.length <= keepRecentCount) {
-      return;
+    const result = await summarizeOldHistoryHelper(
+      this.history,
+      keepRecentCount,
+      summarizeFn,
+    );
+    if (result) {
+      this.history = result;
+      await this.recalculateTotalTokens();
     }
-
-    const toSummarize = this.history.slice(0, -keepRecentCount);
-    const toKeep = this.history.slice(-keepRecentCount);
-
-    const summary = await summarizeFn(toSummarize);
-    this.history = [summary, ...toKeep];
   }
 
-  /**
-   * Export history to JSON
-   */
+  /** Export history to JSON. */
   toJSON(): string {
     return JSON.stringify(this.history, null, 2);
   }
 
-  /**
-   * Import history from JSON
-   */
+  /** Import history from JSON. */
   static fromJSON(json: string): HistoryService {
     const service = new HistoryService();
     const history = JSON.parse(json);
@@ -1852,49 +778,7 @@ export class HistoryService
   /**
    * Get conversation statistics
    */
-  getStatistics(): {
-    totalMessages: number;
-    userMessages: number;
-    aiMessages: number;
-    toolCalls: number;
-    toolResponses: number;
-    totalTokens?: number;
-  } {
-    let userMessages = 0;
-    let aiMessages = 0;
-    let toolCalls = 0;
-    let toolResponses = 0;
-    let totalTokens = 0;
-    let hasTokens = false;
-
-    for (const content of this.history) {
-      if (content.speaker === 'human') {
-        userMessages++;
-      } else if (content.speaker === 'ai') {
-        aiMessages++;
-      }
-
-      for (const block of content.blocks) {
-        if (block.type === 'tool_call') {
-          toolCalls++;
-        } else if (block.type === 'tool_response') {
-          toolResponses++;
-        }
-      }
-
-      if (content.metadata?.usage) {
-        totalTokens += content.metadata.usage.totalTokens;
-        hasTokens = true;
-      }
-    }
-
-    return {
-      totalMessages: this.history.length,
-      userMessages,
-      aiMessages,
-      toolCalls,
-      toolResponses,
-      totalTokens: hasTokens ? totalTokens : undefined,
-    };
+  getStatistics(): ConversationStatistics {
+    return computeStatistics(this.history);
   }
 }

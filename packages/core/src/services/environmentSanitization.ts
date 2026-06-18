@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 export type EnvironmentSanitizationConfig = {
   allowedEnvironmentVariables: string[];
   blockedEnvironmentVariables: string[];
@@ -122,18 +120,16 @@ export const NEVER_ALLOWED_NAME_PATTERNS = [
 export const NEVER_ALLOWED_VALUE_PATTERNS = [
   /-----BEGIN (RSA|OPENSSH|EC|PGP) PRIVATE KEY-----/i,
   /-----BEGIN CERTIFICATE-----/i,
-  // Credentials in URL (quantifiers bounded to prevent polynomial backtracking)
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  /(https?|ftp|smtp):\/\/[^:]{1,2048}:[^@]{1,2048}@/i,
+  // Credentials in URL - match scheme://user:pass@host
+  /(https?|ftp|smtp):\/\/[^:\s]{1,2048}:[^@\s]{1,2048}@/i,
   // GitHub tokens (classic, fine-grained, OAuth, etc.)
   /(ghp|gho|ghu|ghs|ghr|github_pat)_[a-zA-Z0-9_]{36,255}/i,
   // Google API keys
   /AIzaSy[a-zA-Z0-9_\\-]{33}/i,
   // Amazon AWS Access Key ID
   /AKIA[A-Z0-9]{16}/i,
-  // Generic OAuth/JWT tokens (quantifiers bounded to prevent polynomial backtracking)
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  /eyJ[a-zA-Z0-9_-]{0,8192}\.[a-zA-Z0-9_-]{0,8192}\.[a-zA-Z0-9_-]{0,8192}/i,
+  // Generic OAuth/JWT tokens (three base64url segments separated by dots)
+  /eyJ[a-zA-Z0-9_-]{1,2048}\.[a-zA-Z0-9_-]{1,2048}\.[a-zA-Z0-9_-]{1,2048}/i,
   // Stripe API keys
   /(s|r)k_(live|test)_[0-9a-zA-Z]{24}/i,
   // Slack tokens (bot, user, etc.)

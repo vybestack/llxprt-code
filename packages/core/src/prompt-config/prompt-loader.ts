@@ -2,14 +2,34 @@
  * Prompt Loader - Handles reading prompt files from disk with compression support
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { existsSync } from 'fs';
+import { createRequire } from 'node:module';
 import { debugLogger } from '../utils/debugLogger.js';
 
+const requireFromHere = createRequire(import.meta.url);
+
+interface ChokidarLike {
+  watch(
+    baseDir: string,
+    options: {
+      persistent: boolean;
+      recursive: boolean;
+      ignoreInitial: boolean;
+      ignored: (watchPath: string) => boolean;
+    },
+  ): ChokidarWatcherLike;
+}
+
+interface ChokidarWatcherLike {
+  on(
+    event: 'add' | 'change' | 'unlink',
+    listener: (filePath: string) => void,
+  ): void;
+  close(): void;
+}
 // Types for file loading results
 export interface LoadFileResult {
   success: boolean;
@@ -49,11 +69,9 @@ export class PromptLoader {
    * Load a single file with optional compression
    */
   async loadFile(
-    filePath: string,
+    filePath: string | null | undefined,
     shouldCompress: boolean,
   ): Promise<LoadFileResult> {
-    // Step 1: Validate input
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt loading crosses filesystem/plugin boundaries despite declared types.
     if (filePath === null || filePath === undefined) {
       return { success: false, content: '', error: 'Invalid file path' };
     }
@@ -135,94 +153,156 @@ export class PromptLoader {
   /**
    * Compress content according to prompt configuration rules
    */
-  compressContent(content: string): string {
-    // Step 1: Handle empty or null content
-    if (!content) {
+  compressContent(content: string | null | undefined): string {
+    if (content === null || content === undefined || content === '') {
       return '';
     }
 
-    // Step 2: Initialize compression state
-    const lines = content.split(/\r?\n/); // Handle both \n and \r\n
-    const compressedLines: string[] = [];
-    let inCodeBlock = false;
-    let lastLineWasEmpty = false;
-    let codeBlockDelimiter: string | null = null;
+    const state = {
+      inCodeBlock: false,
+      lastLineWasEmpty: false,
+      codeBlockDelimiter: null as string | null,
+      compressedLines: [] as string[],
+    };
 
-    // Step 3: Process each line
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    const lines = content.split(/\r?\n/);
+    const lastIndex = lines.length - 1;
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      // Skip the last empty line if it's from a trailing newline
-      if (i === lines.length - 1 && line === '' && content.endsWith('\n')) {
-        continue;
+      if (i !== lastIndex || lines[i] !== '' || !content.endsWith('\n')) {
+        this.appendCompressedLine(lines[i], state);
       }
-      // Check for code block boundaries
-      if (line.startsWith('```')) {
-        if (!inCodeBlock) {
-          inCodeBlock = true;
-          codeBlockDelimiter = line;
-        } else if (line === codeBlockDelimiter || line === '```') {
-          inCodeBlock = false;
-          codeBlockDelimiter = null;
-        }
-        compressedLines.push(line);
-        lastLineWasEmpty = false;
-        continue;
-      }
-
-      if (inCodeBlock) {
-        compressedLines.push(line);
-        lastLineWasEmpty = false;
-        continue;
-      }
-
-      // Apply prose compression rules
-      let compressedLine = line;
-
-      // Simplify headers
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      compressedLine = compressedLine.replace(/^#{2,}\s+(.+)$/, '# $1');
-
-      // Simplify bold list items
-      compressedLine = compressedLine.replace(
-        // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-        /^(\s*)-\s+\*\*(.+?)\*\*:\s*(.*)$/,
-        '$1- $2: $3',
-      );
-
-      // Remove excessive whitespace
-      // For list items, preserve leading spaces (indentation)
-      if (
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-        compressedLine.match(/^\s*[-*+]\s/) ||
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-        compressedLine.match(/^\s*\d+\.\s/)
-      ) {
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string leading spaces should default to empty string
-        const leadingSpaces = compressedLine.match(/^\s*/)?.[0] || '';
-        compressedLine =
-          leadingSpaces + compressedLine.trim().replace(/\s+/g, ' ');
-      } else {
-        // For non-list items, remove all leading/trailing whitespace
-        compressedLine = compressedLine.trim().replace(/\s+/g, ' ');
-      }
-
-      // Handle blank lines
-      if (compressedLine === '') {
-        if (lastLineWasEmpty) {
-          continue; // Skip multiple blank lines
-        } else {
-          lastLineWasEmpty = true;
-        }
-      } else {
-        lastLineWasEmpty = false;
-      }
-
-      compressedLines.push(compressedLine);
     }
 
-    return compressedLines.join('\n');
+    return state.compressedLines.join('\n');
+  }
+
+  private appendCompressedLine(
+    line: string,
+    state: {
+      inCodeBlock: boolean;
+      lastLineWasEmpty: boolean;
+      codeBlockDelimiter: string | null;
+      compressedLines: string[];
+    },
+  ): void {
+    const codeBlockChanged = this.appendCodeBlockLine(line, state);
+    if (codeBlockChanged) {
+      return;
+    }
+
+    if (state.inCodeBlock) {
+      state.compressedLines.push(line);
+      state.lastLineWasEmpty = false;
+      return;
+    }
+
+    const compressedLine = this.compressProseLine(line);
+    if (compressedLine === '' && state.lastLineWasEmpty) {
+      return;
+    }
+
+    state.lastLineWasEmpty = compressedLine === '';
+    state.compressedLines.push(compressedLine);
+  }
+
+  private appendCodeBlockLine(
+    line: string,
+    state: {
+      inCodeBlock: boolean;
+      lastLineWasEmpty: boolean;
+      codeBlockDelimiter: string | null;
+      compressedLines: string[];
+    },
+  ): boolean {
+    if (!line.startsWith('```')) {
+      return false;
+    }
+
+    if (!state.inCodeBlock) {
+      state.inCodeBlock = true;
+      state.codeBlockDelimiter = line;
+    } else if (line === state.codeBlockDelimiter || line === '```') {
+      state.inCodeBlock = false;
+      state.codeBlockDelimiter = null;
+    }
+    state.compressedLines.push(line);
+    state.lastLineWasEmpty = false;
+    return true;
+  }
+
+  private compressProseLine(line: string): string {
+    const simplifiedLine = this.simplifyBoldListItem(
+      this.simplifyHeaderLine(line),
+    );
+
+    if (this.isListItem(simplifiedLine)) {
+      const leadingSpaces = this.leadingSpaces(simplifiedLine);
+      return leadingSpaces + this.collapseWhitespace(simplifiedLine.trim());
+    }
+
+    return this.collapseWhitespace(simplifiedLine.trim());
+  }
+
+  private simplifyHeaderLine(line: string): string {
+    const trimmedStart = line.trimStart();
+    const leadingLength = line.length - trimmedStart.length;
+    const hashCount = this.countLeadingChar(trimmedStart, '#');
+    if (hashCount < 2 || trimmedStart[hashCount] !== ' ') {
+      return line;
+    }
+    return `${line.slice(0, leadingLength)}# ${trimmedStart.slice(hashCount + 1)}`;
+  }
+
+  private simplifyBoldListItem(line: string): string {
+    const markerIndex = line.indexOf('- **');
+    if (markerIndex < 0) {
+      return line;
+    }
+    const boldStart = markerIndex + 4;
+    const boldEnd = line.indexOf('**:', boldStart);
+    if (boldEnd < 0) {
+      return line;
+    }
+    const prefix = line.slice(0, markerIndex + 2);
+    const label = line.slice(boldStart, boldEnd);
+    const suffix = line.slice(boldEnd + 3).trimStart();
+    return `${prefix}${label}: ${suffix}`;
+  }
+
+  private isListItem(line: string): boolean {
+    const trimmed = line.trimStart();
+    return this.isUnorderedListItem(trimmed) || this.isOrderedListItem(trimmed);
+  }
+
+  private isUnorderedListItem(trimmed: string): boolean {
+    return ['-', '*', '+'].some((marker) => trimmed.startsWith(`${marker} `));
+  }
+
+  private isOrderedListItem(trimmed: string): boolean {
+    const dotIndex = trimmed.indexOf('. ');
+    return dotIndex > 0 && this.isAllDigits(trimmed.slice(0, dotIndex));
+  }
+
+  private isAllDigits(value: string): boolean {
+    return (
+      value.length > 0 && [...value].every((char) => char >= '0' && char <= '9')
+    );
+  }
+
+  private leadingSpaces(value: string): string {
+    return value.slice(0, value.length - value.trimStart().length);
+  }
+
+  private collapseWhitespace(value: string): string {
+    return value.split(/\s+/u).join(' ');
+  }
+
+  private countLeadingChar(value: string, char: string): number {
+    let count = 0;
+    while (value[count] === char) {
+      count++;
+    }
+    return count;
   }
 
   /**
@@ -286,14 +366,7 @@ export class PromptLoader {
     }
 
     // Step 2: Detect sandbox environment
-    const isSandboxed =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      process.env.SANDBOX === '1' ||
-      process.env.SANDBOX === 'true' ||
-      process.env.CONTAINER === '1' ||
-      process.env.CONTAINER === 'true' ||
-      existsSync('/sandbox') ||
-      existsSync('/.dockerenv');
+    const isSandboxed = this.detectSandboxEnvironment();
 
     // Step 3: Detect IDE companion
     const hasIdeCompanion =
@@ -309,6 +382,17 @@ export class PromptLoader {
     };
   }
 
+  private detectSandboxEnvironment(): boolean {
+    return [
+      process.env.SANDBOX === '1',
+      process.env.SANDBOX === 'true',
+      process.env.CONTAINER === '1',
+      process.env.CONTAINER === 'true',
+      existsSync('/sandbox'),
+      existsSync('/.dockerenv'),
+    ].some(Boolean);
+  }
+
   /**
    * Create a chokidar-based file watcher
    */
@@ -317,8 +401,7 @@ export class PromptLoader {
     handleChange: (eventType: string, filePath: string) => void,
     timeouts: Map<string, NodeJS.Timeout>,
   ): FileWatcher | null {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, no-restricted-syntax
-    const chokidar = require('chokidar');
+    const chokidar = requireFromHere('chokidar') as ChokidarLike;
 
     const watcher = chokidar.watch(baseDir, {
       persistent: true,
@@ -368,8 +451,10 @@ export class PromptLoader {
     timeouts.set(
       filenameStr,
       setTimeout(() => {
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string event type should default to 'change'
-        callback(eventType || 'change', filenameStr);
+        callback(
+          eventType === null || eventType === '' ? 'change' : eventType,
+          filenameStr,
+        );
         timeouts.delete(filenameStr);
       }, 100),
     );

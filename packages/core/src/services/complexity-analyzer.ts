@@ -1,5 +1,3 @@
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 export interface ComplexityAnalysisResult {
   /** Complexity score from 0 to 1 */
   complexityScore: number;
@@ -65,11 +63,19 @@ export class ComplexityAnalyzer {
     'when',
   ];
 
-  // Task separator patterns for comma-separated lists
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  private readonly taskSeparatorPattern = /(?:,\s*(?:and\s+)?|;\s*|\band\s+)/;
-  // NOTE: File reference pattern no longer used to reduce false positives
-  // private readonly fileReferencePattern = /(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]+/g;
+  private static readonly NEED_TO_TRIGGERS = [
+    'need to',
+    'want to',
+    'have to',
+    'should',
+    'must',
+    'will',
+  ];
+
+  private static readonly ACTION_VERB_PATTERN =
+    /\b(?:set up|configure|run|start|create|add|implement|build|deploy)\b/i;
+
+  private static readonly WORD_CHAR = /[A-Za-z0-9_]/;
 
   constructor(options: ComplexityAnalyzerOptions = {}) {
     this.complexityThreshold = options.complexityThreshold ?? 0.6;
@@ -93,12 +99,6 @@ export class ComplexityAnalyzer {
 
     // File references are no longer counted toward task detection
     // This was causing too many false positives for task suggestions
-    // const fileReferences = this.extractFileReferences(message);
-    // for (const reference of fileReferences) {
-    //   if (!detectedTasks.includes(reference)) {
-    //     detectedTasks.push(reference);
-    //   }
-    // }
 
     // Calculate complexity score based on multiple factors
     const complexityScore = this.calculateComplexityScore({
@@ -164,64 +164,132 @@ export class ComplexityAnalyzer {
 
     // If no list-style tasks found, check for comma-separated tasks
     if (tasks.length === 0) {
-      // Look for patterns like "I need to X, Y, and Z"
-      const needToPattern =
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-        /(?:need to|want to|have to|should|must|will)\s+([^\r\n.?!]+)/i;
-      const match = message.match(needToPattern);
-
-      if (match) {
-        const taskString = match[1];
-        const potentialTasks = taskString
-          .split(this.taskSeparatorPattern)
-          .map((t) => this.normalizeTaskText(t))
-          .filter((t) => t.length > 3 && !t.includes('?'));
-
-        if (potentialTasks.length >= 2) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const task of potentialTasks) {
-            addTask(task);
-          }
-        }
-      }
+      this.extractNeedToTasks(message).forEach(addTask);
     }
 
     // If still no tasks found, check for sequential pattern sentences
     if (tasks.length === 0) {
-      // Split by sentence-ending punctuation
-      const sentences = message
-        .split(/[.!?]+/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
+      this.extractSequentialSentenceTasks(message).forEach(addTask);
+    }
 
-      // Check if we have sequential indicators suggesting multiple steps
-      const hasSequentialIndicators =
-        this.findSequentialIndicators(message).length > 0;
+    return tasks;
+  }
 
-      if (hasSequentialIndicators && sentences.length >= 2) {
-        // Extract tasks from sentences that likely contain actions
-        for (const sentence of sentences) {
-          const lowerSentence = sentence.toLowerCase();
-          // Look for sentences with action verbs or sequential keywords
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (
-            this.sequentialKeywords.some((kw) => lowerSentence.includes(kw)) ||
-            /\b(set up|configure|run|start|create|add|implement|build|deploy)\b/i.test(
-              sentence,
-            )
-          ) {
-            // Extract the main action from the sentence
-            const actionMatch = sentence.match(
-              // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-              /(?:first,?\s*|then\s*|after that,?\s*|finally,?\s*)?(.+)/i,
-            );
-            if (actionMatch) {
-              const task = this.normalizeTaskText(actionMatch[1]);
-              if (task.length > 0 && !tasks.includes(task)) {
-                addTask(task);
-              }
-            }
-          }
+  /** Extract comma-separated tasks from "need to X, Y, and Z" patterns. */
+  private extractNeedToTasks(message: string): string[] {
+    // Look for patterns like "I need to X, Y, and Z"
+    const taskString = ComplexityAnalyzer.extractAfterTrigger(message);
+    if (taskString === null) {
+      return [];
+    }
+
+    const potentialTasks = this.splitOnSeparators(taskString)
+      .map((t) => this.normalizeTaskText(t))
+      .filter((t) => t.length > 3 && !t.includes('?'));
+
+    return potentialTasks.length >= 2 ? potentialTasks : [];
+  }
+
+  /** Find the first "need to"-style trigger and return the text following it. */
+  private static extractAfterTrigger(message: string): string | null {
+    const lower = message.toLowerCase();
+    for (const trigger of ComplexityAnalyzer.NEED_TO_TRIGGERS) {
+      const index = lower.indexOf(trigger);
+      if (index >= 0) {
+        const after = message.slice(index + trigger.length);
+        const trimmed = after.replace(/^[\s]+/, '');
+        if (trimmed.length > 0) {
+          // Cut at the first sentence-ending punctuation.
+          const stop = trimmed.search(/[.!?\r\n]/);
+          return stop >= 0 ? trimmed.slice(0, stop) : trimmed;
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Split a string on `,`, `;`, and ` and ` separators. */
+  private splitOnSeparators(value: string): string[] {
+    const parts: string[] = [];
+    let current = '';
+    let i = 0;
+    while (i < value.length) {
+      const char = value[i];
+      const separatorAdvance = this.separatorAdvance(
+        char,
+        value,
+        i,
+        current,
+        parts,
+      );
+      if (separatorAdvance.reset) {
+        current = '';
+        i = separatorAdvance.nextIndex;
+      } else {
+        current += char;
+        i += 1;
+      }
+    }
+    parts.push(current);
+    return parts;
+  }
+
+  /** Determine whether the current character starts a separator; returns advance info. */
+  private separatorAdvance(
+    char: string,
+    value: string,
+    index: number,
+    current: string,
+    parts: string[],
+  ): { reset: boolean; nextIndex: number } {
+    if (char === ',' || char === ';') {
+      parts.push(current);
+      return { reset: true, nextIndex: index + 1 };
+    }
+    if (char === ' ' || char === '\t') {
+      const rest = value.slice(index).replace(/^[\s]+/, '');
+      const andMatch = rest.match(/^and\s/);
+      if (andMatch) {
+        parts.push(current);
+        return { reset: true, nextIndex: index + 4 };
+      }
+    }
+    return { reset: false, nextIndex: index + 1 };
+  }
+
+  /** Extract tasks from sentences with sequential indicators or action verbs. */
+  private extractSequentialSentenceTasks(message: string): string[] {
+    const tasks: string[] = [];
+
+    // Split by sentence-ending punctuation
+    const sentences = message
+      .split(/[.!?]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    // Check if we have sequential indicators suggesting multiple steps
+    const hasSequentialIndicators =
+      this.findSequentialIndicators(message).length > 0;
+
+    if (!hasSequentialIndicators || sentences.length < 2) {
+      return tasks;
+    }
+
+    // Extract tasks from sentences that likely contain actions
+    for (const sentence of sentences) {
+      const lowerSentence = sentence.toLowerCase();
+      if (
+        !this.sequentialKeywords.some((kw) => lowerSentence.includes(kw)) &&
+        !ComplexityAnalyzer.ACTION_VERB_PATTERN.test(sentence)
+      ) {
+        continue;
+      }
+      // Extract the main action from the sentence
+      const actionText = this.stripLeadingSequentialPrefix(sentence);
+      if (actionText.length > 0) {
+        const task = this.normalizeTaskText(actionText);
+        if (task.length > 0 && !tasks.includes(task)) {
+          tasks.push(task);
         }
       }
     }
@@ -229,24 +297,20 @@ export class ComplexityAnalyzer {
     return tasks;
   }
 
-  /**
-   * Extracts file references from the message.
-   * NOTE: No longer used for complexity counting to reduce false positives,
-   * but kept in case needed for future functionality.
-   */
-  // private extractFileReferences(message: string): string[] {
-  //   const references: string[] = [];
-  //   const matches = message.matchAll(this.fileReferencePattern);
-
-  //   for (const match of matches) {
-  //     const reference = match[0].trim();
-  //     if (reference.length > 0 && !references.includes(reference)) {
-  //       references.push(reference);
-  //     }
-  //   }
-
-  //   return references;
-  // }
+  /** Remove a leading "first,", "then ", "after that,", "finally," prefix. */
+  private stripLeadingSequentialPrefix(sentence: string): string {
+    const lower = sentence.toLowerCase();
+    const prefixes = ['first', 'then', 'after that', 'finally'];
+    for (const prefix of prefixes) {
+      if (lower.startsWith(prefix)) {
+        const rest = sentence.slice(prefix.length).replace(/^[,?\s]+/, '');
+        if (rest.length > 0) {
+          return rest;
+        }
+      }
+    }
+    return sentence;
+  }
 
   /**
    * Finds sequential indicator keywords in the message.
@@ -262,12 +326,10 @@ export class ComplexityAnalyzer {
     );
 
     for (const keyword of sortedKeywords) {
-      // For multi-word keywords, use a different pattern
-      const pattern = keyword.includes(' ')
-        ? new RegExp(`\\b${keyword.replace(/\s+/g, '\\s+')}\\b`, 'i')
-        : new RegExp(`\\b${keyword}\\b`, 'i');
-
-      if (pattern.test(lowerMessage) && !found.includes(keyword)) {
+      if (
+        ComplexityAnalyzer.containsWholeWord(lowerMessage, keyword) &&
+        !found.includes(keyword)
+      ) {
         found.push(keyword);
       }
     }
@@ -275,12 +337,49 @@ export class ComplexityAnalyzer {
     return found;
   }
 
+  /** Check whether `text` contains `word` as a whole word (case-insensitive). */
+  private static containsWholeWord(text: string, word: string): boolean {
+    if (word.includes(' ')) {
+      // Multi-word keywords: normalize whitespace in the haystack and search.
+      const normalizedWord = word.replace(/\s+/g, ' ');
+      const haystack = text.replace(/\s+/g, ' ');
+      return ComplexityAnalyzer.wholeWordContains(haystack, normalizedWord);
+    }
+    return ComplexityAnalyzer.wholeWordContains(text, word);
+  }
+
+  /** Core whole-word substring check used by {@link containsWholeWord}. */
+  private static wholeWordContains(text: string, word: string): boolean {
+    let searchFrom = 0;
+    while (searchFrom <= text.length) {
+      const index = text.indexOf(word, searchFrom);
+      if (index < 0) {
+        return false;
+      }
+      const before = index > 0 ? text[index - 1] : ' ';
+      const afterIndex = index + word.length;
+      const after = afterIndex < text.length ? text[afterIndex] : ' ';
+      if (
+        !ComplexityAnalyzer.isWordChar(before) &&
+        !ComplexityAnalyzer.isWordChar(after)
+      ) {
+        return true;
+      }
+      searchFrom = index + 1;
+    }
+    return false;
+  }
+
+  /** A word character is [A-Za-z0-9_]. */
+  private static isWordChar(char: string): boolean {
+    return ComplexityAnalyzer.WORD_CHAR.test(char);
+  }
+
   /**
    * Counts the number of questions in the message.
    */
   private countQuestions(message: string): number {
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    const questionPattern = /[^.!?]*\?/g;
+    const questionPattern = /[^.!?]{0,1000}\?/g;
     const matches = message.match(questionPattern);
     return matches ? matches.length : 0;
   }
@@ -317,41 +416,67 @@ export class ComplexityAnalyzer {
 
     const firstChar = trimmed[0];
 
-    if (firstChar === '[') {
-      const closingIndex = trimmed.indexOf(']');
-      if (closingIndex >= 0 && closingIndex + 1 < trimmed.length) {
-        const remainder = trimmed.slice(closingIndex + 1).trimStart();
-        if (remainder.length > 0) {
-          return remainder;
-        }
-      }
+    const bracketTask = this.extractBracketListTask(trimmed, firstChar);
+    if (bracketTask) {
+      return bracketTask;
     }
 
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      (firstChar === '-' || firstChar === '*' || firstChar === '•') &&
-      trimmed.length > 1 &&
-      this.isWhitespaceChar(trimmed[1])
-    ) {
-      let index = 1;
-      while (index < trimmed.length && this.isWhitespaceChar(trimmed[index])) {
-        index += 1;
-      }
-      const remainder = trimmed.slice(index);
-      if (remainder.length > 0) {
-        return remainder;
-      }
+    const bulletTask = this.extractBulletListTask(trimmed, firstChar);
+    if (bulletTask) {
+      return bulletTask;
     }
 
-    const dotIndex = trimmed.indexOf('.');
-    if (dotIndex > 0 && this.isAllDigits(trimmed.slice(0, dotIndex))) {
-      const remainder = trimmed.slice(dotIndex + 1).trimStart();
-      if (remainder.length > 0) {
-        return remainder;
-      }
+    const numberedTask = this.extractNumberedListTask(trimmed);
+    if (numberedTask) {
+      return numberedTask;
     }
 
     return null;
+  }
+
+  /** Extract a task from a `[x]` checkbox-style list item. */
+  private extractBracketListTask(
+    trimmed: string,
+    firstChar: string,
+  ): string | null {
+    if (firstChar !== '[') {
+      return null;
+    }
+    const closingIndex = trimmed.indexOf(']');
+    if (closingIndex < 0 || closingIndex + 1 >= trimmed.length) {
+      return null;
+    }
+    const remainder = trimmed.slice(closingIndex + 1).trimStart();
+    return remainder.length > 0 ? remainder : null;
+  }
+
+  /** Extract a task from a `-`, `*`, or `•` bullet list item. */
+  private extractBulletListTask(
+    trimmed: string,
+    firstChar: string,
+  ): string | null {
+    if (firstChar !== '-' && firstChar !== '*' && firstChar !== '•') {
+      return null;
+    }
+    if (trimmed.length <= 1 || !this.isWhitespaceChar(trimmed[1])) {
+      return null;
+    }
+    let index = 1;
+    while (index < trimmed.length && this.isWhitespaceChar(trimmed[index])) {
+      index += 1;
+    }
+    const remainder = trimmed.slice(index);
+    return remainder.length > 0 ? remainder : null;
+  }
+
+  /** Extract a task from a `1.` numbered list item. */
+  private extractNumberedListTask(trimmed: string): string | null {
+    const dotIndex = trimmed.indexOf('.');
+    if (dotIndex <= 0 || !this.isAllDigits(trimmed.slice(0, dotIndex))) {
+      return null;
+    }
+    const remainder = trimmed.slice(dotIndex + 1).trimStart();
+    return remainder.length > 0 ? remainder : null;
   }
 
   private isAllDigits(value: string): boolean {

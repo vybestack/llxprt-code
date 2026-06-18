@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 /**
  * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P08
  * @requirement:HOOK-061,HOOK-063,HOOK-064,HOOK-065,HOOK-066,HOOK-067a,HOOK-067b,HOOK-068,HOOK-069,HOOK-070
@@ -13,7 +11,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import type { HookConfig, BeforeToolInput } from './types.js';
+import type { HookConfig } from './types.js';
 import { HookEventName } from './types.js';
 import type {
   HookInput,
@@ -22,6 +20,7 @@ import type {
   BeforeAgentInput,
   BeforeModelInput,
   BeforeModelOutput,
+  BeforeToolInput,
 } from './types.js';
 import type { LLMRequest } from './hookTranslator.js';
 import { DebugLogger } from '../debug/index.js';
@@ -46,6 +45,20 @@ const DEFAULT_HOOK_TIMEOUT = 60000;
 const EXIT_CODE_SUCCESS = 0;
 const EXIT_CODE_BLOCKING_ERROR = 2;
 const EXIT_CODE_NON_BLOCKING_ERROR = 1;
+
+function resolveHookId(hookConfig: HookConfig): string {
+  if (hookConfig.name) {
+    return hookConfig.name;
+  }
+  if (hookConfig.command) {
+    return hookConfig.command;
+  }
+  return 'unknown';
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 /**
  * Hook runner that executes command hooks
@@ -76,9 +89,7 @@ export class HookRunner {
       );
     } catch (error) {
       const duration = Date.now() - startTime;
-      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string name/command should fall through to next option or 'unknown' */
-      const hookId = hookConfig.name || hookConfig.command || 'unknown';
-      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+      const hookId = resolveHookId(hookConfig);
       const errorMessage = `Hook execution failed for event '${eventName}' (hook: ${hookId}): ${error}`;
       debugLogger.warn(`Hook execution error (non-fatal): ${errorMessage}`);
 
@@ -175,16 +186,15 @@ export class HookRunner {
     hookOutput: HookOutput,
   ): void {
     if (
-      hookOutput.hookSpecificOutput &&
-      'additionalContext' in hookOutput.hookSpecificOutput
+      !hookOutput.hookSpecificOutput ||
+      !('additionalContext' in hookOutput.hookSpecificOutput)
     ) {
-      const additionalContext =
-        hookOutput.hookSpecificOutput['additionalContext'];
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      if (typeof additionalContext === 'string' && 'prompt' in modifiedInput) {
-        (modifiedInput as BeforeAgentInput).prompt +=
-          '\n\n' + additionalContext;
-      }
+      return;
+    }
+    const additionalContext =
+      hookOutput.hookSpecificOutput['additionalContext'];
+    if (typeof additionalContext === 'string' && 'prompt' in modifiedInput) {
+      (modifiedInput as BeforeAgentInput).prompt += '\n\n' + additionalContext;
     }
   }
 
@@ -193,23 +203,23 @@ export class HookRunner {
     hookOutput: HookOutput,
   ): void {
     if (
-      hookOutput.hookSpecificOutput &&
-      'llm_request' in hookOutput.hookSpecificOutput
+      !hookOutput.hookSpecificOutput ||
+      !('llm_request' in hookOutput.hookSpecificOutput)
     ) {
-      const hookBeforeModelOutput = hookOutput as BeforeModelOutput;
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      if (
-        hookBeforeModelOutput.hookSpecificOutput?.llm_request &&
-        'llm_request' in modifiedInput
-      ) {
-        const currentRequest = (modifiedInput as BeforeModelInput).llm_request;
-        const partialRequest =
-          hookBeforeModelOutput.hookSpecificOutput.llm_request;
-        (modifiedInput as BeforeModelInput).llm_request = {
-          ...currentRequest,
-          ...partialRequest,
-        } as LLMRequest;
-      }
+      return;
+    }
+    const hookBeforeModelOutput = hookOutput as BeforeModelOutput;
+    if (
+      hookBeforeModelOutput.hookSpecificOutput?.llm_request &&
+      'llm_request' in modifiedInput
+    ) {
+      const currentRequest = (modifiedInput as BeforeModelInput).llm_request;
+      const partialRequest =
+        hookBeforeModelOutput.hookSpecificOutput.llm_request;
+      (modifiedInput as BeforeModelInput).llm_request = {
+        ...currentRequest,
+        ...partialRequest,
+      } as LLMRequest;
     }
   }
 
@@ -218,25 +228,18 @@ export class HookRunner {
     hookOutput: HookOutput,
   ): void {
     if (
-      hookOutput.hookSpecificOutput &&
-      'tool_input' in hookOutput.hookSpecificOutput
+      !hookOutput.hookSpecificOutput ||
+      !('tool_input' in hookOutput.hookSpecificOutput)
     ) {
-      const modifiedToolInput = hookOutput.hookSpecificOutput['tool_input'];
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      if (
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        modifiedToolInput !== null &&
-        modifiedToolInput !== undefined &&
-        typeof modifiedToolInput === 'object' &&
-        !Array.isArray(modifiedToolInput) &&
-        'tool_input' in modifiedInput
-      ) {
-        // Merge modified input with existing tool_input
-        (modifiedInput as BeforeToolInput).tool_input = {
-          ...(modifiedInput as BeforeToolInput).tool_input,
-          ...(modifiedToolInput as Record<string, unknown>),
-        };
-      }
+      return;
+    }
+    const modifiedToolInput = hookOutput.hookSpecificOutput['tool_input'];
+    if (isPlainObject(modifiedToolInput) && 'tool_input' in modifiedInput) {
+      const beforeToolInput = modifiedInput as BeforeToolInput;
+      beforeToolInput.tool_input = {
+        ...beforeToolInput.tool_input,
+        ...modifiedToolInput,
+      };
     }
   }
 
@@ -302,12 +305,10 @@ export class HookRunner {
 
       this.writeToStdin(child, input);
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook output crosses plugin process boundaries despite declared types.
       child.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString();
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook output crosses plugin process boundaries despite declared types.
       child.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString();
       });
@@ -430,7 +431,6 @@ export class HookRunner {
     child: ReturnType<typeof spawn>,
     input: HookInput,
   ): void {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- child.stdin type is Writable | null but TypeScript may narrow incorrectly based on spawn options
     if (child.stdin != null) {
       child.stdin.on('error', (err: NodeJS.ErrnoException) => {
         // Ignore EPIPE errors which happen when the child process closes stdin early
@@ -498,8 +498,7 @@ export class HookRunner {
     const env = {
       ...sanitizeEnvironment(
         process.env,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined sanitizationConfig should default to config object
-        sanitizationConfig || {
+        sanitizationConfig ?? {
           enableEnvironmentVariableRedaction: false,
           allowedEnvironmentVariables: [],
           blockedEnvironmentVariables: [],
