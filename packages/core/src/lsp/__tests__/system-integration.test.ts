@@ -439,10 +439,7 @@ describe('LSP system integration (P35)', () => {
       new URL('../../../../tools/src/tools/edit.ts', import.meta.url),
     );
     const editUtilsPath = fileURLToPath(
-      new URL(
-        '../../../../tools/src/tools/edit-utils.ts',
-        import.meta.url,
-      ),
+      new URL('../../../../tools/src/tools/edit-utils.ts', import.meta.url),
     );
     const helperPath = fileURLToPath(
       new URL(
