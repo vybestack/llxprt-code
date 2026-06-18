@@ -414,6 +414,33 @@ const completedDirectiveCleanupScopes = [
   'packages/agents/src/tools/task.issues.test.ts', // #2090
   'packages/agents/src/tools/task.max-turns.test.ts', // #2090
   'packages/agents/src/tools/task.timeout.test.ts', // #2090
+  'packages/agents/src/agents/executor.ts', // #2085
+  'packages/agents/src/compression/HighDensityStrategy.ts', // #2085
+  'packages/agents/src/core/bucketFailoverIntegration.ts', // #2085
+  'packages/agents/src/core/chatSession.ts', // #2085
+  'packages/agents/src/core/clientHelpers.ts', // #2085
+  'packages/agents/src/core/DirectMessageProcessor.ts', // #2085
+  'packages/agents/src/core/MessageConverter.ts', // #2085
+  'packages/agents/src/core/StreamProcessor.ts', // #2085
+  'packages/agents/src/core/subagent.ts', // #2085
+  'packages/agents/src/core/subagentOrchestrator.ts', // #2085
+  'packages/agents/src/core/subagentToolProcessing.ts', // #2085
+  'packages/agents/src/core/TurnProcessor.ts', // #2085
+  'packages/agents/src/tools/task.ts', // #2085
+  // #2085 decomposition helpers extracted from the files above; keep locked so
+  // no inline disables can be reintroduced in the new modules.
+  'packages/agents/src/agents/executor-stream-processor.ts', // #2085
+  'packages/agents/src/agents/executor-tool-dispatch.ts', // #2085
+  'packages/agents/src/agents/recovery.ts', // #2085
+  'packages/agents/src/core/CompressionLoadBalancingProvider.ts', // #2085
+  'packages/agents/src/core/CompressionProfileResolver.ts', // #2085
+  'packages/agents/src/core/streamRequestHelpers.ts', // #2085
+  'packages/agents/src/core/streamResponseHelpers.ts', // #2085
+  'packages/agents/src/core/subagentNonInteractive.ts', // #2085
+  'packages/agents/src/tools/taskAbortHelpers.ts', // #2085
+  'packages/agents/src/tools/taskAsyncExecution.ts', // #2085
+  'packages/agents/src/tools/taskResultHelpers.ts', // #2085
+  'packages/agents/src/tools/taskToolGovernance.ts', // #2085
 ];
 
 export default tseslint.config(

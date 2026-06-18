@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 /**
  * @fileoverview Tool call dispatch, emit handling, and response building
  * for subagents.
@@ -96,6 +94,44 @@ export function buildToolUnavailableMessage(
 }
 
 // ---------------------------------------------------------------------------
+// Boundary-validation helpers (typed `unknown` so guards are necessary)
+// ---------------------------------------------------------------------------
+
+/**
+ * Coerces a possibly-missing tool-call args / emitted-vars payload to a record,
+ * restoring the `?? {}` fallback stripped by issue #2085. Values are typed
+ * `unknown` so downstream null/undefined guards remain genuinely necessary.
+ */
+function asUnknownRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === 'object' && value !== null) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+/**
+ * Reads a `CompletedToolCall.response` through an `unknown` boundary so the
+ * optional-chaining access (`response?.responseParts` etc.) is genuinely
+ * necessary — restoring the defensive `call.response?.*` guards from main.
+ */
+function readResponse(call: CompletedToolCall):
+  | {
+      responseParts?: Part[];
+      resultDisplay?: ToolResultDisplay;
+      error?: { message?: string };
+    }
+  | undefined {
+  const response = (call as { response?: unknown }).response;
+  if (typeof response === 'object' && response !== null) {
+    return response as {
+      responseParts?: Part[];
+      resultDisplay?: ToolResultDisplay;
+      error?: { message?: string };
+    };
+  }
+  return undefined;
+}
+// ---------------------------------------------------------------------------
 // Fuzzy tool name resolution
 // ---------------------------------------------------------------------------
 
@@ -149,14 +185,11 @@ export function finalizeOutput(output: OutputObject): void {
     return;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
-  const emittedVars = output.emitted_vars ?? {};
+  const emittedVars = asUnknownRecord(output.emitted_vars);
   const emittedEntries = Object.entries(emittedVars)
     .filter(
       ([, value]) =>
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
         value !== undefined &&
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
         value !== null &&
         String(value).trim().length > 0,
     )
@@ -200,26 +233,41 @@ export interface EmitValueContext {
   logger: DebugLogger;
 }
 
+/**
+ * Resolves an emit-value argument by preferring the snake_case key and falling
+ * back to the camelCase key, returning '' when neither is a string.
+ */
+function resolveEmitArg(
+  args: Record<string, unknown>,
+  snakeKey: string,
+  camelKey: string,
+): string {
+  const snakeValue = args[snakeKey];
+  if (typeof snakeValue === 'string') {
+    return snakeValue;
+  }
+  const camelValue = args[camelKey];
+  if (typeof camelValue === 'string') {
+    return camelValue;
+  }
+  return '';
+}
+
 export function handleEmitValueCall(
   request: ToolCallRequestInfo,
   ctx: EmitValueContext,
 ): Part[] {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
-  const args = request.args ?? {};
-  const variableName =
-    typeof args.emit_variable_name === 'string'
-      ? args.emit_variable_name
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        typeof args.emitVariableName === 'string'
-        ? args.emitVariableName
-        : '';
-  const variableValue =
-    typeof args.emit_variable_value === 'string'
-      ? args.emit_variable_value
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        typeof args.emitVariableValue === 'string'
-        ? args.emitVariableValue
-        : '';
+  const args = asUnknownRecord(request.args);
+  const variableName = resolveEmitArg(
+    args,
+    'emit_variable_name',
+    'emitVariableName',
+  );
+  const variableValue = resolveEmitArg(
+    args,
+    'emit_variable_value',
+    'emitVariableValue',
+  );
 
   if (variableName && variableValue) {
     ctx.output.emitted_vars[variableName] = variableValue;
@@ -268,23 +316,30 @@ export interface BuildPartsContext {
   logger: DebugLogger;
 }
 
+/**
+ * Appends all non-functionCall parts from responseParts to aggregate.
+ */
+function appendNonFunctionCallParts(
+  aggregate: Part[],
+  responseParts: Part[],
+): void {
+  for (const part of responseParts) {
+    if (!('functionCall' in part)) {
+      aggregate.push(part);
+    }
+  }
+}
+
 export function buildPartsFromCompletedCalls(
   completedCalls: CompletedToolCall[],
   ctx: BuildPartsContext,
 ): Part[] {
   const aggregate: Part[] = [];
   for (const call of completedCalls) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads may be malformed at boundaries.
-    const responseParts = call.response?.responseParts;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads may omit response parts.
+    const response = readResponse(call);
+    const responseParts = response?.responseParts;
     if (responseParts !== undefined && responseParts.length > 0) {
-      for (const part of responseParts) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if ('functionCall' in part) {
-          continue;
-        }
-        aggregate.push(part);
-      }
+      appendNonFunctionCallParts(aggregate, responseParts);
     } else {
       aggregate.push({
         functionResponse: {
@@ -299,10 +354,8 @@ export function buildPartsFromCompletedCalls(
 
     if (call.status === 'error') {
       const errorMessage =
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
-        call.response?.error?.message ??
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
-        call.response?.resultDisplay ??
+        response?.error?.message ??
+        response?.resultDisplay ??
         'Tool execution failed.';
       ctx.logger.warn(
         () =>
@@ -315,12 +368,11 @@ export function buildPartsFromCompletedCalls(
       );
     }
 
+    const callTool = call.tool;
     const toolCanUpdateOutput =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
-      call.status === 'success' && call.tool?.canUpdateOutput === true;
+      call.status === 'success' && callTool?.canUpdateOutput === true;
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
-    const display = call.response?.resultDisplay;
+    const display = response?.resultDisplay;
     if (
       typeof display === 'string' &&
       ctx.onMessage &&
