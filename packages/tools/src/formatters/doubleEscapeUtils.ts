@@ -241,9 +241,11 @@ function convertStringNumbersToNumbers(obj: unknown): unknown {
   if (obj == null) return obj;
 
   if (typeof obj === 'string') {
-    const num = Number(obj);
-    if (obj.trim() !== '' && Number.isFinite(num)) {
-      return num;
+    // Only convert strings matching decimal number syntax (not hex, octal,
+    // whitespace-padded, etc.) to preserve the original regex semantics.
+    if (isDecimalNumberString(obj)) {
+      const num = Number(obj);
+      if (Number.isFinite(num)) return num;
     }
     return obj;
   }
@@ -264,6 +266,55 @@ function convertStringNumbersToNumbers(obj: unknown): unknown {
   }
 
   return obj;
+}
+
+/**
+ * Equivalent to /^-?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$/ without using a regex.
+ * Accepts: "123", "-45", "3.14", ".5", "-0.1", "1e5", "3.14E-10"
+ * Rejects: "0xff", "  123  ", "Infinity", "NaN", "", "abc"
+ */
+function isDecimalNumberString(value: string): boolean {
+  if (value.length === 0) return false;
+  let s = value;
+  if (s[0] === '-') s = s.slice(1);
+  if (s.length === 0) return false;
+
+  // Split mantissa and optional exponent at 'e' or 'E'
+  let mantissa = s;
+  let expPart = '';
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === 'e' || s[i] === 'E') {
+      mantissa = s.slice(0, i);
+      expPart = s.slice(i + 1);
+      break;
+    }
+  }
+
+  // Validate exponent: optional sign, then one or more digits
+  if (expPart.length > 0) {
+    if (expPart[0] === '+' || expPart[0] === '-') expPart = expPart.slice(1);
+    if (!allDigits(expPart)) return false;
+  }
+
+  // Validate mantissa: \d+ or \d*\.\d+
+  const dotIdx = mantissa.indexOf('.');
+  if (dotIdx !== -1) {
+    const intPart = mantissa.slice(0, dotIdx);
+    const fracPart = mantissa.slice(dotIdx + 1);
+    if (mantissa.indexOf('.', dotIdx + 1) !== -1) return false;
+    if (intPart.length > 0 && !allDigits(intPart)) return false;
+    if (fracPart.length === 0 || !allDigits(fracPart)) return false;
+  } else if (mantissa.length === 0 || !allDigits(mantissa)) {
+    return false;
+  }
+  return true;
+}
+
+function allDigits(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] < '0' || s[i] > '9') return false;
+  }
+  return true;
 }
 
 /**
