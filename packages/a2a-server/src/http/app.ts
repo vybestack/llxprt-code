@@ -418,7 +418,14 @@ export async function main() {
   try {
     const expressApp = await createApp();
     const portEnv = process.env['CODER_AGENT_PORT'];
-    const port = portEnv !== undefined && portEnv !== '' ? Number(portEnv) : 0;
+    const parsedPort =
+      portEnv !== undefined && portEnv !== '' ? Number(portEnv) : 0;
+    if (!Number.isInteger(parsedPort) || parsedPort < 0 || parsedPort > 65535) {
+      throw new Error(
+        'CODER_AGENT_PORT must be an integer between 0 and 65535',
+      );
+    }
+    const port = parsedPort;
 
     const server = expressApp.listen(port, () => {
       const address = server.address();

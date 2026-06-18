@@ -33,7 +33,12 @@ export function hasDiffStat(
   if (typeof resultDisplay !== 'object' || resultDisplay === null) {
     return false;
   }
-  return 'diffStat' in resultDisplay;
+  const candidate = (resultDisplay as Record<string, unknown>).diffStat;
+  return (
+    candidate !== undefined &&
+    candidate !== null &&
+    typeof candidate === 'object'
+  );
 }
 
 export function isCompletedToolCallShapeWithTool(

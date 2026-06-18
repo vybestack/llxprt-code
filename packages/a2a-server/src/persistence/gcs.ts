@@ -24,8 +24,15 @@ const getTmpArchiveFilename = (taskId: string): string =>
   `task-${taskId}-workspace-${uuidv4()}.tar.gz`;
 
 async function cleanupTempArchive(tmpArchiveFile: string): Promise<void> {
-  if (await fse.pathExists(tmpArchiveFile)) {
-    await fse.remove(tmpArchiveFile);
+  try {
+    if (await fse.pathExists(tmpArchiveFile)) {
+      await fse.remove(tmpArchiveFile);
+    }
+  } catch (removeError) {
+    logger.warn(
+      `Failed to clean up temporary archive ${tmpArchiveFile}:`,
+      removeError,
+    );
   }
 }
 

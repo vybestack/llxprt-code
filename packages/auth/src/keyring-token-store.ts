@@ -184,8 +184,11 @@ export class KeyringTokenStore implements TokenStore {
   private async removeStaleLock(lockPath: string): Promise<void> {
     try {
       await fs.unlink(lockPath);
-    } catch {
-      // Ignore ENOENT
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        throw error;
+      }
     }
   }
 
@@ -272,24 +275,13 @@ export class KeyringTokenStore implements TokenStore {
         // Ignore stat errors
       }
 
-      try {
-        await fs.unlink(lockPath);
-      } catch {
-        // Ignore ENOENT
-      }
+      await this.removeStaleLock(lockPath);
       return 'stale_broken';
     }
   }
 
   private async releaseLock(lockPath: string): Promise<void> {
-    try {
-      await fs.unlink(lockPath);
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code !== 'ENOENT') {
-        throw error;
-      }
-    }
+    await this.removeStaleLock(lockPath);
   }
 
   /**

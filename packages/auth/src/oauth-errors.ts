@@ -580,12 +580,15 @@ export class RetryHandler {
  */
 export class GracefulErrorHandler {
   private readonly logger: OAuthLogger;
+  private readonly retryHandler: RetryHandler;
 
   constructor(
-    private retryHandler: RetryHandler = new RetryHandler(),
+    retryHandler?: RetryHandler,
     logger: OAuthLogger = consoleLogger,
   ) {
     this.logger = logger;
+    this.retryHandler =
+      retryHandler ?? new RetryHandler(DEFAULT_RETRY_CONFIG, logger);
   }
 
   /**

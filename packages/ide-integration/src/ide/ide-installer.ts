@@ -72,7 +72,10 @@ async function findVsCodeCommand(
     // Windows
     locations.push(
       path.join(
-        process.env.ProgramFiles ?? 'C:\\Program Files',
+        process.env.ProgramFiles !== undefined &&
+          process.env.ProgramFiles !== ''
+          ? process.env.ProgramFiles
+          : 'C:\\Program Files',
         'Microsoft VS Code',
         'bin',
         'code.cmd',

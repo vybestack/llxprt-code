@@ -205,6 +205,7 @@ export class QwenDeviceFlow {
       token_type: 'Bearer',
       expiry,
       refresh_token:
+        validatedResponse.refresh_token !== undefined &&
         validatedResponse.refresh_token !== ''
           ? validatedResponse.refresh_token
           : refreshToken,

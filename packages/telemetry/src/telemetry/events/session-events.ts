@@ -37,6 +37,7 @@ export class StartSessionEvent {
       generatorConfig !== undefined && generatorConfig.vertexai === true;
 
     this['event.name'] = 'cli_config';
+    this['event.timestamp'] = new Date().toISOString();
     this.model = config.getModel();
     this.embedding_model = config.getEmbeddingModel();
     const sandboxConfig = config.getSandbox();
