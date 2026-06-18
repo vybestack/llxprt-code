@@ -1,84 +1,62 @@
 /**
- * Prompt Installer - Creates directory structure and installs default prompt files
- * while preserving user customizations.
- *
- * This is a TDD stub implementation. All methods throw "Not implemented" errors.
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+/** Prompt Installer - Creates directory structure and installs default prompt files while preserving user customizations. */
 
 import { z } from 'zod';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
 import { existsSync } from 'fs';
-import { fileURLToPath } from 'node:url';
-import process from 'node:process';
-import type { Stats } from 'fs';
-import { createHash } from 'node:crypto';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import {
+  type InstalledManifest,
+  hashContent as hashContentImpl,
+  loadOrCreateManifest,
+  saveManifest,
+} from './installer/manifest-operations.js';
+import { writeInstallFile } from './installer/file-writer.js';
+import {
+  createDirectoryStructure,
+  collectAllFiles,
+  setInstalledPermissions,
+  removeEmptyDirs,
+  fixFilePermissions,
+  copyDirectory,
+  countFiles,
+} from './installer/directory-utils.js';
+import {
+  type PromptConflictReason,
+  type PromptConflictSummary,
+  type PromptConflictDetails,
+  type ExistingFileDecision,
+  handleExistingFile,
+  buildRemovalList,
+} from './installer/conflict-resolution.js';
+import {
+  expandPath as expandPathImpl,
+  formatBackupTimestamp,
+  classifyBackupError,
+} from './installer/path-expansion.js';
 
 const logger = new DebugLogger('llxprt:prompt-config:installer');
 
-// Constants
 export const DEFAULT_BASE_DIR = '~/.llxprt/prompts';
-export const REQUIRED_DIRECTORIES = [
-  '', // Base directory
-  'env', // Environment-specific prompts
-  'tools', // Tool-specific prompts
-  'providers', // Provider overrides
-] as const;
+export const REQUIRED_DIRECTORIES = ['', 'env', 'tools', 'providers'] as const;
 
-// Types
 export interface InstallOptions {
-  force?: boolean; // Overwrite existing files
-  dryRun?: boolean; // Simulate without writing
-  verbose?: boolean; // Detailed logging
+  force?: boolean;
+  dryRun?: boolean;
+  verbose?: boolean;
 }
-
-export type PromptConflictReason =
-  | 'default-newer'
-  | 'user-newer'
-  | 'content-diff'
-  | 'user-modified'
-  | 'user-protected'
-  | 'unknown-baseline';
-
-// Manifest file constants
-const MANIFEST_FILE = '.installed-manifest.json';
-const MANIFEST_VERSION = 1;
-
-// Manifest Zod schema for safe deserialization
-const InstalledFileEntrySchema = z.object({
-  hash: z.string(),
-  installedAt: z.string(),
-});
-
-const InstalledManifestSchema = z.object({
-  version: z.number(),
-  files: z.record(z.string(), InstalledFileEntrySchema),
-});
-
-// Manifest type (inferred from schema)
-type InstalledManifest = z.infer<typeof InstalledManifestSchema>;
-
-export interface PromptConflictDetails {
-  path: string;
-  userTimestamp?: string;
-  defaultTimestamp?: string;
-  reason: PromptConflictReason;
-}
-
-export interface PromptConflictSummary extends PromptConflictDetails {
-  action: 'kept' | 'overwritten';
-  reviewFile?: string;
-}
-
-type ExistingFileDecision =
-  | { action: 'same' }
-  | { action: 'overwrite' }
-  | { action: 'keep'; conflict: PromptConflictSummary; notice: string | null }
-  | { action: 'resolved' };
+export type {
+  PromptConflictReason,
+  PromptConflictDetails,
+  PromptConflictSummary,
+  ExistingFileDecision,
+};
 
 export interface InstallResult {
   success: boolean;
@@ -89,18 +67,15 @@ export interface InstallResult {
   conflicts: PromptConflictSummary[];
   notices: string[];
 }
-
 export interface UninstallOptions {
-  removeUserFiles?: boolean; // Remove all files
+  removeUserFiles?: boolean;
   dryRun?: boolean;
 }
-
 export interface UninstallResult {
   success: boolean;
   removed: string[];
   errors: string[];
 }
-
 export interface ValidationResult {
   isValid: boolean;
   errors: string[];
@@ -108,18 +83,15 @@ export interface ValidationResult {
   missing: string[];
   baseDir: string;
 }
-
 export interface RepairOptions {
   verbose?: boolean;
 }
-
 export interface RepairResult {
   success: boolean;
   repaired: string[];
   errors: string[];
   stillInvalid: string[];
 }
-
 export interface BackupResult {
   success: boolean;
   backupPath?: string;
@@ -128,243 +100,98 @@ export interface BackupResult {
   error?: string;
 }
 
-// Schema for defaults map
 export const DefaultsMapSchema = z.record(z.string(), z.string());
 export type DefaultsMap = z.infer<typeof DefaultsMapSchema>;
 
 /**
- * PromptInstaller handles installation, validation, and maintenance of prompt files
+ * PromptInstaller handles installation, validation, and maintenance of prompt files.
+ * Delegates cohesive operations to focused helper modules.
  */
 export class PromptInstaller {
-  private defaultSourceDirs: string[] | null = null;
+  private readonly defaultSourceDirs?: readonly string[];
 
-  private async createSingleDir(
-    fullPath: string,
-    dryRun: boolean | undefined,
-    verbose: boolean | undefined,
-  ): Promise<string | null> {
-    if (dryRun === true) {
-      if (verbose === true) {
-        logger.debug('Would create:', fullPath);
-      }
-      return null;
-    }
-
-    try {
-      await fs.mkdir(fullPath, { recursive: true, mode: 0o755 });
-      if (verbose === true) {
-        logger.debug('Created directory:', fullPath);
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      if (
-        errorMsg.includes('EACCES') ||
-        errorMsg.includes('permission denied')
-      ) {
-        return `Permission denied: ${fullPath}`;
-      }
-      return `Failed to create directory ${fullPath}: ${errorMsg}`;
-    }
-    return null;
-  }
-
-  private async createDirectoryStructure(
-    expandedBaseDir: string,
+  async install(
+    baseDir: string | null,
+    defaults: DefaultsMap,
     options?: InstallOptions,
-  ): Promise<string[]> {
-    const errors: string[] = [];
+  ): Promise<InstallResult> {
+    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
 
-    for (const dir of REQUIRED_DIRECTORIES) {
-      const fullPath = path.join(expandedBaseDir, dir);
-      const error = await this.createSingleDir(
-        fullPath,
-        options?.dryRun,
+    if (expandedBaseDir.includes('..') || !path.isAbsolute(expandedBaseDir)) {
+      return this.invalidBaseDirResult(expandedBaseDir);
+    }
+
+    const dirErrors = await createDirectoryStructure(
+      expandedBaseDir,
+      REQUIRED_DIRECTORIES,
+      options,
+    );
+    const manifest = await loadOrCreateManifest(
+      expandedBaseDir,
+      options?.dryRun === true,
+    );
+    const fileResults = await this.installFiles(
+      expandedBaseDir,
+      defaults,
+      manifest,
+      options,
+    );
+    const errors = [...dirErrors, ...fileResults.errors];
+
+    if (options?.dryRun !== true && errors.length === 0) {
+      await setInstalledPermissions(
+        expandedBaseDir,
+        REQUIRED_DIRECTORIES,
+        fileResults.installed,
         options?.verbose,
       );
-      if (error) errors.push(error);
     }
 
-    return errors;
-  }
-
-  private async loadOrCreateManifest(
-    expandedBaseDir: string,
-    dryRun: boolean,
-  ): Promise<InstalledManifest | null> {
-    let manifest: InstalledManifest | null = null;
-    if (!dryRun && existsSync(expandedBaseDir)) {
-      manifest = await this.loadManifest(expandedBaseDir);
-    }
-    if (!manifest && !dryRun) {
-      manifest = { version: MANIFEST_VERSION, files: {} };
-    }
-    return manifest;
-  }
-
-  private async writeInstallFile(
-    expandedBaseDir: string,
-    relativePath: string,
-    content: string,
-    manifest: InstalledManifest | null,
-    options?: InstallOptions,
-  ): Promise<{ installed: boolean; skipped: boolean; error?: string }> {
-    const fullPath = path.join(expandedBaseDir, relativePath);
-
-    if (options?.dryRun === true) {
-      if (options.verbose === true) {
-        logger.debug('Would write:', fullPath);
-      }
-      return { installed: true, skipped: false };
-    }
-
-    const tempPath = `${fullPath}.tmp.${Date.now()}.${Math.random().toString(36).substring(7)}`;
-    try {
-      await fs.writeFile(tempPath, content, { mode: 0o644 });
-      try {
-        await fs.rename(tempPath, fullPath);
-        if (manifest !== null) {
-          this.updateManifestEntry(
-            manifest,
-            relativePath,
-            this.hashContent(content),
-          );
-        }
-        if (options?.verbose === true) {
-          logger.debug('Installed:', relativePath);
-        }
-        return { installed: true, skipped: false };
-      } catch (renameError) {
-        const renameMsg =
-          renameError instanceof Error
-            ? renameError.message
-            : String(renameError);
-        if (renameMsg.includes('EEXIST') || existsSync(fullPath)) {
-          await fs.unlink(tempPath);
-          return { installed: false, skipped: true };
-        }
-        throw renameError;
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      try {
-        await fs.unlink(tempPath);
-      } catch {
-        // Ignore cleanup errors
-      }
-
-      return {
-        installed: false,
-        skipped: false,
-        error: this.classifyWriteError(fullPath, errorMsg),
-      };
-    }
-  }
-
-  private classifyWriteError(fullPath: string, errorMsg: string): string {
-    if (errorMsg.includes('EACCES') || errorMsg.includes('Permission denied')) {
-      return `Permission denied: ${fullPath}. Try running with elevated permissions or changing the directory ownership.`;
-    }
-    if (errorMsg.includes('ENOSPC')) {
-      return `Disk full: Cannot write ${fullPath}. Free up some disk space and try again.`;
-    }
-    return `Failed to write ${fullPath}: ${errorMsg}`;
-  }
-
-  private async setInstalledPermissions(
-    expandedBaseDir: string,
-    installed: string[],
-    verbose?: boolean,
-  ): Promise<void> {
-    try {
-      await fs.chmod(expandedBaseDir, 0o755);
-
-      for (const dir of REQUIRED_DIRECTORIES) {
-        if (dir === '') {
-          continue;
-        }
-        const dirPath = path.join(expandedBaseDir, dir);
-        if (existsSync(dirPath)) {
-          await fs.chmod(dirPath, 0o755);
-        }
-      }
-
-      for (const file of installed) {
-        const filePath = path.join(expandedBaseDir, file);
-        if (existsSync(filePath)) {
-          await fs.chmod(filePath, 0o644);
-        }
-      }
-    } catch (error) {
-      if (verbose === true) {
-        logger.debug('Could not set permissions:', error);
-      }
-    }
-  }
-
-  /**
-   * Install default prompt files
-   * @param baseDir - Base directory for prompts (defaults to DEFAULT_BASE_DIR)
-   * @param defaults - Map of relative path to file content
-   * @param options - Installation options
-   * @returns Installation result with success status and details
-   */
-  private async handleExistingFileDecision(
-    expandedBaseDir: string,
-    relativePath: string,
-    fullPath: string,
-    content: string,
-    options: InstallOptions | undefined,
-    manifest: InstalledManifest | null,
-  ): Promise<{
-    skip: boolean;
-    conflict?: PromptConflictSummary;
-    notice?: string;
-    error?: string;
-  } | null> {
-    if (!existsSync(fullPath) || options?.force === true) {
-      return null;
-    }
-
-    const decision = await this.handleExistingFile(
+    await this.persistManifest(
       expandedBaseDir,
-      relativePath,
-      fullPath,
-      content,
-      options?.dryRun !== true,
       manifest,
-    ).catch((error) => ({
-      action: 'same' as const,
-      errorMsg: error instanceof Error ? error.message : String(error),
-    }));
+      fileResults.installed,
+      options,
+    );
 
-    if ('errorMsg' in decision) {
-      return {
-        skip: true,
-        error: `Failed to evaluate ${relativePath}: ${decision.errorMsg}`,
-      };
-    }
+    return {
+      success: errors.length === 0,
+      installed: fileResults.installed,
+      skipped: fileResults.skipped,
+      errors,
+      baseDir: expandedBaseDir,
+      conflicts: fileResults.conflicts,
+      notices: fileResults.notices,
+    };
+  }
 
-    if (decision.action === 'same') {
-      return { skip: true };
-    }
+  private invalidBaseDirResult(expandedBaseDir: string): InstallResult {
+    return {
+      success: false,
+      installed: [],
+      skipped: [],
+      errors: ['Invalid base directory'],
+      baseDir: expandedBaseDir,
+      conflicts: [],
+      notices: [],
+    };
+  }
 
-    if (decision.action === 'resolved') {
-      return { skip: true };
+  private async persistManifest(
+    expandedBaseDir: string,
+    manifest: InstalledManifest | null,
+    installed: string[],
+    options?: InstallOptions,
+  ): Promise<void> {
+    if (options?.dryRun !== true && manifest !== null && installed.length > 0) {
+      try {
+        await saveManifest(expandedBaseDir, manifest);
+      } catch (error) {
+        if (options?.verbose === true) {
+          logger.debug('Could not save manifest:', error);
+        }
+      }
     }
-
-    if (decision.action === 'keep') {
-      return {
-        skip: true,
-        conflict: decision.conflict,
-        notice: decision.notice ?? undefined,
-      };
-    }
-
-    // overwrite — not a skip
-    if (options?.verbose === true) {
-      logger.debug('Updating unmodified file:', relativePath);
-    }
-    return null;
   }
 
   private async installFiles(
@@ -385,344 +212,155 @@ export class PromptInstaller {
     const conflicts: PromptConflictSummary[] = [];
     const notices: string[] = [];
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const [relativePath, content] of Object.entries(defaults)) {
-      const fullPath = path.join(expandedBaseDir, relativePath);
-      const fileDir = path.dirname(fullPath);
-
-      if (!existsSync(fileDir) && options?.dryRun !== true) {
-        try {
-          await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
-        } catch (error) {
-          errors.push(
-            `Failed to create directory ${fileDir}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          continue;
-        }
-      }
-
-      const existing = await this.handleExistingFileDecision(
-        expandedBaseDir,
-        relativePath,
-        fullPath,
-        content,
-        options,
-        manifest,
-      );
-      if (existing?.skip === true) {
-        skipped.push(relativePath);
-        if (existing.conflict) conflicts.push(existing.conflict);
-        if (existing.notice) notices.push(existing.notice);
-        if (existing.error) errors.push(existing.error);
-        continue;
-      }
-
-      const result = await this.writeInstallFile(
+      const result = await this.processInstallEntry(
         expandedBaseDir,
         relativePath,
         content,
         manifest,
         options,
       );
-      if (result.installed) installed.push(relativePath);
-      else if (result.skipped) skipped.push(relativePath);
-      else if (result.error) errors.push(result.error);
+      if (result.installed) installed.push(result.path);
+      if (result.skipped) skipped.push(result.path);
+      if (result.error) errors.push(result.error);
+      if (result.conflict) conflicts.push(result.conflict);
+      if (result.notice) notices.push(result.notice);
     }
 
     return { installed, skipped, errors, conflicts, notices };
   }
 
-  async install(
-    baseDir: string | null,
-    defaults: DefaultsMap,
+  private async processInstallEntry(
+    expandedBaseDir: string,
+    relativePath: string,
+    content: string,
+    manifest: InstalledManifest | null,
     options?: InstallOptions,
-  ): Promise<InstallResult> {
-    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
+  ): Promise<{
+    path: string;
+    installed: boolean;
+    skipped: boolean;
+    error?: string;
+    conflict?: PromptConflictSummary;
+    notice?: string;
+  }> {
+    const fullPath = path.join(expandedBaseDir, relativePath);
+    const fileDir = path.dirname(fullPath);
 
-    if (expandedBaseDir.includes('..') || !path.isAbsolute(expandedBaseDir)) {
-      return {
-        success: false,
-        installed: [],
-        skipped: [],
-        errors: ['Invalid base directory'],
-        baseDir: expandedBaseDir,
-        conflicts: [],
-        notices: [],
-      };
-    }
-
-    const dirErrors = await this.createDirectoryStructure(
-      expandedBaseDir,
-      options,
-    );
-    const manifest = await this.loadOrCreateManifest(
-      expandedBaseDir,
-      options?.dryRun === true,
-    );
-    const fileResults = await this.installFiles(
-      expandedBaseDir,
-      defaults,
-      manifest,
-      options,
-    );
-    const errors = [...dirErrors, ...fileResults.errors];
-
-    if (options?.dryRun !== true && errors.length === 0) {
-      await this.setInstalledPermissions(
-        expandedBaseDir,
-        fileResults.installed,
-        options?.verbose,
-      );
-    }
-
-    if (
-      options?.dryRun !== true &&
-      manifest !== null &&
-      fileResults.installed.length > 0
-    ) {
+    if (!existsSync(fileDir) && options?.dryRun !== true) {
       try {
-        await this.saveManifest(expandedBaseDir, manifest);
+        await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
       } catch (error) {
-        if (options?.verbose === true) {
-          logger.debug('Could not save manifest:', error);
-        }
+        return {
+          path: relativePath,
+          installed: false,
+          skipped: false,
+          error: `Failed to create directory ${fileDir}: ${error instanceof Error ? error.message : String(error)}`,
+        };
       }
     }
 
+    const existing = await this.handleExistingFileDecision(
+      expandedBaseDir,
+      relativePath,
+      fullPath,
+      content,
+      options,
+      manifest,
+    );
+    if (existing?.skip === true) {
+      return {
+        path: relativePath,
+        installed: false,
+        skipped: true,
+        conflict: existing.conflict,
+        notice: existing.notice,
+        error: existing.error,
+      };
+    }
+
+    const result = await writeInstallFile(
+      expandedBaseDir,
+      relativePath,
+      content,
+      manifest,
+      options,
+    );
     return {
-      success: errors.length === 0,
-      installed: fileResults.installed,
-      skipped: fileResults.skipped,
-      errors,
-      baseDir: expandedBaseDir,
-      conflicts: fileResults.conflicts,
-      notices: fileResults.notices,
+      path: relativePath,
+      installed: result.installed,
+      skipped: result.skipped,
+      error: result.error,
     };
   }
 
-  private async handleExistingFile(
+  private async handleExistingFileDecision(
     expandedBaseDir: string,
     relativePath: string,
     fullPath: string,
     content: string,
-    createReviewCopy: boolean,
+    options: InstallOptions | undefined,
     manifest: InstalledManifest | null,
-  ): Promise<ExistingFileDecision> {
-    const existingContent = await fs.readFile(fullPath, 'utf-8');
-
-    // 1. Content identical - skip (no change needed)
-    if (existingContent === content) {
-      return { action: 'same' };
+  ): Promise<{
+    skip: boolean;
+    conflict?: PromptConflictSummary;
+    notice?: string;
+    error?: string;
+  } | null> {
+    if (!existsSync(fullPath) || options?.force === true) {
+      return null;
     }
 
-    // 2. Check for NO OVERWRITE flag - user explicitly protects this file
-    if (this.hasNoOverwriteFlag(existingContent)) {
-      return this.createKeepDecision(
+    let decision: ExistingFileDecision;
+    try {
+      decision = await handleExistingFile(
         expandedBaseDir,
         relativePath,
+        fullPath,
         content,
-        'user-protected',
-        createReviewCopy,
+        options?.dryRun !== true,
+        manifest,
+        this.defaultSourceDirs,
       );
+    } catch (error) {
+      return {
+        skip: true,
+        error: `Failed to evaluate ${relativePath}: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
 
-    // 3. Get installed hash to determine if user modified the file
-    const installedHash = this.getInstalledHash(manifest, relativePath);
-    const currentHash = this.hashContent(existingContent);
-
-    // 4. No manifest entry - first run or corrupt manifest (conservative: assume modified)
-    if (installedHash === null) {
-      return this.createKeepDecision(
-        expandedBaseDir,
-        relativePath,
-        content,
-        'unknown-baseline',
-        createReviewCopy,
-      );
-    }
-
-    // 5. User never modified file - safe to overwrite silently
-    if (currentHash === installedHash) {
-      return { action: 'overwrite' };
-    }
-
-    // 6. User DID modify file - preserve their changes, create review file
-    return this.createKeepDecision(
-      expandedBaseDir,
-      relativePath,
-      content,
-      'user-modified',
-      createReviewCopy,
-    );
+    return this.classifyExistingDecision(decision, relativePath, options);
   }
 
-  /**
-   * Create a keep decision with optional review file
-   */
-  private async createKeepDecision(
-    expandedBaseDir: string,
+  private classifyExistingDecision(
+    decision: ExistingFileDecision,
     relativePath: string,
-    content: string,
-    reason: PromptConflictReason,
-    createReviewCopy: boolean,
-  ): Promise<ExistingFileDecision> {
-    const defaultStats = await this.getDefaultFileStats(relativePath);
-    const timestamp = this.getReviewTimestamp(defaultStats);
-    const reviewRelativePath = this.generateReviewFilename(
-      relativePath,
-      timestamp,
-    );
-    const reviewFullPath = path.join(expandedBaseDir, reviewRelativePath);
-
-    // Check if review file already exists
-    if (existsSync(reviewFullPath)) {
-      return { action: 'resolved' };
+    options: InstallOptions | undefined,
+  ): {
+    skip: boolean;
+    conflict?: PromptConflictSummary;
+    notice?: string;
+    error?: string;
+  } | null {
+    if (decision.action === 'same' || decision.action === 'resolved') {
+      return { skip: true };
     }
 
-    if (createReviewCopy) {
-      await fs.mkdir(path.dirname(reviewFullPath), {
-        recursive: true,
-        mode: 0o755,
-      });
-      await fs.writeFile(reviewFullPath, content, { mode: 0o644 });
+    if (decision.action === 'keep') {
+      return {
+        skip: true,
+        conflict: decision.conflict,
+        notice: decision.notice ?? undefined,
+      };
     }
 
-    const conflict: PromptConflictSummary = {
-      path: relativePath,
-      action: 'kept',
-      reviewFile: reviewRelativePath,
-      reason,
-    };
-
-    const notice = this.buildConflictNotice(
-      path.join(expandedBaseDir, relativePath),
-      reviewFullPath,
-    );
-
-    return {
-      action: 'keep',
-      conflict,
-      notice,
-    };
-  }
-
-  private getDefaultSourceDirectories(): string[] {
-    if (this.defaultSourceDirs) {
-      return this.defaultSourceDirs;
-    }
-
-    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-    const candidates = new Set<string>();
-    candidates.add(path.join(moduleDir, 'defaults'));
-    candidates.add(path.join(moduleDir, '..', 'defaults'));
-    candidates.add(path.join(moduleDir, '..', '..', 'defaults'));
-    candidates.add(
-      path.join(moduleDir, '..', '..', 'src', 'prompt-config', 'defaults'),
-    );
-    candidates.add(path.join(process.cwd(), 'bundle'));
-    candidates.add(
-      path.join(process.cwd(), 'packages/core/src/prompt-config/defaults'),
-    );
-
-    this.defaultSourceDirs = Array.from(candidates);
-    return this.defaultSourceDirs;
-  }
-
-  private async getDefaultFileStats(
-    relativePath: string,
-  ): Promise<Stats | null> {
-    for (const baseDir of this.getDefaultSourceDirectories()) {
-      const candidate = path.join(baseDir, relativePath);
-      try {
-        const stats = await fs.stat(candidate);
-        if (stats.isFile()) {
-          return stats;
-        }
-      } catch {
-        continue;
-      }
+    // overwrite — not a skip
+    if (options?.verbose === true) {
+      logger.debug('Updating unmodified file:', relativePath);
     }
     return null;
   }
 
-  private generateReviewFilename(
-    relativePath: string,
-    timestamp: string,
-  ): string {
-    return `${relativePath}.${timestamp}`;
-  }
-
-  private formatTimestamp(date: Date): string {
-    const year = date.getUTCFullYear().toString();
-    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-    const day = date.getUTCDate().toString().padStart(2, '0');
-    const hours = date.getUTCHours().toString().padStart(2, '0');
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
-    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
-  }
-
-  private getReviewTimestamp(defaultStats: Stats | null): string {
-    if (defaultStats) {
-      return this.formatTimestamp(defaultStats.mtime);
-    }
-    return this.formatTimestamp(new Date(0));
-  }
-
-  private buildConflictNotice(userPath: string, reviewPath: string): string {
-    return `Warning: this version includes a newer version of ${userPath} which you customized. We put ${reviewPath} next to it for your review.`;
-  }
-
-  private async buildRemovalList(
-    expandedBaseDir: string,
-    removeUserFiles: boolean,
-  ): Promise<string[]> {
-    if (removeUserFiles) {
-      const toRemove: string[] = [];
-      await this.collectAllFiles(expandedBaseDir, expandedBaseDir, toRemove);
-      return toRemove;
-    }
-
-    const defaultPaths = [
-      'core.md',
-      'env/development.md',
-      'env/dev.md',
-      'tools/git.md',
-      'providers/openai.md',
-    ];
-    return Promise.resolve(
-      defaultPaths.filter((p) => existsSync(path.join(expandedBaseDir, p))),
-    );
-  }
-
-  private async removeEmptyDirs(expandedBaseDir: string): Promise<string[]> {
-    const removed: string[] = [];
-    const dirsToCheck = [...REQUIRED_DIRECTORIES].reverse();
-
-    for (const dir of dirsToCheck) {
-      const fullPath =
-        dir === '' ? expandedBaseDir : path.join(expandedBaseDir, dir);
-
-      try {
-        const contents = await fs.readdir(fullPath);
-        if (contents.length === 0) {
-          await fs.rmdir(fullPath);
-          removed.push(dir === '' ? 'base directory' : dir);
-        }
-      } catch {
-        // Ignore errors when removing directories
-      }
-    }
-
-    return removed;
-  }
-
-  /**
-   * Uninstall prompt files
-   * @param baseDir - Base directory for prompts
-   * @param options - Uninstallation options
-   * @returns Uninstallation result with removed files
-   */
   async uninstall(
     baseDir: string | null,
     options?: UninstallOptions,
@@ -738,9 +376,10 @@ export class PromptInstaller {
 
     let toRemove: string[] = [];
     try {
-      toRemove = await this.buildRemovalList(
+      toRemove = await buildRemovalList(
         expandedBaseDir,
         options?.removeUserFiles === true,
+        collectAllFiles,
       );
     } catch (error) {
       errors.push(
@@ -749,63 +388,143 @@ export class PromptInstaller {
     }
 
     for (const file of toRemove) {
-      const fullPath = path.join(expandedBaseDir, file);
-
-      if (options?.dryRun === true) {
-        logger.debug('Would remove:', fullPath);
-        removed.push(file);
-      } else {
-        try {
-          await fs.unlink(fullPath);
-          removed.push(file);
-        } catch (error) {
-          const errorMsg =
-            error instanceof Error ? error.message : String(error);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Error classification inside catch is intentionally inline
-          if (errorMsg.includes('EBUSY')) {
-            errors.push(
-              `File in use: ${file}. Close any programs using this file and try again.`,
-            );
-          } else if (
-            errorMsg.includes('EACCES') ||
-            errorMsg.includes('Permission denied')
-          ) {
-            errors.push(`Permission denied: ${file}`);
-          } else if (!errorMsg.includes('ENOENT')) {
-            errors.push(`Failed to remove ${file}: ${errorMsg}`);
-          }
-        }
-      }
+      const result = await this.removeSingleFile(
+        file,
+        expandedBaseDir,
+        options,
+      );
+      if (result.removed) removed.push(result.path);
+      if (result.error) errors.push(result.error);
     }
 
     if (options?.dryRun !== true) {
-      const dirRemovals = await this.removeEmptyDirs(expandedBaseDir);
+      const dirRemovals = await removeEmptyDirs(
+        expandedBaseDir,
+        REQUIRED_DIRECTORIES,
+      );
       removed.push(...dirRemovals);
     }
 
     return { success: errors.length === 0, removed, errors };
   }
 
-  /**
-   * Helper method to recursively collect all files in a directory
-   */
-  private async collectAllFiles(
-    baseDir: string,
-    currentDir: string,
-    files: string[],
-  ): Promise<void> {
-    const entries = await fs.readdir(currentDir, { withFileTypes: true });
+  private async removeSingleFile(
+    file: string,
+    expandedBaseDir: string,
+    options?: UninstallOptions,
+  ): Promise<{ path: string; removed: boolean; error?: string }> {
+    const fullPath = path.join(expandedBaseDir, file);
 
-    for (const entry of entries) {
-      const fullPath = path.join(currentDir, entry.name);
-      const relativePath = path.relative(baseDir, fullPath);
-
-      if (entry.isDirectory()) {
-        await this.collectAllFiles(baseDir, fullPath, files);
-      } else if (entry.isFile()) {
-        files.push(relativePath);
-      }
+    if (options?.dryRun === true) {
+      logger.debug('Would remove:', fullPath);
+      return { path: file, removed: true };
     }
+
+    try {
+      await fs.unlink(fullPath);
+      return { path: file, removed: true };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return {
+        path: file,
+        removed: false,
+        error: this.classifyRemovalError(file, errorMsg),
+      };
+    }
+  }
+
+  private classifyRemovalError(
+    file: string,
+    errorMsg: string,
+  ): string | undefined {
+    if (errorMsg.includes('EBUSY')) {
+      return `File in use: ${file}. Close any programs using this file and try again.`;
+    }
+    if (errorMsg.includes('EACCES') || errorMsg.includes('Permission denied')) {
+      return `Permission denied: ${file}`;
+    }
+    if (!errorMsg.includes('ENOENT')) {
+      return `Failed to remove ${file}: ${errorMsg}`;
+    }
+    return undefined;
+  }
+
+  async validate(baseDir: string | null): Promise<ValidationResult> {
+    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
+
+    let isValid = true;
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const missing: string[] = [];
+
+    if (!existsSync(expandedBaseDir)) {
+      errors.push('Base directory does not exist');
+      return {
+        isValid: false,
+        errors,
+        warnings,
+        missing,
+        baseDir: expandedBaseDir,
+      };
+    }
+
+    this.validateDirectoryStructure(expandedBaseDir, errors, warnings, missing);
+    if (errors.length > 0) isValid = false;
+
+    await this.validatePermissions(expandedBaseDir, errors, warnings);
+    if (errors.some((e) => e.includes('Cannot read'))) isValid = false;
+
+    await this.validateCoreIntegrity(
+      expandedBaseDir,
+      errors,
+      warnings,
+      isValid,
+    );
+
+    const defaultFiles = [
+      'env/development.md',
+      'tools/git.md',
+      'providers/openai.md',
+    ];
+    for (const file of defaultFiles) {
+      await this.validateFileIntegrity(
+        path.join(expandedBaseDir, file),
+        file,
+        errors,
+        warnings,
+        false,
+      );
+    }
+
+    return { isValid, errors, warnings, missing, baseDir: expandedBaseDir };
+  }
+
+  private async validateCoreIntegrity(
+    expandedBaseDir: string,
+    errors: string[],
+    warnings: string[],
+    currentValid: boolean,
+  ): Promise<boolean> {
+    let isValid = currentValid;
+    const errorsBeforeCoreIntegrity = errors.length;
+    const corePath = path.join(expandedBaseDir, 'core.md');
+    await this.validateFileIntegrity(
+      corePath,
+      'core.md',
+      errors,
+      warnings,
+      true,
+    );
+    const coreIntegrityErrors = errors.slice(errorsBeforeCoreIntegrity);
+    if (
+      coreIntegrityErrors.some(
+        (error) =>
+          error.includes('core.md') && !error.startsWith('Cannot read:'),
+      )
+    ) {
+      isValid = false;
+    }
+    return isValid;
   }
 
   private validateDirectoryStructure(
@@ -878,66 +597,109 @@ export class PromptInstaller {
     }
   }
 
-  /**
-   * Validate prompt installation
-   * @param baseDir - Base directory to validate
-   * @returns Validation result with issues found
-   */
-  async validate(baseDir: string | null): Promise<ValidationResult> {
-    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
+  async repair(
+    baseDir: string | null,
+    defaults: DefaultsMap,
+    options?: RepairOptions,
+  ): Promise<RepairResult> {
+    const validation = await this.validate(baseDir);
 
-    let isValid = true;
+    const expandedBaseDir = validation.baseDir;
+    const repaired: string[] = [];
     const errors: string[] = [];
-    const warnings: string[] = [];
-    const missing: string[] = [];
 
     if (!existsSync(expandedBaseDir)) {
-      errors.push('Base directory does not exist');
-      isValid = false;
-      return { isValid, errors, warnings, missing, baseDir: expandedBaseDir };
+      const result = await this.repairCreateBase(expandedBaseDir, options);
+      repaired.push(...result.repaired);
+      errors.push(...result.errors);
+      if (result.failed) {
+        return {
+          success: false,
+          repaired,
+          errors,
+          stillInvalid: validation.errors,
+        };
+      }
     }
 
-    this.validateDirectoryStructure(expandedBaseDir, errors, warnings, missing);
-    if (errors.length > 0) isValid = false;
-
-    await this.validatePermissions(expandedBaseDir, errors, warnings);
-    if (errors.some((e) => e.includes('Cannot read'))) isValid = false;
-
-    const errorsBeforeCoreIntegrity = errors.length;
-    const corePath = path.join(expandedBaseDir, 'core.md');
-    await this.validateFileIntegrity(
-      corePath,
-      'core.md',
-      errors,
-      warnings,
-      true,
+    const dirResult = await this.repairMissingDirs(
+      expandedBaseDir,
+      validation.missing,
+      options?.verbose,
     );
-    const coreIntegrityErrors = errors.slice(errorsBeforeCoreIntegrity);
+    repaired.push(...dirResult.repaired);
+    errors.push(...dirResult.errors);
+
+    const fileResult = await this.repairMissingFiles(
+      expandedBaseDir,
+      validation.missing,
+      defaults,
+      options?.verbose,
+    );
+    repaired.push(...fileResult.repaired);
+    errors.push(...fileResult.errors);
+
+    const permsResult = await this.repairPermissions(expandedBaseDir, options);
     if (
-      coreIntegrityErrors.some(
-        (error) =>
-          error.includes('core.md') && !error.startsWith('Cannot read:'),
-      )
+      !validation.isValid &&
+      permsResult.fixed &&
+      permsResult.errors.length === 0
     ) {
-      isValid = false;
+      repaired.push('file permissions');
     }
+    errors.push(...permsResult.errors);
 
-    const defaultFiles = [
-      'env/development.md',
-      'tools/git.md',
-      'providers/openai.md',
-    ];
-    for (const file of defaultFiles) {
-      await this.validateFileIntegrity(
-        path.join(expandedBaseDir, file),
-        file,
-        errors,
-        warnings,
-        false,
-      );
+    const finalValidation = await this.validate(baseDir);
+
+    return {
+      success: finalValidation.isValid && errors.length === 0,
+      repaired,
+      errors,
+      stillInvalid: finalValidation.errors,
+    };
+  }
+
+  private async repairCreateBase(
+    expandedBaseDir: string,
+    options?: RepairOptions,
+  ): Promise<{ repaired: string[]; errors: string[]; failed: boolean }> {
+    try {
+      await fs.mkdir(expandedBaseDir, { recursive: true, mode: 0o755 });
+      if (options?.verbose === true) {
+        logger.debug('Created base directory:', expandedBaseDir);
+      }
+      return { repaired: ['base directory'], errors: [], failed: false };
+    } catch (error) {
+      return {
+        repaired: [],
+        errors: [
+          `Failed to create base directory: ${error instanceof Error ? error.message : String(error)}`,
+        ],
+        failed: true,
+      };
     }
+  }
 
-    return { isValid, errors, warnings, missing, baseDir: expandedBaseDir };
+  private async repairPermissions(
+    expandedBaseDir: string,
+    options?: RepairOptions,
+  ): Promise<{ fixed: boolean; errors: string[] }> {
+    try {
+      await fs.chmod(expandedBaseDir, 0o755);
+      await fixFilePermissions(expandedBaseDir);
+
+      if (options?.verbose === true) {
+        logger.debug('Fixed file permissions');
+      }
+      return { fixed: true, errors: [] };
+    } catch (error) {
+      return {
+        fixed: false,
+        errors: [
+          `Failed to fix permissions: ${error instanceof Error ? error.message : String(error)}`,
+        ],
+      };
+    }
   }
 
   private async repairMissingDirs(
@@ -982,155 +744,63 @@ export class PromptInstaller {
     const repaired: string[] = [];
     const errors: string[] = [];
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Missing items iteration requires early continue for missing defaults
     for (const missingItem of missing) {
-      if (!defaults[missingItem]) continue;
-
-      const filePath = path.join(expandedBaseDir, missingItem);
-      const fileDir = path.dirname(filePath);
-
-      try {
-        await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
-      } catch (error) {
-        errors.push(
-          `Failed to create directory for ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        continue;
-      }
-
-      const tempPath = `${filePath}.tmp.${Date.now()}`;
-      try {
-        await fs.writeFile(tempPath, defaults[missingItem], { mode: 0o644 });
-        await fs.rename(tempPath, filePath);
-        repaired.push(missingItem);
-        if (verbose === true) {
-          logger.debug('Restored file:', filePath);
-        }
-      } catch (error) {
-        errors.push(
-          `Failed to restore ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        try {
-          await fs.unlink(tempPath);
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
+      const result = await this.repairSingleFile(
+        expandedBaseDir,
+        missingItem,
+        defaults,
+        verbose,
+      );
+      if (result.repaired) repaired.push(missingItem);
+      if (result.error) errors.push(result.error);
     }
 
     return { repaired, errors };
   }
 
-  /**
-   * Repair prompt installation
-   * @param baseDir - Base directory to repair
-   * @param defaults - Map of default files to restore
-   * @param options - Repair options
-   * @returns Repair result with fixed issues
-   */
-  async repair(
-    baseDir: string | null,
+  private async repairSingleFile(
+    expandedBaseDir: string,
+    missingItem: string,
     defaults: DefaultsMap,
-    options?: RepairOptions,
-  ): Promise<RepairResult> {
-    const validation = await this.validate(baseDir);
-
-    const expandedBaseDir = validation.baseDir;
-    const repaired: string[] = [];
-    const errors: string[] = [];
-
-    if (!existsSync(expandedBaseDir)) {
-      try {
-        await fs.mkdir(expandedBaseDir, { recursive: true, mode: 0o755 });
-        repaired.push('base directory');
-        if (options?.verbose === true) {
-          logger.debug('Created base directory:', expandedBaseDir);
-        }
-      } catch (error) {
-        errors.push(
-          `Failed to create base directory: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return {
-          success: false,
-          repaired,
-          errors,
-          stillInvalid: validation.errors,
-        };
-      }
+    verbose?: boolean,
+  ): Promise<{ repaired: boolean; error?: string }> {
+    if (!defaults[missingItem]) {
+      return { repaired: false };
     }
 
-    const dirResult = await this.repairMissingDirs(
-      expandedBaseDir,
-      validation.missing,
-      options?.verbose,
-    );
-    repaired.push(...dirResult.repaired);
-    errors.push(...dirResult.errors);
+    const filePath = path.join(expandedBaseDir, missingItem);
+    const fileDir = path.dirname(filePath);
 
-    const fileResult = await this.repairMissingFiles(
-      expandedBaseDir,
-      validation.missing,
-      defaults,
-      options?.verbose,
-    );
-    repaired.push(...fileResult.repaired);
-    errors.push(...fileResult.errors);
-
-    let permissionsFixed = false;
     try {
-      await fs.chmod(expandedBaseDir, 0o755);
-      await this.fixFilePermissions(expandedBaseDir);
-      permissionsFixed = true;
-
-      if (options?.verbose === true) {
-        logger.debug('Fixed file permissions');
-      }
+      await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
     } catch (error) {
-      errors.push(
-        `Failed to fix permissions: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      return {
+        repaired: false,
+        error: `Failed to create directory for ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
 
-    if (!validation.isValid && permissionsFixed && errors.length === 0) {
-      repaired.push('file permissions');
+    const tempPath = `${filePath}.tmp.${Date.now()}`;
+    try {
+      await fs.writeFile(tempPath, defaults[missingItem], { mode: 0o644 });
+      await fs.rename(tempPath, filePath);
+      if (verbose === true) {
+        logger.debug('Restored file:', filePath);
+      }
+      return { repaired: true };
+    } catch (error) {
+      try {
+        await fs.unlink(tempPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      return {
+        repaired: false,
+        error: `Failed to restore ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
-
-    const finalValidation = await this.validate(baseDir);
-
-    return {
-      success: finalValidation.isValid && errors.length === 0,
-      repaired,
-      errors,
-      stillInvalid: finalValidation.errors,
-    };
   }
 
-  private formatBackupTimestamp(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    return `${year}${month}${day}_${hours}${minutes}${seconds}`;
-  }
-
-  private classifyBackupError(errorMsg: string): string {
-    if (errorMsg.includes('ENOSPC')) {
-      return 'Insufficient space: Not enough disk space for backup. Try a different location.';
-    }
-    if (errorMsg.includes('EACCES') || errorMsg.includes('Permission denied')) {
-      return 'Permission denied: Cannot write to backup location. Try a different location or check permissions.';
-    }
-    return `Backup failed: ${errorMsg}`;
-  }
-
-  /**
-   * Create backup of current prompts
-   * @param baseDir - Base directory to backup
-   * @param backupPath - Where to save backup
-   * @returns Backup result with location and stats
-   */
   async backup(
     baseDir: string | null,
     backupPath: string,
@@ -1145,252 +815,64 @@ export class PromptInstaller {
       return { success: false, error: 'Invalid backup path' };
     }
 
-    const timestamp = this.formatBackupTimestamp(new Date());
+    const timestamp = formatBackupTimestamp(new Date());
     const backupDir = path.join(backupPath, `prompt-backup-${timestamp}`);
 
     try {
-      await fs.mkdir(backupDir, { recursive: true });
-
-      let fileCount = 0;
-      let totalSize = 0;
-
-      await this.copyDirectory(expandedBaseDir, backupDir, async (filePath) => {
-        fileCount++;
-        const stats = await fs.stat(filePath);
-        totalSize += stats.size;
-      });
-
-      const manifest = {
-        backupDate: new Date().toISOString(),
-        sourcePath: expandedBaseDir,
-        fileCount,
-        totalSize,
-      };
-
-      await fs.writeFile(
-        path.join(backupDir, 'backup-manifest.json'),
-        JSON.stringify(manifest, null, 2),
-      );
-
-      const verifyCount = await this.countFiles(backupDir);
-      if (verifyCount !== fileCount + 1) {
-        logger.warn(
-          `Backup verification warning: expected ${fileCount + 1} files, found ${verifyCount}`,
-        );
-      }
-
-      return { success: true, backupPath: backupDir, fileCount, totalSize };
+      return await this.performBackup(expandedBaseDir, backupDir);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-
       try {
         await fs.rm(backupDir, { recursive: true, force: true });
       } catch {
         // Ignore cleanup errors
       }
-
-      return { success: false, error: this.classifyBackupError(errorMsg) };
+      return { success: false, error: classifyBackupError(errorMsg) };
     }
   }
 
-  /**
-   * Helper method to copy a directory recursively
-   */
-  private async copyDirectory(
-    source: string,
-    dest: string,
-    onFile?: (filePath: string) => Promise<void>,
-  ): Promise<void> {
-    await fs.mkdir(dest, { recursive: true });
+  private async performBackup(
+    expandedBaseDir: string,
+    backupDir: string,
+  ): Promise<BackupResult> {
+    await fs.mkdir(backupDir, { recursive: true });
 
-    const entries = await fs.readdir(source, { withFileTypes: true });
+    let fileCount = 0;
+    let totalSize = 0;
 
-    for (const entry of entries) {
-      const sourcePath = path.join(source, entry.name);
-      const destPath = path.join(dest, entry.name);
-
-      if (entry.isDirectory()) {
-        await this.copyDirectory(sourcePath, destPath, onFile);
-      } else if (entry.isFile()) {
-        await fs.copyFile(sourcePath, destPath);
-        await fs.chmod(destPath, 0o644);
-        if (onFile) {
-          await onFile(sourcePath);
-        }
-      }
-    }
-  }
-
-  /**
-   * Helper method to count files in a directory
-   */
-  private async countFiles(dir: string): Promise<number> {
-    let count = 0;
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        count += await this.countFiles(path.join(dir, entry.name));
-      } else if (entry.isFile()) {
-        count++;
-      }
-    }
-
-    return count;
-  }
-
-  /**
-   * Helper method to fix file permissions recursively
-   */
-  private async fixFilePermissions(dir: string): Promise<void> {
-    try {
-      const entries = await fs.readdir(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-
-        try {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (entry.isDirectory()) {
-            await fs.chmod(fullPath, 0o755);
-            await this.fixFilePermissions(fullPath);
-          } else if (entry.isFile()) {
-            await fs.chmod(fullPath, 0o644);
-          }
-        } catch {
-          // Silently continue with other files - some filesystems don't support chmod
-        }
-      }
-    } catch {
-      // Silently continue - permissions might not be changeable in some environments
-    }
-  }
-
-  /**
-   * Expand path with home directory and environment variables
-   * @param path - Path to expand
-   * @returns Expanded absolute path
-   */
-  expandPath(inputPath: string): string {
-    // Handle null or empty input
-    if (!inputPath) {
-      return '';
-    }
-
-    let expandedPath = inputPath;
-
-    // Expand home directory
-    if (expandedPath.startsWith('~')) {
-      const homeDir = os.homedir();
-      expandedPath = expandedPath.replace(/^~/, homeDir);
-    }
-
-    // Expand environment variables with curly braces ${VAR}
-    expandedPath = expandedPath.replace(
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      /\$\{([^}]+)\}/g,
-      (match, varName) => process.env[varName] ?? match,
-    );
-
-    // Expand environment variables without curly braces $VAR
-    expandedPath = expandedPath.replace(
-      /\$([A-Za-z_][A-Za-z0-9_]*)/g,
-      (match, varName) => process.env[varName] ?? match,
-    );
-
-    // Resolve to absolute path
-    if (!path.isAbsolute(expandedPath)) {
-      expandedPath = path.resolve(expandedPath);
-    }
-
-    // Normalize path (remove redundant separators, resolve . and ..)
-    return path.normalize(expandedPath);
-  }
-
-  /**
-   * Compute SHA-256 hash of content
-   * @param content - Content to hash
-   * @returns Hex-encoded SHA-256 hash
-   */
-  hashContent(content: string): string {
-    return createHash('sha256').update(content, 'utf-8').digest('hex');
-  }
-
-  /**
-   * Check if content has NO OVERWRITE flag
-   * Hash-based patterns (#, # LLXPRT:) must be at absolute start of file
-   * HTML comment pattern (<!-- -->) can be anywhere in file
-   */
-  private hasNoOverwriteFlag(content: string): boolean {
-    const patterns = [
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      /^#\s*NO\s*OVERWRITE/i, // Must be at absolute start of file (no /m flag)
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      /^#\s*LLXPRT:\s*NO\s*OVERWRITE/i, // Must be at absolute start of file (no /m flag)
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      /<!--\s*NO\s*OVERWRITE\s*-->/i, // Can be anywhere in file
-    ];
-    return patterns.some((p) => p.test(content));
-  }
-
-  /**
-   * Load installed manifest from disk with Zod validation
-   */
-  private async loadManifest(
-    baseDir: string,
-  ): Promise<InstalledManifest | null> {
-    const manifestPath = path.join(baseDir, MANIFEST_FILE);
-    try {
-      const content = await fs.readFile(manifestPath, 'utf-8');
-      const parsed = JSON.parse(content);
-      const result = InstalledManifestSchema.safeParse(parsed);
-      if (result.success) {
-        return result.data;
-      }
-      logger.debug('Invalid manifest format:', result.error.message);
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Save manifest to disk
-   */
-  private async saveManifest(
-    baseDir: string,
-    manifest: InstalledManifest,
-  ): Promise<void> {
-    const manifestPath = path.join(baseDir, MANIFEST_FILE);
-    await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), {
-      mode: 0o644,
+    await copyDirectory(expandedBaseDir, backupDir, async (filePath) => {
+      fileCount++;
+      const stats = await fs.stat(filePath);
+      totalSize += stats.size;
     });
-  }
 
-  /**
-   * Get installed hash for a file from manifest
-   */
-  private getInstalledHash(
-    manifest: InstalledManifest | null,
-    relativePath: string,
-  ): string | null {
-    if (!manifest?.files[relativePath]) {
-      return null;
-    }
-    return manifest.files[relativePath].hash;
-  }
-
-  /**
-   * Update manifest entry for a file
-   */
-  private updateManifestEntry(
-    manifest: InstalledManifest,
-    relativePath: string,
-    hash: string,
-  ): void {
-    manifest.files[relativePath] = {
-      hash,
-      installedAt: new Date().toISOString(),
+    const manifest = {
+      backupDate: new Date().toISOString(),
+      sourcePath: expandedBaseDir,
+      fileCount,
+      totalSize,
     };
+
+    await fs.writeFile(
+      path.join(backupDir, 'backup-manifest.json'),
+      JSON.stringify(manifest, null, 2),
+    );
+
+    const verifyCount = await countFiles(backupDir);
+    if (verifyCount !== fileCount + 1) {
+      logger.warn(
+        `Backup verification warning: expected ${fileCount + 1} files, found ${verifyCount}`,
+      );
+    }
+
+    return { success: true, backupPath: backupDir, fileCount, totalSize };
+  }
+
+  expandPath(inputPath: string): string {
+    return expandPathImpl(inputPath);
+  }
+
+  hashContent(content: string): string {
+    return hashContentImpl(content);
   }
 }

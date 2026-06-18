@@ -1,29 +1,38 @@
 /**
- * PromptResolver handles hierarchical file resolution for prompt templates
- * This is a stub implementation following TDD principles
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
+/** PromptResolver handles hierarchical file resolution for prompt templates. */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { type PromptContext } from './types.js';
+import {
+  fileExists,
+  isDirectory,
+  isRegularFile,
+  walkDirectory,
+} from './resolver/fs-adapter.js';
+import {
+  sanitizePathComponent,
+  convertToKebabCase,
+} from './resolver/name-utils.js';
+import {
+  scanBaseDirectory,
+  scanProviderOverrides,
+} from './resolver/directory-scanner.js';
 
 const logger = new DebugLogger('llxprt:prompt-config:resolver');
 
-/**
- * Result of resolving a single file
- */
 export interface ResolveFileResult {
   found: boolean;
   path: string | null;
   source: 'model' | 'provider' | 'base' | null;
 }
 
-/**
- * Resolved file information with metadata
- */
 export interface ResolvedFile {
   type: 'core' | 'env' | 'tool';
   path: string;
@@ -31,38 +40,31 @@ export interface ResolvedFile {
   toolName?: string;
 }
 
-/**
- * Available file information
- */
 export interface AvailableFile {
   path: string;
   type: 'core' | 'env' | 'tool';
   source: 'model' | 'provider' | 'base';
 }
 
-/**
- * File structure validation result
- */
 export interface ValidationResult {
   isValid: boolean;
   errors: string[];
   warnings: string[];
 }
 
+type FileSource = 'model' | 'provider' | 'base';
+
 /**
- * PromptResolver handles hierarchical file resolution
+ * PromptResolver handles hierarchical file resolution.
  */
 export class PromptResolver {
-  /**
-   * Find the most specific version of a file
-   */
+  /** Find the most specific version of a file. */
   resolveFile(
     baseDir: string,
     relativePath: string,
     context: Partial<PromptContext>,
   ): ResolveFileResult {
-    // 1. Validate inputs
-    if (!baseDir || !this.isDirectory(baseDir)) {
+    if (!baseDir || !isDirectory(baseDir)) {
       return { found: false, path: null, source: null };
     }
 
@@ -70,51 +72,24 @@ export class PromptResolver {
       return { found: false, path: null, source: null };
     }
 
-    // 2. Sanitize provider and model names
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider should be sanitized to empty string
-    const provider = this.sanitizePathComponent(context.provider || '');
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string model should be sanitized to empty string
-    const model = this.sanitizePathComponent(context.model || '');
+    const provider = sanitizePathComponent(context.provider ?? '');
+    const model = sanitizePathComponent(context.model ?? '');
 
-    // 3. Build search paths in order (most specific first)
-    const searchPaths: string[] = [];
+    const searchPaths = buildSearchPaths(relativePath, provider, model);
 
-    if (provider && model) {
-      searchPaths.push(`providers/${provider}/models/${model}/${relativePath}`);
-    }
-
-    if (provider) {
-      searchPaths.push(`providers/${provider}/${relativePath}`);
-    }
-
-    searchPaths.push(relativePath);
-
-    // 4. Search for file
     for (const searchPath of searchPaths) {
       const absolutePath = path.join(baseDir, searchPath);
 
-      if (this.fileExists(absolutePath) && this.isRegularFile(absolutePath)) {
-        let source: 'model' | 'provider' | 'base';
-
-        if (searchPath.includes('/models/')) {
-          source = 'model';
-        } else if (searchPath.startsWith('providers/')) {
-          source = 'provider';
-        } else {
-          source = 'base';
-        }
-
+      if (fileExists(absolutePath) && isRegularFile(absolutePath)) {
+        const source = classifySearchPathSource(searchPath);
         return { found: true, path: absolutePath, source };
       }
     }
 
-    // 5. File not found
     return { found: false, path: null, source: null };
   }
 
-  /**
-   * Resolve all files for a given context
-   */
+  /** Resolve all files for a given context. */
   resolveAllFiles(baseDir: string, context: PromptContext): ResolvedFile[] {
     if (!baseDir) {
       return [];
@@ -129,7 +104,7 @@ export class PromptResolver {
     return resolvedFiles;
   }
 
-  /** Resolve the core prompt file */
+  /** Resolve the core prompt file. */
   private resolveCorePrompt(
     baseDir: string,
     context: PromptContext,
@@ -139,16 +114,10 @@ export class PromptResolver {
     if (!coreResult.found) {
       coreResult = this.resolveFile(baseDir, 'core.md', context);
     }
-    if (coreResult.found && coreResult.path && coreResult.source) {
-      resolvedFiles.push({
-        type: 'core',
-        path: coreResult.path,
-        source: coreResult.source,
-      });
-    }
+    this.addResolvedFile(resolvedFiles, 'core', coreResult);
   }
 
-  /** Resolve environment-specific prompt files */
+  /** Resolve environment-specific prompt files. */
   private resolveEnvironmentPrompts(
     baseDir: string,
     context: PromptContext,
@@ -159,7 +128,7 @@ export class PromptResolver {
     this.resolveIdePrompt(baseDir, context, resolvedFiles);
   }
 
-  /** Resolve git repository prompt */
+  /** Resolve git repository prompt. */
   private resolveGitPrompt(
     baseDir: string,
     context: PromptContext,
@@ -172,16 +141,10 @@ export class PromptResolver {
     if (!gitResult.found) {
       gitResult = this.resolveFile(baseDir, 'env/git-repository.md', context);
     }
-    if (gitResult.found && gitResult.path && gitResult.source) {
-      resolvedFiles.push({
-        type: 'env',
-        path: gitResult.path,
-        source: gitResult.source,
-      });
-    }
+    this.addResolvedFile(resolvedFiles, 'env', gitResult);
   }
 
-  /** Resolve sandbox or outside-of-sandbox prompt */
+  /** Resolve sandbox or outside-of-sandbox prompt. */
   private resolveSandboxPrompt(
     baseDir: string,
     context: PromptContext,
@@ -194,66 +157,35 @@ export class PromptResolver {
     }
   }
 
-  /** Resolve sandbox-type-specific prompt */
+  /** Resolve sandbox-type-specific prompt. */
   private resolveSandboxedPrompt(
     baseDir: string,
     context: PromptContext,
     resolvedFiles: ResolvedFile[],
   ): void {
-    if (context.environment.sandboxType === 'macos-seatbelt') {
-      const seatbeltResult = this.resolveFile(
-        baseDir,
-        'env/macos-seatbelt.md',
-        context,
-      );
-      if (
-        seatbeltResult.found &&
-        seatbeltResult.path &&
-        seatbeltResult.source
-      ) {
-        resolvedFiles.push({
-          type: 'env',
-          path: seatbeltResult.path,
-          source: seatbeltResult.source,
-        });
-      }
-    } else {
-      const sandboxResult = this.resolveFile(
-        baseDir,
-        'env/sandbox.md',
-        context,
-      );
-      if (sandboxResult.found && sandboxResult.path && sandboxResult.source) {
-        resolvedFiles.push({
-          type: 'env',
-          path: sandboxResult.path,
-          source: sandboxResult.source,
-        });
-      }
-    }
+    const sandboxPath =
+      context.environment.sandboxType === 'macos-seatbelt'
+        ? 'env/macos-seatbelt.md'
+        : 'env/sandbox.md';
+    const result = this.resolveFile(baseDir, sandboxPath, context);
+    this.addResolvedFile(resolvedFiles, 'env', result);
   }
 
-  /** Resolve outside-of-sandbox prompt */
+  /** Resolve outside-of-sandbox prompt. */
   private resolveOutsideSandboxPrompt(
     baseDir: string,
     context: PromptContext,
     resolvedFiles: ResolvedFile[],
   ): void {
-    const outsideResult = this.resolveFile(
+    const result = this.resolveFile(
       baseDir,
       'env/outside-of-sandbox.md',
       context,
     );
-    if (outsideResult.found && outsideResult.path && outsideResult.source) {
-      resolvedFiles.push({
-        type: 'env',
-        path: outsideResult.path,
-        source: outsideResult.source,
-      });
-    }
+    this.addResolvedFile(resolvedFiles, 'env', result);
   }
 
-  /** Resolve IDE companion prompt */
+  /** Resolve IDE companion prompt. */
   private resolveIdePrompt(
     baseDir: string,
     context: PromptContext,
@@ -262,17 +194,11 @@ export class PromptResolver {
     if (!context.environment.hasIdeCompanion) {
       return;
     }
-    const ideResult = this.resolveFile(baseDir, 'env/ide-mode.md', context);
-    if (ideResult.found && ideResult.path && ideResult.source) {
-      resolvedFiles.push({
-        type: 'env',
-        path: ideResult.path,
-        source: ideResult.source,
-      });
-    }
+    const result = this.resolveFile(baseDir, 'env/ide-mode.md', context);
+    this.addResolvedFile(resolvedFiles, 'env', result);
   }
 
-  /** Resolve tool prompts (only if enabled via setting, default: false) */
+  /** Resolve tool prompts (only if enabled via setting, default: false). */
   private resolveToolPrompts(
     baseDir: string,
     context: PromptContext,
@@ -282,40 +208,48 @@ export class PromptResolver {
       return;
     }
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const tool of context.enabledTools) {
       if (tool.startsWith('mcp__')) {
         continue;
       }
-
-      const toolFileName = this.convertToKebabCase(tool) + '.md';
-      const toolResult = this.resolveFile(
-        baseDir,
-        'tools/' + toolFileName,
-        context,
-      );
-
-      if (toolResult.found && toolResult.path && toolResult.source) {
-        resolvedFiles.push({
-          type: 'tool',
-          path: toolResult.path,
-          source: toolResult.source,
-          toolName: tool,
-        });
-      } else {
-        this.tryAlternativeToolFormats(baseDir, context, tool, resolvedFiles);
-      }
+      this.resolveTool(baseDir, context, tool, resolvedFiles);
     }
   }
 
-  /** Try PascalCase and snake_case tool file alternatives */
+  /** Resolve a single tool prompt, trying alternative formats. */
+  private resolveTool(
+    baseDir: string,
+    context: PromptContext,
+    tool: string,
+    resolvedFiles: ResolvedFile[],
+  ): void {
+    const toolFileName = convertToKebabCase(tool) + '.md';
+    const toolResult = this.resolveFile(
+      baseDir,
+      'tools/' + toolFileName,
+      context,
+    );
+
+    if (toolResult.found && toolResult.path && toolResult.source) {
+      resolvedFiles.push({
+        type: 'tool',
+        path: toolResult.path,
+        source: toolResult.source,
+        toolName: tool,
+      });
+      return;
+    }
+
+    this.tryAlternativeToolFormats(baseDir, context, tool, resolvedFiles);
+  }
+
+  /** Try PascalCase and snake_case tool file alternatives. */
   private tryAlternativeToolFormats(
     baseDir: string,
     context: PromptContext,
     tool: string,
     resolvedFiles: ResolvedFile[],
   ): void {
-    // First try PascalCase (the original format before change)
     const pascalCaseFile = tool + '.md';
     const pascalCaseResult = this.resolveFile(
       baseDir,
@@ -323,202 +257,63 @@ export class PromptResolver {
       context,
     );
 
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (
       pascalCaseResult.found &&
       pascalCaseResult.path &&
       pascalCaseResult.source
     ) {
-      resolvedFiles.push({
-        type: 'tool',
-        path: pascalCaseResult.path,
-        source: pascalCaseResult.source,
-        toolName: tool,
-      });
+      this.addToolFile(resolvedFiles, pascalCaseResult, tool);
       return;
     }
 
-    // Try snake_case format
-    const snakeCaseFile =
-      tool
-        .replace(/([A-Z])/g, '_$1')
-        .toLowerCase()
-        .replace(/^_/, '') + '.md';
+    const snakeCaseFile = this.toSnakeCase(tool) + '.md';
     const snakeCaseResult = this.resolveFile(
       baseDir,
       'tools/' + snakeCaseFile,
       context,
     );
 
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (
       snakeCaseResult.found &&
       snakeCaseResult.path &&
       snakeCaseResult.source
     ) {
-      resolvedFiles.push({
-        type: 'tool',
-        path: snakeCaseResult.path,
-        source: snakeCaseResult.source,
-        toolName: tool,
-      });
+      this.addToolFile(resolvedFiles, snakeCaseResult, tool);
       return;
     }
 
-    // Log warning "Tool prompt not found: " + tool
     logger.warn(() => `Tool prompt not found: ${tool}`);
   }
 
-  /**
-   * Make names filesystem-safe
-   */
+  private toSnakeCase(tool: string): string {
+    return tool
+      .replace(/([A-Z])/g, '_$1')
+      .toLowerCase()
+      .replace(/^_/, '');
+  }
+
+  /** Make names filesystem-safe. */
   sanitizePathComponent(component: string): string {
-    // 1. IF component is null or empty
-    if (!component || component.length === 0) {
-      return '';
-    }
-
-    // 4. Check for reserved names first (before any transformation)
-    const reservedNames = ['.', '..', 'con', 'prn', 'aux', 'nul'];
-    if (reservedNames.includes(component)) {
-      return `reserved-${component}`;
-    }
-
-    // 2. Apply sanitization rules
-    // a. Convert to lowercase
-    let result = component.toLowerCase();
-
-    // b. Replace sequences of chars that are not alphanumeric, dot, or hyphen with a single hyphen.
-    // Dots are preserved to support version numbers in model names (e.g. gemini-2.5-flash).
-    result = result.replace(/[^a-z0-9.-]+/g, '-');
-
-    // c. Remove leading and trailing hyphens
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    result = result.replace(/^-+|-+$/g, '');
-
-    // d. IF result is empty after sanitization
-    if (result.length === 0) {
-      return 'unknown';
-    }
-
-    // 3. Check length limits
-    if (result.length > 255) {
-      result = result.substring(0, 255);
-    }
-
-    // Check reserved names again after transformation
-    if (reservedNames.includes(result)) {
-      return `reserved-${result}`;
-    }
-
-    // 5. RETURN sanitized component
-    return result;
+    return sanitizePathComponent(component);
   }
 
-  /**
-   * Convert tool names to kebab-case
-   */
+  /** Convert tool names to kebab-case. */
   convertToKebabCase(toolName: string): string {
-    // 1. IF toolName is null or empty
-    if (!toolName || toolName.length === 0) {
-      return '';
-    }
-
-    // 2. Handle special cases
-    // a. IF toolName is all uppercase
-    if (toolName === toolName.toUpperCase() && /^[A-Z]+$/.test(toolName)) {
-      return toolName.toLowerCase();
-    }
-
-    // 3. Convert case - handle special patterns first
-    // Replace underscores and dots with hyphens
-    const processedName = toolName.replace(/[_.]/g, '-');
-
-    // Insert hyphens before uppercase letters that follow lowercase letters
-    // or before digits (except at the start)
-    let result = '';
-    let previousWasLowercase = false;
-    let previousWasDigit = false;
-
-    for (let i = 0; i < processedName.length; i++) {
-      const char = processedName[i];
-      const nextChar = i + 1 < processedName.length ? processedName[i + 1] : '';
-
-      if (char === '-') {
-        // Keep existing hyphens
-        result += char;
-        previousWasLowercase = false;
-        previousWasDigit = false;
-      } else if (/[A-Z]/.test(char)) {
-        // Handle uppercase letters
-        const nextIsLower = nextChar !== '' && /[a-z]/.test(nextChar);
-        const shouldAddHyphen =
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          previousWasLowercase ||
-          (previousWasDigit && result.length > 0) ||
-          (result.length > 0 && nextIsLower && !result.endsWith('-'));
-
-        if (shouldAddHyphen) {
-          result += '-';
-        }
-
-        result += char.toLowerCase();
-        previousWasLowercase = false;
-        previousWasDigit = false;
-      } else if (/[a-z]/.test(char)) {
-        // Handle lowercase letters
-        result += char;
-        previousWasLowercase = true;
-        previousWasDigit = false;
-      } else if (/[0-9]/.test(char)) {
-        // Handle digits
-        if (result.length > 0 && !result.endsWith('-') && !previousWasDigit) {
-          result += '-';
-        }
-        result += char;
-        previousWasLowercase = false;
-        previousWasDigit = true;
-      }
-    }
-
-    // 4. Clean up result
-    // a. Replace multiple consecutive hyphens with single hyphen
-    result = result.replace(/-+/g, '-');
-
-    // b. Remove leading and trailing hyphens
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    result = result.replace(/^-+|-+$/g, '');
-
-    // 5. RETURN result
-    return result;
+    return convertToKebabCase(toolName);
   }
 
-  /**
-   * List all available prompt files
-   */
+  /** List all available prompt files. */
   listAvailableFiles(
     baseDir: string,
     fileType: 'core' | 'env' | 'tool' | 'all',
   ): AvailableFile[] {
-    // 1. Validate inputs
-    if (!baseDir || !this.isDirectory(baseDir)) {
+    if (!baseDir || !isDirectory(baseDir)) {
       return [];
     }
 
-    const validTypes: Array<'core' | 'env' | 'tool' | 'all'> = [
-      'core',
-      'env',
-      'tool',
-      'all',
-    ];
-    if (!validTypes.includes(fileType)) {
-      fileType = 'all';
-    }
+    const effectiveType = validateFileType(fileType);
+    const availableFiles = scanAvailableFiles(baseDir, effectiveType);
 
-    // 2. Scan and collect files
-    const availableFiles = this.scanAvailableFiles(baseDir, fileType);
-
-    // 3. Sort results
     availableFiles.sort((a, b) => {
       const typeOrder = { core: 0, env: 1, tool: 2 };
       const typeCompare = typeOrder[a.type] - typeOrder[b.type];
@@ -529,380 +324,204 @@ export class PromptResolver {
     return availableFiles;
   }
 
-  /** Scan base and provider directories for available files */
-  private scanAvailableFiles(
-    baseDir: string,
-    fileType: 'core' | 'env' | 'tool' | 'all',
-  ): AvailableFile[] {
-    const availableFiles: AvailableFile[] = [];
-
-    try {
-      this.scanBaseDirectory(baseDir, fileType, availableFiles);
-      this.scanProviderOverrides(baseDir, fileType, availableFiles);
-    } catch {
-      // Permission errors: Skip inaccessible directories
-    }
-
-    return availableFiles;
-  }
-
-  /** Scan the base directory for core, env, and tool files */
-  private scanBaseDirectory(
-    baseDir: string,
-    fileType: 'core' | 'env' | 'tool' | 'all',
-    availableFiles: AvailableFile[],
-  ): void {
-    // a. IF fileType is 'all' or 'core'
-    if (fileType === 'all' || fileType === 'core') {
-      const corePath = path.join(baseDir, 'core.md');
-      if (this.fileExists(corePath)) {
-        availableFiles.push({
-          path: 'core.md',
-          type: 'core',
-          source: 'base',
-        });
-      }
-    }
-
-    // b. IF fileType is 'all' or 'env'
-    if (fileType === 'all' || fileType === 'env') {
-      this.scanSubDirectory(baseDir, 'env', 'env', fileType, availableFiles);
-    }
-
-    // c. IF fileType is 'all' or 'tool'
-    if (fileType === 'all' || fileType === 'tool') {
-      this.scanSubDirectory(baseDir, 'tools', 'tool', fileType, availableFiles);
-    }
-  }
-
-  /** Scan a named subdirectory for .md files */
-  private scanSubDirectory(
-    baseDir: string,
-    subDir: string,
-    type: 'core' | 'env' | 'tool',
-    _fileType: 'core' | 'env' | 'tool' | 'all',
-    availableFiles: AvailableFile[],
-  ): void {
-    const dirPath = path.join(baseDir, subDir);
-    if (!this.isDirectory(dirPath)) {
-      return;
-    }
-    const files = this.readDirectory(dirPath);
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const file of files) {
-      if (file.endsWith('.md')) {
-        availableFiles.push({
-          path: `${subDir}/${file}`,
-          type,
-          source: 'base',
-        });
-      }
-    }
-  }
-
-  /** Scan provider override directories */
-  private scanProviderOverrides(
-    baseDir: string,
-    fileType: 'core' | 'env' | 'tool' | 'all',
-    availableFiles: AvailableFile[],
-  ): void {
-    const providersDir = path.join(baseDir, 'providers');
-    if (!this.isDirectory(providersDir)) {
-      return;
-    }
-    const providers = this.readDirectory(providersDir);
-    for (const provider of providers) {
-      const providerPath = path.join(providersDir, provider);
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      if (this.isDirectory(providerPath)) {
-        this.scanProviderDirectory(
-          providerPath,
-          provider,
-          fileType,
-          availableFiles,
-        );
-      }
-    }
-  }
-
-  /**
-   * Validate the file structure
-   */
+  /** Validate the file structure. */
   validateFileStructure(baseDir: string): ValidationResult {
-    // 1. Initialize validation result
     let isValid = true;
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    // 2. Check base directory
-    if (!this.fileExists(baseDir)) {
-      isValid = false;
-      errors.push('Base directory does not exist');
-      return { isValid, errors, warnings };
+    const dirCheck = checkBaseDirectory(baseDir);
+    if (!dirCheck.isValid) {
+      return {
+        isValid: false,
+        errors: [...errors, ...dirCheck.errors],
+        warnings,
+      };
     }
 
-    if (!this.isDirectory(baseDir)) {
-      isValid = false;
-      errors.push('Base path is not a directory');
-      return { isValid, errors, warnings };
-    }
+    checkRequiredDirs(baseDir, warnings);
+    checkCoreFile(baseDir, errors);
+    if (errors.length > 0) isValid = false;
 
-    // 3. Check required directories
-    const requiredDirs = ['env', 'tools'];
-    for (const dir of requiredDirs) {
-      const dirPath = path.join(baseDir, dir);
-      if (!this.fileExists(dirPath)) {
-        warnings.push(`Missing directory: ${dir}`);
-      }
-    }
+    this.checkFileContents(baseDir, errors, warnings);
+    checkCorePermissions(baseDir, errors);
+    if (errors.some((e) => e.includes('Cannot read core.md'))) isValid = false;
 
-    // 4. Check core file
-    const corePath = path.join(baseDir, 'core.md');
-    if (!this.fileExists(corePath)) {
-      isValid = false;
-      errors.push('Missing required core.md file');
-    }
+    return { isValid, errors, warnings };
+  }
 
-    // 5. Check for invalid files
+  /** Check all files for non-md, large files, and invalid filenames. */
+  private checkFileContents(
+    baseDir: string,
+    _errors: string[],
+    warnings: string[],
+  ): void {
     try {
-      this.walkDirectory(baseDir, (filePath: string, relativePath: string) => {
-        // Check file extension
-        if (!filePath.endsWith('.md')) {
-          warnings.push(`Non-markdown file found: ${relativePath}`);
-        }
-
-        // Check file size
-        try {
-          const stats = fs.statSync(filePath);
-          if (stats.size > 10 * 1024 * 1024) {
-            // 10MB
-            warnings.push(`Large file found: ${relativePath}`);
-          }
-        } catch {
-          // Ignore stat errors
-        }
-
-        // Check filename for special characters
-        const filename = path.basename(filePath);
-        if (!/^[\w\-.]+$/.test(filename)) {
-          warnings.push(`Invalid filename: ${relativePath}`);
-        }
+      walkDirectory(baseDir, (filePath: string, relativePath: string) => {
+        checkFileEntry(filePath, relativePath, warnings);
       });
-    } catch (_error) {
-      errors.push(`File system error: ${_error}`);
-    }
-
-    // 6. Check permissions
-    try {
-      if (this.fileExists(corePath)) {
-        fs.accessSync(corePath, fs.constants.R_OK);
-      }
-    } catch {
-      isValid = false;
-      errors.push('Cannot read core.md - check permissions');
-    }
-
-    // 7. RETURN validation result
-    return {
-      isValid,
-      errors,
-      warnings,
-    };
-  }
-
-  // Helper methods
-  private fileExists(filePath: string): boolean {
-    try {
-      fs.accessSync(filePath);
-      return true;
-    } catch {
-      return false;
+    } catch (error) {
+      _errors.push(`File system error: ${error}`);
     }
   }
 
-  private isDirectory(filePath: string): boolean {
-    try {
-      const stats = fs.statSync(filePath);
-      return stats.isDirectory();
-    } catch {
-      return false;
-    }
-  }
-
-  private isRegularFile(filePath: string): boolean {
-    try {
-      const stats = fs.statSync(filePath);
-      return stats.isFile();
-    } catch {
-      return false;
-    }
-  }
-
-  private readDirectory(dirPath: string): string[] {
-    try {
-      return fs.readdirSync(dirPath);
-    } catch {
-      return [];
-    }
-  }
-
-  private scanProviderDirectory(
-    providerPath: string,
-    provider: string,
-    fileType: 'core' | 'env' | 'tool' | 'all',
-    availableFiles: AvailableFile[],
+  /** Add a resolved file to the list if found. */
+  private addResolvedFile(
+    resolvedFiles: ResolvedFile[],
+    type: 'core' | 'env',
+    result: ResolveFileResult,
   ): void {
-    // Check for core.md at provider level
-    if (fileType === 'all' || fileType === 'core') {
-      const corePath = path.join(providerPath, 'core.md');
-      if (this.fileExists(corePath)) {
-        availableFiles.push({
-          path: `providers/${provider}/core.md`,
-          type: 'core',
-          source: 'provider',
-        });
-      }
-    }
-
-    // Check for env files at provider level
-    if (fileType === 'all' || fileType === 'env') {
-      const envDir = path.join(providerPath, 'env');
-      if (this.isDirectory(envDir)) {
-        const envFiles = this.readDirectory(envDir);
-        for (const file of envFiles) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (file.endsWith('.md')) {
-            availableFiles.push({
-              path: `providers/${provider}/env/${file}`,
-              type: 'env',
-              source: 'provider',
-            });
-          }
-        }
-      }
-    }
-
-    // Check for tool files at provider level
-    if (fileType === 'all' || fileType === 'tool') {
-      const toolsDir = path.join(providerPath, 'tools');
-      if (this.isDirectory(toolsDir)) {
-        const toolFiles = this.readDirectory(toolsDir);
-        for (const file of toolFiles) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (file.endsWith('.md')) {
-            availableFiles.push({
-              path: `providers/${provider}/tools/${file}`,
-              type: 'tool',
-              source: 'provider',
-            });
-          }
-        }
-      }
-    }
-
-    // Check for models directory
-    const modelsDir = path.join(providerPath, 'models');
-    if (this.isDirectory(modelsDir)) {
-      const models = this.readDirectory(modelsDir);
-      for (const model of models) {
-        const modelPath = path.join(modelsDir, model);
-        if (this.isDirectory(modelPath)) {
-          this.scanModelDirectory(
-            modelPath,
-            provider,
-            model,
-            fileType,
-            availableFiles,
-          );
-        }
-      }
+    if (result.found && result.path && result.source) {
+      resolvedFiles.push({ type, path: result.path, source: result.source });
     }
   }
 
-  private scanModelDirectory(
-    modelPath: string,
-    provider: string,
-    model: string,
-    fileType: 'core' | 'env' | 'tool' | 'all',
-    availableFiles: AvailableFile[],
+  /** Add a resolved tool file to the list if found. */
+  private addToolFile(
+    resolvedFiles: ResolvedFile[],
+    result: ResolveFileResult,
+    tool: string,
   ): void {
-    // Check for core.md at model level
-    if (fileType === 'all' || fileType === 'core') {
-      const corePath = path.join(modelPath, 'core.md');
-      if (this.fileExists(corePath)) {
-        availableFiles.push({
-          path: `providers/${provider}/models/${model}/core.md`,
-          type: 'core',
-          source: 'model',
-        });
-      }
-    }
-
-    // Check for env files at model level
-    if (fileType === 'all' || fileType === 'env') {
-      const envDir = path.join(modelPath, 'env');
-      if (this.isDirectory(envDir)) {
-        const envFiles = this.readDirectory(envDir);
-        for (const file of envFiles) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (file.endsWith('.md')) {
-            availableFiles.push({
-              path: `providers/${provider}/models/${model}/env/${file}`,
-              type: 'env',
-              source: 'model',
-            });
-          }
-        }
-      }
-    }
-
-    // Check for tool files at model level
-    if (fileType === 'all' || fileType === 'tool') {
-      const toolsDir = path.join(modelPath, 'tools');
-      if (this.isDirectory(toolsDir)) {
-        const toolFiles = this.readDirectory(toolsDir);
-        for (const file of toolFiles) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (file.endsWith('.md')) {
-            availableFiles.push({
-              path: `providers/${provider}/models/${model}/tools/${file}`,
-              type: 'tool',
-              source: 'model',
-            });
-          }
-        }
-      }
+    if (result.found && result.path && result.source) {
+      resolvedFiles.push({
+        type: 'tool',
+        path: result.path,
+        source: result.source,
+        toolName: tool,
+      });
     }
   }
+}
 
-  private walkDirectory(
-    dirPath: string,
-    callback: (filePath: string, relativePath: string) => void,
-    baseDir: string = dirPath,
-  ): void {
-    try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+/** Build search paths for file resolution (most specific first). */
+function buildSearchPaths(
+  relativePath: string,
+  provider: string,
+  model: string,
+): string[] {
+  const searchPaths: string[] = [];
 
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        const relativePath = path.relative(baseDir, fullPath);
+  if (provider && model) {
+    searchPaths.push(`providers/${provider}/models/${model}/${relativePath}`);
+  }
 
-        // Skip hidden files (starting with .)
-        if (entry.name.startsWith('.')) {
-          continue;
-        }
+  if (provider) {
+    searchPaths.push(`providers/${provider}/${relativePath}`);
+  }
 
-        if (entry.isDirectory()) {
-          // Recurse into subdirectory
-          this.walkDirectory(fullPath, callback, baseDir);
-        } else if (entry.isFile()) {
-          // Process file
-          callback(fullPath, relativePath);
-        }
-        // Skip symlinks and other special files
-      }
-    } catch {
-      // Ignore errors in subdirectories
+  searchPaths.push(relativePath);
+  return searchPaths;
+}
+
+/** Classify the source type from a search path. */
+function classifySearchPathSource(searchPath: string): FileSource {
+  if (searchPath.includes('/models/')) {
+    return 'model';
+  }
+  if (searchPath.startsWith('providers/')) {
+    return 'provider';
+  }
+  return 'base';
+}
+
+/** Validate file type, defaulting to 'all' if invalid. */
+function validateFileType(
+  fileType: 'core' | 'env' | 'tool' | 'all',
+): 'core' | 'env' | 'tool' | 'all' {
+  const validTypes = ['core', 'env', 'tool', 'all'];
+  return validTypes.includes(fileType) ? fileType : 'all';
+}
+
+/** Scan available files from base and provider directories. */
+function scanAvailableFiles(
+  baseDir: string,
+  fileType: 'core' | 'env' | 'tool' | 'all',
+): AvailableFile[] {
+  const availableFiles: AvailableFile[] = [];
+
+  try {
+    scanBaseDirectory(baseDir, fileType, availableFiles);
+    scanProviderOverrides(baseDir, fileType, availableFiles);
+  } catch {
+    // Permission errors: Skip inaccessible directories
+  }
+
+  return availableFiles;
+}
+
+/** Check if base directory exists and is a directory. */
+function checkBaseDirectory(baseDir: string): {
+  isValid: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+  if (!fileExists(baseDir)) {
+    errors.push('Base directory does not exist');
+    return { isValid: false, errors };
+  }
+  if (!isDirectory(baseDir)) {
+    errors.push('Base path is not a directory');
+    return { isValid: false, errors };
+  }
+  return { isValid: true, errors };
+}
+
+/** Check for required directories, adding warnings for missing ones. */
+function checkRequiredDirs(baseDir: string, warnings: string[]): void {
+  const requiredDirs = ['env', 'tools'];
+  for (const dir of requiredDirs) {
+    const dirPath = path.join(baseDir, dir);
+    if (!fileExists(dirPath)) {
+      warnings.push(`Missing directory: ${dir}`);
     }
   }
+}
+
+/** Check for the core.md file, adding an error if missing. */
+function checkCoreFile(baseDir: string, errors: string[]): void {
+  const corePath = path.join(baseDir, 'core.md');
+  if (!fileExists(corePath)) {
+    errors.push('Missing required core.md file');
+  }
+}
+
+/** Check core.md read permissions. */
+function checkCorePermissions(baseDir: string, errors: string[]): void {
+  const corePath = path.join(baseDir, 'core.md');
+  try {
+    if (fileExists(corePath)) {
+      fs.accessSync(corePath, fs.constants.R_OK);
+    }
+  } catch {
+    errors.push('Cannot read core.md - check permissions');
+  }
+}
+
+/** Check a single file entry for non-md, large files, and invalid filenames. */
+function checkFileEntry(
+  filePath: string,
+  relativePath: string,
+  warnings: string[],
+): void {
+  if (!filePath.endsWith('.md')) {
+    warnings.push(`Non-markdown file found: ${relativePath}`);
+  }
+
+  try {
+    const stats = fs.statSync(filePath);
+    if (stats.size > 10 * 1024 * 1024) {
+      warnings.push(`Large file found: ${relativePath}`);
+    }
+  } catch {
+    // Ignore stat errors
+  }
+
+  const filename = path.basename(filePath);
+  if (!isValidFilename(filename)) {
+    warnings.push(`Invalid filename: ${relativePath}`);
+  }
+}
+
+function isValidFilename(filename: string): boolean {
+  return /^[\w\-.]+$/.test(filename);
 }

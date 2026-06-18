@@ -4,8 +4,6 @@
  * Complex method implementations live in Config (extends ConfigBase) in config.ts.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { GitService } from '../services/gitService.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
@@ -246,8 +244,7 @@ export abstract class ConfigBase extends ConfigBaseCore {
       }
 
       const activeProvider = this.providerManager.getActiveProvider();
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider manager may have no active provider during settings updates.
-      if (activeProvider === undefined || activeProvider === null) {
+      if (activeProvider === undefined) {
         return;
       }
 

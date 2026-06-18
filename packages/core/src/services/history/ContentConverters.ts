@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import { randomUUID } from 'crypto';
 import { type Content, type Part } from '@google/genai';
 import type { IContent, ContentBlock, ThinkingBlock } from './IContent.js';
@@ -41,15 +39,13 @@ export class ContentConverters {
   }
 
   private static hasLegacyTruthyValue(value: unknown): boolean {
-    return (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      value !== null &&
-      value !== undefined &&
-      value !== false &&
-      value !== 0 &&
-      value !== '' &&
-      !(typeof value === 'number' && Number.isNaN(value))
-    );
+    if (value === null || value === undefined) {
+      return false;
+    }
+    if (value === false || value === 0 || value === '') {
+      return false;
+    }
+    return !(typeof value === 'number' && Number.isNaN(value));
   }
 
   /** Resolve the Gemini role from an IContent speaker. */
@@ -212,31 +208,22 @@ export class ContentConverters {
 
   /** Safely parse a functionResponse.response into a Record. */
   private static parseFunctionResponseResult(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Gemini SDK types
-    response: any,
+    response: unknown,
     callId: string,
   ): Record<string, unknown> {
-    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Gemini SDK response may be any type
-    if (!response) {
+    if (response === null || response === undefined) {
       return {};
     }
     return ContentConverters.parseResponseValue(response, callId);
   }
 
   /** Parse a non-null/non-undefined response value into a Record. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Gemini SDK types
   private static parseResponseValue(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Gemini SDK types
-    response: any,
+    response: unknown,
     callId: string,
   ): Record<string, unknown> {
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     try {
-      if (
-        typeof response === 'object' &&
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
-        response !== null
-      ) {
+      if (ContentConverters.isPlainObject(response)) {
         return response;
       }
       if (typeof response === 'string') {
@@ -254,10 +241,31 @@ export class ContentConverters {
       );
       return {
         error: 'Failed to process tool response',
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing, @typescript-eslint/strict-boolean-expressions -- empty string is valid fallback; any-type response from Gemini SDK
-        output: String(response || ''),
+        output: ContentConverters.stringifyWithEmptyFallback(response),
       };
     }
+  }
+
+  /** Type guard: value is a non-null object (not an array, but Record-compatible). */
+  private static isPlainObject(
+    value: unknown,
+  ): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+  }
+
+  /** Stringify a possibly-falsy value, falling back to empty string. */
+  private static stringifyWithEmptyFallback(response: unknown): string {
+    return response !== null && response !== undefined ? String(response) : '';
+  }
+
+  /** Return the first non-empty string argument, or '' if none match. */
+  private static firstNonEmpty(...values: Array<string | undefined>): string {
+    for (const value of values) {
+      if (value !== undefined && value !== '') {
+        return value;
+      }
+    }
+    return '';
   }
 
   /** Parse a string response value, trying JSON parse first. */
@@ -284,8 +292,7 @@ export class ContentConverters {
     },
     callIndex: number,
   ): { blocks: ContentBlock[]; callIndex: number } {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name
-    const toolName = part.functionCall!.name || '';
+    const toolName = part.functionCall!.name ?? '';
     const rawId = part.functionCall!.id;
     const generatedId =
       !rawId && context.generateIdCb ? context.generateIdCb() : undefined;
@@ -329,8 +336,9 @@ export class ContentConverters {
     },
     responseIndex: number,
   ): { blocks: ContentBlock[]; responseIndex: number } {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name
-    const toolName = part.functionResponse!.name || '';
+    const toolName = ContentConverters.firstNonEmpty(
+      part.functionResponse!.name,
+    );
     const rawId = part.functionResponse!.id;
     const matched = !rawId ? context.getNextUnmatchedToolCall?.() : undefined;
     const generatedId =
@@ -362,13 +370,25 @@ export class ContentConverters {
       {
         type: 'tool_response',
         callId,
-        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name */
-        toolName: matched?.toolName || part.functionResponse!.name || '',
-        /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+        toolName: ContentConverters.firstNonEmpty(
+          matched?.toolName,
+          part.functionResponse!.name,
+        ),
         result,
       },
     ];
     return { blocks, responseIndex: responseIndex + 1 };
+  }
+
+  /** Convert a text-or-thought Part into a ContentBlock. */
+  private static textPartToBlock(part: Part): ContentBlock {
+    if (
+      'thought' in part &&
+      ContentConverters.hasLegacyTruthyValue(part.thought)
+    ) {
+      return ContentConverters.partToThinkingBlock(part);
+    }
+    return { type: 'text', text: part.text ?? '' };
   }
 
   /** Convert a single Gemini Part into ContentBlocks, returning any tool-call index counters. */
@@ -386,19 +406,7 @@ export class ContentConverters {
     let { callIndex, responseIndex } = indices;
 
     if ('text' in part && part.text !== undefined) {
-      // Check if this is a thinking block
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      if (
-        'thought' in part &&
-        ContentConverters.hasLegacyTruthyValue(part.thought)
-      ) {
-        blocks.push(ContentConverters.partToThinkingBlock(part));
-      } else {
-        blocks.push({
-          type: 'text',
-          text: part.text,
-        });
-      }
+      blocks.push(ContentConverters.textPartToBlock(part));
     } else if ('functionCall' in part && part.functionCall) {
       const fcResult = this.processFunctionCallPart(part, context, callIndex);
       blocks.push(...fcResult.blocks);
@@ -414,10 +422,8 @@ export class ContentConverters {
     } else if ('inlineData' in part && part.inlineData) {
       blocks.push({
         type: 'media',
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for mimeType
-        mimeType: part.inlineData.mimeType || '',
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for data
-        data: part.inlineData.data || '',
+        mimeType: part.inlineData.mimeType ?? '',
+        data: part.inlineData.data ?? '',
         encoding: 'base64',
       });
     }

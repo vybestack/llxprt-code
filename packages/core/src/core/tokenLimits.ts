@@ -4,30 +4,78 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 type Model = string;
 type TokenCount = number;
 
 export const DEFAULT_TOKEN_LIMIT = 1_048_576;
 
-function isOpenAi128kModel(modelWithoutPrefix: string): boolean {
-  if (modelWithoutPrefix.startsWith('o4-mini')) {
-    return true;
+const OPENAI_128K_PREFIXES = [
+  'o4-mini',
+  'gpt-4o-mini',
+  'gpt-4o-realtime',
+  'gpt-4o',
+  'gpt-4-turbo',
+];
+
+const OPENAI_200K_PREFIXES = ['o3-pro', 'o3-mini', 'o1-mini', 'o3', 'o1'];
+
+interface PrefixLimit {
+  prefix: string;
+  limit: TokenCount;
+}
+
+const PREFIX_LIMITS: PrefixLimit[] = [
+  { prefix: 'gpt-4.1', limit: 1_000_000 },
+  { prefix: 'gpt-3.5-turbo', limit: 16_385 },
+];
+
+const EXACT_LIMITS: Record<string, TokenCount> = {
+  // Gemini models
+  'gemini-1.5-pro': 2_097_152,
+  'gemini-1.5-flash': 1_048_576,
+  'gemini-2.5-pro-preview-05-06': 1_048_576,
+  'gemini-2.5-pro-preview-06-05': 1_048_576,
+  'gemini-2.5-pro': 1_048_576,
+  'gemini-2.5-flash-preview-05-20': 1_048_576,
+  'gemini-2.5-flash': 1_048_576,
+  'gemini-2.5-flash-lite': 1_048_576,
+  'gemini-2.0-flash': 1_048_576,
+  'gemini-2.0-flash-preview-image-generation': 32_000,
+
+  // Claude Opus 4.6/4.7/4.8 default to the Claude Code / subscription 200K
+  // context window. The 1M window is API-only and plan-gated; override via
+  // /set or a profile (context-limit).
+  'claude-opus-4-8': 200_000,
+  'claude-opus-4-7': 200_000,
+  'claude-opus-4-6': 200_000,
+  'claude-opus-4-latest': 200_000,
+  'claude-sonnet-4-6': 200_000,
+  'claude-sonnet-4-latest': 400_000,
+  'claude-3-7-opus-20250115': 300_000,
+  'claude-3-7-sonnet-20250115': 300_000,
+  'claude-3-opus-20240229': 200_000,
+  'claude-3-sonnet-20240229': 200_000,
+  'claude-3-haiku-20240307': 200_000,
+  'claude-3.5-sonnet-20240620': 200_000,
+  'claude-3.5-sonnet-20241022': 200_000,
+  'claude-3.5-haiku-20241022': 200_000,
+  'claude-3-5-sonnet-20241022': 200_000,
+  'claude-3-5-haiku-20241022': 200_000,
+};
+
+function matchesAnyPrefix(model: string, prefixes: string[]): boolean {
+  return prefixes.some((prefix) => model.startsWith(prefix));
+}
+
+function resolvePrefixLimit(
+  modelWithoutPrefix: string,
+): TokenCount | undefined {
+  for (const { prefix, limit } of PREFIX_LIMITS) {
+    if (modelWithoutPrefix.startsWith(prefix)) {
+      return limit;
+    }
   }
-  if (modelWithoutPrefix.startsWith('gpt-4o-mini')) {
-    return true;
-  }
-  if (modelWithoutPrefix.startsWith('gpt-4o-realtime')) {
-    return true;
-  }
-  if (modelWithoutPrefix.startsWith('gpt-4o')) {
-    return true;
-  }
-  if (modelWithoutPrefix.startsWith('gpt-4-turbo')) {
-    return true;
-  }
-  return false;
+  return undefined;
 }
 
 export function tokenLimit(
@@ -42,79 +90,26 @@ export function tokenLimit(
   // Strip provider prefix if present (e.g., "openai:gpt-4o" -> "gpt-4o")
   const modelWithoutPrefix = model.includes(':') ? model.split(':')[1] : model;
 
-  // Check OpenAI models with version suffixes first
-  if (modelWithoutPrefix.startsWith('gpt-4.1')) {
-    return 1_000_000;
+  // Check exact model matches first
+  if (modelWithoutPrefix in EXACT_LIMITS) {
+    return EXACT_LIMITS[modelWithoutPrefix];
   }
-  // Check more specific models first
-  if (
-    modelWithoutPrefix.startsWith('o3-pro') ||
-    modelWithoutPrefix.startsWith('o3-mini') ||
-    modelWithoutPrefix.startsWith('o1-mini')
-  ) {
+
+  // Check prefix-based limits
+  const prefixLimit = resolvePrefixLimit(modelWithoutPrefix);
+  if (prefixLimit !== undefined) {
+    return prefixLimit;
+  }
+
+  // Check OpenAI 200K models (includes o3, o1 series)
+  if (matchesAnyPrefix(modelWithoutPrefix, OPENAI_200K_PREFIXES)) {
     return 200_000;
   }
-  // Then check base models
-  if (
-    modelWithoutPrefix.startsWith('o3') ||
-    modelWithoutPrefix.startsWith('o1')
-  ) {
-    return 200_000;
-  }
-  if (isOpenAi128kModel(modelWithoutPrefix)) {
+
+  // Check OpenAI 128K models
+  if (matchesAnyPrefix(modelWithoutPrefix, OPENAI_128K_PREFIXES)) {
     return 128_000;
   }
-  if (modelWithoutPrefix.startsWith('gpt-3.5-turbo')) {
-    return 16_385;
-  }
 
-  // Add other models as they become relevant or if specified by config
-  // Pulled from https://ai.google.dev/gemini-api/docs/models
-  switch (modelWithoutPrefix) {
-    // Gemini models
-    case 'gemini-1.5-pro':
-      return 2_097_152;
-    case 'gemini-1.5-flash':
-    case 'gemini-2.5-pro-preview-05-06':
-    case 'gemini-2.5-pro-preview-06-05':
-    case 'gemini-2.5-pro':
-    case 'gemini-2.5-flash-preview-05-20':
-    case 'gemini-2.5-flash':
-    case 'gemini-2.5-flash-lite':
-    case 'gemini-2.0-flash':
-      return 1_048_576;
-    case 'gemini-2.0-flash-preview-image-generation':
-      return 32_000;
-
-    // Anthropic models
-    // Claude Opus 4.6/4.7/4.8 default to the Claude Code / subscription 200K
-    // context window. The 1M window is API-only and plan-gated; override via
-    // /set or a profile (context-limit).
-    case 'claude-opus-4-8':
-    case 'claude-opus-4-7':
-    case 'claude-opus-4-6':
-    case 'claude-opus-4-latest':
-      return 200_000;
-    case 'claude-sonnet-4-6':
-      return 200_000;
-    case 'claude-sonnet-4-latest':
-      return 400_000;
-    // Claude 3.7 series
-    case 'claude-3-7-opus-20250115':
-    case 'claude-3-7-sonnet-20250115':
-      return 300_000;
-    // Claude 3.5 and 3.0 series
-    case 'claude-3-opus-20240229':
-    case 'claude-3-sonnet-20240229':
-    case 'claude-3-haiku-20240307':
-    case 'claude-3.5-sonnet-20240620':
-    case 'claude-3.5-sonnet-20241022':
-    case 'claude-3.5-haiku-20241022':
-    case 'claude-3-5-sonnet-20241022':
-    case 'claude-3-5-haiku-20241022':
-      return 200_000;
-
-    default:
-      return DEFAULT_TOKEN_LIMIT;
-  }
+  return DEFAULT_TOKEN_LIMIT;
 }

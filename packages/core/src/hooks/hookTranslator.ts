@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import type {
   GenerateContentResponse,
   GenerateContentParameters,
@@ -102,6 +100,24 @@ function hasTextProperty(value: unknown): value is { text: string } {
 }
 
 /**
+ * Checks whether a value from an untyped SDK boundary is present (not
+ * undefined, null, false, 0, empty string, or NaN).
+ */
+function isPresent(value: unknown): boolean {
+  return Boolean(value);
+}
+
+function resolveMessageRole(role: string): 'user' | 'model' | 'system' {
+  if (role === 'model') {
+    return 'model';
+  }
+  if (role === 'system') {
+    return 'system';
+  }
+  return 'user';
+}
+
+/**
  * Type guard to check if content has role and parts properties
  */
 function isContentWithParts(
@@ -165,14 +181,7 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
     const messages: LLMRequest['messages'] = [];
 
     const rawContents = sdkRequest.contents as unknown;
-    const hasContents =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      rawContents !== undefined &&
-      rawContents !== null &&
-      rawContents !== false &&
-      rawContents !== 0 &&
-      rawContents !== '' &&
-      !(typeof rawContents === 'number' && Number.isNaN(rawContents));
+    const hasContents = isPresent(rawContents);
 
     if (hasContents) {
       const contents = Array.isArray(sdkRequest.contents)
@@ -186,32 +195,7 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
             content,
           });
         } else if (isContentWithParts(content)) {
-          const role =
-            content.role === 'model'
-              ? ('model' as const)
-              : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-                content.role === 'system'
-                ? ('system' as const)
-                : ('user' as const);
-
-          const parts = Array.isArray(content.parts)
-            ? content.parts
-            : [content.parts];
-
-          // Extract only text parts - intentionally filtering out non-text content
-          const textContent = parts
-            .filter(hasTextProperty)
-            .map((part) => part.text)
-            .join('');
-
-          // Only add message if there's text content
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (textContent !== '') {
-            messages.push({
-              role,
-              content: textContent,
-            });
-          }
+          this.pushTextMessage(messages, content);
         }
       }
     }
@@ -229,6 +213,27 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
         topK: config?.topK,
       },
     };
+  }
+
+  private pushTextMessage(
+    messages: LLMRequest['messages'],
+    content: { role: string; parts: unknown },
+  ): void {
+    const role = resolveMessageRole(content.role);
+
+    const parts = Array.isArray(content.parts)
+      ? content.parts
+      : [content.parts];
+
+    // Extract only text parts - intentionally filtering out non-text content
+    const textContent = parts
+      .filter(hasTextProperty)
+      .map((part) => part.text)
+      .join('');
+
+    if (textContent !== '') {
+      messages.push({ role, content: textContent });
+    }
   }
 
   /**

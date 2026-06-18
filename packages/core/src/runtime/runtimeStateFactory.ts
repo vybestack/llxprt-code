@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 /**
  * @plan PLAN-20251027-STATELESS5.P05
  * @requirement REQ-STAT5-002.3
@@ -58,6 +56,36 @@ function resolveRuntimeId(config: Config, explicitId?: string): string {
     .slice(2, 8)}`;
 }
 
+function resolveProvider(config: Config, override?: string): string {
+  if (override) {
+    return override;
+  }
+  if (typeof config.getProvider === 'function') {
+    return config.getProvider() ?? 'gemini';
+  }
+  return 'gemini';
+}
+
+function resolveModel(
+  config: Config,
+  contentModel: string | undefined,
+  override?: string,
+): string {
+  if (override) {
+    return override;
+  }
+  if (contentModel) {
+    return contentModel;
+  }
+  if (typeof config.getModel === 'function') {
+    const model = (config.getModel as () => unknown)();
+    if (typeof model === 'string' && model.length > 0) {
+      return model;
+    }
+  }
+  return DEFAULT_GEMINI_MODEL;
+}
+
 /**
  * Creates an AgentRuntimeState using the current Config snapshot.
  *
@@ -74,20 +102,8 @@ export function createAgentRuntimeStateFromConfig(
       : undefined;
 
   const overrides = options.overrides ?? {};
-  const provider =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    overrides.provider ??
-    (typeof config.getProvider === 'function'
-      ? (config.getProvider() ?? undefined)
-      : undefined) ??
-    'gemini';
-
-  const model =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    overrides.model ??
-    contentConfig?.model ??
-    (typeof config.getModel === 'function' ? config.getModel() : undefined) ??
-    DEFAULT_GEMINI_MODEL;
+  const provider = resolveProvider(config, overrides.provider);
+  const model = resolveModel(config, contentConfig?.model, overrides.model);
 
   const baseUrlCandidate =
     overrides.baseUrl ??
