@@ -19,11 +19,8 @@
  */
 
 const noop = {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   debug: (_msg: string) => {},
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   error: (_msg: string) => {},
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   warn: (_msg: string) => {},
 };
 
@@ -61,6 +58,19 @@ function fixStringifiedValues(parsed: Record<string, unknown>): {
     }
   }
   return { fixed, wasDoubleEscaped };
+}
+
+/**
+ * Checks whether a single value is a JSON string that encodes an object.
+ */
+function isStringifiedValue(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    const testParse = JSON.parse(value);
+    return typeof testParse === 'object';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -109,17 +119,8 @@ export function detectDoubleEscaping(jsonString: string): {
         result.correctedValue = parsed;
       }
     } else if (typeof parsed === 'object' && parsed !== null) {
-      const hasStringifiedValues = Object.values(parsed).some((value) => {
-        if (typeof value === 'string') {
-          try {
-            const testParse = JSON.parse(value);
-            return typeof testParse === 'object';
-          } catch {
-            return false;
-          }
-        }
-        return false;
-      });
+      const hasStringifiedValues =
+        Object.values(parsed).some(isStringifiedValue);
 
       if (hasStringifiedValues) {
         const { fixed, wasDoubleEscaped } = fixStringifiedValues(parsed);
@@ -150,12 +151,18 @@ export function detectDoubleEscapingInChunk(chunk: string): boolean {
   const startPattern = String.raw`"\\`;
   const endPattern = String.raw`\\"`;
 
-  return (
-    chunk.includes(backslashBracket) ||
-    chunk.includes(doubleBackslash) ||
-    chunk.includes(backslashQuote) ||
-    (chunk.startsWith(startPattern) && chunk.endsWith(endPattern))
+  const doubleEscapeMarkers = [
+    backslashBracket,
+    doubleBackslash,
+    backslashQuote,
+  ];
+  const hasMarker = doubleEscapeMarkers.some((marker) =>
+    chunk.includes(marker),
   );
+  const hasWrappedPattern =
+    chunk.startsWith(startPattern) && chunk.endsWith(endPattern);
+
+  return hasMarker || hasWrappedPattern;
 }
 
 /**
@@ -202,7 +209,7 @@ function tryMultipleParsingStrategies(
 
   // Strategy 2: Detect and repair double escaping
   const detection = detectDoubleEscaping(parametersString);
-  const formatLabel = format || 'auto';
+  const formatLabel = format ?? 'auto';
   if (detection.correctedValue !== undefined) {
     if (detection.isDoubleEscaped) {
       noop.error(
@@ -234,9 +241,9 @@ function convertStringNumbersToNumbers(obj: unknown): unknown {
   if (obj == null) return obj;
 
   if (typeof obj === 'string') {
-    if (/^-?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$/.test(obj)) {
-      const num = Number(obj);
-      if (Number.isFinite(num)) return num;
+    const num = Number(obj);
+    if (obj.trim() !== '' && Number.isFinite(num)) {
+      return num;
     }
     return obj;
   }

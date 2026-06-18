@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import fs from 'fs';
 import path from 'path';
 import { glob, escape } from 'glob';
@@ -21,6 +19,7 @@ import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
 import { shortenPath, makeRelative } from '../utils/paths.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 
 // Subset of 'Path' interface provided by 'glob' that we can implement for testing
 export interface GlobPath {
@@ -100,8 +99,11 @@ class GlobToolInvocation extends BaseToolInvocation<
   }
 
   private getDirPath(): string | undefined {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through
-    return this.params.dir_path || this.params.path;
+    const resolved = stringOrDefault(
+      this.params.dir_path ?? '',
+      this.params.path ?? '',
+    );
+    return resolved.trim() !== '' ? resolved : undefined;
   }
 
   getDescription(): string {
@@ -379,12 +381,10 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
   protected override validateToolParamValues(
     params: GlobToolParams,
   ): string | null {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through
-    const dirPath = params.dir_path || params.path;
+    const dirPath = stringOrDefault(params.dir_path ?? '', params.path ?? '');
     const searchDirAbsolute = path.resolve(
       this.host.getTargetDir(),
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should use current dir
-      dirPath || '.',
+      stringOrDefault(dirPath, '.'),
     );
     const pathError = validatePathWithinWorkspace(
       this.host.getWorkspaceRoots(),

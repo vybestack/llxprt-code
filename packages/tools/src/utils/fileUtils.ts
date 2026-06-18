@@ -56,6 +56,14 @@ const BINARY_EXTENSIONS = [
   '.pdf',
 ];
 
+/** Checks whether the buffer is a UTF-16LE BOM (and not a UTF-32LE BOM). */
+function isUtf16leBOM(buf: Buffer): boolean {
+  if (buf[0] !== 0xff || buf[1] !== 0xfe) {
+    return false;
+  }
+  return buf.length < 4 || buf[2] !== 0x00 || buf[3] !== 0x00;
+}
+
 /** Detect a Unicode BOM (Byte Order Mark) if present. */
 export function detectBOM(buf: Buffer): BOMInfo | null {
   if (buf.length >= 4) {
@@ -85,11 +93,7 @@ export function detectBOM(buf: Buffer): BOMInfo | null {
     return { encoding: 'utf8', bomLength: 3 };
   }
   if (buf.length >= 2) {
-    if (
-      buf[0] === 0xff &&
-      buf[1] === 0xfe &&
-      (buf.length < 4 || buf[2] !== 0x00 || buf[3] !== 0x00)
-    ) {
+    if (isUtf16leBOM(buf)) {
       return { encoding: 'utf16le', bomLength: 2 };
     }
     if (buf[0] === 0xfe && buf[1] === 0xff) {
@@ -152,6 +156,8 @@ export async function readFileWithEncoding(filePath: string): Promise<string> {
       return decodeUTF32(content, true);
     case 'utf32be':
       return decodeUTF32(content, false);
+    default:
+      return content.toString('utf8');
   }
 }
 
@@ -418,6 +424,8 @@ async function processFileByType(
     case 'audio':
     case 'video':
       return processMediaFile(filePath, relativePathForDisplay, fileType);
+    default:
+      return processTextFile(filePath, relativePathForDisplay, offset, limit);
   }
 }
 

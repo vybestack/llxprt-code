@@ -9,12 +9,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, max-lines -- Shell tool delegated through IShellToolHost. */
-
-import { spawnSync } from 'node:child_process';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os, { EOL } from 'node:os';
 import path from 'node:path';
 
 import {
@@ -29,117 +24,29 @@ import {
   type PolicyUpdateOptions,
 } from './tools.js';
 import { ToolErrorType } from '../types/tool-error.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
-import type {
-  IShellExecutionService,
-  ShellResult,
-} from '../interfaces/IShellExecutionService.js';
+import type { IShellExecutionService } from '../interfaces/IShellExecutionService.js';
 
 import type {
   IShellToolHost,
   ShellExecutionResult,
   ShellOutputEvent,
 } from '../interfaces/IShellToolHost.js';
+import {
+  applyOutputFilters,
+  collectProcessInfo,
+  createShellToolHostFromExecutionService,
+  getCommandDescription,
+  getShellToolDescription,
+  isShellToolHost,
+  prepareShellExecution,
+  validateGrepFlags,
+  validatePositiveInteger,
+} from './shell-helpers.js';
 
 /** Throttle interval for shell output updates. */
 export const OUTPUT_UPDATE_INTERVAL_MS = 100;
-
-function isShellToolHost(
-  host: IShellToolHost | IShellExecutionService,
-): host is IShellToolHost {
-  return 'executeShellCommand' in host;
-}
-
-function unwrapCommandForExecutionService(command: string): string {
-  const match = /^\{ ([\s\S]*) \}; __code=\$\?; pgrep -g 0 >/.exec(command);
-  if (!match) {
-    return command;
-  }
-  const innerCommand = match[1].trim();
-  return innerCommand.endsWith(';')
-    ? innerCommand.slice(0, -1).trimEnd()
-    : innerCommand;
-}
-
-function createShellToolHostFromExecutionService(
-  service: IShellExecutionService,
-): IShellToolHost {
-  const targetDir = process.cwd();
-  return {
-    getTargetDir: () => targetDir,
-    getWorkspaceContext: () => ({
-      getDirectories: () => [targetDir],
-      isPathWithinWorkspace: (resolvedPath: string) =>
-        resolvedPath === targetDir ||
-        resolvedPath.startsWith(`${targetDir}${path.sep}`),
-    }),
-    isCommandAllowed: (command: string) => {
-      const allowed = service.isCommandAllowed(command);
-      return allowed
-        ? { allowed: true }
-        : {
-            allowed: false,
-            reason: `Command denied by shell policy: ${command}`,
-          };
-    },
-    isShellInvocationAllowlisted: () => false,
-    isInteractive: () => true,
-    isYoloMode: () => false,
-    getDebugMode: () => false,
-    getShellExecutionConfig: () => ({
-      shouldUseNodePty: false,
-      executionOptions: {},
-    }),
-    getTimeoutConfig: () => ({
-      timeoutSeconds: undefined,
-      defaultTimeoutSeconds: 60,
-    }),
-    getOutputLimits: () => ({}),
-    executeShellCommand: async (command) => {
-      const result: ShellResult = await service.execute(
-        unwrapCommandForExecutionService(command),
-      );
-      const error =
-        result.stderr.trim() !== '' || result.exitCode !== 0
-          ? new Error(
-              result.stderr.trim() !== ''
-                ? result.stderr.trim()
-                : `Command failed with exit code ${result.exitCode}`,
-            )
-          : null;
-      return {
-        output: result.stdout,
-        exitCode: result.exitCode,
-        signal: null,
-        error,
-        aborted: result.aborted,
-        pid: undefined,
-      };
-    },
-    getCommandRoots: (command: string) => {
-      const root = command.trim().split(/\s+/)[0];
-      return root ? [root] : [];
-    },
-    stripShellWrapper: (command: string) => command,
-    validatePathWithinWorkspace: (_workspaceContext, dirPath) => {
-      const resolvedPath = path.isAbsolute(dirPath)
-        ? dirPath
-        : path.resolve(targetDir, dirPath);
-      return resolvedPath === targetDir ||
-        resolvedPath.startsWith(`${targetDir}${path.sep}`)
-        ? null
-        : `Directory '${dirPath}' is not a registered workspace directory`;
-    },
-    isPtyActive: () => false,
-    formatMemoryUsage: (bytes: number) => {
-      if (bytes < 1024) return `${bytes} bytes`;
-      return `${(bytes / 1024).toFixed(1)} KB`;
-    },
-    trySummarizeOutput: async (content: string) => content,
-    getSummarizeConfig: () => undefined,
-    limitOutputTokens: (content: string) => ({ content, wasTruncated: false }),
-  };
-}
 
 export interface ShellToolParams {
   /** The shell command to execute. */
@@ -160,172 +67,6 @@ export interface ShellToolParams {
   grep_flags?: string[];
   /** Optional timeout in seconds (-1 for unlimited). */
   timeout_seconds?: number;
-}
-
-function applyGrepFilter(
-  content: string,
-  params: ShellToolParams,
-  descriptionParts: string[],
-): string {
-  const grepPattern =
-    typeof params.grep_pattern === 'string' && params.grep_pattern !== ''
-      ? params.grep_pattern
-      : undefined;
-  if (grepPattern === undefined) {
-    return content;
-  }
-
-  const invertMatch = params.grep_flags?.includes('-v') === true;
-  const options = params.grep_flags?.includes('-i') === true ? 'i' : '';
-  const regex = new RegExp(grepPattern, options);
-  const filteredLines = content
-    .split('\n')
-    .filter((line) => (invertMatch ? !regex.test(line) : regex.test(line)));
-
-  descriptionParts.push(`grep_pattern filter: "${grepPattern}"`);
-  if (params.grep_flags !== undefined && params.grep_flags.length > 0) {
-    descriptionParts.push(`flags: [${params.grep_flags.join(', ')}]`);
-  }
-  return filteredLines.join('\n');
-}
-
-function applyOutputFilters(
-  output: string,
-  params: ShellToolParams,
-): { content: string; description?: string } {
-  let content = output;
-  const descriptionParts: string[] = [];
-
-  content = applyGrepFilter(content, params, descriptionParts);
-
-  if (params.head_lines !== undefined && params.head_lines !== 0) {
-    validatePositiveInteger(params.head_lines, 'head_lines');
-    const lines = content.split('\n');
-    const headLines = lines.slice(0, params.head_lines);
-    const wasTruncated = lines.length > params.head_lines;
-
-    content = headLines.join('\n');
-    descriptionParts.push(
-      `head_lines filter: showing first ${params.head_lines} lines${wasTruncated ? ` (of ${lines.length} total)` : ''}`,
-    );
-  }
-
-  if (params.tail_lines !== undefined && params.tail_lines !== 0) {
-    validatePositiveInteger(params.tail_lines, 'tail_lines');
-    const lines = content.split('\n');
-    const tailLines = lines.slice(-params.tail_lines);
-    const wasTruncated = lines.length > params.tail_lines;
-
-    content = tailLines.join('\n');
-    descriptionParts.push(
-      `tail_lines filter: showing last ${params.tail_lines} lines${wasTruncated ? ` (of ${lines.length} total)` : ''}`,
-    );
-  }
-
-  return {
-    content,
-    description:
-      descriptionParts.length > 0 ? descriptionParts.join('; ') : undefined,
-  };
-}
-
-function validatePositiveInteger(value: number, paramName: string): void {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${paramName} must be a positive integer, got: ${value}`);
-  }
-}
-
-function validateGrepFlags(flags: string[]): void {
-  const validFlags = ['-i', '-v', '-E', '-F', '-x', '-w'];
-  for (const flag of flags) {
-    if (!validFlags.includes(flag)) {
-      throw new Error(
-        `Invalid grep flag: ${flag}. Valid flags: ${validFlags.join(', ')}`,
-      );
-    }
-  }
-}
-
-function isValidBackgroundPid(
-  linePid: number,
-  mainPid: number | undefined,
-): boolean {
-  if (mainPid === undefined || mainPid === 0) {
-    return false;
-  }
-  return linePid !== mainPid;
-}
-
-function buildCommandToExecute(
-  strippedCommand: string,
-  isWindows: boolean,
-  tempFilePath: string,
-): string {
-  if (isWindows) {
-    return strippedCommand;
-  }
-  let command = strippedCommand.trim();
-  if (!command.endsWith('&')) {
-    command += ';';
-  }
-  return `{ ${command} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
-}
-
-function parsePgrepFile(
-  tempFilePath: string,
-  mainPid: number | undefined,
-): number[] {
-  const pids: number[] = [];
-  if (!fs.existsSync(tempFilePath)) {
-    return pids;
-  }
-  const pgrepLines = fs
-    .readFileSync(tempFilePath, 'utf8')
-    .split(EOL)
-    .filter(Boolean);
-  for (const line of pgrepLines) {
-    if (!/^\d+$/.test(line)) {
-      continue;
-    }
-    const linePid = Number(line);
-    if (isValidBackgroundPid(linePid, mainPid)) {
-      pids.push(linePid);
-    }
-  }
-  return pids;
-}
-
-function collectProcessInfo(
-  result: ShellExecutionResult,
-  tempFilePath: string,
-  signal: AbortSignal,
-): { backgroundPIDs: number[]; pgid: number | null } {
-  const backgroundPIDs = result.backgroundPIDs ?? [];
-  let pgid = result.pgid ?? null;
-  if (os.platform() !== 'win32') {
-    backgroundPIDs.push(...parsePgrepFile(tempFilePath, result.pid));
-    if (
-      pgid === null &&
-      result.pid !== undefined &&
-      result.pid !== 0 &&
-      signal.aborted === false
-    ) {
-      try {
-        const psResult = spawnSync('ps', [
-          '-o',
-          'pgid=',
-          '-p',
-          String(result.pid),
-        ]);
-        if (psResult.status === 0 && psResult.stdout.toString().trim()) {
-          pgid = parseInt(psResult.stdout.toString().trim(), 10);
-        }
-      } catch {
-        pgid = null;
-      }
-    }
-  }
-  return { backgroundPIDs, pgid };
 }
 
 export class ShellToolInvocation extends BaseToolInvocation<
@@ -349,8 +90,11 @@ export class ShellToolInvocation extends BaseToolInvocation<
   }
 
   private getDirPath(): string | undefined {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing
-    return this.params.dir_path || this.params.directory;
+    const resolved = stringOrDefault(
+      this.params.dir_path ?? '',
+      this.params.directory ?? '',
+    );
+    return resolved.trim() !== '' ? resolved : undefined;
   }
 
   override getDescription(): string {
@@ -502,59 +246,14 @@ export class ShellToolInvocation extends BaseToolInvocation<
   ): Promise<ToolResult> {
     const combinedSignal = timeoutController.signal;
     const cwd = this.resolveCwd();
-    const isWindows = os.platform() === 'win32';
-    const tempFileName = `shell_pgrep_${crypto
-      .randomBytes(6)
-      .toString('hex')}.tmp`;
-    const tempFilePath = path.join(os.tmpdir(), tempFileName);
-    const commandToExecute = buildCommandToExecute(
-      strippedCommand,
-      isWindows,
-      tempFilePath,
-    );
+    const { tempFilePath, commandToExecute } =
+      prepareShellExecution(strippedCommand);
 
     try {
-      let cumulativeOutput: string = '';
-      let lastUpdateTime = 0;
-      let isBinaryStream = false;
-
       const executionResult = await this.host.executeShellCommand(
         commandToExecute,
         cwd,
-        (event: ShellOutputEvent) => {
-          if (!updateOutput) return;
-
-          let shouldUpdate = false;
-
-          switch (event.type) {
-            case 'data': {
-              if (isBinaryStream) break;
-              cumulativeOutput = event.chunk ?? '';
-              shouldUpdate = true;
-              break;
-            }
-            case 'binary_detected':
-              isBinaryStream = true;
-              cumulativeOutput = '[Binary output detected. Halting stream...]';
-              shouldUpdate = true;
-              break;
-            case 'binary_progress':
-              isBinaryStream = true;
-              cumulativeOutput = `[Receiving binary output... ${this.host.formatMemoryUsage(event.bytesReceived ?? 0)} received]`;
-              if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
-                shouldUpdate = true;
-              }
-              break;
-            default: {
-              throw new Error('An unhandled ShellOutputEvent was found.');
-            }
-          }
-
-          if (shouldUpdate) {
-            updateOutput(cumulativeOutput);
-            lastUpdateTime = Date.now();
-          }
-        },
+        this.createOutputEventHandler(updateOutput),
         combinedSignal,
       );
 
@@ -565,8 +264,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         signal,
       );
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive boundary
-      const rawOutput = result?.output ?? '';
+      const rawOutput = result.output;
       const filterInfo = applyOutputFilters(rawOutput, this.params);
       const filteredOutput = filterInfo.content;
 
@@ -597,15 +295,11 @@ export class ShellToolInvocation extends BaseToolInvocation<
         timeoutTriggered,
       );
 
-      let llmPayload = llmContent;
-      const shellToolConfig = this.host.getSummarizeConfig();
-      if (shellToolConfig !== undefined && result.aborted !== true) {
-        llmPayload = await this.host.trySummarizeOutput(
-          llmContent,
-          signal,
-          shellToolConfig.tokenBudget,
-        );
-      }
+      const llmPayload = await this.summarizeIfNeeded(
+        llmContent,
+        result,
+        signal,
+      );
 
       const limitedResult = this.host.limitOutputTokens(llmPayload);
       if (limitedResult.wasTruncated) {
@@ -626,6 +320,64 @@ export class ShellToolInvocation extends BaseToolInvocation<
         fs.unlinkSync(tempFilePath);
       }
     }
+  }
+
+  private async summarizeIfNeeded(
+    llmContent: string,
+    result: { aborted?: boolean },
+    signal: AbortSignal,
+  ): Promise<string> {
+    const shellToolConfig = this.host.getSummarizeConfig();
+    if (shellToolConfig === undefined || result.aborted === true) {
+      return llmContent;
+    }
+    return this.host.trySummarizeOutput(
+      llmContent,
+      signal,
+      shellToolConfig.tokenBudget,
+    );
+  }
+
+  private createOutputEventHandler(
+    updateOutput: ((output: string) => void) | undefined,
+  ): (event: ShellOutputEvent) => void {
+    let cumulativeOutput = '';
+    let lastUpdateTime = 0;
+    let isBinaryStream = false;
+    return (event: ShellOutputEvent) => {
+      if (!updateOutput) return;
+
+      let shouldUpdate = false;
+
+      switch (event.type) {
+        case 'data': {
+          if (isBinaryStream) break;
+          cumulativeOutput = event.chunk ?? '';
+          shouldUpdate = true;
+          break;
+        }
+        case 'binary_detected':
+          isBinaryStream = true;
+          cumulativeOutput = '[Binary output detected. Halting stream...]';
+          shouldUpdate = true;
+          break;
+        case 'binary_progress':
+          isBinaryStream = true;
+          cumulativeOutput = `[Receiving binary output... ${this.host.formatMemoryUsage(event.bytesReceived ?? 0)} received]`;
+          if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
+            shouldUpdate = true;
+          }
+          break;
+        default: {
+          throw new Error('An unhandled ShellOutputEvent was found.');
+        }
+      }
+
+      if (shouldUpdate) {
+        updateOutput(cumulativeOutput);
+        lastUpdateTime = Date.now();
+      }
+    };
   }
 
   private validateFilterParams(): void {
@@ -721,9 +473,8 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
       llmContent = [
         `Command: ${this.params.command}`,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing
-        `Directory: ${this.getDirPath() || '(root)'}`,
-        `Stdout: ${filteredOutput || '(empty)'}`,
+        `Directory: ${stringOrDefault(this.getDirPath(), '(root)')}`,
+        `Stdout: ${stringOrDefault(filteredOutput, '(empty)')}`,
         `Stderr: (empty)`,
         `Error: ${finalError}`,
         `Exit Code: ${result.exitCode ?? '(none)'}`,
@@ -836,30 +587,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
   }
 }
 
-function getShellToolDescription(): string {
-  const returnedInfo = `\n\n      The following information is returned:\n\n      Command: Executed command.\n      Directory: Directory (relative to project root) where command was executed, or \`(root)\`.\n      Stdout: Output on stdout stream. Can be \`(empty)\` or partial on error and for any unwaited background processes.\n      Stderr: Output on stderr stream. Can be \`(empty)\` or partial on error and for any unwaited background processes.\n      Error: Error or \`(none)\` if no error was reported for the subprocess.\n      Exit Code: Exit code or \`(none)\` if terminated by signal.\n      Signal: Signal number or \`(none)\` if no signal was received.\n      Background PIDs: List of background processes started or \`(none)\`.\n      Process Group PGID: Process group started or \`(none)\``;
-
-  if (os.platform() === 'win32') {
-    return `This tool executes a given shell command as \`cmd.exe /c <command>\`. Command can start background processes using \`start /b\`.${returnedInfo}`;
-  }
-  return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`. Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`.${returnedInfo}`;
-}
-
-function getCommandDescription(): string {
-  const cmd_substitution_warning =
-    '\n*** WARNING: Command substitution using $(), `` ` ``, <(), or >() is not allowed for security reasons.';
-  if (os.platform() === 'win32') {
-    return (
-      'Exact command to execute as `cmd.exe /c <command>`' +
-      cmd_substitution_warning
-    );
-  }
-  return (
-    'Exact bash command to execute as `bash -c <command>`' +
-    cmd_substitution_warning
-  );
-}
-
 export class ShellTool extends BaseDeclarativeTool<
   ShellToolParams,
   ToolResult
@@ -933,9 +660,11 @@ export class ShellTool extends BaseDeclarativeTool<
     if (this.host.getCommandRoots(params.command).length === 0) {
       return 'Could not identify command root to obtain permission from user.';
     }
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing
-    const dirPath = params.dir_path || params.directory;
-    if (dirPath) {
+    const dirPath = stringOrDefault(
+      params.dir_path ?? '',
+      params.directory ?? '',
+    );
+    if (dirPath.trim() !== '') {
       const workspaceContext = this.host.getWorkspaceContext();
       if (path.isAbsolute(dirPath)) {
         const pathError = this.host.validatePathWithinWorkspace(
@@ -1049,4 +778,3 @@ export class ShellTool extends BaseDeclarativeTool<
     );
   }
 }
-/* eslint-enable complexity, max-lines -- Shell tool delegated through IShellToolHost. */

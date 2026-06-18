@@ -576,7 +576,7 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const feedbackPattern = /avoid using emojis/g;
         const matches = result.llmContent.match(feedbackPattern);
         expect(matches).not.toBeNull();
-        if (!matches) return;
+        if (matches === null) return;
         expect(matches.length).toBe(1);
       });
     });

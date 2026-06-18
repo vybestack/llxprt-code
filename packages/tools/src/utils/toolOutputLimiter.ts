@@ -56,13 +56,14 @@ function shouldSkipTruncation(
   tokens: number,
   effectiveLimit: number,
 ): boolean {
-  return (
-    rawMaxTokens === false ||
-    rawMaxTokens === '' ||
-    maxTokens === 0 ||
-    Number.isNaN(maxTokens) ||
-    tokens <= effectiveLimit
-  );
+  const skipConditions = [
+    rawMaxTokens === false,
+    rawMaxTokens === '',
+    maxTokens === 0,
+    Number.isNaN(maxTokens),
+    tokens <= effectiveLimit,
+  ];
+  return skipConditions.some((condition) => condition);
 }
 
 function truncateWarn(

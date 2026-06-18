@@ -191,12 +191,36 @@ function ensureNewlineSeparation(currentContent: string): string {
 }
 
 /**
+ * Strips leading dash groups and intervening whitespace using a safe linear
+ * loop instead of a potentially-polynomial regex like /^(-+\s*)+/.
+ */
+function stripLeadingDashPrefixes(text: string): string {
+  let i = 0;
+  while (i < text.length) {
+    // Skip a group of dashes
+    let advanced = false;
+    while (i < text.length && text[i] === '-') {
+      i++;
+      advanced = true;
+    }
+    // Skip following whitespace
+    while (i < text.length && /\s/.test(text[i])) {
+      i++;
+      advanced = true;
+    }
+    if (!advanced) {
+      break;
+    }
+  }
+  return text.slice(i);
+}
+
+/**
  * Computes the new content that would result from adding a memory entry
  */
 function computeNewContent(currentContent: string, fact: string): string {
   let processedText = fact.trim();
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  processedText = processedText.replace(/^(-+\s*)+/, '').trim();
+  processedText = stripLeadingDashPrefixes(processedText).trim();
   const newMemoryItem = `- ${processedText}`;
 
   const headerIndex = currentContent.indexOf(MEMORY_SECTION_HEADER);
@@ -258,13 +282,11 @@ class MemoryToolInvocation extends BaseToolInvocation<
   }
 
   getMemoryFilePath(): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: scope is optional string, empty string should fall through to default
-    const scope = this.params.scope || 'project';
+    const scope = this.params.scope ?? 'project';
     const workingDir = this.resolveWorkingDir();
     switch (scope) {
       case 'core.project':
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workingDir is optional string, empty string should fall through to cwd
-        return getProjectCoreMemoryFilePath(workingDir || process.cwd());
+        return getProjectCoreMemoryFilePath(workingDir ?? process.cwd());
       case 'core.global':
         return getGlobalCoreMemoryFilePath(this.storageService);
       case 'project':
@@ -537,15 +559,11 @@ export class MemoryTool
 
   getModifyContext(_abortSignal: AbortSignal): ModifyContext<SaveMemoryParams> {
     const resolvePath = (scope?: MemoryScope): string => {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: scope is optional string, empty string should fall through to default
-      const resolvedScope = scope || 'project';
+      const resolvedScope = scope ?? 'project';
       const workingDir = this.getWorkingDir?.();
       switch (resolvedScope) {
         case 'core.project':
-          return getProjectCoreMemoryFilePath(
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getWorkingDir returns string | undefined, empty string should fall through to cwd
-            workingDir || process.cwd(),
-          );
+          return getProjectCoreMemoryFilePath(workingDir ?? process.cwd());
         case 'core.global':
           return getGlobalCoreMemoryFilePath(this.storageService);
         case 'project':

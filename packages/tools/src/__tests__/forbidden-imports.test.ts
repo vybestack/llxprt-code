@@ -52,7 +52,7 @@ function scanForForbiddenImports(): {
     try {
       // Match import/re-export lines containing the package ID
       const result = execSync(
-        `rg -n "from\s+['\"].*${pkgId}" "${toolsSrcDir}" -g "*.ts" -g "!__tests__/**" --no-heading`,
+        `rg -n "from\\s+['"].*${pkgId}" "${toolsSrcDir}" -g "*.ts" -g "!__tests__/**" --no-heading`,
         {
           encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -71,7 +71,7 @@ function scanForForbiddenImports(): {
   for (const prefix of FORBIDDEN_PATH_PREFIXES) {
     try {
       const result = execSync(
-        `rg -n "from\s+['\"].*${prefix}" "${toolsSrcDir}" -g "*.ts" -g "!__tests__/**" --no-heading`,
+        `rg -n "from\\s+['"].*${prefix}" "${toolsSrcDir}" -g "*.ts" -g "!__tests__/**" --no-heading`,
         {
           encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'pipe'],

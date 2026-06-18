@@ -6,7 +6,7 @@
 
 import * as path from 'path';
 import { ASTConfig } from './ast-config.js';
-import { KEYWORDS, REGEX } from './constants.js';
+import { KEYWORDS } from './constants.js';
 import type { Import } from './types.js';
 
 /**
@@ -65,8 +65,25 @@ export function extractImports(content: string, language: string): Import[] {
  * @returns The module path or 'unknown' if not found
  */
 function extractImportModule(line: string): string {
-  const match = line.match(REGEX.IMPORT_MODULE);
-  return match ? match[1] : 'unknown';
+  // Use string scanning instead of regex to avoid polynomial backtracking.
+  const prefix =
+    line.startsWith('import ') || line.startsWith('from ')
+      ? line.slice(line.indexOf(' ') + 1).trimStart()
+      : null;
+  if (prefix === null) {
+    return 'unknown';
+  }
+  if (prefix.length < 2) {
+    return 'unknown';
+  }
+  const quoteChar = prefix[0];
+  if (quoteChar === "'" || quoteChar === '"') {
+    const closeIdx = prefix.indexOf(quoteChar, 1);
+    if (closeIdx !== -1) {
+      return prefix.slice(1, closeIdx);
+    }
+  }
+  return 'unknown';
 }
 
 /**
@@ -95,15 +112,18 @@ function extractImportItems(line: string): string[] {
  * Handles: `import os`, `from pathlib import Path`, `from os.path import join`
  */
 function extractPythonImportModule(line: string): string {
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  const fromMatch = line.match(/^from\s+([\w.]+)\s+import/);
-  if (fromMatch) {
-    return fromMatch[1];
+  // Use token splitting instead of regex to avoid polynomial backtracking.
+  if (line.startsWith('from ')) {
+    const rest = line.slice(5).trimStart();
+    const importIdx = rest.indexOf(' import');
+    if (importIdx !== -1) {
+      return rest.slice(0, importIdx).trim();
+    }
   }
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  const importMatch = line.match(/^import\s+([\w.]+)/);
-  if (importMatch) {
-    return importMatch[1];
+  if (line.startsWith('import ')) {
+    const rest = line.slice(7).trimStart();
+    const spaceIdx = rest.search(/\s/);
+    return spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
   }
   return 'unknown';
 }
@@ -130,13 +150,20 @@ function stripImportAlias(item: string): string {
  * Handles: `from typing import List, Dict`, `from os.path import join, exists`
  */
 function extractPythonImportItems(line: string): string[] {
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  const fromImportMatch = line.match(/^from\s+[\w.]+\s+import\s+(.+)/);
-  if (fromImportMatch) {
-    return fromImportMatch[1]
-      .split(',')
-      .map((item) => stripImportAlias(item.trim()))
-      .filter((item) => item);
+  // Use string scanning instead of regex to avoid polynomial backtracking.
+  if (!line.startsWith('from ')) {
+    return [];
   }
-  return [];
+  const importIdx = line.indexOf(' import');
+  if (importIdx === -1) {
+    return [];
+  }
+  const items = line.slice(importIdx + 7).trim();
+  if (items.length === 0) {
+    return [];
+  }
+  return items
+    .split(',')
+    .map((item) => stripImportAlias(item.trim()))
+    .filter((item) => item);
 }

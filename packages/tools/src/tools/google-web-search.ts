@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IWebSearchService } from '../interfaces/index.js';
+import type {
+  IToolMessageBus,
+  IWebSearchService,
+} from '../interfaces/index.js';
 import { BaseDeclarativeTool, Kind, type ToolInvocation } from './tools.js';
 import {
   GoogleWebSearchToolInvocation,
@@ -54,7 +57,7 @@ export class GoogleWebSearchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: WebSearchToolParams,
-    messageBus?: import('../interfaces/index.js').IToolMessageBus,
+    messageBus?: IToolMessageBus,
   ): ToolInvocation<WebSearchToolParams, WebSearchToolResult> {
     return new GoogleWebSearchToolInvocation(
       this.webSearchService,

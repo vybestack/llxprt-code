@@ -7,8 +7,6 @@
  * Contains calculateEdit, validation, and helper functions.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { parse } from '@ast-grep/napi';
@@ -131,18 +129,27 @@ async function readFileState(
   return { currentContent, fileExists };
 }
 
+function isFileStale(
+  params: ASTEditToolParams,
+  fileExists: boolean,
+  currentMtime: number | null,
+): boolean {
+  if (params.last_modified == null) {
+    return false;
+  }
+  if (fileExists && currentMtime == null) {
+    return true;
+  }
+  return currentMtime != null && currentMtime > params.last_modified;
+}
+
 function checkFreshness(
   params: ASTEditToolParams,
   currentMtime: number | null,
   fileExists: boolean,
   currentContent: string | null,
 ): CalculatedEdit | undefined {
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    params.last_modified != null &&
-    ((fileExists && currentMtime == null) ||
-      (currentMtime != null && currentMtime > params.last_modified))
-  ) {
+  if (isFileStale(params, fileExists, currentMtime)) {
     return {
       currentContent,
       newContent: currentContent ?? '',

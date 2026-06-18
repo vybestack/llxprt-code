@@ -75,15 +75,7 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
     }
 
     // Type guard to ensure params has the expected structure
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      params == null ||
-      params === false ||
-      params === 0 ||
-      params === '' ||
-      Number.isNaN(params) ||
-      typeof params !== 'object'
-    ) {
+    if (params == null || typeof params !== 'object') {
       const errorString = new String('params must be an object') as string & {
         message: string;
       };
@@ -192,7 +184,7 @@ ${reasonResult.systemFeedback}
     if (!this.toolHost) {
       return null;
     }
-    const raw = this.toolHost.getEphemeralSettings?.().emojifilter;
+    const raw = this.toolHost.getEphemeralSettings().emojifilter;
     const mode = isEmojiFilterMode(raw) ? raw : 'auto';
     return new EmojiFilter({ mode });
   }

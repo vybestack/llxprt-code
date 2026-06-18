@@ -46,7 +46,7 @@ import { EDIT_TOOL_NAME } from '../types/tool-names.js';
 import { collectLspDiagnosticsBlock } from '../utils/lsp-diagnostics-helper.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { ensureParentDirectoriesExist } from '../utils/ensure-dirs.js';
-import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 
 import {
   getEmojiFilter,
@@ -54,192 +54,16 @@ import {
   applyReplacement,
   countLineGuardedOccurrences,
   applyLineGuardedReplacement,
+  toIdeConnectionStatus,
+  readTextFileViaHost,
+  createDefaultToolHost,
+  getTargetDirCompat,
+  getWorkspaceRootsCompat,
+  createEditModifyContext,
+  validateEditToolParams,
+  resolveConstructorArguments,
   type EditErrorInfo,
 } from './edit-utils.js';
-
-function createDefaultToolHost(): IToolHost {
-  return {
-    getTargetDir: () => process.cwd(),
-    getWorkspaceRoots: () => [path.parse(process.cwd()).root],
-    getApprovalMode: () => 'auto',
-    setApprovalMode: () => {},
-    isInteractive: () => false,
-    hasFeatureFlag: () => false,
-    getFileService: () => ({
-      shouldGitIgnoreFile: () => false,
-      shouldLlxprtIgnoreFile: () => false,
-      filterFiles: (paths: string[]) => paths,
-    }),
-    getFileFilteringOptions: () => ({
-      respectGitIgnore: true,
-      respectLlxprtIgnore: true,
-    }),
-    getFileExclusions: () => [],
-    getReadManyFilesExclusions: () => [],
-    getFileFilteringRespectLlxprtIgnore: () => true,
-    getLlxprtIgnoreFilePath: () => null,
-    recordFileRead: () => {},
-    getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
-    getDebugMode: () => false,
-  };
-}
-
-function getTargetDirCompat(host: IToolHost): string {
-  return host.getTargetDir?.() ?? process.cwd();
-}
-
-function getWorkspaceRootsCompat(host: IToolHost): string[] {
-  const maybeHost = host as unknown as {
-    getWorkspaceRoots?: () => string[];
-    getWorkspaceContext?: () => { getDirectories?: () => string[] };
-    getTargetDir?: () => string;
-  };
-  return (
-    maybeHost.getWorkspaceContext?.().getDirectories?.() ??
-    maybeHost.getWorkspaceRoots?.() ?? [
-      maybeHost.getTargetDir?.() ?? process.cwd(),
-    ]
-  );
-}
-
-function toIdeConnectionStatus(
-  status: unknown,
-): 'connected' | 'disconnected' | 'connecting' {
-  if (typeof status === 'string') {
-    return status === 'connected' || status === 'connecting'
-      ? status
-      : 'disconnected';
-  }
-  if (typeof status === 'object' && status !== null && 'status' in status) {
-    return toIdeConnectionStatus((status as { status?: unknown }).status);
-  }
-  return 'disconnected';
-}
-
-function hasMessageBusShape(value: unknown): value is IToolMessageBus {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    ('requestConfirmation' in value ||
-      'publishPolicyUpdate' in value ||
-      'publish' in value ||
-      'subscribe' in value)
-  );
-}
-
-function hasIdeServiceShape(value: unknown): value is IIdeService {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    ('applyDiff' in value ||
-      'openDiff' in value ||
-      'getConnectionStatus' in value)
-  );
-}
-
-function hasLspServiceShape(value: unknown): value is ILspService {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    ('waitForDiagnostics' in value ||
-      'getDiagnostics' in value ||
-      'getLspConfig' in value)
-  );
-}
-
-function getLegacyIdeService(host: IToolHost): IIdeService | undefined {
-  const maybeHost = host as unknown as {
-    getIdeMode?: () => boolean;
-    getIdeClient?: () => unknown;
-  };
-  if (
-    typeof maybeHost.getIdeMode !== 'function' ||
-    typeof maybeHost.getIdeClient !== 'function'
-  ) {
-    return undefined;
-  }
-  const getLegacyIdeClient = ():
-    | {
-        openDiff?: (
-          filePath: string,
-          content?: string,
-        ) => Promise<{ status: 'accepted' | 'rejected'; content?: string }>;
-        getConnectionStatus?: () => unknown;
-      }
-    | undefined => {
-    if (maybeHost.getIdeMode?.() !== true) {
-      return undefined;
-    }
-    const ideClient = maybeHost.getIdeClient?.();
-    if (
-      typeof ideClient !== 'object' ||
-      ideClient === null ||
-      !('openDiff' in ideClient)
-    ) {
-      return undefined;
-    }
-    return ideClient as {
-      openDiff?: (
-        filePath: string,
-        content?: string,
-      ) => Promise<{ status: 'accepted' | 'rejected'; content?: string }>;
-      getConnectionStatus?: () => unknown;
-    };
-  };
-  return {
-    applyDiff: async ({ filePath, diff }) => {
-      const legacyIdeClient = getLegacyIdeClient();
-      if (legacyIdeClient?.openDiff === undefined) {
-        return { status: 'rejected', content: undefined };
-      }
-      const result = await legacyIdeClient.openDiff(filePath, diff);
-      return result.status === 'accepted'
-        ? { status: 'accepted', content: result.content }
-        : { status: 'rejected', content: undefined };
-    },
-    getConnectionStatus: () =>
-      toIdeConnectionStatus(getLegacyIdeClient()?.getConnectionStatus?.()),
-    openDiff: async ({ filePath, newContent }) => {
-      await getLegacyIdeClient()?.openDiff?.(filePath, newContent);
-    },
-  };
-}
-
-function getLegacyLspService(host: IToolHost): ILspService | undefined {
-  const maybeHost = host as unknown as {
-    getLspServiceClient?: () => unknown;
-    getLspConfig?: () => unknown;
-  };
-  const lspClient = maybeHost.getLspServiceClient?.();
-  if (typeof lspClient !== 'object' || lspClient === null) {
-    return undefined;
-  }
-  return {
-    getDiagnostics: () => [],
-    waitForDiagnostics: async (filePath, _timeout) => {
-      const isAlive = (lspClient as { isAlive?: () => boolean }).isAlive?.();
-      if (isAlive !== true) {
-        return [];
-      }
-      const checkFile = (
-        lspClient as {
-          checkFile?: (
-            filePath: string,
-            signal?: AbortSignal,
-          ) => Promise<unknown>;
-        }
-      ).checkFile;
-      if (typeof checkFile !== 'function') {
-        return [];
-      }
-      const diagnostics = await checkFile.call(lspClient, filePath);
-      return Array.isArray(diagnostics) ? diagnostics : [];
-    },
-    getLspConfig: () =>
-      maybeHost.getLspConfig?.() as ReturnType<ILspService['getLspConfig']>,
-  };
-}
 
 export {
   applyReplacement,
@@ -326,8 +150,10 @@ class EditToolInvocation extends BaseToolInvocation<
 
   private getFilePath(): string {
     // Use absolute_path if provided, otherwise fall back to file_path
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-    return this.params.absolute_path || this.params.file_path || '';
+    return stringOrDefault(
+      this.params.absolute_path,
+      stringOrDefault(this.params.file_path, ''),
+    );
   }
 
   override toolLocations(): ToolLocation[] {
@@ -479,11 +305,7 @@ class EditToolInvocation extends BaseToolInvocation<
   }
 
   private async readTextFile(filePath: string): Promise<string> {
-    const fileSystemService = this.host.getFileSystemService?.();
-    if (fileSystemService !== undefined) {
-      return fileSystemService.readTextFile(filePath);
-    }
-    return fs.readFile(filePath, 'utf8');
+    return readTextFileViaHost(this.host, filePath);
   }
 
   private async writeTextFile(
@@ -631,8 +453,10 @@ class EditToolInvocation extends BaseToolInvocation<
     };
     const expectedReplacements = filteredParams.expected_replacements ?? 1;
 
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-    const filePath = params.absolute_path || params.file_path || '';
+    const filePath = stringOrDefault(
+      params.absolute_path,
+      stringOrDefault(params.file_path, ''),
+    );
 
     const {
       currentContent,
@@ -668,14 +492,7 @@ class EditToolInvocation extends BaseToolInvocation<
     }
 
     if (!resolvedError && fileExists && currentContent === newContent) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-      const fp = params.absolute_path || params.file_path || '';
-      resolvedError = {
-        display:
-          'No changes to apply. The new content is identical to the current content.',
-        raw: `No changes to apply. The new content is identical to the current content in file: ${fp}`,
-        type: ToolErrorType.EDIT_NO_CHANGE,
-      };
+      resolvedError = buildNoChangeError(filePath);
     }
 
     return {
@@ -838,8 +655,7 @@ class EditToolInvocation extends BaseToolInvocation<
     try {
       return await gitStatsService.trackFileEdit(
         filePath,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined currentContent should default to empty
-        currentContent || '',
+        currentContent ?? '',
         newContent,
       );
     } catch (error) {
@@ -1034,24 +850,13 @@ export class EditTool
     ideServiceOrLspService?: IIdeService | ILspService,
     lspService?: ILspService,
   ) {
-    const secondArgumentIsMessageBus = hasMessageBusShape(
-      messageBusOrIdeService,
-    );
-    const explicitIdeService = secondArgumentIsMessageBus
-      ? ideServiceOrLspService
-      : messageBusOrIdeService;
-    const ideService = hasIdeServiceShape(explicitIdeService)
-      ? explicitIdeService
-      : getLegacyIdeService(host);
-    const messageBus = secondArgumentIsMessageBus
-      ? (messageBusOrIdeService as IToolMessageBus)
-      : undefined;
-    const explicitLspService = secondArgumentIsMessageBus
-      ? lspService
-      : ideServiceOrLspService;
-    const resolvedLspService = hasLspServiceShape(explicitLspService)
-      ? explicitLspService
-      : getLegacyLspService(host);
+    const { ideService, messageBus, resolvedLspService } =
+      resolveConstructorArguments(
+        host,
+        messageBusOrIdeService,
+        ideServiceOrLspService,
+        lspService,
+      );
 
     super(
       EditTool.Name,
@@ -1125,44 +930,7 @@ Expectation for required parameters:
   protected override validateToolParamValues(
     params: EditToolParams,
   ): string | null {
-    // Accept either absolute_path or file_path
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid
-    const filePath = params.absolute_path || params.file_path || '';
-
-    if (filePath.trim() === '') {
-      return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
-    }
-
-    if (!path.isAbsolute(filePath)) {
-      return `File path must be absolute: ${filePath}`;
-    }
-
-    const pathError = validatePathWithinWorkspace(
-      getWorkspaceRootsCompat(this.host),
-      filePath,
-    );
-
-    if (pathError) {
-      return pathError;
-    }
-
-    // Validate that empty old_string with multiple replacements is not allowed
-    const expectedReplacements = params.expected_replacements ?? 1;
-    if (params.old_string === '' && expectedReplacements > 1) {
-      return `Cannot perform multiple replacements with empty old_string (would cause infinite loop)`;
-    }
-
-    const replaceLine = params.replaceBeginLineNumber;
-    if (
-      replaceLine !== undefined &&
-      (!Number.isFinite(replaceLine) ||
-        !Number.isInteger(replaceLine) ||
-        replaceLine <= 0)
-    ) {
-      return `replaceBeginLineNumber must be a positive integer (1-based)`;
-    }
-
-    return null;
+    return validateEditToolParams(params, getWorkspaceRootsCompat(this.host));
   }
 
   protected createInvocation(
@@ -1188,11 +956,7 @@ Expectation for required parameters:
   }
 
   private async readTextFile(filePath: string): Promise<string> {
-    const fileSystemService = this.host.getFileSystemService?.();
-    if (fileSystemService !== undefined) {
-      return fileSystemService.readTextFile(filePath);
-    }
-    return fs.readFile(filePath, 'utf8');
+    return readTextFileViaHost(this.host, filePath);
   }
 
   async execute(
@@ -1203,87 +967,21 @@ Expectation for required parameters:
   }
 
   getModifyContext(_: AbortSignal): ModifyContext<EditToolParams> {
-    return {
-      getFilePath: (params: EditToolParams) =>
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-        params.absolute_path || params.file_path || '',
-      getCurrentContent: async (params: EditToolParams): Promise<string> => {
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-        const filePath = params.absolute_path || params.file_path || '';
-        try {
-          return await this.readTextFile(filePath);
-        } catch (err) {
-          if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
-          return '';
-        }
-      },
-      getProposedContent: async (params: EditToolParams): Promise<string> => {
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-        const filePath = params.absolute_path || params.file_path || '';
-        try {
-          const raw = await this.readTextFile(filePath);
-          const currentContent = raw.replace(/\r\n/g, '\n');
-
-          const replaceLine = params.replaceBeginLineNumber;
-
-          if (
-            replaceLine !== undefined &&
-            replaceLine > 0 &&
-            params.old_string !== ''
-          ) {
-            // When replaceBeginLineNumber is set, only replace occurrences
-            // whose start falls on the specified line.
-            const expectedReplacements = params.expected_replacements ?? 1;
-            const eligibleCount = countLineGuardedOccurrences(
-              currentContent,
-              params.old_string,
-              replaceLine,
-            );
-
-            // If eligible count doesn't match expected_replacements, execute()
-            // would reject with a mismatch error. Return unchanged content to
-            // avoid presenting a partial proposal that would never be written.
-            if (eligibleCount !== expectedReplacements) {
-              return currentContent;
-            }
-
-            return applyLineGuardedReplacement(
-              currentContent,
-              params.old_string,
-              params.new_string,
-              expectedReplacements,
-              replaceLine,
-            );
-          }
-
-          const isNewFile = params.old_string === '' && currentContent === '';
-          return applyReplacement(
-            currentContent,
-            params.old_string,
-            params.new_string,
-            isNewFile,
-            params.expected_replacements ?? 1,
-          );
-        } catch (err) {
-          if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
-          // File does not exist: if old_string is empty, this is a new-file creation.
-          if (params.old_string === '') {
-            return params.new_string;
-          }
-          return '';
-        }
-      },
-      createUpdatedParams: (
-        oldContent: string,
-        modifiedProposedContent: string,
-        originalParams: EditToolParams,
-      ): EditToolParams => ({
-        ...originalParams,
-        ai_proposed_content: oldContent,
-        old_string: oldContent,
-        new_string: modifiedProposedContent,
-        modified_by_user: true,
-      }),
-    };
+    return createEditModifyContext((filePath: string) =>
+      this.readTextFile(filePath),
+    );
   }
+}
+
+function buildNoChangeError(filePath: string): {
+  display: string;
+  raw: string;
+  type: (typeof ToolErrorType)[keyof typeof ToolErrorType];
+} {
+  return {
+    display:
+      'No changes to apply. The new content is identical to the current content.',
+    raw: `No changes to apply. The new content is identical to the current content in file: ${filePath}`,
+    type: ToolErrorType.EDIT_NO_CHANGE,
+  };
 }

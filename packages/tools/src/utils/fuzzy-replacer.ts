@@ -4,8 +4,6 @@
  * Adapted for llxprt-code by Vybestack.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 // Similarity thresholds for block anchor fallback matching
 const SINGLE_CANDIDATE_SIMILARITY_THRESHOLD = 0.0;
 const MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD = 0.3;
@@ -27,10 +25,11 @@ export function levenshtein(a: string, b: string): number {
     return Math.max(a.length, b.length);
   }
   const matrix = Array.from({ length: a.length + 1 }, (_, i) =>
-    Array.from({ length: b.length + 1 }, (_, j) =>
-      // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      i === 0 ? j : j === 0 ? i : 0,
-    ),
+    Array.from({ length: b.length + 1 }, (_, j) => {
+      if (i === 0) return j;
+      if (j === 0) return i;
+      return 0;
+    }),
   );
 
   for (let i = 1; i <= a.length; i++) {
@@ -49,9 +48,28 @@ export function levenshtein(a: string, b: string): number {
 /**
  * Helper function to escape special regex characters
  */
+const SPECIAL_CHARS = [
+  '.',
+  '*',
+  '+',
+  '?',
+  '^',
+  '$',
+  '{',
+  '}',
+  '(',
+  ')',
+  '|',
+  '[',
+  ']',
+  '\\',
+];
+
 const escapeRegExp = (str: string): string =>
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  SPECIAL_CHARS.reduce(
+    (escaped, char) => escaped.split(char).join(`\\${char}`),
+    str,
+  );
 
 const ESCAPE_SEQUENCE_PATTERN = /\\(n|t|r|'|"|`|\\|\$)/g;
 const ESCAPE_SEQUENCE_TEST_PATTERN = /\\(n|t|r|'|"|`|\\|\$)/;
@@ -88,6 +106,25 @@ export const SimpleReplacer: Replacer = function* (_content, find) {
 };
 
 /**
+ * Checks whether searchLines match originalLines starting at offset i (trimmed comparison).
+ */
+function trimmedLinesMatchAt(
+  originalLines: string[],
+  searchLines: string[],
+  i: number,
+): boolean {
+  for (let j = 0; j < searchLines.length; j++) {
+    const originalTrimmed = originalLines[i + j].trim();
+    const searchTrimmed = searchLines[j].trim();
+
+    if (originalTrimmed !== searchTrimmed) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Replacer that matches lines with trimmed content
  */
 export const LineTrimmedReplacer: Replacer = function* (content, find) {
@@ -99,33 +136,12 @@ export const LineTrimmedReplacer: Replacer = function* (content, find) {
   }
 
   for (let i = 0; i <= originalLines.length - searchLines.length; i++) {
-    let matches = true;
-
-    for (let j = 0; j < searchLines.length; j++) {
-      const originalTrimmed = originalLines[i + j].trim();
-      const searchTrimmed = searchLines[j].trim();
-
-      if (originalTrimmed !== searchTrimmed) {
-        matches = false;
-        break;
-      }
-    }
-
-    if (matches) {
-      let matchStartIndex = 0;
-      for (let k = 0; k < i; k++) {
-        matchStartIndex += originalLines[k].length + 1;
-      }
-
-      let matchEndIndex = matchStartIndex;
-      for (let k = 0; k < searchLines.length; k++) {
-        matchEndIndex += originalLines[i + k].length;
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (k < searchLines.length - 1) {
-          matchEndIndex += 1; // Add newline character except for the last line
-        }
-      }
-
+    if (trimmedLinesMatchAt(originalLines, searchLines, i)) {
+      const { matchStartIndex, matchEndIndex } = computeLineRangeCharIndices(
+        originalLines,
+        i,
+        i + searchLines.length - 1,
+      );
       yield content.substring(matchStartIndex, matchEndIndex);
     }
   }
@@ -192,24 +208,78 @@ function computeMiddleSimilarity(
     return 1.0;
   }
 
+  const middleLinePairs = collectMiddleLinePairs(
+    originalLines,
+    searchLines,
+    startLine,
+    searchBlockSize,
+    actualBlockSize,
+  );
+
+  return accumulateSimilarity(middleLinePairs, linesToCheck);
+}
+
+/**
+ * Collects the (originalLine, searchLine) pairs from the middle of a block.
+ */
+function collectMiddleLinePairs(
+  originalLines: string[],
+  searchLines: string[],
+  startLine: number,
+  searchBlockSize: number,
+  actualBlockSize: number,
+): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
+  const limit = Math.min(searchBlockSize - 1, actualBlockSize - 1);
+  for (let j = 1; j < limit; j++) {
+    pairs.push([originalLines[startLine + j], searchLines[j]]);
+  }
+  return pairs;
+}
+
+/**
+ * Accumulates similarity from line pairs, stopping early once the threshold is reached.
+ */
+function accumulateSimilarity(
+  pairs: Array<[string, string]>,
+  linesToCheck: number,
+): number {
   let similarity = 0;
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  for (let j = 1; j < searchBlockSize - 1 && j < actualBlockSize - 1; j++) {
-    const originalLine = originalLines[startLine + j].trim();
-    const searchLine = searchLines[j].trim();
-    const maxLen = Math.max(originalLine.length, searchLine.length);
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    if (maxLen === 0) {
-      continue;
-    }
-    const distance = levenshtein(originalLine, searchLine);
-    similarity += (1 - distance / maxLen) / linesToCheck;
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    if (similarity >= SINGLE_CANDIDATE_SIMILARITY_THRESHOLD) {
+  const reachedThreshold = () =>
+    similarity >= SINGLE_CANDIDATE_SIMILARITY_THRESHOLD;
+  for (const [originalLine, searchLine] of pairs) {
+    if (reachedThreshold()) {
       break;
+    }
+    const contribution = linePairContribution(
+      originalLine,
+      searchLine,
+      linesToCheck,
+    );
+    if (contribution !== null) {
+      similarity += contribution;
     }
   }
   return similarity;
+}
+
+/**
+ * Computes the similarity contribution for a pair of lines, or null if the lines
+ * are both empty (and thus should be skipped).
+ */
+function linePairContribution(
+  originalLine: string,
+  searchLine: string,
+  linesToCheck: number,
+): number | null {
+  const trimmedOriginal = originalLine.trim();
+  const trimmedSearch = searchLine.trim();
+  const maxLen = Math.max(trimmedOriginal.length, trimmedSearch.length);
+  if (maxLen === 0) {
+    return null;
+  }
+  const distance = levenshtein(trimmedOriginal, trimmedSearch);
+  return (1 - distance / maxLen) / linesToCheck;
 }
 
 /**
@@ -233,7 +303,6 @@ function computeAverageMiddleSimilarity(
     const originalLine = originalLines[startLine + j].trim();
     const searchLine = searchLines[j].trim();
     const maxLen = Math.max(originalLine.length, searchLine.length);
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (maxLen === 0) {
       continue;
     }
@@ -329,6 +398,34 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
 };
 
 /**
+ * Attempts to yield a whitespace-normalized substring match for a single line.
+ */
+function* yieldWhitespaceSubstringMatches(
+  line: string,
+  normalizedLine: string,
+  normalizedFind: string,
+  find: string,
+): Generator<string, void, unknown> {
+  if (!normalizedLine.includes(normalizedFind)) {
+    return;
+  }
+  const words = find.trim().split(/\s+/);
+  if (words.length === 0) {
+    return;
+  }
+  const pattern = words.map((word) => escapeRegExp(word)).join('\\s+');
+  try {
+    const regex = new RegExp(pattern);
+    const match = line.match(regex);
+    if (match) {
+      yield match[0];
+    }
+  } catch {
+    // Invalid regex pattern, skip
+  }
+}
+
+/**
  * Replacer that normalizes whitespace before matching
  */
 export const WhitespaceNormalizedReplacer: Replacer = function* (
@@ -343,29 +440,17 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (
   const lines = content.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (normalizeWhitespace(line) === normalizedFind) {
+    const normalizedLine = normalizeWhitespace(line);
+    if (normalizedLine === normalizedFind) {
       yield line;
-    } else {
-      // Only check for substring matches if the full line doesn't match
-      const normalizedLine = normalizeWhitespace(line);
-      if (normalizedLine.includes(normalizedFind)) {
-        // Find the actual substring in the original line that matches
-        const words = find.trim().split(/\s+/);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (words.length > 0) {
-          const pattern = words.map((word) => escapeRegExp(word)).join('\\s+');
-          try {
-            const regex = new RegExp(pattern);
-            const match = line.match(regex);
-            if (match) {
-              yield match[0];
-            }
-          } catch {
-            // Invalid regex pattern, skip
-          }
-        }
-      }
+      continue;
     }
+    yield* yieldWhitespaceSubstringMatches(
+      line,
+      normalizedLine,
+      normalizedFind,
+      find,
+    );
   }
 
   // Handle multi-line matches
@@ -446,19 +531,31 @@ export const EscapeNormalizedReplacer: Replacer = function* (content, find) {
 };
 
 /**
+ * Collects all start indices where `find` occurs in `content`.
+ */
+function findAllOccurrences(content: string, find: string): number[] {
+  const indices: number[] = [];
+  let startIndex = 0;
+  while (startIndex <= content.length) {
+    const index = content.indexOf(find, startIndex);
+    if (index === -1) {
+      break;
+    }
+    indices.push(index);
+    startIndex = index + find.length;
+  }
+  return indices;
+}
+
+/**
  * Replacer that yields all exact matches for handling multiple occurrences
  */
 export const MultiOccurrenceReplacer: Replacer = function* (content, find) {
   // This replacer yields all exact matches, allowing the replace function
   // to handle multiple occurrences based on replaceAll parameter
-  let startIndex = 0;
-
-  while (startIndex < content.length) {
-    const index = content.indexOf(find, startIndex);
-    if (index === -1) break;
-
+  const occurrences = findAllOccurrences(content, find);
+  for (const _index of occurrences) {
     yield find;
-    startIndex = index + find.length;
   }
 };
 
@@ -498,6 +595,71 @@ export const TrimmedBoundaryReplacer: Replacer = function* (content, find) {
 };
 
 /**
+ * Counts matching and total non-empty middle lines between block and find lines.
+ */
+function countMiddleLineMatches(
+  blockLines: string[],
+  findLines: string[],
+): { matchingLines: number; totalNonEmptyLines: number } {
+  let matchingLines = 0;
+  let totalNonEmptyLines = 0;
+  for (let k = 1; k < blockLines.length - 1; k++) {
+    const blockLine = blockLines[k].trim();
+    const findLine = findLines[k].trim();
+
+    if (blockLine.length > 0 || findLine.length > 0) {
+      totalNonEmptyLines++;
+      if (blockLine === findLine) {
+        matchingLines++;
+      }
+    }
+  }
+  return { matchingLines, totalNonEmptyLines };
+}
+
+/**
+ * Determines whether a candidate context block matches by middle-line similarity.
+ */
+function isMatchingContextBlock(
+  blockLines: string[],
+  findLines: string[],
+): boolean {
+  if (blockLines.length !== findLines.length) {
+    return false;
+  }
+  const { matchingLines, totalNonEmptyLines } = countMiddleLineMatches(
+    blockLines,
+    findLines,
+  );
+  return totalNonEmptyLines === 0 || matchingLines / totalNonEmptyLines >= 0.5;
+}
+
+/**
+ * Searches for the first context block starting at `startIndex` whose first and last
+ * anchor lines match and whose middle content is sufficiently similar. Returns the
+ * joined block string, or null if no match.
+ */
+function findContextBlockFromIndex(
+  contentLines: string[],
+  startIndex: number,
+  firstLine: string,
+  lastLine: string,
+  findLines: string[],
+): string | null {
+  for (let j = startIndex + 2; j < contentLines.length; j++) {
+    if (contentLines[j].trim() !== lastLine) {
+      continue;
+    }
+    const blockLines = contentLines.slice(startIndex, j + 1);
+    if (isMatchingContextBlock(blockLines, findLines)) {
+      return blockLines.join('\n');
+    }
+    return null;
+  }
+  return null;
+}
+
+/**
  * Replacer that uses first and last lines as context anchors with similarity checking
  */
 export const ContextAwareReplacer: Replacer = function* (content, find) {
@@ -520,48 +682,89 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
 
   // Find blocks that start and end with the context anchors
   for (let i = 0; i < contentLines.length; i++) {
-    if (contentLines[i].trim() !== firstLine) continue;
+    if (contentLines[i].trim() !== firstLine) {
+      continue;
+    }
 
-    // Look for the matching last line
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (let j = i + 2; j < contentLines.length; j++) {
-      if (contentLines[j].trim() === lastLine) {
-        // Found a potential context block
-        const blockLines = contentLines.slice(i, j + 1);
-        const block = blockLines.join('\n');
-
-        // Check if the middle content has reasonable similarity
-        // (simple heuristic: at least 50% of non-empty lines should match when trimmed)
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (blockLines.length === findLines.length) {
-          let matchingLines = 0;
-          let totalNonEmptyLines = 0;
-
-          for (let k = 1; k < blockLines.length - 1; k++) {
-            const blockLine = blockLines[k].trim();
-            const findLine = findLines[k].trim();
-
-            if (blockLine.length > 0 || findLine.length > 0) {
-              totalNonEmptyLines++;
-              if (blockLine === findLine) {
-                matchingLines++;
-              }
-            }
-          }
-
-          if (
-            totalNonEmptyLines === 0 ||
-            matchingLines / totalNonEmptyLines >= 0.5
-          ) {
-            yield block;
-            break; // Only match the first occurrence
-          }
-        }
-        break;
-      }
+    const block = findContextBlockFromIndex(
+      contentLines,
+      i,
+      firstLine,
+      lastLine,
+      findLines,
+    );
+    if (block !== null) {
+      yield block;
     }
   }
 };
+
+/**
+ * The ordered list of replacement strategies tried by fuzzyReplace.
+ */
+const REPLACERS: Replacer[] = [
+  SimpleReplacer,
+  LineTrimmedReplacer,
+  BlockAnchorReplacer,
+  WhitespaceNormalizedReplacer,
+  IndentationFlexibleReplacer,
+  EscapeNormalizedReplacer,
+  TrimmedBoundaryReplacer,
+  ContextAwareReplacer,
+  MultiOccurrenceReplacer,
+];
+
+/**
+ * Builds the final replacement string, unescaping escape sequences when
+ * the matched content has no backslashes but the find/new strings do.
+ */
+function buildFinalReplacement(
+  search: string,
+  newString: string,
+  oldStringHasEscapes: boolean,
+  newStringHasEscapes: boolean,
+): string {
+  const shouldUnescape =
+    (oldStringHasEscapes || newStringHasEscapes) && !search.includes('\\');
+  return shouldUnescape ? unescapeEscapedSequences(newString) : newString;
+}
+
+/**
+ * Attempts a single replacement using the given search match.
+ * Returns the result object, or null if this search is not actionable.
+ */
+function trySingleReplacement(
+  content: string,
+  search: string,
+  finalReplacement: string,
+): { result: string; occurrences: number } | null {
+  const index = content.indexOf(search);
+  if (index === -1) {
+    return null;
+  }
+  const lastIndex = content.lastIndexOf(search);
+  if (index !== lastIndex) {
+    return null;
+  }
+  const result =
+    content.substring(0, index) +
+    finalReplacement +
+    content.substring(index + search.length);
+  return { result, occurrences: 1 };
+}
+
+/**
+ * Attempts a replace-all using the given search match.
+ */
+function tryReplaceAll(
+  content: string,
+  search: string,
+  finalReplacement: string,
+): { result: string; occurrences: number } {
+  const result = content.replaceAll(search, () => finalReplacement);
+  const occurrences = content.split(search).length - 1;
+  return { result, occurrences };
+}
 
 /**
  * Main fuzzy replace function that tries multiple replacement strategies
@@ -586,44 +789,26 @@ export function fuzzyReplace(
 
   let notFound = true;
 
-  for (const replacer of [
-    SimpleReplacer,
-    LineTrimmedReplacer,
-    BlockAnchorReplacer,
-    WhitespaceNormalizedReplacer,
-    IndentationFlexibleReplacer,
-    EscapeNormalizedReplacer,
-    TrimmedBoundaryReplacer,
-    ContextAwareReplacer,
-    MultiOccurrenceReplacer,
-  ]) {
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  for (const replacer of REPLACERS) {
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search);
       if (index === -1) continue;
       notFound = false;
 
-      const shouldUnescapeReplacement =
-        (oldStringHasEscapes || newStringHasEscapes) && !search.includes('\\');
-
-      // Prepare the replacement string - convert escape sequences when the match
-      // represents real characters (no backslashes in the matched content)
-      const finalReplacement = shouldUnescapeReplacement
-        ? unescapeEscapedSequences(newString)
-        : newString;
+      const finalReplacement = buildFinalReplacement(
+        search,
+        newString,
+        oldStringHasEscapes,
+        newStringHasEscapes,
+      );
 
       if (replaceAll) {
-        const result = content.replaceAll(search, () => finalReplacement);
-        const occurrences = content.split(search).length - 1;
-        return { result, occurrences };
+        return tryReplaceAll(content, search, finalReplacement);
       }
-      const lastIndex = content.lastIndexOf(search);
-      if (index !== lastIndex) continue;
-      const result =
-        content.substring(0, index) +
-        finalReplacement +
-        content.substring(index + search.length);
-      return { result, occurrences: 1 };
+      const single = trySingleReplacement(content, search, finalReplacement);
+      if (single) {
+        return single;
+      }
     }
   }
 
