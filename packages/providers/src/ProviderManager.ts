@@ -5,21 +5,10 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 import { type IProvider, type GenerateChatOptions } from './IProvider.js';
 import { type IProviderManager } from './IProviderManager.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { isContainerSandbox } from './utils/containerSandbox.js';
-import {
-  hydrateModelsWithRegistry,
-  getModelsDevProviderIds,
-  type HydratedModel,
-} from '@vybestack/llxprt-code-core/models/hydration.js';
-import {
-  initializeModelRegistry,
-  getModelRegistry,
-} from '@vybestack/llxprt-code-core/models/registry.js';
+import type { HydratedModel } from '@vybestack/llxprt-code-core/models/hydration.js';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
 import { RetryOrchestrator } from './RetryOrchestrator.js';
 import {
@@ -30,54 +19,25 @@ import {
   ProviderSwitchEvent,
   ProviderCapabilityEvent,
 } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import type {
-  ProviderCapabilities,
-  ProviderContext,
-  ProviderComparison,
-} from './types.js';
+import type { ProviderCapabilities, ProviderComparison } from './types.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   getActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
-  MissingProviderRuntimeError,
-  ProviderRuntimeNormalizationError,
-} from './errors.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { MissingProviderRuntimeError } from './errors.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
-
-const PROVIDER_CAPABILITY_HINTS: Record<
-  string,
-  Partial<ProviderCapabilities>
-> = {
-  gemini: {
-    hasModelSelection: true,
-    hasApiKeyConfig: true,
-    hasBaseUrlConfig: false,
-  },
-  openai: {
-    hasModelSelection: true,
-    hasApiKeyConfig: true,
-    hasBaseUrlConfig: true,
-  },
-  'openai-responses': {
-    hasModelSelection: false,
-    hasApiKeyConfig: true,
-    hasBaseUrlConfig: true,
-  },
-  anthropic: {
-    hasModelSelection: true,
-    hasApiKeyConfig: true,
-    hasBaseUrlConfig: true,
-  },
-  openaivercel: {
-    hasModelSelection: true,
-    hasApiKeyConfig: true,
-    hasBaseUrlConfig: true,
-  },
-};
+import {
+  TokenUsageTracker,
+  type CacheStatistics,
+  type SessionTokenUsage,
+} from './tokenUsageTracker.js';
+import { ProviderCapabilitiesService } from './providerCapabilitiesService.js';
+import {
+  buildEphemeralsSnapshot,
+  normalizeRuntimeInputs,
+} from './runtimeNormalizer.js';
+import { resolveAvailableModels } from './modelResolver.js';
 
 const logger = new DebugLogger('llxprt:provider:manager');
 
@@ -93,13 +53,28 @@ interface ProviderManagerInit {
   settingsService?: SettingsService;
 }
 
-export interface CacheStatistics {
-  totalCacheReads: number;
-  /** null means provider doesn't report cache writes; 0 means explicitly reported as zero */
-  totalCacheWrites: number | null;
-  requestsWithCacheHits: number;
-  requestsWithCacheWrites: number;
-  hitRate: number;
+/**
+ * Type guard: distinguish ProviderRuntimeContext from ProviderManagerInit.
+ * A ProviderRuntimeContext has settingsService plus either runtimeId or metadata.
+ */
+function isRuntimeContext(
+  init: ProviderManagerInit | ProviderRuntimeContext,
+): init is ProviderRuntimeContext {
+  return (
+    'settingsService' in init && ('runtimeId' in init || 'metadata' in init)
+  );
+}
+
+/**
+ * Check whether a settings value is effectively absent (null, undefined, empty,
+ * false, 0, or NaN).
+ */
+function isBlankValue(value: unknown): boolean {
+  if (value == null || value === '' || value === false || value === 0) {
+    return true;
+  }
+
+  return typeof value === 'number' && Number.isNaN(value);
 }
 
 export class ProviderManager implements IProviderManager {
@@ -114,28 +89,8 @@ export class ProviderManager implements IProviderManager {
   private settingsService: SettingsService;
   private runtime?: ProviderRuntimeContext;
   private providerCapabilities: Map<string, ProviderCapabilities> = new Map();
-  private sessionTokenUsage: {
-    input: number;
-    output: number;
-    cache: number;
-    tool: number;
-    thought: number;
-    total: number;
-  } = {
-    input: 0,
-    output: 0,
-    cache: 0,
-    tool: 0,
-    thought: 0,
-    total: 0,
-  };
-  private cacheStats: CacheStatistics = {
-    totalCacheReads: 0,
-    totalCacheWrites: null,
-    requestsWithCacheHits: 0,
-    requestsWithCacheWrites: 0,
-    hitRate: 0,
-  };
+  private tokenUsageTracker: TokenUsageTracker = new TokenUsageTracker();
+  private capabilitiesService: ProviderCapabilitiesService;
 
   constructor(init?: ProviderManagerInit | ProviderRuntimeContext) {
     const resolved = this.resolveInit(init);
@@ -144,6 +99,9 @@ export class ProviderManager implements IProviderManager {
     this.settingsService = resolved.settingsService;
     this.config = resolved.config ?? this.config;
     this.runtime = resolved.runtime;
+    this.capabilitiesService = new ProviderCapabilitiesService(
+      this.providerCapabilities,
+    );
   }
 
   /**
@@ -161,10 +119,7 @@ export class ProviderManager implements IProviderManager {
   } {
     let fallback: ProviderRuntimeContext | null = null;
     const ensureFallback = (): ProviderRuntimeContext => {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional lazy initialization
-      if (!fallback) {
-        fallback = getActiveProviderRuntimeContext();
-      }
+      fallback ??= getActiveProviderRuntimeContext();
       return fallback;
     };
 
@@ -177,14 +132,7 @@ export class ProviderManager implements IProviderManager {
       };
     }
 
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      typeof init === 'object' &&
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- preserve defensive runtime boundary guard despite current static types.
-      init !== null &&
-      'settingsService' in init &&
-      ('runtimeId' in init || 'metadata' in init)
-    ) {
+    if (isRuntimeContext(init)) {
       const context = init;
       return {
         settingsService: asSettingsService(context.settingsService),
@@ -193,7 +141,7 @@ export class ProviderManager implements IProviderManager {
       };
     }
 
-    const initObj = init as ProviderManagerInit;
+    const initObj = init;
     const runtime = initObj.runtime;
     let settingsService =
       initObj.settingsService ??
@@ -220,6 +168,13 @@ export class ProviderManager implements IProviderManager {
       config,
       runtime,
     };
+  }
+
+  buildEphemeralsSnapshot(
+    settingsService: SettingsService,
+    providerName: string,
+  ): Record<string, unknown> {
+    return buildEphemeralsSnapshot(settingsService, providerName);
   }
 
   setConfig(config: Config): void {
@@ -415,500 +370,19 @@ export class ProviderManager implements IProviderManager {
    * @pseudocode provider-runtime-handling.md lines 10-16
    *
    * Normalize runtime inputs per call - no stored settings/config fallbacks.
-   * This method enforces that all runtime context is provided per-call and that
-   * providers cannot rely on stored state.
    */
   normalizeRuntimeInputs(
     rawOptions: GenerateChatOptions,
     providerName?: string,
   ): GenerateChatOptions {
-    const runtimeId = rawOptions.runtime?.runtimeId ?? 'unknown';
-    const targetProvider = providerName ?? this.getActiveProviderName();
-
-    const { settingsService, config } = this.requireRuntimeContext(
+    return normalizeRuntimeInputs(
       rawOptions,
-      runtimeId,
-    );
-
-    const resolved = this.resolveFields(
-      rawOptions,
-      settingsService,
-      config,
-      targetProvider,
-      runtimeId,
-    );
-
-    this.validateResolvedFields(resolved, targetProvider, runtimeId);
-
-    return this.buildNormalizedOptions(
-      rawOptions,
-      settingsService,
-      config,
-      resolved,
-      targetProvider,
-      runtimeId,
-    );
-  }
-
-  /**
-   * REQ-SP4-002: Validate and extract required settings service and config.
-   */
-  private requireRuntimeContext(
-    rawOptions: GenerateChatOptions,
-    runtimeId: string,
-  ): { settingsService: SettingsService; config: Config } {
-    const settingsService =
-      rawOptions.settings ?? rawOptions.runtime?.settingsService;
-    const config = rawOptions.config ?? rawOptions.runtime?.config;
-
-    if (!settingsService) {
-      throw new ProviderRuntimeNormalizationError({
-        providerKey: 'ProviderManager',
-        message:
-          'ProviderManager requires call-scoped settings; legacy provider state is disabled.',
-        requirement: 'REQ-SP4-002',
-        runtimeId,
-        stage: 'normalizeRuntimeInputs',
-        metadata: {
-          hint: 'SettingsService must be provided in options.settings or runtime.settingsService',
-        },
-      });
-    }
-
-    if (!config) {
-      throw new ProviderRuntimeNormalizationError({
-        providerKey: 'ProviderManager',
-        message:
-          'ProviderManager requires call-scoped config; legacy provider state is disabled.',
-        requirement: 'REQ-SP4-002',
-        runtimeId,
-        stage: 'normalizeRuntimeInputs',
-        metadata: {
-          hint: 'Config must be provided in options.config or runtime.config',
-        },
-      });
-    }
-
-    return { settingsService: settingsService as SettingsService, config };
-  }
-
-  /**
-   * REQ-SP4-003: Compose normalized.resolved with runtime helpers.
-   * Resolves model, baseURL, authToken, and telemetry.
-   */
-  private resolveFields(
-    rawOptions: GenerateChatOptions,
-    settingsService: SettingsService,
-    config: Config,
-    targetProvider: string,
-    runtimeId: string,
-  ): Record<string, unknown> {
-    const providerSettings =
-      settingsService.getProviderSettings(targetProvider);
-    const providerInstance = this.providers.get(targetProvider);
-    const shouldApplyGlobalEphemerals = this.shouldApplyGlobalEphemerals(
-      settingsService,
-      config,
-      targetProvider,
-    );
-
-    logger.debug(() => {
-      const token = rawOptions.resolved?.authToken;
-      const tokenStr = typeof token === 'string' ? token : '';
-      return `[normalizeRuntimeInputs] provider=${targetProvider}, incoming authToken present=${Boolean(tokenStr.trim())} length=${tokenStr.length}`;
-    });
-
-    const resolved: Record<string, unknown> = {
-      model: this.resolveModelField(
-        rawOptions,
-        providerSettings,
-        config,
-        providerInstance,
-        shouldApplyGlobalEphemerals,
-      ),
-      baseURL: this.resolveBaseURLField(rawOptions, providerSettings),
-      authToken:
-        rawOptions.resolved?.authToken ??
-        (providerSettings['auth-key'] as string | undefined),
-      telemetry: {
-        ...rawOptions.resolved?.telemetry,
-        runtimeId,
-        normalizedAt: new Date().toISOString(),
-        provider: targetProvider,
+      {
+        getActiveProviderName: () => this.getActiveProviderName(),
+        getProvider: (name) => this.providers.get(name),
       },
-    };
-
-    this.applyGlobalAuthKey(
-      resolved,
-      rawOptions,
-      config,
-      shouldApplyGlobalEphemerals,
-      targetProvider,
+      providerName,
     );
-
-    this.resolveBaseURL(
-      resolved,
-      rawOptions,
-      settingsService,
-      config,
-      providerSettings,
-      providerInstance,
-      shouldApplyGlobalEphemerals,
-      targetProvider,
-    );
-
-    return resolved;
-  }
-
-  /**
-   * Resolve model field, treating empty/whitespace strings as absent
-   * so they do not block fallback to provider settings, config, or default model.
-   */
-  private resolveModelField(
-    rawOptions: GenerateChatOptions,
-    providerSettings: Record<string, unknown>,
-    config: Config,
-    providerInstance: IProvider | undefined,
-    shouldApplyGlobalEphemerals: boolean,
-  ): string | undefined {
-    const fromResolved = rawOptions.resolved?.model;
-    if (typeof fromResolved === 'string' && fromResolved.trim() !== '') {
-      return fromResolved;
-    }
-    const fromSettings = providerSettings.model as string | undefined;
-    if (typeof fromSettings === 'string' && fromSettings.trim() !== '') {
-      return fromSettings;
-    }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-    if (shouldApplyGlobalEphemerals) {
-      const fromConfig = config.getModel();
-      if (typeof fromConfig === 'string' && fromConfig.trim() !== '') {
-        return fromConfig;
-      }
-    }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-    const fromDefault = providerInstance?.getDefaultModel?.();
-    if (typeof fromDefault === 'string' && fromDefault.trim() !== '') {
-      return fromDefault;
-    }
-    return undefined;
-  }
-
-  /**
-   * Resolve baseURL field, treating empty/whitespace strings as absent
-   * so they do not block fallback to provider settings.
-   */
-  private resolveBaseURLField(
-    rawOptions: GenerateChatOptions,
-    providerSettings: Record<string, unknown>,
-  ): string | undefined {
-    const fromResolved = rawOptions.resolved?.baseURL;
-    if (typeof fromResolved === 'string' && fromResolved.trim() !== '') {
-      return fromResolved;
-    }
-    const fromSettings = providerSettings['base-url'] as string | undefined;
-    if (typeof fromSettings === 'string' && fromSettings.trim() !== '') {
-      return fromSettings;
-    }
-    return undefined;
-  }
-
-  /**
-   * Determine whether global ephemeral settings should be applied.
-   */
-  private shouldApplyGlobalEphemerals(
-    settingsService: SettingsService,
-    config: Config,
-    targetProvider: string,
-  ): boolean {
-    const configSettingsService =
-      typeof (config as unknown as { getSettingsService?: () => unknown })
-        .getSettingsService === 'function'
-        ? (
-            config as unknown as { getSettingsService: () => unknown }
-          ).getSettingsService()
-        : undefined;
-    const configMatchesSettingsService =
-      configSettingsService === undefined ||
-      configSettingsService === null ||
-      configSettingsService === settingsService;
-    const activeProviderRaw = settingsService.get('activeProvider');
-    const activeProviderName =
-      typeof activeProviderRaw === 'string' ? activeProviderRaw.trim() : '';
-    return (
-      configMatchesSettingsService &&
-      (!activeProviderName || activeProviderName === targetProvider)
-    );
-  }
-
-  /**
-   * Apply global auth-key from ephemeral settings if no token is set.
-   */
-  private applyGlobalAuthKey(
-    resolved: Record<string, unknown>,
-    rawOptions: GenerateChatOptions,
-    config: Config,
-    shouldApplyGlobalEphemerals: boolean,
-    targetProvider: string,
-  ): void {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-    const effectiveConfig = rawOptions.config ?? config ?? null;
-
-    logger.debug(() => {
-      const token = resolved.authToken;
-      const tokenStr = typeof token === 'string' ? token : '';
-      return `[normalizeRuntimeInputs] provider=${targetProvider}, resolved authToken present=${Boolean(tokenStr.trim())} length=${tokenStr.length}`;
-    });
-
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      shouldApplyGlobalEphemerals &&
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- preserve defensive runtime boundary guard despite current static types.
-      effectiveConfig !== null &&
-      typeof (
-        effectiveConfig as Config & {
-          getEphemeralSetting?: (key: string) => unknown;
-        }
-      ).getEphemeralSetting === 'function' &&
-      (typeof resolved.authToken !== 'string' ||
-        resolved.authToken.trim() === '')
-    ) {
-      const globalAuthKey = (
-        effectiveConfig as Config & {
-          getEphemeralSetting?: (key: string) => unknown;
-        }
-      )
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-        .getEphemeralSetting?.('auth-key') as string | undefined;
-
-      logger.debug(() => {
-        const tokenStr = typeof globalAuthKey === 'string' ? globalAuthKey : '';
-        return `[normalizeRuntimeInputs] provider=${targetProvider}, global auth-key present=${Boolean(tokenStr.trim())} length=${tokenStr.length}, will use: ${globalAuthKey ? 'YES' : 'NO'}`;
-      });
-
-      if (globalAuthKey && globalAuthKey.trim() !== '') {
-        resolved.authToken = globalAuthKey.trim();
-      } else if (process.env.DEBUG) {
-        logger.debug(
-          () =>
-            `[ProviderManager] Missing auth token for provider '${targetProvider}' even after checking global auth-key.`,
-        );
-      }
-    }
-  }
-
-  /**
-   * Check whether a value is blank (nullish or whitespace-only string).
-   * Restores prior falsy semantics for model/baseURL checks.
-   */
-  private isBlankish(value: unknown): boolean {
-    return value == null || (typeof value === 'string' && value.trim() === '');
-  }
-
-  private resolveBaseURL(
-    resolved: Record<string, unknown>,
-
-    rawOptions: GenerateChatOptions,
-    _settingsService: SettingsService,
-    config: Config,
-    providerSettings: Record<string, unknown>,
-    providerInstance: IProvider | undefined,
-    shouldApplyGlobalEphemerals: boolean,
-    _targetProvider: string,
-  ): void {
-    if (this.isBlankish(resolved.baseURL) && shouldApplyGlobalEphemerals) {
-      const configBaseUrl =
-        typeof config.getEphemeralSetting === 'function'
-          ? (config.getEphemeralSetting('base-url') as string | undefined)
-          : undefined;
-      if (configBaseUrl && typeof configBaseUrl === 'string') {
-        const trimmed = configBaseUrl.trim();
-        if (trimmed) {
-          resolved.baseURL = trimmed;
-        }
-      }
-    }
-
-    if (this.isBlankish(resolved.baseURL)) {
-      const providerBaseUrl = this.getBaseUrlFromProvider(providerInstance);
-      if (providerBaseUrl) {
-        resolved.baseURL = providerBaseUrl;
-      }
-    }
-
-    const hasExplicitCallBaseUrl =
-      typeof rawOptions.resolved?.baseURL === 'string' &&
-      rawOptions.resolved.baseURL.trim() !== '';
-    if (isContainerSandbox() && !hasExplicitCallBaseUrl) {
-      const sandboxBaseUrl = providerSettings['sandbox-base-url'] as
-        | string
-        | undefined;
-      if (sandboxBaseUrl && typeof sandboxBaseUrl === 'string') {
-        const trimmed = sandboxBaseUrl.trim();
-        if (trimmed) {
-          resolved.baseURL = trimmed;
-        }
-      }
-    }
-  }
-
-  /**
-   * REQ-SP4-003: Validate required fields in resolved options.
-   */
-  private validateResolvedFields(
-    resolved: Record<string, unknown>,
-    targetProvider: string,
-    runtimeId: string,
-  ): void {
-    const missingFields: string[] = [];
-    if (this.isBlankish(resolved.model)) missingFields.push('model');
-    const baseUrlOptionalProviders = new Set([
-      'gemini',
-      'openai',
-      'openai-responses',
-      'anthropic',
-      'openaivercel',
-      'load-balancer',
-    ]);
-    if (
-      this.isBlankish(resolved.baseURL) &&
-      !baseUrlOptionalProviders.has(targetProvider)
-    ) {
-      missingFields.push('baseURL');
-    }
-    const resolvedAuthToken = resolved.authToken;
-    const hasResolvedAuthToken =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      resolvedAuthToken !== undefined &&
-      resolvedAuthToken !== null &&
-      resolvedAuthToken !== '' &&
-      resolvedAuthToken !== false &&
-      resolvedAuthToken !== 0 &&
-      !(
-        typeof resolvedAuthToken === 'number' && Number.isNaN(resolvedAuthToken)
-      );
-    if (!hasResolvedAuthToken && targetProvider !== 'gemini') {
-      const providerInstance = this.providers.get(targetProvider);
-
-      interface ProviderWithWrapper {
-        wrappedProvider?: IProvider;
-      }
-      interface ProviderWithAuth {
-        getAuthToken?: () => Promise<string>;
-      }
-
-      let actualProvider: IProvider | undefined = providerInstance;
-      while (actualProvider && 'wrappedProvider' in actualProvider) {
-        actualProvider = (actualProvider as ProviderWithWrapper)
-          .wrappedProvider;
-      }
-
-      const canResolveAuth =
-        actualProvider !== undefined &&
-        'getAuthToken' in actualProvider &&
-        typeof (actualProvider as ProviderWithAuth).getAuthToken === 'function';
-
-      if (canResolveAuth === false) {
-        missingFields.push('authToken');
-      }
-    }
-
-    if (missingFields.length > 0) {
-      throw new ProviderRuntimeNormalizationError({
-        providerKey: 'ProviderManager',
-        message: `Incomplete runtime resolution (${missingFields.join(', ')}) for runtimeId=${runtimeId}`,
-        requirement: 'REQ-SP4-003',
-        runtimeId,
-        stage: 'normalizeRuntimeInputs',
-        metadata: { missingFields, provider: targetProvider },
-      });
-    }
-  }
-
-  /**
-   * REQ-SP4-005: Build final normalized options with runtime context.
-   */
-  private buildNormalizedOptions(
-    rawOptions: GenerateChatOptions,
-    settingsService: SettingsService,
-    config: Config,
-    resolved: Record<string, unknown>,
-    targetProvider: string,
-    runtimeId: string,
-  ): GenerateChatOptions {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-    const userMemory = rawOptions.userMemory ?? config.getUserMemory?.();
-    const metadata = {
-      ...rawOptions.metadata,
-      ...rawOptions.runtime?.metadata,
-      _normalized: true,
-      _normalizationTime: new Date().toISOString(),
-      _runtimeId: runtimeId,
-      _provider: targetProvider,
-    };
-
-    const normalizedRuntime: ProviderRuntimeContext = {
-      ...(rawOptions.runtime ?? {}),
-      settingsService,
-      config,
-      runtimeId,
-      metadata,
-    };
-
-    const userMemorySnapshot =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-      typeof userMemory === 'string' ? userMemory : config.getUserMemory?.();
-
-    const invocation =
-      rawOptions.invocation ??
-      createRuntimeInvocationContext({
-        runtime: normalizedRuntime,
-        settings: settingsService,
-        providerName: targetProvider,
-        ephemeralsSnapshot: this.buildEphemeralsSnapshot(
-          settingsService,
-          targetProvider,
-        ),
-        telemetry: resolved.telemetry as
-          | { runtimeId: string; normalizedAt: string; provider: string }
-          | undefined,
-        metadata,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-        userMemory: userMemorySnapshot ?? undefined,
-        fallbackRuntimeId: runtimeId,
-      });
-
-    return {
-      ...rawOptions,
-      settings: settingsService,
-      config,
-      runtime: normalizedRuntime,
-      resolved: resolved as GenerateChatOptions['resolved'],
-      userMemory,
-      metadata,
-      invocation,
-    };
-  }
-
-  private buildEphemeralsSnapshot(
-    settingsService: SettingsService,
-    providerName: string,
-  ): Record<string, unknown> {
-    const globalEphemerals = settingsService.getAllGlobalSettings();
-    const providerEphemerals =
-      settingsService.getProviderSettings(providerName);
-
-    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
-    // Filter out provider-config settings from global level
-    // These should only appear in provider-scoped sections
-    const snapshot: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(globalEphemerals)) {
-      if (!PROVIDER_CONFIG_KEYS.has(key)) {
-        snapshot[key] = value;
-      }
-    }
-    snapshot[providerName] = { ...providerEphemerals };
-    return snapshot;
   }
 
   /**
@@ -943,12 +417,21 @@ export class ProviderManager implements IProviderManager {
     this.providers.set(provider.name, finalProvider);
 
     // Capture provider capabilities
-    const capabilities = this.captureProviderCapabilities(provider);
+    const capabilities = this.capabilitiesService.captureProviderCapabilities(
+      provider,
+      this.settingsService,
+      this.config,
+    );
     this.providerCapabilities.set(provider.name, capabilities);
 
     // Log provider capability information if logging enabled
     if (this.config?.getConversationLoggingEnabled() === true) {
-      const context = this.createProviderContext(provider, capabilities);
+      const context = this.capabilitiesService.createProviderContext(
+        provider,
+        capabilities,
+        this.settingsService,
+        this.config,
+      );
       logProviderCapability(
         this.config,
         new ProviderCapabilityEvent(provider.name, capabilities, context),
@@ -957,15 +440,7 @@ export class ProviderManager implements IProviderManager {
 
     // If this is the default provider and no provider is active, set it as active
     const currentActiveProvider = this.settingsService.get('activeProvider');
-    const isActiveProviderAbsent =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      currentActiveProvider == null ||
-      currentActiveProvider === '' ||
-      currentActiveProvider === false ||
-      currentActiveProvider === 0 ||
-      (typeof currentActiveProvider === 'number' &&
-        Number.isNaN(currentActiveProvider));
-    if (provider.isDefault === true && isActiveProviderAbsent) {
+    if (provider.isDefault === true && isBlankValue(currentActiveProvider)) {
       this.settingsService.set('activeProvider', provider.name);
     }
 
@@ -1020,7 +495,10 @@ export class ProviderManager implements IProviderManager {
           previousProviderName,
           name,
           this.generateConversationId(),
-          this.isContextPreserved(previousProviderName, name),
+          this.capabilitiesService.isContextPreserved(
+            previousProviderName,
+            name,
+          ),
         ),
       );
     }
@@ -1057,8 +535,7 @@ export class ProviderManager implements IProviderManager {
     let resolvedName = activeProviderName;
 
     if (!resolvedName) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-      const preferredFromConfig = this.config?.getProvider?.();
+      const preferredFromConfig = this.config?.getProvider();
       if (preferredFromConfig && this.providers.has(preferredFromConfig)) {
         resolvedName = preferredFromConfig;
       } else if (this.providers.has('openai')) {
@@ -1102,79 +579,7 @@ export class ProviderManager implements IProviderManager {
       provider = this.getActiveProvider();
     }
 
-    // Step 1: Get models from provider (live API or fallback)
-    const baseModels = await provider.getModels();
-
-    // Step 2: Initialize registry if needed (non-blocking failure)
-    try {
-      await initializeModelRegistry();
-    } catch {
-      // Registry init failed - return unhydrated
-      logger.debug(
-        () =>
-          `[getAvailableModels] Registry init failed for provider: ${provider.name}`,
-      );
-      return baseModels.map((m) => ({ ...m, hydrated: false }));
-    }
-
-    // Step 3: Get modelsDevProviderIds for hydration lookup
-    const modelsDevProviderIds = getModelsDevProviderIds(provider.name);
-
-    // Step 4: If provider returned no models, fall back to registry-only models
-    if (baseModels.length === 0 && modelsDevProviderIds.length > 0) {
-      logger.debug(
-        () =>
-          `[getAvailableModels] Provider ${provider.name} returned 0 models, falling back to registry`,
-      );
-      const registry = getModelRegistry();
-      if (registry.isInitialized()) {
-        // Get models from registry for this provider (only those with tool support)
-        const registryModels: HydratedModel[] = [];
-        for (const providerId of modelsDevProviderIds) {
-          const providerModels = registry.getByProvider(providerId);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const rm of providerModels) {
-            // Only exclude models that explicitly disable tool support
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-            if (rm.capabilities?.toolCalling === false) continue;
-
-            registryModels.push({
-              id: rm.modelId,
-              name: rm.name,
-              provider: provider.name,
-              supportedToolFormats: [],
-              contextWindow: rm.contextWindow,
-              maxOutputTokens: rm.maxOutputTokens,
-              capabilities: rm.capabilities,
-              pricing: rm.pricing,
-              limits: rm.limits,
-              metadata: rm.metadata,
-              providerId: rm.providerId,
-              modelId: rm.modelId,
-              family: rm.family,
-              hydrated: true,
-            });
-          }
-        }
-        if (registryModels.length > 0) {
-          return registryModels;
-        }
-      }
-    }
-
-    logger.debug(
-      () =>
-        `[getAvailableModels] Hydrating ${baseModels.length} models for provider: ${provider.name} with modelsDevIds: ${JSON.stringify(modelsDevProviderIds)}`,
-    );
-
-    // Step 5: Hydrate with models.dev data
-    const hydratedModels = await hydrateModelsWithRegistry(
-      baseModels,
-      modelsDevProviderIds,
-    );
-
-    // Step 6: Filter to only models with tool support (required for CLI)
-    return hydratedModels.filter((m) => m.capabilities?.toolCalling !== false);
+    return resolveAvailableModels(provider);
   }
 
   listProviders(): string[] {
@@ -1225,171 +630,7 @@ export class ProviderManager implements IProviderManager {
   }
 
   private generateConversationId(): string {
-    // Generate unique conversation ID for session
     return `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  private isContextPreserved(
-    fromProvider: string,
-    toProvider: string,
-  ): boolean {
-    // Analyze whether context can be preserved between providers
-    const fromCapabilities = this.providerCapabilities.get(fromProvider);
-    const toCapabilities = this.providerCapabilities.get(toProvider);
-
-    if (!fromCapabilities || !toCapabilities) {
-      return false; // Can't analyze without capabilities
-    }
-
-    // Context is better preserved between providers with similar capabilities
-    const capabilityScore = this.calculateCapabilityCompatibility(
-      fromCapabilities,
-      toCapabilities,
-    );
-
-    // Context is considered preserved if compatibility is high
-    return capabilityScore > 0.7;
-  }
-
-  private getStoredModelName(provider: IProvider): string {
-    const providerSettings = this.settingsService.getProviderSettings(
-      provider.name,
-    );
-    const storedModel = providerSettings.model as string | undefined;
-    if (storedModel && typeof storedModel === 'string' && storedModel.trim()) {
-      return storedModel;
-    }
-
-    if (
-      this.config &&
-      typeof this.config.getProvider === 'function' &&
-      this.config.getProvider() === provider.name
-    ) {
-      const configModel = this.config.getModel();
-      if (configModel) {
-        return configModel;
-      }
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-    return provider.getDefaultModel?.() ?? '';
-  }
-
-  private captureProviderCapabilities(
-    provider: IProvider,
-  ): ProviderCapabilities {
-    const hints = PROVIDER_CAPABILITY_HINTS[provider.name] ?? {};
-
-    return {
-      supportsStreaming: true, // All current providers support streaming
-      supportsTools: provider.getServerTools().length > 0,
-      supportsVision: this.detectVisionSupport(provider),
-      maxTokens: this.getProviderMaxTokens(provider),
-      supportedFormats: this.getSupportedToolFormats(provider),
-      hasModelSelection: hints.hasModelSelection ?? true,
-      hasApiKeyConfig: hints.hasApiKeyConfig ?? true,
-      hasBaseUrlConfig: hints.hasBaseUrlConfig ?? true,
-      supportsPaidMode: typeof provider.isPaidMode === 'function',
-    };
-  }
-
-  private detectVisionSupport(provider: IProvider): boolean {
-    // Provider-specific vision detection logic
-    const model = this.getStoredModelName(provider).toLowerCase();
-    switch (provider.name) {
-      case 'gemini': {
-        return true;
-      }
-      case 'openai': {
-        return model.includes('vision') || model.includes('gpt-4');
-      }
-      case 'anthropic': {
-        return model.includes('claude-3');
-      }
-      default:
-        return false;
-    }
-  }
-
-  private getProviderMaxTokens(provider: IProvider): number {
-    const model = this.getStoredModelName(provider).toLowerCase();
-
-    switch (provider.name) {
-      case 'gemini':
-        if (model.includes('pro')) return 32768;
-        if (model.includes('flash')) return 8192;
-        return 8192;
-      case 'openai':
-        if (model.includes('gpt-4')) return 8192;
-        if (model.includes('gpt-3.5')) return 4096;
-        return 4096;
-      case 'anthropic':
-        if (model.includes('claude-3')) return 200000;
-        return 100000;
-      default:
-        return 4096;
-    }
-  }
-
-  private getSupportedToolFormats(provider: IProvider): string[] {
-    switch (provider.name) {
-      case 'gemini':
-        return ['function_calling', 'gemini_tools'];
-      case 'openai':
-        return ['function_calling', 'json_schema', 'hermes'];
-      case 'anthropic':
-        return ['xml_tools', 'anthropic_tools'];
-      default:
-        return [];
-    }
-  }
-
-  private createProviderContext(
-    provider: IProvider,
-    capabilities: ProviderCapabilities,
-  ): ProviderContext {
-    const providerSettings = this.settingsService.getProviderSettings(
-      provider.name,
-    );
-    const toolFormatSetting =
-      (providerSettings.toolFormat as string | undefined) ?? 'auto';
-    return {
-      providerName: provider.name,
-      currentModel: this.getStoredModelName(provider) || 'unknown',
-      toolFormat: toolFormatSetting,
-      isPaidMode: provider.isPaidMode?.() ?? false,
-      capabilities,
-      sessionStartTime: Date.now(),
-    };
-  }
-
-  private calculateCapabilityCompatibility(
-    from: ProviderCapabilities,
-    to: ProviderCapabilities,
-  ): number {
-    let score = 0;
-    let totalChecks = 0;
-
-    // Check tool support compatibility
-    totalChecks++;
-    if (from.supportsTools === to.supportsTools) score++;
-
-    // Check vision support compatibility
-    totalChecks++;
-    if (from.supportsVision === to.supportsVision) score++;
-
-    // Check streaming compatibility (all providers support streaming currently)
-    totalChecks++;
-    if (from.supportsStreaming === to.supportsStreaming) score++;
-
-    // Check tool format compatibility
-    totalChecks++;
-    const hasCommonFormats = from.supportedFormats.some((format) =>
-      to.supportedFormats.includes(format),
-    );
-    if (hasCommonFormats) score++;
-
-    return score / totalChecks;
   }
 
   /**
@@ -1407,100 +648,21 @@ export class ProviderManager implements IProviderManager {
       cacheWrites?: number | null;
     },
   ): void {
-    logger.debug(
-      () =>
-        `[ProviderManager.accumulateSessionTokens] Called with: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}, cacheReads===undefined: ${usage.cacheReads === undefined}, cacheWrites===undefined: ${usage.cacheWrites === undefined}`,
-    );
-
-    const inputTokens = Math.max(0, this._sanitizeTokenValue(usage.input));
-    const outputTokens = Math.max(0, this._sanitizeTokenValue(usage.output));
-    const toolTokens = Math.max(0, this._sanitizeTokenValue(usage.tool));
-    const thoughtTokens = Math.max(0, this._sanitizeTokenValue(usage.thought));
-
-    this.sessionTokenUsage.input += inputTokens;
-    this.sessionTokenUsage.output += outputTokens;
-
-    // For cache field: use the explicit cache value OR cacheReads if cache is 0
-    // This handles both Gemini (which uses cached_content_token_count) and
-    // Anthropic (which uses cache_read_input_tokens)
-    const cacheValue = Math.max(0, this._sanitizeTokenValue(usage.cache));
-    const cacheReadValue = Math.max(
-      0,
-      this._sanitizeTokenValue(usage.cacheReads),
-    );
-    const cacheTokens = cacheValue > 0 ? cacheValue : cacheReadValue;
-    this.sessionTokenUsage.cache += cacheTokens;
-
-    this.sessionTokenUsage.tool += toolTokens;
-    this.sessionTokenUsage.thought += thoughtTokens;
-    this.sessionTokenUsage.total +=
-      inputTokens + outputTokens + cacheTokens + toolTokens + thoughtTokens;
-
-    // Track cache reads/writes if provided
-    // Note: cacheWrites can be null (provider doesn't report) vs undefined (not in usage object)
-    if (usage.cacheReads !== undefined || usage.cacheWrites !== undefined) {
-      logger.debug(
-        () =>
-          `[ProviderManager.accumulateSessionTokens] Received cache usage: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`,
-      );
-      this.trackCacheUsage(
-        Math.max(0, this._sanitizeTokenValue(usage.cacheReads)),
-        usage.cacheWrites === null || usage.cacheWrites === undefined
-          ? null
-          : Math.max(0, this._sanitizeTokenValue(usage.cacheWrites)),
-      );
-    } else {
-      logger.debug(
-        () =>
-          `[ProviderManager.accumulateSessionTokens] No cache usage in this request`,
-      );
-    }
+    this.tokenUsageTracker.accumulateSessionTokens(providerName, usage);
   }
 
   /**
    * Reset session token usage counters
    */
   resetSessionTokenUsage(): void {
-    this.sessionTokenUsage = {
-      input: 0,
-      output: 0,
-      cache: 0,
-      tool: 0,
-      thought: 0,
-      total: 0,
-    };
+    this.tokenUsageTracker.resetSessionTokenUsage();
   }
 
   /**
    * Get current session token usage
    */
-  getSessionTokenUsage(): {
-    input: number;
-    output: number;
-    cache: number;
-    tool: number;
-    thought: number;
-    total: number;
-  } {
-    return {
-      input: this._sanitizeTokenValue(this.sessionTokenUsage.input),
-      output: this._sanitizeTokenValue(this.sessionTokenUsage.output),
-      cache: this._sanitizeTokenValue(this.sessionTokenUsage.cache),
-      tool: this._sanitizeTokenValue(this.sessionTokenUsage.tool),
-      thought: this._sanitizeTokenValue(this.sessionTokenUsage.thought),
-      total: this._sanitizeTokenValue(this.sessionTokenUsage.total),
-    };
-  }
-
-  /**
-   * Helper to sanitize token values: undefined/NaN → 0, finite numbers preserved.
-   * Preserves old `value || 0` runtime-boundary semantics without implicit truthiness.
-   */
-  private _sanitizeTokenValue(value: number | null | undefined): number {
-    if (value == null) return 0;
-    if (Object.is(value, -0)) return 0;
-    if (Number.isNaN(value)) return 0;
-    return value;
+  getSessionTokenUsage(): SessionTokenUsage {
+    return this.tokenUsageTracker.getSessionTokenUsage();
   }
 
   /**
@@ -1509,55 +671,14 @@ export class ProviderManager implements IProviderManager {
    * @param cacheWrites - Number of tokens written to cache, or null if provider doesn't report this
    */
   trackCacheUsage(cacheReads: number, cacheWrites: number | null): void {
-    logger.debug(
-      () =>
-        `[ProviderManager.trackCacheUsage] Called with cacheReads=${cacheReads}, cacheWrites=${cacheWrites}`,
-    );
-    if (cacheReads > 0) {
-      this.cacheStats.totalCacheReads += cacheReads;
-      this.cacheStats.requestsWithCacheHits++;
-      logger.debug(
-        () =>
-          `[ProviderManager.trackCacheUsage] Updated totalCacheReads to ${this.cacheStats.totalCacheReads}`,
-      );
-    }
-    // Only track cache writes if the provider reports them (not null)
-    if (cacheWrites !== null) {
-      // Initialize from null to 0 on first reported value
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional null check for initialization
-      if (this.cacheStats.totalCacheWrites === null) {
-        this.cacheStats.totalCacheWrites = 0;
-      }
-      this.cacheStats.totalCacheWrites += cacheWrites;
-      if (cacheWrites > 0) {
-        this.cacheStats.requestsWithCacheWrites++;
-      }
-      logger.debug(
-        () =>
-          `[ProviderManager.trackCacheUsage] Updated totalCacheWrites to ${this.cacheStats.totalCacheWrites}`,
-      );
-    }
-
-    // Recalculate hit rate
-    // Hit rate = cache reads / (cache reads + uncached input) * 100
-    const totalPromptTokens = this.sessionTokenUsage.input;
-    const totalInputTokens =
-      this.cacheStats.totalCacheReads + totalPromptTokens;
-    if (totalInputTokens > 0) {
-      this.cacheStats.hitRate =
-        (this.cacheStats.totalCacheReads / totalInputTokens) * 100;
-      logger.debug(
-        () =>
-          `[ProviderManager.trackCacheUsage] Updated hitRate to ${this.cacheStats.hitRate}% (cacheReads=${this.cacheStats.totalCacheReads}, uncachedInput=${totalPromptTokens}, total=${totalInputTokens})`,
-      );
-    }
+    this.tokenUsageTracker.trackCacheUsage(cacheReads, cacheWrites);
   }
 
   /**
    * Get cache statistics
    */
   getCacheStatistics(): CacheStatistics {
-    return { ...this.cacheStats };
+    return this.tokenUsageTracker.getCacheStatistics();
   }
 
   /**
@@ -1565,8 +686,7 @@ export class ProviderManager implements IProviderManager {
    * @plan PLAN-20250909-TOKTRACK
    */
   getProviderMetrics(providerName?: string) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-    const name = providerName ?? this.getActiveProvider()?.name;
+    const name = providerName ?? this.getActiveProviderName();
     if (!name) return null;
 
     const provider = this.providers.get(name);
@@ -1597,10 +717,7 @@ export class ProviderManager implements IProviderManager {
     providerName?: string,
   ): ProviderCapabilities | undefined {
     const name =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-      providerName ??
-      (this.settingsService.get('activeProvider') as string) ??
-      '';
+      providerName ?? (this.settingsService.get('activeProvider') as string);
     return this.providerCapabilities.get(name);
   }
 
@@ -1702,136 +819,6 @@ export class ProviderManager implements IProviderManager {
   }
 
   compareProviders(provider1: string, provider2: string): ProviderComparison {
-    const cap1 = this.providerCapabilities.get(provider1);
-    const cap2 = this.providerCapabilities.get(provider2);
-
-    if (!cap1 || !cap2) {
-      throw new Error('Cannot compare providers: capabilities not available');
-    }
-
-    return {
-      provider1,
-      provider2,
-      capabilities: {
-        [provider1]: cap1,
-        [provider2]: cap2,
-      },
-      compatibility: this.calculateCapabilityCompatibility(cap1, cap2),
-      recommendation: this.generateProviderRecommendation(
-        provider1,
-        provider2,
-        cap1,
-        cap2,
-      ),
-    };
-  }
-
-  private generateProviderRecommendation(
-    provider1: string,
-    provider2: string,
-    cap1: ProviderCapabilities,
-    cap2: ProviderCapabilities,
-  ): string {
-    if (cap1.maxTokens > cap2.maxTokens) {
-      return `${provider1} supports longer contexts (${cap1.maxTokens} vs ${cap2.maxTokens} tokens)`;
-    }
-
-    if (cap1.supportsVision && !cap2.supportsVision) {
-      return `${provider1} supports vision capabilities`;
-    }
-
-    if (cap1.supportedFormats.length > cap2.supportedFormats.length) {
-      return `${provider1} supports more tool formats`;
-    }
-
-    return 'Providers have similar capabilities';
-  }
-
-  private getBaseUrlFromProvider(
-    provider: IProvider | undefined,
-  ): string | undefined {
-    if (!provider) {
-      return undefined;
-    }
-
-    const visited = new Set<IProvider>();
-    let current: IProvider | undefined = provider;
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- preserve defensive runtime boundary guard despite current static types.
-    while (current != null) {
-      if (visited.has(current)) {
-        break;
-      }
-      visited.add(current);
-
-      const baseConfig = (
-        current as {
-          baseProviderConfig?: { baseURL?: string; baseUrl?: string };
-        }
-      ).baseProviderConfig;
-      if (baseConfig) {
-        const candidate =
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          typeof baseConfig.baseURL === 'string' &&
-          baseConfig.baseURL.trim() !== ''
-            ? baseConfig.baseURL.trim()
-            : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              typeof baseConfig.baseUrl === 'string' &&
-                baseConfig.baseUrl.trim() !== ''
-              ? baseConfig.baseUrl.trim()
-              : undefined;
-        if (candidate) {
-          return candidate;
-        }
-      }
-
-      const providerConfig = (
-        current as {
-          providerConfig?: { baseURL?: string; baseUrl?: string };
-        }
-      ).providerConfig;
-      if (providerConfig) {
-        const candidate =
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          typeof providerConfig.baseURL === 'string' &&
-          providerConfig.baseURL.trim() !== ''
-            ? providerConfig.baseURL.trim()
-            : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              typeof providerConfig.baseUrl === 'string' &&
-                providerConfig.baseUrl.trim() !== ''
-              ? providerConfig.baseUrl.trim()
-              : undefined;
-        if (candidate) {
-          return candidate;
-        }
-      }
-
-      const maybeHasBaseUrl = current as unknown as {
-        getBaseURL?: () => string | undefined;
-      };
-      if (typeof maybeHasBaseUrl.getBaseURL === 'function') {
-        try {
-          const reported = maybeHasBaseUrl.getBaseURL();
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (reported && reported.trim() !== '') {
-            return reported.trim();
-          }
-        } catch {
-          // ignore provider errors
-        }
-      }
-
-      const maybeWrapped = current as unknown as {
-        wrappedProvider?: IProvider;
-      };
-      if (maybeWrapped.wrappedProvider) {
-        current = maybeWrapped.wrappedProvider;
-        continue;
-      }
-
-      break;
-    }
-
-    return undefined;
+    return this.capabilitiesService.compareProviders(provider1, provider2);
   }
 }

@@ -441,7 +441,6 @@ export class StreamProcessor {
     const runtimeContext = this._buildRuntimeContext(
       baseRuntimeContext,
       params,
-      tools,
     );
 
     return { requestPayload, baseRuntimeContext, runtimeContext };
@@ -450,13 +449,15 @@ export class StreamProcessor {
   private _buildRuntimeContext(
     baseRuntimeContext: ProviderRuntimeContext,
     params: SendMessageParameters,
-    tools: unknown,
   ): ProviderRuntimeContext {
-    if (!params.config) return baseRuntimeContext;
+    if (!params.config?.abortSignal) return baseRuntimeContext;
     return {
       ...baseRuntimeContext,
-      config: { ...baseRuntimeContext.config, ...params.config, tools },
-    } as unknown as ProviderRuntimeContext;
+      metadata: {
+        ...(baseRuntimeContext.metadata ?? {}),
+        abortSignal: params.config.abortSignal,
+      },
+    };
   }
 
   private async _sendProviderRequest(

@@ -10,8 +10,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
-
 import { AsyncLocalStorage } from 'node:async_hooks';
 import * as os from 'node:os';
 import * as path from 'node:path';
