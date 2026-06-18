@@ -53,6 +53,7 @@ import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
 import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { parseBootstrapArgs } from './config/profileBootstrap.js';
+import { coerceDebugFlag } from './config/yargsOptions.js';
 import {
   dynamicSettingsRegistry,
   generateDynamicToolSettings,
@@ -399,14 +400,14 @@ export async function startInteractiveUI(
 }
 
 export async function main() {
-  // Handle debug mode as early as possible so that early logs are captured
+  // Handle debug mode as early as possible so that early logs are captured.
+  // Reuse the shared yargs coercion so the bootstrap path normalizes false-like
+  // values (false, 0, no, off) identically to the parsed `--debug` flag.
   const bootstrapParsed = parseBootstrapArgs();
-  const debugArg = bootstrapParsed.bootstrapArgs.debug;
-  const isDebugEnabled =
-    typeof debugArg === 'string'
-      ? debugArg.length > 0 &&
-        !['false', '0', 'no'].includes(debugArg.toLowerCase())
-      : debugArg === true;
+  const debugArg = coerceDebugFlag(
+    bootstrapParsed.bootstrapArgs.debug ?? undefined,
+  );
+  const isDebugEnabled = debugArg === true || typeof debugArg === 'string';
   if (isDebugEnabled) {
     const namespaces = typeof debugArg === 'string' ? debugArg : 'llxprt:*';
     ConfigurationManager.getInstance().setCliConfig({

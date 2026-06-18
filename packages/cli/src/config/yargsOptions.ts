@@ -13,6 +13,34 @@ import { OutputFormat } from '@vybestack/llxprt-code-core';
 import type { Options } from 'yargs';
 
 /**
+ * Normalizes the `--debug` flag value.
+ *
+ * `--debug` accepts an optional comma-separated namespace list (e.g.
+ * `--debug llxprt:core:*`). Yargs types the option as a string so the optional
+ * value can be captured, but a bare `--debug` must still resolve to boolean
+ * `true`, and explicit false-like values (`--debug=false`, `0`, `no`, `off`)
+ * must resolve to boolean `false`. Any other string is preserved as the
+ * namespace specifier and consumed downstream by the bootstrap debug parser.
+ */
+export function coerceDebugFlag(
+  value: string | boolean | undefined,
+): string | boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === '' || value === true) {
+    return true;
+  }
+  if (
+    typeof value === 'string' &&
+    ['false', '0', 'no', 'off'].includes(value.trim().toLowerCase())
+  ) {
+    return false;
+  }
+  return value;
+}
+
+/**
  * Options registered on the root command scope (accessible before subcommand dispatch).
  * These duplicate a subset of the inner-command options intentionally so that
  * `--provider`, `--key`, etc. are parseable during bootstrap arg scanning.
@@ -146,6 +174,7 @@ export const rootOptions: Record<string, Options> = {
   debug: {
     alias: 'd',
     type: 'string',
+    coerce: coerceDebugFlag,
     description:
       'Run in debug mode? (Optional: specify comma-separated namespaces, e.g., llxprt:core:*,llxprt:openai:*)',
   },
@@ -199,6 +228,7 @@ export const innerCommandOptions: Record<string, Options> = {
   debug: {
     alias: 'd',
     type: 'string',
+    coerce: coerceDebugFlag,
     description:
       'Run in debug mode? (Optional: specify comma-separated namespaces, e.g., llxprt:core:*,llxprt:openai:*)',
   },
