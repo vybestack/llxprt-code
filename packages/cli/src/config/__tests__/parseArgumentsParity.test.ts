@@ -273,6 +273,40 @@ describe('parseArgumentsParity: boolean defaults', () => {
     expect(argv.debug).toBe(true);
   });
 
+  it('-d short alias sets debug to true', async () => {
+    process.argv = ['node', 'script.js', '-d'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.debug).toBe(true);
+  });
+
+  it('--debug=<namespaces> preserves the namespace specifier string', async () => {
+    process.argv = [
+      'node',
+      'script.js',
+      '--debug=llxprt:core:*,llxprt:openai:*',
+    ];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.debug).toBe('llxprt:core:*,llxprt:openai:*');
+  });
+
+  it('--debug=false normalizes to boolean false', async () => {
+    process.argv = ['node', 'script.js', '--debug=false'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.debug).toBe(false);
+  });
+
+  it('--debug=0 normalizes to boolean false', async () => {
+    process.argv = ['node', 'script.js', '--debug=0'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.debug).toBe(false);
+  });
+
+  it('--debug=off normalizes to boolean false', async () => {
+    process.argv = ['node', 'script.js', '--debug=off'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.debug).toBe(false);
+  });
+
   it('--yolo defaults to false when not provided', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);

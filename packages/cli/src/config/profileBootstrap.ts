@@ -39,6 +39,7 @@ export interface BootstrapProfileArgs {
   keyNameOverride: string | null;
   baseurlOverride: string | null;
   setOverrides: string[] | null;
+  debug: string | boolean | null;
 }
 
 export interface RuntimeBootstrapMetadata {
@@ -116,6 +117,7 @@ function createEmptyBootstrapArgs(): BootstrapProfileArgs {
     keyNameOverride: null,
     baseurlOverride: null,
     setOverrides: null,
+    debug: null,
   };
 }
 
@@ -184,6 +186,10 @@ function applySimpleBootstrapFlag(
       return true;
     case '--baseurl':
       state.bootstrapArgs.baseurlOverride = consumed.value;
+      return true;
+    case '--debug':
+    case '-d':
+      state.bootstrapArgs.debug = consumed.value ?? true;
       return true;
     default:
       return false;
@@ -311,6 +317,7 @@ function logBootstrapArgs(
         keyNameOverride: bootstrapArgs.keyNameOverride,
         baseurlOverride: bootstrapArgs.baseurlOverride,
         setOverrides: bootstrapArgs.setOverrides,
+        debug: bootstrapArgs.debug,
       })}`,
   );
 }
