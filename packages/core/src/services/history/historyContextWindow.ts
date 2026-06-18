@@ -54,7 +54,9 @@ export async function summarizeOldHistory(
   keepRecentCount: number,
   summarizeFn: (contents: IContent[]) => Promise<IContent>,
 ): Promise<IContent[] | null> {
-  const keep = Math.max(0, keepRecentCount);
+  const keep = Number.isFinite(keepRecentCount)
+    ? Math.max(0, Math.floor(keepRecentCount))
+    : 0;
   if (history.length <= keep) {
     return null;
   }

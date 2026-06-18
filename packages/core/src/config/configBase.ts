@@ -23,6 +23,7 @@ import {
   normalizeShellReplacement,
 } from './configTypes.js';
 import { ConfigBaseCore } from './configBaseCore.js';
+import { normalizeMaxAsyncTasks } from './asyncTaskServices.js';
 
 export abstract class ConfigBase extends ConfigBaseCore {
   // Abstract methods implemented by Config subclass
@@ -213,15 +214,7 @@ export abstract class ConfigBase extends ConfigBaseCore {
     // @requirement REQ-ASYNC-012
     // Propagate task-max-async changes to AsyncTaskManager
     if (key === 'task-max-async') {
-      let normalizedValue: number;
-      if (typeof settingValue === 'number') {
-        normalizedValue = settingValue;
-      } else if (typeof settingValue === 'string') {
-        const parsed = parseInt(settingValue, 10);
-        normalizedValue = isNaN(parsed) ? 0 : parsed;
-      } else {
-        normalizedValue = 0;
-      }
+      const normalizedValue = normalizeMaxAsyncTasks(settingValue);
       const asyncTaskManager = this.getAsyncTaskManager();
       if (asyncTaskManager) {
         asyncTaskManager.setMaxAsyncTasks(normalizedValue);

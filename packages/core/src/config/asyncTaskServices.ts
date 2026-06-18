@@ -14,18 +14,25 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * Resolves the max-async setting from the settings service, defaulting to 5.
  */
-export function resolveMaxAsyncTasks(settingsService: SettingsService): number {
-  const raw = settingsService.get('task-max-async');
-  if (typeof raw === 'number' && Number.isFinite(raw)) {
-    return raw;
-  }
-  if (typeof raw === 'string') {
-    const parsed = Number.parseInt(raw, 10);
+export function normalizeMaxAsyncTasks(value: unknown, fallback = 5): number {
+  let normalized: number | undefined;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    normalized = value;
+  } else if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
     if (Number.isFinite(parsed)) {
-      return parsed;
+      normalized = parsed;
     }
   }
-  return 5;
+
+  if (normalized === -1 || (normalized !== undefined && normalized >= 1)) {
+    return normalized;
+  }
+  return fallback;
+}
+
+export function resolveMaxAsyncTasks(settingsService: SettingsService): number {
+  return normalizeMaxAsyncTasks(settingsService.get('task-max-async'));
 }
 
 /**
