@@ -1397,6 +1397,16 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off', // eslint-policy-allow-off: #2088 cross-package bridge
     },
   },
+  // Issue #2088: schemaValidator uses ajv subpath import (ajv/dist/2020.js)
+  // which is the only supported way to load draft-2020-12 per ajv docs.
+  // The `any` cast is required for ajv's ESM/CJS interop default resolution.
+  {
+    files: ['packages/tools/src/utils/schemaValidator.ts'],
+    rules: {
+      'import/no-internal-modules': 'off', // eslint-policy-allow-off: #2088 ajv subpath
+      '@typescript-eslint/no-explicit-any': 'off', // eslint-policy-allow-off: #2088 ajv interop
+    },
+  },
   {
     files: [
       'packages/tools/src/**/*.{test,spec}.{ts,tsx}',

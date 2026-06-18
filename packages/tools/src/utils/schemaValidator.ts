@@ -24,21 +24,12 @@
 // ajv v8 does not declare package "exports", so subpath imports like
 // "ajv/dist/2020" are the only supported way to pull in the draft-2020-12
 // build. See https://ajv.js.org/json-schema.html#draft-2020-12
-// We load it via createRequire assigned to a non-restricted name to avoid
-// the no-restricted-syntax rule, and construct the subpath at runtime to
-// avoid import/no-internal-modules.
-import { createRequire } from 'node:module';
+import Ajv2020Pkg from 'ajv/dist/2020.js';
 import AjvPkg from 'ajv';
 import type { ErrorObject } from 'ajv';
-const nodeRequire = createRequire(import.meta.url);
-const ajvSubpath = ['ajv', 'dist', '2020.js'].join('/');
-const Ajv2020Pkg = nodeRequire(ajvSubpath);
 // Ajv's ESM/CJS interop: default/namespace dual export.
-// nodeRequire returns an implicitly untyped binding, so .default access
-// stays implicit without an explicit `any` annotation.
-const Ajv2020Class = Ajv2020Pkg.default ?? Ajv2020Pkg;
-const AjvClass: typeof Ajv2020Class =
-  (AjvPkg as { default?: typeof Ajv2020Class }).default ?? AjvPkg;
+const Ajv2020Class = (Ajv2020Pkg as any).default ?? Ajv2020Pkg;
+const AjvClass = (AjvPkg as any).default ?? AjvPkg;
 
 /**
  * The JSON Schema draft-07 meta-schema, inlined verbatim from ajv's
