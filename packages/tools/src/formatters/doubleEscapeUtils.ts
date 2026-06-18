@@ -282,16 +282,18 @@ function isDecimalNumberString(value: string): boolean {
   // Split mantissa and optional exponent at 'e' or 'E'
   let mantissa = s;
   let expPart = '';
+  let hasExponent = false;
   for (let i = 0; i < s.length; i++) {
     if (s[i] === 'e' || s[i] === 'E') {
       mantissa = s.slice(0, i);
       expPart = s.slice(i + 1);
+      hasExponent = true;
       break;
     }
   }
 
   // Validate exponent: optional sign, then one or more digits
-  if (expPart.length > 0) {
+  if (hasExponent) {
     if (expPart[0] === '+' || expPart[0] === '-') expPart = expPart.slice(1);
     if (!allDigits(expPart)) return false;
   }
@@ -311,6 +313,7 @@ function isDecimalNumberString(value: string): boolean {
 }
 
 function allDigits(s: string): boolean {
+  if (s.length === 0) return false;
   for (let i = 0; i < s.length; i++) {
     if (s[i] < '0' || s[i] > '9') return false;
   }

@@ -16,7 +16,7 @@
  * was in packages/core/src/utils/schemaValidator.ts. It uses the `ajv`
  * package directly with zero core imports.
  *
- * Tool files (tools.ts, ripGrep.ts, todo-pause.ts) need schema validation
+ * Tool files (tools.ts, ripGrep.ts, and the pause tool) need schema validation
  * for their parameter schemas. Moving this utility into the tools package
  * eliminates the core dependency.
  */

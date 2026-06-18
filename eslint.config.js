@@ -1373,7 +1373,6 @@ export default tseslint.config(
       'packages/tools/src/tools/todo-*.ts',
       'packages/tools/src/utils/todo*.ts',
       'packages/tools/src/__tests__/todo-*.ts',
-      'packages/tools/src/utils/schemaValidator.ts',
     ],
     rules: {
       'sonarjs/todo-tag': 'off', // eslint-policy-allow-off: #2088 domain vocabulary
