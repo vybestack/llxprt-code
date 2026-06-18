@@ -46,9 +46,11 @@ export function levenshtein(a: string, b: string): number {
 }
 
 /**
- * Helper function to escape special regex characters
+ * Helper function to escape special regex characters.
+ * Single-pass mapper avoids double-escaping backslashes that earlier
+ * passes inserted (the prior reduce/split/join approach had this bug).
  */
-const SPECIAL_CHARS = [
+const SPECIAL_CHAR_SET = new Set([
   '.',
   '*',
   '+',
@@ -63,13 +65,15 @@ const SPECIAL_CHARS = [
   '[',
   ']',
   '\\',
-];
+]);
 
-const escapeRegExp = (str: string): string =>
-  SPECIAL_CHARS.reduce(
-    (escaped, char) => escaped.split(char).join(`\\${char}`),
-    str,
-  );
+const escapeRegExp = (str: string): string => {
+  let result = '';
+  for (const ch of str) {
+    result += SPECIAL_CHAR_SET.has(ch) ? '\\' + ch : ch;
+  }
+  return result;
+};
 
 const ESCAPE_SEQUENCE_PATTERN = /\\(n|t|r|'|"|`|\\|\$)/g;
 const ESCAPE_SEQUENCE_TEST_PATTERN = /\\(n|t|r|'|"|`|\\|\$)/;
