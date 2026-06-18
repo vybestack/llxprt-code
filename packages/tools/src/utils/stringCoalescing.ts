@@ -11,7 +11,7 @@
  * semantics of `??`.
  *
  * This keeps `@typescript-eslint/prefer-nullish-coalescing` satisfied without
- * resorting to inline `eslint-disable` comments.
+ * resorting to inline lint suppression comments.
  */
 export function stringOrDefault(
   value: string | undefined,
