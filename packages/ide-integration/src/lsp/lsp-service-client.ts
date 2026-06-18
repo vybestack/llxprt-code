@@ -2,17 +2,12 @@
 /* @requirement:REQ-ARCH-060, REQ-GRACE-020, REQ-GRACE-040 */
 /* pseudocode: project-plans/issue438/pseudocode/P30-lsp-service-client-functional.md */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import { spawn } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { once } from 'node:events';
 import { constants as fsConstants } from 'node:fs';
 import { access } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import { basename, dirname, join } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
-import { fileURLToPath } from 'node:url';
 import {
   createMessageConnection,
   StreamMessageReader,
@@ -20,36 +15,14 @@ import {
   type MessageConnection,
 } from 'vscode-jsonrpc/node.js';
 import type { Diagnostic, LspConfig, ServerStatus } from './types.js';
+import { normalizeServerStatus } from './lsp-status-normalizer.js';
+import { resolveLspEntry } from './lsp-entry-resolver.js';
 
 const READY_TIMEOUT_MS = 10_000;
 const SHUTDOWN_TIMEOUT_MS = 3_000;
 const SIGKILL_GRACE_MS = 2_000;
 
-export function normalizeServerStatus(raw: unknown): ServerStatus {
-  const obj = raw as Record<string, unknown>;
-  const serverId = String(obj.serverId ?? '');
-  const state = typeof obj.state === 'string' ? obj.state : undefined;
-  const status = typeof obj.status === 'string' ? obj.status : undefined;
-  const healthy =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    state === 'ok'
-      ? true
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        state === 'broken' || state === 'starting'
-        ? false
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          typeof obj.healthy === 'boolean'
-          ? obj.healthy
-          : false;
-
-  return {
-    serverId,
-    healthy,
-    detail: typeof obj.detail === 'string' ? obj.detail : (state ?? status),
-    state: state as ServerStatus['state'],
-    status,
-  };
-}
+export { normalizeServerStatus };
 
 export class LspServiceClient {
   private alive = false;
@@ -82,7 +55,7 @@ export class LspServiceClient {
       return;
     }
 
-    const lspEntry = await this.resolveLspEntry();
+    const lspEntry = await resolveLspEntry(this.pathIsReadable.bind(this));
     if (lspEntry === null) {
       this.disable(
         'LSP service entry not found. Install @vybestack/llxprt-code-lsp: npm install -g @vybestack/llxprt-code-lsp',
@@ -119,10 +92,12 @@ export class LspServiceClient {
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-      const request = this.connection.sendRequest('lsp/checkFile', {
-        filePath,
-      }) as Promise<Diagnostic[]>;
+      const request = this.connection.sendRequest<Diagnostic[]>(
+        'lsp/checkFile',
+        {
+          filePath,
+        },
+      );
       if (signal === undefined) {
         return await request;
       }
@@ -138,11 +113,9 @@ export class LspServiceClient {
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-      return (await this.connection.sendRequest('lsp/diagnostics')) as Record<
-        string,
-        Diagnostic[]
-      >;
+      return await this.connection.sendRequest<Record<string, Diagnostic[]>>(
+        'lsp/diagnostics',
+      );
     } catch {
       return {};
     }
@@ -162,10 +135,10 @@ export class LspServiceClient {
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-      const rawStatuses = (await this.connection.sendRequest(
-        'lsp/status',
-      )) as Array<Record<string, unknown>>;
+      const rawStatuses =
+        await this.connection.sendRequest<Array<Record<string, unknown>>>(
+          'lsp/status',
+        );
       return rawStatuses.map(normalizeServerStatus);
     } catch {
       return [];
@@ -273,99 +246,6 @@ export class LspServiceClient {
     return true;
   }
 
-  private async resolveLspEntry(): Promise<string | null> {
-    let lspEntry: string | null = null;
-
-    // Walks up from a resolved package path to find package.json, then probes
-    // src/main.ts (source tree) and dist/main.js (npm-published).
-    const resolveEntryFromPackagePath = async (
-      packagePath: string,
-    ): Promise<string | null> => {
-      let pkgRoot = dirname(packagePath);
-      while (pkgRoot !== dirname(pkgRoot)) {
-        if (await this.pathIsReadable(join(pkgRoot, 'package.json'))) {
-          break;
-        }
-        pkgRoot = dirname(pkgRoot);
-      }
-
-      const srcEntry = join(pkgRoot, 'src', 'main.ts');
-      if (await this.pathIsReadable(srcEntry)) return srcEntry;
-
-      const distEntry = join(pkgRoot, 'dist', 'main.js');
-      return (await this.pathIsReadable(distEntry)) ? distEntry : null;
-    };
-
-    const resolveImportMeta = (
-      import.meta as unknown as {
-        resolve?: (specifier: string) => string;
-      }
-    ).resolve;
-
-    if (typeof resolveImportMeta === 'function') {
-      try {
-        const packageUrl = resolveImportMeta('@vybestack/llxprt-code-lsp');
-        lspEntry = await resolveEntryFromPackagePath(fileURLToPath(packageUrl));
-      } catch (error) {
-        const err = error as { code?: string };
-        if (
-          err.code !== 'MODULE_NOT_FOUND' &&
-          err.code !== 'ERR_MODULE_NOT_FOUND'
-        ) {
-          throw error;
-        }
-      }
-    }
-
-    // Fallback for Node <20.6 where import.meta.resolve is unavailable
-    lspEntry ??= await this.resolveLspEntryViaCreateRequire(
-      resolveEntryFromPackagePath,
-    );
-
-    // Source-tree monorepo fallback (walks up to find packages/ directory)
-    lspEntry ??= await this.resolveLspEntryMonorepoFallback();
-
-    return lspEntry;
-  }
-
-  private async resolveLspEntryViaCreateRequire(
-    resolveEntryFromPackagePath: (pkgPath: string) => Promise<string | null>,
-  ): Promise<string | null> {
-    try {
-      const require = createRequire(import.meta.url);
-      const packagePath = require.resolve('@vybestack/llxprt-code-lsp');
-      return await resolveEntryFromPackagePath(packagePath);
-    } catch (error) {
-      const err = error as { code?: string };
-      if (
-        err.code !== 'MODULE_NOT_FOUND' &&
-        err.code !== 'ERR_MODULE_NOT_FOUND'
-      ) {
-        throw error;
-      }
-    }
-    return null;
-  }
-
-  private async resolveLspEntryMonorepoFallback(): Promise<string | null> {
-    let dir = dirname(fileURLToPath(import.meta.url));
-    let foundPackagesDir = false;
-    while (dir !== dirname(dir)) {
-      if (basename(dir) === 'packages') {
-        foundPackagesDir = true;
-        break;
-      }
-      dir = dirname(dir);
-    }
-    if (foundPackagesDir) {
-      const fallbackEntry = join(dir, 'lsp', 'src', 'main.ts');
-      if (await this.pathIsReadable(fallbackEntry)) {
-        return fallbackEntry;
-      }
-    }
-    return null;
-  }
-
   private launchLspProcess(
     bunPath: string,
     lspEntry: string,
@@ -390,13 +270,26 @@ export class LspServiceClient {
     });
 
     this.process = child;
+    this.connection = this.createConnection(child);
+    this.attachProcessLifecycleHandlers(child);
 
+    return { child, connection: this.connection };
+  }
+
+  private createConnection(
+    child: ChildProcessWithoutNullStreams,
+  ): MessageConnection {
     const connection = createMessageConnection(
       new StreamMessageReader(child.stdout),
       new StreamMessageWriter(child.stdin),
     );
     this.connection = connection;
+    return connection;
+  }
 
+  private attachProcessLifecycleHandlers(
+    child: ChildProcessWithoutNullStreams,
+  ): void {
     child.once('error', (error) => {
       this.alive = false;
       this.unavailableReason = error.message;
@@ -408,8 +301,6 @@ export class LspServiceClient {
       this.unavailableReason ??= `LSP service exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
       this.cleanupProcessState();
     });
-
-    return { child, connection };
   }
 
   private async resolveBunPath(): Promise<string | null> {

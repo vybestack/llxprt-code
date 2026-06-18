@@ -32,7 +32,7 @@ export interface CliArgs {
   sandboxImage: string | undefined;
   sandboxEngine: string | undefined;
   sandboxProfileLoad: string | undefined;
-  debug: boolean | undefined;
+  debug: boolean | string | undefined;
   prompt: string | undefined;
   promptInteractive: string | undefined;
   outputFormat: string | undefined;
@@ -153,7 +153,7 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     sandboxImage: result['sandboxImage'] as string | undefined,
     sandboxEngine: result['sandboxEngine'] as string | undefined,
     sandboxProfileLoad: result['sandboxProfileLoad'] as string | undefined,
-    debug: result['debug'] as boolean | undefined,
+    debug: result['debug'] as boolean | string | undefined,
     prompt:
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to queryFromPromptWords
       (result['prompt'] as string | undefined) ||

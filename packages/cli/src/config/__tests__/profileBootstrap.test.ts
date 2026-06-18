@@ -30,6 +30,7 @@ type BootstrapProfileArgs = {
   keyNameOverride: string | null;
   baseurlOverride: string | null;
   setOverrides: string[] | null;
+  debug: string | boolean | null;
 };
 
 type MockSettingsService = {
@@ -174,6 +175,7 @@ describe('profileBootstrap helpers', () => {
         keyNameOverride: null,
         baseurlOverride: null,
         setOverrides: null,
+        debug: null,
       },
       runtimeMetadata: {
         runtimeId: 'cli-runtime',
@@ -926,6 +928,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -964,6 +967,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1002,6 +1006,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1039,6 +1044,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1078,6 +1084,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1115,6 +1122,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1152,6 +1160,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1189,6 +1198,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1228,6 +1238,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     expect(() => {
@@ -1258,6 +1269,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     expect(() => {
@@ -1300,6 +1312,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1337,6 +1350,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1403,6 +1417,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1439,6 +1454,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1475,6 +1491,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1511,6 +1528,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1550,6 +1568,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     mockSettings.getProfile.mockReturnValue({
@@ -1591,6 +1610,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     mockSettings.getProfile.mockReturnValue({
@@ -1633,6 +1653,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     const parsed = parseArgsWithMeta(args, {
@@ -1668,6 +1689,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     mockSettings.getProfile.mockReturnValue({
@@ -1713,6 +1735,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     expect(() => {
@@ -1743,6 +1766,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     expect(() => {
@@ -1773,6 +1797,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     mockSettings.getProfile.mockReturnValue(null);
@@ -1813,6 +1838,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
+      debug: null,
     };
 
     expect(() => {

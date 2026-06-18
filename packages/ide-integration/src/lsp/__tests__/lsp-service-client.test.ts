@@ -257,8 +257,7 @@ describe('LspServiceClient unit contract', () => {
       (call) => call[0] !== 'which',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
-    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
     const env = spawnOptions.env as Record<string, unknown> | undefined;
     const bootstrapRaw = env?.LSP_BOOTSTRAP;
     expect(typeof bootstrapRaw).toBe('string');
@@ -278,8 +277,7 @@ describe('LspServiceClient unit contract', () => {
       (call) => call[0] !== 'which',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
-    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
     const env = spawnOptions.env as Record<string, unknown> | undefined;
     const bootstrapRaw = env?.LSP_BOOTSTRAP;
     expect(typeof bootstrapRaw).toBe('string');
@@ -302,8 +300,7 @@ describe('LspServiceClient unit contract', () => {
       (call) => call[0] !== 'which',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
-    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
     const env = spawnOptions.env as Record<string, unknown> | undefined;
     const bootstrapRaw = env?.LSP_BOOTSTRAP;
     expect(typeof bootstrapRaw).toBe('string');
@@ -322,8 +319,7 @@ describe('LspServiceClient unit contract', () => {
       (call) => call[0] !== 'which',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
-    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
     const env = spawnOptions.env as Record<string, unknown> | undefined;
     const bootstrapRaw = env?.LSP_BOOTSTRAP;
     expect(typeof bootstrapRaw).toBe('string');
@@ -347,8 +343,7 @@ describe('LspServiceClient unit contract', () => {
       (call) => call[0] !== 'which',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
-    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
     const env = spawnOptions.env as Record<string, unknown> | undefined;
     const bootstrapRaw = env?.LSP_BOOTSTRAP;
     expect(typeof bootstrapRaw).toBe('string');
@@ -373,8 +368,7 @@ describe('LspServiceClient unit contract', () => {
       (call) => call[0] !== 'which',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- spawn args are loosely typed
-    const spawnOptions = lspSpawnCalls[0]![2] as Record<string, unknown>;
+    const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
     const env = spawnOptions.env as Record<string, unknown> | undefined;
     const bootstrapRaw = env?.LSP_BOOTSTRAP;
     expect(typeof bootstrapRaw).toBe('string');

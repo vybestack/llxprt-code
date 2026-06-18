@@ -68,10 +68,8 @@ async function getProcessTableWindows(): Promise<Map<number, ProcessInfo>> {
             !Number.isNaN(p.ParentProcessId)
               ? p.ParentProcessId
               : 0,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional property
-          name: p.Name || '',
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional property
-          command: p.CommandLine || '',
+          name: p.Name ?? '',
+          command: p.CommandLine ?? '',
         });
       }
     }
@@ -117,6 +115,24 @@ async function getProcessInfo(pid: number): Promise<{
 }
 
 /**
+ * Resolves the grandparent PID of a shell process, falling back to the parent
+ * when the grandparent cannot be determined or is the init process.
+ */
+async function resolveIdePidFromShellParent(
+  parentPid: number,
+): Promise<number> {
+  try {
+    const { parentPid: grandParentPid } = await getProcessInfo(parentPid);
+    if (grandParentPid > 1) {
+      return grandParentPid;
+    }
+  } catch {
+    // Ignore if getting grandparent fails, we'll just use the parent pid.
+  }
+  return parentPid;
+}
+
+/**
  * Finds the IDE process info on Unix-like systems.
  *
  * The strategy is to find the shell process that spawned the CLI, and then
@@ -132,53 +148,57 @@ async function getIdeProcessInfoForUnix(): Promise<{
   const shells = ['zsh', 'bash', 'sh', 'tcsh', 'csh', 'ksh', 'fish', 'dash'];
   let currentPid = process.pid;
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < MAX_TRAVERSAL_DEPTH; i++) {
-    try {
-      const { parentPid, name, command } = await getProcessInfo(currentPid);
-
-      // Debug logging
-      if (process.env.DEBUG_PROCESS_TREE) {
-        debugLogger.error(
-          `[Process Tree] PID: ${currentPid}, Parent: ${parentPid}, Name: "${name}", Command: "${command}"`,
-        );
-      }
-
-      // Check if it's a shell (handle both 'zsh' and '/bin/zsh' formats)
-      const baseName = path.basename(name);
-      const isShell = shells.some(
-        (shell) => baseName === shell || name === shell,
+    const traversalResult = await traverseOnce(currentPid, shells);
+    if (traversalResult.kind === 'shell') {
+      const idePid = await resolveIdePidFromShellParent(
+        traversalResult.parentPid,
       );
-      if (isShell) {
-        // The direct parent of the shell is often a utility process (e.g. VS
-        // Code's `ptyhost` process). To get the true IDE process, we need to
-        // traverse one level higher to get the grandparent.
-        let idePid = parentPid;
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        try {
-          const { parentPid: grandParentPid } = await getProcessInfo(parentPid);
-          if (grandParentPid > 1) {
-            idePid = grandParentPid;
-          }
-        } catch {
-          // Ignore if getting grandparent fails, we'll just use the parent pid.
-        }
-        const { command } = await getProcessInfo(idePid);
-        return { pid: idePid, command };
-      }
-
-      if (parentPid <= 1) {
-        break; // Reached the root
-      }
-      currentPid = parentPid;
-    } catch {
-      // Process in chain died
+      const { command } = await getProcessInfo(idePid);
+      return { pid: idePid, command };
+    }
+    if (traversalResult.nextPid === currentPid) {
       break;
     }
+    currentPid = traversalResult.nextPid;
   }
 
   const { command } = await getProcessInfo(currentPid);
   return { pid: currentPid, command };
+}
+
+type TraversalStep =
+  | { kind: 'shell'; parentPid: number }
+  | { kind: 'continue'; nextPid: number };
+
+async function traverseOnce(
+  currentPid: number,
+  shells: string[],
+): Promise<TraversalStep> {
+  try {
+    const { parentPid, name, command } = await getProcessInfo(currentPid);
+
+    if (process.env.DEBUG_PROCESS_TREE) {
+      debugLogger.error(
+        `[Process Tree] PID: ${currentPid}, Parent: ${parentPid}, Name: "${name}", Command: "${command}"`,
+      );
+    }
+
+    const baseName = path.basename(name);
+    const isShell = shells.some(
+      (shell) => baseName === shell || name === shell,
+    );
+    if (isShell) {
+      return { kind: 'shell', parentPid };
+    }
+
+    if (parentPid <= 1) {
+      return { kind: 'continue', nextPid: currentPid };
+    }
+    return { kind: 'continue', nextPid: parentPid };
+  } catch {
+    return { kind: 'continue', nextPid: currentPid };
+  }
 }
 
 /**
