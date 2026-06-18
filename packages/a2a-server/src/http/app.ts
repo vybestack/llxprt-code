@@ -431,7 +431,7 @@ export async function main() {
     const server = expressApp.listen(port, () => {
       const address = server.address();
       let actualPort;
-      if (hasExplicitPort) {
+      if (hasExplicitPort && parsedPort !== 0) {
         actualPort = parsedPort;
       } else if (address !== null && typeof address !== 'string') {
         actualPort = address.port;
