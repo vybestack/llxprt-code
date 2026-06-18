@@ -474,7 +474,7 @@ export class PromptInstaller {
     await this.validatePermissions(expandedBaseDir, errors, warnings);
     if (errors.some((e) => e.includes('Cannot read'))) isValid = false;
 
-    await this.validateCoreIntegrity(
+    isValid = await this.validateCoreIntegrity(
       expandedBaseDir,
       errors,
       warnings,

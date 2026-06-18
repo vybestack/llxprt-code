@@ -16,7 +16,16 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
  */
 export function resolveMaxAsyncTasks(settingsService: SettingsService): number {
   const raw = settingsService.get('task-max-async');
-  return typeof raw === 'number' ? raw : 5;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw;
+  }
+  if (typeof raw === 'string') {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return 5;
 }
 
 /**

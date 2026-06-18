@@ -250,7 +250,7 @@ export class ContentConverters {
   private static isPlainObject(
     value: unknown,
   ): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null;
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
   /** Stringify a possibly-falsy value, falling back to empty string. */

@@ -106,12 +106,13 @@ export function sanitizeParamsWithLogger(
   params: unknown,
   logger: DebugLogger,
 ): unknown {
-  try {
-    return sanitizeParams(params);
-  } catch (error) {
-    logger.debug('Error sanitizing params:', error);
-    return {
-      _note: 'Parameters contained circular references and were sanitized',
-    };
+  const sanitized = sanitizeParams(params);
+  if (
+    typeof sanitized === 'object' &&
+    sanitized !== null &&
+    '_note' in sanitized
+  ) {
+    logger.debug('Parameters were sanitized due to serialization issues');
   }
+  return sanitized;
 }

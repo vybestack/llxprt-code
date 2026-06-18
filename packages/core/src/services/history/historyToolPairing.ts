@@ -96,9 +96,11 @@ export function findUnmatchedToolCalls(
   const seenToolCallIds = new Set<string>();
 
   const toolCalls = history.flatMap((content) =>
-    content.blocks.filter(
-      (block): block is ToolCallBlock => block.type === 'tool_call',
-    ),
+    hasValidBlocks(content)
+      ? content.blocks.filter(
+          (block): block is ToolCallBlock => block.type === 'tool_call',
+        )
+      : [],
   );
 
   for (const block of toolCalls) {

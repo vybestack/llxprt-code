@@ -66,7 +66,7 @@ function validateRemovalBounds(
   historyLength: number,
 ): void {
   for (const index of removals) {
-    if (index < 0 || index >= historyLength) {
+    if (!Number.isInteger(index) || index < 0 || index >= historyLength) {
       throw new CompressionStrategyError(
         `DensityResult removal index ${index} out of bounds [0, ${historyLength})`,
         'DENSITY_INDEX_OUT_OF_BOUNDS',
@@ -81,7 +81,7 @@ function validateReplacementBounds(
   historyLength: number,
 ): void {
   for (const index of replacements.keys()) {
-    if (index < 0 || index >= historyLength) {
+    if (!Number.isInteger(index) || index < 0 || index >= historyLength) {
       throw new CompressionStrategyError(
         `DensityResult replacement index ${index} out of bounds [0, ${historyLength})`,
         'DENSITY_INDEX_OUT_OF_BOUNDS',

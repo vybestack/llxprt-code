@@ -54,12 +54,13 @@ export async function summarizeOldHistory(
   keepRecentCount: number,
   summarizeFn: (contents: IContent[]) => Promise<IContent>,
 ): Promise<IContent[] | null> {
-  if (history.length <= keepRecentCount) {
+  const keep = Math.max(0, keepRecentCount);
+  if (history.length <= keep) {
     return null;
   }
 
-  const toSummarize = history.slice(0, -keepRecentCount);
-  const toKeep = history.slice(-keepRecentCount);
+  const toSummarize = keep === 0 ? [...history] : history.slice(0, -keep);
+  const toKeep = keep === 0 ? [] : history.slice(-keep);
 
   const summary = await summarizeFn(toSummarize);
   return [summary, ...toKeep];

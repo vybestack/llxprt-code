@@ -197,7 +197,7 @@ function isHashLlxprtNoOverwriteFlag(content: string): boolean {
 /** Check for `<!-- NO OVERWRITE -->` HTML comment anywhere in content. */
 function containsHtmlNoOverwriteFlag(content: string): boolean {
   const upper = content.toUpperCase();
-  const openIdx = upper.indexOf('<!--');
+  let openIdx = upper.indexOf('<!--');
   while (openIdx !== -1) {
     const closeIdx = upper.indexOf('-->', openIdx);
     if (closeIdx === -1) {
@@ -208,6 +208,7 @@ function containsHtmlNoOverwriteFlag(content: string): boolean {
     if (normalized === 'NO OVERWRITE') {
       return true;
     }
+    openIdx = upper.indexOf('<!--', closeIdx + 3);
   }
   return false;
 }
@@ -220,7 +221,6 @@ function keywordAfterPrefix(afterPrefix: string, keyword: string): boolean {
     if (!upper.startsWith(keyword.toUpperCase())) {
       return false;
     }
-    stripped.substring(keyword.length).replace(/^\s*/, '');
   }
   return checkNoOverwriteKeyword(stripped.slice(keyword.length));
 }

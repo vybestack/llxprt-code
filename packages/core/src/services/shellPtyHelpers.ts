@@ -153,13 +153,7 @@ export function serializeTerminalForRender(
   const serialized = serializeTerminalToObject(terminal);
   return (Array.isArray(serialized) ? serialized : [])
     .filter((line): line is AnsiLine => Array.isArray(line))
-    .map((line) =>
-      line.map((token) => {
-        token.fg = '';
-        token.bg = '';
-        return token;
-      }),
-    );
+    .map((line) => line.map((token) => ({ ...token, fg: '', bg: '' })));
 }
 
 /** Find the last non-empty line index in an AnsiOutput, capped by cursorY. */

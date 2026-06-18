@@ -6,7 +6,7 @@
 
 import * as path from 'node:path';
 import type { AvailableFile } from '../prompt-resolver.js';
-import { fileExists, isDirectory, readDirectory } from './fs-adapter.js';
+import { isDirectory, isRegularFile, readDirectory } from './fs-adapter.js';
 
 type FileType = 'core' | 'env' | 'tool';
 type FileSource = 'model' | 'provider' | 'base';
@@ -22,7 +22,8 @@ function addMarkdownFiles(
 ): void {
   const files = readDirectory(dirPath);
   for (const file of files) {
-    if (file.endsWith('.md')) {
+    const fullPath = path.join(dirPath, file);
+    if (file.endsWith('.md') && isRegularFile(fullPath)) {
       availableFiles.push({
         path: `${pathPrefix}/${file}`,
         type,
@@ -45,7 +46,7 @@ export function scanBaseDirectory(
 ): void {
   if (typeMatches(fileType, 'core')) {
     const corePath = path.join(baseDir, 'core.md');
-    if (fileExists(corePath)) {
+    if (isRegularFile(corePath)) {
       availableFiles.push({ path: 'core.md', type: 'core', source: 'base' });
     }
   }
@@ -103,7 +104,7 @@ export function scanProviderDirectory(
 
   if (typeMatches(fileType, 'core')) {
     const corePath = path.join(providerPath, 'core.md');
-    if (fileExists(corePath)) {
+    if (isRegularFile(corePath)) {
       availableFiles.push({
         path: `${basePath}/core.md`,
         type: 'core',
@@ -169,7 +170,7 @@ export function scanModelDirectory(
 
   if (typeMatches(fileType, 'core')) {
     const corePath = path.join(modelPath, 'core.md');
-    if (fileExists(corePath)) {
+    if (isRegularFile(corePath)) {
       availableFiles.push({
         path: `${basePath}/core.md`,
         type: 'core',

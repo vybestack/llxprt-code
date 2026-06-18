@@ -49,23 +49,38 @@ export function simpleTokenEstimateForText(text: string): number {
   return Math.round(Math.max(wordCount * 1.3, characterCount / 4));
 }
 
+/** Stringify a value for token fallback, returning fallback if serialization fails. */
+function safeJsonStringify(value: unknown, fallback: string): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return fallback;
+  }
+}
+
 /** Convert a content block to a string for fallback token estimation. */
 export function blockToTokenFallbackString(block: ContentBlock): string {
   switch (block.type) {
     case 'text':
       return block.text;
     case 'tool_call':
-      return JSON.stringify({
-        name: block.name,
-        parameters: block.parameters,
-      });
+      return safeJsonStringify(
+        {
+          name: block.name,
+          parameters: block.parameters,
+        },
+        `tool_call: ${block.name}`,
+      );
     case 'tool_response':
-      return JSON.stringify({
-        callId: block.callId,
-        toolName: block.toolName,
-        result: block.result,
-        error: block.error,
-      });
+      return safeJsonStringify(
+        {
+          callId: block.callId,
+          toolName: block.toolName,
+          result: block.result,
+          error: block.error,
+        },
+        `tool_response: ${block.toolName || 'unknown'}`,
+      );
     case 'thinking':
       return block.thought;
     case 'code':

@@ -471,7 +471,7 @@ function checkRequiredDirs(baseDir: string, warnings: string[]): void {
   const requiredDirs = ['env', 'tools'];
   for (const dir of requiredDirs) {
     const dirPath = path.join(baseDir, dir);
-    if (!fileExists(dirPath)) {
+    if (!isDirectory(dirPath)) {
       warnings.push(`Missing directory: ${dir}`);
     }
   }
@@ -480,7 +480,7 @@ function checkRequiredDirs(baseDir: string, warnings: string[]): void {
 /** Check for the core.md file, adding an error if missing. */
 function checkCoreFile(baseDir: string, errors: string[]): void {
   const corePath = path.join(baseDir, 'core.md');
-  if (!fileExists(corePath)) {
+  if (!isRegularFile(corePath)) {
     errors.push('Missing required core.md file');
   }
 }
@@ -489,7 +489,7 @@ function checkCoreFile(baseDir: string, errors: string[]): void {
 function checkCorePermissions(baseDir: string, errors: string[]): void {
   const corePath = path.join(baseDir, 'core.md');
   try {
-    if (fileExists(corePath)) {
+    if (isRegularFile(corePath)) {
       fs.accessSync(corePath, fs.constants.R_OK);
     }
   } catch {

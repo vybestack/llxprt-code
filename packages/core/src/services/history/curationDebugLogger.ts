@@ -185,8 +185,9 @@ export function computeStatistics(history: IContent[]): ConversationStatistics {
       }
     }
 
-    if (content.metadata?.usage) {
-      totalTokens += content.metadata.usage.totalTokens;
+    const usageTokens = content.metadata?.usage?.totalTokens;
+    if (typeof usageTokens === 'number' && Number.isFinite(usageTokens)) {
+      totalTokens += usageTokens;
       hasTokens = true;
     }
   }

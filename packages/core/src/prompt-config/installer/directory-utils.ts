@@ -187,6 +187,7 @@ export async function copyDirectory(
   onFile?: (filePath: string) => Promise<void>,
 ): Promise<void> {
   await fs.mkdir(dest, { recursive: true });
+  await fs.chmod(dest, 0o755);
 
   const entries = await fs.readdir(source, { withFileTypes: true });
 

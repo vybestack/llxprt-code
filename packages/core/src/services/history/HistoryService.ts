@@ -709,6 +709,7 @@ export class HistoryService
     );
     if (result) {
       this.history = result;
+      await this.recalculateTotalTokens();
     }
   }
 
