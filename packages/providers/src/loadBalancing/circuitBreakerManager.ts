@@ -43,10 +43,30 @@ export class CircuitBreakerManager {
       return this.maybeEnterHalfOpen(state, profileName, settings);
     }
 
-    // half-open: allow one attempt
-    return true;
+    return this.consumeHalfOpenProbe(state);
   }
 
+  canAttemptBackend(profileName: string): boolean {
+    const settings = this.getFailoverSettings();
+    if (!settings.circuitBreakerEnabled) {
+      return true;
+    }
+
+    const state = this.states.get(profileName);
+    if (!state || state.state === 'closed') {
+      return true;
+    }
+
+    if (state.state === 'half-open') {
+      return state.lastAttempt === undefined;
+    }
+
+    const openedAtRuntime: unknown = state.openedAt;
+    return (
+      typeof openedAtRuntime === 'number' &&
+      Date.now() - openedAtRuntime >= settings.circuitBreakerRecoveryTimeoutMs
+    );
+  }
   recordBackendSuccess(profileName: string): void {
     const state = this.states.get(profileName);
     if (state && state.state === 'half-open') {
@@ -101,10 +121,18 @@ export class CircuitBreakerManager {
       now - openedAtRuntime >= recoveryTimeout
     ) {
       state.state = 'half-open';
-      state.lastAttempt = now;
+      state.lastAttempt = undefined;
       this.logger.debug(
         () => `[circuit-breaker] ${profileName}: Testing recovery`,
       );
+      return this.consumeHalfOpenProbe(state);
+    }
+    return false;
+  }
+
+  private consumeHalfOpenProbe(state: CircuitBreakerState): boolean {
+    if (state.lastAttempt === undefined) {
+      state.lastAttempt = Date.now();
       return true;
     }
     return false;

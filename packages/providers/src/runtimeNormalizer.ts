@@ -35,6 +35,9 @@ const BASE_URL_OPTIONAL_PROVIDERS = new Set([
 interface ProviderWithWrapper {
   wrappedProvider?: IProvider;
 }
+
+const MAX_WRAPPED_PROVIDER_DEPTH = 25;
+
 interface ProviderWithAuth {
   getAuthToken?: () => Promise<string>;
 }
@@ -54,6 +57,36 @@ function hasResolvedAuthToken(value: unknown): boolean {
     return false;
   }
   return !(typeof value === 'number' && Number.isNaN(value));
+}
+
+function unwrapProvider(
+  provider: IProvider | undefined,
+): IProvider | undefined {
+  const visitedProviders = new Set<IProvider>();
+  let actualProvider = provider;
+  let depth = 0;
+  while (
+    actualProvider !== undefined &&
+    'wrappedProvider' in actualProvider &&
+    !visitedProviders.has(actualProvider) &&
+    depth < MAX_WRAPPED_PROVIDER_DEPTH
+  ) {
+    visitedProviders.add(actualProvider);
+    actualProvider = (actualProvider as ProviderWithWrapper).wrappedProvider;
+    depth += 1;
+  }
+
+  if (actualProvider !== undefined && visitedProviders.has(actualProvider)) {
+    return undefined;
+  }
+  if (
+    actualProvider !== undefined &&
+    'wrappedProvider' in actualProvider &&
+    depth >= MAX_WRAPPED_PROVIDER_DEPTH
+  ) {
+    return undefined;
+  }
+  return actualProvider;
 }
 
 export interface RuntimeNormalizerDeps {
@@ -386,10 +419,7 @@ function validateResolvedFields(
   ) {
     const providerInstance = deps.getProvider(targetProvider);
 
-    let actualProvider: IProvider | undefined = providerInstance;
-    while (actualProvider && 'wrappedProvider' in actualProvider) {
-      actualProvider = (actualProvider as ProviderWithWrapper).wrappedProvider;
-    }
+    const actualProvider = unwrapProvider(providerInstance);
 
     const canResolveAuth =
       actualProvider !== undefined &&

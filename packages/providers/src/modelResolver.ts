@@ -43,7 +43,9 @@ export async function resolveAvailableModels(
       () =>
         `[getAvailableModels] Registry init failed for provider: ${provider.name}`,
     );
-    return baseModels.map((m) => ({ ...m, hydrated: false }));
+    return baseModels
+      .filter((m) => m.supportedToolFormats.length > 0)
+      .map((m) => ({ ...m, hydrated: false }));
   }
 
   // Step 3: Get modelsDevProviderIds for hydration lookup

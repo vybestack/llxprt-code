@@ -69,6 +69,14 @@ export function extractSimpleContent(chunk: unknown): string {
     return '';
   }
 
+  const contentChunk = chunk as Partial<IContent>;
+  if (Array.isArray(contentChunk.blocks)) {
+    return contentChunk.blocks
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('');
+  }
+
   const obj = chunk as Record<string, unknown>;
 
   // Try common content paths

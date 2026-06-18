@@ -9,6 +9,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
+import type { CircuitBreakerState } from '../LoadBalancingProvider.js';
 import {
   clearActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
@@ -19,6 +20,8 @@ import {
   isImmediateFailoverError,
   shouldFailover,
 } from '../loadBalancing/failoverSettings.js';
+import { CircuitBreakerManager } from '../loadBalancing/circuitBreakerManager.js';
+import { buildExtendedStats } from '../loadBalancing/statsBuilder.js';
 import {
   isTimeoutError,
   wrapWithTimeout,
@@ -28,10 +31,12 @@ import { ProviderCapabilitiesService } from '../providerCapabilitiesService.js';
 import { normalizeRuntimeInputs } from '../runtimeNormalizer.js';
 import { buildRoundRobinResolvedOptions } from '../loadBalancing/resolvedOptionsBuilder.js';
 import { BackendMetricsCollector } from '../loadBalancing/backendMetrics.js';
+import { ConfigBasedRedactor } from '../logging/ConfigBasedRedactor.js';
 import {
   normalizeChatCompletionOptions,
   ensureRuntimeContext,
 } from '../logging/optionsNormalizer.js';
+import { extractSimpleContent } from '../logging/streamChunkUtils.js';
 import { accumulateTokenUsage } from '../logging/tokenAccumulator.js';
 import { extractTokenCountsFromResponse } from '../logging/tokenCounts.js';
 import {
@@ -96,10 +101,53 @@ describe('extracted provider helper behavior', () => {
     expect(shouldFailover(statusError(502), custom)).toBe(false);
   });
 
-  it('preserves first-chunk timeout behavior and timeout identification', async () => {
+  it('gates half-open probes and returns immutable circuit-breaker snapshots', () => {
+    const states = new Map<string, CircuitBreakerState>();
+    const manager = new CircuitBreakerManager(
+      states,
+      debugLoggerStub(),
+      () => ({
+        retryCount: 1,
+        retryDelayMs: 0,
+        failoverStatusCodes: [500],
+        failoverOnNetworkErrors: true,
+        circuitBreakerEnabled: true,
+        circuitBreakerFailureThreshold: 1,
+        circuitBreakerFailureWindowMs: 1000,
+        circuitBreakerRecoveryTimeoutMs: 0,
+      }),
+    );
+
+    manager.recordBackendFailure('primary', new Error('boom'));
+    expect(manager.isBackendHealthy('primary')).toBe(true);
+    expect(manager.isBackendHealthy('primary')).toBe(false);
+
+    const stats = buildExtendedStats(
+      'lb',
+      1,
+      'primary',
+      new Map(),
+      states,
+      new Map(),
+      [{ name: 'primary' }],
+      () => 0,
+    );
+    const snapshot = stats.circuitBreakerStates.primary;
+    expect(snapshot.state).toBe('half-open');
+    snapshot.failures.push({ timestamp: 1, error: new Error('mutated') });
+    const primaryState = states.get('primary') as CircuitBreakerState;
+    expect(primaryState.failures).toHaveLength(1);
+  });
+
+  it('preserves first-chunk timeout behavior and cancels timed-out iterators', async () => {
+    let closed = false;
     async function* delayedFirstChunk(): AsyncIterableIterator<IContent> {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'late' }] };
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'late' }] };
+      } finally {
+        closed = true;
+      }
     }
 
     await expect(
@@ -112,6 +160,7 @@ describe('extracted provider helper behavior', () => {
         ),
       ),
     ).rejects.toThrow('Request timeout after 1ms');
+    expect(closed).toBe(true);
     expect(isTimeoutError(new Error('Request timeout after 1ms'))).toBe(true);
   });
 
@@ -198,6 +247,7 @@ describe('extracted provider helper behavior', () => {
       output_token_count: 3,
       cached_content_token_count: 4,
       cache_read_input_tokens: 5,
+      cache_creation_input_tokens: null,
     });
     expect(accumulateSessionTokens).toHaveBeenCalledWith(
       'provider-a',
@@ -208,6 +258,41 @@ describe('extracted provider helper behavior', () => {
         cacheReads: 5,
       }),
     );
+  });
+
+  it('redacts URLs/custom patterns and extracts text from IContent chunks', () => {
+    const redactor = new ConfigBasedRedactor({
+      redactApiKeys: false,
+      redactCredentials: false,
+      redactFilePaths: false,
+      redactUrls: true,
+      redactEmails: false,
+      redactPersonalInfo: false,
+      customPatterns: [
+        {
+          name: 'ticket',
+          pattern: /SECRET-[0-9]+/g,
+          replacement: '[REDACTED-CUSTOM]',
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(
+      redactor.redactResponseContent(
+        'visit https://example.test/path and SECRET-123',
+        'provider-a',
+      ),
+    ).toBe('visit [REDACTED-URL] and [REDACTED-CUSTOM]');
+    expect(
+      extractSimpleContent({
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'hello ' },
+          { type: 'text', text: 'world' },
+        ],
+      }),
+    ).toBe('hello world');
   });
 
   it('preserves runtime identity fallback ordering', () => {
@@ -342,6 +427,43 @@ describe('extracted provider helper behavior', () => {
         'base-url': 'https://settings.example.test',
       },
     });
+  });
+
+  it('fails closed instead of looping on cyclic wrapped-provider chains', () => {
+    const settingsService = new SettingsService();
+    settingsService.setProviderSetting('provider-a', 'model', 'settings-model');
+    settingsService.setProviderSetting(
+      'provider-a',
+      'base-url',
+      'https://settings.example.test',
+    );
+    const config = {
+      getModel: () => 'config-model',
+      getEphemeralSetting: () => undefined,
+      getSettingsService: () => settingsService,
+    } as unknown as Config;
+    const cyclicProvider = providerStub({ name: 'wrapper' }) as IProvider & {
+      wrappedProvider?: IProvider;
+    };
+    cyclicProvider.wrappedProvider = cyclicProvider;
+
+    expect(() =>
+      normalizeRuntimeInputs(
+        {
+          contents: [],
+          runtime: {
+            settingsService,
+            config,
+            runtimeId: 'runtime-a',
+            metadata: {},
+          },
+        },
+        {
+          getActiveProviderName: () => 'provider-a',
+          getProvider: () => cyclicProvider,
+        },
+      ),
+    ).toThrow(/authToken/);
   });
 
   it('preserves load-balancer resolved delegate option construction', () => {

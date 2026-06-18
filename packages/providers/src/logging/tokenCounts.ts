@@ -100,7 +100,7 @@ export function extractTokenCountsFromResponse(response: unknown): TokenCounts {
   let thoughts_token_count = 0;
   let tool_token_count = 0;
   let cache_read_input_tokens = 0;
-  let cache_creation_input_tokens: number | null = 0;
+  let cache_creation_input_tokens: number | null = null;
 
   try {
     if (typeof response === 'string') {
@@ -159,6 +159,7 @@ function extractUsageNumbers(usage: Record<string, unknown>): TokenCounts {
     const n = Number(v);
     return !isNaN(n) && n !== 0 ? n : 0;
   };
+  const hasCacheWriteData = usage.cache_creation_input_tokens !== undefined;
   return {
     input_token_count: safeNum(usage.prompt_tokens),
     output_token_count: safeNum(usage.completion_tokens),
@@ -166,7 +167,9 @@ function extractUsageNumbers(usage: Record<string, unknown>): TokenCounts {
     thoughts_token_count: safeNum(usage.thoughts_tokens),
     tool_token_count: safeNum(usage.tool_tokens),
     cache_read_input_tokens: safeNum(usage.cache_read_input_tokens),
-    cache_creation_input_tokens: safeNum(usage.cache_creation_input_tokens),
+    cache_creation_input_tokens: hasCacheWriteData
+      ? safeNum(usage.cache_creation_input_tokens)
+      : null,
   };
 }
 
@@ -218,6 +221,6 @@ function zeroTokenCounts(): TokenCounts {
     thoughts_token_count: 0,
     tool_token_count: 0,
     cache_read_input_tokens: 0,
-    cache_creation_input_tokens: 0,
+    cache_creation_input_tokens: null,
   };
 }

@@ -89,6 +89,7 @@ export class LoggingProviderWrapper implements IProvider {
   private conversationId: string;
   private turnNumber: number = 0;
   private redactor: ConversationDataRedactor | null = null;
+  private readonly injectedRedactor: ConversationDataRedactor | null = null;
   private performanceTracker: ProviderPerformanceTracker;
   private runtimeContextResolver?: () => ProviderRuntimeContext;
   private statelessRuntimeMetadata: Record<string, unknown> | null = null;
@@ -116,6 +117,7 @@ export class LoggingProviderWrapper implements IProvider {
     // New usage should NOT pass config here - config comes per-call.
     if (configOrRedactor && 'redactMessage' in configOrRedactor) {
       this.redactor = configOrRedactor;
+      this.injectedRedactor = configOrRedactor;
     } else if (
       configOrRedactor &&
       'getConversationLoggingEnabled' in configOrRedactor
@@ -126,6 +128,7 @@ export class LoggingProviderWrapper implements IProvider {
 
     if (injectedRedactor) {
       this.redactor = injectedRedactor;
+      this.injectedRedactor = injectedRedactor;
     }
 
     this.performanceTracker = new ProviderPerformanceTracker(wrapped.name);
@@ -307,13 +310,20 @@ export class LoggingProviderWrapper implements IProvider {
     activeConfig: Config,
   ): void {
     const invocation = normalizedOptions.invocation;
+    if (this.injectedRedactor) {
+      this.redactor = this.injectedRedactor;
+      this.debug.log(
+        () => `After redactor setup: hasRedactor=${!!this.redactor}`,
+      );
+      return;
+    }
 
     if (invocation?.redaction) {
       this.redactor = new ConfigBasedRedactor({
         ...invocation.redaction,
       });
     } else {
-      this.redactor ??= new ConfigBasedRedactor(
+      this.redactor = new ConfigBasedRedactor(
         activeConfig.getRedactionConfig(),
       );
     }

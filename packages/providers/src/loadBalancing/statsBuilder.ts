@@ -63,7 +63,10 @@ function collectCircuitBreakerStates(
 ): Record<string, CircuitBreakerState> {
   const snapshot: Record<string, CircuitBreakerState> = {};
   for (const [name, state] of circuitBreakerStates) {
-    snapshot[name] = { ...state };
+    snapshot[name] = {
+      ...state,
+      failures: state.failures.map((failure) => ({ ...failure })),
+    };
   }
   return snapshot;
 }

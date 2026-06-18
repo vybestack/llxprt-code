@@ -61,9 +61,10 @@ export async function* wrapWithTimeout(
       yield chunk;
     }
   } catch (error) {
-    if (timeoutHandle) {
+    if (timeoutHandle !== undefined) {
       clearTimeout(timeoutHandle);
     }
+    await iterator.return?.();
     logger.debug(
       () =>
         `[LB:timeout] ${profileName}: Request timed out after ${timeoutMs}ms`,

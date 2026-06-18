@@ -618,6 +618,9 @@ export class LoadBalancingProvider implements IProvider {
     return this.circuitBreaker.isBackendHealthy(profileName);
   }
 
+  private canAttemptBackend(profileName: string): boolean {
+    return this.circuitBreaker.canAttemptBackend(profileName);
+  }
   private recordBackendSuccess(profileName: string): void {
     this.circuitBreaker.recordBackendSuccess(profileName);
   }
@@ -780,7 +783,7 @@ export class LoadBalancingProvider implements IProvider {
     if (settings.circuitBreakerEnabled) {
       const allUnhealthy = this.config.subProfiles
         .slice(0, numProfiles)
-        .every((sp) => !this.isBackendHealthy(sp.name));
+        .every((sp) => !this.canAttemptBackend(sp.name));
       if (allUnhealthy) {
         throw new Error(
           'All backends are currently unhealthy (circuit breakers open). Please wait for recovery or check backend configurations.',

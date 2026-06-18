@@ -366,6 +366,23 @@ function redactCreditCardNumbers(content: string): string {
   return redacted;
 }
 
+function redactUrls(content: string): string {
+  return content.replace(/https?:\/\/[^\s"']+/g, '[REDACTED-URL]');
+}
+
+function applyCustomPatterns(
+  content: string,
+  patterns: RedactionConfig['customPatterns'],
+): string {
+  let redacted = content;
+  for (const pattern of patterns ?? []) {
+    if (pattern.enabled) {
+      redacted = redacted.replace(pattern.pattern, pattern.replacement);
+    }
+  }
+  return redacted;
+}
+
 function isEmailLikeToken(token: string): boolean {
   const atIndex = token.indexOf('@');
   return (
@@ -406,15 +423,18 @@ export class ConfigBasedRedactor implements ConversationDataRedactor {
           text: this.redactContent(block.text, providerName),
         };
       } else if (block.type === 'tool_call') {
-        // For tool calls, we'll redact the parameters as JSON strings then parse back
         const redactedParams = this.redactContent(
           JSON.stringify(block.parameters),
           providerName,
         );
-        return {
-          ...block,
-          parameters: JSON.parse(redactedParams),
-        };
+        try {
+          return {
+            ...block,
+            parameters: JSON.parse(redactedParams),
+          };
+        } catch {
+          return block;
+        }
       }
       return block;
     });
@@ -458,7 +478,11 @@ export class ConfigBasedRedactor implements ConversationDataRedactor {
       return true;
     }
 
-    return cfg.redactUrls || cfg.redactEmails || cfg.redactPersonalInfo;
+    if (cfg.redactUrls || cfg.redactEmails || cfg.redactPersonalInfo) {
+      return true;
+    }
+
+    return (cfg.customPatterns ?? []).some((pattern) => pattern.enabled);
   }
 
   private redactContent(content: string, _providerName: string): string {
@@ -511,6 +535,10 @@ export class ConfigBasedRedactor implements ConversationDataRedactor {
       );
     }
 
+    if (this.redactionConfig.redactUrls) {
+      redacted = redactUrls(redacted);
+    }
+
     // Apply email redaction if enabled
     if (this.redactionConfig.redactEmails) {
       redacted = redactEmailAddresses(redacted);
@@ -526,6 +554,10 @@ export class ConfigBasedRedactor implements ConversationDataRedactor {
       redacted = redactCreditCardNumbers(redacted);
     }
 
+    redacted = applyCustomPatterns(
+      redacted,
+      this.redactionConfig.customPatterns,
+    );
     return redacted;
   }
 }
