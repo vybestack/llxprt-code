@@ -163,7 +163,7 @@ const legacyDirectiveCleanupScopes = [
   'packages/storage/src/**/*.{ts,tsx}', // #2092
   // #2089 scope: the six target packages (mcp/auth/settings/telemetry/
   // ide-integration/a2a-server) still contain other files with legacy
-  // eslint-disable directives. Those packages are kept in legacy scope so
+  // inline lint directives. Those packages are kept in legacy scope so
   // existing directives do not break lint. The target files and extracted
   // modules are locked in completedDirectiveCleanupScopes below, which
   // overrides this block for those specific files.
@@ -229,8 +229,8 @@ const completedDirectiveCleanupScopes = [
   'packages/core/src/prompt-config/resolver/**/*.{ts,tsx}', // #2082
   'packages/core/src/runtime/runtimeStateFactory.ts', // #2082
   // #2089 scope — six target files and their extracted modules are fully
-  // compliant: zero inline eslint-disable directives. Locked to error so
-  // any new directive fails immediately.
+  // compliant: zero inline lint directives. Locked to error so any new
+  // directive fails immediately.
   'packages/a2a-server/src/agent/task.ts', // #2089
   'packages/a2a-server/src/agent/task-runtime-helpers.ts', // #2089
   'packages/a2a-server/src/agent/task-support.ts', // #2089
