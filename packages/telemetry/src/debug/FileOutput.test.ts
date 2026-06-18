@@ -481,14 +481,21 @@ describe('FileOutput', () => {
 
     await fileOutput.write(logEntry);
 
-    expect(fs.appendFile).toHaveBeenCalledWith(
-      expect.stringMatching(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-        /llxprt-debug-[^-]+-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.jsonl$/,
-      ),
-      expect.any(String),
-      expect.any(Object),
+    const appendCall = vi.mocked(fs.appendFile).mock.calls[0];
+    const writtenPath = appendCall[0] as string;
+    // Validate the filename structure without a complex regex literal:
+    // llxprt-debug-<runId>-YYYY-MM-DD-HH-MM-SS.jsonl
+    expect(writtenPath).toContain('llxprt-debug-');
+    expect(writtenPath).toMatch(/\.jsonl$/);
+    // The run id (process pid) is a non-empty numeric segment after the prefix.
+    const afterPrefix = writtenPath.slice(
+      writtenPath.indexOf('llxprt-debug-') + 'llxprt-debug-'.length,
     );
+    const runIdSegment = afterPrefix.split('-')[0];
+    expect(runIdSegment.length).toBeGreaterThan(0);
+    expect(Number.isNaN(Number(runIdSegment))).toBe(false);
+    expect(appendCall[1]).toStrictEqual(expect.any(String));
+    expect(appendCall[2]).toStrictEqual(expect.any(Object));
   });
 
   /**

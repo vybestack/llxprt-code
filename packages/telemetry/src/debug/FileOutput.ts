@@ -15,6 +15,15 @@ interface QueuedEntry {
 
 const LOG_FILE_DATE_LENGTH = 10;
 
+function firstNonEmpty(...values: Array<string | undefined>): string {
+  for (const value of values) {
+    if (value !== undefined && value !== '') {
+      return value;
+    }
+  }
+  return values[values.length - 1] ?? '';
+}
+
 export class FileOutput {
   private static instance: FileOutput | undefined;
   private debugDir: string;
@@ -35,12 +44,12 @@ export class FileOutput {
     this.debugDir = home
       ? join(home, LLXPRT_DIR, 'debug')
       : join(process.cwd(), LLXPRT_DIR, 'debug');
-    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env vars may be empty strings, fall through to pid */
-    this.debugRunId =
-      process.env.LLXPRT_DEBUG_RUN_ID ||
-      process.env.LLXPRT_DEBUG_SESSION_ID ||
-      String(process.pid);
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    // Env vars may be empty strings; fall through to pid.
+    this.debugRunId = firstNonEmpty(
+      process.env.LLXPRT_DEBUG_RUN_ID,
+      process.env.LLXPRT_DEBUG_SESSION_ID,
+      String(process.pid),
+    );
     this.currentLogFile = this.generateLogFileName();
   }
 

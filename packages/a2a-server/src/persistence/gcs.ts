@@ -23,6 +23,19 @@ type ObjectType = 'metadata' | 'workspace';
 const getTmpArchiveFilename = (taskId: string): string =>
   `task-${taskId}-workspace-${uuidv4()}.tar.gz`;
 
+async function cleanupTempArchive(tmpArchiveFile: string): Promise<void> {
+  try {
+    if (await fse.pathExists(tmpArchiveFile)) {
+      await fse.remove(tmpArchiveFile);
+    }
+  } catch (removeError) {
+    logger.warn(
+      `Failed to clean up temporary archive ${tmpArchiveFile}:`,
+      removeError,
+    );
+  }
+}
+
 // Validate the taskId to prevent path traversal attacks by ensuring it only contains safe characters.
 const isTaskIdValid = (taskId: string): boolean => {
   // Allow only alphanumeric characters, dashes, and underscores, and ensure it's not empty.
@@ -303,10 +316,7 @@ export class GCSTaskStore implements TaskStore {
             `Task ${taskId} workspace restored from GCS to ${workDir}`,
           );
         } finally {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (await fse.pathExists(tmpArchiveFile)) {
-            await fse.remove(tmpArchiveFile);
-          }
+          await cleanupTempArchive(tmpArchiveFile);
         }
       } else {
         logger.info(`Task ${taskId} workspace archive not found in GCS.`);

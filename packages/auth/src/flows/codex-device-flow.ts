@@ -46,6 +46,25 @@ const JwtPayloadSchema = z.object({
 });
 
 /**
+ * Resolves the account_id from JWT claims, preferring the OpenAI-specific
+ * chatgpt_account_id, then the nested account_id, then the root account_id.
+ * Empty-string values are treated as absent.
+ */
+function resolveAccountId(
+  chatgptAccountId: string | undefined,
+  nestedAccountId: string | undefined,
+  rootAccountId: string | undefined,
+): string | undefined {
+  if (chatgptAccountId !== '' && chatgptAccountId !== undefined) {
+    return chatgptAccountId;
+  }
+  if (nestedAccountId !== '' && nestedAccountId !== undefined) {
+    return nestedAccountId;
+  }
+  return rootAccountId;
+}
+
+/**
  * Codex OAuth PKCE flow implementation
  * Implements OAuth 2.0 Authorization Code flow with PKCE for Codex authentication
  */
@@ -338,13 +357,14 @@ export class CodexDeviceFlow {
     const parsedPayload: unknown = JSON.parse(decoded);
     const validated = JwtPayloadSchema.parse(parsedPayload);
 
-    // Extract account_id from OpenAI-specific claim or root
-    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string account_id from JWT claims should fall through to next option */
-    const accountId =
-      validated['https://api.openai.com/auth']?.chatgpt_account_id ||
-      validated['https://api.openai.com/auth']?.account_id ||
-      validated.account_id;
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    // Extract account_id from OpenAI-specific claim or root.
+    // Empty-string claims should fall through to the next option.
+    const openaiAuth = validated['https://api.openai.com/auth'];
+    const accountId = resolveAccountId(
+      openaiAuth?.chatgpt_account_id,
+      openaiAuth?.account_id,
+      validated.account_id,
+    );
 
     if (!accountId) {
       throw new Error('No account_id found in id_token JWT claims');
@@ -457,12 +477,7 @@ export class CodexDeviceFlow {
     const startTime = Date.now();
     const intervalMs = intervalSeconds * 1000;
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Device-flow polling intentionally loops until timeout, authorization, or terminal error.
-    while (true) {
-      if (Date.now() - startTime >= maxWaitMs) {
-        throw new Error('Device authorization timed out after 15 minutes');
-      }
-
+    while (Date.now() - startTime < maxWaitMs) {
       this.logger.debug(
         () =>
           `[DEVICE] Polling ${CODEX_CONFIG.deviceAuthTokenEndpoint} with device_auth_id=${deviceAuthId}, user_code=${userCode}`,
@@ -533,6 +548,8 @@ export class CodexDeviceFlow {
         `Device authorization failed: ${response.status} ${responseText}`,
       );
     }
+
+    throw new Error('Device authorization timed out after 15 minutes');
   }
 
   /**
