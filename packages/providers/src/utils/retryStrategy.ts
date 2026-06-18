@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { extractHttpStatus, isOkStatusError } from './statusExtraction.js';
 
 export interface RetryOptions {
   logger?: DebugLogger;
@@ -36,44 +35,11 @@ export function shouldRetryOnStatus(
 ): boolean {
   const logger = options?.logger;
 
-  if (
-    error !== null &&
-    typeof error === 'object' &&
-    'status' in error &&
-    (error as { status?: number }).status === 200
-  ) {
+  if (isOkStatusError(error)) {
     return false;
   }
 
-  let status: number | undefined;
-
-  if (error !== null && typeof error === 'object' && 'status' in error) {
-    status = (error as { status?: number }).status;
-  }
-
-  if (
-    isInvalidStatus(status) &&
-    error !== null &&
-    typeof error === 'object' &&
-    'response' in error
-  ) {
-    const response = (error as { response?: { status?: number } }).response;
-    if (
-      response !== undefined &&
-      typeof response === 'object' &&
-      'status' in response
-    ) {
-      status = response.status;
-    }
-  }
-
-  if (
-    isInvalidStatus(status) &&
-    error instanceof Error &&
-    error.message.includes('429')
-  ) {
-    status = 429;
-  }
+  const status = extractHttpStatus(error);
 
   logger?.debug(() => `shouldRetryOnStatus checking error:`, {
     hasError: error !== null && error !== undefined,
@@ -91,9 +57,7 @@ export function shouldRetryOnStatus(
         : undefined,
   });
 
-  const shouldRetry = Boolean(
-    status === 429 || (status !== undefined && status >= 500 && status < 600),
-  );
+  const shouldRetry = isRetryableStatus(status);
 
   if (
     !shouldRetry &&
@@ -114,9 +78,8 @@ export function shouldRetryOnStatus(
   return shouldRetry;
 }
 
-/**
- * Helper function to check if a status value is invalid (undefined, 0, or NaN).
- */
-function isInvalidStatus(status: number | undefined): boolean {
-  return status === undefined || status === 0 || Number.isNaN(status);
+function isRetryableStatus(status: number | undefined): boolean {
+  return (
+    status === 429 || (status !== undefined && status >= 500 && status < 600)
+  );
 }

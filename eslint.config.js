@@ -155,7 +155,26 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/utils/terminalSerializer.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/tool-utils.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/userAccountManager.ts', // remaining core cleanup after #2081/#2082
-  'packages/providers/src/**/*.{ts,tsx}', // #2083/#2084/#2092
+  // #2083 completed files are locked in completedDirectiveCleanupScopes below.
+  // Remaining #2084/#2092 provider files keep narrowed globs here.
+  'packages/providers/src/**/*.{test,spec}.ts', // #2092 provider tests
+  'packages/providers/src/anthropic/**/*.ts', // #2084/#2092
+  'packages/providers/src/openai/**/*.ts', // #2084/#2092
+  'packages/providers/src/openai-responses/**/*.ts', // #2084/#2092
+  'packages/providers/src/openai-vercel/**/*.ts', // #2084/#2092
+  'packages/providers/src/gemini/**/*.ts', // #2084/#2092
+  'packages/providers/src/auth/**/*.ts', // #2092
+  'packages/providers/src/BaseProvider.ts', // #2084
+  'packages/providers/src/composition/**/*.ts', // #2084
+  'packages/providers/src/fake/**/*.ts', // #2084
+  'packages/providers/src/logging/ProviderContentExtractor.ts', // #2084
+  'packages/providers/src/reasoning/**/*.ts', // #2084
+  'packages/providers/src/runtime/bucketFailover.ts', // #2092
+  'packages/providers/src/runtime/modelParamParser.ts', // #2084
+  'packages/providers/src/runtime/runtimeAccessors.ts', // #2084
+  'packages/providers/src/utils/localEndpoint.ts', // #2084
+  'packages/providers/src/utils/toolNameNormalization.ts', // #2084
+  'packages/providers/src/utils/toolResponsePayload.ts', // #2084
   'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2087/#2091
   'packages/tools/src/**/*.{ts,tsx}', // #2088
@@ -222,6 +241,34 @@ const completedDirectiveCleanupScopes = [
   'packages/core/src/prompt-config/prompt-resolver.ts', // #2082
   'packages/core/src/prompt-config/resolver/**/*.{ts,tsx}', // #2082
   'packages/core/src/runtime/runtimeStateFactory.ts', // #2082
+  // #2083 providers core cleanup — only these enumerated files are locked;
+  // ProviderContentExtractor.ts remains in legacyDirectiveCleanupScopes for #2084.
+  'packages/providers/src/LoadBalancingProvider.ts', // #2083
+  'packages/providers/src/LoggingProviderWrapper.ts', // #2083
+  'packages/providers/src/ProviderManager.ts', // #2083
+  'packages/providers/src/RetryOrchestrator.ts', // #2083
+  'packages/providers/src/runtime/profileSnapshot.ts', // #2083
+  'packages/providers/src/runtime/runtimeContextFactory.ts', // #2083
+  'packages/providers/src/runtime/runtimeRegistry.ts', // #2083
+  'packages/providers/src/runtime/settingsResolver.ts', // #2083
+  'packages/providers/src/utils/retryStrategy.ts', // #2083
+  'packages/providers/src/baseUrlResolver.ts', // #2083
+  'packages/providers/src/modelResolver.ts', // #2083
+  'packages/providers/src/providerCapabilitiesService.ts', // #2083
+  'packages/providers/src/runtimeNormalizer.ts', // #2083
+  'packages/providers/src/tokenUsageTracker.ts', // #2083
+  'packages/providers/src/loadBalancing/**/*.ts', // #2083
+  'packages/providers/src/logging/ConfigBasedRedactor.ts', // #2083
+  'packages/providers/src/logging/configValidator.ts', // #2083
+  'packages/providers/src/logging/conversationLogger.ts', // #2083
+  'packages/providers/src/logging/optionsNormalizer.ts', // #2083
+  'packages/providers/src/logging/streamChunkUtils.ts', // #2083
+  'packages/providers/src/logging/telemetryEmitter.ts', // #2083
+  'packages/providers/src/logging/tokenAccumulator.ts', // #2083
+  'packages/providers/src/logging/tokenCounts.ts', // #2083
+  'packages/providers/src/runtime/keyResolution.ts', // #2083
+  'packages/providers/src/runtime/runtimeIdentityResolution.ts', // #2083
+  'packages/providers/src/utils/statusExtraction.ts', // #2083
 ];
 
 export default tseslint.config(
@@ -668,8 +715,8 @@ export default tseslint.config(
   },
 
 
-  // Issues #2081/#2082 completed cleanup scopes. Keep these paths locked even
-  // while remaining core files still use the temporary legacy directive override.
+  // Completed cleanup scopes stay locked against inline ESLint directives even
+  // while remaining files still use temporary legacy directive overrides.
   {
     files: completedDirectiveCleanupScopes,
     linterOptions: {
