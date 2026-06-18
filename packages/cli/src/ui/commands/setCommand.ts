@@ -19,6 +19,7 @@ import type {
   ValueArgument,
 } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { coreEvents } from '@vybestack/llxprt-code-core';
 import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
@@ -565,6 +566,7 @@ function handleSetEphemeral(
   // Note: SettingsService doesn't currently support ephemeral settings,
   // so we continue to use the config directly for these session-only settings
   runtime.setEphemeralSetting(key, parsedValue);
+  coreEvents.emitSettingsChanged();
 
   return {
     type: 'message',

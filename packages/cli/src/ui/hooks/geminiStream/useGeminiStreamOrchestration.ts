@@ -4,13 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
   type Config,
   type EditorType,
   type AgentClientContract,
+  type AnsiOutput,
   type MessageBus,
   type RecordingIntegration,
+  type ToolCall,
+  type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
@@ -21,9 +24,9 @@ import {
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { type TrackedToolCall } from '../useReactToolScheduler.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
-import { useToolCompletionHandler } from './toolCompletionHandler.js';
 import { useStreamState } from './useStreamState.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from './useSubmitQuery.js';
+import { useAgenticLoop } from './useAgenticLoop.js';
 import {
   useCancellation,
   useShellCommandSetup,
@@ -72,10 +75,13 @@ interface ToolSchedulerState {
   scheduler: ReturnType<typeof useToolSchedulerSetup>;
   toolCalls: TrackedToolCall[];
   scheduleToolCalls: UseSubmitQueryDeps['scheduleToolCalls'];
-  markToolsAsSubmitted: (callIds: string[]) => void;
+  markToolsAsDisplayCleared: (callIds: string[]) => void;
   cancelAllToolCalls: () => void;
   lastToolOutputTime: number;
   interactiveRuntimeReady: boolean;
+  /** Bound display-state updaters for the AgenticLoop's displayCallbacks. */
+  replaceToolCalls: (calls: ToolCall[]) => void;
+  updateToolOutput: (callId: string, chunk: string | AnsiOutput) => void;
 }
 
 export function useGeminiStreamOrchestration(
@@ -92,6 +98,18 @@ export function useGeminiStreamOrchestration(
     st.isResponding,
     scheduler.toolCalls,
   );
+  // Cancels EVERY running async subagent on ESC, not only those launched by the
+  // current foreground turn. This is intentional (issue #2074): an async task
+  // launched in a prior turn has its foreground-signal relay bound to that
+  // earlier turn's signal, which already settled and can never abort. Relaying
+  // alone would therefore leave such cross-turn tasks running, which is the
+  // exact bug #2074 reports. The AsyncTaskManager is the single session-wide
+  // owner of running tasks, so cancelling all of them is the only mechanism
+  // that reliably stops detached subagents regardless of launch turn.
+  const cancelRunningAsyncTasks = useCallback(() => {
+    const mgr = args.config.getAsyncTaskManager();
+    mgr?.getRunningTasks().forEach((t) => mgr.cancelTask(t.id));
+  }, [args.config]);
   const { cancelOngoingRequest } = useCancellation(
     streamingState,
     st.turnCancelledRef,
@@ -104,25 +122,46 @@ export function useGeminiStreamOrchestration(
     args.onCancelSubmit,
     st.setIsResponding,
     st.queuedSubmissionsRef,
+    cancelRunningAsyncTasks,
   );
-  const submitQuery = useSubmitForStream(
+  // Refs to break the circular dependency between useSubmitQuery (which
+  // creates useStreamEventHandlers → processStreamEvent) and useAgenticLoop
+  // (which provides runLoop). Each is populated synchronously during render.
+  const processStreamEventRef = useRef<
+    ((event: ServerGeminiStreamEvent, ts: number) => void) | null
+  >(null);
+  const runLoopRef = useRef<
+    | ((
+        message: PartListUnion,
+        signal: AbortSignal,
+        promptId: string,
+      ) => Promise<void>)
+    | null
+  >(null);
+
+  const submitQueryResult = useSubmitForStream(
     args,
     st,
     scheduler.scheduleToolCalls,
     shell.handleShellCommand,
     loopDetectedRef,
     streamingState,
+    runLoopRef,
   );
-  const { handleCompletedTools } = useToolCompletionHandler(
-    st.isResponding,
-    st.turnCancelledRef,
-    st.submitQueryRef,
-    args.agentClient,
-    scheduler.markToolsAsSubmitted,
-    args.performMemoryRefresh,
-    args.onTodoPause,
+  const submitQuery = submitQueryResult.submitQuery;
+  // Populate the ref synchronously so the first render already has the real
+  // function available for any synchronous consumer.
+  processStreamEventRef.current = submitQueryResult.processStreamEvent;
+
+  const agenticLoop = useLoopForStream(
+    args,
+    st,
+    scheduler,
+    processStreamEventRef,
   );
-  scheduler.scheduler.handleCompletedToolsRef.current = handleCompletedTools;
+  // Populate runLoopRef synchronously.
+  runLoopRef.current = agenticLoop.runLoop;
+
   return buildResult(
     st,
     streamingState,
@@ -151,19 +190,23 @@ function useToolSchedulerState(
   const [
     toolCalls,
     scheduleToolCalls,
-    markToolsAsSubmitted,
+    markToolsAsDisplayCleared,
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
+    replaceToolCalls,
+    updateToolOutput,
   ] = scheduler.toolSchedulerResult;
   return {
     scheduler,
     toolCalls,
     scheduleToolCalls,
-    markToolsAsSubmitted,
+    markToolsAsDisplayCleared,
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
+    replaceToolCalls,
+    updateToolOutput,
   };
 }
 
@@ -192,8 +235,9 @@ function useSubmitForStream(
   handleShellCommand: (query: string, signal: AbortSignal) => boolean,
   loopDetectedRef: React.MutableRefObject<boolean>,
   streamingState: ReturnType<typeof useStreamingState>,
+  runLoopRef: UseSubmitQueryDeps['runLoopRef'],
 ) {
-  const { submitQuery } = useSubmitQuery(
+  const result = useSubmitQuery(
     buildSubmitQueryDeps({
       args,
       st,
@@ -201,9 +245,41 @@ function useSubmitForStream(
       handleShellCommand,
       loopDetectedRef,
       streamingState,
+      runLoopRef,
     }),
   );
-  return submitQuery;
+  return result;
+}
+
+function useLoopForStream(
+  args: GeminiStreamOrchestrationDeps,
+  st: ReturnType<typeof useStreamState>,
+  scheduler: ToolSchedulerState,
+  processStreamEventRef: React.MutableRefObject<
+    ((event: ServerGeminiStreamEvent, ts: number) => void) | null
+  >,
+) {
+  return useAgenticLoop({
+    config: args.config,
+    agentClient: args.agentClient,
+    messageBus: args.runtimeMessageBus,
+    interactiveMode:
+      typeof args.config.isInteractive === 'function'
+        ? args.config.isInteractive()
+        : false,
+    addItem: args.addItem,
+    processStreamEventRef,
+    flushPendingHistoryItem: st.flushPendingHistoryItem,
+    clearPendingHistoryItem: () => st.setPendingHistoryItem(null),
+    performMemoryRefresh: args.performMemoryRefresh,
+    onTodoPause: args.onTodoPause,
+    markToolsAsDisplayCleared: scheduler.markToolsAsDisplayCleared,
+    onToolCallsUpdate: scheduler.replaceToolCalls,
+    outputUpdateHandler: scheduler.updateToolOutput,
+    getPreferredEditor: args.getPreferredEditor,
+    onEditorOpen: args.onEditorOpen,
+    onEditorClose: args.onEditorClose,
+  });
 }
 
 function usePendingToolGroupDisplay(toolCalls: TrackedToolCall[]) {
@@ -246,6 +322,7 @@ interface BuildSubmitQueryDepsArgs {
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
   loopDetectedRef: React.MutableRefObject<boolean>;
   streamingState: ReturnType<typeof useStreamingState>;
+  runLoopRef: UseSubmitQueryDeps['runLoopRef'];
 }
 
 function buildSubmitQueryDeps({
@@ -255,6 +332,7 @@ function buildSubmitQueryDeps({
   handleShellCommand,
   loopDetectedRef,
   streamingState,
+  runLoopRef,
 }: BuildSubmitQueryDepsArgs): UseSubmitQueryDeps {
   return {
     config: args.config,
@@ -290,5 +368,6 @@ function buildSubmitQueryDeps({
     submitQueryRef: st.submitQueryRef,
     isResponding: st.isResponding,
     streamingState,
+    runLoopRef,
   };
 }

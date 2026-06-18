@@ -23,6 +23,8 @@ export {
   getProtectedSettingKeys,
   getProviderConfigKeys,
   getDirectSettingSpecs,
+  getInternalSettingKeys,
+  isInternalSettingKey,
   SETTINGS_REGISTRY,
 } from './settings/settingsRegistry.js';
 export type {

@@ -7,34 +7,26 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
- * Unit tests for toolCompletionHandler.ts pure transform helpers
- * and the useToolCompletionHandler hook's branch matrix.
+ * Unit tests for toolCompletionHandler.ts display-side helpers.
  *
- * Tests pure functions: classifyCompletedTools, buildToolResponses,
- * recordCancelledToolHistory, processMemoryToolResults
- *
- * Tests call-order invariants:
- * - addHistory role ordering (model before user)
- * - markToolsAsSubmitted before submitQuery (continuation)
- * - External tools marked even when primaryTools is empty
+ * Tests: classifyCompletedTools (CLI filter + engine delegation),
+ * processMemoryToolResults, and the engine buildToolResponses helper
+ * consumed by the loop.
  */
 
 import type React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Part } from '@google/genai';
-import type { AgentClientContract as AgentClient } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import type {
   TrackedToolCall,
   TrackedCompletedToolCall,
-  TrackedCancelledToolCall,
 } from '../../useReactToolScheduler.js';
 import {
   classifyCompletedTools,
-  buildToolResponses,
-  recordCancelledToolHistory,
   processMemoryToolResults,
 } from '../toolCompletionHandler.js';
+import { buildToolResponses } from '@vybestack/llxprt-code-agents';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -65,7 +57,7 @@ function makeCompletedTool(overrides: {
       agentId: overrides.agentId ?? DEFAULT_AGENT_ID,
     },
     status: overrides.status ?? 'success',
-    responseSubmittedToGemini: false,
+    displayCleared: false,
     response: {
       callId: overrides.callId,
       responseParts: overrides.responseParts ?? [functionResponsePart],
@@ -81,39 +73,6 @@ function makeCompletedTool(overrides: {
       build: vi.fn(),
     } as any,
   } as TrackedCompletedToolCall;
-}
-
-function makeCancelledTool(overrides: {
-  callId: string;
-  agentId?: string;
-  responseParts?: Part[];
-}): TrackedCancelledToolCall {
-  return {
-    request: {
-      callId: overrides.callId,
-      name: 'test_tool',
-      args: {},
-      isClientInitiated: false,
-      prompt_id: 'prompt-1',
-      agentId: overrides.agentId ?? DEFAULT_AGENT_ID,
-    },
-    status: 'cancelled',
-    responseSubmittedToGemini: false,
-    response: {
-      callId: overrides.callId,
-      responseParts: overrides.responseParts ?? [functionResponsePart],
-      resultDisplay: undefined,
-      error: undefined,
-      errorType: undefined,
-    },
-    invocation: { getDescription: () => 'test' } as any,
-    tool: {
-      name: 'test_tool',
-      displayName: 'Test',
-      description: 'test',
-      build: vi.fn(),
-    } as any,
-  } as TrackedCancelledToolCall;
 }
 
 // ─── classifyCompletedTools ───────────────────────────────────────────────────
@@ -257,193 +216,6 @@ describe('buildToolResponses', () => {
   });
 });
 
-// ─── recordCancelledToolHistory ────────────────────────────────────────────────
-
-describe('recordCancelledToolHistory', () => {
-  let mockAddHistory: ReturnType<typeof vi.fn>;
-  let mockMarkToolsAsSubmitted: ReturnType<typeof vi.fn>;
-  let mockAgentClient: AgentClient;
-
-  beforeEach(() => {
-    mockAddHistory = vi.fn();
-    mockMarkToolsAsSubmitted = vi.fn();
-    mockAgentClient = {
-      addHistory: mockAddHistory,
-    } as unknown as AgentClient;
-  });
-
-  it('adds functionCalls with model role and functionResponses with user role', () => {
-    const tool = makeCompletedTool({
-      callId: 'call-1',
-      responseParts: [functionCallPart, functionResponsePart],
-    });
-    recordCancelledToolHistory(
-      [tool],
-      mockAgentClient,
-      mockMarkToolsAsSubmitted,
-    );
-
-    expect(mockAddHistory).toHaveBeenCalledTimes(2);
-    expect(mockAddHistory.mock.calls[0][0].role).toBe('model');
-    expect(mockAddHistory.mock.calls[1][0].role).toBe('user');
-  });
-
-  it('model role is called BEFORE user role (ordering invariant)', () => {
-    const callOrder: string[] = [];
-    mockAddHistory.mockImplementation(({ role }: { role: string }) => {
-      callOrder.push(role);
-    });
-
-    const tool = makeCompletedTool({
-      callId: 'call-1',
-      responseParts: [functionCallPart, functionResponsePart],
-    });
-    recordCancelledToolHistory(
-      [tool],
-      mockAgentClient,
-      mockMarkToolsAsSubmitted,
-    );
-
-    expect(callOrder[0]).toBe('model');
-    expect(callOrder[1]).toBe('user');
-  });
-
-  it('only adds user role when there are no functionCalls', () => {
-    const tool = makeCompletedTool({
-      callId: 'call-1',
-      responseParts: [functionResponsePart],
-    });
-    recordCancelledToolHistory(
-      [tool],
-      mockAgentClient,
-      mockMarkToolsAsSubmitted,
-    );
-
-    expect(mockAddHistory).toHaveBeenCalledTimes(1);
-    expect(mockAddHistory.mock.calls[0][0].role).toBe('user');
-  });
-
-  it('calls markToolsAsSubmitted with correct callIds', () => {
-    const tool1 = makeCompletedTool({
-      callId: 'call-a',
-      responseParts: [functionResponsePart],
-    });
-    const tool2 = makeCompletedTool({
-      callId: 'call-b',
-      responseParts: [functionResponsePart],
-    });
-    recordCancelledToolHistory(
-      [tool1, tool2],
-      mockAgentClient,
-      mockMarkToolsAsSubmitted,
-    );
-
-    expect(mockMarkToolsAsSubmitted).toHaveBeenCalledExactlyOnceWith(
-      expect.arrayContaining(['call-a', 'call-b']),
-    );
-  });
-
-  it('handles empty responseParts gracefully', () => {
-    const tool = makeCompletedTool({ callId: 'call-1', responseParts: [] });
-    recordCancelledToolHistory(
-      [tool],
-      mockAgentClient,
-      mockMarkToolsAsSubmitted,
-    );
-    // No history calls when no parts
-    expect(mockAddHistory).not.toHaveBeenCalled();
-    // But still marks as submitted
-    expect(mockMarkToolsAsSubmitted).toHaveBeenCalledExactlyOnceWith(
-      expect.arrayContaining(['call-1']),
-    );
-  });
-});
-
-// ─── recordCancelledToolHistory (all-cancelled branch) ──────────────────────────
-
-describe('recordCancelledToolHistory (all-cancelled branch)', () => {
-  let mockAddHistory: ReturnType<typeof vi.fn>;
-  let mockMarkToolsAsSubmitted: ReturnType<typeof vi.fn>;
-  let mockAgentClient: AgentClient;
-
-  beforeEach(() => {
-    mockAddHistory = vi.fn();
-    mockMarkToolsAsSubmitted = vi.fn();
-    mockAgentClient = {
-      addHistory: mockAddHistory,
-    } as unknown as AgentClient;
-  });
-
-  it('adds functionCalls with model role and responses with user role', () => {
-    const tool = makeCancelledTool({
-      callId: 'call-1',
-      responseParts: [functionCallPart, functionResponsePart],
-    });
-    recordCancelledToolHistory(
-      [tool],
-      mockAgentClient,
-      mockMarkToolsAsSubmitted,
-    );
-
-    expect(mockAddHistory).toHaveBeenCalledTimes(2);
-    expect(mockAddHistory.mock.calls[0][0].role).toBe('model');
-    expect(mockAddHistory.mock.calls[1][0].role).toBe('user');
-  });
-
-  it('model role is called BEFORE user role (ordering invariant)', () => {
-    const callOrder: string[] = [];
-    mockAddHistory.mockImplementation(({ role }: { role: string }) => {
-      callOrder.push(role);
-    });
-
-    const tool = makeCancelledTool({
-      callId: 'call-1',
-      responseParts: [functionCallPart, functionResponsePart],
-    });
-    recordCancelledToolHistory(
-      [tool],
-      mockAgentClient,
-      mockMarkToolsAsSubmitted,
-    );
-
-    expect(callOrder[0]).toBe('model');
-    expect(callOrder[1]).toBe('user');
-  });
-
-  it('calls markToolsAsSubmitted with correct callIds', () => {
-    const tool = makeCancelledTool({
-      callId: 'cancelled-call',
-      responseParts: [functionResponsePart],
-    });
-    recordCancelledToolHistory(
-      [tool],
-      mockAgentClient,
-      mockMarkToolsAsSubmitted,
-    );
-
-    expect(mockMarkToolsAsSubmitted).toHaveBeenCalledExactlyOnceWith(
-      expect.arrayContaining(['cancelled-call']),
-    );
-  });
-
-  it('does NOT call submitQuery (no continuation)', () => {
-    // recordCancelledToolHistory should only update history and mark submitted
-    // It takes no submitQuery param — this is verified structurally
-    const tool = makeCancelledTool({
-      callId: 'c1',
-      responseParts: [functionResponsePart],
-    });
-    recordCancelledToolHistory(
-      [tool],
-      mockAgentClient,
-      mockMarkToolsAsSubmitted,
-    );
-    // Only addHistory and markToolsAsSubmitted are called, no external side effects
-    expect(mockAddHistory).toHaveBeenCalled();
-    expect(mockMarkToolsAsSubmitted).toHaveBeenCalled();
-  });
-});
-
 // ─── processMemoryToolResults ─────────────────────────────────────────────────
 
 describe('processMemoryToolResults', () => {
@@ -527,63 +299,5 @@ describe('processMemoryToolResults', () => {
     expect(mockPerformMemoryRefresh).toHaveBeenCalledOnce();
     expect(processedMemoryToolsRef.current.has('m1')).toBe(true);
     expect(processedMemoryToolsRef.current.has('m2')).toBe(true);
-  });
-});
-
-// ─── Call-order invariants ────────────────────────────────────────────────────
-
-describe('call-order invariants', () => {
-  let mockAddHistory: ReturnType<typeof vi.fn>;
-  let mockMarkToolsAsSubmitted: ReturnType<typeof vi.fn>;
-  let mockAgentClient: AgentClient;
-
-  beforeEach(() => {
-    mockAddHistory = vi.fn();
-    mockMarkToolsAsSubmitted = vi.fn();
-    mockAgentClient = {
-      addHistory: mockAddHistory,
-    } as unknown as AgentClient;
-  });
-
-  it('external tools are marked even when primaryTools is empty (branch 3→4)', () => {
-    // This verifies that external tool marking is NOT guarded by the primaryTools.length check
-    // We test classifyCompletedTools: the caller (handleCompletedTools) marks external tools
-    // before checking primaryTools.length === 0
-    const externalTool = makeCompletedTool({
-      callId: 'ext-1',
-      agentId: 'subagent-1',
-    });
-    const { primaryTools, externalTools } = classifyCompletedTools([
-      externalTool,
-    ]);
-
-    // Simulate the handleCompletedTools logic:
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (externalTools.length > 0) {
-      mockMarkToolsAsSubmitted(externalTools.map((t) => t.request.callId));
-    }
-    // primaryTools is empty — would normally cause early return
-    expect(primaryTools).toHaveLength(0);
-    // But external tools were still marked:
-    expect(mockMarkToolsAsSubmitted).toHaveBeenCalledWith(['ext-1']);
-  });
-
-  it('markToolsAsSubmitted (cancelled) is called before any continuation in cancelled branch', () => {
-    const callOrder: string[] = [];
-    mockMarkToolsAsSubmitted.mockImplementation(() => {
-      callOrder.push('mark');
-    });
-    // There is no submitQuery in recordCancelledToolHistory — it handles marking
-    // and returns without continuation.
-    const tool = makeCancelledTool({
-      callId: 'c1',
-      responseParts: [functionResponsePart],
-    });
-    recordCancelledToolHistory(
-      [tool],
-      mockAgentClient,
-      mockMarkToolsAsSubmitted,
-    );
-    expect(callOrder).toContain('mark');
   });
 });

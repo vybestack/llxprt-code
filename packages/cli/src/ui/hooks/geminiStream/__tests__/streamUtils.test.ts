@@ -22,7 +22,6 @@ import { ToolCallStatus } from '../../../types.js';
 import {
   mergePartListUnions,
   mergePendingToolGroupsForDisplay,
-  splitPartsByRole,
   collectGeminiTools,
   buildFinishReasonMessage,
   deduplicateToolCallRequests,
@@ -34,6 +33,7 @@ import {
   getCurrentProfileName,
   SYSTEM_NOTICE_EVENT,
 } from '../streamUtils.js';
+import { splitPartsByRole } from '@vybestack/llxprt-code-agents';
 import { getActiveProviderNameForApiError } from '../../../../utils/apiErrorFormatting.js';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────

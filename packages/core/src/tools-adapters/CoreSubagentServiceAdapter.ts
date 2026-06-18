@@ -294,6 +294,11 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     const effectiveWhitelist = this.buildEffectiveToolWhitelist(request);
     if (effectiveWhitelist !== undefined && effectiveWhitelist.length > 0) {
       launchRequest.toolConfig = { tools: effectiveWhitelist };
+    } else if (this.hasExplicitWhitelist(request)) {
+      // Explicit empty or fully-filtered-to-zero whitelist must remain fail-closed.
+      // toolConfig: { tools: [] } tells the runtime to expose no normal tools.
+      // Omitting toolConfig entirely (the else case) means runtime/profile defaults.
+      launchRequest.toolConfig = { tools: [] };
     }
 
     if (request.outputSpec && Object.keys(request.outputSpec).length > 0) {
@@ -310,35 +315,74 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     return launchRequest;
   }
 
+  /**
+   * Centralized explicit-whitelist detection (Issue #2069).
+   *
+   * The Task tool always sets hasExplicitToolWhitelist based on whether an
+   * array was passed, but ISubagentService.executeSubagent is a public
+   * interface and direct callers may pass toolWhitelist without the flag.
+   * Treat an Array toolWhitelist as explicit regardless of the flag so that
+   * empty/fully-filtered whitelists fail closed to { tools: [] }.
+   */
+  private hasExplicitWhitelist(request: SubagentRequest): boolean {
+    return (
+      request.hasExplicitToolWhitelist === true ||
+      Array.isArray(request.toolWhitelist)
+    );
+  }
+
   private buildEffectiveToolWhitelist(
     request: SubagentRequest,
   ): string[] | undefined {
+    // Issue #2069: no explicit whitelist must preserve omitted toolConfig so
+    // the subagent runtime/profile default tools apply. Do NOT synthesize a
+    // whitelist from the parent registry regardless of registry availability.
+    // Explicitness is inferred from Array.isArray(request.toolWhitelist) so
+    // direct ISubagentService callers (which may omit hasExplicitToolWhitelist)
+    // are treated consistently with the Task tool.
+    if (!this.hasExplicitWhitelist(request)) {
+      return undefined;
+    }
+
     const registry = this.config?.getToolRegistry?.() as
       | ToolRegistry
       | undefined;
-    if (registry === undefined) {
-      return request.toolWhitelist;
-    }
 
     let effectiveWhitelist = request.toolWhitelist;
-    if (effectiveWhitelist && effectiveWhitelist.length > 0) {
+    if (registry && effectiveWhitelist && effectiveWhitelist.length > 0) {
       effectiveWhitelist = this.buildGovernedToolWhitelist(
         effectiveWhitelist,
         registry,
       );
-    }
-
-    if (
-      !request.hasExplicitToolWhitelist &&
-      (!effectiveWhitelist || effectiveWhitelist.length === 0)
-    ) {
-      effectiveWhitelist = this.buildGovernedToolWhitelist(
-        registry.getEnabledTools().map((tool) => tool.name),
-        registry,
-      );
+    } else {
+      // No registry available: still filter excluded tools (task/list_subagents)
+      // so they can never be exposed to a subagent runtime. Non-excluded entries
+      // pass through unchanged (no registry validation possible).
+      effectiveWhitelist = this.filterExcludedFromWhitelist(effectiveWhitelist);
     }
 
     return effectiveWhitelist;
+  }
+
+  /**
+   * Filters excluded tools (task/list_subagents) from a whitelist when no
+   * registry is available to perform full governance validation. Non-excluded
+   * entries pass through unchanged. Returns undefined if the result is empty
+   * so the caller can apply fail-closed semantics for explicit whitelists.
+   */
+  private filterExcludedFromWhitelist(
+    candidateTools: string[] | undefined,
+  ): string[] | undefined {
+    if (!candidateTools || candidateTools.length === 0) {
+      return undefined;
+    }
+
+    const excluded = buildExcludedToolNames();
+    const filtered = candidateTools.filter(
+      (name) => typeof name === 'string' && !isExcludedToolName(name, excluded),
+    );
+
+    return filtered.length > 0 ? filtered : undefined;
   }
 
   private buildGovernedToolWhitelist(

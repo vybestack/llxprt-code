@@ -64,6 +64,196 @@ function createAdapter(
   });
 }
 
+interface AdapterWithLaunch {
+  adapter: CoreSubagentServiceAdapter;
+  launch: ReturnType<typeof vi.fn>;
+}
+
+function createAdapterWithLaunch(
+  configOverrides: Partial<Config> = {},
+): AdapterWithLaunch {
+  const spies: ScopeSpies = {
+    runInteractive: vi.fn().mockResolvedValue(undefined),
+    runNonInteractive: vi.fn().mockResolvedValue(undefined),
+    dispose: vi.fn().mockResolvedValue(undefined),
+  };
+  const launchResult = createLaunchResult(spies);
+  const launch = vi.fn().mockResolvedValue(launchResult);
+
+  const fakeOrchestrator = {
+    launch,
+  } as unknown as CoreSubagentLauncher;
+
+  const config = {
+    getEphemeralSettings: () => ({}),
+    getSessionId: () => 'session-test',
+    isInteractive: () => false,
+    ...configOverrides,
+  } as unknown as Config;
+
+  const adapter = new CoreSubagentServiceAdapter({
+    managerProvider: () => ({}) as unknown as SubagentManager,
+    profileManagerProvider: () => ({}) as unknown as ProfileManager,
+    config,
+    isInteractiveEnvironment: () => false,
+    orchestratorFactory: () => fakeOrchestrator,
+  });
+  return { adapter, launch };
+}
+
+describe('CoreSubagentServiceAdapter toolConfig preservation (Issue #2069)', () => {
+  it('preserves explicit empty toolWhitelist as toolConfig: { tools: [] }', async () => {
+    const { adapter, launch } = createAdapterWithLaunch();
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: [],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: unknown }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig).toStrictEqual({ tools: [] });
+  });
+
+  it('preserves explicit whitelist fully filtered to zero as toolConfig: { tools: [] }', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({
+      getEphemeralSettings: () => ({ 'tools.disabled': ['read_file'] }),
+      getToolRegistry: () => ({
+        getEnabledTools: () => [{ name: 'read_file' }, { name: 'write_file' }],
+      }),
+    } as Partial<Config>);
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: ['read_file'],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: unknown }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig).toStrictEqual({ tools: [] });
+  });
+
+  it('filters explicit whitelist to zero when config ephemerals have tools.allowed=[] (Issue #2069)', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({
+      getEphemeralSettings: () => ({ 'tools.allowed': [] }),
+      getExcludeTools: () => [],
+      getToolRegistry: () => ({
+        getEnabledTools: () => [{ name: 'read_file' }, { name: 'write_file' }],
+      }),
+    } as Partial<Config>);
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: ['read_file', 'write_file'],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: unknown }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    // Explicit empty tools.allowed in config means "block all normal tools"
+    // (fail-closed), so even an explicit non-empty request whitelist filters to
+    // zero → toolConfig { tools: [] }.
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig).toStrictEqual({ tools: [] });
+  });
+
+  it('omits toolConfig when no explicit whitelist and registry unavailable', async () => {
+    const { adapter, launch } = createAdapterWithLaunch();
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: unknown }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).not.toHaveProperty('toolConfig');
+  });
+
+  it('omits toolConfig when no explicit whitelist but registry available (Issue #2069)', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({
+      getEphemeralSettings: () => ({}),
+      getExcludeTools: () => [],
+      getToolRegistry: () => ({
+        getEnabledTools: () => [
+          { name: 'read_file' },
+          { name: 'write_file' },
+          { name: 'task' },
+          { name: 'list_subagents' },
+        ],
+      }),
+    } as Partial<Config>);
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      // No toolWhitelist and no hasExplicitToolWhitelist → runtime defaults.
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: unknown }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    // No explicit whitelist must NOT synthesize toolConfig from the parent
+    // registry. toolConfig omitted → runtime/profile defaults apply.
+    expect(launchRequest).not.toHaveProperty('toolConfig');
+  });
+
+  it('filters task/list_subagents from explicit whitelist when registry is unavailable (Issue #2069)', async () => {
+    // No getToolRegistry on config — simulates registry unavailable
+    const { adapter, launch } = createAdapterWithLaunch({});
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: ['read_file', 'task', 'list_subagents'],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: { tools?: string[] } }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    // task/list_subagents must be removed even without a registry;
+    // read_file is preserved (no-registry explicit whitelist semantics).
+    expect(launchRequest?.toolConfig?.tools).toStrictEqual(['read_file']);
+  });
+
+  it('preserves fail-closed toolConfig { tools: [] } when explicit whitelist only contains task/list_subagents and registry unavailable (Issue #2069)', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({});
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: ['task', 'list_subagents'],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: { tools?: string[] } }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+  });
+});
+
 describe('CoreSubagentServiceAdapter runScope interactivity', () => {
   it('runs the subagent non-interactively when the environment is non-interactive', async () => {
     const spies: ScopeSpies = {
@@ -103,5 +293,59 @@ describe('CoreSubagentServiceAdapter runScope interactivity', () => {
     expect(spies.runInteractive).toHaveBeenCalledTimes(1);
     expect(spies.runNonInteractive).not.toHaveBeenCalled();
     expect(spies.dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CoreSubagentServiceAdapter inferred explicit whitelist (Issue #2069 direct callers)', () => {
+  it('treats toolWhitelist: [] without hasExplicitToolWhitelist as explicit and fail-closed', async () => {
+    const { adapter, launch } = createAdapterWithLaunch();
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      // Direct ISubagentService caller: toolWhitelist present but flag omitted.
+      toolWhitelist: [],
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: unknown }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig).toStrictEqual({ tools: [] });
+  });
+
+  it('treats toolWhitelist with only excluded tools and no flag as explicit and fail-closed', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({});
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: ['task', 'list_subagents'],
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: { tools?: string[] } }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+  });
+
+  it('treats toolWhitelist: ["read_file"] without flag as explicit and preserves it after excluded filtering (no registry)', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({});
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: ['read_file'],
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: { tools?: string[] } }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig?.tools).toStrictEqual(['read_file']);
   });
 });

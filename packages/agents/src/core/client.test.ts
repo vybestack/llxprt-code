@@ -83,6 +83,8 @@ import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-r
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 
 // --- Mocks ---
 const mockChatCreateFn = vi.fn();
@@ -3056,6 +3058,23 @@ sub memory
       expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
     });
 
+    it('returns history from a stored history service after profile invalidation', async () => {
+      const history: Content[] = [
+        { role: 'user', parts: [{ text: 'remember issue 2049' }] },
+        { role: 'model', parts: [{ text: 'we are preserving history' }] },
+      ];
+      const historyService = new HistoryService();
+      for (const content of history) {
+        historyService.add(ContentConverters.toIContent(content), 'test-model');
+      }
+      client['_storedHistoryService'] = historyService;
+      client['_previousHistory'] = undefined;
+      client['chat'] = undefined;
+      client.getHistory = AgentClient.prototype.getHistory.bind(client);
+
+      await expect(client.getHistory()).resolves.toStrictEqual(history);
+    });
+
     it('should update chat immediately when chat is initialized', async () => {
       // Arrange
       const mockChat = {
@@ -3396,6 +3415,7 @@ sub memory
         vertexai: false,
       });
       expect(client['_storedHistoryService']).toBe(historyService);
+      expect(client.getHistoryService()).toBe(historyService);
       expect(client['_previousHistory']).toBeUndefined();
     });
 
@@ -3438,6 +3458,63 @@ sub memory
       expect(client['_storedHistoryService']).toBe(historyService);
     });
 
+    it('uses live chat history instead of a stale stored snapshot when reinitializing', async () => {
+      const storedHistory: Content[] = [
+        { role: 'user', parts: [{ text: 'old turn' }] },
+      ];
+      const liveHistory: Content[] = [
+        ...storedHistory,
+        { role: 'model', parts: [{ text: 'new committed turn' }] },
+      ];
+      const mockChat: Partial<ChatSession> = {
+        getHistory: vi.fn().mockReturnValue(liveHistory),
+      };
+      client['chat'] = mockChat as ChatSession;
+      client['_previousHistory'] = storedHistory;
+
+      await client.initialize({
+        model: 'new-model',
+        apiKey: 'test-key',
+        vertexai: false,
+      });
+
+      expect(client['_previousHistory']).toBe(liveHistory);
+    });
+
+    it('preserves stored conversation history when refreshing tools before the next turn', async () => {
+      const committedHistory: Content[] = [
+        { role: 'user', parts: [{ text: 'We are fixing issue 2049.' }] },
+        {
+          role: 'model',
+          parts: [{ text: 'Profile switches must preserve context.' }],
+        },
+      ];
+      client.storeHistoryForLaterUse(committedHistory);
+      client['chat'] = undefined;
+      const startChatSpy = vi
+        .spyOn(client, 'startChat')
+        .mockImplementation(async (extraHistory?: Content[]) => {
+          const restoredHistory = extraHistory ?? [];
+          return {
+            getHistory: vi.fn().mockReturnValue(restoredHistory),
+            getHistoryService: vi.fn().mockReturnValue({
+              clear: vi.fn(),
+              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+              getCurated: vi.fn().mockReturnValue([]),
+              getTotalTokens: vi.fn().mockReturnValue(0),
+            }),
+            getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+            setTools: vi.fn(),
+          } as unknown as ChatSession;
+        });
+
+      await client.setTools();
+
+      expect(startChatSpy).toHaveBeenCalledWith(committedHistory);
+      const restoredHistory =
+        await AgentClient.prototype.getHistory.call(client);
+      expect(restoredHistory).toStrictEqual(committedHistory);
+    });
     it('also resets currentSequenceModel on ModelChanged', () => {
       client['currentSequenceModel'] = 'sticky-model';
       coreEvents.emitModelChanged('other-model');

@@ -35,7 +35,7 @@ import { useSessionStats } from '../../contexts/SessionContext.js';
 import { handleSubmissionError } from './streamUtils.js';
 import { prepareTurnForQuery } from './useGeminiStream.js';
 import { useStreamEventHandlers } from './useStreamEventHandlers.js';
-import { StreamProcessingStatus, type QueuedSubmission } from './types.js';
+import type { QueuedSubmission } from './types.js';
 
 export interface UseSubmitQueryDeps {
   config: Config;
@@ -86,6 +86,20 @@ export interface UseSubmitQueryDeps {
   lastModelInfoRef: React.MutableRefObject<string | null>;
   lastModelIdentityRef: React.MutableRefObject<string | null>;
   abortControllerRef: React.MutableRefObject<AbortController | null>;
+  /**
+   * Ref to the engine-owned loop runner. Held as a ref to break the circular
+   * dependency: runLoop comes from useAgenticLoop which needs processStreamEvent
+   * from useStreamEventHandlers (created inside this hook). The ref is populated
+   * synchronously during render and read at call time.
+   */
+  runLoopRef: React.MutableRefObject<
+    | ((
+        message: PartListUnion,
+        signal: AbortSignal,
+        promptId: string,
+      ) => Promise<void>)
+    | null
+  >;
   submitQueryRef: React.MutableRefObject<
     | ((
         query: PartListUnion,
@@ -105,11 +119,11 @@ export interface UseSubmitQueryReturn {
     prompt_id?: string,
   ) => Promise<void>;
   scheduleNextQueuedSubmission: () => void;
-  processGeminiStreamEvents: (
-    stream: AsyncIterable<ServerGeminiStreamEvent>,
+  /** Processes a single stream event (for the AgenticLoop router). */
+  processStreamEvent: (
+    event: ServerGeminiStreamEvent,
     userMessageTimestamp: number,
-    signal: AbortSignal,
-  ) => Promise<StreamProcessingStatus>;
+  ) => void;
   displayUserMessage: (
     trimmedQuery: string,
     userMessageTimestamp: number,
@@ -126,12 +140,11 @@ export interface UseSubmitQueryReturn {
   handleLoopDetectedEvent: () => void;
 }
 
-/* eslint-disable max-lines-per-function */
 export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
   const { startNewPrompt, getPromptCount } = useSessionStats();
 
   const {
-    processGeminiStreamEvents,
+    processStreamEvent,
     displayUserMessage,
     prepareQueryForGemini,
     handleLoopDetectedEvent,
@@ -169,7 +182,6 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     ...deps,
     displayUserMessage,
     prepareQueryForGemini,
-    processGeminiStreamEvents,
     handleLoopDetectedEvent,
     scheduleNextQueuedSubmission,
     startNewPrompt,
@@ -211,7 +223,7 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
   return {
     submitQuery,
     scheduleNextQueuedSubmission,
-    processGeminiStreamEvents,
+    processStreamEvent,
     displayUserMessage,
     prepareQueryForGemini,
     handleLoopDetectedEvent,
@@ -247,11 +259,6 @@ interface SubmitQueryCallbackDeps extends UseSubmitQueryDeps {
     abortSignal: AbortSignal,
     promptId: string,
   ) => Promise<{ queryToSend: PartListUnion | null; shouldProceed: boolean }>;
-  processGeminiStreamEvents: (
-    stream: AsyncIterable<ServerGeminiStreamEvent>,
-    userMessageTimestamp: number,
-    signal: AbortSignal,
-  ) => Promise<StreamProcessingStatus>;
   handleLoopDetectedEvent: () => void;
   scheduleNextQueuedSubmission: () => void;
   startNewPrompt: () => void;
@@ -265,18 +272,21 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
       options?: { isContinuation: boolean },
       prompt_id?: string,
     ) => {
-      if (isQueueable(cbd.streamingState, options)) {
+      // submitQuery handles NEW user prompts only; the engine-owned
+      // AgenticLoop drives multi-turn continuation internally.
+      void options;
+
+      if (isQueueable(cbd.streamingState)) {
         cbd.queuedSubmissionsRef.current.push({
           query,
-          options,
           promptId: prompt_id,
         });
         return;
       }
 
-      const turn = initTurn(cbd, query, options, prompt_id, cbd.getPromptCount);
+      const turn = initTurn(cbd, query, prompt_id, cbd.getPromptCount);
 
-      if (isMcpDiscoveryBlocking(cbd.config, turn.trimmedStr, options)) {
+      if (isMcpDiscoveryBlocking(cbd.config, turn.trimmedStr)) {
         cbd.addItem(
           {
             type: 'info' as const,
@@ -287,11 +297,11 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
         return;
       }
 
-      if (shouldDisplayUserMessage(turn.trimmedStr, options)) {
+      if (shouldDisplayUserMessage(turn.trimmedStr)) {
         cbd.displayUserMessage(turn.trimmedStr, turn.userMessageTimestamp);
       }
 
-      await runSubmitQueryCore(cbd, query, options, turn);
+      await runSubmitQueryCore(cbd, query, turn);
     },
     [cbd],
   );
@@ -300,7 +310,6 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
 async function runSubmitQueryCore(
   cbd: SubmitQueryCallbackDeps,
   query: PartListUnion,
-  options: { isContinuation: boolean } | undefined,
   turn: TurnInit,
 ): Promise<void> {
   const { queryToSend, shouldProceed } = await cbd.prepareQueryForGemini(
@@ -315,7 +324,7 @@ async function runSubmitQueryCore(
   }
 
   await prepareTurnForQuery(
-    options?.isContinuation === true,
+    false,
     cbd.config,
     cbd.startNewPrompt,
     cbd.setThought,
@@ -325,13 +334,7 @@ async function runSubmitQueryCore(
   cbd.setInitError(null);
 
   try {
-    await executeStream(
-      cbd,
-      cbd.processGeminiStreamEvents,
-      cbd.handleLoopDetectedEvent,
-      queryToSend,
-      turn,
-    );
+    await executeStream(cbd, cbd.handleLoopDetectedEvent, queryToSend, turn);
   } catch (error: unknown) {
     handleSubmissionError(
       error,
@@ -350,34 +353,18 @@ async function runSubmitQueryCore(
   }
 }
 
-function isQueueable(
-  streamingState: StreamingState,
-  options?: { isContinuation: boolean },
-): boolean {
+function isQueueable(streamingState: StreamingState): boolean {
   return (
-    (streamingState === StreamingState.Responding ||
-      streamingState === StreamingState.WaitingForConfirmation) &&
-    options?.isContinuation !== true
+    streamingState === StreamingState.Responding ||
+    streamingState === StreamingState.WaitingForConfirmation
   );
 }
 
-function shouldDisplayUserMessage(
-  trimmedStr: string,
-  options?: { isContinuation: boolean },
-): boolean {
-  return (
-    !!trimmedStr &&
-    options?.isContinuation !== true &&
-    !isSlashCommand(trimmedStr)
-  );
+function shouldDisplayUserMessage(trimmedStr: string): boolean {
+  return !!trimmedStr && !isSlashCommand(trimmedStr);
 }
 
-function isMcpDiscoveryBlocking(
-  config: Config,
-  trimmedStr: string,
-  options?: { isContinuation: boolean },
-): boolean {
-  if (options?.isContinuation === true) return false;
+function isMcpDiscoveryBlocking(config: Config, trimmedStr: string): boolean {
   if (!trimmedStr) return false;
   if (isSlashCommand(trimmedStr)) return false;
 
@@ -403,7 +390,6 @@ interface TurnInit {
 function initTurn(
   deps: UseSubmitQueryDeps,
   query: PartListUnion,
-  options: { isContinuation: boolean } | undefined,
   promptId: string | undefined,
   getPromptCount: () => number,
 ): TurnInit {
@@ -427,26 +413,19 @@ function initTurn(
 
 async function executeStream(
   deps: UseSubmitQueryDeps,
-  processGeminiStreamEvents: (
-    stream: AsyncIterable<ServerGeminiStreamEvent>,
-    userMessageTimestamp: number,
-    signal: AbortSignal,
-  ) => Promise<StreamProcessingStatus>,
   handleLoopDetectedEvent: () => void,
   queryToSend: PartListUnion,
   turn: TurnInit,
 ): Promise<void> {
-  const stream = deps.agentClient.sendMessageStream(
-    queryToSend,
-    turn.abortSignal,
-    turn.promptId,
-  );
-  const status = await processGeminiStreamEvents(
-    stream,
-    turn.userMessageTimestamp,
-    turn.abortSignal,
-  );
-  if (status === StreamProcessingStatus.UserCancelled) return;
+  const runLoop = deps.runLoopRef.current;
+  if (!runLoop) {
+    throw new Error('AgenticLoop runner is not initialized.');
+  }
+
+  // The engine-owned AgenticLoop drives the entire multi-turn flow:
+  // send → stream → schedule → execute → feed-back → repeat.
+  await runLoop(queryToSend, turn.abortSignal, turn.promptId);
+
   if (deps.pendingHistoryItemRef.current) {
     deps.flushPendingHistoryItem(turn.userMessageTimestamp);
     deps.setPendingHistoryItem(null);

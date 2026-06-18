@@ -10,7 +10,7 @@ vi.unmock('./providerAliases.js');
 
 import { loadProviderAliasEntries } from './providerAliases.js';
 
-describe('provider alias default models (#1543)', () => {
+describe('provider alias defaults (#1543, #2056)', () => {
   const entries = loadProviderAliasEntries();
 
   const findAlias = (alias: string) =>
@@ -65,6 +65,46 @@ describe('provider alias default models (#1543)', () => {
       expect(entry?.config['base-url']).toBe('https://api.deepseek.com/v1');
       expect(entry?.config.defaultModel).toBe('deepseek-v4-flash');
       expect(entry?.config.apiKeyEnv).toBe('DEEPSEEK_API_KEY');
+    });
+  });
+
+  describe('Ollama Cloud alias', () => {
+    it('is registered and discoverable as a builtin config', () => {
+      const entry = findAlias('Ollama Cloud');
+      expect(entry).toBeDefined();
+      expect(entry?.source).toBe('builtin');
+    });
+
+    it('has correct base configuration', () => {
+      const entry = findAlias('Ollama Cloud');
+      expect(entry?.config.baseProvider).toBe('openai');
+      expect(entry?.config['base-url']).toBe('https://ollama.com/v1/');
+      expect(entry?.config.defaultModel).toBe('kimi-k2.6');
+      expect(entry?.config.apiKeyEnv).toBe('OLLAMA_API_KEY');
+      expect(entry?.config.modelsDevProviderId).toBe('ollama-cloud');
+      expect(entry?.config.description).toBe(
+        'Ollama Cloud OpenAI-compatible endpoint',
+      );
+    });
+  });
+
+  describe('Makora alias', () => {
+    it('is registered and discoverable as a builtin config', () => {
+      const entry = findAlias('Makora');
+      expect(entry).toBeDefined();
+      expect(entry?.source).toBe('builtin');
+    });
+
+    it('has correct base configuration', () => {
+      const entry = findAlias('Makora');
+      expect(entry?.config.baseProvider).toBe('openai');
+      expect(entry?.config['base-url']).toBe('https://inference.makora.com/v1');
+      expect(entry?.config.defaultModel).toBe('nvidia/Kimi-K2.6-NVFP4');
+      expect(entry?.config.apiKeyEnv).toBe('MAKORA_API_KEY');
+      expect(entry?.config.modelsDevProviderId).toBeNull();
+      expect(entry?.config.description).toBe(
+        'Makora OpenAI-compatible inference endpoint',
+      );
     });
   });
 });

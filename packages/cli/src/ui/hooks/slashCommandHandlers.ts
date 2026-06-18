@@ -9,6 +9,7 @@ import type {
   Config,
   RecordingIntegration,
   ToolCallConfirmationDetails,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
@@ -27,10 +28,10 @@ import type {
   SlashCommand,
   SubagentDialogData,
 } from '../commands/types.js';
-import type { RecordingSwapCallbacks } from '../../services/performResume.js';
-import {
-  performResume,
-  type ResumeContext,
+import { performResume } from '../../services/performResume.js';
+import type {
+  RecordingSwapCallbacks,
+  ResumeContext,
 } from '../../services/performResume.js';
 import type {
   HistoryItemWithoutId,
@@ -39,7 +40,6 @@ import type {
   SlashCommandProcessorResult,
 } from '../types.js';
 import { MessageType, ToolCallStatus } from '../types.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 
 export interface SlashCommandHandlerDeps {

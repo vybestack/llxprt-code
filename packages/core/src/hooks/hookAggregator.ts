@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 /**
  * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P15,P16,P17
  * @requirement:HOOK-092,HOOK-093,HOOK-094,HOOK-095,HOOK-096,HOOK-097,HOOK-098,HOOK-099,HOOK-100,HOOK-101,HOOK-102,HOOK-103,HOOK-104,HOOK-105
@@ -177,8 +175,7 @@ export class HookAggregator {
       // Handle clearContext (any true wins) - for AfterAgent hooks
       if (output.hookSpecificOutput?.['clearContext'] === true) {
         merged.hookSpecificOutput = {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default-shape pattern for object spread
-          ...(merged.hookSpecificOutput || {}),
+          ...(merged.hookSpecificOutput ?? {}),
           clearContext: true,
         };
       }
@@ -189,8 +186,7 @@ export class HookAggregator {
         const { clearContext: _clearContext, ...restSpecificOutput } =
           output.hookSpecificOutput;
         merged.hookSpecificOutput = {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default-shape pattern for object spread
-          ...(merged.hookSpecificOutput || {}),
+          ...(merged.hookSpecificOutput ?? {}),
           ...restSpecificOutput,
         };
       }
@@ -220,8 +216,7 @@ export class HookAggregator {
     // If we collected additional contexts, merge them into hookSpecificOutput
     if (additionalContexts.length > 0) {
       merged.hookSpecificOutput = {
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default-shape pattern for object spread
-        ...(merged.hookSpecificOutput || {}),
+        ...(merged.hookSpecificOutput ?? {}),
         additionalContext: additionalContexts.join('\n'),
       };
     }

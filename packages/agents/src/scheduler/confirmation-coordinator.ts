@@ -126,6 +126,14 @@ function getConfirmationCorrelationId(
 export class ConfirmationCoordinator {
   /** correlationId → callId */
   private readonly pendingConfirmations: Map<string, string> = new Map();
+  /** correlationId → tool implementation's original confirmation callback */
+  private readonly pendingOriginalConfirmHandlers: Map<
+    string,
+    (
+      outcome: ToolConfirmationOutcome,
+      payload?: ToolConfirmationPayload,
+    ) => Promise<void>
+  > = new Map();
   /** correlationId → timeout handle — tracks stale IDs after ModifyWithEditor */
   private readonly staleCorrelationIds: Map<string, NodeJS.Timeout> = new Map();
   /** callIds already processed — prevents double-handling */
@@ -170,6 +178,7 @@ export class ConfirmationCoordinator {
   /** Clear all maps, sets, and timers. Called during cancelAll(). */
   reset(): void {
     this.pendingConfirmations.clear();
+    this.pendingOriginalConfirmHandlers.clear();
     this.processedConfirmations.clear();
     this.staleCorrelationIds.forEach((t) => clearTimeout(t));
     this.staleCorrelationIds.clear();
@@ -350,13 +359,21 @@ export class ConfirmationCoordinator {
           outcome,
           signal,
           payload,
-          false,
         ),
     };
 
     this.pendingConfirmations.set(correlationId, reqInfo.callId);
+    this.pendingOriginalConfirmHandlers.set(correlationId, originalOnConfirm);
     void this.onToolNotification(this.config, wrappedDetails);
-    publishConfirmationRequest(correlationId, policyContext, this.messageBus);
+    const policyContextWithCallId = {
+      ...policyContext,
+      callId: reqInfo.callId,
+    };
+    publishConfirmationRequest(
+      correlationId,
+      policyContextWithCallId,
+      this.messageBus,
+    );
     this.statusMutator.setAwaitingApproval(reqInfo.callId, wrappedDetails);
   }
 
@@ -405,6 +422,7 @@ export class ConfirmationCoordinator {
         );
       }
       this.pendingConfirmations.delete(response.correlationId);
+      this.pendingOriginalConfirmHandlers.delete(response.correlationId);
       return;
     }
 
@@ -419,6 +437,7 @@ export class ConfirmationCoordinator {
         );
       }
       this.pendingConfirmations.delete(response.correlationId);
+      this.pendingOriginalConfirmHandlers.delete(response.correlationId);
       return;
     }
 
@@ -432,14 +451,19 @@ export class ConfirmationCoordinator {
         );
       }
       this.pendingConfirmations.delete(response.correlationId);
+      this.pendingOriginalConfirmHandlers.delete(response.correlationId);
       this.statusMutator.setOutcome(callId, ToolConfirmationOutcome.Cancel);
       void this.handleCancellation(callId);
       return;
     }
 
+    const originalOnConfirm =
+      this.pendingOriginalConfirmHandlers.get(response.correlationId) ??
+      waitingToolCall.confirmationDetails.onConfirm;
+
     void this.handleConfirmationResponse(
       callId,
-      waitingToolCall.confirmationDetails.onConfirm,
+      originalOnConfirm,
       derivedOutcome,
       signal,
       response.payload,
@@ -493,7 +517,9 @@ export class ConfirmationCoordinator {
       waitingToolCall?.confirmationDetails,
     );
 
-    await originalOnConfirm(outcome, payload);
+    if (outcome !== ToolConfirmationOutcome.ModifyWithEditor) {
+      await originalOnConfirm(outcome, payload);
+    }
 
     if (outcome === ToolConfirmationOutcome.ProceedAlways) {
       await this.autoApproveCompatiblePendingTools(signal, callId);
@@ -577,6 +603,7 @@ export class ConfirmationCoordinator {
     await this.schedulerAccessor.attemptExecution(signal);
   }
 
+  // eslint-disable-next-line max-lines-per-function -- Editor modification must retain a single transactional confirmation flow.
   private async handleModifyWithEditor(
     callId: string,
     waitingToolCall: WaitingToolCall,
@@ -619,22 +646,58 @@ export class ConfirmationCoordinator {
 
     this.statusMutator.setArgs(callId, updatedParams);
 
+    if (
+      !isInteractiveConfirmationDetails(waitingToolCall.confirmationDetails)
+    ) {
+      return;
+    }
+    const confirmationDetails = waitingToolCall.confirmationDetails;
+    const previousCorrelationId =
+      getConfirmationCorrelationId(confirmationDetails);
+    const originalOnConfirm = previousCorrelationId
+      ? (this.pendingOriginalConfirmHandlers.get(previousCorrelationId) ??
+        confirmationDetails.onConfirm)
+      : confirmationDetails.onConfirm;
+
     const newCorrelationId = randomUUID();
     const updatedDetails: ToolCallConfirmationDetails = {
-      ...waitingToolCall.confirmationDetails,
+      ...confirmationDetails,
       fileDiff: updatedDiff,
       isModifying: false,
       correlationId: newCorrelationId,
+      onConfirm: (
+        outcome: ToolConfirmationOutcome,
+        payload?: ToolConfirmationPayload,
+      ) =>
+        this.handleConfirmationResponse(
+          callId,
+          originalOnConfirm,
+          outcome,
+          signal,
+          payload,
+        ),
     } as ToolCallConfirmationDetails;
 
     this.pendingConfirmations.set(newCorrelationId, callId);
+    this.pendingOriginalConfirmHandlers.set(
+      newCorrelationId,
+      originalOnConfirm,
+    );
     this.processedConfirmations.delete(callId);
 
     const context = getPolicyContextFromInvocation(
       waitingToolCall.invocation,
       waitingToolCall.request,
     );
-    publishConfirmationRequest(newCorrelationId, context, this.messageBus);
+    const contextWithCallId = {
+      ...context,
+      callId,
+    };
+    publishConfirmationRequest(
+      newCorrelationId,
+      contextWithCallId,
+      this.messageBus,
+    );
     this.statusMutator.setAwaitingApproval(callId, updatedDetails);
 
     this.registerStaleCorrelationId(
@@ -771,6 +834,7 @@ export class ConfirmationCoordinator {
     if (!correlationId) return;
 
     this.pendingConfirmations.delete(correlationId);
+    this.pendingOriginalConfirmHandlers.delete(correlationId);
 
     if (!skipBusPublish) {
       const confirmed =

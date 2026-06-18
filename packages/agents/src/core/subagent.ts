@@ -207,9 +207,11 @@ export class SubAgentScope {
         toolConfig,
         toolsView,
       });
-      // Use undefined if all tools were filtered out
-      toolConfig =
-        filteredToolConfig.tools.length > 0 ? filteredToolConfig : undefined;
+      // Preserve explicit empty/fail-closed semantics: an explicit toolConfig
+      // that filters to zero tools must remain { tools: [] } so the runtime
+      // produces no normal declarations. Only undefined toolConfig means
+      // runtime/profile defaults.
+      toolConfig = filteredToolConfig;
     }
 
     const settingsSnapshot =

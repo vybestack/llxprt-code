@@ -86,11 +86,36 @@ jobs:
             exit 0
           fi
 
+          gitignore_patch=''
+          if grep -Fxq '.gitignore' <<<"$files"; then
+            gitignore_patch="$(gh api \
+              --paginate \
+              -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+              --jq '.[] | select(.filename == ".gitignore") | .patch' || true)"
+          fi
+
           docs_only=true
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             case "$file" in
-              docs/*|README.md|README.*|*.md|*.mdx|*.rst|*.txt|*.adoc)
+              docs/*|README.md|README.*|CHANGELOG.md|CHANGELOG.*)
+                ;;
+              CONTRIBUTING.md|CONTRIBUTING.*|CODE_OF_CONDUCT.md|SECURITY.md)
+                ;;
+              *.md|*.mdx|*.rst|*.txt|*.adoc)
+                ;;
+              .gitignore)
+                if [[ -z "$gitignore_patch" ]]; then
+                  docs_only=false
+                  break
+                fi
+                if printf '%s\n' "$gitignore_patch" \
+                  | grep -E '^[+-][^+-]' \
+                  | grep -Ev '^[+-](!docs/reference/|#.*docs/reference)' >/dev/null; then
+                  docs_only=false
+                  break
+                fi
                 ;;
               *)
                 docs_only=false
@@ -199,6 +224,17 @@ jobs:
           npm run format
           # Check for changes, excluding project-plans directory
           git diff --exit-code -- . ':!project-plans/'
+
+      - name: 'Run ESLint policy guard'
+        env:
+          ESLINT_GUARD_BASE: >-
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha
+              || github.event_name == 'merge_group' && github.event.merge_group.base_sha
+              || github.event_name == 'push' && github.event.before
+              || 'origin/main' }}
+          ESLINT_GUARD_HEAD: ${{ github.sha }}
+        run: |-
+          npm run lint:eslint-guard
 
       - name: 'Run linter'
         env:

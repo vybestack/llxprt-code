@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
+
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { CreateChatObjectParams } from './subagentRuntimeSetup.js';
 
@@ -327,6 +329,154 @@ describe('subagentRuntimeSetup', () => {
       const decls = buildRuntimeFunctionDeclarations(toolsView, toolConfig);
       expect(decls).toStrictEqual([]);
     });
+
+    // Issue #2069: omitted toolConfig must use runtime default tools, not no tools
+    it('uses all runtime tools when toolConfig is undefined (omitted)', () => {
+      const toolsView = {
+        listToolNames: () => ['read_file', 'write_file', 'edit_file'],
+        getToolMetadata: (name: string) => ({
+          name,
+          description: `Description of ${name}`,
+          parameterSchema: { type: 'OBJECT', properties: {} },
+        }),
+      };
+      const decls = buildRuntimeFunctionDeclarations(toolsView, undefined);
+      expect(decls.length).toBe(3);
+      expect(decls.map((d: { name: string }) => d.name)).toStrictEqual([
+        'read_file',
+        'write_file',
+        'edit_file',
+      ]);
+    });
+
+    // Issue #2069: explicit empty toolConfig must remain no tools (fail-closed)
+    it('returns no tools when toolConfig has explicit empty tools array', () => {
+      const toolsView = {
+        listToolNames: () => ['read_file', 'write_file'],
+        getToolMetadata: (name: string) => ({
+          name,
+          description: '',
+          parameterSchema: { type: 'OBJECT', properties: {} },
+        }),
+      };
+      const decls = buildRuntimeFunctionDeclarations(toolsView, {
+        tools: [],
+      });
+      expect(decls).toStrictEqual([]);
+    });
+
+    // Issue #2069: canonicalization must match task.ts canonical (full snake_case)
+    it('matches CamelCase tool names in whitelist against snake_case registry via canonicalization', () => {
+      const toolsView = {
+        listToolNames: () => ['read_file', 'write_file'],
+        getToolMetadata: (name: string) => ({
+          name,
+          description: '',
+          parameterSchema: { type: 'OBJECT', properties: {} },
+        }),
+      };
+      const decls = buildRuntimeFunctionDeclarations(toolsView, {
+        tools: ['ReadFile'],
+      });
+      expect(decls.map((d: { name: string }) => d.name)).toStrictEqual([
+        'read_file',
+      ]);
+    });
+
+    // Issue #2069: excluded task/list_subagents must be excluded from default
+    it('excludes task and list_subagents from runtime default tools', () => {
+      const toolsView = {
+        listToolNames: () => [
+          'read_file',
+          'write_file',
+          'task',
+          'list_subagents',
+        ],
+        getToolMetadata: (name: string) => ({
+          name,
+          description: '',
+          parameterSchema: { type: 'OBJECT', properties: {} },
+        }),
+      };
+      const decls = buildRuntimeFunctionDeclarations(toolsView, undefined);
+      const names = decls.map((d: { name: string }) => d.name);
+      expect(names).toContain('read_file');
+      expect(names).toContain('write_file');
+      expect(names).not.toContain('task');
+      expect(names).not.toContain('list_subagents');
+    });
+
+    // Issue #2069: non-string FunctionDeclaration entries named task must be
+    // excluded even when injected via an explicit ToolConfig.
+    it('excludes non-string FunctionDeclaration named task from explicit toolConfig', () => {
+      const toolsView = {
+        listToolNames: () => ['read_file'],
+        getToolMetadata: (name: string) => ({
+          name,
+          description: '',
+          parameterSchema: { type: 'OBJECT', properties: {} },
+        }),
+      };
+      const taskDecl = { name: 'task', description: 'nested task' };
+      const toolConfig = { tools: [taskDecl] };
+      const decls = buildRuntimeFunctionDeclarations(toolsView, toolConfig);
+      expect(decls).toStrictEqual([]);
+    });
+
+    // Issue #2069: non-string FunctionDeclaration entries named list_subagents
+    // must be excluded even when injected via an explicit ToolConfig.
+    it('excludes non-string FunctionDeclaration named list_subagents from explicit toolConfig', () => {
+      const toolsView = {
+        listToolNames: () => ['read_file'],
+        getToolMetadata: (name: string) => ({
+          name,
+          description: '',
+          parameterSchema: { type: 'OBJECT', properties: {} },
+        }),
+      };
+      const listSubagentsDecl = {
+        name: 'list_subagents',
+        description: 'enumerate subagents',
+      };
+      const toolConfig = { tools: [listSubagentsDecl] };
+      const decls = buildRuntimeFunctionDeclarations(toolsView, toolConfig);
+      expect(decls).toStrictEqual([]);
+    });
+
+    // Issue #2069: canonical variants of excluded tool names in non-string
+    // declarations must also be excluded.
+    it('excludes non-string FunctionDeclaration with CamelCase name matching excluded tool', () => {
+      const toolsView = {
+        listToolNames: () => ['read_file'],
+        getToolMetadata: (name: string) => ({
+          name,
+          description: '',
+          parameterSchema: { type: 'OBJECT', properties: {} },
+        }),
+      };
+      const taskDecl = { name: 'Task', description: 'nested task' };
+      const goodDecl = { name: 'read_file', description: 'read' };
+      const toolConfig = { tools: [taskDecl, goodDecl] };
+      const decls = buildRuntimeFunctionDeclarations(toolsView, toolConfig);
+      const names = decls.map((d: { name: string }) => d.name);
+      expect(names).not.toContain('Task');
+      expect(names).not.toContain('task');
+      expect(names).toContain('read_file');
+    });
+
+    // Issue #2069: non-string FunctionDeclaration with no name is preserved
+    // (cannot match excluded tools).
+    it('preserves non-string FunctionDeclaration with no name', () => {
+      const toolsView = {
+        listToolNames: () => [],
+        getToolMetadata: () => undefined,
+      };
+      const anonDecl = { description: 'anonymous' };
+      const toolConfig = { tools: [anonDecl] };
+      const decls = buildRuntimeFunctionDeclarations(toolsView, toolConfig);
+      expect(decls).toHaveLength(1);
+      expect(decls[0]).toBe(anonDecl);
+    });
   });
 
   describe('getScopeLocalFuncDefs', () => {
@@ -522,6 +672,142 @@ describe('subagentRuntimeSetup', () => {
       await expect(createChatObject(params)).rejects.toThrow(
         'PromptConfig.systemPrompt must be a non-empty string.',
       );
+    });
+  });
+
+  describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', () => {
+    const makeFixture = () => ({
+      runtimeBundle: {
+        runtimeContext: { state: { sessionId: 'sess-fc' } },
+      },
+      toolRegistry: {
+        getTool: () => undefined,
+        getFunctionDeclarationsFiltered: () => [],
+      },
+      foregroundConfig: {
+        getOrCreateScheduler: () => {},
+        disposeScheduler: () => {},
+      },
+    });
+
+    it('preserves explicit empty tools array as tools.allowed=[]', () => {
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+        undefined,
+        undefined,
+        { tools: [] },
+      );
+      expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
+      expect(config.getEphemeralSettings()['tools.allowed']).toStrictEqual([]);
+    });
+
+    it('preserves parent explicit empty tools.allowed when intersecting with a non-empty whitelist', () => {
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+        undefined,
+        { tools: { allowed: [] } },
+        { tools: ['read_file'] },
+      );
+      expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
+      expect(config.getEphemeralSettings()['tools.allowed']).toStrictEqual([]);
+    });
+    it('does not set tools.allowed when toolConfig is undefined', () => {
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+        undefined,
+        undefined,
+        undefined,
+      );
+      expect(config.getEphemeralSetting('tools.allowed')).toBeUndefined();
+      expect(config.getEphemeralSettings()['tools.allowed']).toBeUndefined();
+    });
+
+    it('does not set tools.allowed when toolConfig is omitted', () => {
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+      );
+      expect(config.getEphemeralSetting('tools.allowed')).toBeUndefined();
+    });
+  });
+
+  describe('createSchedulerConfig — fail-closed empty whitelist (#2069)', () => {
+    it('getAllowedTools() returns [] for explicit empty even when foreground returns defaults', () => {
+      const toolExecCtxWithEmpty = {
+        getToolRegistry: () => ({}),
+        getSessionId: () => 'sess-fc',
+        getEphemeralSettings: () => ({ 'tools.allowed': [] }),
+        getEphemeralSetting: (key: string) =>
+          key === 'tools.allowed' ? [] : undefined,
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getOrCreateScheduler: () => Promise.resolve({}),
+        disposeScheduler: () => {},
+      };
+      const foregroundWithDefaults = {
+        getApprovalMode: () => 'DEFAULT',
+        getPolicyEngine: () => undefined,
+        getOrCreateScheduler: () => Promise.resolve({}),
+        disposeScheduler: () => {},
+        getEphemeralSettings: () => ({}),
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getAllowedTools: () => ['read_file', 'write_file'],
+        getEnableHooks: () => false,
+        getHooks: () => undefined,
+        getHookSystem: () => undefined,
+        getWorkingDir: () => '/tmp',
+        getTargetDir: () => '/tmp',
+      };
+      const config = createSchedulerConfig(
+        toolExecCtxWithEmpty,
+        foregroundWithDefaults,
+      );
+      expect(config.getAllowedTools()).toStrictEqual([]);
+    });
+
+    it('getAllowedTools() falls back to foreground when ephemerals omit tools.allowed', () => {
+      const toolExecCtxNoOverride = {
+        getToolRegistry: () => ({}),
+        getSessionId: () => 'sess-default',
+        getEphemeralSettings: () => ({}),
+        getEphemeralSetting: () => undefined,
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getOrCreateScheduler: () => Promise.resolve({}),
+        disposeScheduler: () => {},
+      };
+      const foregroundWithDefaults = {
+        getApprovalMode: () => 'DEFAULT',
+        getPolicyEngine: () => undefined,
+        getOrCreateScheduler: () => Promise.resolve({}),
+        disposeScheduler: () => {},
+        getEphemeralSettings: () => ({}),
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getAllowedTools: () => ['read_file'],
+        getEnableHooks: () => false,
+        getHooks: () => undefined,
+        getHookSystem: () => undefined,
+        getWorkingDir: () => '/tmp',
+        getTargetDir: () => '/tmp',
+      };
+      const config = createSchedulerConfig(
+        toolExecCtxNoOverride,
+        foregroundWithDefaults,
+      );
+      expect(config.getAllowedTools()).toStrictEqual(['read_file']);
     });
   });
 
@@ -745,6 +1031,126 @@ describe('subagentRuntimeSetup', () => {
 
       expect(toolExecDisposeCalled).toBe(true);
       expect(foregroundDisposeCalled).toBe(false);
+    });
+  });
+
+  describe('Issue #2069: scheduler governance excludes task/list_subagents', () => {
+    const makeFixture = () => ({
+      runtimeBundle: {
+        runtimeContext: { state: { sessionId: 'sess-2069' } },
+      },
+      toolRegistry: {
+        getTool: () => undefined,
+        getFunctionDeclarationsFiltered: () => [],
+      },
+      foregroundConfig: {
+        getOrCreateScheduler: () => {},
+        disposeScheduler: () => {},
+      },
+    });
+
+    it('createToolExecutionConfig().getExcludeTools() returns task and list_subagents', () => {
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+      );
+      const excluded = config.getExcludeTools();
+      expect(excluded).toContain('task');
+      expect(excluded).toContain('list_subagents');
+    });
+
+    it('createSchedulerConfig().getExcludeTools() surfaces task/list_subagents from toolExecutorContext', () => {
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const toolExecConfig = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+      );
+      const schedulerConfig = createSchedulerConfig(
+        toolExecConfig,
+        foregroundConfig,
+      );
+      const excluded = schedulerConfig.getExcludeTools();
+      expect(excluded).toContain('task');
+      expect(excluded).toContain('list_subagents');
+    });
+
+    it('buildToolGovernance from schedulerConfig marks task/list_subagents as blocked (fail-closed)', async () => {
+      const { buildToolGovernance, isToolBlocked } = await import(
+        './toolGovernance.js'
+      );
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const toolExecConfig = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+      );
+      const schedulerConfig = createSchedulerConfig(
+        toolExecConfig,
+        foregroundConfig,
+      );
+
+      const governance = buildToolGovernance(schedulerConfig);
+      expect(isToolBlocked('task', governance)).toBe(true);
+      expect(isToolBlocked('list_subagents', governance)).toBe(true);
+      // Non-excluded tool should not be blocked by excluded set alone
+      expect(isToolBlocked('read_file', governance)).toBe(false);
+    });
+
+    it('applyToolWhitelistToEphemerals removes task/list_subagents from tools.allowed', () => {
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const toolConfig = { tools: ['read_file', 'task', 'list_subagents'] };
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+        undefined,
+        undefined,
+        toolConfig,
+      );
+      const allowed = config.getEphemeralSetting('tools.allowed') as string[];
+      expect(Array.isArray(allowed)).toBe(true);
+      expect(allowed).toContain('read_file');
+      expect(allowed).not.toContain('task');
+      expect(allowed).not.toContain('list_subagents');
+    });
+
+    it('applyToolWhitelistToEphemerals sets tools.allowed to [] when only excluded tools remain', () => {
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const toolConfig = { tools: ['task', 'list_subagents'] };
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+        undefined,
+        undefined,
+        toolConfig,
+      );
+      const allowed = config.getEphemeralSetting('tools.allowed') as string[];
+      expect(Array.isArray(allowed)).toBe(true);
+      expect(allowed).toStrictEqual([]);
+    });
+
+    it('applyToolWhitelistToEphemerals removes canonical variants (TaskTool, listSubagents)', () => {
+      const { runtimeBundle, toolRegistry, foregroundConfig } = makeFixture();
+      const toolConfig = {
+        tools: ['ReadFileTool', 'TaskTool', 'listSubagents'],
+      };
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        toolRegistry,
+        foregroundConfig,
+        undefined,
+        undefined,
+        toolConfig,
+      );
+      const allowed = config.getEphemeralSetting('tools.allowed') as string[];
+      expect(Array.isArray(allowed)).toBe(true);
+      expect(allowed).toContain('read_file');
+      expect(allowed).not.toContain('task');
+      expect(allowed).not.toContain('list_subagents');
     });
   });
 });

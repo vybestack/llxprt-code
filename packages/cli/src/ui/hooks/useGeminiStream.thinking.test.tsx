@@ -214,7 +214,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
   let mockHandleSlashCommand: Mock;
   let mockScheduleToolCalls: Mock;
   let mockCancelAllToolCalls: Mock;
-  let mockMarkToolsAsSubmitted: Mock;
+  let mockMarkToolsAsDisplayCleared: Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -287,15 +287,17 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
     mockScheduleToolCalls = vi.fn();
     mockCancelAllToolCalls = vi.fn();
-    mockMarkToolsAsSubmitted = vi.fn();
+    mockMarkToolsAsDisplayCleared = vi.fn();
 
     mockUseReactToolScheduler.mockReturnValue([
       [],
       mockScheduleToolCalls,
-      mockMarkToolsAsSubmitted,
+      mockMarkToolsAsDisplayCleared,
       mockCancelAllToolCalls,
       0,
       true,
+      vi.fn(),
+      vi.fn(),
     ]);
 
     mockStartChat.mockClear().mockResolvedValue({
@@ -327,10 +329,12 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockUseReactToolScheduler.mockImplementation(() => [
       currentToolCalls,
       mockScheduleToolCalls,
-      mockMarkToolsAsSubmitted,
+      mockMarkToolsAsDisplayCleared,
       mockCancelAllToolCalls,
       0,
       true,
+      vi.fn(),
+      vi.fn(),
     ]);
 
     const client = agentClient ?? mockConfig.getAgentClient();
@@ -387,7 +391,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     return {
       result,
       rerender,
-      mockMarkToolsAsSubmitted,
+      mockMarkToolsAsDisplayCleared,
       mockSendMessageStream,
       client,
     };

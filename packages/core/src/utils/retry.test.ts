@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ApiError } from '@google/genai';
 import type { HttpError } from './retry.js';
-import { retryWithBackoff } from './retry.js';
+import { retryWithBackoff, isOverloadError } from './retry.js';
 import { setSimulate429 } from './testUtils.js';
 
 // Helper to create a mock function that fails a certain number of times
@@ -770,5 +770,178 @@ describe('retryWithBackoff', () => {
       expect.objectContaining({ name: 'AbortError' }),
     );
     expect(mockFn).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * @requirement issue #2053 - Anthropic body-level api_error must be retried
+   * @scenario Default retry predicate retries SDK-wrapped api_error
+   * @given retryWithBackoff with no custom shouldRetryOnError and no
+   *   onPersistent429 failover callback
+   * @when the first call throws an Anthropic SDK-wrapped api_error (HTTP status
+   *   undefined, retryable type nested at error.error.error.type) and the
+   *   second call succeeds
+   * @then retryWithBackoff retries and resolves with the success value
+   */
+  it('should retry an Anthropic SDK-wrapped api_error with the default predicate (issue #2053)', async () => {
+    let attempt = 0;
+    const mockFn = vi.fn(async () => {
+      attempt++;
+      if (attempt <= 1) {
+        // Anthropic SDK throws `new APIError(undefined, body, ...)` for stream
+        // error events, storing the entire body on `error.error`. There is no
+        // HTTP status, so retryability must be derived from the body type.
+        const error = new Error('Internal server error') as HttpError & {
+          error?: unknown;
+        };
+        error.status = undefined;
+        error.error = {
+          type: 'error',
+          error: {
+            details: null,
+            type: 'api_error',
+            message: 'Internal server error',
+          },
+          request_id: 'req_011Cc7LnNajEpxrjW4iJ67q7',
+        };
+        throw error;
+      }
+      return 'success after api_error retry';
+    });
+
+    const promise = retryWithBackoff(mockFn, {
+      maxAttempts: 3,
+      initialDelayMs: 100,
+    });
+
+    await vi.runAllTimersAsync();
+    await expect(promise).resolves.toBe('success after api_error retry');
+    expect(mockFn).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * Behavioral tests for isOverloadError.
+ *
+ * isOverloadError detects Anthropic body-level error types that carry no HTTP
+ * status code and must be retried like an HTTP 429. Historically it only
+ * recognized overloaded_error and rate_limit_error; issue #2053 requires that
+ * api_error (Anthropic "Internal server error") is also treated as retryable.
+ */
+describe('isOverloadError', () => {
+  it('returns true for Anthropic api_error internal server error (issue #2053)', () => {
+    const error = {
+      type: 'error',
+      error: {
+        details: null,
+        type: 'api_error',
+        message: 'Internal server error',
+      },
+      request_id: 'req_011Cc7LnNajEpxrjW4iJ67q7',
+    };
+    expect(isOverloadError(error)).toBe(true);
+  });
+
+  it('returns true for Anthropic overloaded_error', () => {
+    const error = {
+      type: 'error',
+      error: { type: 'overloaded_error', message: 'Overloaded' },
+    };
+    expect(isOverloadError(error)).toBe(true);
+  });
+
+  it('returns true for Anthropic rate_limit_error', () => {
+    const error = {
+      type: 'error',
+      error: { type: 'rate_limit_error', message: 'Rate limited' },
+    };
+    expect(isOverloadError(error)).toBe(true);
+  });
+
+  it('returns true when api_error is nested without a top-level type wrapper', () => {
+    const error = { error: { type: 'api_error' } };
+    expect(isOverloadError(error)).toBe(true);
+  });
+
+  it('returns true when api_error appears as the top-level type', () => {
+    const error = { type: 'api_error', message: 'Internal server error' };
+    expect(isOverloadError(error)).toBe(true);
+  });
+
+  it('returns true for an SDK-wrapped api_error (real Anthropic stream error, issue #2053)', () => {
+    // The Anthropic SDK throws `new APIError(undefined, body, ...)` for stream
+    // error events, storing the entire body on `error.error`. The retryable
+    // type is therefore nested at `error.error.error.type`, while the
+    // intermediate `error.error.type` is the generic envelope value "error".
+    const error = {
+      status: undefined,
+      error: {
+        type: 'error',
+        error: {
+          details: null,
+          type: 'api_error',
+          message: 'Internal server error',
+        },
+        request_id: 'req_011Cc7LnNajEpxrjW4iJ67q7',
+      },
+    };
+    expect(isOverloadError(error)).toBe(true);
+  });
+
+  it('returns true for an SDK-wrapped overloaded_error', () => {
+    const error = {
+      status: undefined,
+      error: {
+        type: 'error',
+        error: { type: 'overloaded_error', message: 'Overloaded' },
+      },
+    };
+    expect(isOverloadError(error)).toBe(true);
+  });
+
+  it('returns true for an SDK-wrapped rate_limit_error', () => {
+    const error = {
+      status: undefined,
+      error: {
+        type: 'error',
+        error: { type: 'rate_limit_error', message: 'Rate limited' },
+      },
+    };
+    expect(isOverloadError(error)).toBe(true);
+  });
+
+  it('returns false for a non-retryable Anthropic body error type', () => {
+    const error = {
+      type: 'error',
+      error: { type: 'invalid_request_error', message: 'bad' },
+    };
+    expect(isOverloadError(error)).toBe(false);
+  });
+
+  it('returns false for an SDK-wrapped non-retryable Anthropic body error type', () => {
+    const error = {
+      status: undefined,
+      error: {
+        type: 'error',
+        error: { type: 'invalid_request_error', message: 'bad' },
+      },
+    };
+    expect(isOverloadError(error)).toBe(false);
+  });
+
+  it('returns false for a bare error wrapper with no nested error type', () => {
+    const error = { type: 'error' };
+    expect(isOverloadError(error)).toBe(false);
+  });
+
+  it('returns false for null', () => {
+    expect(isOverloadError(null)).toBe(false);
+  });
+
+  it('returns false for undefined', () => {
+    expect(isOverloadError(undefined)).toBe(false);
+  });
+
+  it('returns false for a string error', () => {
+    expect(isOverloadError('some string')).toBe(false);
   });
 });

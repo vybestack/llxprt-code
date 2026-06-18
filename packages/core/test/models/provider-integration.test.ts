@@ -11,6 +11,7 @@ import {
   hasModelInRegistry,
   getExtendedModelInfo,
   getRecommendedModel,
+  getModelsDevProviderIds,
 } from '../../src/models/provider-integration.js';
 import { ModelRegistry, getModelRegistry } from '../../src/models/registry.js';
 import type { LlxprtModel } from '../../src/models/schema.js';
@@ -95,6 +96,26 @@ describe('llxprtModelToIModel', () => {
   it('preserves supportedToolFormats array', () => {
     const result = llxprtModelToIModel(sampleLlxprtModel);
     expect(result.supportedToolFormats).toEqual(['openai']);
+  });
+});
+
+describe('getModelsDevProviderIds', () => {
+  it('maps known provider names to models.dev provider IDs', () => {
+    expect(getModelsDevProviderIds('gemini')).toEqual([
+      'google',
+      'google-vertex',
+    ]);
+    expect(getModelsDevProviderIds('openai')).toEqual(['openai']);
+  });
+
+  it('maps "Ollama Cloud" alias provider name to ["ollama-cloud"]', () => {
+    expect(getModelsDevProviderIds('Ollama Cloud')).toEqual(['ollama-cloud']);
+  });
+
+  it('falls back to the provider name when no mapping exists', () => {
+    expect(getModelsDevProviderIds('some-unknown-provider')).toEqual([
+      'some-unknown-provider',
+    ]);
   });
 });
 

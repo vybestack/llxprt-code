@@ -27,6 +27,7 @@ import {
   useReactToolScheduler,
 } from '../useReactToolScheduler.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
+import { classifyCompletedTools } from './toolCompletionHandler.js';
 import { useKeypress, type Key } from '../useKeypress.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { type QueuedSubmission } from './types.js';
@@ -52,7 +53,7 @@ function isOutstandingToolCall(tc: TrackedToolCall): boolean {
   if (!isTerminalToolCall(status)) return false;
   return (
     (tc as TrackedCompletedToolCall | TrackedCancelledToolCall)
-      .responseSubmittedToGemini !== true
+      .displayCleared !== true
   );
 }
 
@@ -78,20 +79,16 @@ export function useToolSchedulerSetup(
   addItem: UseHistoryManagerReturn['addItem'],
   agentClient: AgentClientContract,
 ) {
-  const handleCompletedToolsRef = useRef<
-    (tools: TrackedToolCall[]) => Promise<void>
-  >(async () => {});
-
   const toolSchedulerResult = useReactToolScheduler(
     async (_schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) return;
       if (isPrimary) {
-        void processPrimaryCompletion(
+        processPrimaryCompletion(
           completedToolCallsFromScheduler,
           addItem,
           agentClient,
           config,
-          handleCompletedToolsRef.current,
+          toolSchedulerResult[2],
         );
         return;
       }
@@ -109,16 +106,16 @@ export function useToolSchedulerSetup(
     runtimeMessageBus,
   );
 
-  return { toolSchedulerResult, handleCompletedToolsRef };
+  return { toolSchedulerResult };
 }
 
-async function processPrimaryCompletion(
+function processPrimaryCompletion(
   completedToolCallsFromScheduler: TrackedToolCall[],
   addItem: UseHistoryManagerReturn['addItem'],
   agentClient: AgentClientContract,
   config: Config,
-  handleCompletedTools: (tools: TrackedToolCall[]) => Promise<void>,
-): Promise<void> {
+  markToolsAsDisplayCleared: (callIds: string[]) => void,
+): void {
   addItem(
     mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
     Date.now(),
@@ -137,18 +134,25 @@ async function processPrimaryCompletion(
       `Error recording completed tool call information: ${error}`,
     );
   }
-  await handleCompletedTools(completedToolCallsFromScheduler);
+  // Mark external (subagent) tools as cleared from display. Continuation is
+  // owned by the AgenticLoop; this is display-only.
+  const { externalTools } = classifyCompletedTools(
+    completedToolCallsFromScheduler,
+  );
+  if (externalTools.length > 0) {
+    markToolsAsDisplayCleared(externalTools.map((tc) => tc.request.callId));
+  }
 }
 
 function processSecondaryCompletion(
   completedToolCallsFromScheduler: TrackedToolCall[],
-  markToolsAsSubmitted: (callIds: string[]) => void,
+  markToolsAsDisplayCleared: (callIds: string[]) => void,
   addItem: UseHistoryManagerReturn['addItem'],
 ): void {
   const callIdsToMark = completedToolCallsFromScheduler.map(
     (toolCall) => toolCall.request.callId,
   );
-  if (callIdsToMark.length > 0) markToolsAsSubmitted(callIdsToMark);
+  if (callIdsToMark.length > 0) markToolsAsDisplayCleared(callIdsToMark);
   addItem(
     mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
     Date.now(),
@@ -216,13 +220,20 @@ export function useCancellation(
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void,
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>,
   queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>,
+  cancelRunningAsyncTasks: () => void = () => {},
 ) {
   const cancelOngoingRequest = useCallback(() => {
-    if (streamingState !== StreamingState.Responding) return;
+    if (
+      streamingState !== StreamingState.Responding &&
+      streamingState !== StreamingState.WaitingForConfirmation
+    ) {
+      return;
+    }
     if (turnCancelledRef.current) return;
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
     if (abortControllerRef.current) cancelAllToolCalls();
+    cancelRunningAsyncTasks();
     if (pendingHistoryItemRef.current) flushPendingHistoryItem(Date.now());
     addItem({ type: MessageType.INFO, text: 'Request cancelled.' }, Date.now());
     setPendingHistoryItem(null);
@@ -234,6 +245,7 @@ export function useCancellation(
     turnCancelledRef,
     abortControllerRef,
     cancelAllToolCalls,
+    cancelRunningAsyncTasks,
     pendingHistoryItemRef,
     flushPendingHistoryItem,
     addItem,

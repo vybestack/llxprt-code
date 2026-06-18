@@ -66,25 +66,25 @@ export type ScheduleFn = (
   request: ToolCallRequestInfo | ToolCallRequestInfo[],
   signal: AbortSignal,
 ) => Promise<void>;
-export type MarkToolsAsSubmittedFn = (callIds: string[]) => void;
+export type MarkToolsAsDisplayClearedFn = (callIds: string[]) => void;
 
 export type TrackedScheduledToolCall = ScheduledToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 export type TrackedValidatingToolCall = ValidatingToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 export type TrackedWaitingToolCall = WaitingToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 export type TrackedExecutingToolCall = ExecutingToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 export type TrackedCompletedToolCall = CompletedToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 export type TrackedCancelledToolCall = CancelledToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 
 export type TrackedToolCall =
@@ -96,13 +96,25 @@ export type TrackedToolCall =
   | TrackedCancelledToolCall;
 
 export type CancelAllFn = () => void;
+/**
+ * Replaces the display tool-calls for the main scheduler, bound to the main
+ * scheduler ID so callers (e.g. the AgenticLoop's displayCallbacks) don't need
+ * to know the internal symbol.
+ */
+export type ReplaceToolCallsFn = (calls: ToolCall[]) => void;
+export type UpdateToolOutputFn = (
+  toolCallId: string,
+  chunk: string | AnsiOutput,
+) => void;
 export type ReactToolSchedulerResult = readonly [
   TrackedToolCall[],
   ScheduleFn,
-  MarkToolsAsSubmittedFn,
+  MarkToolsAsDisplayClearedFn,
   CancelAllFn,
   number,
   boolean,
+  ReplaceToolCallsFn,
+  UpdateToolOutputFn,
 ];
 type PendingScheduleRequests = Array<{
   request: ToolCallRequestInfo | ToolCallRequestInfo[];
@@ -148,9 +160,9 @@ function updatePendingItemWithOutput(
 }
 
 /**
- * Maps updated calls preserving the responseSubmittedToGemini flag.
+ * Maps updated calls preserving the displayCleared flag.
  */
-function mapCallsWithSubmittedFlag(
+function mapCallsWithDisplayClearedFlag(
   prevCalls: TrackedToolCall[],
   updatedCalls: ToolCall[],
 ): TrackedToolCall[] {
@@ -160,9 +172,8 @@ function mapCallsWithSubmittedFlag(
   );
   return updatedCalls.map((call) => ({
     ...call,
-    responseSubmittedToGemini:
-      previousCallMap.get(call.request.callId)?.responseSubmittedToGemini ??
-      false,
+    displayCleared:
+      previousCallMap.get(call.request.callId)?.displayCleared ?? false,
   })) as TrackedToolCall[];
 }
 
@@ -203,15 +214,15 @@ function updateSchedulerState(
 }
 
 /**
- * Marks tool calls as submitted to Gemini.
+ * Marks tool calls as cleared from display.
  */
-function markCallsAsSubmitted(
+function markCallsAsDisplayCleared(
   calls: TrackedToolCall[],
   callIdsToMark: string[],
 ): TrackedToolCall[] {
   return calls.map((call) =>
     callIdsToMark.includes(call.request.callId)
-      ? { ...call, responseSubmittedToGemini: true }
+      ? { ...call, displayCleared: true }
       : call,
   );
 }
@@ -396,7 +407,7 @@ function useToolCallUpdaters(
   const replaceToolCallsForScheduler = useCallback(
     (schedulerId: symbol, updatedCalls: ToolCall[]) => {
       updateToolCallsForScheduler(schedulerId, (prevCalls) =>
-        mapCallsWithSubmittedFlag(prevCalls, updatedCalls),
+        mapCallsWithDisplayClearedFlag(prevCalls, updatedCalls),
       );
     },
     [updateToolCallsForScheduler],
@@ -575,6 +586,26 @@ function useExternalSchedulerSetup(
 }
 
 /**
+ * Composes external scheduler factory creation with its registration effect.
+ */
+function useExternalSchedulerRegistration(
+  config: Config,
+  refs: SchedulerRefs,
+  runtimeMessageBus: MessageBus | undefined,
+  setExternalSchedulerRegistered: (registered: boolean) => void,
+): void {
+  const createExternalScheduler = useExternalSchedulerFactoryCreator(
+    refs,
+    runtimeMessageBus,
+  );
+  useExternalSchedulerSetup(
+    config,
+    createExternalScheduler,
+    setExternalSchedulerRegistered,
+  );
+}
+
+/**
  * Hook that manages schedule function.
  */
 function useScheduleFn(
@@ -598,13 +629,13 @@ function useScheduleFn(
 }
 
 /**
- * Hook that manages markToolsAsSubmitted function.
+ * Hook that manages markToolsAsDisplayCleared function.
  */
-function useMarkToolsAsSubmitted(
+function useMarkToolsAsDisplayCleared(
   setToolCallsByScheduler: React.Dispatch<
     React.SetStateAction<Map<symbol, TrackedToolCall[]>>
   >,
-): MarkToolsAsSubmittedFn {
+): MarkToolsAsDisplayClearedFn {
   return useCallback(
     (callIdsToMark: string[]) => {
       if (callIdsToMark.length === 0) return;
@@ -612,7 +643,7 @@ function useMarkToolsAsSubmitted(
         let changed = false;
         const next = new Map(prev);
         for (const [schedulerId, calls] of prev) {
-          const updatedCalls = markCallsAsSubmitted(calls, callIdsToMark);
+          const updatedCalls = markCallsAsDisplayCleared(calls, callIdsToMark);
           const hasChange = updatedCalls.some(
             (call, index) => call !== calls[index],
           );
@@ -719,22 +750,73 @@ function useToolSchedulerReadiness(
   return scheduler !== null && externalSchedulerRegistered;
 }
 
+/**
+ * Derives the flattened tool-call list and a cancel-all callback from the
+ * per-scheduler tracked tool-call state.
+ */
+function useDerivedToolCallState(
+  toolCallsByScheduler: Map<symbol, TrackedToolCall[]>,
+  scheduler: CoreToolScheduler | null,
+): { toolCalls: TrackedToolCall[]; cancelAllToolCalls: CancelAllFn } {
+  const cancelAllToolCalls = useCallback(
+    () => scheduler?.cancelAll(),
+    [scheduler],
+  );
+  const toolCalls = useMemo(
+    () => Array.from(toolCallsByScheduler.values()).flat(),
+    [toolCallsByScheduler],
+  );
+  return { toolCalls, cancelAllToolCalls };
+}
+
 function buildReactToolSchedulerResult(
   toolCalls: TrackedToolCall[],
   schedule: ScheduleFn,
-  markToolsAsSubmitted: MarkToolsAsSubmittedFn,
+  markToolsAsDisplayCleared: MarkToolsAsDisplayClearedFn,
   cancelAllToolCalls: CancelAllFn,
   lastToolOutputTime: number,
   interactiveRuntimeReady: boolean,
+  replaceToolCallsForScheduler: ReplaceToolCallsFn,
+  updateToolCallOutput: UpdateToolOutputFn,
 ): ReactToolSchedulerResult {
   return [
     toolCalls,
     schedule,
-    markToolsAsSubmitted,
+    markToolsAsDisplayCleared,
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
+    replaceToolCallsForScheduler,
+    updateToolCallOutput,
   ] as const;
+}
+
+/**
+ * Creates bound display-state updaters for the AgenticLoop's displayCallbacks.
+ * Binds the main scheduler ID so the loop's onToolCallsUpdate /
+ * outputUpdateHandler feed the SAME React display state.
+ */
+function useBoundDisplayUpdaters(
+  toolCallUpdaters: ReturnType<typeof useToolCallUpdaters>,
+  mainSchedulerId: symbol,
+): {
+  replaceToolCalls: ReplaceToolCallsFn;
+  updateToolOutput: UpdateToolOutputFn;
+} {
+  const replaceToolCalls = useCallback(
+    (calls: ToolCall[]) =>
+      toolCallUpdaters.replaceToolCallsForScheduler(mainSchedulerId, calls),
+    // Deps reference specific methods on the toolCallUpdaters object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [toolCallUpdaters.replaceToolCallsForScheduler, mainSchedulerId],
+  );
+  const updateToolOutput = useCallback(
+    (toolCallId: string, chunk: string | AnsiOutput) =>
+      toolCallUpdaters.updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [toolCallUpdaters.updateToolCallOutput, mainSchedulerId],
+  );
+  return { replaceToolCalls, updateToolOutput };
 }
 
 export function useReactToolScheduler(
@@ -786,25 +868,20 @@ export function useReactToolScheduler(
     pendingScheduleRequests,
   );
 
-  const createExternalScheduler = useExternalSchedulerFactoryCreator(
+  useExternalSchedulerRegistration(
+    config,
     refs,
     runtimeMessageBus,
-  );
-  useExternalSchedulerSetup(
-    config,
-    createExternalScheduler,
     setExternalSchedulerRegistered,
   );
 
   const schedule = useScheduleFn(scheduler, pendingScheduleRequests);
-  const markToolsAsSubmitted = useMarkToolsAsSubmitted(setToolCallsByScheduler);
-  const cancelAllToolCalls = useCallback(
-    () => scheduler?.cancelAll(),
-    [scheduler],
+  const markToolsAsDisplayCleared = useMarkToolsAsDisplayCleared(
+    setToolCallsByScheduler,
   );
-  const toolCalls = useMemo(
-    () => Array.from(toolCallsByScheduler.values()).flat(),
-    [toolCallsByScheduler],
+  const { toolCalls, cancelAllToolCalls } = useDerivedToolCallState(
+    toolCallsByScheduler,
+    scheduler,
   );
 
   const interactiveRuntimeReady = useToolSchedulerReadiness(
@@ -812,12 +889,19 @@ export function useReactToolScheduler(
     externalSchedulerRegistered,
   );
 
+  const {
+    replaceToolCalls: boundReplaceToolCalls,
+    updateToolOutput: boundUpdateToolOutput,
+  } = useBoundDisplayUpdaters(toolCallUpdaters, mainSchedulerId);
+
   return buildReactToolSchedulerResult(
     toolCalls,
     schedule,
-    markToolsAsSubmitted,
+    markToolsAsDisplayCleared,
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
+    boundReplaceToolCalls,
+    boundUpdateToolOutput,
   );
 }

@@ -10,8 +10,8 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import * as versionUtils from '../../utils/version.js';
 import { MessageType } from '../types.js';
-import { MockFileSystem } from '@vybestack/llxprt-code-providers/composition.js';
 import {
+  MockFileSystem,
   setFileSystem,
   resetProviderManager,
 } from '@vybestack/llxprt-code-providers/composition.js';

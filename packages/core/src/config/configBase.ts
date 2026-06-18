@@ -4,8 +4,6 @@
  * Complex method implementations live in Config (extends ConfigBase) in config.ts.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { GitService } from '../services/gitService.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
@@ -25,6 +23,7 @@ import {
   normalizeShellReplacement,
 } from './configTypes.js';
 import { ConfigBaseCore } from './configBaseCore.js';
+import { normalizeMaxAsyncTasks } from './asyncTaskServices.js';
 
 export abstract class ConfigBase extends ConfigBaseCore {
   // Abstract methods implemented by Config subclass
@@ -215,15 +214,7 @@ export abstract class ConfigBase extends ConfigBaseCore {
     // @requirement REQ-ASYNC-012
     // Propagate task-max-async changes to AsyncTaskManager
     if (key === 'task-max-async') {
-      let normalizedValue: number;
-      if (typeof settingValue === 'number') {
-        normalizedValue = settingValue;
-      } else if (typeof settingValue === 'string') {
-        const parsed = parseInt(settingValue, 10);
-        normalizedValue = isNaN(parsed) ? 0 : parsed;
-      } else {
-        normalizedValue = 0;
-      }
+      const normalizedValue = normalizeMaxAsyncTasks(settingValue);
       const asyncTaskManager = this.getAsyncTaskManager();
       if (asyncTaskManager) {
         asyncTaskManager.setMaxAsyncTasks(normalizedValue);
@@ -246,8 +237,7 @@ export abstract class ConfigBase extends ConfigBaseCore {
       }
 
       const activeProvider = this.providerManager.getActiveProvider();
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider manager may have no active provider during settings updates.
-      if (activeProvider === undefined || activeProvider === null) {
+      if (activeProvider === undefined) {
         return;
       }
 

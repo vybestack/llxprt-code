@@ -29,6 +29,201 @@ const __dirname = path.dirname(__filename);
 // Determine the monorepo root (assuming eslint.config.js is at the root)
 const projectRoot = __dirname;
 
+const legacyDirectiveCleanupScopes = [
+  'packages/core/src/code_assist/oauth-credential-storage.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/code_assist/setup.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/config/config-lsp-integration.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/config/config.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/config/configBaseCore.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/config/endpoints.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/config/lspIntegration.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/config/toolRegistryFactory.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/core/contentGenerator.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/core/coreToolHookTriggers.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/core/lifecycleHookTriggers.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/core/logger.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/core/subagentTypes.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/core/subagentTypes.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/debug/DebugLogger.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/debug/FileOutput.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/filters/EmojiFilter.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/filters/EmojiFilter.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/hooks/__tests__/hookEventHandler-messagebus.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/hooks/__tests__/hookSemantics.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/hooks/__tests__/hookSystem-lifecycle.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/hooks/__tests__/hookValidators.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/hooks/hookEventHandler.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/hooks/hookRegistry.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/hooks/hookRunner.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/hooks/types.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/integration/compression-duplicate-ids.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/models/hydration.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/models/registry.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/parsers/TextToolCallParser.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/parsers/tool-call-parser-utils.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/policy/utils.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/prompt-config/prompt-cache.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/prompt-config/prompt-installer.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/prompt-config/prompt-loader.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/prompt-config/prompt-service.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/prompt-config/TemplateEngine.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/__tests__/SessionDiscovery.extensions.spec.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/integration.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/RecordingIntegration.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/ReplayEngine.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/ReplayEngine.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/resumeSession.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/sessionCleanupUtils.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/SessionDiscovery.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/SessionDiscovery.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/SessionLockManager.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/SessionLockManager.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/sessionManagement.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/recording/SessionRecordingService.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/runtime/AgentRuntimeLoader.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/runtime/AgentRuntimeState.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/runtime/contracts/boundary-guards.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/runtime/createAgentRuntimeContext.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/runtime/errors/MissingRuntimeProviderError.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/runtime/RuntimeInvocationContext.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/services/gitService.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/services/history/__tests__/density-history.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/services/history/canonicalToolIds.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/services/history/HistoryService.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/services/loopDetectionService.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/services/shellExecutionService.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/skills/skillLoader.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/skills/skillManager.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/storage/SessionPersistenceService.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/telemetry/loggers.test.circular.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/telemetry/loggers.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/test-utils/runtime.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/test-utils/tools.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/todo/todoFormatter.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/tools/tool-key-storage.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/__tests__/resolveTextSearchTarget.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/ast-grep-utils.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/asyncIterator.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/bfsFileSearch.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/checkpointUtils.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/checkpointUtils.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/editor.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/errorParsing.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/errorReporting.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/events.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/fileDiffUtils.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/filesearch/crawler.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/filesearch/fileSearch.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/filesearch/fileSearch.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/fileUtils.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/fileUtils.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/generateContentResponseUtilities.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/getFolderStructure.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/getPty.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/gitIgnoreParser.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/gitLineChanges.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/googleErrors.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/googleQuotaErrors.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/googleQuotaErrors.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/ignorePatterns.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/memoryDiscovery.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/memoryDiscovery.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/memoryImportProcessor.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/memoryImportProcessor.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/parameterCoercion.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/partUtils.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/paths.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/quotaErrorDetection.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/retry.quota.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/retry.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/retry.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/safeJsonStringify.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/sanitization.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/schemaValidator.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/secure-browser-launcher.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/shell-parser.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/shell-parser.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/shell-utils.shellReplacement.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/shell-utils.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/shell-utils.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/shellPathCompletion.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/stdio.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/streamIdleTimeout.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/summarizer.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/systemEncoding.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/terminalSerializer.test.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/terminalSerializer.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/tool-utils.ts', // remaining core cleanup after #2081/#2082
+  'packages/core/src/utils/userAccountManager.ts', // remaining core cleanup after #2081/#2082
+  'packages/providers/src/**/*.{ts,tsx}', // #2083/#2084/#2092
+  'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
+  'packages/cli/src/**/*.{ts,tsx}', // #2086/#2087/#2091
+  'packages/tools/src/**/*.{ts,tsx}', // #2088
+  'packages/mcp/src/**/*.{ts,tsx}', // #2089/#2092
+  'packages/auth/src/**/*.{ts,tsx}', // #2089
+  'packages/settings/src/**/*.{ts,tsx}', // #2089
+  'packages/telemetry/src/**/*.{ts,tsx}', // #2089
+  'packages/ide-integration/src/**/*.{ts,tsx}', // #2089
+  'packages/a2a-server/src/**/*.{ts,tsx}', // #2089
+  'packages/policy/src/**/*.{ts,tsx}', // #2089
+  'packages/storage/src/**/*.{ts,tsx}', // #2092
+];
+
+const completedDirectiveCleanupScopes = [
+  'packages/core/src/services/complexity-analyzer.ts', // #2081
+  'packages/core/src/services/environmentSanitization.ts', // #2081
+  'packages/core/src/services/history/ContentConverters.ts', // #2081
+  'packages/core/src/services/history/HistoryService.ts', // #2081
+  'packages/core/src/services/history/IContent.ts', // #2081
+  'packages/core/src/services/history/curationDebugLogger.ts', // #2081
+  'packages/core/src/services/history/densityValidation.ts', // #2081
+  'packages/core/src/services/history/historyCloneUtils.ts', // #2081
+  'packages/core/src/services/history/historyContextWindow.ts', // #2081
+  'packages/core/src/services/history/historyCuration.ts', // #2081
+  'packages/core/src/services/history/historyEventTypes.ts', // #2081
+  'packages/core/src/services/history/historyProviderPipeline.ts', // #2081
+  'packages/core/src/services/history/historyQuery.ts', // #2081
+  'packages/core/src/services/history/historyTokenEstimation.ts', // #2081
+  'packages/core/src/services/history/historyTokenizerAdapter.ts', // #2081
+  'packages/core/src/services/history/historyToolNormalization.ts', // #2081
+  'packages/core/src/services/history/historyToolPairing.ts', // #2081
+  'packages/core/src/services/shellCpExecution.ts', // #2081
+  'packages/core/src/services/shellCpHelpers.ts', // #2081
+  'packages/core/src/services/shellExecutionService.ts', // #2081
+  'packages/core/src/services/shellExecutionTypes.ts', // #2081
+  'packages/core/src/services/shellExitGuard.ts', // #2081
+  'packages/core/src/services/shellOutputUtils.ts', // #2081
+  'packages/core/src/services/shellProcessKill.ts', // #2081
+  'packages/core/src/services/shellPtyExecution.ts', // #2081
+  'packages/core/src/services/shellPtyHelpers.ts', // #2081
+  'packages/core/src/services/shellPtyLifecycle.ts', // #2081
+  'packages/core/src/services/shellPtyState.ts', // #2081
+  'packages/core/src/code_assist/oauth2.ts', // #2082
+  'packages/core/src/config/agentClientLifecycle.ts', // #2082
+  'packages/core/src/config/asyncTaskServices.ts', // #2082
+  'packages/core/src/config/config.ts', // #2082
+  'packages/core/src/config/configBase.ts', // #2082
+  'packages/core/src/config/configConstructor.ts', // #2082
+  'packages/core/src/config/subagentManager.ts', // #2082
+  'packages/core/src/config/subagentSettingsParser.ts', // #2082
+  'packages/core/src/core/prompts.ts', // #2082
+  'packages/core/src/core/tokenLimits.ts', // #2082
+  'packages/core/src/hooks/hookAggregator.ts', // #2082
+  'packages/core/src/hooks/hookRunner.ts', // #2082
+  'packages/core/src/hooks/hookTranslator.ts', // #2082
+  'packages/core/src/models/profiles.ts', // #2082
+  'packages/core/src/policy/config.ts', // #2082
+  'packages/core/src/prompt-config/defaults/core-defaults.ts', // #2082
+  'packages/core/src/prompt-config/defaults/provider-defaults.ts', // #2082
+  'packages/core/src/prompt-config/defaults/tool-defaults.ts', // #2082
+  'packages/core/src/prompt-config/installer/**/*.{ts,tsx}', // #2082
+  'packages/core/src/prompt-config/prompt-installer.ts', // #2082
+  'packages/core/src/prompt-config/prompt-loader.ts', // #2082
+  'packages/core/src/prompt-config/prompt-resolver.ts', // #2082
+  'packages/core/src/prompt-config/resolver/**/*.{ts,tsx}', // #2082
+  'packages/core/src/runtime/runtimeStateFactory.ts', // #2082
+];
+
 export default tseslint.config(
   {
     // Global ignores
@@ -66,6 +261,12 @@ export default tseslint.config(
       'evals/**',
       'packages/test-utils/**',
     ],
+  },
+  {
+    // Issue #2079: stale disable directives are policy failures, not warnings.
+    linterOptions: {
+      reportUnusedDisableDirectives: 'error',
+    },
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
@@ -230,7 +431,6 @@ export default tseslint.config(
       '@typescript-eslint/prefer-optional-chain': 'error',
 
       // General code quality
-      'no-console': 'warn',
       'no-else-return': 'error',
       'no-lonely-if': 'error',
       'no-unneeded-ternary': 'error',
@@ -246,10 +446,17 @@ export default tseslint.config(
         { max: 80, skipBlankLines: true, skipComments: true },
       ],
 
-      // Sonarjs rules (spread recommended as warnings, then override specifics)
+      // Issue #2079: warning-only SonarJS recommendations are not permitted
+      // because lint:ci uses --max-warnings 0. Start from off, then promote
+      // project-signal rules below to error. Future off decisions must be
+      // explicit and justified so the guard in scripts/check-eslint-guard.js
+      // can reject accidental policy weakening.
       ...Object.fromEntries(
         Object.entries(sonarjs.configs.recommended.rules ?? {}).map(
-          ([rule, config]) => [rule, Array.isArray(config) ? ['warn', ...config.slice(1)] : 'warn'],
+          ([rule, config]) => [
+            rule,
+            Array.isArray(config) ? ['off', ...config.slice(1)] : 'off', // eslint-policy-allow-off: #2079
+          ],
         ),
       ),
       'sonarjs/cognitive-complexity': ['error', 30],
@@ -257,8 +464,10 @@ export default tseslint.config(
       'sonarjs/no-ignored-exceptions': 'error',
       'sonarjs/regular-expr': 'error',
       'sonarjs/slow-regex': 'error',
-      'sonarjs/os-command': 'error',
-      'sonarjs/no-os-command-from-path': 'error',
+      // Issue #2079: this CLI intentionally invokes user/platform tools such as
+      // git, shells, editors, and ripgrep. These rules are not useful signal.
+      'sonarjs/os-command': 'off', // eslint-policy-allow-off: #2079
+      'sonarjs/no-os-command-from-path': 'off', // eslint-policy-allow-off: #2079
       'sonarjs/no-all-duplicated-branches': 'error',
       'sonarjs/no-duplicated-branches': 'error',
       'sonarjs/no-identical-functions': 'error',
@@ -399,12 +608,18 @@ export default tseslint.config(
       'sonarjs/prefer-immediate-return': 'off', // Named intermediates improve readability/debuggability
       'sonarjs/pseudo-random': 'off', // CLI context: Math.random for IDs/jitter, not cryptography
 
-      // ESLint comments (recommended rules downgraded to warn)
+      // Issue #2079: ESLint directive comments are policy controls, not code fixes.
       ...Object.fromEntries(
         Object.entries(eslintComments.configs.recommended.rules ?? {}).map(
-          ([rule, config]) => [rule, Array.isArray(config) ? ['warn', ...config.slice(1)] : 'warn'],
+          ([rule, config]) => [rule, Array.isArray(config) ? ['error', ...config.slice(1)] : 'error'],
         ),
       ),
+      'eslint-comments/no-use': [
+        'error',
+        {
+          allow: ['eslint-env', 'global', 'globals', 'exported'],
+        },
+      ],
 
       // --- End strict rules ---
 
@@ -416,7 +631,7 @@ export default tseslint.config(
         },
       ],
       'react/jsx-no-bind': [
-        'warn',
+        'error',
         {
           ignoreDOMComponents: false,
           ignoreRefs: true,
@@ -429,7 +644,61 @@ export default tseslint.config(
     },
   },
 
+  // Issue #2079 temporary legacy directive scope.
+  // Existing package code still contains inline ESLint directives and is burned
+  // down by #2081-#2092. The CI guard added for #2080 blocks new directives in
+  // diffs immediately; each cleanup issue removes or narrows this override for
+  // its scope before fixing that scope.
+  {
+    files: legacyDirectiveCleanupScopes,
+    linterOptions: {
+      reportUnusedDisableDirectives: 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+    },
+    rules: {
+      'eslint-comments/disable-enable-pair': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-aggregating-enable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-duplicate-disable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-restricted-disable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-unlimited-disable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-unused-disable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-unused-enable': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/no-use': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+      'eslint-comments/require-description': 'off', // eslint-policy-allow-off: #2079 temporary #2081-#2092
+    },
+  },
+
+
+  // Issues #2081/#2082 completed cleanup scopes. Keep these paths locked even
+  // while remaining core files still use the temporary legacy directive override.
+  {
+    files: completedDirectiveCleanupScopes,
+    linterOptions: {
+      reportUnusedDisableDirectives: 'error',
+    },
+    rules: {
+      'eslint-comments/no-use': 'error',
+    },
+  },
   // extra settings for scripts that we run directly with node
+  // Issue #2079 temporary warning burn-down scopes. These were warning-only
+  // before lint:ci started using --max-warnings 0 and are assigned to existing
+  // cleanup areas instead of being left as warnings.
+  {
+    files: ['packages/cli/src/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react/jsx-no-bind': 'off', // eslint-policy-allow-off: #2079 temporary #2087
+    },
+  },
+  {
+    files: [
+      'packages/core/src/config/subagentManager.ts',
+      'packages/core/src/skills/skillManager.ts',
+      'packages/telemetry/src/debug/**/*.ts',
+    ],
+    rules: {
+      'no-console': 'off', // eslint-policy-allow-off: #2079 temporary #2082/#2089
+    },
+  },
   {
     files: ['./scripts/**/*.js', './scripts/**/*.mjs', 'esbuild.config.js'],
     languageOptions: {
@@ -865,7 +1134,7 @@ export default tseslint.config(
     ],
     rules: {
       'no-restricted-imports': [
-        'warn',
+        'error',
         {
           paths: [],
           patterns: [
@@ -965,6 +1234,19 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1581
   // ============================================================================
+
+  // Issue #2081/#2082: Security credential-detection regex patterns.
+  // These are intentionally crafted to scan environment variables for secrets
+  // (credentials in URLs, JWT tokens). The sonarjs/regular-expr rule is a
+  // generic safety heuristic that cannot distinguish "validating untrusted
+  // input" from "scanning for secrets". The patterns are already bounded with
+  // explicit quantifiers to prevent ReDoS.
+  {
+    files: ['packages/core/src/services/environmentSanitization.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2081/#2082 security credential-detection regex
+    },
+  },
 
   // Prettier config must be last
   prettierConfig,
@@ -1145,7 +1427,6 @@ export default tseslint.config(
   {
     files: [
       'packages/core/src/agents/executor.ts',
-      'packages/core/src/config/config.ts',
       'packages/core/src/core/TodoContinuationService.test.ts',
     ],
     rules: {

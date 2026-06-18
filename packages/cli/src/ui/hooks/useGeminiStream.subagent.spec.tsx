@@ -22,10 +22,12 @@ import type {
   EditorType,
   AnyToolInvocation,
 } from '@vybestack/llxprt-code-core';
+import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
 import type { Part, PartListUnion } from '@google/genai';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
+import { StreamingState } from '../types.js';
 
 const inkMock = vi.hoisted(() => {
   const noop = vi.fn(() => null);
@@ -154,7 +156,7 @@ describe('useGeminiStream subagent isolation', () => {
   let mockOnDebugMessage: Mock;
   let mockHandleSlashCommand: Mock;
   let mockScheduleToolCalls: Mock;
-  let mockMarkToolsAsSubmitted: Mock;
+  let mockMarkToolsAsDisplayCleared: Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -220,17 +222,19 @@ describe('useGeminiStream subagent isolation', () => {
     } as unknown as LoadedSettings;
 
     mockScheduleToolCalls = vi.fn();
-    mockMarkToolsAsSubmitted = vi.fn();
+    mockMarkToolsAsDisplayCleared = vi.fn();
 
     const mockCancelAllToolCalls = vi.fn();
 
     mockUseReactToolScheduler.mockReturnValue([
       [],
       mockScheduleToolCalls,
-      mockMarkToolsAsSubmitted,
+      mockMarkToolsAsDisplayCleared,
       mockCancelAllToolCalls,
       0,
       true,
+      vi.fn(),
+      vi.fn(),
     ] as const);
 
     mockStartChat.mockClear().mockResolvedValue({
@@ -257,10 +261,12 @@ describe('useGeminiStream subagent isolation', () => {
       return [
         [],
         mockScheduleToolCalls,
-        mockMarkToolsAsSubmitted,
+        mockMarkToolsAsDisplayCleared,
         vi.fn(),
         0,
         true,
+        vi.fn(),
+        vi.fn(),
       ] as const;
     });
 
@@ -295,7 +301,7 @@ describe('useGeminiStream subagent isolation', () => {
         agentId: 'agent-sub',
       },
       status: 'success',
-      responseSubmittedToGemini: false,
+      displayCleared: false,
       response: {
         callId: 'subagent-call',
         responseParts: [{ text: 'subagent output' } as Part],
@@ -323,9 +329,248 @@ describe('useGeminiStream subagent isolation', () => {
     });
 
     await waitFor(() => {
-      expect(mockMarkToolsAsSubmitted).toHaveBeenCalledWith(['subagent-call']);
+      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledWith([
+        'subagent-call',
+      ]);
       expect(mockSendMessageStream).not.toHaveBeenCalled();
       expect(client.addHistory).not.toHaveBeenCalled();
     });
+  });
+
+  it('marks a terminal subagent tool as outstanding until displayCleared transitions it out of Responding', () => {
+    const client = new MockedAgentClientClass(mockConfig);
+
+    const unclearedSubagentTool: TrackedCompletedToolCall = {
+      request: {
+        callId: 'subagent-pending',
+        name: 'task',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-pending',
+        agentId: 'agent-sub',
+      },
+      status: 'success',
+      displayCleared: false,
+      response: {
+        callId: 'subagent-pending',
+        responseParts: [{ text: 'pending output' } as Part],
+        resultDisplay: undefined,
+        error: undefined,
+        errorType: undefined,
+      },
+      invocation: {
+        getDescription: () => `Mock description`,
+      } as unknown as AnyToolInvocation,
+      tool: {
+        name: 'task',
+        displayName: 'Task',
+        description: 'Launch subagent',
+        build: vi.fn(),
+      } as any,
+    };
+
+    mockUseReactToolScheduler.mockReturnValue([
+      [unclearedSubagentTool],
+      mockScheduleToolCalls,
+      mockMarkToolsAsDisplayCleared,
+      vi.fn(),
+      0,
+      true,
+      vi.fn(),
+      vi.fn(),
+    ] as const);
+
+    const { result } = renderHook(() =>
+      useGeminiStream(
+        client,
+        [],
+        mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
+        mockConfig,
+        mockSettings,
+        mockOnDebugMessage,
+        mockHandleSlashCommand as unknown as (
+          cmd: PartListUnion,
+        ) => Promise<SlashCommandProcessorResult | false>,
+        false,
+        () => 'vscode' as EditorType,
+        () => {},
+        () => Promise.resolve(),
+        () => {},
+        () => {},
+        () => {},
+      ),
+    );
+
+    // A terminal-but-not-yet-display-cleared subagent tool keeps the stream in
+    // Responding because isOutstandingToolCall treats it as outstanding.
+    expect(result.current.streamingState).toBe(StreamingState.Responding);
+  });
+
+  it('transitions a terminal subagent tool out of Responding once displayCleared is true', () => {
+    const client = new MockedAgentClientClass(mockConfig);
+
+    const clearedSubagentTool: TrackedCompletedToolCall = {
+      request: {
+        callId: 'subagent-cleared',
+        name: 'task',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-cleared',
+        agentId: 'agent-sub',
+      },
+      status: 'success',
+      displayCleared: true,
+      response: {
+        callId: 'subagent-cleared',
+        responseParts: [{ text: 'cleared output' } as Part],
+        resultDisplay: undefined,
+        error: undefined,
+        errorType: undefined,
+      },
+      invocation: {
+        getDescription: () => `Mock description`,
+      } as unknown as AnyToolInvocation,
+      tool: {
+        name: 'task',
+        displayName: 'Task',
+        description: 'Launch subagent',
+        build: vi.fn(),
+      } as any,
+    };
+
+    mockUseReactToolScheduler.mockReturnValue([
+      [clearedSubagentTool],
+      mockScheduleToolCalls,
+      mockMarkToolsAsDisplayCleared,
+      vi.fn(),
+      0,
+      true,
+      vi.fn(),
+      vi.fn(),
+    ] as const);
+
+    const { result } = renderHook(() =>
+      useGeminiStream(
+        client,
+        [],
+        mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
+        mockConfig,
+        mockSettings,
+        mockOnDebugMessage,
+        mockHandleSlashCommand as unknown as (
+          cmd: PartListUnion,
+        ) => Promise<SlashCommandProcessorResult | false>,
+        false,
+        () => 'vscode' as EditorType,
+        () => {},
+        () => Promise.resolve(),
+        () => {},
+        () => {},
+        () => {},
+      ),
+    );
+
+    // Once displayCleared is true, the terminal tool is no longer outstanding,
+    // so the streaming state settles to Idle without any model resubmission.
+    expect(result.current.streamingState).toBe(StreamingState.Idle);
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
+  });
+
+  it('renders a completed client-initiated tool to display without resubmitting to the model or marking it display-cleared', async () => {
+    const client = new MockedAgentClientClass(mockConfig);
+
+    let capturedOnComplete:
+      | ((
+          schedulerId: symbol,
+          completedTools: TrackedToolCall[],
+          options: { isPrimary: boolean },
+        ) => Promise<void>)
+      | null = null;
+
+    mockUseReactToolScheduler.mockImplementation((onComplete) => {
+      capturedOnComplete = onComplete as typeof capturedOnComplete;
+      return [
+        [],
+        mockScheduleToolCalls,
+        mockMarkToolsAsDisplayCleared,
+        vi.fn(),
+        0,
+        true,
+        vi.fn(),
+        vi.fn(),
+      ] as const;
+    });
+
+    renderHook(() =>
+      useGeminiStream(
+        client,
+        [],
+        mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
+        mockConfig,
+        mockSettings,
+        mockOnDebugMessage,
+        mockHandleSlashCommand as unknown as (
+          cmd: PartListUnion,
+        ) => Promise<SlashCommandProcessorResult | false>,
+        false,
+        () => 'vscode' as EditorType,
+        () => {},
+        () => Promise.resolve(),
+        () => {},
+        () => {},
+        () => {},
+      ),
+    );
+
+    // A client-initiated tool completes through the MAIN scheduler: it has
+    // isClientInitiated: true and agentId: DEFAULT_AGENT_ID, and its completion
+    // callback is invoked with { isPrimary: true }.
+    const clientInitiatedTool: TrackedCompletedToolCall = {
+      request: {
+        callId: 'client-callId',
+        name: 'list_directory',
+        args: {},
+        isClientInitiated: true,
+        prompt_id: 'prompt-client',
+        agentId: DEFAULT_AGENT_ID,
+      },
+      status: 'success',
+      displayCleared: false,
+      response: {
+        callId: 'client-callId',
+        responseParts: [{ text: 'dir listing' } as Part],
+        resultDisplay: undefined,
+        error: undefined,
+        errorType: undefined,
+      },
+      invocation: {
+        getDescription: () => `Mock description`,
+      } as unknown as AnyToolInvocation,
+      tool: {
+        name: 'list_directory',
+        displayName: 'List Directory',
+        description: 'List files',
+        build: vi.fn(),
+      } as any,
+    };
+
+    await act(async () => {
+      if (capturedOnComplete) {
+        await capturedOnComplete(Symbol('scheduler'), [clientInitiatedTool], {
+          isPrimary: true,
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(mockAddItem).toHaveBeenCalled();
+    });
+
+    // Completing a client-initiated tool does NOT resubmit to the model.
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
+    // A client-initiated PRIMARY tool is cleared by the scheduler emptying its
+    // list, NOT via the displayCleared flag, so markToolsAsDisplayCleared is
+    // never called for it.
+    expect(mockMarkToolsAsDisplayCleared).not.toHaveBeenCalled();
   });
 });

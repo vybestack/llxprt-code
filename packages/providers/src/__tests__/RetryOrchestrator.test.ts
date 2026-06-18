@@ -140,6 +140,34 @@ function createNetworkError(code = 'ECONNRESET'): Error {
 }
 
 /**
+ * Helper to create an Anthropic SDK-wrapped api_error (Internal Server Error).
+ *
+ * Mirrors how the Anthropic SDK throws stream error events: it constructs an
+ * APIError with `status: undefined` and stores the entire response body on the
+ * `error` property. The retryable type therefore lives at
+ * `error.error.error.type`, with the intermediate `error.error.type` being the
+ * generic envelope value "error". Carries no HTTP status, so retryability must
+ * be derived from the body-level type (issue #2053).
+ */
+function createAnthropicApiError(): Error {
+  const error = new Error('Internal server error') as Error & {
+    status?: number;
+    error?: unknown;
+  };
+  error.status = undefined;
+  error.error = {
+    type: 'error',
+    error: {
+      details: null,
+      type: 'api_error',
+      message: 'Internal server error',
+    },
+    request_id: 'req_011Cc7LnNajEpxrjW4iJ67q7',
+  };
+  return error;
+}
+
+/**
  * Helper to consume async iterator and return all chunks
  */
 async function consumeStream(
@@ -360,6 +388,36 @@ describe('RetryOrchestrator', () => {
 
       expect(throttleWaits.length).toBeGreaterThan(0);
       expect(throttleWaits[0]).toBeGreaterThan(0);
+    });
+
+    it('should retry on Anthropic SDK-wrapped api_error and then succeed (issue #2053)', async () => {
+      // Reproduces issue #2053: an Anthropic "Internal server error" (api_error)
+      // arrives with no HTTP status, wrapped by the SDK at
+      // error.error.error.type. Previously this broke the loop instead of
+      // retrying. The orchestrator must retry and yield the eventual success.
+      const apiError = createAnthropicApiError();
+      const provider = createTestProvider({
+        responses: [{ error: apiError }, 'success'],
+      });
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+      };
+
+      const result = await consumeStream(
+        orchestrator.generateChatCompletion(options),
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'test response',
+      });
     });
   });
 

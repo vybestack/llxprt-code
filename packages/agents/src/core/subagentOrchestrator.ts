@@ -335,10 +335,13 @@ export class SubagentOrchestrator {
       'maxTurnsPerPrompt',
     ]);
 
-    const maxTurns = custom?.max_turns ?? profileMaxTurns ?? 200;
+    const parentMaxTurns = this.getParentMaxTurns();
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent settings cross persisted/runtime boundaries despite declared types.
-    if (maxTurns !== undefined && maxTurns > 0) {
+    const maxTurns = custom?.max_turns ?? profileMaxTurns ?? parentMaxTurns;
+
+    if (maxTurns === undefined) {
+      runConfig.max_turns = 200;
+    } else if (maxTurns > 0) {
       runConfig.max_turns = Math.floor(maxTurns);
     }
 
@@ -347,6 +350,25 @@ export class SubagentOrchestrator {
     }
 
     return runConfig;
+  }
+
+  private getParentMaxTurns(): number | undefined {
+    const config = this.options.foregroundConfig as Config & {
+      getEphemeralSetting?: (key: string) => unknown;
+    };
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Foreground config may not implement getEphemeralSetting in all environments.
+    if (typeof config.getEphemeralSetting !== 'function') {
+      return undefined;
+    }
+    const value = config.getEphemeralSetting('maxTurnsPerPrompt');
+    if (
+      typeof value === 'number' &&
+      Number.isFinite(value) &&
+      (value === -1 || value > 0)
+    ) {
+      return value;
+    }
+    return undefined;
   }
 
   private async resolveRuntimeProfile(
