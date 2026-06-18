@@ -574,10 +574,10 @@ describe('GracefulErrorHandler', () => {
       await expect(wrappedMethod()).rejects.toThrow(/Authentication required/);
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        'You need to sign in to Test-provider to continue.',
+        'OAuth authentication requires user action for Test-provider.',
       );
       expect(consoleSpy).toHaveBeenCalledWith(
-        "Action required: Run 'llxprt auth login test-provider' to sign in again.",
+        "Action required: Run 'llxprt auth login test-provider' to sign in again or review the provider authentication instructions.",
       );
 
       consoleSpy.mockRestore();

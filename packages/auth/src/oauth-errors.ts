@@ -655,19 +655,14 @@ export class GracefulErrorHandler {
 
         // Always show user-friendly error message for user-actionable errors
         if (oauthError.category === OAuthErrorCategory.USER_ACTION_REQUIRED) {
+          const providerName =
+            provider.charAt(0).toUpperCase() + provider.slice(1);
           this.logger.error(
-            OAuthError.generateUserMessage(
-              oauthError.type,
-              oauthError.provider,
-            ),
+            `OAuth authentication requires user action for ${providerName}.`,
           );
-          const actionRequired = OAuthError.generateActionRequired(
-            oauthError.type,
-            oauthError.provider,
+          this.logger.error(
+            `Action required: Run 'llxprt auth login ${provider}' to sign in again or review the provider authentication instructions.`,
           );
-          if (actionRequired !== null) {
-            this.logger.error(`Action required: ${actionRequired}`);
-          }
         }
 
         // Log technical details for debugging
