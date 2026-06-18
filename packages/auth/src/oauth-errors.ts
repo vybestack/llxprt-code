@@ -176,10 +176,10 @@ export class OAuthError extends Error {
     this.isRetryable = this.determineRetryability(type);
     this.userMessage = isNonEmpty(options.userMessage)
       ? options.userMessage
-      : this.generateUserMessage(type, provider);
+      : OAuthError.generateUserMessage(type, provider);
     this.actionRequired = isNonEmpty(options.actionRequired)
       ? options.actionRequired
-      : this.generateActionRequired(type, provider);
+      : OAuthError.generateActionRequired(type, provider);
     this.retryAfterMs = options.retryAfterMs ?? null;
     this.technicalDetails = options.technicalDetails ?? {};
     this.originalError = options.originalError ?? null;
@@ -241,7 +241,7 @@ export class OAuthError extends Error {
   /**
    * Generates user-friendly error message
    */
-  private generateUserMessage(type: OAuthErrorType, provider: string): string {
+  static generateUserMessage(type: OAuthErrorType, provider: string): string {
     const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
 
     switch (type) {
@@ -287,7 +287,7 @@ export class OAuthError extends Error {
   /**
    * Generates actionable guidance for users
    */
-  private generateActionRequired(
+  static generateActionRequired(
     type: OAuthErrorType,
     provider: string,
   ): string | null {
@@ -652,9 +652,18 @@ export class GracefulErrorHandler {
 
         // Always show user-friendly error message for user-actionable errors
         if (oauthError.category === OAuthErrorCategory.USER_ACTION_REQUIRED) {
-          this.logger.error(oauthError.userMessage);
-          if (oauthError.actionRequired) {
-            this.logger.error(`Action required: ${oauthError.actionRequired}`);
+          this.logger.error(
+            OAuthError.generateUserMessage(
+              oauthError.type,
+              oauthError.provider,
+            ),
+          );
+          const actionRequired = OAuthError.generateActionRequired(
+            oauthError.type,
+            oauthError.provider,
+          );
+          if (actionRequired !== null) {
+            this.logger.error(`Action required: ${actionRequired}`);
           }
         }
 
