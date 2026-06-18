@@ -280,7 +280,11 @@ describe('parseArgumentsParity: boolean defaults', () => {
   });
 
   it('--debug=<namespaces> preserves the namespace specifier string', async () => {
-    process.argv = ['node', 'script.js', '--debug=llxprt:core:*,llxprt:openai:*'];
+    process.argv = [
+      'node',
+      'script.js',
+      '--debug=llxprt:core:*,llxprt:openai:*',
+    ];
     const argv = await parseArguments({} as Settings);
     expect(argv.debug).toBe('llxprt:core:*,llxprt:openai:*');
   });
