@@ -32,7 +32,20 @@ const FORBIDDEN_PATH_PREFIXES = [
 ] as const;
 
 const REGEX_SPECIAL_CHARS = new Set([
-  '.', '*', '+', '?', '^', '$', '{', '}', '(', ')', '|', '[', ']', '\\',
+  '.',
+  '*',
+  '+',
+  '?',
+  '^',
+  '$',
+  '{',
+  '}',
+  '(',
+  ')',
+  '|',
+  '[',
+  ']',
+  '\\',
 ]);
 
 /** Escapes regex special characters so a literal string matches only itself. */
