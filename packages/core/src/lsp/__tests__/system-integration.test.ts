@@ -438,6 +438,12 @@ describe('LSP system integration (P35)', () => {
     const editPath = fileURLToPath(
       new URL('../../../../tools/src/tools/edit.ts', import.meta.url),
     );
+    const editUtilsPath = fileURLToPath(
+      new URL(
+        '../../../../tools/src/tools/edit-utils.ts',
+        import.meta.url,
+      ),
+    );
     const helperPath = fileURLToPath(
       new URL(
         '../../../../tools/src/utils/lsp-diagnostics-helper.ts',
@@ -446,15 +452,16 @@ describe('LSP system integration (P35)', () => {
     );
 
     const editSource = readFileSync(editPath, 'utf8');
+    const editUtilsSource = readFileSync(editUtilsPath, 'utf8');
     const helperSource = readFileSync(helperPath, 'utf8');
 
     // edit.ts uses the shared helper via import
     expect(editSource).toContain('collectLspDiagnosticsBlock');
 
-    // The moved tools-package path keeps the legacy LSP client bridge
-    // and the shared helper contains the current diagnostics integration.
-    expect(editSource).toContain('getLspServiceClient');
-    expect(editSource).toContain('checkFile');
+    // The LSP client bridge and checkFile were extracted to edit-utils.ts
+    // during #2088 decomposition. Verify they remain in the tools package.
+    expect(editUtilsSource).toContain('getLspServiceClient');
+    expect(editUtilsSource).toContain('checkFile');
     expect(helperSource).toContain('waitForDiagnostics');
   });
 
