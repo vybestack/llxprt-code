@@ -4,17 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable max-lines -- Existing A2A task orchestration file exceeds the project line limit; MCP extraction only updates import boundaries. */
-
 import {
   GeminiEventType,
   ToolConfirmationOutcome,
   ApprovalMode,
-  isNodeError,
   createAgentRuntimeState,
   DEFAULT_GUI_EDITOR,
-  EDIT_TOOL_NAMES,
-  processRestorableToolCalls,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
 import type {
@@ -31,10 +26,6 @@ import type {
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
 import { AgentClient } from '@vybestack/llxprt-code-agents';
-import {
-  getAllMCPServerStatuses,
-  MCPServerStatus,
-} from '@vybestack/llxprt-code-mcp';
 import type { RequestContext } from '@a2a-js/sdk/server';
 import { type ExecutionEventBus } from '@a2a-js/sdk/server';
 import type {
@@ -47,18 +38,15 @@ import type {
 } from '@a2a-js/sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger.js';
-import * as fs from 'node:fs';
 
 import { CoderAgentEvent } from '../types.js';
 import type {
   CoderAgentMessage,
   StateChange,
-  TextContent,
   TaskMetadata,
-  Thought,
   ThoughtSummary,
 } from '../types.js';
-import type { PartUnion, Part as genAiPart } from '@google/genai';
+import type { PartUnion } from '@google/genai';
 import {
   createToolStatusMessage,
   isInformationalAgentEvent,
@@ -72,34 +60,22 @@ import {
   handleStreamError,
   handleUserCancelled,
   normalizeToolCallRequest,
-  writeCheckpointsAndUpdateRequests,
-  applyReplacement,
   convertAnsiOutputToString,
   createTextMessage,
   createDataMessage,
 } from './task-support.js';
-type SchedulerConfig = Config & {
-  getOrCreateScheduler(
-    sessionId: string,
-    callbacks: {
-      outputUpdateHandler: (toolCallId: string, chunk: string) => void;
-      onAllToolCallsComplete: (
-        completedToolCalls: CompletedToolCall[],
-      ) => Promise<void>;
-      onToolCallsUpdate: (toolCalls: ToolCall[]) => void;
-      getPreferredEditor: () => typeof DEFAULT_GUI_EDITOR;
-      onEditorClose: () => void;
-    },
-    options?: Record<string, unknown>,
-    dependencies?: { messageBus?: MessageBus },
-  ): Promise<ToolSchedulerContract>;
-};
+import {
+  type SchedulerConfig,
+  getEventTraceId,
+  getProposedContent,
+  resolveModel,
+  resolveTimestamp,
+  normalizeResponseToGenAiParts,
+  buildLlmPartsFromToolCalls,
+  createCheckpointsForRestorableTools,
+  buildServerAndToolMetadata,
+} from './task-runtime-helpers.js';
 
-function getEventTraceId(event: ServerGeminiStreamEvent): string | undefined {
-  return 'traceId' in event && typeof event.traceId === 'string'
-    ? event.traceId
-    : undefined;
-}
 export class Task {
   id: string;
   contextId: string;
@@ -146,8 +122,11 @@ export class Task {
     const runtimeState = createAgentRuntimeState({
       runtimeId: `${this.contextId}-task-runtime`,
       provider: this.config.getProvider() ?? 'gemini',
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty-string model should fall through to contentConfig/default (matches PR #1901 convention; Config.getModel() returns string)
-      model: this.config.getModel() || contentConfig?.model || 'gemini-pro',
+      model: resolveModel(
+        this.config.getModel(),
+        contentConfig?.model,
+        'gemini-pro',
+      ),
       proxyUrl: this.config.getProxy(),
       sessionId: this.config.getSessionId(),
     });
@@ -176,26 +155,11 @@ export class Task {
   // process. This is not scoped to the individual task but reflects the global connection
   // state managed within the @gemini-cli/core module.
   async getMetadata(): Promise<TaskMetadata> {
-    const toolRegistry = this.config.getToolRegistry();
-    const mcpServers = this.config.getMcpServers() ?? {};
-    const serverStatuses = getAllMCPServerStatuses();
-    const servers = Object.keys(mcpServers).map((serverName) => ({
-      name: serverName,
-      status: serverStatuses.get(serverName) ?? MCPServerStatus.DISCONNECTED,
-      tools: toolRegistry.getToolsByServer(serverName).map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        parameterSchema: tool.schema.parameters,
-      })),
-    }));
+    const { mcpServers, availableTools } = buildServerAndToolMetadata(
+      this.config,
+    );
 
-    const availableTools = toolRegistry.getAllTools().map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      parameterSchema: tool.schema.parameters,
-    }));
-
-    const metadata: TaskMetadata = {
+    return {
       id: this.id,
       contextId: this.contextId,
       taskState: this.taskState,
@@ -203,10 +167,9 @@ export class Task {
         this.modelInfo?.model ??
         this.config.getContentGeneratorConfig()?.model ??
         'unknown',
-      mcpServers: servers,
+      mcpServers,
       availableTools,
     };
-    return metadata;
   }
 
   private _resetToolCompletionPromise(): void {
@@ -302,8 +265,7 @@ export class Task {
       status: {
         state: stateToReport,
         message, // Shorthand property
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string timestamp is invalid, use current time
-        timestamp: timestamp || new Date().toISOString(),
+        timestamp: resolveTimestamp(timestamp),
       },
       final,
       metadata,
@@ -518,18 +480,7 @@ export class Task {
     old_string: string,
     new_string: string,
   ): Promise<string> {
-    try {
-      const currentContent = fs.readFileSync(file_path, 'utf8');
-      return applyReplacement(
-        currentContent,
-        old_string,
-        new_string,
-        old_string === '' && currentContent === '',
-      );
-    } catch (err) {
-      if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
-      return '';
-    }
+    return getProposedContent(file_path, old_string, new_string);
   }
 
   async scheduleToolCalls(
@@ -554,63 +505,16 @@ export class Task {
     };
     this.setTaskStateAndPublishUpdate('working', stateChange);
 
-    await this._createCheckpointsForRestorableTools(updatedRequests);
+    await createCheckpointsForRestorableTools(
+      this.config,
+      updatedRequests,
+      this.agentClient,
+    );
 
     if (!this.scheduler) {
       throw new Error('Scheduler not initialized');
     }
     await this.scheduler.schedule(updatedRequests, abortSignal);
-  }
-
-  private async _createCheckpointsForRestorableTools(
-    updatedRequests: ToolCallRequestInfo[],
-  ): Promise<void> {
-    if (!this.config.getCheckpointingEnabled()) {
-      return;
-    }
-
-    try {
-      const restorableRequests = updatedRequests.filter((r) =>
-        EDIT_TOOL_NAMES.has(r.name),
-      );
-
-      if (restorableRequests.length === 0) {
-        return;
-      }
-
-      logger.info(
-        `[Task] Creating checkpoints for ${restorableRequests.length} restorable tool calls.`,
-      );
-
-      const gitService = await this.config.getGitService();
-      const { checkpointsToWrite, toolCallToCheckpointMap, errors } =
-        await processRestorableToolCalls(
-          restorableRequests,
-          gitService,
-          this.agentClient,
-        );
-
-      if (errors.length > 0) {
-        logger.warn(
-          `[Task] Checkpoint creation had ${errors.length} errors: ${errors.join(', ')}`,
-        );
-      }
-
-      if (checkpointsToWrite.size > 0) {
-        const checkpointDir =
-          this.config.storage.getProjectTempCheckpointsDir();
-        await writeCheckpointsAndUpdateRequests(
-          checkpointsToWrite,
-          checkpointDir,
-          toolCallToCheckpointMap,
-          updatedRequests,
-        );
-      }
-    } catch (checkpointError) {
-      logger.warn(
-        `[Task] Checkpoint creation failed, continuing with tool execution: ${checkpointError instanceof Error ? checkpointError.message : String(checkpointError)}`,
-      );
-    }
   }
 
   async acceptAgentMessage(event: ServerGeminiStreamEvent): Promise<void> {
@@ -724,14 +628,7 @@ export class Task {
     );
 
     for (const response of responsesToAdd) {
-      let parts: genAiPart[];
-      if (Array.isArray(response)) {
-        parts = response;
-      } else if (typeof response === 'string') {
-        parts = [{ text: response }];
-      } else {
-        parts = [response];
-      }
+      const parts = normalizeResponseToGenAiParts(response);
       void this.agentClient.addHistory({
         role: 'user',
         parts,
@@ -748,7 +645,7 @@ export class Task {
       return;
     }
 
-    const llmParts: PartUnion[] = [];
+    const llmParts = buildLlmPartsFromToolCalls(completedToolCalls);
     logger.info(
       `[Task] Feeding ${completedToolCalls.length} tool responses to LLM.`,
     );
@@ -756,12 +653,6 @@ export class Task {
       logger.info(
         `[Task] Adding tool response for "${completedToolCall.request.name}" (callId: ${completedToolCall.request.callId}) to LLM input.`,
       );
-      const responseParts = completedToolCall.response.responseParts;
-      if (Array.isArray(responseParts)) {
-        llmParts.push(...responseParts);
-      } else {
-        llmParts.push(responseParts);
-      }
     }
 
     logger.info('[Task] Sending new parts to agent.');
@@ -860,20 +751,10 @@ export class Task {
       return;
     }
     logger.info('[Task] Sending text content to event bus.');
-    const message = createTextMessage(content, this.id, this.contextId);
-    const textContent: TextContent = {
-      kind: CoderAgentEvent.TextContentEvent,
-    };
-    this.eventBus?.publish(
-      this._createStatusUpdateEvent(
-        this.taskState,
-        textContent,
-        message,
-        false,
-        undefined,
-        undefined,
-        traceId,
-      ),
+    this.publishContentMessage(
+      createTextMessage(content, this.id, this.contextId),
+      { kind: CoderAgentEvent.TextContentEvent },
+      traceId,
     );
   }
 
@@ -882,14 +763,22 @@ export class Task {
       return;
     }
     logger.info('[Task] Sending thought to event bus.');
-    const message = createDataMessage(content, this.id, this.contextId);
-    const thought: Thought = {
-      kind: CoderAgentEvent.ThoughtEvent,
-    };
+    this.publishContentMessage(
+      createDataMessage(content, this.id, this.contextId),
+      { kind: CoderAgentEvent.ThoughtEvent },
+      traceId,
+    );
+  }
+
+  private publishContentMessage(
+    message: Message,
+    coderAgentMessage: CoderAgentMessage,
+    traceId?: string,
+  ): void {
     this.eventBus?.publish(
       this._createStatusUpdateEvent(
         this.taskState,
-        thought,
+        coderAgentMessage,
         message,
         false,
         undefined,

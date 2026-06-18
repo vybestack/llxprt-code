@@ -284,13 +284,11 @@ describe('DebugLogger', () => {
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
     logger.log('test message');
 
-    expect(writeSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        timestamp: expect.stringMatching(
-          // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
-        ),
-      }),
+    const writtenEntry = writeSpy.mock.calls[0][0] as { timestamp: string };
+    // Validate ISO 8601 UTC format without a complex regex literal.
+    expect(Number.isNaN(Date.parse(writtenEntry.timestamp))).toBe(false);
+    expect(new Date(writtenEntry.timestamp).toISOString()).toBe(
+      writtenEntry.timestamp,
     );
   });
 

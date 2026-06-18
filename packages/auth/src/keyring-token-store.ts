@@ -46,11 +46,7 @@ const LOCK_WRITE_GRACE_MS = 750;
 /** Lazily resolved to avoid crashing when homedir() is undefined at import time. */
 let _lockDir: string | undefined;
 function getLockDir(): string {
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing
-  if (!_lockDir) {
-    _lockDir = join(homedir(), '.llxprt', 'oauth', 'locks');
-  }
-  return _lockDir;
+  return (_lockDir ??= join(homedir(), '.llxprt', 'oauth', 'locks'));
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -163,26 +159,53 @@ export class KeyringTokenStore implements TokenStore {
       `[acquireLock] wait=${waitMs} stale=${staleMs} poll=${LOCK_POLL_INTERVAL_MS}`,
     );
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- lock acquisition loop
     while (Date.now() - startTime < waitMs) {
       const createResult = await this.tryCreateLock(lockPath);
       if (createResult === 'acquired') {
         return true;
       }
 
-      const checkResult = await this.checkExistingLock(lockPath, staleMs);
-      if (checkResult === 'retry') {
+      if (await this.shouldRetryAfterExistingCheck(lockPath, staleMs)) {
         await sleep(LOCK_POLL_INTERVAL_MS);
-        continue;
       }
-      if (checkResult === 'stale_broken') {
-        continue;
-      }
-
-      await sleep(LOCK_POLL_INTERVAL_MS);
     }
 
     return false;
+  }
+
+  private async shouldRetryAfterExistingCheck(
+    lockPath: string,
+    staleMs: number,
+  ): Promise<boolean> {
+    const checkResult = await this.checkExistingLock(lockPath, staleMs);
+    return checkResult !== 'stale_broken';
+  }
+
+  private async removeStaleLock(lockPath: string): Promise<void> {
+    try {
+      await fs.unlink(lockPath);
+    } catch {
+      // Ignore ENOENT
+    }
+  }
+
+  private async lockOwnershipConfirmed(
+    lockPath: string,
+    createdLockInfo: { pid: number; timestamp: number },
+  ): Promise<boolean> {
+    try {
+      const content = await fs.readFile(lockPath, 'utf8');
+      const existing = JSON.parse(content) as {
+        pid: number;
+        timestamp: number;
+      };
+      return (
+        existing.pid === createdLockInfo.pid &&
+        existing.timestamp === createdLockInfo.timestamp
+      );
+    } catch {
+      return false;
+    }
   }
 
   private async tryCreateLock(
@@ -197,21 +220,8 @@ export class KeyringTokenStore implements TokenStore {
       });
       createdLockInfo = lockInfo;
 
-      try {
-        const content = await fs.readFile(lockPath, 'utf8');
-        const existing = JSON.parse(content) as {
-          pid: number;
-          timestamp: number;
-        };
-        // eslint-disable-next-line sonarjs/nested-control-flow -- lock verification
-        if (
-          existing.pid === createdLockInfo.pid &&
-          existing.timestamp === createdLockInfo.timestamp
-        ) {
-          return 'acquired';
-        }
-      } catch {
-        // Lock file disappeared or is unreadable
+      if (await this.lockOwnershipConfirmed(lockPath, createdLockInfo)) {
+        return 'acquired';
       }
     } catch (writeError) {
       const err = writeError as NodeJS.ErrnoException;
@@ -246,12 +256,7 @@ export class KeyringTokenStore implements TokenStore {
       }
 
       if (lockAge > staleMs) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- stale lock cleanup
-        try {
-          await fs.unlink(lockPath);
-        } catch {
-          // Ignore ENOENT
-        }
+        await this.removeStaleLock(lockPath);
         return 'stale_broken';
       }
 

@@ -605,6 +605,20 @@ export function handleInvalidStream(
 }
 
 /**
+ * Resolves a provider stream error message against a fallback for malformed
+ * payloads. Provider events cross a runtime boundary where error.message may
+ * be missing/nullish despite the type declaration; this preserves the previous
+ * "Unknown error from LLM stream" fallback so downstream publish/log/cancel
+ * calls never receive undefined.
+ */
+function resolveStreamErrorMessage(
+  message: string | undefined,
+  fallback: string,
+): string {
+  return typeof message === 'string' && message !== '' ? message : fallback;
+}
+
+/**
  * Handles LLM stream error events by cancelling pending tools
  * and publishing an error status update.
  */
@@ -615,9 +629,10 @@ export function handleStreamError(
   traceId?: string,
 ): void {
   // Provider stream events are runtime boundaries; malformed payloads must not publish undefined.
-  const errorMessage =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Runtime boundary: error.message may be undefined in malformed payloads despite type definitions
-    event.value.error.message ?? 'Unknown error from LLM stream';
+  const errorMessage = resolveStreamErrorMessage(
+    event.value.error.message,
+    'Unknown error from LLM stream',
+  );
   logger.error('[Task] Received error event from LLM stream:', errorMessage);
   const errMessage = parseAndFormatApiError(
     event.value.error,
@@ -659,6 +674,16 @@ export function handleUserCancelled(
   );
 }
 
+function isReplaceRequestNeedingContent(request: ToolCallRequestInfo): boolean {
+  if (request.name !== 'replace') return false;
+  if (request.args['newContent'] !== undefined) return false;
+  return (
+    request.args['file_path'] !== undefined &&
+    request.args['old_string'] !== undefined &&
+    request.args['new_string'] !== undefined
+  );
+}
+
 /**
  * Normalizes a tool call request with default agentId and computes newContent
  * for 'replace' tool calls that don't already have newContent set.
@@ -676,14 +701,7 @@ export async function normalizeToolCallRequest(
     agentId: request.agentId ?? DEFAULT_AGENT_ID,
   };
 
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    normalizedRequest.name === 'replace' &&
-    normalizedRequest.args['newContent'] === undefined &&
-    normalizedRequest.args['file_path'] !== undefined &&
-    normalizedRequest.args['old_string'] !== undefined &&
-    normalizedRequest.args['new_string'] !== undefined
-  ) {
+  if (isReplaceRequestNeedingContent(normalizedRequest)) {
     const newContent = await getProposedContent(
       normalizedRequest.args['file_path'] as string,
       normalizedRequest.args['old_string'] as string,
@@ -695,6 +713,20 @@ export async function normalizeToolCallRequest(
     };
   }
   return normalizedRequest;
+}
+
+function attachCheckpointToRequest(
+  requests: ToolCallRequestInfo[],
+  callId: string,
+  checkpointPath: string,
+): void {
+  const request = requests.find((req) => req.callId === callId);
+  if (request) {
+    request.checkpoint = checkpointPath;
+    logger.info(
+      `[Task] Checkpoint created for callId ${callId}: ${checkpointPath}`,
+    );
+  }
 }
 
 /**
@@ -722,14 +754,7 @@ export async function writeCheckpointsAndUpdateRequests(
       )?.[0];
 
       if (callId) {
-        const request = updatedRequests.find((req) => req.callId === callId);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (request) {
-          request.checkpoint = checkpointPath;
-          logger.info(
-            `[Task] Checkpoint created for callId ${callId}: ${checkpointPath}`,
-          );
-        }
+        attachCheckpointToRequest(updatedRequests, callId, checkpointPath);
       }
     } catch (writeError) {
       logger.warn(

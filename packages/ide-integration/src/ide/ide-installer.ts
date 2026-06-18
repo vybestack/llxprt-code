@@ -32,7 +32,6 @@ async function findVsCodeCommand(
   const vscodeCommand = getVsCodeCommand(platform);
   try {
     if (platform === 'win32') {
-      // eslint-disable-next-line sonarjs/os-command -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       const result = child_process
         .execSync(`where.exe ${vscodeCommand}`)
         .toString()
@@ -43,7 +42,6 @@ async function findVsCodeCommand(
         return firstPath;
       }
     } else {
-      // eslint-disable-next-line sonarjs/os-command -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       child_process.execSync(`command -v ${vscodeCommand}`, {
         stdio: 'ignore',
       });
@@ -74,8 +72,7 @@ async function findVsCodeCommand(
     // Windows
     locations.push(
       path.join(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var may be empty string, fallback to default path
-        process.env.ProgramFiles || 'C:\\Program Files',
+        process.env.ProgramFiles ?? 'C:\\Program Files',
         'Microsoft VS Code',
         'bin',
         'code.cmd',

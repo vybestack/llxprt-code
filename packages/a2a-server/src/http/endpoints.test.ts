@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -15,6 +14,7 @@ import * as os from 'node:os';
 import type { Server } from 'node:http';
 import type { TaskMetadata } from '../types.js';
 import type { AddressInfo } from 'node:net';
+import { logger } from '../utils/logger.js';
 
 // Mock the logger to avoid polluting test output
 // Comment out to help debug
@@ -132,7 +132,7 @@ describe('Agent Server Endpoints', () => {
       try {
         fs.rmSync(testWorkspace, { recursive: true, force: true });
       } catch (e) {
-        console.warn(`Could not remove temp dir '${testWorkspace}':`, e);
+        logger.warn(`Could not remove temp dir '${testWorkspace}':`, e);
       }
     }
   });

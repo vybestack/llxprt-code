@@ -417,8 +417,8 @@ async function handleTaskMetadata(
 export async function main() {
   try {
     const expressApp = await createApp();
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var default
-    const port = process.env['CODER_AGENT_PORT'] || 0;
+    const portEnv = process.env['CODER_AGENT_PORT'];
+    const port = portEnv !== undefined && portEnv !== '' ? Number(portEnv) : 0;
 
     const server = expressApp.listen(port, () => {
       const address = server.address();

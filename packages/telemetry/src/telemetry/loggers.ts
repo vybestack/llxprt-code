@@ -88,6 +88,16 @@ function getCommonAttributes(config: SessionConfig): LogAttributes {
   };
 }
 
+function formatStatusCode(statusCode: number | string | undefined): string {
+  if (statusCode === undefined || statusCode === '' || statusCode === 0) {
+    return 'N/A';
+  }
+  if (typeof statusCode === 'number' && Number.isNaN(statusCode)) {
+    return 'N/A';
+  }
+  return String(statusCode);
+}
+
 export function logCliConfiguration(
   config: Config,
   event: StartSessionEvent,
@@ -377,8 +387,7 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
 
   const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    body: `API response from ${event.model}. Status: ${event.status_code !== undefined && event.status_code !== '' && event.status_code !== 0 && !(typeof event.status_code === 'number' && Number.isNaN(event.status_code)) ? event.status_code : 'N/A'}. Duration: ${event.duration_ms}ms.`,
+    body: `API response from ${event.model}. Status: ${formatStatusCode(event.status_code)}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };
   logger.emit(logRecord);
