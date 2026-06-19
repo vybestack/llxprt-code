@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { statsCommand } from './statsCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -37,6 +37,10 @@ describe('statsCommand null sessionStartTime guard', () => {
     getActiveProviderNameMock.mockReset();
     getCliProviderManagerMock.mockReset();
     getEphemeralSettingMock.mockReturnValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('should show an error when sessionStartTime is null', async () => {

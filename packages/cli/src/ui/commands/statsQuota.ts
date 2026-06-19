@@ -143,8 +143,8 @@ async function fetchApiKeyProviderQuota(
   const ephemeralBaseUrl = runtimeApi.getEphemeralSetting('base-url');
   if (typeof ephemeralBaseUrl === 'string') {
     provider = detectApiKeyProvider(ephemeralBaseUrl);
-    baseUrlForFetch = ephemeralBaseUrl;
     if (provider) {
+      baseUrlForFetch = ephemeralBaseUrl;
       logger.debug(() => `Detected ${provider} from ephemeral base-url`);
     }
   }

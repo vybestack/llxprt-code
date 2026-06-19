@@ -112,7 +112,13 @@ export function assignArgsToPrompt(
   }
 
   if (unfilledArgs.length === 1) {
-    // Single unfilled required arg: join all positional tokens as one value.
+    // Single unfilled required arg: if no positional tokens were provided,
+    // the required argument is missing. Otherwise join all positional tokens
+    // as one value (preserving legacy multi-word single-argument behavior).
+    if (positionalTokens.length === 0) {
+      const missingName = `--${unfilledArgs[0].name}`;
+      return new Error(`Missing required argument(s): ${missingName}`);
+    }
     promptInputs[unfilledArgs[0].name] = positionalTokens.join(' ');
     return promptInputs;
   }

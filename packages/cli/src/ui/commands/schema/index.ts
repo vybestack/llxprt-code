@@ -116,12 +116,12 @@ function collectNestedPaths(
     if (nextNode.kind === 'value' && nextNode.options) {
       flattened.push(...flattenValueOptions(nodePath, nextNode));
     } else if (nextNode.kind === 'literal') {
-      // Recursively flatten nested literals
-      const nestedLiterals = nextNodes.filter(
-        (n): n is LiteralArgument => n.kind === 'literal',
-      );
-      const nestedPaths = flattenSchemaPaths(nestedLiterals, nodePath);
-      flattened.push(...nestedPaths);
+      // Recursively flatten into this literal's nested schema, avoiding
+      // re-processing sibling literals on each iteration.
+      const literalPath = [...nodePath, nextNode.value];
+      if (nextNode.next && nextNode.next.length > 0) {
+        collectNestedPaths(nextNode.next, literalPath, flattened);
+      }
     }
   }
 }

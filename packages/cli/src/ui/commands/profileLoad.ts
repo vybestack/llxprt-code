@@ -90,7 +90,7 @@ async function switchProviderManager(
       `[profile] forcing config provider manager switch to '${providerName}'`,
   );
   try {
-    void providerManager.setActiveProvider(providerName);
+    await providerManager.setActiveProvider(providerName);
     logActiveProviderName(providerManager);
   } catch (error) {
     logger.error(

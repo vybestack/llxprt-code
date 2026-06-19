@@ -120,6 +120,19 @@ describe('assignArgsToPrompt', () => {
     );
     expect(result).toStrictEqual({ a: 'filled' });
   });
+
+  it('returns an error when a single required arg is missing and no positional tokens', () => {
+    const argValues = new Map<string, string>();
+    const result = assignArgsToPrompt(
+      argValues,
+      [],
+      [{ name: 'only', required: true }],
+    );
+    expect(result).toBeInstanceOf(Error);
+    expect((result as Error).message).toBe(
+      'Missing required argument(s): --only',
+    );
+  });
 });
 
 describe('parsePromptArgs', () => {

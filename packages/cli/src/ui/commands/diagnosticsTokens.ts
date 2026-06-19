@@ -57,10 +57,19 @@ async function appendProviderTokens(
     diagnostics.push(`  - Buckets: ${buckets.length}`);
 
     for (const bucket of buckets) {
-      const token = (await tokenStore.getToken(
-        provider,
-        bucket,
-      )) as ProviderToken | null;
+      let token: ProviderToken | null;
+      try {
+        token = (await tokenStore.getToken(
+          provider,
+          bucket,
+        )) as ProviderToken | null;
+      } catch (error) {
+        logger.debug(
+          () =>
+            `[diagnostics] Failed to read token for ${provider}/${bucket}: ${error}`,
+        );
+        continue;
+      }
 
       if (token && typeof token.expiry === 'number') {
         appendProviderBucketToken(diagnostics, bucket, token);
