@@ -127,9 +127,15 @@ export function applyProfileModelParams(
     _profileModelParams?: Record<string, unknown>;
     _cliModelParams?: Record<string, unknown>;
   };
+
+  const mergedModelParams = {
+    ...(configWithProfile._profileModelParams ?? {}),
+    ...(configWithProfile._cliModelParams ?? {}),
+  };
+  const existingParams = getActiveModelParams();
   if (
-    !configWithProfile._profileModelParams ||
-    Object.keys(configWithProfile._profileModelParams).length === 0
+    Object.keys(mergedModelParams).length === 0 &&
+    Object.keys(existingParams).length === 0
   ) {
     return;
   }
@@ -150,12 +156,6 @@ export function applyProfileModelParams(
       ephemeralBaseUrl,
     );
   }
-
-  const mergedModelParams = {
-    ...(configWithProfile._profileModelParams ?? {}),
-    ...(configWithProfile._cliModelParams ?? {}),
-  };
-  const existingParams = getActiveModelParams();
 
   for (const [key, value] of Object.entries(mergedModelParams)) {
     setActiveModelParam(key, value);

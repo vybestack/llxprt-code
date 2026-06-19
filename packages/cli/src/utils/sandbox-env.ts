@@ -161,7 +161,7 @@ export async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
         osReleaseContainsLike(osReleaseContent, 'debian') ||
         osReleaseContainsLike(osReleaseContent, 'ubuntu')
       ) {
-        debugLogger.error(
+        debugLogger.log(
           'INFO: Defaulting to use current user UID/GID for Debian/Ubuntu-based Linux.',
         );
         return true;

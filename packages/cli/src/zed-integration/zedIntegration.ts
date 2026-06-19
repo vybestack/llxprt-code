@@ -353,10 +353,21 @@ export class Session {
     const promptId = Math.random().toString(16).slice(2);
     const chat = this.chat;
 
-    const parts = await this.pathResolver.resolvePrompt(
-      params.prompt,
-      pendingSend.signal,
-    );
+    let parts: Part[];
+    try {
+      parts = await this.pathResolver.resolvePrompt(
+        params.prompt,
+        pendingSend.signal,
+      );
+    } catch (error) {
+      if (
+        pendingSend.signal.aborted ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
+        return { stopReason: 'cancelled' };
+      }
+      throw error;
+    }
 
     let nextMessage: Content | null = { role: 'user', parts };
     let hasStreamedAgentContent = false;

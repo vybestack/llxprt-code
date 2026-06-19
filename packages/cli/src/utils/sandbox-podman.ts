@@ -183,6 +183,9 @@ function ensurePodmanHostNetworkForSshAgent(
   }
 
   const existingNet = args[existingNetIdx + 1];
+  if (existingNet === 'host') {
+    return true;
+  }
   debugLogger.warn(
     `Podman macOS SSH agent forwarding requires --network=host but ` +
       `--network=${existingNet} is already set. Skipping SSH agent setup.`,

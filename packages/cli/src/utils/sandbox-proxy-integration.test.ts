@@ -211,7 +211,23 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('cleans up proxy in catch block on error', () => {
-      expect(sandboxSources.sandbox).toContain('await stopProxy()');
+      const handlerStart = sandboxSources.sandbox.indexOf(
+        'async function handleSandboxStartError',
+      );
+      expect(handlerStart).toBeGreaterThan(-1);
+      const handlerEnd = sandboxSources.sandbox.indexOf(
+        '}',
+        sandboxSources.sandbox.indexOf('throw error;', handlerStart),
+      );
+      const handlerSection = sandboxSources.sandbox.substring(
+        handlerStart,
+        handlerEnd,
+      );
+      const stopProxyIdx = handlerSection.indexOf('await stopProxy()');
+      const throwIdx = handlerSection.indexOf('throw error;');
+      expect(stopProxyIdx).toBeGreaterThan(-1);
+      expect(throwIdx).toBeGreaterThan(-1);
+      expect(stopProxyIdx).toBeLessThan(throwIdx);
       expect(sandboxSources.containers).toContain(
         '@plan:PLAN-20250214-CREDPROXY.P34 R25.2, R25.3:',
       );

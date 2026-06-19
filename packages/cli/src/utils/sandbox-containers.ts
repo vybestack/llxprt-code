@@ -71,6 +71,26 @@ const SANDBOX_PROXY_NAME = 'llxprt-code-sandbox-proxy';
 
 export { LOCAL_DEV_SANDBOX_IMAGE_NAME };
 
+/** Rewrites only the loopback hostname of a proxy URL to the sandbox proxy name,
+ *  preserving credentials, port, and path. Falls back to the original URL on parse failure. */
+function rewriteProxyHostname(proxyUrl: string): string {
+  try {
+    const parsed = new URL(proxyUrl);
+    if (
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '::1' ||
+      parsed.hostname === '[::1]'
+    ) {
+      parsed.hostname = SANDBOX_PROXY_NAME;
+      return parsed.toString();
+    }
+    return proxyUrl;
+  } catch {
+    return proxyUrl;
+  }
+}
+
 function resolveProxyUrl(): string {
   const candidates = [
     process.env.HTTPS_PROXY,
@@ -196,7 +216,9 @@ function addSandboxEnvVars(args: string[]): void {
     const env = raw.trim();
     if (env !== '') {
       if (env.includes('=')) {
-        debugLogger.error(`SANDBOX_ENV: ${env}`);
+        const eqIdx = env.indexOf('=');
+        const envName = env.substring(0, eqIdx);
+        debugLogger.log(`SANDBOX_ENV: ${envName}=<redacted>`);
         args.push('--env', env);
       } else {
         throw new FatalSandboxError(
@@ -312,8 +334,7 @@ export function setupContainerNetworking(
 ): string | undefined {
   const proxyCommand = process.env.LLXPRT_SANDBOX_PROXY_COMMAND;
   if (isNonEmptyEnvValue(proxyCommand)) {
-    let proxy = resolveProxyUrl();
-    proxy = proxy.replace('localhost', SANDBOX_PROXY_NAME);
+    const proxy = rewriteProxyHostname(resolveProxyUrl());
     args.push('--env', `HTTPS_PROXY=${proxy}`);
     args.push('--env', `https_proxy=${proxy}`);
     args.push('--env', `HTTP_PROXY=${proxy}`);
@@ -486,15 +507,31 @@ export async function startProxyContainer(
   image: string,
   workdir: string,
 ): Promise<ProxyContainerHandle> {
-  const proxyContainerCommand =
-    `${config.command} run --rm --init ${userFlag} --name ${SANDBOX_PROXY_NAME} ` +
-    `--network ${SANDBOX_PROXY_NAME} -p 8877:8877 -v ${process.cwd()}:${workdir} ` +
-    `--workdir ${workdir} ${image} ${proxyCommand}`;
-  const proxyProcess = spawn(proxyContainerCommand, {
+  const proxyContainerArgs = [
+    'run',
+    '--rm',
+    '--init',
+    ...userFlag.split(' ').filter((f) => f.length > 0),
+    '--name',
+    SANDBOX_PROXY_NAME,
+    '--network',
+    SANDBOX_PROXY_NAME,
+    '-p',
+    '8877:8877',
+    '-v',
+    `${process.cwd()}:${workdir}`,
+    '--workdir',
+    workdir,
+    image,
+    'sh',
+    '-lc',
+    proxyCommand,
+  ];
+  const proxyProcess = spawn(config.command, proxyContainerArgs, {
     stdio: ['ignore', 'pipe', 'pipe'],
-    shell: true,
     detached: true,
   });
+  const proxyContainerCommand = `${config.command} ${proxyContainerArgs.join(' ')}`;
 
   const stopProxyContainer = () => {
     debugLogger.log('stopping proxy container ...');
@@ -509,9 +546,18 @@ export async function startProxyContainer(
   });
 
   debugLogger.log('waiting for proxy to start ...');
-  await execAsync(
-    `until timeout 0.25 curl -s http://localhost:8877; do sleep 0.25; done`,
-  );
+  const PROXY_READY_TIMEOUT_MS = 30000;
+  try {
+    await execAsync(
+      `timeout ${Math.floor(PROXY_READY_TIMEOUT_MS / 1000)} bash -c 'until curl -s http://localhost:8877; do sleep 0.25; done'`,
+      { timeout: PROXY_READY_TIMEOUT_MS + 5000 },
+    );
+  } catch (err) {
+    stopProxyContainer();
+    throw new FatalSandboxError(
+      `Proxy container failed to become ready within ${PROXY_READY_TIMEOUT_MS}ms: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   await execAsync(
     `${config.command} network connect ${SANDBOX_NETWORK_NAME} ${SANDBOX_PROXY_NAME}`,
   );

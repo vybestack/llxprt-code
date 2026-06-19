@@ -21,6 +21,7 @@ import type { Part, PartListUnion } from '@google/genai';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { toToolCallContent } from './zed-helpers.js';
+import { normalizeToParts } from './zed-content-utils.js';
 
 interface SendUpdateFn {
   (update: acp.SessionUpdate): Promise<void>;
@@ -102,9 +103,16 @@ export class ZedPathResolver {
 
     const processedQueryParts: Part[] = [{ text: initialQueryText }];
 
+    // Preserve existing inlineData parts (images/audio) from the original prompt.
+    for (const part of parts) {
+      if ('inlineData' in part) {
+        processedQueryParts.push(part);
+      }
+    }
+
     if (pathSpecsToRead.length === 0 && embeddedContext.length === 0) {
       debugLogger.warn('No valid file paths found in @ commands to read.');
-      return [{ text: initialQueryText }];
+      return processedQueryParts;
     }
 
     if (pathSpecsToRead.length > 0) {
@@ -462,20 +470,21 @@ export class ZedPathResolver {
     llmContent: PartListUnion | undefined,
     processedQueryParts: Part[],
   ): void {
-    if (!Array.isArray(llmContent)) {
+    if (llmContent === undefined) {
       debugLogger.warn(
         'read_many_files tool returned no content or empty content.',
       );
       return;
     }
 
+    const parts = normalizeToParts(llmContent);
     const fileContentRegex = /^--- (.*?) ---\n\n([\s\S]*?)\n\n$/;
     processedQueryParts.push({
       text: '\n--- Content from referenced files ---',
     });
-    for (const part of llmContent) {
-      if (typeof part === 'string') {
-        const match = fileContentRegex.exec(part);
+    for (const part of parts) {
+      if (typeof part.text === 'string') {
+        const match = fileContentRegex.exec(part.text);
         if (match) {
           const filePathSpecInContent = match[1];
           const fileActualContent = match[2].trim();
@@ -484,7 +493,7 @@ export class ZedPathResolver {
           });
           processedQueryParts.push({ text: fileActualContent });
         } else {
-          processedQueryParts.push({ text: part });
+          processedQueryParts.push({ text: part.text });
         }
       } else {
         processedQueryParts.push(part);

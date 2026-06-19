@@ -322,14 +322,15 @@ function buildSandboxImage(
   image: string,
   config: SandboxConfig,
 ): void {
-  if (!gcPath.includes('gemini-cli/packages/')) {
+  const normalizedGcPath = gcPath.split(/[\\/]/).join('/');
+  if (!normalizedGcPath.includes('gemini-cli/packages/')) {
     throw new FatalSandboxError(
       'Cannot build sandbox using installed gemini binary; ' +
         'run `npm link ./packages/cli` under gemini-cli repo to switch to linked binary.',
     );
   }
   debugLogger.error('building sandbox ...');
-  const gcRoot = gcPath.split('/packages/')[0];
+  const gcRoot = normalizedGcPath.split('/packages/')[0];
   if (isCustomProjectSandbox) {
     debugLogger.error(`using ${projectSandboxDockerfile} for sandbox`);
   }

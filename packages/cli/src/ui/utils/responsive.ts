@@ -36,15 +36,19 @@ function truncatePathMiddle(
   const firstDir = segments[0];
   const filename = segments[segments.length - 1];
   const parentDir = segments.length > 2 ? segments[segments.length - 2] : '';
+  // Preserve leading slash for absolute paths (segments[0] === '' when
+  // text starts with '/').
+  const leadingSlash = text.startsWith('/') ? '/' : '';
 
   if (parentDir && segments.length >= 3) {
-    const candidate = firstDir + ELLIPSIS + '/' + parentDir + '/' + filename;
+    const candidate =
+      leadingSlash + firstDir + ELLIPSIS + '/' + parentDir + '/' + filename;
     if (candidate.length <= maxLength) {
       return candidate;
     }
   }
 
-  const candidate2 = firstDir + ELLIPSIS + '/' + filename;
+  const candidate2 = leadingSlash + firstDir + ELLIPSIS + '/' + filename;
   if (candidate2.length <= maxLength) {
     return candidate2;
   }

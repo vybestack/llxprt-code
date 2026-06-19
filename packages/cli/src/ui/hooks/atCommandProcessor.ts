@@ -48,7 +48,17 @@ const WHITESPACE = /\s/;
 
 function findNextUnescapedAt(query: string, startIndex: number): number {
   for (let i = startIndex; i < query.length; i++) {
-    if (query[i] === '@' && (i === 0 || query[i - 1] !== '\\')) {
+    if (query[i] !== '@') {
+      continue;
+    }
+    // Count consecutive backslashes immediately preceding '@'.
+    // Odd count => the '@' is escaped (consumed by a trailing backslash).
+    // Even count => the '@' is not escaped (backslashes pair up).
+    let backslashCount = 0;
+    for (let j = i - 1; j >= 0 && query[j] === '\\'; j--) {
+      backslashCount++;
+    }
+    if (backslashCount % 2 === 0) {
       return i;
     }
   }

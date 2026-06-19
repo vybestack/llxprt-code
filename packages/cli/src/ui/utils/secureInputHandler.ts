@@ -12,16 +12,13 @@ export interface SecureInputState {
   commandPrefix: string;
 }
 
-const SECURE_COMMAND_PREFIXES = [
-  '/key ',
-  '/key',
-  '/keyfile ',
-  '/keyfile',
-  '/toolkey ',
-  '/toolkey',
-];
+const SECURE_COMMAND_PREFIXES = ['/key', '/keyfile', '/toolkey'];
 
-const TOOLKEY_VALUE_PATTERN = /^\/toolkey\s+\S+\s+([\s\S]*)/;
+const SECURE_PREFIX_PATTERN = new RegExp(
+  `^(?:${SECURE_COMMAND_PREFIXES.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?:$|\\s)`,
+);
+
+const TOOLKEY_VALUE_PATTERN = /^(\/toolkey\s+\S+\s+)([\s\S]*)/;
 const KEY_SAVE_PATTERN = /^(\/key\s+save\s+\S+\s+)([\s\S]+)/;
 const KEY_SUBCOMMAND_PATTERN = /^\/key\s+(save|load|show|list|delete)(\s|$)/;
 const KEY_VALUE_PATTERN = /^\/key\s+([\s\S]*)/;
@@ -32,9 +29,7 @@ const KEY_COMMAND_PATTERN = /^(\/key\s+)(.+)$/;
 const LINE_BREAK_PATTERN = /[\r\n]/;
 
 function isSecureCommand(trimmed: string): boolean {
-  return SECURE_COMMAND_PREFIXES.some((prefix) =>
-    prefix.endsWith(' ') ? trimmed.startsWith(prefix) : trimmed === prefix,
-  );
+  return SECURE_PREFIX_PATTERN.test(trimmed);
 }
 
 interface MaskSegment {
@@ -121,17 +116,16 @@ export class SecureInputHandler {
 
   private maskToolKeyInput(text: string): string | null {
     const toolkeyMatch = text.match(TOOLKEY_VALUE_PATTERN);
-    if (!toolkeyMatch?.[1]) {
+    if (!toolkeyMatch?.[2]) {
       return null;
     }
-    const patContent = toolkeyMatch[1];
-    const prefixEnd = text.indexOf(patContent);
-    const prefix = text.substring(0, prefixEnd);
-    const { keyToMask, afterLineBreak } = splitAtLineBreak(patContent);
+    const prefix = toolkeyMatch[1];
+    const valueContent = toolkeyMatch[2];
+    const { keyToMask, afterLineBreak } = splitAtLineBreak(valueContent);
     if (afterLineBreak) {
       return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
     }
-    return `${prefix}${this.maskValue(patContent)}`;
+    return `${prefix}${this.maskValue(valueContent)}`;
   }
 
   private maskKeySaveInput(text: string): string | null {

@@ -221,9 +221,25 @@ async function setupSeatbeltProxy(): Promise<SeatbeltProxySetup> {
     debugLogger.error(data.toString());
   });
   debugLogger.log('waiting for proxy to start ...');
-  await execAsync(
-    `until timeout 0.25 curl -s http://localhost:8877; do sleep 0.25; done`,
-  );
+  const SEATBELT_PROXY_READY_TIMEOUT_MS = 30000;
+  try {
+    await execAsync(
+      `timeout ${Math.floor(SEATBELT_PROXY_READY_TIMEOUT_MS / 1000)} bash -c 'until curl -s http://localhost:8877; do sleep 0.25; done'`,
+      { timeout: SEATBELT_PROXY_READY_TIMEOUT_MS + 5000 },
+    );
+  } catch (err) {
+    const proxyPid = proxyProcess.pid;
+    if (proxyPid !== undefined && proxyPid !== 0) {
+      try {
+        process.kill(-proxyPid, 'SIGTERM');
+      } catch {
+        // ignore
+      }
+    }
+    throw new FatalSandboxError(
+      `Proxy command failed to become ready within ${SEATBELT_PROXY_READY_TIMEOUT_MS}ms: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   return { sandboxEnv, proxyProcess, proxyCommand };
 }
 
@@ -240,9 +256,12 @@ function wireSeatbeltProxyCloseHandler(
     if (sandboxPid !== undefined && sandboxPid !== 0) {
       process.kill(-sandboxPid, 'SIGTERM');
     }
-    throw new FatalSandboxError(
+    // Avoid throwing inside an event callback (uncaught async throw).
+    // Log the failure and terminate the process group so the sandbox exits.
+    debugLogger.error(
       `Proxy command '${proxyCommand}' exited with code ${code}, signal ${signal}`,
     );
+    process.exit(1);
   });
 }
 
