@@ -16,7 +16,7 @@
  * was in packages/core/src/utils/schemaValidator.ts. It uses the `ajv`
  * package directly with zero core imports.
  *
- * Tool files (tools.ts, ripGrep.ts, todo-pause.ts) need schema validation
+ * Tool files (tools.ts, ripGrep.ts, and the pause tool) need schema validation
  * for their parameter schemas. Moving this utility into the tools package
  * eliminates the core dependency.
  */
@@ -24,14 +24,11 @@
 // ajv v8 does not declare package "exports", so subpath imports like
 // "ajv/dist/2020" are the only supported way to pull in the draft-2020-12
 // build. See https://ajv.js.org/json-schema.html#draft-2020-12
-// eslint-disable-next-line import/no-internal-modules
 import Ajv2020Pkg from 'ajv/dist/2020.js';
 import AjvPkg from 'ajv';
 import type { ErrorObject } from 'ajv';
 // Ajv's ESM/CJS interop: default/namespace dual export.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Ajv2020Class = (Ajv2020Pkg as any).default ?? Ajv2020Pkg;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const AjvClass = (AjvPkg as any).default ?? AjvPkg;
 
 /**
@@ -193,11 +190,33 @@ function registerCustomFormats(instance: {
     type: 'string',
     validate: () => true,
   });
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening.
-  instance.addFormat('date', /^\d{4}-\d{2}-\d{2}$/);
+  instance.addFormat('date', {
+    type: 'string',
+    validate: (value: string) => isValidDateString(value),
+  });
 }
 registerCustomFormats(ajValidator2020);
 registerCustomFormats(ajValidator07);
+
+/**
+ * Validates a date string in YYYY-MM-DD format without regex.
+ */
+function isValidDateString(value: string): boolean {
+  if (value.length !== 10) {
+    return false;
+  }
+  if (value[4] !== '-' || value[7] !== '-') {
+    return false;
+  }
+  const year = value.slice(0, 4);
+  const month = value.slice(5, 7);
+  const day = value.slice(8, 10);
+  return (
+    year.split('').every((c) => c >= '0' && c <= '9') &&
+    month.split('').every((c) => c >= '0' && c <= '9') &&
+    day.split('').every((c) => c >= '0' && c <= '9')
+  );
+}
 
 /** Returns true if the declared `$schema` URI refers to JSON Schema draft-07. */
 function isDraft07SchemaUri(uri: unknown): boolean {
@@ -215,14 +234,24 @@ interface ExtendedSchema {
   [key: string]: unknown;
 }
 
+/** Resolves the error path from AJV instancePath or dataPath. */
+function resolveErrorPath(instancePath: unknown, dataPath: unknown): string {
+  if (typeof instancePath === 'string' && instancePath !== '') {
+    return instancePath;
+  }
+  if (typeof dataPath === 'string' && dataPath !== '') {
+    return dataPath;
+  }
+  return '';
+}
+
 /**
  * Package-local SchemaValidator utility for tool parameter validation.
  * Zero core imports — uses ajv directly.
  */
 export class SchemaValidator {
   static validate(schema: unknown | undefined, data: unknown): string | null {
-    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-    if (!schema) {
+    if (schema === undefined || schema === null) {
       return null;
     }
     if (typeof data !== 'object' || data === null) {
@@ -283,16 +312,13 @@ export class SchemaValidator {
 
   private static formatErrors(errors: ErrorObject[]): string {
     const formattedErrors = errors.map((err: ErrorObject) => {
-      /* eslint-disable @typescript-eslint/no-explicit-any */
-      const instancePath = (err as any).instancePath;
-      const dataPath = (err as any).dataPath;
-      /* eslint-enable @typescript-eslint/no-explicit-any */
-      const path =
-        (typeof instancePath === 'string' && instancePath !== ''
-          ? instancePath
-          : null) ??
-        (typeof dataPath === 'string' && dataPath !== '' ? dataPath : null) ??
-        '';
+      const errorRecord = err as ErrorObject & {
+        instancePath?: string;
+        dataPath?: string;
+      };
+      const instancePath = errorRecord.instancePath;
+      const dataPath = errorRecord.dataPath;
+      const path = resolveErrorPath(instancePath, dataPath);
       const basePath = SchemaValidator.formatPath(path);
       const message = err.message ?? 'is invalid';
       return `${basePath} ${message}`;

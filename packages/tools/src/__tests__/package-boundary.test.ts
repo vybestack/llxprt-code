@@ -72,25 +72,19 @@ describe('Package Boundary Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
   describe('dependency isolation', () => {
     it('must not depend on @vybestack/llxprt-code-core', () => {
       const pkg = loadPackageJson();
-      const deps = Object.keys(
-        (pkg.dependencies as Record<string, unknown>) ?? {},
-      );
+      const deps = Object.keys(pkg.dependencies as Record<string, unknown>);
       expect(deps).not.toContain('@vybestack/llxprt-code-core');
     });
 
     it('must not depend on @vybestack/llxprt-code-providers', () => {
       const pkg = loadPackageJson();
-      const deps = Object.keys(
-        (pkg.dependencies as Record<string, unknown>) ?? {},
-      );
+      const deps = Object.keys(pkg.dependencies as Record<string, unknown>);
       expect(deps).not.toContain('@vybestack/llxprt-code-providers');
     });
 
     it('must not depend on @vybestack/llxprt-code-cli', () => {
       const pkg = loadPackageJson();
-      const deps = Object.keys(
-        (pkg.dependencies as Record<string, unknown>) ?? {},
-      );
+      const deps = Object.keys(pkg.dependencies as Record<string, unknown>);
       expect(deps).not.toContain('@vybestack/llxprt-code-cli');
     });
 
@@ -113,8 +107,8 @@ describe('Package Boundary Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
     it('all forbidden packages absent from both dependencies and devDependencies', () => {
       const pkg = loadPackageJson();
       const allDeps = [
-        ...Object.keys((pkg.dependencies as Record<string, unknown>) ?? {}),
-        ...Object.keys((pkg.devDependencies as Record<string, unknown>) ?? {}),
+        ...Object.keys(pkg.dependencies as Record<string, unknown>),
+        ...Object.keys(pkg.devDependencies as Record<string, unknown>),
       ];
       for (const forbidden of FORBIDDEN_RUNTIME_DEPS) {
         expect(allDeps).not.toContain(forbidden);

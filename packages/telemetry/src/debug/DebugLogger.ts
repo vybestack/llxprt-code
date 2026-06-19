@@ -25,6 +25,34 @@ if (typeof window === 'undefined') {
   };
 }
 
+const REGEX_SPECIAL_CHARS = new Set([
+  '.',
+  '+',
+  '?',
+  '^',
+  '$',
+  '{',
+  '}',
+  '(',
+  ')',
+  '|',
+  '[',
+  ']',
+  '\\',
+]);
+
+function escapeRegExpExceptWildcard(pattern: string): string {
+  let result = '';
+  for (const char of pattern) {
+    if (REGEX_SPECIAL_CHARS.has(char)) {
+      result += `\\${char}`;
+    } else {
+      result += char;
+    }
+  }
+  return result;
+}
+
 export class DebugLogger {
   // Add static registry for singleton-per-namespace pattern
   private static instances: Map<string, DebugLogger> = new Map();
@@ -289,13 +317,10 @@ export class DebugLogger {
 
     // Support wildcards anywhere in the pattern
     if (pattern.includes('*')) {
-      // Convert pattern to regex:
-      // - Escape special regex chars except *
-      // - Replace * with .* for regex wildcard matching
-      const regexPattern = pattern
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-        .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape special chars
-        .replace(/\*/g, '.*'); // Convert * to regex wildcard
+      const regexPattern = escapeRegExpExceptWildcard(pattern).replace(
+        /\*/g,
+        '.*',
+      );
 
       const regex = new RegExp(`^${regexPattern}$`);
       return regex.test(namespace);

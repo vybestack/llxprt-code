@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import path from 'path';
 import { type PartUnion } from '@google/genai';
 import {
@@ -18,6 +16,7 @@ import {
 } from './tools.js';
 import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 import {
   processSingleFileContent,
   getSpecificMimeType,
@@ -381,7 +380,10 @@ If git status cannot be read, the tool will still return file content and includ
   protected override validateToolParamValues(
     params: ReadLineRangeToolParams,
   ): string | null {
-    const filePath = params.absolute_path || params.file_path || '';
+    const filePath = stringOrDefault(
+      params.absolute_path,
+      stringOrDefault(params.file_path, ''),
+    );
     if (filePath.trim() === '') {
       return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
     }

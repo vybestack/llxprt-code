@@ -153,7 +153,7 @@ describe('useGeminiStream', () => {
   let mockHandleSlashCommand: Mock;
   let mockScheduleToolCalls: Mock;
   let mockCancelAllToolCalls: Mock;
-  let mockMarkToolsAsSubmitted: Mock;
+  let mockMarkToolsAsDisplayCleared: Mock;
   let handleAtCommandSpy: MockInstance;
 
   beforeEach(() => {
@@ -221,13 +221,13 @@ describe('useGeminiStream', () => {
     // Mock return value for useReactToolScheduler
     mockScheduleToolCalls = vi.fn();
     mockCancelAllToolCalls = vi.fn();
-    mockMarkToolsAsSubmitted = vi.fn();
+    mockMarkToolsAsDisplayCleared = vi.fn();
 
     // Default mock for useReactToolScheduler to prevent toolCalls being undefined initially
     mockUseReactToolScheduler.mockReturnValue([
       [], // Default to empty array for toolCalls
       mockScheduleToolCalls,
-      mockMarkToolsAsSubmitted,
+      mockMarkToolsAsDisplayCleared,
       mockCancelAllToolCalls,
       0,
       true,
@@ -298,7 +298,7 @@ describe('useGeminiStream', () => {
                   responseParts: [],
                   resultDisplay: 'Request cancelled.',
                 },
-                responseSubmittedToGemini: true, // Mark as "processed"
+                displayCleared: true, // Cleared from display
               } as any as TrackedCancelledToolCall;
             }
             return tc;
@@ -309,7 +309,7 @@ describe('useGeminiStream', () => {
         mockUseReactToolScheduler.mockImplementation(() => [
           props.toolCalls,
           mockScheduleToolCalls,
-          mockMarkToolsAsSubmitted,
+          mockMarkToolsAsDisplayCleared,
           statefulCancelAllToolCalls, // Use the stateful mock
           0,
           true,
@@ -342,7 +342,7 @@ describe('useGeminiStream', () => {
     return {
       result,
       rerender,
-      mockMarkToolsAsSubmitted,
+      mockMarkToolsAsDisplayCleared,
       mockSendMessageStream,
       client,
     };
@@ -364,7 +364,7 @@ describe('useGeminiStream', () => {
       prompt_id: 'prompt-id-1',
     },
     status: status as 'awaiting_approval',
-    responseSubmittedToGemini: false,
+    displayCleared: false,
     confirmationDetails:
       confirmationType === 'edit'
         ? {
@@ -450,7 +450,7 @@ describe('useGeminiStream', () => {
           prompt_id: 'prompt-id-1',
         },
         status: 'success',
-        responseSubmittedToGemini: false,
+        displayCleared: false,
         response: {
           callId: 'call1',
           responseParts: [{ text: 'tool 1 response' }],
@@ -478,7 +478,7 @@ describe('useGeminiStream', () => {
           prompt_id: 'prompt-id-1',
         },
         status: 'executing',
-        responseSubmittedToGemini: false,
+        displayCleared: false,
         tool: {
           name: 'tool2',
           displayName: 'tool2',
@@ -493,13 +493,13 @@ describe('useGeminiStream', () => {
       } as TrackedExecutingToolCall,
     ];
 
-    const { mockMarkToolsAsSubmitted, mockSendMessageStream } =
+    const { mockMarkToolsAsDisplayCleared, mockSendMessageStream } =
       renderTestHook(toolCalls);
 
     // Effect for submitting tool responses depends on toolCalls and isResponding
     // isResponding is initially false, so the effect should run.
 
-    expect(mockMarkToolsAsSubmitted).not.toHaveBeenCalled();
+    expect(mockMarkToolsAsDisplayCleared).not.toHaveBeenCalled();
     expect(mockSendMessageStream).not.toHaveBeenCalled(); // submitQuery uses this
   });
 
@@ -516,7 +516,7 @@ describe('useGeminiStream', () => {
           prompt_id: 'prompt-id-2',
         },
         status: 'success',
-        responseSubmittedToGemini: false,
+        displayCleared: false,
         response: {
           callId: 'call1',
           responseParts: toolCall1ResponseParts,
@@ -538,7 +538,7 @@ describe('useGeminiStream', () => {
           prompt_id: 'prompt-id-2',
         },
         status: 'error',
-        responseSubmittedToGemini: false,
+        displayCleared: false,
         response: {
           callId: 'call2',
           responseParts: toolCall2ResponseParts,
@@ -561,7 +561,7 @@ describe('useGeminiStream', () => {
       return [
         [],
         mockScheduleToolCalls,
-        mockMarkToolsAsSubmitted,
+        mockMarkToolsAsDisplayCleared,
         mockCancelAllToolCalls,
         0,
         true,
@@ -600,7 +600,7 @@ describe('useGeminiStream', () => {
     });
 
     await waitFor(() => {
-      expect(mockMarkToolsAsSubmitted).toHaveBeenCalledTimes(1);
+      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledTimes(1);
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     });
 
@@ -643,7 +643,7 @@ describe('useGeminiStream', () => {
           prompt_id: 'prompt-id-filter',
         },
         status: 'success',
-        responseSubmittedToGemini: false,
+        displayCleared: false,
         response: {
           callId: 'call-filter',
           responseParts: toolCallResponseParts,
@@ -671,7 +671,7 @@ describe('useGeminiStream', () => {
       return [
         [],
         mockScheduleToolCalls,
-        mockMarkToolsAsSubmitted,
+        mockMarkToolsAsDisplayCleared,
         mockCancelAllToolCalls,
         0,
         true,
@@ -708,7 +708,7 @@ describe('useGeminiStream', () => {
     });
 
     await waitFor(() => {
-      expect(mockMarkToolsAsSubmitted).toHaveBeenCalledTimes(1);
+      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledTimes(1);
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     });
 
@@ -746,7 +746,7 @@ describe('useGeminiStream', () => {
           responseParts: [{ text: 'cancelled' }],
           errorType: undefined, // FIX: Added missing property
         },
-        responseSubmittedToGemini: false,
+        displayCleared: false,
         tool: {
           displayName: 'mock tool',
         },
@@ -771,7 +771,7 @@ describe('useGeminiStream', () => {
       return [
         [],
         mockScheduleToolCalls,
-        mockMarkToolsAsSubmitted,
+        mockMarkToolsAsDisplayCleared,
         mockCancelAllToolCalls,
         0,
         true,
@@ -810,7 +810,7 @@ describe('useGeminiStream', () => {
     });
 
     await waitFor(() => {
-      expect(mockMarkToolsAsSubmitted).toHaveBeenCalledWith(['1']);
+      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledWith(['1']);
       expect(client.addHistory).toHaveBeenCalledWith({
         role: 'user',
         parts: [{ text: 'cancelled' }],
@@ -848,7 +848,7 @@ describe('useGeminiStream', () => {
         error: undefined,
         errorType: undefined, // FIX: Added missing property
       },
-      responseSubmittedToGemini: false,
+      displayCleared: false,
     };
     const cancelledToolCall2: TrackedCancelledToolCall = {
       request: {
@@ -877,7 +877,7 @@ describe('useGeminiStream', () => {
         error: undefined,
         errorType: undefined, // FIX: Added missing property
       },
-      responseSubmittedToGemini: false,
+      displayCleared: false,
     };
     const allCancelledTools = [cancelledToolCall1, cancelledToolCall2];
     const client = new MockedAgentClientClass(mockConfig);
@@ -895,7 +895,7 @@ describe('useGeminiStream', () => {
       return [
         [],
         mockScheduleToolCalls,
-        mockMarkToolsAsSubmitted,
+        mockMarkToolsAsDisplayCleared,
         mockCancelAllToolCalls,
         0,
         true,
@@ -934,8 +934,8 @@ describe('useGeminiStream', () => {
     });
 
     await waitFor(() => {
-      // The tools should be marked as submitted locally
-      expect(mockMarkToolsAsSubmitted).toHaveBeenCalledWith([
+      // The tools should be marked as display-cleared locally
+      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledWith([
         'cancel-1',
         'cancel-2',
       ]);
@@ -972,7 +972,7 @@ describe('useGeminiStream', () => {
           prompt_id: 'prompt-id-4',
         },
         status: 'executing',
-        responseSubmittedToGemini: false,
+        displayCleared: false,
         tool: {
           name: 'tool1',
           displayName: 'tool1',
@@ -1016,7 +1016,7 @@ describe('useGeminiStream', () => {
       return [
         currentToolCalls,
         mockScheduleToolCalls,
-        mockMarkToolsAsSubmitted,
+        mockMarkToolsAsDisplayCleared,
         mockCancelAllToolCalls,
         0,
         true,
@@ -1055,7 +1055,7 @@ describe('useGeminiStream', () => {
       return [
         completedToolCalls,
         mockScheduleToolCalls,
-        mockMarkToolsAsSubmitted,
+        mockMarkToolsAsDisplayCleared,
         mockCancelAllToolCalls,
         0,
         true,
@@ -1067,7 +1067,8 @@ describe('useGeminiStream', () => {
     });
 
     // 3. The state should *still* be Responding, not Idle.
-    // This is because the completed tool's response has not been submitted yet.
+    // This is because the completed tool has not yet been cleared from the
+    // display (displayCleared is still false), so it remains outstanding.
     expect(result.current.streamingState).toBe(StreamingState.Responding);
 
     // 4. Trigger the onComplete callback to simulate tool completion
@@ -1299,7 +1300,7 @@ describe('useGeminiStream', () => {
         {
           request: { callId: 'call1', name: 'tool1', args: {} },
           status: 'executing',
-          responseSubmittedToGemini: false,
+          displayCleared: false,
           tool: {
             name: 'tool1',
             description: 'desc1',
@@ -1339,7 +1340,7 @@ describe('useGeminiStream', () => {
             prompt_id: 'prompt-id-1',
           },
           status: 'awaiting_approval',
-          responseSubmittedToGemini: false,
+          displayCleared: false,
           tool: {
             name: 'some_tool',
             description: 'a tool',
@@ -1580,7 +1581,7 @@ describe('useGeminiStream', () => {
           prompt_id: 'prompt-id-6',
         },
         status: 'success',
-        responseSubmittedToGemini: false,
+        displayCleared: false,
         response: {
           callId: 'save-mem-call-1',
           responseParts: [{ text: 'Memory saved' }],
@@ -1613,7 +1614,7 @@ describe('useGeminiStream', () => {
         return [
           [],
           mockScheduleToolCalls,
-          mockMarkToolsAsSubmitted,
+          mockMarkToolsAsDisplayCleared,
           mockCancelAllToolCalls,
           0,
           true,
@@ -1829,7 +1830,7 @@ describe('useGeminiStream', () => {
             prompt_id: 'prompt-id-1',
           },
           status: 'awaiting_approval',
-          responseSubmittedToGemini: false,
+          displayCleared: false,
           // No confirmationDetails
           tool: {
             name: 'replace',
@@ -1870,7 +1871,7 @@ describe('useGeminiStream', () => {
             prompt_id: 'prompt-id-1',
           },
           status: 'awaiting_approval',
-          responseSubmittedToGemini: false,
+          displayCleared: false,
           confirmationDetails: {
             type: 'edit',
             title: 'Confirm Edit',
@@ -1928,7 +1929,7 @@ describe('useGeminiStream', () => {
             prompt_id: 'prompt-id-1',
           },
           status: 'awaiting_approval',
-          responseSubmittedToGemini: false,
+          displayCleared: false,
           confirmationDetails: {
             type: 'edit',
             title: 'Confirm Edit',
@@ -1958,7 +1959,7 @@ describe('useGeminiStream', () => {
             prompt_id: 'prompt-id-1',
           },
           status: 'executing',
-          responseSubmittedToGemini: false,
+          displayCleared: false,
           tool: {
             name: 'write_file',
             displayName: 'write_file',
@@ -2274,7 +2275,7 @@ describe('useGeminiStream', () => {
       return [
         [], // toolCalls
         mockScheduleToolCalls,
-        vi.fn(), // markToolsAsSubmitted
+        vi.fn(), // markToolsAsDisplayCleared
         vi.fn(), // cancelAllToolCalls
         0, // lastToolOutputTime
         true, // interactiveRuntimeReady
@@ -2493,7 +2494,7 @@ describe('useGeminiStream', () => {
       mockUseReactToolScheduler.mockReturnValue([
         [],
         mockScheduleToolCalls,
-        mockMarkToolsAsSubmitted,
+        mockMarkToolsAsDisplayCleared,
         mockCancelAllToolCalls,
         0,
         true,
@@ -2546,7 +2547,7 @@ describe('useGeminiStream', () => {
       mockUseReactToolScheduler.mockReturnValue([
         newToolCalls,
         mockScheduleToolCalls,
-        mockMarkToolsAsSubmitted,
+        mockMarkToolsAsDisplayCleared,
         mockCancelAllToolCalls,
         0,
         true,
@@ -2579,7 +2580,7 @@ describe('useGeminiStream', () => {
       mockUseReactToolScheduler.mockReturnValue([
         [pendingToolCall],
         mockScheduleToolCalls,
-        mockMarkToolsAsSubmitted,
+        mockMarkToolsAsDisplayCleared,
         mockCancelAllToolCalls,
         0,
         true,
@@ -3209,7 +3210,7 @@ describe('useGeminiStream', () => {
           mockUseReactToolScheduler.mockReturnValue([
             props.toolCalls,
             mockScheduleToolCalls,
-            mockMarkToolsAsSubmitted,
+            mockMarkToolsAsDisplayCleared,
             mockCancelAllToolCalls,
             0,
             true,
@@ -3345,7 +3346,7 @@ describe('useGeminiStream', () => {
           mockUseReactToolScheduler.mockReturnValue([
             props.toolCalls,
             mockScheduleToolCalls,
-            mockMarkToolsAsSubmitted,
+            mockMarkToolsAsDisplayCleared,
             mockCancelAllToolCalls,
             0,
             true,

@@ -83,6 +83,39 @@ export interface PolicyUpdateOptions {
   commandPrefix?: string | string[];
   mcpName?: string;
 }
+/** Confirmation response shape from the message bus. */
+interface ConfirmationResponse {
+  confirmed?: boolean;
+  outcome?: ToolConfirmationOutcome;
+}
+
+/** Structural shape of a message bus with publish/subscribe methods. */
+interface PublishSubscribeBus {
+  publish: (message: Record<string, unknown>) => void;
+  subscribe: (event: string, handler: (response: unknown) => void) => void;
+  unsubscribe?: (event: string, handler: (response: unknown) => void) => void;
+}
+
+/**
+ * Determines whether a confirmation response indicates the action is allowed.
+ * Falls back to inferring from the outcome when `confirmed` is not explicitly set.
+ */
+function resolveConfirmationFromResponse(
+  response: ConfirmationResponse,
+): boolean {
+  if (response.confirmed !== undefined) {
+    return response.confirmed;
+  }
+  const nonConfirmingOutcomes = new Set([
+    ToolConfirmationOutcome.Cancel,
+    ToolConfirmationOutcome.ModifyWithEditor,
+    ToolConfirmationOutcome.SuggestEdit,
+  ]);
+  return (
+    response.outcome !== undefined &&
+    !nonConfirmingOutcomes.has(response.outcome)
+  );
+}
 
 /**
  * A convenience base class for ToolInvocation.
@@ -186,7 +219,7 @@ export abstract class BaseToolInvocation<
       return Promise.resolve('DENY');
     }
 
-    const bus = this.messageBus as any;
+    const bus = this.messageBus as unknown as PublishSubscribeBus;
     if (
       typeof bus.publish !== 'function' ||
       typeof bus.subscribe !== 'function'
@@ -210,7 +243,10 @@ export abstract class BaseToolInvocation<
         }
         abortSignal.removeEventListener('abort', abortHandler);
         if (typeof bus.unsubscribe === 'function') {
-          bus.unsubscribe('tool-confirmation-response', responseHandler);
+          bus.unsubscribe(
+            'tool-confirmation-response',
+            responseHandler as (response: unknown) => void,
+          );
         }
       };
 
@@ -236,13 +272,7 @@ export abstract class BaseToolInvocation<
           return;
         }
 
-        const confirmed =
-          response.confirmed ??
-          (response.outcome !== undefined
-            ? response.outcome !== ToolConfirmationOutcome.Cancel &&
-              response.outcome !== ToolConfirmationOutcome.ModifyWithEditor &&
-              response.outcome !== ToolConfirmationOutcome.SuggestEdit
-            : false);
+        const confirmed = resolveConfirmationFromResponse(response);
 
         resolve(confirmed ? 'ALLOW' : 'DENY');
       };
@@ -255,7 +285,10 @@ export abstract class BaseToolInvocation<
         resolve('ASK_USER');
       }, 30000);
 
-      bus.subscribe('tool-confirmation-response', responseHandler);
+      bus.subscribe(
+        'tool-confirmation-response',
+        responseHandler as (response: unknown) => void,
+      );
 
       try {
         bus.publish({
@@ -619,10 +652,10 @@ export type AnyDeclarativeTool = DeclarativeTool<object, ToolResult>;
  * @returns True if the object is a Tool, false otherwise.
  */
 export function isTool(obj: unknown): obj is AnyDeclarativeTool {
+  if (typeof obj !== 'object' || obj === null) {
+    return false;
+  }
   return (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    typeof obj === 'object' &&
-    obj !== null &&
     'name' in obj &&
     'build' in obj &&
     typeof (obj as AnyDeclarativeTool).build === 'function'

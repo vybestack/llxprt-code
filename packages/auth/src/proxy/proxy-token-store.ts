@@ -83,10 +83,9 @@ export class ProxyTokenStore implements TokenStore {
     const data = response.data as Record<string, unknown>;
     return {
       bucket,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Proxy payloads can omit persisted bucket stats.
-      requestCount: (data.requestCount as number) ?? 0,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Proxy payloads can omit persisted bucket stats.
-      percentage: (data.percentage as number) ?? 0,
+      requestCount:
+        typeof data.requestCount === 'number' ? data.requestCount : 0,
+      percentage: typeof data.percentage === 'number' ? data.percentage : 0,
       lastUsed: data.lastUsed as number | undefined,
     };
   }

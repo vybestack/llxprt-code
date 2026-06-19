@@ -328,8 +328,11 @@ describe('MemoryTool', () => {
       memoryTool = createMemoryTool();
       // Clear the allowlist before each test
       const invocation = memoryTool.build({ fact: 'mock-fact' });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (invocation.constructor as any).allowlist.clear();
+      (
+        invocation.constructor as unknown as {
+          allowlist: Set<string>;
+        }
+      ).allowlist.clear();
       // Mock fs.readFile to return empty string (file doesn't exist)
       vi.mocked(fs.readFile).mockResolvedValue('');
     });
@@ -344,7 +347,6 @@ describe('MemoryTool', () => {
 
       // Verify result is an edit confirmation
       expect(result).not.toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result === false) {
         throw new Error('Expected result to be a confirmation, not false');
       }
@@ -378,8 +380,11 @@ describe('MemoryTool', () => {
 
       const invocation = memoryTool.build(params);
       // Add the memory file to the allowlist
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (invocation.constructor as any).allowlist.add(memoryFilePath);
+      (
+        invocation.constructor as unknown as {
+          allowlist: Set<string>;
+        }
+      ).allowlist.add(memoryFilePath);
 
       const result = await invocation.shouldConfirmExecute(mockAbortSignal);
 
@@ -401,7 +406,6 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       // Verify result is an edit confirmation
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result === false) {
         throw new Error('Expected result to be a confirmation, not false');
       }
@@ -415,8 +419,11 @@ describe('MemoryTool', () => {
 
       // Check that the memory file was added to the allowlist
       expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (invocation.constructor as any).allowlist.has(memoryFilePath),
+        (
+          invocation.constructor as unknown as {
+            allowlist: Set<string>;
+          }
+        ).allowlist.has(memoryFilePath),
       ).toBe(true);
     });
 
@@ -435,7 +442,6 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       // Verify result is an edit confirmation
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result === false) {
         throw new Error('Expected result to be a confirmation, not false');
       }
@@ -446,8 +452,11 @@ describe('MemoryTool', () => {
 
       // Simulate the onConfirm callback with different outcomes
       await editResult.onConfirm(ToolConfirmationOutcome.ProceedOnce);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const allowlist = (invocation.constructor as any).allowlist;
+      const allowlist = (
+        invocation.constructor as unknown as {
+          allowlist: Set<string>;
+        }
+      ).allowlist;
       expect(allowlist.has(memoryFilePath)).toBe(false);
 
       await editResult.onConfirm(ToolConfirmationOutcome.Cancel);
@@ -469,7 +478,6 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       // Verify result is an edit confirmation
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result === false) {
         throw new Error('Expected result to be a confirmation, not false');
       }
@@ -636,7 +644,6 @@ describe('MemoryTool', () => {
       const result = await invocation.shouldConfirmExecute(mockAbortSignal);
 
       expect(result).not.toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result === false) {
         throw new Error('Expected confirmation details');
       }
@@ -702,9 +709,11 @@ describe('MemoryTool', () => {
       };
       const invocation = coreMemoryTool.build(params);
       const filePath = invocation.getMemoryFilePath();
-      expect(filePath).toContain(mockWorkingDir);
-      expect(filePath).toContain('.llxprt');
-      expect(filePath).toContain('.LLXPRT_SYSTEM');
+      // Normalize paths for cross-platform compatibility
+      const normalizedPath = filePath.replace(/\\/g, '/');
+      expect(normalizedPath).toContain(mockWorkingDir);
+      expect(normalizedPath).toContain('.llxprt');
+      expect(normalizedPath).toContain('.LLXPRT_SYSTEM');
     });
   });
 });

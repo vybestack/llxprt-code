@@ -6,7 +6,6 @@
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
-  type LoadBalancerSubProfile,
   type ResolvedSubProfile,
 } from '../../LoadBalancingProvider.js';
 import {
@@ -26,13 +25,25 @@ import {
   getProfileModelParams,
   getProfileProvider,
   getStringValue,
+  isPositiveContextLimit,
 } from './profileAccessors.js';
+
+interface ModelMetadataProvider {
+  getModels: () => Promise<Array<{ id: string; contextWindow?: number }>>;
+}
+
+interface LoadBalancerProviderManager {
+  getProviderByName: (
+    providerName: string,
+  ) => ModelMetadataProvider | undefined;
+}
 
 interface LoadBalancerResolutionDeps {
   lbName: string;
   profileManagerInstance: {
     loadProfile: (profileName: string) => Promise<Profile>;
   };
+  providerManager?: LoadBalancerProviderManager;
   lbLogger: {
     debug: (messageFactory: () => string) => void;
     warn: (messageFactory: () => string) => void;
@@ -122,6 +133,29 @@ async function resolveSubProfileAuthToken(
   }
 }
 
+async function resolveSubProfileContextWindow(
+  providerName: string,
+  modelId: string,
+  deps: LoadBalancerResolutionDeps,
+): Promise<number | undefined> {
+  const provider = deps.providerManager?.getProviderByName(providerName);
+  if (provider === undefined) {
+    return undefined;
+  }
+
+  try {
+    const models = await provider.getModels();
+    const model = models.find((candidate) => candidate.id === modelId);
+    return model?.contextWindow;
+  } catch (error) {
+    deps.lbLogger.warn(
+      () =>
+        `Failed to resolve context window for sub-profile model ${providerName}/${modelId}: ${error}`,
+    );
+    return undefined;
+  }
+}
+
 async function resolveLoadBalancerSubProfile(
   profileName: string,
   deps: LoadBalancerResolutionDeps,
@@ -139,16 +173,39 @@ async function resolveLoadBalancerSubProfile(
     authKeyfile,
     deps,
   );
+  const providerName = getProfileProvider(subProfile) ?? '';
+  const model = getProfileModel(subProfile) ?? '';
+  const contextWindow = await resolveSubProfileContextWindow(
+    providerName,
+    model,
+    deps,
+  );
+
   return {
     name: profileName,
-    providerName: getProfileProvider(subProfile) ?? '',
-    model: getProfileModel(subProfile) ?? '',
+    providerName,
+    model,
     baseURL: getStringValue(subProfileEphemeralSettings, 'base-url'),
     authToken,
     authKeyfile,
+    contextWindow,
     ephemeralSettings: subProfileEphemeralSettings,
     modelParams: getProfileModelParams(subProfile),
   };
+}
+
+function getLoadBalancerContextLimit(
+  profileInput: LoadBalancerProfile,
+): number | undefined {
+  if (isPositiveContextLimit(profileInput.contextLimit)) {
+    return profileInput.contextLimit;
+  }
+
+  const ephemeralContextLimit =
+    getProfileEphemeralSettings(profileInput)['context-limit'];
+  return isPositiveContextLimit(ephemeralContextLimit)
+    ? ephemeralContextLimit
+    : undefined;
 }
 
 function createLoadBalancerConfig(
@@ -159,16 +216,10 @@ function createLoadBalancerConfig(
   return {
     profileName: lbName,
     strategy: profileInput.policy === 'failover' ? 'failover' : 'round-robin',
-    subProfiles: resolvedSubProfiles.map(
-      (sp): LoadBalancerSubProfile => ({
-        name: sp.name,
-        providerName: sp.providerName,
-        modelId: sp.model,
-        baseURL: sp.baseURL,
-        authToken: sp.authToken,
-      }),
-    ),
+    subProfiles: resolvedSubProfiles,
+    contextLimit: getLoadBalancerContextLimit(profileInput),
     lbProfileEphemeralSettings: getProfileEphemeralSettings(profileInput),
+    lbProfileModelParams: getProfileModelParams(profileInput),
   };
 }
 
@@ -209,7 +260,12 @@ export async function maybeRegisterLoadBalancerProfile(
       : new ProfileManager();
   const resolvedSubProfiles = await resolveLoadBalancerSubProfiles(
     profileInput,
-    { lbName, profileManagerInstance, lbLogger },
+    {
+      lbName,
+      profileManagerInstance,
+      providerManager: runtimeServices.providerManager,
+      lbLogger,
+    },
   );
   const lbConfig = createLoadBalancerConfig(
     profileInput,

@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import {
   OAuth2Client,
   type Credentials,
@@ -493,9 +491,11 @@ async function handleOAuthCallbackRequest(
       res.end();
 
       const errorCode = qs.get('error');
+      const rawErrorDescription = qs.get('error_description');
       const errorDescription =
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: URLSearchParams.get returns string | null, string fallback for error message
-        qs.get('error_description') || 'No additional details provided';
+        rawErrorDescription !== null && rawErrorDescription !== ''
+          ? rawErrorDescription
+          : 'No additional details provided';
       reject(
         new FatalAuthenticationError(
           `Google OAuth error: ${errorCode}. ${errorDescription}`,
@@ -546,8 +546,8 @@ async function handleOAuthCallbackRequest(
 async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
   const port = await getAvailablePort();
   // The hostname used for the HTTP server binding (e.g., '0.0.0.0' in Docker).
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var may be empty string
-  const host = process.env.OAUTH_CALLBACK_HOST || 'localhost';
+  const rawHost = process.env.OAUTH_CALLBACK_HOST;
+  const host = rawHost !== undefined && rawHost !== '' ? rawHost : 'localhost';
   // The `redirectUri` sent to Google's authorization server MUST use a loopback IP literal
   // (i.e., 'localhost' or '127.0.0.1'). This is a strict security policy for credentials of
   // type 'Desktop app' or 'Web application' (when using loopback flow) to mitigate

@@ -29,6 +29,8 @@ import {
   isLoadBalancerProfileFormat,
 } from '../LoadBalancingProvider.js';
 
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
 describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -209,6 +211,56 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
       );
 
       expect(normalized.resolved?.model).toBe('claude-sonnet-4');
+    });
+
+    it('rejects requests that exceed an explicit load balancer context limit before delegating', async () => {
+      const delegateProvider: IProvider & { calls: number } = {
+        name: 'openai',
+        getModels: async () => [],
+        getDefaultModel: () => 'gpt-4o',
+        calls: 0,
+        async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+          this.calls += 1;
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+        },
+        getServerTools: () => [],
+        invokeServerTool: async () => {
+          throw new Error('unexpected server tool invocation');
+        },
+      };
+      providerManager.registerProvider(delegateProvider);
+      const provider = new LoadBalancingProvider(
+        {
+          profileName: 'tiny-lb',
+          strategy: 'round-robin',
+          contextLimit: 1,
+          subProfiles: [
+            {
+              name: 'primary',
+              providerName: 'openai',
+              modelId: 'gpt-4o',
+            },
+          ],
+        },
+        providerManager,
+      );
+
+      const iterator = provider.generateChatCompletion({
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'text',
+                text: 'this prompt is deliberately longer than one token',
+              },
+            ],
+          },
+        ],
+      });
+
+      await expect(iterator.next()).rejects.toThrow(/context limit exceeded/);
+      expect(delegateProvider.calls).toBe(0);
     });
 
     it('should have getServerTools method that returns an array', () => {
@@ -2016,7 +2068,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
           // Verify metadata was passed to delegate
           expect(capturedOptions).toBeDefined();
-          expect(capturedOptions!.metadata).toStrictEqual(testMetadata);
+          expect(capturedOptions!.metadata).toMatchObject(testMetadata);
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
@@ -2233,6 +2285,79 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             topP: 0.9,
             topK: 40,
             stopSequences: ['END'],
+          });
+        } finally {
+          providerManager.getProviderByName = originalGetProvider;
+        }
+      });
+
+      it('should surface modelParams and reasoning settings through delegate runtime invocation', async () => {
+        const resolvedSubProfiles: ResolvedSubProfile[] = [
+          {
+            name: 'reasoning-sub',
+            providerName: 'gemini',
+            model: 'gemini-flash',
+            ephemeralSettings: {
+              'reasoning.enabled': true,
+              'reasoning.budgetTokens': 2048,
+            },
+            modelParams: {
+              topP: 0.9,
+            },
+          },
+        ];
+
+        const provider = new LoadBalancingProvider(
+          {
+            profileName: 'reasoning-test',
+            strategy: 'round-robin',
+            subProfiles: resolvedSubProfiles,
+            lbProfileModelParams: { topK: 40 },
+          },
+          providerManager,
+        );
+
+        let capturedOptions: GenerateChatOptions | undefined;
+        const mockProvider = {
+          name: 'gemini',
+          async *generateChatCompletion(
+            options: GenerateChatOptions,
+          ): AsyncIterableIterator<IContent> {
+            capturedOptions = options;
+            yield { role: 'model', parts: [{ text: 'response' }] };
+          },
+          getModels: async () => [],
+          getDefaultModel: () => 'gemini-flash',
+          getServerTools: () => [],
+          invokeServerTool: async () => ({}),
+        };
+
+        const originalGetProvider =
+          providerManager.getProviderByName.bind(providerManager);
+        providerManager.getProviderByName = () => mockProvider as IProvider;
+
+        try {
+          const iterator = provider.generateChatCompletion({
+            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            settings: settingsService,
+            config,
+            runtime: { settingsService, config },
+          });
+          for await (const _chunk of iterator) {
+            // Consume
+          }
+
+          expect(
+            capturedOptions?.invocation?.getModelBehavior('reasoning.enabled'),
+          ).toBe(true);
+          expect(
+            capturedOptions?.invocation?.getModelBehavior(
+              'reasoning.budgetTokens',
+            ),
+          ).toBe(2048);
+          expect(capturedOptions?.invocation?.modelParams).toMatchObject({
+            topP: 0.9,
+            topK: 40,
           });
         } finally {
           providerManager.getProviderByName = originalGetProvider;

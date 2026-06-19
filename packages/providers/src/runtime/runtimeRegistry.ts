@@ -10,8 +10,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
-
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P15
  * @requirement REQ-SP2-003
@@ -35,6 +33,12 @@ import { type OAuthManager } from '../auth/index.js';
 import { resetProviderManager } from '../composition/index.js';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
 import { formatMissingRuntimeMessage } from './messages.js';
+import {
+  resolveFromActiveContext,
+  resolveFromAsyncLocalStorage,
+  resolveFromFirstRegistered,
+  type RuntimeIdentity,
+} from './runtimeIdentityResolution.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
 
@@ -51,45 +55,15 @@ export interface RuntimeRegistryEntry {
 export const runtimeRegistry = new Map<string, RuntimeRegistryEntry>();
 export const LEGACY_RUNTIME_ID = 'legacy-singleton';
 
-export function resolveActiveRuntimeIdentity(): {
-  runtimeId: string;
-  metadata: Record<string, unknown>;
-} {
-  const scope = getCurrentRuntimeScope();
-  if (scope) {
-    return scope;
-  }
-
-  const context = peekActiveProviderRuntimeContext();
-  if (context) {
-    const candidateId =
-      typeof context.runtimeId === 'string' && context.runtimeId.trim() !== ''
-        ? context.runtimeId
-        : LEGACY_RUNTIME_ID;
-
-    // If the active context's runtimeId is registered in the CLI registry, use it.
-    // Otherwise fall back to a registered ID — the active context may be a
-    // provider-scoped context (e.g. a per-call UUID from BaseProvider) that was
-    // never registered in the CLI runtime registry.
-    if (runtimeRegistry.has(candidateId)) {
-      return { runtimeId: candidateId, metadata: context.metadata ?? {} };
+export function resolveActiveRuntimeIdentity(): RuntimeIdentity {
+  return (
+    resolveFromAsyncLocalStorage(getCurrentRuntimeScope()) ??
+    resolveFromActiveContext(runtimeRegistry, LEGACY_RUNTIME_ID) ??
+    resolveFromFirstRegistered(runtimeRegistry) ?? {
+      runtimeId: LEGACY_RUNTIME_ID,
+      metadata: {},
     }
-
-    // Fall back to the first registered runtimeId (typically cli.runtime.bootstrap)
-    const firstRegistered = runtimeRegistry.keys().next().value;
-    if (firstRegistered) {
-      return { runtimeId: firstRegistered, metadata: context.metadata ?? {} };
-    }
-
-    return { runtimeId: candidateId, metadata: context.metadata ?? {} };
-  }
-
-  const firstRegistered = runtimeRegistry.keys().next().value;
-  if (firstRegistered) {
-    return { runtimeId: firstRegistered, metadata: {} };
-  }
-
-  return { runtimeId: LEGACY_RUNTIME_ID, metadata: {} };
+  );
 }
 
 export function upsertRuntimeEntry(
@@ -99,30 +73,27 @@ export function upsertRuntimeEntry(
   const current = runtimeRegistry.get(runtimeId);
   const next: RuntimeRegistryEntry = {
     runtimeId,
-    settingsService: Object.prototype.hasOwnProperty.call(
+    settingsService: resolveFieldUpdate(
       update,
       'settingsService',
-    )
-      ? (update.settingsService ?? null)
-      : (current?.settingsService ?? null),
-    config: Object.prototype.hasOwnProperty.call(update, 'config')
-      ? (update.config ?? null)
-      : (current?.config ?? null),
-    providerManager: Object.prototype.hasOwnProperty.call(
+      current?.settingsService,
+    ),
+    config: resolveFieldUpdate(update, 'config', current?.config),
+    providerManager: resolveFieldUpdate(
       update,
       'providerManager',
-    )
-      ? (update.providerManager ?? null)
-      : (current?.providerManager ?? null),
-    oauthManager: Object.prototype.hasOwnProperty.call(update, 'oauthManager')
-      ? (update.oauthManager ?? null)
-      : (current?.oauthManager ?? null),
-    profileManager: Object.prototype.hasOwnProperty.call(
+      current?.providerManager,
+    ),
+    oauthManager: resolveFieldUpdate(
+      update,
+      'oauthManager',
+      current?.oauthManager,
+    ),
+    profileManager: resolveFieldUpdate(
       update,
       'profileManager',
-    )
-      ? (update.profileManager ?? null)
-      : (current?.profileManager ?? null),
+      current?.profileManager,
+    ),
     metadata:
       update.metadata !== undefined
         ? { ...(current?.metadata ?? {}), ...update.metadata }
@@ -134,6 +105,22 @@ export function upsertRuntimeEntry(
       `[upsertRuntimeEntry] SET runtimeId=${runtimeId}, hasConfig=${!!next.config}, hasProviderManager=${!!next.providerManager}, registered=[${Array.from(runtimeRegistry.keys()).join(', ')}]`,
   );
   return next;
+}
+
+/**
+ * Resolve a field update: when the update object explicitly owns the key
+ * (own property), prefer its value (falling back to null); otherwise keep
+ * the existing value.
+ */
+function resolveFieldUpdate<T>(
+  update: Record<string, unknown>,
+  key: string,
+  current: T | null | undefined,
+): T | null {
+  if (Object.prototype.hasOwnProperty.call(update, key)) {
+    return (update[key] as T | null | undefined) ?? null;
+  }
+  return current ?? null;
 }
 
 export function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {

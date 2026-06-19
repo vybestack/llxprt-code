@@ -66,25 +66,25 @@ export type ScheduleFn = (
   request: ToolCallRequestInfo | ToolCallRequestInfo[],
   signal: AbortSignal,
 ) => Promise<void>;
-export type MarkToolsAsSubmittedFn = (callIds: string[]) => void;
+export type MarkToolsAsDisplayClearedFn = (callIds: string[]) => void;
 
 export type TrackedScheduledToolCall = ScheduledToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 export type TrackedValidatingToolCall = ValidatingToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 export type TrackedWaitingToolCall = WaitingToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 export type TrackedExecutingToolCall = ExecutingToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 export type TrackedCompletedToolCall = CompletedToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 export type TrackedCancelledToolCall = CancelledToolCall & {
-  responseSubmittedToGemini?: boolean;
+  displayCleared?: boolean;
 };
 
 export type TrackedToolCall =
@@ -109,7 +109,7 @@ export type UpdateToolOutputFn = (
 export type ReactToolSchedulerResult = readonly [
   TrackedToolCall[],
   ScheduleFn,
-  MarkToolsAsSubmittedFn,
+  MarkToolsAsDisplayClearedFn,
   CancelAllFn,
   number,
   boolean,
@@ -160,9 +160,9 @@ function updatePendingItemWithOutput(
 }
 
 /**
- * Maps updated calls preserving the responseSubmittedToGemini flag.
+ * Maps updated calls preserving the displayCleared flag.
  */
-function mapCallsWithSubmittedFlag(
+function mapCallsWithDisplayClearedFlag(
   prevCalls: TrackedToolCall[],
   updatedCalls: ToolCall[],
 ): TrackedToolCall[] {
@@ -172,9 +172,8 @@ function mapCallsWithSubmittedFlag(
   );
   return updatedCalls.map((call) => ({
     ...call,
-    responseSubmittedToGemini:
-      previousCallMap.get(call.request.callId)?.responseSubmittedToGemini ??
-      false,
+    displayCleared:
+      previousCallMap.get(call.request.callId)?.displayCleared ?? false,
   })) as TrackedToolCall[];
 }
 
@@ -215,15 +214,15 @@ function updateSchedulerState(
 }
 
 /**
- * Marks tool calls as submitted to Gemini.
+ * Marks tool calls as cleared from display.
  */
-function markCallsAsSubmitted(
+function markCallsAsDisplayCleared(
   calls: TrackedToolCall[],
   callIdsToMark: string[],
 ): TrackedToolCall[] {
   return calls.map((call) =>
     callIdsToMark.includes(call.request.callId)
-      ? { ...call, responseSubmittedToGemini: true }
+      ? { ...call, displayCleared: true }
       : call,
   );
 }
@@ -408,7 +407,7 @@ function useToolCallUpdaters(
   const replaceToolCallsForScheduler = useCallback(
     (schedulerId: symbol, updatedCalls: ToolCall[]) => {
       updateToolCallsForScheduler(schedulerId, (prevCalls) =>
-        mapCallsWithSubmittedFlag(prevCalls, updatedCalls),
+        mapCallsWithDisplayClearedFlag(prevCalls, updatedCalls),
       );
     },
     [updateToolCallsForScheduler],
@@ -587,6 +586,26 @@ function useExternalSchedulerSetup(
 }
 
 /**
+ * Composes external scheduler factory creation with its registration effect.
+ */
+function useExternalSchedulerRegistration(
+  config: Config,
+  refs: SchedulerRefs,
+  runtimeMessageBus: MessageBus | undefined,
+  setExternalSchedulerRegistered: (registered: boolean) => void,
+): void {
+  const createExternalScheduler = useExternalSchedulerFactoryCreator(
+    refs,
+    runtimeMessageBus,
+  );
+  useExternalSchedulerSetup(
+    config,
+    createExternalScheduler,
+    setExternalSchedulerRegistered,
+  );
+}
+
+/**
  * Hook that manages schedule function.
  */
 function useScheduleFn(
@@ -610,13 +629,13 @@ function useScheduleFn(
 }
 
 /**
- * Hook that manages markToolsAsSubmitted function.
+ * Hook that manages markToolsAsDisplayCleared function.
  */
-function useMarkToolsAsSubmitted(
+function useMarkToolsAsDisplayCleared(
   setToolCallsByScheduler: React.Dispatch<
     React.SetStateAction<Map<symbol, TrackedToolCall[]>>
   >,
-): MarkToolsAsSubmittedFn {
+): MarkToolsAsDisplayClearedFn {
   return useCallback(
     (callIdsToMark: string[]) => {
       if (callIdsToMark.length === 0) return;
@@ -624,7 +643,7 @@ function useMarkToolsAsSubmitted(
         let changed = false;
         const next = new Map(prev);
         for (const [schedulerId, calls] of prev) {
-          const updatedCalls = markCallsAsSubmitted(calls, callIdsToMark);
+          const updatedCalls = markCallsAsDisplayCleared(calls, callIdsToMark);
           const hasChange = updatedCalls.some(
             (call, index) => call !== calls[index],
           );
@@ -753,7 +772,7 @@ function useDerivedToolCallState(
 function buildReactToolSchedulerResult(
   toolCalls: TrackedToolCall[],
   schedule: ScheduleFn,
-  markToolsAsSubmitted: MarkToolsAsSubmittedFn,
+  markToolsAsDisplayCleared: MarkToolsAsDisplayClearedFn,
   cancelAllToolCalls: CancelAllFn,
   lastToolOutputTime: number,
   interactiveRuntimeReady: boolean,
@@ -763,7 +782,7 @@ function buildReactToolSchedulerResult(
   return [
     toolCalls,
     schedule,
-    markToolsAsSubmitted,
+    markToolsAsDisplayCleared,
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
@@ -849,18 +868,17 @@ export function useReactToolScheduler(
     pendingScheduleRequests,
   );
 
-  const createExternalScheduler = useExternalSchedulerFactoryCreator(
+  useExternalSchedulerRegistration(
+    config,
     refs,
     runtimeMessageBus,
-  );
-  useExternalSchedulerSetup(
-    config,
-    createExternalScheduler,
     setExternalSchedulerRegistered,
   );
 
   const schedule = useScheduleFn(scheduler, pendingScheduleRequests);
-  const markToolsAsSubmitted = useMarkToolsAsSubmitted(setToolCallsByScheduler);
+  const markToolsAsDisplayCleared = useMarkToolsAsDisplayCleared(
+    setToolCallsByScheduler,
+  );
   const { toolCalls, cancelAllToolCalls } = useDerivedToolCallState(
     toolCallsByScheduler,
     scheduler,
@@ -879,7 +897,7 @@ export function useReactToolScheduler(
   return buildReactToolSchedulerResult(
     toolCalls,
     schedule,
-    markToolsAsSubmitted,
+    markToolsAsDisplayCleared,
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,

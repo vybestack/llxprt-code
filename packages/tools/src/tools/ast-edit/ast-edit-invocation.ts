@@ -42,6 +42,13 @@ import {
   type CalculatedEdit,
 } from './edit-calculator.js';
 
+function normalizeSeverity(severity: unknown): string {
+  if (typeof severity !== 'number') {
+    return String(severity ?? 'error');
+  }
+  return severity === 1 ? 'error' : String(severity);
+}
+
 export class ASTEditToolInvocation
   implements ToolInvocation<ASTEditToolParams, ToolResult>
 {
@@ -442,8 +449,7 @@ export class ASTEditToolInvocation
     }
     return {
       getDiagnostics: (filePath: string) => {
-        const diagnostics = (client.getDiagnostics?.(filePath) ??
-          []) as unknown[];
+        const diagnostics = client.getDiagnostics?.(filePath) ?? [];
         return diagnostics.map((diagnostic) => {
           const value = diagnostic as {
             message?: string;
@@ -452,12 +458,7 @@ export class ASTEditToolInvocation
           };
           return {
             message: String(value.message ?? ''),
-            severity:
-              typeof value.severity === 'number'
-                ? value.severity === 1
-                  ? 'error'
-                  : String(value.severity)
-                : String(value.severity ?? 'error'),
+            severity: normalizeSeverity(value.severity),
             line:
               value.range?.start?.line !== undefined
                 ? value.range.start.line + 1
@@ -478,9 +479,10 @@ export class ASTEditToolInvocation
         };
         if (checker.checkFile) {
           const controller = new AbortController();
-          const timeoutId = timeout
-            ? setTimeout(() => controller.abort(), timeout)
-            : undefined;
+          const timeoutId =
+            timeout !== undefined && timeout !== 0
+              ? setTimeout(() => controller.abort(), timeout)
+              : undefined;
           try {
             return (await checker.checkFile(filePath, controller.signal)).map(
               (diagnostic) => this.normalizeLegacyDiagnostic(diagnostic),
@@ -507,12 +509,7 @@ export class ASTEditToolInvocation
     };
     return {
       message: String(value.message ?? ''),
-      severity:
-        typeof value.severity === 'number'
-          ? value.severity === 1
-            ? 'error'
-            : String(value.severity)
-          : String(value.severity ?? 'error'),
+      severity: normalizeSeverity(value.severity),
       line:
         value.line ??
         (value.range?.start?.line !== undefined

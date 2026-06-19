@@ -45,13 +45,6 @@ const FORBIDDEN_IN_ALL = [
   '@vybestack/llxprt-code',
 ] as const;
 
-const FORBIDDEN_IN_DEV = [
-  '@vybestack/llxprt-code-core',
-  '@vybestack/llxprt-code-providers',
-  '@vybestack/llxprt-code-cli',
-  '@vybestack/llxprt-code',
-] as const;
-
 function collectAllDepNames(pkg: PackageJson): string[] {
   return [
     ...Object.keys(pkg.dependencies ?? {}),

@@ -3,8 +3,6 @@
  * These constants reference the corresponding .md files for default content
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,13 +39,11 @@ function logDebugEnvInfo(logger: DebugLogger, filename: string): void {
   );
   logger.debug(
     () =>
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
-      `[PROMPT_LOADER] process.argv[0]: ${typeof process !== 'undefined' ? process.argv?.[0] : 'N/A'}`,
+      `[PROMPT_LOADER] process.argv[0]: ${typeof process !== 'undefined' ? process.argv[0] : 'N/A'}`,
   );
   logger.debug(
     () =>
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
-      `[PROMPT_LOADER] process.argv[1]: ${typeof process !== 'undefined' ? process.argv?.[1] : 'N/A'}`,
+      `[PROMPT_LOADER] process.argv[1]: ${typeof process !== 'undefined' ? process.argv[1] : 'N/A'}`,
   );
   logger.debug(
     () =>
@@ -55,13 +51,11 @@ function logDebugEnvInfo(logger: DebugLogger, filename: string): void {
   );
   logger.debug(
     () =>
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
-      `[PROMPT_LOADER] NODE_ENV: ${typeof process !== 'undefined' ? process.env?.NODE_ENV : 'N/A'}`,
+      `[PROMPT_LOADER] NODE_ENV: ${typeof process !== 'undefined' ? process.env.NODE_ENV : 'N/A'}`,
   );
   logger.debug(
     () =>
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
-      `[PROMPT_LOADER] CI: ${typeof process !== 'undefined' ? process.env?.CI : 'N/A'}`,
+      `[PROMPT_LOADER] CI: ${typeof process !== 'undefined' ? process.env.CI : 'N/A'}`,
   );
 }
 
@@ -109,7 +103,6 @@ function logBundleDirDebugInfo(
       const fullPath = join(currentDir, f);
       try {
         const exists = existsSync(fullPath);
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
         if (exists) {
           logger.debug(() => `[PROMPT_LOADER] Found ${f} at ${fullPath}`);
         }
@@ -203,8 +196,7 @@ function tryLoadByTraversingUp(filename: string): string | null {
 }
 
 function tryLoadFromCwdBundle(filename: string): string | null {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
-  if (process?.cwd().includes('bundle')) {
+  if (process.cwd().includes('bundle')) {
     const cwdPath = join(process.cwd(), filename);
     if (existsSync(cwdPath)) {
       return readFileSync(cwdPath, 'utf-8');
@@ -214,8 +206,7 @@ function tryLoadFromCwdBundle(filename: string): string | null {
 }
 
 function tryLoadFromScriptArgv(filename: string): string | null {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
-  if (process?.argv[1]) {
+  if (process.argv[1]) {
     const scriptDir = dirname(process.argv[1]);
     const scriptPath = join(scriptDir, filename);
     if (existsSync(scriptPath)) {
@@ -252,7 +243,6 @@ function logSearchPaths(logger: DebugLogger, searchPaths: string[]): void {
     typeof process !== 'undefined' ? dirname(process.argv[1] || '') : '',
   ].filter((dir) => dir !== '');
   for (const dir of checkDirs) {
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     try {
       const files = readdirSync(dir).filter(
         (f) =>

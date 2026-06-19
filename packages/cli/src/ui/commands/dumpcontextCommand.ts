@@ -65,16 +65,16 @@ function getHistoryService(
   if (!hasCallableGetAgentClient(config)) {
     return null;
   }
-  const getAgentClient: () => unknown = config.getAgentClient;
-  const agentClient = getAgentClient();
+  const agentClient = config.getAgentClient();
+  /* eslint-disable @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- callers may return null/undefined at runtime */
   if (
-    typeof agentClient !== 'object' ||
     agentClient === null ||
-    !('getHistoryService' in agentClient) ||
+    agentClient === undefined ||
     typeof agentClient.getHistoryService !== 'function'
   ) {
     return null;
   }
+  /* eslint-enable @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison */
   return agentClient.getHistoryService() as HistoryService | null;
 }
 

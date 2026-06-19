@@ -417,14 +417,22 @@ async function handleTaskMetadata(
 export async function main() {
   try {
     const expressApp = await createApp();
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var default
-    const port = process.env['CODER_AGENT_PORT'] || 0;
+    const rawPortEnv = process.env['CODER_AGENT_PORT'];
+    const portEnv = rawPortEnv?.trim();
+    const hasExplicitPort = portEnv !== undefined && portEnv !== '';
+    const parsedPort = hasExplicitPort ? Number(portEnv) : 0;
+    if (!Number.isInteger(parsedPort) || parsedPort < 0 || parsedPort > 65535) {
+      throw new Error(
+        'CODER_AGENT_PORT must be an integer between 0 and 65535',
+      );
+    }
+    const port = parsedPort;
 
     const server = expressApp.listen(port, () => {
       const address = server.address();
       let actualPort;
-      if (process.env['CODER_AGENT_PORT']) {
-        actualPort = process.env['CODER_AGENT_PORT'];
+      if (hasExplicitPort && parsedPort !== 0) {
+        actualPort = parsedPort;
       } else if (address !== null && typeof address !== 'string') {
         actualPort = address.port;
       } else {

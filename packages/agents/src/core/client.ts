@@ -44,6 +44,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import { subscribeToAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { BaseLLMClient } from './baseLlmClient.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 
 import {
   coreEvents,
@@ -267,10 +268,7 @@ export class AgentClient implements AgentClientContract {
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
-    // Preserve chat history before resetting, but only if we don't already have stored history
-    // (e.g., from storeHistoryForLaterUse called before initialize)
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty array means "no stored history"
-    const previousHistory = this._previousHistory || this.chat?.getHistory();
+    const previousHistory = this.chat?.getHistory() ?? this._previousHistory;
 
     // Reset the client to force reinitialization with new auth
     this.contentGenerator = undefined;
@@ -385,7 +383,7 @@ export class AgentClient implements AgentClientContract {
   getHistoryService(): HistoryService | null {
     // Removed verbose debug logging
     if (!this.hasChatInitialized()) {
-      return null;
+      return this._storedHistoryService ?? null;
     }
     const historyService = this.getChat().getHistoryService();
     // Removed verbose debug logging
@@ -403,11 +401,6 @@ export class AgentClient implements AgentClientContract {
   }
 
   async getHistory(): Promise<Content[]> {
-    // If we have stored history but no chat, return the stored history
-    if (!this.hasChatInitialized() && this._previousHistory) {
-      return this._previousHistory;
-    }
-
     // If chat is initialized, get its current history
     if (this.hasChatInitialized()) {
       const chat = this.getChat() as unknown as {
@@ -418,6 +411,16 @@ export class AgentClient implements AgentClientContract {
         await chat.waitForIdle();
       }
       return chat.getHistory();
+    }
+
+    if (this._previousHistory) {
+      return this._previousHistory;
+    }
+
+    if (this._storedHistoryService) {
+      return ContentConverters.toGeminiContents(
+        this._storedHistoryService.getAll(),
+      );
     }
 
     // No history available
@@ -521,9 +524,8 @@ export class AgentClient implements AgentClientContract {
     }
 
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
-    // Ensure chat is initialized before setting tools
     if (!this.hasChatInitialized()) {
-      await this.resetChat();
+      this.chat = await this.startChat(this._previousHistory ?? []);
     }
     this.getChat().setTools(tools);
   }

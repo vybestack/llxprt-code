@@ -45,17 +45,7 @@ export class TodoStore {
     const rawData = JSON.parse(content);
 
     // Check if it's the new format (object with todos property)
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      rawData != null &&
-      rawData !== false &&
-      rawData !== 0 &&
-      rawData !== '' &&
-      !Number.isNaN(rawData) &&
-      typeof rawData === 'object' &&
-      !Array.isArray(rawData) &&
-      'todos' in rawData
-    ) {
+    if (isNewTodoFormat(rawData)) {
       const todosResult = TodoArraySchema.safeParse(rawData.todos);
       if (todosResult.success) {
         return {
@@ -150,4 +140,16 @@ export class TodoStore {
       paused,
     });
   }
+}
+
+/**
+ * Type guard: is the parsed data a new-format ({ todos, ... }) object?
+ * Extracts the compound truthiness/type check into a named function to keep
+ * conditional operator count within the linter limit.
+ */
+function isNewTodoFormat(data: unknown): data is Record<string, unknown> {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    return false;
+  }
+  return 'todos' in data;
 }

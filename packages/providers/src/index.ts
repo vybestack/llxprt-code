@@ -34,7 +34,8 @@ export type { NormalizedGenerateChatOptions } from './BaseProvider.js';
 export { ContentGeneratorRole } from './ContentGeneratorRole.js';
 
 // --- Provider manager ---
-export { ProviderManager, type CacheStatistics } from './ProviderManager.js';
+export { ProviderManager } from './ProviderManager.js';
+export type { CacheStatistics } from './tokenUsageTracker.js';
 
 // --- Provider implementations ---
 export { OpenAIProvider } from './openai/OpenAIProvider.js';

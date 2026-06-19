@@ -14,6 +14,22 @@ This project values respectful and constructive collaboration. We expect all con
 
 ## Contribution Process
 
+### Before You Open a Pull Request
+
+Run the presubmit check from the repository root before opening a pull request:
+
+```bash
+npm run presubmit
+```
+
+This formats the repository and then runs linting, the build, type checking, and tests. (The build runs before type checking and tests because packages type-check and test against each other's built output.) If your PR is large or you run into problems that are hard to reproduce locally, you may also want to run the heavier CI-style preflight check:
+
+```bash
+npm run preflight
+```
+
+`preflight` performs a clean install and already includes formatting, CI linting, build, type checking, and CI tests, so you do not need to run those separately unless you are re-checking a specific failure after making fixes.
+
 ### Code Reviews
 
 All submissions, including submissions by project members, require review. We
@@ -54,7 +70,7 @@ If you'd like to get early feedback on your work, please use GitHub's **Draft Pu
 
 #### 4. Ensure All Checks Pass
 
-Before submitting your PR, ensure that all automated checks are passing by running `npm run preflight`. This command runs all tests, linting, and other style checks.
+Before submitting your PR, ensure that the contributor readiness checks pass by running `npm run presubmit`. This command formats the repository and then runs linting, the build, type checking, and tests.
 
 #### 5. Update Documentation
 
@@ -145,7 +161,7 @@ To execute the unit test suite for the project:
 npm run test
 ```
 
-This will run tests located in the `packages/core` and `packages/cli` directories. Ensure tests pass before submitting any changes. For a more comprehensive check, it is recommended to run `npm run preflight`.
+This will run tests located in the `packages/core` and `packages/cli` directories. Ensure tests pass before submitting any changes. For the standard pre-PR check, run `npm run presubmit`.
 
 #### Integration Tests
 
@@ -161,26 +177,34 @@ For more detailed information on the integration testing framework, please see t
 
 ### Linting and Preflight Checks
 
-To ensure code quality and formatting consistency, run the preflight check:
+To ensure code quality and formatting consistency before a PR, run the presubmit check:
+
+```bash
+npm run presubmit
+```
+
+This command runs formatting, linting, the build, type checking, and tests.
+
+For a larger PR or a difficult-to-reproduce failure, run the heavier preflight check:
 
 ```bash
 npm run preflight
 ```
 
-This command will run ESLint, Prettier, all tests, and other checks as defined in the project's `package.json`.
+This command runs a clean install and then formatting, CI linting, build, type checking, and CI tests as defined in the project's `package.json`.
 
 _ProTip_
 
-after cloning create a git precommit hook file to ensure your commits are always clean.
+After cloning, you can create a git pre-push hook to check your branch before pushing:
 
 ```bash
 echo "
-# Run npm build and check for errors
-if ! npm run preflight; then
-  echo "npm build failed. Commit aborted."
+# Run contributor readiness checks before pushing
+if ! npm run presubmit; then
+  echo "npm presubmit failed. Push aborted."
   exit 1
 fi
-" > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+" > .git/hooks/pre-push && chmod +x .git/hooks/pre-push
 ```
 
 #### Formatting

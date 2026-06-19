@@ -1,10 +1,8 @@
 /**
- * @license
- * Copyright 2025 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
  */
-
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 import {
   DebugLogger,
@@ -14,6 +12,7 @@ import {
 import {
   ProfileManager,
   getProfilePersistableKeys,
+  isInternalSettingKey,
   isLoadBalancerProfile,
   resolveAlias,
 } from '@vybestack/llxprt-code-settings';
@@ -30,6 +29,28 @@ import {
   _internal as runtimeAccessorsInternal,
 } from './runtimeAccessors.js';
 import { applyProfileWithGuards } from './profileApplication.js';
+import {
+  getProfileEphemeralSettings,
+  getProfileModel,
+  getProfileModelParams,
+  getProfileProvider,
+} from './profile-application/profileAccessors.js';
+
+type LoadBalancerProfileDetail = {
+  name: string;
+  provider?: string;
+  model?: string;
+  contextLimit?: number;
+  reasoningEnabled?: boolean;
+  temperature?: unknown;
+  maxTokens?: unknown;
+  modelParams?: Record<string, unknown>;
+  loadError?: boolean;
+};
+
+type LoadBalancerProfileWithDetails = LoadBalancerProfile & {
+  loadBalancerProfileDetails?: LoadBalancerProfileDetail[];
+};
 
 const logger = new DebugLogger('llxprt:runtime:settings');
 const {
@@ -127,6 +148,52 @@ function getNestedValue(
   return current;
 }
 
+function getProfileEphemeralValue(
+  ephemeralRecord: Record<string, unknown>,
+  key: string,
+): unknown {
+  const directValue = getNestedValue(ephemeralRecord, key);
+  if (directValue !== undefined) {
+    return directValue;
+  }
+
+  for (const [aliasKey, aliasValue] of Object.entries(ephemeralRecord)) {
+    if (
+      aliasValue !== undefined &&
+      !isInternalSettingKey(aliasKey) &&
+      resolveAlias(aliasKey) === key
+    ) {
+      return aliasValue;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Determine whether a profile ephemeral key should be skipped during snapshot
+ * collection. Internal settings are always skipped, and lower-precedence auth
+ * keys are skipped when a higher-precedence auth source is present.
+ */
+function isSkippableProfileKey(
+  key: string,
+  authState: { hasAuthKeyfile: boolean; hasAuthKeyName: boolean },
+): boolean {
+  if (isInternalSettingKey(key)) {
+    return true;
+  }
+  if (
+    key === 'auth-key' &&
+    (authState.hasAuthKeyfile || authState.hasAuthKeyName)
+  ) {
+    return true;
+  }
+  if (key === 'auth-keyfile' && authState.hasAuthKeyName) {
+    return true;
+  }
+  return false;
+}
+
 export function buildRuntimeProfileSnapshot(): Profile {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
   const snapshotConfig = config as RuntimeSnapshotConfig;
@@ -159,25 +226,12 @@ export function buildRuntimeProfileSnapshot(): Profile {
     ephemeralRecord['auth-key-name'] !== undefined &&
     ephemeralRecord['auth-key-name'] !== null;
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const key of PROFILE_EPHEMERAL_KEYS) {
-    if (key === 'auth-key' && (hasAuthKeyfile || hasAuthKeyName)) {
-      continue;
-    }
-    if (key === 'auth-keyfile' && hasAuthKeyName) {
+    if (isSkippableProfileKey(key, { hasAuthKeyfile, hasAuthKeyName })) {
       continue;
     }
 
-    let value = getNestedValue(ephemeralRecord, key);
-    if (value === undefined) {
-      for (const [aliasKey, aliasValue] of Object.entries(ephemeralRecord)) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (aliasValue !== undefined && resolveAlias(aliasKey) === key) {
-          value = aliasValue;
-          break;
-        }
-      }
-    }
+    const value = getProfileEphemeralValue(ephemeralRecord, key);
     if (value !== undefined) {
       snapshot[key] = value;
     }
@@ -583,6 +637,54 @@ export async function deleteProfileByName(profileName: string): Promise<void> {
     }
   }
 }
+async function resolveLoadBalancerProfileDetail(
+  memberName: string,
+  manager: ProfileManager,
+): Promise<LoadBalancerProfileDetail> {
+  try {
+    const memberProfile = await manager.loadProfile(memberName);
+    if (isLoadBalancerProfile(memberProfile)) {
+      return { name: memberName, loadError: true };
+    }
+
+    const ephemerals = getProfileEphemeralSettings(memberProfile);
+    const modelParams = getProfileModelParams(memberProfile);
+    return {
+      name: memberName,
+      provider: getProfileProvider(memberProfile),
+      model: getProfileModel(memberProfile),
+      contextLimit:
+        typeof ephemerals['context-limit'] === 'number'
+          ? ephemerals['context-limit']
+          : undefined,
+      reasoningEnabled:
+        typeof ephemerals['reasoning.enabled'] === 'boolean'
+          ? ephemerals['reasoning.enabled']
+          : undefined,
+      temperature: modelParams.temperature,
+      maxTokens: modelParams.max_tokens,
+      ...(Object.keys(modelParams).length > 0 && { modelParams }),
+    };
+  } catch {
+    return { name: memberName, loadError: true };
+  }
+}
+
+async function addLoadBalancerProfileDetails(
+  profile: LoadBalancerProfile,
+  manager: ProfileManager,
+): Promise<LoadBalancerProfileWithDetails> {
+  const details = await Promise.all(
+    profile.profiles.map((memberName) =>
+      resolveLoadBalancerProfileDetail(memberName, manager),
+    ),
+  );
+
+  return {
+    ...profile,
+    loadBalancerProfileDetails: details,
+  };
+}
 
 export async function listSavedProfiles(): Promise<string[]> {
   const manager = new ProfileManager();
@@ -591,7 +693,12 @@ export async function listSavedProfiles(): Promise<string[]> {
 
 export async function getProfileByName(profileName: string): Promise<Profile> {
   const manager = new ProfileManager();
-  return manager.loadProfile(profileName);
+  const profile = await manager.loadProfile(profileName);
+  if (!isLoadBalancerProfile(profile)) {
+    return profile;
+  }
+
+  return addLoadBalancerProfileDetails(profile, manager);
 }
 
 export function getActiveProfileName(): string | null {

@@ -1070,18 +1070,22 @@ export class AgentImpl implements Agent {
   }
 
   /**
-   * After a client-rebinding mutation, the new client's chat may not be
-   * initialized (getHistoryService() returns null). The prior HistoryService
-   * was stored via storeHistoryServiceForReuse during transferHistoryToNewClient.
-   * Calling startChat() consumes the stored service and makes it visible,
-   * preserving identity for the REQ-005 probe.
+   * After a client-rebinding mutation, the new client's chat is not yet
+   * initialized. The prior conversation is carried onto the new client by
+   * transferHistoryToNewClient (as history content) and surfaced by the new
+   * client's getHistory() before its chat exists. Seeding startChat() with that
+   * carried-over history makes the chat visible WITHOUT dropping prior context,
+   * preserving the conversation across the rebind for REQ-005.
    * @plan:PLAN-20260617-COREAPI.P16
    * @requirement:REQ-005
    */
   private async restoreChatVisibility(): Promise<void> {
     const client = this.deps.resolveClient();
     if (!client.hasChatInitialized()) {
-      await client.startChat();
+      const carriedHistory = await client.getHistory();
+      await client.startChat(
+        carriedHistory.length > 0 ? carriedHistory : undefined,
+      );
     }
   }
 

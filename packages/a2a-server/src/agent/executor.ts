@@ -38,6 +38,12 @@ import { loadExtensions } from '../config/extension.js';
 import { Task } from './task.js';
 import { requestStorage } from '../http/requestStorage.js';
 
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw new Error('Execution aborted');
+  }
+}
+
 /**
  * Provides a wrapper for Task. Passes data from Task to SDKTask.
  * The idea is to use this class inside CoderAgentExecutor to replace Task.
@@ -476,8 +482,7 @@ export class CoderAgentExecutor implements AgentExecutor {
       );
 
       // Check abort signal after async operation - signal state may have changed.
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (abortSignal.aborted) throw new Error('Execution aborted');
+      throwIfAborted(abortSignal);
 
       const completedTools = task.getAndClearCompletedTools();
 

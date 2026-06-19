@@ -39,7 +39,6 @@ import {
   EditTool,
   StructuralAnalysisTool,
 } from '../index.js';
-import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 import type { ToolResult } from '../index.js';
 
 function createTempDir(prefix = 'llxprt-edit-test-'): {

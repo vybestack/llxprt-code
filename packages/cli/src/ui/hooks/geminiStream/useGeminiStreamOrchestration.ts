@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
   type Config,
   type EditorType,
@@ -75,7 +75,7 @@ interface ToolSchedulerState {
   scheduler: ReturnType<typeof useToolSchedulerSetup>;
   toolCalls: TrackedToolCall[];
   scheduleToolCalls: UseSubmitQueryDeps['scheduleToolCalls'];
-  markToolsAsSubmitted: (callIds: string[]) => void;
+  markToolsAsDisplayCleared: (callIds: string[]) => void;
   cancelAllToolCalls: () => void;
   lastToolOutputTime: number;
   interactiveRuntimeReady: boolean;
@@ -98,6 +98,18 @@ export function useGeminiStreamOrchestration(
     st.isResponding,
     scheduler.toolCalls,
   );
+  // Cancels EVERY running async subagent on ESC, not only those launched by the
+  // current foreground turn. This is intentional (issue #2074): an async task
+  // launched in a prior turn has its foreground-signal relay bound to that
+  // earlier turn's signal, which already settled and can never abort. Relaying
+  // alone would therefore leave such cross-turn tasks running, which is the
+  // exact bug #2074 reports. The AsyncTaskManager is the single session-wide
+  // owner of running tasks, so cancelling all of them is the only mechanism
+  // that reliably stops detached subagents regardless of launch turn.
+  const cancelRunningAsyncTasks = useCallback(() => {
+    const mgr = args.config.getAsyncTaskManager();
+    mgr?.getRunningTasks().forEach((t) => mgr.cancelTask(t.id));
+  }, [args.config]);
   const { cancelOngoingRequest } = useCancellation(
     streamingState,
     st.turnCancelledRef,
@@ -110,6 +122,7 @@ export function useGeminiStreamOrchestration(
     args.onCancelSubmit,
     st.setIsResponding,
     st.queuedSubmissionsRef,
+    cancelRunningAsyncTasks,
   );
   // Refs to break the circular dependency between useSubmitQuery (which
   // creates useStreamEventHandlers → processStreamEvent) and useAgenticLoop
@@ -177,7 +190,7 @@ function useToolSchedulerState(
   const [
     toolCalls,
     scheduleToolCalls,
-    markToolsAsSubmitted,
+    markToolsAsDisplayCleared,
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
@@ -188,7 +201,7 @@ function useToolSchedulerState(
     scheduler,
     toolCalls,
     scheduleToolCalls,
-    markToolsAsSubmitted,
+    markToolsAsDisplayCleared,
     cancelAllToolCalls,
     lastToolOutputTime,
     interactiveRuntimeReady,
@@ -260,7 +273,7 @@ function useLoopForStream(
     clearPendingHistoryItem: () => st.setPendingHistoryItem(null),
     performMemoryRefresh: args.performMemoryRefresh,
     onTodoPause: args.onTodoPause,
-    markToolsAsSubmitted: scheduler.markToolsAsSubmitted,
+    markToolsAsDisplayCleared: scheduler.markToolsAsDisplayCleared,
     onToolCallsUpdate: scheduler.replaceToolCalls,
     outputUpdateHandler: scheduler.updateToolOutput,
     getPreferredEditor: args.getPreferredEditor,

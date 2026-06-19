@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Legacy core orchestration boundary retained while policy implementation lives in packages/policy. */
-
 import * as path from 'node:path';
 import fs from 'node:fs/promises';
 import toml from '@iarna/toml';
@@ -228,12 +226,26 @@ function addToolsAllowedRules(
   }
 }
 
+function matchLegacyToolArgsFormat(
+  tool: string,
+): { toolName: string; argsStr: string } | undefined {
+  const openParen = tool.indexOf('(');
+  if (openParen <= 0 || !tool.endsWith(')')) {
+    return undefined;
+  }
+  const toolName = tool.slice(0, openParen);
+  if (!/^[a-zA-Z0-9_-]+$/.test(toolName)) {
+    return undefined;
+  }
+  const argsStr = tool.slice(openParen + 1, -1);
+  return { toolName, argsStr };
+}
+
 function addSingleAllowedToolRule(tool: string, rules: PolicyRule[]): void {
   // Check for legacy ShellTool(args) format
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  const match = /^([a-zA-Z0-9_-]+)\((.*)\)$/.exec(tool);
+  const match = matchLegacyToolArgsFormat(tool);
   if (match) {
-    const [, toolName, argsStr] = match;
+    const { toolName, argsStr } = match;
     const normalizedName =
       toolName === 'ShellTool' ? 'run_shell_command' : toolName;
 

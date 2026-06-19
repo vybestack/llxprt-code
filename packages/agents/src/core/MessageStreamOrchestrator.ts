@@ -156,8 +156,7 @@ export class MessageStreamOrchestrator {
       logger.debug('Restoring previous history during prompt generation', {
         historyLength: previousHistory.length,
       });
-      const conversationHistory = previousHistory.slice(2);
-      setChat(await startChat(conversationHistory));
+      setChat(await startChat(previousHistory));
     } else {
       setChat(await startChat());
     }
@@ -778,16 +777,16 @@ export class MessageStreamOrchestrator {
 
   /**
    * Resolves the effective model for ModelInfo, preferring the provider
-   * manager's active provider default model where available.
+   * manager's active provider model where available.
    */
   private _resolveModelForInfo(): string {
     const contentGenConfig = this.deps.config.getContentGeneratorConfig();
     const providerManager = contentGenConfig?.providerManager;
-    const providerDefault = providerManager
+    const providerModel = providerManager
       ?.getActiveProvider()
-      ?.getDefaultModel?.();
-    if (providerDefault && providerDefault.trim() !== '') {
-      return providerDefault;
+      ?.getCurrentModel?.();
+    if (providerModel && providerModel.trim() !== '') {
+      return providerModel;
     }
     return this.deps.getEffectiveModel();
   }

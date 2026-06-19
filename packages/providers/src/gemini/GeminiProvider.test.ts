@@ -136,18 +136,15 @@ describe('GeminiProvider', () => {
           blocks: [{ type: 'text', text: 'hello ephemerals' }],
         },
       ] as IContent[],
+      settingsOverrides: {
+        global: { maxOutputTokens: 42 },
+      },
     });
-    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
-    // Provider-scoped settings now go through invocation.modelParams after separation
     options.invocation = {
       ...options.invocation,
       ephemerals: {
         ...options.invocation.ephemerals,
         tools: { allowed: ['read_file'], disabled: ['web_search'] },
-        gemini: { maxOutputTokens: 42 },
-      },
-      modelParams: {
-        maxOutputTokens: 42,
       },
     };
 

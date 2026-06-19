@@ -12,11 +12,12 @@
  * not mock call verification.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
+import { ConfigBasedRedactor } from './logging/ConfigBasedRedactor.js';
 import type {
   IProvider,
   IContent,
@@ -31,6 +32,7 @@ import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storag
 // P06: intentional core deep import — verifies shim re-exports storage symbols correctly
 import { getConversationFileWriter as getFromCore } from '@vybestack/llxprt-code-core/storage/ConversationFileWriter.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
 class FakeProvider implements IProvider {
   name = 'fake-test-provider';
@@ -177,14 +179,11 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
 
   it('logs error to observable array when write fails', async () => {
     const errors: Array<{ message: string; context?: unknown }> = [];
-
-    // Force a write failure: create a temp dir, place a regular file where a directory is expected
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lpw-error-test-'));
     const blockerPath = path.join(tmpDir, 'blocker');
     await fs.writeFile(blockerPath, 'not a directory');
     const badLogPath = path.join(tmpDir, 'blocker', 'conversations');
 
-    // Use ConversationFileWriter directly with the bad path to verify error logging
     const { ConversationFileWriter } = await import(
       '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js'
     );
@@ -201,7 +200,160 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     expect(errors.length).toBeGreaterThan(0);
     expect(errors[0].message).toContain('Failed to write log entry');
 
-    // Cleanup
     await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('keeps request logging failures observable while allowing provider response', async () => {
+    const tmpDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'lpw-request-fail-'),
+    );
+    const configStub = buildConfigStub(tmpDir);
+    const settings = new SettingsServiceImpl();
+    const throwingRedactor = {
+      redactMessage: () => {
+        throw new Error('redaction failed');
+      },
+      redactToolCall: (tool: unknown) => tool,
+      redactResponseContent: (content: string) => content,
+    };
+    const wrapper = new LoggingProviderWrapper(
+      new FakeProvider(),
+      throwingRedactor,
+    );
+    const warnSpy = vi.spyOn(DebugLogger.prototype, 'warn');
+
+    const runtime: ProviderRuntimeContext = {
+      settingsService: settings as unknown as SettingsService,
+      config: configStub,
+      runtimeId: 'request-log-failure-runtime',
+      metadata: { source: 'LoggingProviderWrapper.test' },
+    };
+
+    try {
+      const chunks: IContent[] = [];
+      for await (const chunk of wrapper.generateChatCompletion({
+        contents: [{ speaker: 'user', blocks: [{ type: 'text', text: 'hi' }] }],
+        settings: settings as unknown as SettingsService,
+        runtime,
+        config: configStub,
+      })) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks.length).toBeGreaterThan(0);
+      const warningMessages = warnSpy.mock.calls.map((call) => call[0]());
+      expect(warningMessages).toContainEqual(
+        expect.stringContaining('Failed to log conversation request'),
+      );
+    } finally {
+      warnSpy.mockRestore();
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('redacts credential file paths without an ESLint regex exception', () => {
+    const redactor = new ConfigBasedRedactor({
+      redactApiKeys: false,
+      redactCredentials: false,
+      redactFilePaths: true,
+      redactUrls: false,
+      redactEmails: false,
+      redactPersonalInfo: false,
+    });
+
+    const redacted = redactor.redactResponseContent(
+      'keys at /Users/alice/.ssh/id_ed25519 and /home/bob/project/.env.local',
+      'fake-test-provider',
+    );
+
+    expect(redacted).toContain('[REDACTED-SSH-PATH]');
+    expect(redacted).toContain('[REDACTED-ENV-FILE]');
+    expect(redacted).not.toContain('id_ed25519');
+    expect(redacted).not.toContain('.env.local');
+  });
+
+  it('preserves bearer and absolute-path redaction semantics without ESLint regex exceptions', () => {
+    const credentialRedactor = new ConfigBasedRedactor({
+      redactApiKeys: false,
+      redactCredentials: true,
+      redactFilePaths: false,
+      redactUrls: false,
+      redactEmails: false,
+      redactPersonalInfo: false,
+    });
+    const fileRedactor = new ConfigBasedRedactor({
+      redactApiKeys: false,
+      redactCredentials: false,
+      redactFilePaths: true,
+      redactUrls: false,
+      redactEmails: false,
+      redactPersonalInfo: false,
+    });
+
+    expect(
+      credentialRedactor.redactResponseContent(
+        'authorization: bearer abcdefghijklmnop.qrs-token',
+        'fake-test-provider',
+      ),
+    ).toContain('bearer [REDACTED-BEARER-TOKEN]');
+
+    expect(
+      fileRedactor.redactResponseContent(
+        'relative secret .ssh/id_ed25519 should remain visible',
+        'fake-test-provider',
+      ),
+    ).toContain('.ssh/id_ed25519');
+  });
+
+  it('preserves punctuation-delimited redaction semantics without regex disables', () => {
+    const fileRedactor = new ConfigBasedRedactor({
+      redactApiKeys: false,
+      redactCredentials: false,
+      redactFilePaths: true,
+      redactUrls: false,
+      redactEmails: false,
+      redactPersonalInfo: false,
+    });
+    const emailRedactor = new ConfigBasedRedactor({
+      redactApiKeys: false,
+      redactCredentials: false,
+      redactFilePaths: false,
+      redactUrls: false,
+      redactEmails: true,
+      redactPersonalInfo: false,
+    });
+    const personalInfoRedactor = new ConfigBasedRedactor({
+      redactApiKeys: false,
+      redactCredentials: false,
+      redactFilePaths: false,
+      redactUrls: false,
+      redactEmails: false,
+      redactPersonalInfo: true,
+    });
+
+    expect(
+      fileRedactor.redactResponseContent(
+        'path=(/Users/alice/.ssh/id_ed25519), env=path:/home/bob/project/.env.local',
+        'fake-test-provider',
+      ),
+    ).toContain('[REDACTED-SSH-PATH]');
+    expect(
+      fileRedactor.redactResponseContent(
+        'path=(/Users/alice/.ssh/id_ed25519), env=path:/home/bob/project/.env.local',
+        'fake-test-provider',
+      ),
+    ).toContain('[REDACTED-ENV-FILE]');
+    expect(
+      emailRedactor.redactResponseContent(
+        'contact=<alice@example.com>',
+        'fake-test-provider',
+      ),
+    ).toBe('contact=<[REDACTED-EMAIL]>');
+    expect(
+      personalInfoRedactor.redactResponseContent(
+        'cc=4111 1111 1111 1111',
+        'fake-test-provider',
+      ),
+    ).toBe('cc=[REDACTED-CC-NUMBER]');
   });
 });

@@ -273,7 +273,7 @@ export class StreamProcessor {
     const tools = toolSelection.tools;
 
     const { requestPayload, baseRuntimeContext, runtimeContext } =
-      this._prepareRequestPayload(requestContents, tools);
+      this._prepareRequestPayload(requestContents, tools, params);
 
     const finalContents = await this._fireBeforeModelHook(
       configForHooks,
@@ -414,6 +414,7 @@ export class StreamProcessor {
   private _prepareRequestPayload(
     requestContents: IContent[],
     tools: GenerateContentConfig['tools'],
+    params: SendMessageParameters,
   ): {
     requestPayload: { contents: IContent[]; tools: unknown };
     baseRuntimeContext: ProviderRuntimeContext;
@@ -437,7 +438,10 @@ export class StreamProcessor {
 
     const requestPayload = { contents: requestContents, tools };
 
-    const runtimeContext = this._buildRuntimeContext(baseRuntimeContext);
+    const runtimeContext = this._buildRuntimeContext(
+      baseRuntimeContext,
+      params,
+    );
 
     return { requestPayload, baseRuntimeContext, runtimeContext };
   }
@@ -446,6 +450,7 @@ export class StreamProcessor {
   // @requirement:REQ-001
   private _buildRuntimeContext(
     baseRuntimeContext: ProviderRuntimeContext,
+    params: SendMessageParameters,
   ): ProviderRuntimeContext {
     // The runtime context's `config` MUST stay the live llxprt `Config`
     // class instance so provider-side resolution (ProviderManager
@@ -454,7 +459,14 @@ export class StreamProcessor {
     // reach the provider via dedicated channels (requestPayload.tools,
     // metadata.abortSignal, and direct params.config reads); spreading them
     // into the Config slot would strip its prototype methods.
-    return baseRuntimeContext;
+    if (!params.config?.abortSignal) return baseRuntimeContext;
+    return {
+      ...baseRuntimeContext,
+      metadata: {
+        ...(baseRuntimeContext.metadata ?? {}),
+        abortSignal: params.config.abortSignal,
+      },
+    };
   }
 
   private async _sendProviderRequest(

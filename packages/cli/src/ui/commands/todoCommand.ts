@@ -11,9 +11,8 @@
  * @requirement REQ-003, REQ-004, REQ-005, REQ-006, REQ-007
  */
 
-import type { SlashCommand } from './types.js';
+import type { SlashCommand, CommandContext } from './types.js';
 import { CommandKind } from './types.js';
-import type { CommandContext } from './types.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import * as fs from 'fs';

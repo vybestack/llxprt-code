@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import process from 'node:process';
-import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -15,19 +12,11 @@ import { ActivateSkillTool } from '@vybestack/llxprt-code-tools';
 import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
-import type {
-  AgentClientContract,
-  AgentClientFactory,
-} from '../core/clientContract.js';
-import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
+import type { AgentClientContract } from '../core/clientContract.js';
 import { HookSystem } from '../hooks/hookSystem.js';
-import type { HistoryService } from '../services/history/HistoryService.js';
 import { ContextManager } from '../services/contextManager.js';
-// @plan PLAN-20260130-ASYNCTASK.P09
-import { AsyncTaskManager } from '../services/asyncTaskManager.js';
-// @plan PLAN-20260130-ASYNCTASK.P22
-import { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
-import { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
+import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
+import type { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
 import {
   loadServerHierarchicalMemory,
   loadJitSubdirectoryMemory,
@@ -35,7 +24,6 @@ import {
 import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
-import type { Content } from '@google/genai';
 import {
   getOrCreateScheduler as _getOrCreateScheduler,
   type SchedulerCallbacks,
@@ -47,6 +35,19 @@ import {
   type ConfigConstructorTarget,
 } from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
+import {
+  buildNewContentGeneratorConfig,
+  disposePreviousAgentClient,
+  extractExistingState,
+  requireAgentClientFactory,
+  transferHistoryToNewClient,
+} from './agentClientLifecycle.js';
+import {
+  getOrCreateAsyncTaskManager,
+  getOrCreateAsyncTaskReminderService,
+  setupAsyncTaskAutoTrigger,
+} from './asyncTaskServices.js';
+import { parseSettingsSubagentDefinitions } from './subagentSettingsParser.js';
 
 import {
   type ConfigParameters,
@@ -166,45 +167,17 @@ export class Config extends ConfigBase {
       }
     }
 
-    // Register extension-contributed subagents (after skill discovery, before AgentClient creation)
-    const subagentMgr = this.getSubagentManager();
-    if (subagentMgr) {
-      subagentMgr.clearExtensionSubagents();
-      for (const extension of this.getExtensions()) {
-        if (
-          extension.isActive &&
-          extension.subagents !== undefined &&
-          extension.subagents.length > 0
-        ) {
-          subagentMgr.registerExtensionSubagents(
-            extension.name,
-            extension.subagents,
-          );
-        }
-      }
-    }
-
-    // Register settings-defined subagents (after extension subagents, before AgentClient creation)
-    if (subagentMgr) {
-      const allSettings = this.settingsService.getAllGlobalSettings();
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      const subagentsSettings = allSettings?.['subagents'] as
-        | Record<string, unknown>
-        | undefined;
-      const definitions = subagentsSettings?.['definitions'] as
-        | Record<string, { profile: string; systemPrompt: string }>
-        | undefined;
-      if (definitions && typeof definitions === 'object') {
-        subagentMgr.clearSettingsSubagents();
-        subagentMgr.registerSettingsSubagents(definitions);
-      }
-    }
+    // Register subagents (after skill discovery, before AgentClient creation)
+    this.registerSubagents();
 
     // Create AgentClient instance immediately without authentication
     // This ensures agentClient is available for providers on startup
     // @plan PLAN-20260610-ISSUE1592.P01
     // @requirement REQ-INV-001
-    const clientFactory = this.requireAgentClientFactory('initialize');
+    const clientFactory = requireAgentClientFactory(
+      this.agentClientFactory,
+      'initialize',
+    );
     this.agentClient = clientFactory(this, this.runtimeState);
 
     if (this.getJitContextEnabled()) {
@@ -216,114 +189,43 @@ export class Config extends ConfigBase {
     void this._modelSwitchedDuringSession;
   }
 
-  private static stripThoughtSignatures(history: Content[]): Content[] {
-    return history.map((content) => {
-      const newContent = { ...content };
-      if (newContent.parts) {
-        newContent.parts = newContent.parts.map((part) => {
-          if (
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-            part !== null &&
-            typeof part === 'object' &&
-            'thoughtSignature' in part
-          ) {
-            const newPart = { ...part };
-            delete (newPart as { thoughtSignature?: string }).thoughtSignature;
-            return newPart;
-          }
-          return part;
-        });
-      }
-      return newContent;
-    });
+  private getAgentClientIfReady(): AgentClientContract | undefined {
+    const client = this.agentClient as AgentClientContract | undefined;
+    if (client === undefined) {
+      return undefined;
+    }
+    if (!client.isInitialized()) {
+      return undefined;
+    }
+    return client;
   }
 
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-001
-   */
-  private requireAgentClientFactory(operation: string): AgentClientFactory {
-    if (!this.agentClientFactory) {
-      throw new Error(
-        `agentClientFactory is required before Config.${operation}() can create an AgentClient`,
-      );
-    }
-    return this.agentClientFactory;
-  }
-
-  private async extractExistingState(logger: DebugLogger): Promise<{
-    history: Content[];
-    historyService: HistoryService | null;
-  }> {
-    const previousAgentClient = this.agentClient;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!previousAgentClient?.isInitialized()) {
-      return { history: [], historyService: null };
-    }
-    const existingHistory = await previousAgentClient.getHistory();
-    const existingHistoryService = previousAgentClient.getHistoryService();
-    logger.debug('Retrieved existing state', {
-      historyLength: existingHistory.length,
-      hasHistoryService: !!existingHistoryService,
-    });
-    return {
-      history: existingHistory,
-      historyService: existingHistoryService,
-    };
-  }
-
-  private buildNewContentGeneratorConfig() {
-    const newContentGeneratorConfig = createContentGeneratorConfig(this);
-    if (this.providerManager) {
-      newContentGeneratorConfig.providerManager = this.providerManager;
-    }
-    if (this.contentGeneratorFactory) {
-      newContentGeneratorConfig.contentGeneratorFactory =
-        this.contentGeneratorFactory;
-    }
-    const updatedRuntimeState = createAgentRuntimeStateFromConfig(this, {
-      runtimeId: this.runtimeState.runtimeId,
-      overrides: {
-        model: newContentGeneratorConfig.model,
-        proxyUrl: newContentGeneratorConfig.proxy ?? this.runtimeState.proxyUrl,
-      },
-    });
-    this.runtimeState = updatedRuntimeState;
-    return newContentGeneratorConfig;
-  }
-
-  private transferHistoryToNewClient(
-    logger: DebugLogger,
-    newAgentClient: AgentClientContract,
-    existingHistory: Content[],
-    existingHistoryService: HistoryService | null,
-    newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
-  ): void {
-    if (existingHistoryService) {
-      logger.debug('Storing existing HistoryService for reuse', {
-        historyLength: existingHistory.length,
-      });
-      newAgentClient.storeHistoryServiceForReuse(existingHistoryService);
-    }
-    if (existingHistory.length === 0) {
+  private registerSubagents(): void {
+    const subagentMgr = this.getSubagentManager();
+    if (!subagentMgr) {
       return;
     }
-    const fromGenaiToVertex =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      this.contentGeneratorConfig?.vertexai === false &&
-      newContentGeneratorConfig.vertexai === true;
-    logger.debug('Storing history for later use', {
-      historyLength: existingHistory.length,
-      fromGenaiToVertex,
-      willStripThoughts: fromGenaiToVertex,
-    });
-    const historyToStore = fromGenaiToVertex
-      ? Config.stripThoughtSignatures(existingHistory)
-      : existingHistory;
-    newAgentClient.storeHistoryForLaterUse(historyToStore);
-    logger.debug('History stored in new client', {
-      storedHistoryLength: historyToStore.length,
-    });
+    // Register extension-contributed subagents
+    subagentMgr.clearExtensionSubagents();
+    for (const extension of this.getExtensions()) {
+      if (
+        extension.isActive &&
+        extension.subagents !== undefined &&
+        extension.subagents.length > 0
+      ) {
+        subagentMgr.registerExtensionSubagents(
+          extension.name,
+          extension.subagents,
+        );
+      }
+    }
+    // Register settings-defined subagents
+    const allSettings = this.settingsService.getAllGlobalSettings();
+    const definitions = parseSettingsSubagentDefinitions(allSettings);
+    if (definitions) {
+      subagentMgr.clearSettingsSubagents();
+      subagentMgr.registerSettingsSubagents(definitions);
+    }
   }
 
   initializeContentGeneratorConfig: () => Promise<void> = async () => {
@@ -332,44 +234,40 @@ export class Config extends ConfigBase {
     );
     const previousAgentClient = this.agentClient;
     const { history: existingHistory, historyService: existingHistoryService } =
-      await this.extractExistingState(logger);
+      await extractExistingState(logger, this.agentClient);
 
-    const newContentGeneratorConfig = this.buildNewContentGeneratorConfig();
+    const {
+      contentGeneratorConfig: newContentGeneratorConfig,
+      runtimeState: newRuntimeState,
+    } = buildNewContentGeneratorConfig(
+      this,
+      this.providerManager,
+      this.contentGeneratorFactory,
+      this.runtimeState,
+    );
+    this.runtimeState = newRuntimeState;
     // @plan PLAN-20260610-ISSUE1592.P01
     // @requirement REQ-INV-001
-    const clientFactory = this.requireAgentClientFactory(
+    const clientFactory = requireAgentClientFactory(
+      this.agentClientFactory,
       'initializeContentGeneratorConfig',
     );
     const newAgentClient = clientFactory(this, this.runtimeState);
 
-    this.transferHistoryToNewClient(
+    transferHistoryToNewClient(
       logger,
       newAgentClient,
       existingHistory,
       existingHistoryService,
       newContentGeneratorConfig,
+      this.getContentGeneratorConfig()?.vertexai,
     );
 
     await newAgentClient.initialize(newContentGeneratorConfig);
     logger.debug('New client initialized');
 
     this.contentGeneratorConfig = newContentGeneratorConfig;
-    if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      previousAgentClient != null &&
-      typeof previousAgentClient.dispose === 'function'
-    ) {
-      try {
-        previousAgentClient.dispose();
-      } catch (error) {
-        logger.warn(
-          () =>
-            `Failed to dispose previous AgentClient: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-        );
-      }
-    }
+    disposePreviousAgentClient(logger, previousAgentClient);
     this.agentClient = newAgentClient;
 
     const newHistory = await this.agentClient.getHistory();
@@ -390,44 +288,37 @@ export class Config extends ConfigBase {
   getModel(): string {
     // Delegate to SettingsService as source of truth
     const settingsService = this.getSettingsService();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (settingsService !== undefined) {
-      const activeProvider = settingsService.get('activeProvider') as string;
-      // Preserve old truthiness semantics: call getProviderSettings when
-      // activeProvider is truthy/non-empty. Do not add method-existence guard.
-      if (typeof activeProvider === 'string' && activeProvider.length > 0) {
-        const providerSettings =
-          settingsService.getProviderSettings(activeProvider);
-        // Restore old truthiness semantics: falsy model should not be returned.
-        // Only return truthy string models.
-        if (
-          typeof providerSettings.model === 'string' &&
-          providerSettings.model.length > 0
-        ) {
-          return providerSettings.model;
-        }
+    const activeProvider = settingsService.get('activeProvider') as string;
+    // Preserve old truthiness semantics: call getProviderSettings when
+    // activeProvider is truthy/non-empty.
+    if (typeof activeProvider === 'string' && activeProvider.length > 0) {
+      const providerSettings =
+        settingsService.getProviderSettings(activeProvider);
+      // Restore old truthiness semantics: falsy model should not be returned.
+      // Only return truthy string models.
+      if (
+        typeof providerSettings.model === 'string' &&
+        providerSettings.model.length > 0
+      ) {
+        return providerSettings.model;
       }
     }
     // Fallback to legacy
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    return this.contentGeneratorConfig?.model || this.model;
+    const legacyModel = this.getContentGeneratorConfig()?.model;
+    return legacyModel && legacyModel.length > 0 ? legacyModel : this.model;
   }
 
   setModel(newModel: string): void {
     // Update SettingsService as source of truth
     const settingsService = this.getSettingsService();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (settingsService !== undefined) {
-      const activeProvider = settingsService.get('activeProvider') as string;
-      if (typeof activeProvider === 'string' && activeProvider.length > 0) {
-        settingsService.setProviderSetting(activeProvider, 'model', newModel);
-      }
+    const activeProvider = settingsService.get('activeProvider') as string;
+    if (typeof activeProvider === 'string' && activeProvider.length > 0) {
+      settingsService.setProviderSetting(activeProvider, 'model', newModel);
     }
     // Keep legacy updates for backward compatibility
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (this.contentGeneratorConfig != null) {
-      this.contentGeneratorConfig.model = newModel;
+    const contentConfig = this.getContentGeneratorConfig();
+    if (contentConfig) {
+      contentConfig.model = newModel;
     }
     // Also update the base model so it persists across refreshAuth
     if (this.model !== newModel || this.inFallbackMode) {
@@ -454,10 +345,10 @@ export class Config extends ConfigBase {
    */
   async refreshMcpContext(): Promise<void> {
     await this.refreshMemory();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (this.agentClient?.isInitialized()) {
-      await this.agentClient.setTools();
-      await this.agentClient.updateSystemInstruction();
+    const client = this.getAgentClientIfReady();
+    if (client) {
+      await client.setTools();
+      await client.updateSystemInstruction();
     }
   }
 
@@ -488,8 +379,7 @@ export class Config extends ConfigBase {
       if (!extension.isActive) {
         continue;
       }
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: array default for optional extension property
-      for (const tool of extension.excludeTools || []) {
+      for (const tool of extension.excludeTools ?? []) {
         excludeToolsSet.add(tool);
       }
     }
@@ -594,8 +484,7 @@ export class Config extends ConfigBase {
 
   private expandPath(filePath: string): string {
     if (filePath.startsWith('~/')) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: HOME env var may be empty string
-      return filePath.replace('~', process.env.HOME || '');
+      return filePath.replace('~', process.env.HOME ?? '');
     }
     return filePath;
   }
@@ -710,15 +599,13 @@ export class Config extends ConfigBase {
    * @plan PLAN-20260130-ASYNCTASK.P09
    */
   getAsyncTaskManager(): AsyncTaskManager | undefined {
-    if (!this.asyncTaskManager) {
-      // Initialize lazily using the 'task-max-async' setting (default 5)
-      const settingsService = this.getSettingsService();
-      const maxAsyncTasks =
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        (settingsService.get('task-max-async') as number) ?? 5;
-      this.asyncTaskManager = new AsyncTaskManager(maxAsyncTasks);
-    }
-    return this.asyncTaskManager;
+    return getOrCreateAsyncTaskManager(
+      this.getSettingsService(),
+      () => this.asyncTaskManager,
+      (manager) => {
+        this.asyncTaskManager = manager;
+      },
+    );
   }
 
   /**
@@ -726,15 +613,17 @@ export class Config extends ConfigBase {
    * @plan PLAN-20260130-ASYNCTASK.P22
    */
   getAsyncTaskReminderService(): AsyncTaskReminderService | undefined {
-    if (!this.asyncTaskReminderService) {
-      const asyncTaskManager = this.getAsyncTaskManager();
-      if (asyncTaskManager) {
-        this.asyncTaskReminderService = new AsyncTaskReminderService(
-          asyncTaskManager,
-        );
-      }
-    }
-    return this.asyncTaskReminderService;
+    return getOrCreateAsyncTaskReminderService(
+      this.getSettingsService(),
+      () => this.asyncTaskManager,
+      (manager) => {
+        this.asyncTaskManager = manager;
+      },
+      () => this.asyncTaskReminderService,
+      (service) => {
+        this.asyncTaskReminderService = service;
+      },
+    );
   }
 
   /**
@@ -748,27 +637,25 @@ export class Config extends ConfigBase {
     isAgentBusy: () => boolean,
     triggerAgentTurn: (message: string) => Promise<void>,
   ): () => void {
-    const asyncTaskManager = this.getAsyncTaskManager();
-    const reminderService = this.getAsyncTaskReminderService();
-
-    if (!asyncTaskManager || !reminderService) {
-      // Return a no-op cleanup function if components aren't available
-      return () => {};
-    }
-
-    if (!this.asyncTaskAutoTrigger) {
-      this.asyncTaskAutoTrigger = new AsyncTaskAutoTrigger(
-        asyncTaskManager,
-        reminderService,
-        isAgentBusy,
-        triggerAgentTurn,
-      );
-    } else {
-      // Refresh callbacks with the latest closures from React re-renders
-      this.asyncTaskAutoTrigger.updateCallbacks(isAgentBusy, triggerAgentTurn);
-    }
-
-    return this.asyncTaskAutoTrigger.subscribe();
+    return setupAsyncTaskAutoTrigger(
+      this.getSettingsService(),
+      {
+        getManager: () => this.asyncTaskManager,
+        setManager: (manager) => {
+          this.asyncTaskManager = manager;
+        },
+        getReminder: () => this.asyncTaskReminderService,
+        setReminder: (service) => {
+          this.asyncTaskReminderService = service;
+        },
+        getAutoTrigger: () => this.asyncTaskAutoTrigger,
+        setAutoTrigger: (trigger) => {
+          this.asyncTaskAutoTrigger = trigger;
+        },
+      },
+      isAgentBusy,
+      triggerAgentTurn,
+    );
   }
 
   async refreshMemory(): Promise<{
@@ -837,8 +724,7 @@ export class Config extends ConfigBase {
     }
     return _getOrCreateScheduler(this, sessionId, callbacks, options, {
       messageBus: schedulerMessageBus,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      toolRegistry: dependencies?.toolRegistry ?? this.getToolRegistry(),
+      toolRegistry: dependencies.toolRegistry ?? this.getToolRegistry(),
     });
   }
 
@@ -880,8 +766,10 @@ export class Config extends ConfigBase {
   }
 
   async dispose(): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    this.agentClient?.dispose();
+    const client = this.agentClient as AgentClientContract | undefined;
+    if (client !== undefined) {
+      client.dispose();
+    }
     if (this.mcpClientManager !== undefined) {
       await this.mcpClientManager.stop();
     }

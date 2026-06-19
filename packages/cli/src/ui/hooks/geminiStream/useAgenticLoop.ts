@@ -107,11 +107,11 @@ export interface UseAgenticLoopArgs {
   /** Invoked when the pause tool succeeds. */
   onTodoPause?: () => void;
   /**
-   * Marks the given tool callIds as submitted so the React display state clears
-   * them. Used for external (subagent) tools whose results are owned by the
+   * Marks the given tool callIds as cleared from the React display state.
+   * Used for external (subagent) tools whose results are owned by the
    * subagent flow, not the primary loop continuation. Display-only.
    */
-  markToolsAsSubmitted?: (callIds: string[]) => void;
+  markToolsAsDisplayCleared?: (callIds: string[]) => void;
   /** Display callbacks forwarded into the loop's scheduler. */
   onToolCallsUpdate?: (toolCalls: ToolCall[]) => void;
   outputUpdateHandler?: (callId: string, chunk: string | AnsiOutput) => void;
@@ -181,10 +181,34 @@ function handleToolsComplete(
 
   // Clear external (subagent) tools from the React display state. Their results
   // are owned by the subagent flow, not the primary loop continuation, so the
-  // display must mark them submitted to remove them from the pending view.
+  // display must mark them cleared to remove them from the pending view.
   if (externalTools.length > 0) {
-    args.markToolsAsSubmitted?.(externalTools.map((tc) => tc.request.callId));
+    args.markToolsAsDisplayCleared?.(
+      externalTools.map((tc) => tc.request.callId),
+    );
   }
+}
+
+/**
+ * Iterates the AgenticLoop generator, routing each event until the loop ends or
+ * the signal aborts. Returns a promise that settles when iteration completes.
+ */
+function iterateLoop(
+  loop: AgenticLoop,
+  message: PartListUnion,
+  signal: AbortSignal,
+  promptId: string,
+  args: UseAgenticLoopArgs,
+  userMessageTimestamp: number,
+  processedMemoryTools: Set<string>,
+): Promise<void> {
+  return (async () => {
+    const iterator = loop.run(message, signal, promptId);
+    for await (const event of iterator) {
+      if (signal.aborted) break;
+      routeLoopEvent(event, args, userMessageTimestamp, processedMemoryTools);
+    }
+  })();
 }
 
 export function useAgenticLoop(args: UseAgenticLoopArgs): UseAgenticLoopReturn {
@@ -245,6 +269,14 @@ export function useAgenticLoop(args: UseAgenticLoopArgs): UseAgenticLoopReturn {
     ],
   );
 
+  // Serializes overlapping runLoop calls so a fast re-submit after a cancel
+  // does not collide with the previous run's async teardown. The loop instance
+  // is stable (memoized), and its `run()` rejects concurrent executions. We
+  // therefore await any in-flight previous run — swallowing its (expected)
+  // cancellation error — before starting the new run. The new run's own error
+  // still propagates to the caller.
+  const inflightRunRef = useRef<Promise<void> | null>(null);
+
   const runLoop = useCallback(
     async (
       message: PartListUnion,
@@ -252,15 +284,32 @@ export function useAgenticLoop(args: UseAgenticLoopArgs): UseAgenticLoopReturn {
       promptId: string,
     ): Promise<void> => {
       const userMessageTimestamp = Date.now();
-      const iterator = loop.run(message, signal, promptId);
-      for await (const event of iterator) {
-        if (signal.aborted) break;
-        routeLoopEvent(
-          event,
-          latestArgs.current,
-          userMessageTimestamp,
-          processedMemoryTools,
+      // Chain on the current in-flight promise BEFORE assigning the new one so
+      // that multiple overlapping callers serialize correctly: if B and C both
+      // enter while A runs, C chains onto B's promise (which chains onto A).
+      // The previous run's error is swallowed; only the current run's error
+      // propagates to the caller.
+      const previous = inflightRunRef.current ?? Promise.resolve();
+      const currentRun = previous
+        .catch(() => {})
+        .then(() =>
+          iterateLoop(
+            loop,
+            message,
+            signal,
+            promptId,
+            latestArgs.current,
+            userMessageTimestamp,
+            processedMemoryTools,
+          ),
         );
+      inflightRunRef.current = currentRun;
+      try {
+        await currentRun;
+      } finally {
+        if (inflightRunRef.current === currentRun) {
+          inflightRunRef.current = null;
+        }
       }
     },
     [loop, processedMemoryTools],

@@ -14,6 +14,7 @@ import {
   ApprovalMode,
   ToolConfirmationOutcome,
   type ToolCall,
+  type ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
 import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
 import { createMockConfig } from '../utils/testing_utils.js';
@@ -48,8 +49,7 @@ describe('Task', () => {
       cancelAll: vi.fn(),
       dispose: vi.fn(),
       toolCalls: [],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    } as unknown as ToolSchedulerContract;
 
     task['setTaskStateAndPublishUpdate'] = vi.fn();
     task['getProposedContent'] = vi.fn().mockResolvedValue('new content');
@@ -240,8 +240,7 @@ describe('Task', () => {
       await task.acceptAgentMessage(event);
 
       // Access private field for testing
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((task as any).modelInfo).toStrictEqual({
+      expect(task['modelInfo']).toStrictEqual({
         model: 'gemini-2.0-flash-exp',
       });
     });
@@ -381,8 +380,7 @@ describe('Task', () => {
       await task.acceptAgentMessage(event2);
 
       // Should have the latest modelInfo
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((task as any).modelInfo).toStrictEqual({
+      expect(task['modelInfo']).toStrictEqual({
         model: 'gemini-2.0-flash-exp',
       });
     });
@@ -414,8 +412,7 @@ describe('Task', () => {
         mockEventBus,
       );
       // Avoid real AgentClient initialization path in unit test.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (task as any).agentClient = {
+      task['agentClient'] = {
         sendMessageStream: sendMessageStreamMock,
         getUserTier: vi.fn(),
       };

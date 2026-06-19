@@ -7,11 +7,13 @@
  */
 
 import process from 'node:process';
-import {
-  type Config,
-  type GeminiCLIExtension,
-  type SandboxConfig,
-  type MCPServerConfig,
+import type {
+  ApprovalMode,
+  PolicyEngineConfig,
+  Config,
+  GeminiCLIExtension,
+  SandboxConfig,
+  MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -65,10 +67,6 @@ type ConfigBuildPieces = {
 };
 
 import type { ContextResolutionResult } from './interactiveContext.js';
-import type {
-  ApprovalMode,
-  PolicyEngineConfig,
-} from '@vybestack/llxprt-code-core';
 
 // ─── Orchestrator ────────────────────────────────────────────────────────────
 

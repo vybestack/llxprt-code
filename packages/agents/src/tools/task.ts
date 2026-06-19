@@ -73,6 +73,7 @@ export interface TaskToolParams {
   contextVars?: Record<string, unknown>;
   timeout_seconds?: number;
   grace_period_seconds?: number;
+  max_turns?: number;
   async?: boolean;
 }
 
@@ -83,6 +84,7 @@ interface TaskToolInvocationParams {
   toolWhitelist?: string[];
   outputSpec?: Record<string, string>;
   context: Record<string, unknown>;
+  maxTurns?: number;
   async: boolean;
 }
 
@@ -102,6 +104,8 @@ interface AsyncSetupResult {
   dispose: () => Promise<void>;
   asyncAbortController: AbortController;
   timeoutId: NodeJS.Timeout | null;
+  timedOut: { value: boolean };
+  cleanupForegroundRelay: () => void;
 }
 
 function launchRequestName(
@@ -255,6 +259,28 @@ class TaskToolInvocation extends BaseToolInvocation<
     return deduped.length > 0 ? deduped : undefined;
   }
 
+  /**
+   * Filters excluded tools (task/list_subagents) from a whitelist when no
+   * registry is available to perform full governance validation. Non-excluded
+   * entries pass through unchanged. Returns undefined if the result is empty
+   * so the caller can apply fail-closed semantics for explicit whitelists.
+   */
+  private filterExcludedFromWhitelist(
+    candidateTools: string[] | undefined,
+  ): string[] | undefined {
+    if (!candidateTools || candidateTools.length === 0) {
+      return undefined;
+    }
+
+    const excluded = this.buildExcludedToolNames();
+    const filtered = candidateTools.filter(
+      (name) =>
+        typeof name === 'string' && !this.isExcludedToolName(name, excluded),
+    );
+
+    return filtered.length > 0 ? filtered : undefined;
+  }
+
   private createLaunchRequest(timeoutMs?: number): SubagentLaunchRequest {
     const { subagentName, behaviourPrompts, toolWhitelist, outputSpec } =
       this.normalized;
@@ -277,6 +303,20 @@ class TaskToolInvocation extends BaseToolInvocation<
       };
     }
 
+    if (this.normalized.maxTurns !== undefined) {
+      launchRequest.runConfig = {
+        max_time_minutes:
+          launchRequest.runConfig?.max_time_minutes ?? Number.POSITIVE_INFINITY,
+        ...(launchRequest.runConfig?.grace_period_seconds !== undefined
+          ? {
+              grace_period_seconds:
+                launchRequest.runConfig.grace_period_seconds,
+            }
+          : {}),
+        max_turns: this.normalized.maxTurns,
+      };
+    }
+
     if (behaviourPrompts.length > 0) {
       launchRequest.behaviourPrompts = behaviourPrompts;
     }
@@ -287,22 +327,21 @@ class TaskToolInvocation extends BaseToolInvocation<
       Array.isArray(this.params.tool_whitelist) ||
       Array.isArray(this.params.toolWhitelist);
 
-    if (registry) {
-      if (effectiveWhitelist && effectiveWhitelist.length > 0) {
+    // Issue #2069: no explicit whitelist must preserve omitted toolConfig so
+    // the subagent runtime/profile default tools apply. Do NOT synthesize a
+    // whitelist from the parent registry regardless of registry availability.
+    if (hasExplicitWhitelist) {
+      if (registry && effectiveWhitelist && effectiveWhitelist.length > 0) {
         effectiveWhitelist = this.buildGovernedToolWhitelist(
           effectiveWhitelist,
           registry,
         );
-      }
-
-      if (
-        !hasExplicitWhitelist &&
-        (!effectiveWhitelist || effectiveWhitelist.length === 0)
-      ) {
-        effectiveWhitelist = this.buildGovernedToolWhitelist(
-          registry.getEnabledTools().map((tool) => tool.name),
-          registry,
-        );
+      } else {
+        // No registry available: still filter excluded tools (task/list_subagents)
+        // so they can never be exposed to a subagent runtime. Non-excluded entries
+        // pass through unchanged (no registry validation possible).
+        effectiveWhitelist =
+          this.filterExcludedFromWhitelist(effectiveWhitelist);
       }
     }
 
@@ -313,6 +352,11 @@ class TaskToolInvocation extends BaseToolInvocation<
       launchRequest.toolConfig = {
         tools: Array.from(whitelistSet),
       };
+    } else if (hasExplicitWhitelist) {
+      // Explicit empty or fully-filtered-to-zero whitelist must remain fail-closed.
+      // toolConfig: { tools: [] } tells the runtime to expose no normal tools.
+      // Omitting toolConfig entirely (the else case) means runtime/profile defaults.
+      launchRequest.toolConfig = { tools: [] };
     }
 
     taskLogger.debug(() => {
@@ -527,6 +571,12 @@ class TaskToolInvocation extends BaseToolInvocation<
         timeoutController.signal,
       );
       abortState.setLaunchResult(launchResult);
+      if (signal.aborted) {
+        const scopeCandidate = launchResult.scope as
+          | { cancel?: (reason?: string) => void }
+          | undefined;
+        scopeCandidate?.cancel?.('User aborted task execution.');
+      }
       return launchResult;
     } catch (error) {
       abortState.removeAbortHandler();
@@ -985,17 +1035,50 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   /**
+   * Wires the foreground turn's abort signal into the async abort controller so
+   * that ESC (which aborts the foreground turn) also cancels the detached
+   * subagent. Returns a cleanup function that removes the listener.
+   */
+  private setupForegroundRelay(
+    foregroundSignal: AbortSignal,
+    asyncAbortController: AbortController,
+  ): () => void {
+    const relayForegroundAbort = () => asyncAbortController.abort();
+    if (foregroundSignal.aborted) {
+      asyncAbortController.abort();
+    } else {
+      foregroundSignal.addEventListener('abort', relayForegroundAbort, {
+        once: true,
+      });
+    }
+    return () => {
+      foregroundSignal.removeEventListener('abort', relayForegroundAbort);
+    };
+  }
+
+  /**
    * @plan PLAN-20260130-ASYNCTASK.P11
    *
-   * Note: Async tasks are designed to run independently in the background.
-   * Unlike foreground task execution, they do NOT wire cancellation or timeout
-   * to the parent agent's signal. This is an intentional design choice to allow
-   * async tasks to continue running even if the foreground agent is interrupted.
+   * Note: Async tasks run in the background — the foreground agent does not
+   * await their completion. They ARE, however, linked to the launching
+   * foreground turn's abort signal (issue #2074): the async abort controller
+   * registered with the AsyncTaskManager is passed to orchestrator.launch and
+   * relayed from the foreground signal, so pressing ESC (which aborts the
+   * foreground turn) also cancels the detached subagent. The AsyncTaskManager
+   * still owns timeout-driven cancellation independently of the foreground.
    */
-  private async executeAsync(
-    signal: AbortSignal,
-    updateOutput?: (output: string) => void,
-  ): Promise<ToolResult> {
+  /**
+   * Validates async preconditions and reserves a booking slot. Returns either
+   * an error ToolResult (if async is unavailable or no slot is free) or the
+   * validated orchestrator + task manager + booking id.
+   */
+  private resolveAsyncContext():
+    | ToolResult
+    | {
+        asyncTaskManager: AsyncTaskManager;
+        orchestrator: SubagentOrchestrator;
+        bookingId: string;
+      } {
     const settingsCheck = this.checkAsyncSettings();
     if (settingsCheck) {
       return settingsCheck;
@@ -1028,7 +1111,21 @@ class TaskToolInvocation extends BaseToolInvocation<
       return this.createAsyncSlotResult(asyncTaskManager);
     }
 
+    return { asyncTaskManager, orchestrator, bookingId };
+  }
+
+  private async executeAsync(
+    signal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
+    const ctx = this.resolveAsyncContext();
+    if (!('asyncTaskManager' in ctx)) {
+      return ctx;
+    }
+    const { asyncTaskManager, orchestrator, bookingId } = ctx;
+
     const setupResult = await this.setupAsyncInfrastructure(
+      signal,
       orchestrator,
       asyncTaskManager,
       bookingId,
@@ -1045,6 +1142,8 @@ class TaskToolInvocation extends BaseToolInvocation<
       dispose,
       asyncAbortController,
       timeoutId,
+      timedOut,
+      cleanupForegroundRelay,
     } = setupResult as AsyncSetupResult;
 
     const asyncStreaming = this.setupAsyncStreaming(
@@ -1062,6 +1161,8 @@ class TaskToolInvocation extends BaseToolInvocation<
       asyncAbortController.signal,
       timeoutId,
       asyncStreaming?.emitAsyncClosingSubagentTag,
+      cleanupForegroundRelay,
+      timedOut,
     );
 
     return {
@@ -1138,6 +1239,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private async setupAsyncInfrastructure(
+    foregroundSignal: AbortSignal,
     orchestrator: SubagentOrchestrator,
     asyncTaskManager: AsyncTaskManager,
     bookingId: string | undefined,
@@ -1150,16 +1252,31 @@ class TaskToolInvocation extends BaseToolInvocation<
     const asyncAbortController = new AbortController();
     let timeoutId: NodeJS.Timeout | null = null;
     let taskRegistered = false;
+    const timedOut = { value: false };
+
+    // Relay the foreground signal BEFORE launch so an ESC pressed while the
+    // orchestrator is still loading config/profile (issue #2074) aborts the
+    // launch in-flight instead of being missed during that window.
+    const cleanupForegroundRelay = this.setupForegroundRelay(
+      foregroundSignal,
+      asyncAbortController,
+    );
 
     try {
       const launchRequest = this.createLaunchRequest();
-      launchResult = await orchestrator.launch(launchRequest, undefined);
+      launchResult = await orchestrator.launch(
+        launchRequest,
+        asyncAbortController.signal,
+      );
       agentId = launchResult.agentId;
       scope = launchResult.scope;
       dispose = launchResult.dispose;
       contextState = this.buildContextState();
 
-      const timeoutSetup = this.setupAsyncTimeout(asyncAbortController);
+      const timeoutSetup = this.setupAsyncTimeout(
+        asyncAbortController,
+        timedOut,
+      );
       timeoutId = timeoutSetup.timeoutId;
 
       asyncTaskManager.registerTask(
@@ -1173,6 +1290,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       );
       taskRegistered = true;
     } catch (error) {
+      cleanupForegroundRelay();
       if (!taskRegistered && bookingId) {
         asyncTaskManager.cancelReservation(bookingId);
       }
@@ -1180,7 +1298,9 @@ class TaskToolInvocation extends BaseToolInvocation<
         clearTimeout(timeoutId);
       }
       if (dispose) {
-        void dispose();
+        // Defensively swallow disposal errors on the partial-launch path so a
+        // rejecting dispose() cannot surface as an unhandled rejection.
+        void dispose().catch(() => {});
       }
       return this.createErrorResult(
         error,
@@ -1196,10 +1316,15 @@ class TaskToolInvocation extends BaseToolInvocation<
       dispose,
       asyncAbortController,
       timeoutId,
+      timedOut,
+      cleanupForegroundRelay,
     };
   }
 
-  private setupAsyncTimeout(asyncAbortController: AbortController): {
+  private setupAsyncTimeout(
+    asyncAbortController: AbortController,
+    timedOut: { value: boolean },
+  ): {
     timeoutId: NodeJS.Timeout | null;
   } {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
@@ -1221,7 +1346,10 @@ class TaskToolInvocation extends BaseToolInvocation<
     const timeoutId =
       timeoutMs === undefined
         ? null
-        : setTimeout(() => asyncAbortController.abort(), timeoutMs);
+        : setTimeout(() => {
+            timedOut.value = true;
+            asyncAbortController.abort();
+          }, timeoutMs);
 
     return { timeoutId };
   }
@@ -1262,6 +1390,26 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   /**
+   * Handles the background task after the scope run completes with an aborted
+   * signal. Distinguishes timeout (failTask) from user-initiated cancellation
+   * (cancelTask, idempotent). Only acts if the task is still 'running' so a
+   * prior cancelTask is not overwritten.
+   */
+  private handleBackgroundAbort(
+    asyncTaskManager: AsyncTaskManager,
+    agentId: string,
+    timedOut: boolean,
+  ): void {
+    const task = asyncTaskManager.getTask(agentId);
+    if (task?.status !== 'running') return;
+    if (timedOut) {
+      asyncTaskManager.failTask(agentId, 'Async task timed out');
+    } else {
+      asyncTaskManager.cancelTask(agentId);
+    }
+  }
+
+  /**
    * @plan PLAN-20260130-ASYNCTASK.P11
    *
    * Execute async task in background using the SAME execution path as sync tasks.
@@ -1278,6 +1426,8 @@ class TaskToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     timeoutId: ReturnType<typeof setTimeout> | null,
     emitClosingSubagentTag?: () => void,
+    cleanupForegroundRelay?: () => void,
+    timedOut?: { value: boolean },
   ): void {
     void (async () => {
       try {
@@ -1298,10 +1448,11 @@ class TaskToolInvocation extends BaseToolInvocation<
         }
 
         if (signal.aborted) {
-          const task = asyncTaskManager.getTask(agentId);
-          if (task?.status === 'running') {
-            asyncTaskManager.failTask(agentId, 'Async task timed out');
-          }
+          this.handleBackgroundAbort(
+            asyncTaskManager,
+            agentId,
+            timedOut?.value === true,
+          );
           return;
         }
 
@@ -1322,6 +1473,8 @@ class TaskToolInvocation extends BaseToolInvocation<
         if (timeoutId !== null) {
           clearTimeout(timeoutId);
         }
+
+        cleanupForegroundRelay?.();
 
         try {
           await dispose();
@@ -1394,6 +1547,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
             description:
               'Optional grace period in seconds for recovery after a termination condition (TIMEOUT, MAX_TURNS, or protocol violation). Falls back to 60s if not specified or invalid.',
           },
+          max_turns: {
+            type: 'number',
+            description:
+              'Optional maximum number of turns for the subagent. Overrides the subagent profile and parent agent defaults when set.',
+          },
           async: {
             type: 'boolean',
             description:
@@ -1425,6 +1583,17 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       params.goal_prompt ?? params.goalPrompt ?? params.goalPrompt;
     if (!goalPrompt || goalPrompt.trim().length === 0) {
       return 'Task tool requires a goal_prompt describing the assignment.';
+    }
+
+    if (params.max_turns !== undefined) {
+      const maxTurns = params.max_turns;
+      if (
+        !Number.isFinite(maxTurns) ||
+        !Number.isInteger(maxTurns) ||
+        (maxTurns !== -1 && maxTurns < 1)
+      ) {
+        return 'Task tool max_turns must be a positive integer or -1 for unlimited.';
+      }
     }
 
     return null;
@@ -1494,6 +1663,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       toolWhitelist: toolWhitelist.length > 0 ? toolWhitelist : undefined,
       outputSpec,
       context,
+      maxTurns: params.max_turns,
       async: params.async ?? false,
     };
   }

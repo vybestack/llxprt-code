@@ -6,10 +6,14 @@
 
 import type { GroundingMetadata } from '@google/genai';
 
-import type { IWebSearchService } from '../interfaces/index.js';
+import type {
+  IWebSearchService,
+  IToolMessageBus,
+} from '../interfaces/index.js';
 import { GOOGLE_WEB_SEARCH_TOOL } from '../types/tool-names.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { getErrorMessage } from '../utils/errors.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 import { BaseToolInvocation, type ToolResult } from './tools.js';
 
 type GeminiWebSearchResponse = {
@@ -66,7 +70,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly webSearchService: IWebSearchService,
     params: WebSearchToolParams,
-    messageBus?: import('../interfaces/index.js').IToolMessageBus,
+    messageBus?: IToolMessageBus,
   ) {
     super(params, messageBus);
   }
@@ -210,10 +214,8 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
 
   private formatSources(sources: GroundingChunkItem[]): string[] {
     return sources.map((source, index) => {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty title should show 'Untitled'
-      const title = source.web?.title || 'Untitled';
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty URI should show 'No URI'
-      const uri = source.web?.uri || 'No URI';
+      const title = stringOrDefault(source.web?.title, 'Untitled');
+      const uri = stringOrDefault(source.web?.uri, 'No URI');
       return `[${index + 1}] ${title} (${uri})`;
     });
   }

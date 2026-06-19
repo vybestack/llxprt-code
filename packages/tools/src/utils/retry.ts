@@ -83,6 +83,33 @@ async function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/** Extracts messages, codes, and nested errors from an error-like object. */
+function collectFromErrorObject(
+  errorObject: Record<string, unknown>,
+  visited: Set<unknown>,
+  messages: string[],
+  codes: string[],
+  stack: unknown[],
+  current: unknown,
+): void {
+  visited.add(errorObject);
+  if (typeof errorObject.message === 'string') {
+    messages.push(errorObject.message);
+  }
+  if (typeof errorObject.code === 'string') {
+    codes.push(errorObject.code);
+  }
+  for (const nested of [
+    errorObject.cause,
+    errorObject.originalError,
+    errorObject.error,
+  ]) {
+    if (nested !== undefined && nested !== null && nested !== current) {
+      stack.push(nested);
+    }
+  }
+}
+
 function collectErrorDetails(error: unknown): {
   messages: string[];
   codes: string[];
@@ -94,39 +121,22 @@ function collectErrorDetails(error: unknown): {
 
   while (stack.length > 0) {
     const current = stack.pop();
-    if (current === null || current === undefined) {
-      continue;
-    }
     if (typeof current === 'string') {
       messages.push(current);
-      continue;
-    }
-    if (typeof current !== 'object' || visited.has(current)) {
-      continue;
-    }
-    visited.add(current);
-
-    const errorObject = current as {
-      message?: unknown;
-      code?: unknown;
-      cause?: unknown;
-      originalError?: unknown;
-      error?: unknown;
-    };
-    if (typeof errorObject.message === 'string') {
-      messages.push(errorObject.message);
-    }
-    if (typeof errorObject.code === 'string') {
-      codes.push(errorObject.code);
-    }
-    for (const nested of [
-      errorObject.cause,
-      errorObject.originalError,
-      errorObject.error,
-    ]) {
-      if (nested !== undefined && nested !== null && nested !== current) {
-        stack.push(nested);
-      }
+    } else if (
+      current !== null &&
+      current !== undefined &&
+      typeof current === 'object' &&
+      !visited.has(current)
+    ) {
+      collectFromErrorObject(
+        current as Record<string, unknown>,
+        visited,
+        messages,
+        codes,
+        stack,
+        current,
+      );
     }
   }
 
@@ -177,6 +187,15 @@ export function getErrorStatus(error: unknown): number | undefined {
   return undefined;
 }
 
+/** Checks whether an HTTP status code indicates a retryable error. */
+function isRetryableStatus(status: number | undefined): boolean {
+  const RETRYABLE_STATUSES = new Set([401, 403, 429]);
+  return (
+    RETRYABLE_STATUSES.has(status ?? -1) ||
+    (status !== undefined && status >= 500 && status < 600)
+  );
+}
+
 export function isRetryableError(
   error: Error | unknown,
   retryFetchErrors?: boolean,
@@ -193,12 +212,7 @@ export function isRetryableError(
   }
 
   const status = getErrorStatus(error);
-  return (
-    status === 401 ||
-    status === 403 ||
-    status === 429 ||
-    (status !== undefined && status >= 500 && status < 600)
-  );
+  return isRetryableStatus(status);
 }
 
 export async function retryWithBackoff<T>(

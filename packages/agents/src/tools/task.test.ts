@@ -15,7 +15,7 @@ import {
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
-import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -239,7 +239,10 @@ describe('TaskTool', () => {
       | { toolConfig?: unknown }
       | undefined;
     expect(launchRequest).toBeDefined();
-    expect(launchRequest).not.toHaveProperty('toolConfig');
+    // Explicit whitelist fully filtered to zero must preserve fail-closed
+    // toolConfig: { tools: [] }, NOT omit toolConfig (which means runtime defaults).
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig).toStrictEqual({ tools: [] });
   });
 
   it('filters excluded task tools from explicit whitelist using canonical tool names', async () => {
@@ -353,7 +356,10 @@ describe('TaskTool', () => {
       | { toolConfig?: unknown }
       | undefined;
     expect(launchRequest).toBeDefined();
-    expect(launchRequest).not.toHaveProperty('toolConfig');
+    // Explicit empty whitelist must preserve fail-closed toolConfig: { tools: [] },
+    // NOT omit toolConfig (which means runtime defaults).
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig).toStrictEqual({ tools: [] });
   });
 
   it('backfills sessionId from config when context does not provide one', async () => {
@@ -757,6 +763,150 @@ describe('TaskTool', () => {
     expect(result.returnDisplay).toMatch(/abort/i);
   });
 
+  describe('max_turns handling', () => {
+    it('passes max_turns from params into launch request runConfig', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-max-turns',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        max_turns: 42,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_turns: 42,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+
+    it('passes max_turns alongside timeout into runConfig without losing either', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-max-turns-timeout',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithTimeout = {
+        ...config,
+        getEphemeralSettings: () => ({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
+        }),
+      } as unknown as Config;
+      const tool = new TaskTool(configWithTimeout, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        max_turns: 30,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_time_minutes: 1,
+            max_turns: 30,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+
+    it('passes max_turns alongside grace_period_seconds into runConfig', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-max-turns-grace',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        max_turns: 20,
+        grace_period_seconds: 15,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_turns: 20,
+            grace_period_seconds: 15,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
   describe('timeout_seconds handling', () => {
     beforeEach(() => {
       vi.useFakeTimers();
@@ -1076,6 +1226,139 @@ describe('TaskTool', () => {
     );
   });
 
+  describe('max_turns validation', () => {
+    const createTool = () =>
+      new TaskTool(config, {
+        orchestratorFactory: () => {
+          throw new Error('should not be called');
+        },
+      });
+
+    it('rejects max_turns of 0', () => {
+      const tool = createTool();
+
+      expect(() =>
+        tool.build({
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          max_turns: 0,
+        }),
+      ).toThrow('Task tool max_turns must be a positive integer or -1');
+    });
+
+    it('rejects fractional max_turns like 0.5', () => {
+      const tool = createTool();
+
+      expect(() =>
+        tool.build({
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          max_turns: 0.5,
+        }),
+      ).toThrow('Task tool max_turns must be a positive integer or -1');
+    });
+
+    it('rejects negative max_turns other than -1', () => {
+      const tool = createTool();
+
+      expect(() =>
+        tool.build({
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          max_turns: -2,
+        }),
+      ).toThrow('Task tool max_turns must be a positive integer or -1');
+    });
+
+    it('accepts max_turns of -1 for unlimited and wires it through', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-unlimited-turns',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Do work',
+        max_turns: -1,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_turns: -1,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+
+    it('accepts positive integer max_turns and wires it through', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-fixed-turns',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Do work',
+        max_turns: 5,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_turns: 5,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
   it('streams subagent messages on separate lines with normalized newlines', async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
     const updateOutput = vi.fn();
@@ -1301,7 +1584,7 @@ describe('TaskTool', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
-    it('passes undefined (not foreground signal) to orchestrator.launch for async tasks', async () => {
+    it('passes the async abort controller signal to orchestrator.launch so cancelTask can stop the subagent', async () => {
       const mockAsyncTaskManager = {
         canLaunchAsync: () => ({ allowed: true }),
         tryReserveAsyncSlot: () => 'booking-1',
@@ -1336,11 +1619,192 @@ describe('TaskTool', () => {
       const invocation = tool.build(params);
       await invocation.execute(new AbortController().signal);
 
-      // Async tasks must NOT pass the foreground signal to launch
-      // so the scope has no parent abort signal dependency
-      expect(launchMock).toHaveBeenCalledWith(expect.anything(), undefined);
+      // Async tasks MUST pass an AbortSignal (the async abort controller) to
+      // launch so AsyncTaskManager.cancelTask can abort the running subagent.
+      expect(launchMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.any(AbortSignal),
+      );
 
       await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    it('wires the async abort controller so cancelTask aborts the launch signal', async () => {
+      // End-to-end wiring at the task-tool boundary: the signal passed to
+      // launch is the SAME AbortController registered with the AsyncTaskManager.
+      // Aborting it via cancelTask flips that signal's .aborted to true,
+      // proving the subagent CAN be stopped by cancellation.
+      const realAsyncTaskManager = new AsyncTaskManager();
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-cancel-agent',
+        scope: {
+          runNonInteractive: vi.fn().mockImplementation(
+            () =>
+              new Promise<void>(() => {
+                // never resolves; we cancel via cancelTask
+              }),
+          ),
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () => realAsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Cancellable work',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      // The signal passed to launch is the async abort controller's signal.
+      const launchSignal = launchMock.mock.calls[0]?.[1] as
+        | AbortSignal
+        | undefined;
+      expect(launchSignal).toBeInstanceOf(AbortSignal);
+      expect(launchSignal!.aborted).toBe(false);
+
+      // Cancel via the real AsyncTaskManager → the launch signal aborts.
+      realAsyncTaskManager.cancelTask('async-cancel-agent');
+
+      expect(launchSignal!.aborted).toBe(true);
+    });
+
+    it('relays the foreground signal abort into the async abort controller', async () => {
+      // Fix (b): when the foreground signal passed to executeAsync aborts,
+      // the async abort controller's signal must also abort so the subagent
+      // stops.
+      const realAsyncTaskManager = new AsyncTaskManager();
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-relay-agent',
+        scope: {
+          runNonInteractive: vi.fn().mockImplementation(
+            () =>
+              new Promise<void>(() => {
+                // never resolves
+              }),
+          ),
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () => realAsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Relay work',
+        async: true,
+      };
+
+      const foregroundController = new AbortController();
+      const invocation = tool.build(params);
+      await invocation.execute(foregroundController.signal);
+
+      const launchSignal = launchMock.mock.calls[0]?.[1] as
+        | AbortSignal
+        | undefined;
+      expect(launchSignal).toBeInstanceOf(AbortSignal);
+      expect(launchSignal!.aborted).toBe(false);
+
+      // Abort the FOREGROUND signal (ESC) → the launch signal must also abort.
+      foregroundController.abort();
+
+      // Give the once-listener a tick to fire.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(launchSignal!.aborted).toBe(true);
+    });
+
+    it('aborts the launch signal when the foreground aborts DURING launch (before registration)', async () => {
+      // Regression for the relay-installed-after-launch gap: if the foreground
+      // turn is cancelled (ESC) while orchestrator.launch is still pending —
+      // e.g. loading config/profile — the launch signal must already observe
+      // the abort, because the relay is wired BEFORE launch is awaited.
+      const realAsyncTaskManager = new AsyncTaskManager();
+      let capturedLaunchSignal: AbortSignal | undefined;
+      let resolveLaunch: (() => void) | undefined;
+      const launchGate = new Promise<void>((resolve) => {
+        resolveLaunch = resolve;
+      });
+      const launchMock = vi
+        .fn()
+        .mockImplementation(
+          async (_request: unknown, launchSignal: AbortSignal) => {
+            capturedLaunchSignal = launchSignal;
+            // Simulate slow launch (config/profile loading) that has not yet
+            // returned a scope when the user presses ESC.
+            await launchGate;
+            return {
+              agentId: 'async-launch-abort-agent',
+              scope: {
+                runNonInteractive: vi.fn().mockImplementation(
+                  () =>
+                    new Promise<void>(() => {
+                      // never resolves
+                    }),
+                ),
+                output: {
+                  terminate_reason: SubagentTerminateMode.GOAL,
+                  emitted_vars: {},
+                },
+              },
+              dispose: vi.fn().mockResolvedValue(undefined),
+            };
+          },
+        );
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () => realAsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Slow launch work',
+        async: true,
+      };
+
+      const foregroundController = new AbortController();
+      const invocation = tool.build(params);
+      const executePromise = invocation.execute(foregroundController.signal);
+
+      // Wait until launch has been entered (signal captured) but is still gated.
+      while (capturedLaunchSignal === undefined) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      expect(capturedLaunchSignal.aborted).toBe(false);
+
+      // Press ESC while launch is still pending.
+      foregroundController.abort();
+      expect(capturedLaunchSignal.aborted).toBe(true);
+
+      // Let launch resolve so the invocation can settle cleanly.
+      resolveLaunch?.();
+      await executePromise;
+
+      // The task that registered after the gated launch carries the SAME
+      // (already-aborted) controller the relay aborted, so it is registered in
+      // an aborted state rather than as a live, unstoppable background task.
+      const registered = realAsyncTaskManager.getTask(
+        'async-launch-abort-agent',
+      );
+      expect(registered).toBeDefined();
+      expect(registered!.abortController?.signal.aborted).toBe(true);
     });
 
     it('returns immediately with launch status when async=true (does not block)', async () => {
@@ -1579,6 +2043,60 @@ describe('TaskTool', () => {
       expect(completeTaskMock).not.toHaveBeenCalled();
 
       vi.useRealTimers();
+    });
+
+    it('does NOT label a user-cancelled task as timeout (cancelTask sets status to cancelled)', async () => {
+      // Fix (d): when the signal aborts because the user cancelled (via
+      // AsyncTaskManager.cancelTask, which sets status='cancelled'), the
+      // background path must NOT call failTask with 'Async task timed out'.
+      // Only a true timeout should be labelled as such.
+      const realAsyncTaskManager = new AsyncTaskManager();
+      let resolveRun: (() => void) | undefined;
+      const failTaskSpy = vi.spyOn(realAsyncTaskManager, 'failTask');
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-cancel-status',
+        scope: {
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+          runNonInteractive: vi.fn(
+            () =>
+              new Promise<void>((resolve) => {
+                resolveRun = resolve;
+              }),
+          ),
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () => realAsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'User-cancelled task',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      // Cancel via cancelTask (sets status to 'cancelled').
+      realAsyncTaskManager.cancelTask('async-cancel-status');
+
+      // Let the scope return (simulating scope completing after cancellation).
+      resolveRun?.();
+      // Wait for the background execution to finish.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // The task must NOT be labelled as a timeout.
+      expect(failTaskSpy).not.toHaveBeenCalledWith(
+        'async-cancel-status',
+        'Async task timed out',
+      );
     });
 
     it('returns error when async=true but global subagents.asyncEnabled is false', async () => {
@@ -2014,6 +2532,213 @@ describe('TaskTool', () => {
       expect(updateOutput).toHaveBeenLastCalledWith(
         '</subagent name="async-helper" id="async-xml-agent">\n',
       );
+    });
+  });
+
+  describe('Issue #2069: toolConfig omission with output_spec', () => {
+    it('omits toolConfig (not empty) when no explicit whitelist and registry unavailable, so runtime uses profile defaults', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-2069-no-registry',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      // Config WITHOUT getToolRegistry — simulates registry unavailable
+      const configNoRegistry = {
+        getSessionId: () => 'session-2069',
+      } as unknown as Config;
+
+      const tool = new TaskTool(configNoRegistry, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'rustcoder',
+        goal_prompt: 'Write a function',
+        output_spec: { result: 'The implementation' },
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      const launchRequest = launch.mock.calls[0]?.[0] as
+        | { toolConfig?: unknown; outputConfig?: unknown }
+        | undefined;
+      expect(launchRequest).toBeDefined();
+      // toolConfig must be absent (undefined) so runtime uses profile defaults
+      expect(launchRequest).not.toHaveProperty('toolConfig');
+      // outputConfig must still be present
+      expect(launchRequest).toHaveProperty('outputConfig');
+    });
+
+    it('omits toolConfig (not parent registry-derived) when no explicit whitelist and registry available, so runtime uses profile defaults', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-2069-with-registry',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithRegistry = {
+        getSessionId: () => 'session-2069',
+        getEphemeralSettings: () => ({}),
+        getExcludeTools: () => [],
+        getToolRegistry: () => ({
+          getEnabledTools: () => [
+            { name: 'read_file' },
+            { name: 'write_file' },
+            { name: 'task' },
+            { name: 'list_subagents' },
+          ],
+        }),
+      } as unknown as Config;
+
+      const tool = new TaskTool(configWithRegistry, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'rustcoder',
+        goal_prompt: 'Write a function',
+        output_spec: { result: 'The implementation' },
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      const launchRequest = launch.mock.calls[0]?.[0] as
+        | { toolConfig?: unknown; outputConfig?: unknown }
+        | undefined;
+      expect(launchRequest).toBeDefined();
+      // Issue #2069: no explicit whitelist must NOT synthesize toolConfig from
+      // the parent registry. toolConfig omitted → runtime/profile defaults apply.
+      expect(launchRequest).not.toHaveProperty('toolConfig');
+      // outputConfig must still be present
+      expect(launchRequest).toHaveProperty('outputConfig');
+    });
+  });
+
+  describe('Issue #2069: no-registry explicit whitelist must strip task/list_subagents', () => {
+    it('filters task/list_subagents from explicit whitelist when registry is unavailable', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-2069-no-reg-filter',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      // Config WITHOUT getToolRegistry — simulates registry unavailable
+      const configNoRegistry = {
+        getSessionId: () => 'session-2069',
+      } as unknown as Config;
+
+      const tool = new TaskTool(configNoRegistry, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Do work',
+        tool_whitelist: ['read_file', 'task', 'list_subagents'],
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      const launchRequest = launch.mock.calls[0]?.[0] as
+        | { toolConfig?: { tools?: string[] } }
+        | undefined;
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest).toHaveProperty('toolConfig');
+      // task/list_subagents must be removed even without a registry;
+      // read_file is preserved (no-registry explicit whitelist semantics).
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual(['read_file']);
+    });
+
+    it('preserves fail-closed toolConfig { tools: [] } when explicit whitelist only contains task/list_subagents and registry unavailable', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-2069-no-reg-failclosed',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configNoRegistry = {
+        getSessionId: () => 'session-2069',
+      } as unknown as Config;
+
+      const tool = new TaskTool(configNoRegistry, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Do work',
+        tool_whitelist: ['task', 'list_subagents'],
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      const launchRequest = launch.mock.calls[0]?.[0] as
+        | { toolConfig?: { tools?: string[] } }
+        | undefined;
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest).toHaveProperty('toolConfig');
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
     });
   });
 });

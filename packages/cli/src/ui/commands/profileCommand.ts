@@ -26,7 +26,11 @@ import {
 } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { getProtectedSettingKeys } from '@vybestack/llxprt-code-settings';
+import {
+  getProtectedSettingKeys,
+  isInternalSettingKey,
+  type LoadBalancerProfile,
+} from '@vybestack/llxprt-code-settings';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
 
@@ -413,6 +417,118 @@ async function verifyBucketsExist(
   }
 }
 
+function extractExplicitLoadBalancerContextLimit(args: string[]): {
+  contextLimit: number | undefined;
+  profileArgs: string[];
+  error?: MessageActionReturn;
+} {
+  const profileArgs: string[] = [];
+  let contextLimit: number | undefined;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    const valueFromEquals = arg.startsWith('--context-limit=')
+      ? arg.slice('--context-limit='.length)
+      : undefined;
+    const valueFromNext =
+      arg === '--context-limit' ? args[index + 1] : undefined;
+    const rawValue = valueFromEquals ?? valueFromNext;
+
+    if (rawValue === undefined) {
+      if (isContextLimitFlag(arg)) {
+        return {
+          contextLimit: undefined,
+          profileArgs,
+          error: {
+            type: 'message',
+            messageType: 'error',
+            content: 'context limit must be a positive integer',
+          },
+        };
+      }
+      profileArgs.push(arg);
+      continue;
+    }
+
+    const parsed = Number(rawValue);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return {
+        contextLimit: undefined,
+        profileArgs,
+        error: {
+          type: 'message',
+          messageType: 'error',
+          content: 'context limit must be a positive integer',
+        },
+      };
+    }
+
+    contextLimit = parsed;
+    if (valueFromNext !== undefined) {
+      index += 1;
+    }
+  }
+
+  return { contextLimit, profileArgs };
+}
+function isContextLimitFlag(arg: string): boolean {
+  return arg === '--context-limit' || arg.startsWith('--context-limit=');
+}
+
+function shouldPersistLoadBalancerEphemeral(
+  protectedSettings: string[],
+  key: string,
+  value: unknown,
+): boolean {
+  if (key === 'context-limit' || protectedSettings.includes(key)) {
+    return false;
+  }
+  return !isInternalSettingKey(key) && value !== undefined && value !== null;
+}
+
+function getAmbientLoadBalancerContextLimit(
+  currentEphemerals: Record<string, unknown>,
+): number | undefined {
+  const value = currentEphemerals['context-limit'];
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function buildLoadBalancerEphemeralSettings(
+  currentEphemerals: Record<string, unknown>,
+): Record<string, unknown> {
+  const protectedSettings = getProtectedSettingKeys();
+  const filteredEphemerals = Object.fromEntries(
+    Object.entries(currentEphemerals).filter(([key, value]) =>
+      shouldPersistLoadBalancerEphemeral(protectedSettings, key, value),
+    ),
+  );
+
+  return filteredEphemerals;
+}
+
+function createLoadBalancerProfileDefinition(
+  policy: 'roundrobin' | 'failover',
+  selectedProfiles: string[],
+  ephemeralSettings: Record<string, unknown>,
+  contextLimit: number | undefined,
+): LoadBalancerProfile {
+  return {
+    version: 1,
+    type: 'loadbalancer',
+    policy,
+    profiles: selectedProfiles,
+    ...(contextLimit !== undefined && {
+      contextLimit,
+    }),
+    provider: '',
+    model: '',
+    modelParams: {},
+    ephemeralSettings,
+  };
+}
+
 async function saveLoadBalancerProfile(
   parts: string[],
 ): Promise<MessageActionReturn | OpenDialogActionReturn> {
@@ -421,7 +537,7 @@ async function saveLoadBalancerProfile(
       type: 'message',
       messageType: 'error',
       content:
-        'Usage: /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
+        'Usage: /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]',
     };
   }
 
@@ -442,7 +558,16 @@ async function saveLoadBalancerProfile(
 
   const policy: 'roundrobin' | 'failover' = policyInput;
 
-  const selectedProfiles = parts.slice(3).filter((p) => p.length > 0);
+  const explicitContextLimit = extractExplicitLoadBalancerContextLimit(
+    parts.slice(3),
+  );
+  if (explicitContextLimit.error !== undefined) {
+    return explicitContextLimit.error;
+  }
+
+  const selectedProfiles = explicitContextLimit.profileArgs.filter(
+    (p) => p.length > 0,
+  );
 
   if (selectedProfiles.length < 2) {
     return {
@@ -467,28 +592,18 @@ async function saveLoadBalancerProfile(
       }
     }
 
-    const PROTECTED_SETTINGS = getProtectedSettingKeys();
-
     const currentEphemerals = runtime.getEphemeralSettings();
-    const filteredEphemerals = Object.fromEntries(
-      Object.entries(currentEphemerals).filter(
-        ([key, value]) =>
-          !PROTECTED_SETTINGS.includes(key) &&
-          value !== undefined &&
-          value !== null,
-      ),
-    );
-
-    const lbProfile = {
-      version: 1 as const,
-      type: 'loadbalancer' as const,
+    const filteredEphemerals =
+      buildLoadBalancerEphemeralSettings(currentEphemerals);
+    const contextLimit =
+      explicitContextLimit.contextLimit ??
+      getAmbientLoadBalancerContextLimit(currentEphemerals);
+    const lbProfile = createLoadBalancerProfileDefinition(
       policy,
-      profiles: selectedProfiles,
-      provider: '',
-      model: '',
-      modelParams: {},
-      ephemeralSettings: filteredEphemerals,
-    };
+      selectedProfiles,
+      filteredEphemerals,
+      contextLimit,
+    );
 
     await runtime.saveLoadBalancerProfile(lbProfileName, lbProfile);
 
@@ -525,7 +640,7 @@ const saveCommand: SlashCommand = {
         type: 'message',
         messageType: 'error',
         content:
-          'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
+          'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]',
       };
     }
 
@@ -544,7 +659,7 @@ const saveCommand: SlashCommand = {
       type: 'message',
       messageType: 'error',
       content:
-        'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
+        'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]',
     };
   },
 };
@@ -1139,7 +1254,7 @@ export const profileCommand: SlashCommand = {
     messageType: 'info',
     content: `Profile management commands:
   /profile save model <name>    - Save current model configuration
-  /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]
+  /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]
                                 - Save a load balancer profile
   /profile load <name>          - Load a saved profile
   /profile show <name>          - View details of a specific profile

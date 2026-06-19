@@ -1,11 +1,8 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-/* eslint-disable complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
 
 /**
  * OAuth Error Handling System
@@ -13,6 +10,58 @@
  * Provides comprehensive error classification, user-friendly messaging,
  * and recovery mechanisms for OAuth providers.
  */
+
+/**
+ * Returns true when value is a non-empty string (explicitly treating empty
+ * string as "unset" so it falls through to the generated default).
+ */
+function isNonEmpty(value: string | undefined): value is string {
+  return value !== undefined && value !== '';
+}
+
+/** Type alias for a console-compatible logger used by retry/error handlers. */
+export type OAuthLogger = {
+  debug(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+};
+
+const consoleLogger: OAuthLogger = console;
+
+/**
+ * Classifies an error into an OAuthErrorType based on its message text and
+ * optional system error code. Returns UNKNOWN when no pattern matches.
+ */
+function classifyErrorByMessage(
+  message: string,
+  code?: string,
+): OAuthErrorType {
+  const lower = message.toLowerCase();
+  if (
+    lower.includes('network') ||
+    lower.includes('connection') ||
+    code === 'ENOTFOUND' ||
+    code === 'ECONNREFUSED'
+  ) {
+    return OAuthErrorType.NETWORK_ERROR;
+  }
+  if (lower.includes('timeout')) {
+    return OAuthErrorType.TIMEOUT;
+  }
+  if (lower.includes('permission') || code === 'EACCES' || code === 'EPERM') {
+    return OAuthErrorType.FILE_PERMISSIONS;
+  }
+  if (
+    lower.includes('unauthorized') ||
+    lower.includes('invalid_grant') ||
+    lower.includes('expired')
+  ) {
+    return OAuthErrorType.AUTHORIZATION_EXPIRED;
+  }
+  if (lower.includes('rate') || lower.includes('too many')) {
+    return OAuthErrorType.RATE_LIMITED;
+  }
+  return OAuthErrorType.UNKNOWN;
+}
 
 /**
  * OAuth error categories for classification and handling
@@ -125,12 +174,12 @@ export class OAuthError extends Error {
     this.provider = provider;
     this.category = this.categorizeError(type);
     this.isRetryable = this.determineRetryability(type);
-    this.userMessage =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string userMessage should fall back to generated
-      options.userMessage || this.generateUserMessage(type, provider);
-    this.actionRequired =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string actionRequired should fall back to generated
-      options.actionRequired || this.generateActionRequired(type, provider);
+    this.userMessage = isNonEmpty(options.userMessage)
+      ? options.userMessage
+      : OAuthError.generateUserMessage(type, provider);
+    this.actionRequired = isNonEmpty(options.actionRequired)
+      ? options.actionRequired
+      : OAuthError.generateActionRequired(type, provider);
     this.retryAfterMs = options.retryAfterMs ?? null;
     this.technicalDetails = options.technicalDetails ?? {};
     this.originalError = options.originalError ?? null;
@@ -192,7 +241,7 @@ export class OAuthError extends Error {
   /**
    * Generates user-friendly error message
    */
-  private generateUserMessage(type: OAuthErrorType, provider: string): string {
+  static generateUserMessage(type: OAuthErrorType, provider: string): string {
     const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
 
     switch (type) {
@@ -238,7 +287,7 @@ export class OAuthError extends Error {
   /**
    * Generates actionable guidance for users
    */
-  private generateActionRequired(
+  static generateActionRequired(
     type: OAuthErrorType,
     provider: string,
   ): string | null {
@@ -420,36 +469,10 @@ export class OAuthErrorFactory {
     if (error instanceof Error) {
       originalError = error;
       message = error.message;
-
-      // Attempt to classify based on error message or type
-      const errorWithCode = error as Error & { code?: string };
-      if (
-        error.message.toLowerCase().includes('network') ||
-        error.message.toLowerCase().includes('connection') ||
-        errorWithCode.code === 'ENOTFOUND' ||
-        errorWithCode.code === 'ECONNREFUSED'
-      ) {
-        type = OAuthErrorType.NETWORK_ERROR;
-      } else if (error.message.toLowerCase().includes('timeout')) {
-        type = OAuthErrorType.TIMEOUT;
-      } else if (
-        error.message.toLowerCase().includes('permission') ||
-        errorWithCode.code === 'EACCES' ||
-        errorWithCode.code === 'EPERM'
-      ) {
-        type = OAuthErrorType.FILE_PERMISSIONS;
-      } else if (
-        error.message.toLowerCase().includes('unauthorized') ||
-        error.message.toLowerCase().includes('invalid_grant') ||
-        error.message.toLowerCase().includes('expired')
-      ) {
-        type = OAuthErrorType.AUTHORIZATION_EXPIRED;
-      } else if (
-        error.message.toLowerCase().includes('rate') ||
-        error.message.toLowerCase().includes('too many')
-      ) {
-        type = OAuthErrorType.RATE_LIMITED;
-      }
+      type = classifyErrorByMessage(
+        error.message,
+        (error as Error & { code?: string }).code,
+      );
     } else if (typeof error === 'string') {
       message = error;
     } else {
@@ -472,7 +495,14 @@ export class OAuthErrorFactory {
  * Retry handler with exponential backoff and jitter
  */
 export class RetryHandler {
-  constructor(private config: RetryConfig = DEFAULT_RETRY_CONFIG) {}
+  private readonly logger: OAuthLogger;
+
+  constructor(
+    private config: RetryConfig = DEFAULT_RETRY_CONFIG,
+    logger: OAuthLogger = consoleLogger,
+  ) {
+    this.logger = logger;
+  }
 
   /**
    * Executes operation with retry logic for transient errors
@@ -519,7 +549,7 @@ export class RetryHandler {
           delay = delay * (0.5 + Math.random() * 0.5); // 50-100% of calculated delay
         }
 
-        console.debug(
+        this.logger.debug(
           `${provider} operation failed (attempt ${attempt}/${this.config.maxAttempts}), retrying in ${delay}ms...`,
         );
         await this.sleep(delay);
@@ -549,7 +579,17 @@ export class RetryHandler {
  * Graceful error handler for OAuth operations
  */
 export class GracefulErrorHandler {
-  constructor(private retryHandler: RetryHandler = new RetryHandler()) {}
+  private readonly logger: OAuthLogger;
+  private readonly retryHandler: RetryHandler;
+
+  constructor(
+    retryHandler?: RetryHandler,
+    logger: OAuthLogger = consoleLogger,
+  ) {
+    this.logger = logger;
+    this.retryHandler =
+      retryHandler ?? new RetryHandler(DEFAULT_RETRY_CONFIG, logger);
+  }
 
   /**
    * Handles errors gracefully, providing fallback behavior when possible
@@ -573,7 +613,7 @@ export class GracefulErrorHandler {
           : OAuthErrorFactory.fromUnknown(provider, error, context);
 
       // Log the error for debugging
-      console.debug(
+      this.logger.debug(
         'OAuth operation failed gracefully:',
         oauthError.toLogEntry(),
       );
@@ -615,14 +655,18 @@ export class GracefulErrorHandler {
 
         // Always show user-friendly error message for user-actionable errors
         if (oauthError.category === OAuthErrorCategory.USER_ACTION_REQUIRED) {
-          console.error(oauthError.userMessage);
-          if (oauthError.actionRequired) {
-            console.error(`Action required: ${oauthError.actionRequired}`);
-          }
+          const providerName =
+            provider.charAt(0).toUpperCase() + provider.slice(1);
+          this.logger.error(
+            `OAuth authentication requires user action for ${providerName}.`,
+          );
+          this.logger.error(
+            `Action required: Run 'llxprt auth login ${provider}' to sign in again or review the provider authentication instructions.`,
+          );
         }
 
         // Log technical details for debugging
-        console.debug(
+        this.logger.debug(
           `${provider}.${methodName} failed:`,
           oauthError.toLogEntry(),
         );

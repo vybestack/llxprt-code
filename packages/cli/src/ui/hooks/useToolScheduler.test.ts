@@ -1247,6 +1247,186 @@ describe('useReactToolScheduler', () => {
   });
 });
 
+/**
+ * Helper that builds a ScheduledToolCall fixture bound to a real MockTool
+ * and its invocation, for seeding display state via the real hook's public
+ * replaceToolCallsForScheduler surface (tuple index 6).
+ */
+const buildScheduledToolCall = (
+  callId: string,
+  tool: MockTool,
+  status: 'scheduled' | 'success' | 'executing' = 'scheduled',
+): ToolCall =>
+  ({
+    status,
+    request: buildRequest({ callId }),
+    tool,
+    invocation: tool.build(buildRequest({ callId }).args),
+  }) as unknown as ToolCall;
+
+/**
+ * Behavioral coverage for the displayCleared display-state flag exercised
+ * end-to-end through the REAL useReactToolScheduler hook's public writer
+ * surfaces (markToolsAsDisplayCleared tuple index 2 and
+ * replaceToolCallsForScheduler tuple index 6), asserting on the observable
+ * toolCalls tuple element (index 0). Only the infra CoreToolScheduler is
+ * mocked (via buildMockScheduler); the hook under test is real.
+ *
+ * The completed primary tool call is cleared from display state by the
+ * harness's onAllToolCallsComplete -> replaceToolCallsForScheduler(main, []),
+ * so these tests seed tracked calls directly via the public
+ * replaceToolCallsForScheduler surface, which routes through the real
+ * mapCallsWithDisplayClearedFlag preservation logic.
+ */
+describe('useReactToolScheduler displayCleared display-state', () => {
+  let onComplete: Mock;
+  let setPendingHistoryItem: Mock;
+  let displayClearedTool: MockTool;
+
+  beforeEach(() => {
+    onComplete = vi.fn();
+    setPendingHistoryItem = vi.fn();
+    (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.DEFAULT);
+    mockToolRegistry.getTool.mockClear();
+    displayClearedTool = new MockTool({
+      name: 'displayClearedTool',
+      displayName: 'Display Cleared Tool',
+      shouldConfirmExecute: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    for (const [sessionId, scheduler] of createdSchedulers.entries()) {
+      scheduler.dispose();
+      createdSchedulers.delete(sessionId);
+    }
+    DebugLogger.disposeAll();
+  });
+
+  it('marks a completed tool as displayCleared when markToolsAsDisplayCleared is called for its callId', async () => {
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
+
+    const replaceToolCalls = result.current[6];
+    const markToolsAsDisplayCleared = result.current[2];
+
+    // Seed two tracked calls into display state via the real hook. The tool to
+    // be cleared is seeded as a completed ('success') call to mirror the real
+    // scenario of clearing a finished tool from display.
+    await act(async () => {
+      replaceToolCalls([
+        buildScheduledToolCall('to-clear', displayClearedTool, 'success'),
+        buildScheduledToolCall('leave-alone', displayClearedTool),
+      ]);
+    });
+
+    const beforeCalls = result.current[0];
+    expect(
+      beforeCalls.find((c) => c.request.callId === 'to-clear')?.displayCleared,
+    ).toBeFalsy();
+    expect(
+      beforeCalls.find((c) => c.request.callId === 'leave-alone')
+        ?.displayCleared,
+    ).toBeFalsy();
+
+    // Mark only one callId via the real hook writer surface.
+    await act(async () => {
+      markToolsAsDisplayCleared(['to-clear']);
+    });
+
+    const afterCalls = result.current[0];
+    expect(
+      afterCalls.find((c) => c.request.callId === 'to-clear')?.displayCleared,
+    ).toBe(true);
+    expect(
+      afterCalls.find((c) => c.request.callId === 'leave-alone')
+        ?.displayCleared,
+    ).toBeFalsy();
+  });
+
+  it('preserves displayCleared across a subsequent scheduler tool-calls update (mapCallsWithDisplayClearedFlag)', async () => {
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
+
+    const replaceToolCalls = result.current[6];
+    const markToolsAsDisplayCleared = result.current[2];
+
+    // Seed a tracked call, then mark it displayCleared via the real hook.
+    await act(async () => {
+      replaceToolCalls([
+        buildScheduledToolCall('persist-1', displayClearedTool),
+      ]);
+    });
+    await act(async () => {
+      markToolsAsDisplayCleared(['persist-1']);
+    });
+    expect(
+      result.current[0].find((c) => c.request.callId === 'persist-1')
+        ?.displayCleared,
+    ).toBe(true);
+
+    // Replace tool calls again with an update to the SAME callId plus a
+    // brand-new callId; the prior displayCleared value must be preserved.
+    await act(async () => {
+      replaceToolCalls([
+        buildScheduledToolCall('persist-1', displayClearedTool, 'success'),
+        buildScheduledToolCall('fresh-2', displayClearedTool),
+      ]);
+    });
+
+    const updatedCalls = result.current[0];
+    expect(
+      updatedCalls.find((c) => c.request.callId === 'persist-1')
+        ?.displayCleared,
+    ).toBe(true);
+    expect(
+      updatedCalls.find((c) => c.request.callId === 'fresh-2')?.displayCleared,
+    ).toBeFalsy();
+  });
+
+  it('is a no-op when markToolsAsDisplayCleared is called with an empty array', async () => {
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+    );
+
+    const replaceToolCalls = result.current[6];
+    const markToolsAsDisplayCleared = result.current[2];
+
+    // Seed tracked calls with known (falsey) displayCleared values.
+    await act(async () => {
+      replaceToolCalls([
+        buildScheduledToolCall('noop-1', displayClearedTool),
+        buildScheduledToolCall('noop-2', displayClearedTool),
+      ]);
+    });
+
+    const beforeCalls = result.current[0];
+
+    // Empty-array mark must early-return without state churn.
+    await act(async () => {
+      markToolsAsDisplayCleared([]);
+    });
+
+    const afterCalls = result.current[0];
+    expect(afterCalls).toBe(beforeCalls);
+    expect(
+      afterCalls.map((c) => [c.request.callId, c.displayCleared]),
+    ).toStrictEqual([
+      ['noop-1', false],
+      ['noop-2', false],
+    ]);
+  });
+});
+
 describe('mapToDisplay', () => {
   const baseRequest: ToolCallRequestInfo = buildRequest();
 

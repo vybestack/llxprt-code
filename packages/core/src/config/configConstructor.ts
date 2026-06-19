@@ -12,8 +12,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import * as path from 'node:path';
 import process from 'node:process';
 
@@ -301,33 +299,58 @@ function applyTelemetryAndMemory(
   config: ConfigConstructorTarget,
   params: ConfigParameters,
 ): void {
+  applyMemorySettings(config, params);
+  applyTelemetrySettings(config, params);
+  applyFileFilteringSettings(config, params);
+}
+
+function applyMemorySettings(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.userMemory = params.userMemory ?? '';
   config.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
   config.llxprtMdFilePaths = params.llxprtMdFilePaths ?? [];
   config.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
   config.showMemoryUsage = params.showMemoryUsage ?? false;
   config.accessibility = params.accessibility ?? {};
+}
 
+function applyTelemetrySettings(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   // Spread first to preserve all fields (e.g. conversationLogPath,
   // customRedactionPatterns, retention settings), then override core fields
   // with explicit defaults.
-  config.telemetrySettings = {
-    ...(params.telemetry ?? {}),
-    enabled: params.telemetry?.enabled ?? false,
-    target: params.telemetry?.target ?? DEFAULT_TELEMETRY_TARGET,
-    otlpEndpoint: params.telemetry?.otlpEndpoint ?? DEFAULT_OTLP_ENDPOINT,
-    logPrompts: params.telemetry?.logPrompts ?? true,
-    outfile: params.telemetry?.outfile,
-    logConversations: params.telemetry?.logConversations ?? false,
-    logResponses: params.telemetry?.logResponses ?? false,
-    redactSensitiveData: params.telemetry?.redactSensitiveData ?? true,
-    redactFilePaths: params.telemetry?.redactFilePaths ?? false,
-    redactUrls: params.telemetry?.redactUrls ?? false,
-    redactEmails: params.telemetry?.redactEmails ?? false,
-    redactPersonalInfo: params.telemetry?.redactPersonalInfo ?? false,
-  };
+  config.telemetrySettings = resolveTelemetrySettings(params.telemetry);
   config.usageStatisticsEnabled = params.usageStatisticsEnabled ?? true;
+}
 
+function resolveTelemetrySettings(
+  telemetry: TelemetrySettings | undefined,
+): TelemetrySettings {
+  return {
+    ...(telemetry ?? {}),
+    enabled: telemetry?.enabled ?? false,
+    target: telemetry?.target ?? DEFAULT_TELEMETRY_TARGET,
+    otlpEndpoint: telemetry?.otlpEndpoint ?? DEFAULT_OTLP_ENDPOINT,
+    logPrompts: telemetry?.logPrompts ?? true,
+    outfile: telemetry?.outfile,
+    logConversations: telemetry?.logConversations ?? false,
+    logResponses: telemetry?.logResponses ?? false,
+    redactSensitiveData: telemetry?.redactSensitiveData ?? true,
+    redactFilePaths: telemetry?.redactFilePaths ?? false,
+    redactUrls: telemetry?.redactUrls ?? false,
+    redactEmails: telemetry?.redactEmails ?? false,
+    redactPersonalInfo: telemetry?.redactPersonalInfo ?? false,
+  };
+}
+
+function applyFileFilteringSettings(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.fileFiltering = {
     respectGitIgnore:
       params.fileFiltering?.respectGitIgnore ??
@@ -345,6 +368,17 @@ function applyRuntimeFlags(
   config: ConfigConstructorTarget,
   params: ConfigParameters,
 ): void {
+  applyBasicRuntimeFlags(config, params);
+  applyExtensionFlags(config, params);
+  applyShellFlags(config, params);
+  applyOutputFlags(config, params);
+  applySessionFlags(config, params);
+}
+
+function applyBasicRuntimeFlags(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.checkpointing = params.checkpointing ?? false;
   config.dumpOnError = params.dumpOnError ?? false;
   config.proxy = params.proxy;
@@ -357,13 +391,6 @@ function applyRuntimeFlags(
   config.maxSessionTurns = params.maxSessionTurns ?? -1;
   config.experimentalZedIntegration =
     params.experimentalZedIntegration ?? false;
-  config.listExtensions = params.listExtensions ?? false;
-  config._activeExtensions = params.activeExtensions ?? [];
-  config.providerManager = params.providerManager;
-  config.provider = params.provider;
-  config._extensionLoader =
-    params.extensionLoader ??
-    new SimpleExtensionLoader(params.extensions ?? []);
   config.noBrowser = params.noBrowser ?? false;
   config.summarizeToolOutput = params.summarizeToolOutput;
   config.folderTrust = params.folderTrust ?? false;
@@ -380,11 +407,42 @@ function applyRuntimeFlags(
   config.shellReplacement = normalizeShellReplacement(params.shellReplacement);
   config.trustedFolder = params.trustedFolder;
   config.useRipgrep = params.useRipgrep ?? false;
+}
+
+function applyExtensionFlags(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
+  config.listExtensions = params.listExtensions ?? false;
+  config._activeExtensions = params.activeExtensions ?? [];
+  config.providerManager = params.providerManager;
+  config.provider = params.provider;
+  config._extensionLoader =
+    params.extensionLoader ??
+    new SimpleExtensionLoader(params.extensions ?? []);
+  config.extensionManagement = params.extensionManagement ?? false;
+  config.enableExtensionReloading = params.enableExtensionReloading ?? false;
+  config.enablePromptCompletion = params.enablePromptCompletion ?? false;
+  config.eventEmitter = params.eventEmitter;
+}
+
+function applyShellFlags(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
   config.allowPtyThemeOverride = params.allowPtyThemeOverride ?? false;
   config.ptyScrollbackLimit = params.ptyScrollbackLimit ?? 600000;
   config.ptyTerminalWidth = params.ptyTerminalWidth;
   config.ptyTerminalHeight = params.ptyTerminalHeight;
+  config.enableShellOutputEfficiency =
+    params.enableShellOutputEfficiency ?? true;
+}
+
+function applyOutputFlags(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.skipNextSpeakerCheck = params.skipNextSpeakerCheck ?? false;
   config.truncateToolOutputThreshold =
     params.truncateToolOutputThreshold ??
@@ -392,16 +450,16 @@ function applyRuntimeFlags(
   config.truncateToolOutputLines =
     params.truncateToolOutputLines ?? DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES;
   config.enableToolOutputTruncation = params.enableToolOutputTruncation ?? true;
+}
+
+function applySessionFlags(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
-  config.enableShellOutputEfficiency =
-    params.enableShellOutputEfficiency ?? true;
   config.continueSession = params.continueSession ?? false;
-  config.extensionManagement = params.extensionManagement ?? false;
-  config.enableExtensionReloading = params.enableExtensionReloading ?? false;
   config.storage = new Storage(config.targetDir);
   config.fileExclusions = new FileExclusions(config as unknown as Config);
-  config.enablePromptCompletion = params.enablePromptCompletion ?? false;
-  config.eventEmitter = params.eventEmitter;
 }
 
 function applyPolicyAndLifecycle(

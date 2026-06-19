@@ -23,8 +23,6 @@
  * - Respects ephemeral settings (retries, retrywait)
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 import {
   type IProvider,
   type GenerateChatOptions,
@@ -48,6 +46,50 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { AllBucketsExhaustedError } from './errors.js';
 import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
+
+/**
+ * Internal shape used to carry an AbortSignal through retry orchestration when
+ * no full RuntimeInvocationContext is available (e.g. legacy signal signature).
+ * BaseProvider normalization detects this shape and replaces it with a real
+ * RuntimeInvocationContext while preserving the signal via extractLegacySignal.
+ */
+interface SignalOnlyInvocation {
+  readonly signal?: AbortSignal;
+}
+
+function withLegacySignal(
+  signal: AbortSignal | undefined,
+): GenerateChatOptions['invocation'] | undefined {
+  if (!signal) {
+    return undefined;
+  }
+  return { signal } as unknown as GenerateChatOptions['invocation'];
+}
+
+function withSignal(
+  invocation: GenerateChatOptions['invocation'],
+  signal: AbortSignal | undefined,
+): GenerateChatOptions['invocation'] | undefined {
+  if (!signal) {
+    return invocation;
+  }
+  if (!invocation) {
+    return withLegacySignal(signal);
+  }
+  return {
+    ...invocation,
+    signal,
+  } as GenerateChatOptions['invocation'];
+}
+
+function extractSignal(
+  invocation: GenerateChatOptions['invocation'],
+): AbortSignal | undefined {
+  if (!invocation) {
+    return undefined;
+  }
+  return (invocation as unknown as SignalOnlyInvocation).signal;
+}
 
 function isSignalAborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
@@ -126,7 +168,13 @@ export class RetryOrchestrator implements IProvider {
   private isLoadBalancer(): boolean {
     // Check by name pattern rather than importing LoadBalancingProvider
     // to avoid circular dependency
-    return this.wrappedProvider.name.includes('-lb-');
+    return this.wrappedProvider.name === 'load-balancer';
+  }
+
+  private shouldBypassRetry(options: GenerateChatOptions): boolean {
+    return (
+      this.isLoadBalancer() || options.metadata?.loadBalancerDelegate === true
+    );
   }
 
   // Delegate all IProvider methods to wrapped provider
@@ -195,26 +243,20 @@ export class RetryOrchestrator implements IProvider {
 
     if (Array.isArray(optionsOrContents)) {
       // Legacy signature: (contents, tools?, signal?)
+      // The signal is carried on invocation so retry logic and the wrapped
+      // provider can read it; BaseProvider normalization replaces this stub
+      // with a real RuntimeInvocationContext (preserving the signal).
       options = {
         contents: optionsOrContents,
         tools,
-        invocation: signal
-          ? ({ signal } as unknown as GenerateChatOptions['invocation'])
-          : undefined,
+        invocation: withLegacySignal(signal),
       } as GenerateChatOptions;
     } else {
       // Modern signature: (options)
-      options = optionsOrContents;
-
-      // Ensure invocation.signal is propagated to options
-      if (!options.invocation && signal) {
-        options = {
-          ...options,
-          invocation: {
-            signal,
-          } as unknown as GenerateChatOptions['invocation'],
-        };
-      }
+      options = {
+        ...optionsOrContents,
+        invocation: withSignal(optionsOrContents.invocation, signal),
+      };
     }
 
     return this.generateChatCompletionWithRetry(options);
@@ -229,7 +271,7 @@ export class RetryOrchestrator implements IProvider {
     // If the wrapped provider is a LoadBalancingProvider, pass through without retry logic
     // because LoadBalancingProvider already has its own failover and retry mechanisms.
     // Don't buffer chunks for LoadBalancingProvider to avoid timeout issues.
-    if (this.isLoadBalancer()) {
+    if (this.shouldBypassRetry(options)) {
       for await (const chunk of this.wrappedProvider.generateChatCompletion(
         options,
       )) {
@@ -239,8 +281,7 @@ export class RetryOrchestrator implements IProvider {
     }
 
     // Extract signal - it may be on invocation or in options directly
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
-    const signal = (options.invocation as { signal?: AbortSignal })?.signal;
+    const signal = extractSignal(options.invocation);
 
     // Check for abort before starting
     if (isSignalAborted(signal)) {
@@ -248,15 +289,13 @@ export class RetryOrchestrator implements IProvider {
     }
 
     // Read ephemeral settings for retry configuration
+    const invocationEphemerals = options.invocation?.ephemerals;
     const maxAttempts =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
-      (options.invocation?.ephemerals?.['retries'] as number | undefined) ??
+      (invocationEphemerals?.['retries'] as number | undefined) ??
       this.config.maxAttempts;
     const initialDelayMs =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
-      (options.invocation?.ephemerals?.['retrywait'] as number | undefined) ??
+      (invocationEphemerals?.['retrywait'] as number | undefined) ??
       this.config.initialDelayMs;
-    const invocationEphemerals = options.invocation?.ephemerals;
     const authRetryTimeoutMs =
       (invocationEphemerals?.['auth-retry-timeout'] as number | undefined) ??
       this.config.authRetryTimeoutMs;
@@ -333,7 +372,6 @@ export class RetryOrchestrator implements IProvider {
     stream: AsyncIterableIterator<IContent>,
   ): AsyncGenerator<IContent> {
     let chunksYielded = false;
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     try {
       for await (const chunk of stream) {
         chunksYielded = true;
@@ -406,15 +444,17 @@ export class RetryOrchestrator implements IProvider {
       await this.invokeAuthErrorHandler(error, options, errorStatus);
     }
 
-    const shouldAttemptFailover =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      bucketFailoverHandler != null &&
-      ((is429 && state.consecutive429s > failoverThreshold) ||
-        is402 ||
-        (isAuthError && state.consecutiveAuthErrors > 1) ||
-        (isNetworkError && state.consecutiveNetworkErrors > failoverThreshold));
+    const shouldAttemptFailover = this.shouldAttemptFailover(
+      bucketFailoverHandler,
+      is429,
+      is402,
+      isAuthError,
+      isNetworkError,
+      state,
+      failoverThreshold,
+    );
 
-    if (shouldAttemptFailover) {
+    if (shouldAttemptFailover && bucketFailoverHandler) {
       return this.handleFailoverDecision(
         errorStatus,
         is429,
@@ -435,6 +475,34 @@ export class RetryOrchestrator implements IProvider {
       shouldAttemptRefreshRetry,
       signal,
     );
+  }
+
+  private shouldAttemptFailover(
+    bucketFailoverHandler: BucketFailoverHandler | undefined,
+    is429: boolean,
+    is402: boolean,
+    isAuthError: boolean,
+    isNetworkError: boolean,
+    state: {
+      consecutive429s: number;
+      consecutiveAuthErrors: number;
+      consecutiveNetworkErrors: number;
+    },
+    failoverThreshold: number,
+  ): boolean {
+    if (bucketFailoverHandler == null) {
+      return false;
+    }
+    if (is429 && state.consecutive429s > failoverThreshold) {
+      return true;
+    }
+    if (is402) {
+      return true;
+    }
+    if (isAuthError && state.consecutiveAuthErrors > 1) {
+      return true;
+    }
+    return isNetworkError && state.consecutiveNetworkErrors > failoverThreshold;
   }
 
   private updateConsecutiveCounters(
@@ -553,7 +621,6 @@ export class RetryOrchestrator implements IProvider {
     errorStatus: number | undefined,
   ): Promise<void> {
     const authErrorHandler = this.getOnAuthErrorHandler(options);
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (authErrorHandler) {
       try {
         const failedAccessToken = await this.resolveAuthToken(options);
@@ -561,7 +628,6 @@ export class RetryOrchestrator implements IProvider {
         await authErrorHandler.handleAuthError({
           failedAccessToken,
           providerId,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
           errorStatus: errorStatus ?? 401,
         });
       } catch (handlerError) {
@@ -590,12 +656,13 @@ export class RetryOrchestrator implements IProvider {
     bucketFailoverHandler: BucketFailoverHandler,
     authRetryTimeoutMs: number,
   ): Promise<'continue' | 'exhausted'> {
-    const failoverReason = is429
-      ? `${state.consecutive429s} consecutive 429 errors`
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        isNetworkError
-        ? `${state.consecutiveNetworkErrors} consecutive network errors`
-        : `status ${errorStatus}`;
+    const failoverReason = resolveFailoverReason(
+      is429,
+      isNetworkError,
+      state.consecutive429s,
+      state.consecutiveNetworkErrors,
+      errorStatus,
+    );
     this.logger.debug(
       () => `Attempting bucket failover after ${failoverReason}`,
     );
@@ -608,7 +675,6 @@ export class RetryOrchestrator implements IProvider {
     const failoverResult =
       await bucketFailoverHandler.tryFailover(failoverContext);
 
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (failoverResult) {
       this.logger.debug(
         () => `Bucket failover successful, resetting retry state`,
@@ -637,8 +703,7 @@ export class RetryOrchestrator implements IProvider {
     const iterator = stream[Symbol.asyncIterator]();
     let firstChunk = true;
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
-    while (true) {
+    for (;;) {
       if (isSignalAborted(signal)) {
         throw createAbortError();
       }
@@ -647,38 +712,12 @@ export class RetryOrchestrator implements IProvider {
 
       // Apply timeout only for first chunk
       if (firstChunk && timeoutMs > 0) {
-        let timeoutId: NodeJS.Timeout | undefined;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutId = setTimeout(
-            () => reject(new Error('Stream timeout: first chunk not received')),
-            timeoutMs,
-          );
-        });
-
-        try {
-          const result = await Promise.race([nextPromise, timeoutPromise]);
-
-          // Clear the timeout now that we got the first chunk
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (timeoutId !== undefined) {
-            clearTimeout(timeoutId);
-          }
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (result.done === true) {
-            return;
-          }
-
-          firstChunk = false;
-          yield result.value;
-        } catch (error) {
-          // Clear timeout on error
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (timeoutId !== undefined) {
-            clearTimeout(timeoutId);
-          }
-          throw error;
+        const outcome = await raceFirstChunkWithTimeout(nextPromise, timeoutMs);
+        if (outcome.done === true) {
+          return;
         }
+        firstChunk = false;
+        yield outcome.value;
       } else {
         const result = await nextPromise;
 
@@ -782,14 +821,22 @@ export class RetryOrchestrator implements IProvider {
   /**
    * Gets the bucket failover handler from options
    */
+  private resolveBucketFailoverHandler(
+    config: unknown,
+  ): BucketFailoverHandler | undefined {
+    const configWithHandler = config as
+      | { getBucketFailoverHandler?: () => BucketFailoverHandler | undefined }
+      | null
+      | undefined;
+    return configWithHandler?.getBucketFailoverHandler?.();
+  }
+
   private getBucketFailoverHandler(
     options: GenerateChatOptions,
   ): BucketFailoverHandler | undefined {
     return (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
-      options.runtime?.config?.getBucketFailoverHandler?.() ??
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
-      options.config?.getBucketFailoverHandler?.()
+      this.resolveBucketFailoverHandler(options.runtime?.config) ??
+      this.resolveBucketFailoverHandler(options.config)
     );
   }
 
@@ -797,14 +844,22 @@ export class RetryOrchestrator implements IProvider {
    * Gets the auth error handler from options
    * @fix issue1861
    */
+  private resolveOnAuthErrorHandler(
+    config: unknown,
+  ): OnAuthErrorHandler | undefined {
+    const configWithHandler = config as
+      | { getOnAuthErrorHandler?: () => OnAuthErrorHandler | undefined }
+      | null
+      | undefined;
+    return configWithHandler?.getOnAuthErrorHandler?.();
+  }
+
   private getOnAuthErrorHandler(
     options: GenerateChatOptions,
   ): OnAuthErrorHandler | undefined {
     return (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
-      options.runtime?.config?.getOnAuthErrorHandler?.() ??
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
-      options.config?.getOnAuthErrorHandler?.()
+      this.resolveOnAuthErrorHandler(options.runtime?.config) ??
+      this.resolveOnAuthErrorHandler(options.config)
     );
   }
 
@@ -860,5 +915,49 @@ export class RetryOrchestrator implements IProvider {
     const reasons = handler.getLastFailoverReasons?.() ?? {};
 
     return new AllBucketsExhaustedError(this.name, buckets, lastError, reasons);
+  }
+}
+
+/**
+ * Resolve a human-readable reason for a bucket failover attempt.
+ */
+function resolveFailoverReason(
+  is429: boolean,
+  isNetworkError: boolean,
+  consecutive429s: number,
+  consecutiveNetworkErrors: number,
+  errorStatus: number | undefined,
+): string {
+  if (is429) {
+    return `${consecutive429s} consecutive 429 errors`;
+  }
+  if (isNetworkError) {
+    return `${consecutiveNetworkErrors} consecutive network errors`;
+  }
+  return `status ${errorStatus}`;
+}
+
+/**
+ * Race the first stream chunk against a timeout. Resolves with the iterator
+ * result (clearing the timeout), or rejects with a stream-timeout error.
+ */
+async function raceFirstChunkWithTimeout<T>(
+  nextPromise: Promise<IteratorResult<T>>,
+  timeoutMs: number,
+): Promise<IteratorResult<T>> {
+  let timeoutId: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error('Stream timeout: first chunk not received')),
+      timeoutMs,
+    );
+  });
+
+  try {
+    return await Promise.race([nextPromise, timeoutPromise]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
   }
 }

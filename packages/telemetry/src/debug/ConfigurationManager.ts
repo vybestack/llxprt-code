@@ -8,6 +8,24 @@ import * as os from 'os';
 import { LLXPRT_DIR } from '../utils/paths.js';
 import { type DebugSettings } from './types.js';
 
+function readDebugConfigFile(
+  configPath: string,
+): Partial<DebugSettings> | null {
+  if (!fs.existsSync(configPath)) {
+    return null;
+  }
+  try {
+    const content = fs.readFileSync(configPath, 'utf8');
+    const parsed = JSON.parse(content);
+    if (typeof parsed.debug === 'object' && parsed.debug !== null) {
+      return parsed.debug;
+    }
+  } catch {
+    // Silently ignore — can't use debugLogger here (circular dep)
+  }
+  return null;
+}
+
 export class ConfigurationManager {
   // Line 11: PRIVATE static instance: ConfigurationManager
   private static instance: ConfigurationManager | undefined;
@@ -103,17 +121,9 @@ export class ConfigurationManager {
         return;
       }
       const configPath = path.join(homeDir, LLXPRT_DIR, 'settings.json');
-      if (fs.existsSync(configPath)) {
-        try {
-          const content = fs.readFileSync(configPath, 'utf8');
-          const parsed = JSON.parse(content);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (typeof parsed.debug === 'object' && parsed.debug !== null) {
-            this.userConfig = parsed.debug;
-          }
-        } catch {
-          // Silently ignore — can't use debugLogger here (circular dep)
-        }
+      const debugConfig = readDebugConfigFile(configPath);
+      if (debugConfig !== null) {
+        this.userConfig = debugConfig;
       }
     } catch {
       // Home directory unavailable (e.g., in tests); use default config.
@@ -128,17 +138,9 @@ export class ConfigurationManager {
         return;
       }
       const configPath = path.join(cwd, LLXPRT_DIR, 'config.json');
-      if (fs.existsSync(configPath)) {
-        try {
-          const content = fs.readFileSync(configPath, 'utf8');
-          const parsed = JSON.parse(content);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (typeof parsed.debug === 'object' && parsed.debug !== null) {
-            this.projectConfig = parsed.debug;
-          }
-        } catch {
-          // Silently ignore — can't use debugLogger here (circular dep)
-        }
+      const debugConfig = readDebugConfigFile(configPath);
+      if (debugConfig !== null) {
+        this.projectConfig = debugConfig;
       }
     } catch {
       // Working directory unavailable (e.g., in tests); use default config.

@@ -149,6 +149,49 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
     );
   });
 
+  describe('runtime config handoff', () => {
+    it('preserves the Config instance when GenAI request config carries abort state', () => {
+      const configInstance = {
+        getEnableHooks: () => false,
+        getHookSystem: () => null,
+        getUserMemory: () => undefined,
+        getConversationLoggingEnabled: () => false,
+      };
+      const abortController = new AbortController();
+      const tools = [{ functionDeclarations: [] }];
+      const baseRuntimeContext = {
+        config: configInstance,
+        settingsService: {},
+        runtimeId: 'test-runtime',
+        metadata: { source: 'test' },
+      };
+
+      const buildRuntimeContext = (
+        processor as unknown as {
+          _buildRuntimeContext: (
+            baseRuntimeContext: unknown,
+            params: { config?: { abortSignal?: AbortSignal; tools?: unknown } },
+          ) => { config?: unknown; metadata?: Record<string, unknown> };
+        }
+      )._buildRuntimeContext;
+
+      const runtimeContext = buildRuntimeContext.call(
+        processor,
+        baseRuntimeContext,
+        {
+          config: { abortSignal: abortController.signal, tools },
+        },
+      );
+
+      expect(runtimeContext.config).toBe(configInstance);
+      expect(runtimeContext.config).not.toHaveProperty('abortSignal');
+      expect(runtimeContext.config).not.toHaveProperty('tools');
+      expect(runtimeContext.metadata?.['abortSignal']).toBe(
+        abortController.signal,
+      );
+    });
+  });
+
   describe('first chunk consumption within retry boundary', () => {
     it('forwards cancellation to the wrapped source iterator before first next', async () => {
       let sourceClosed = false;

@@ -53,7 +53,7 @@ function isOutstandingToolCall(tc: TrackedToolCall): boolean {
   if (!isTerminalToolCall(status)) return false;
   return (
     (tc as TrackedCompletedToolCall | TrackedCancelledToolCall)
-      .responseSubmittedToGemini !== true
+      .displayCleared !== true
   );
 }
 
@@ -114,7 +114,7 @@ function processPrimaryCompletion(
   addItem: UseHistoryManagerReturn['addItem'],
   agentClient: AgentClientContract,
   config: Config,
-  markToolsAsSubmitted: (callIds: string[]) => void,
+  markToolsAsDisplayCleared: (callIds: string[]) => void,
 ): void {
   addItem(
     mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
@@ -134,25 +134,25 @@ function processPrimaryCompletion(
       `Error recording completed tool call information: ${error}`,
     );
   }
-  // Mark external (subagent) tools as submitted so the display state clears
-  // them. Continuation is owned by the AgenticLoop; this is display-only.
+  // Mark external (subagent) tools as cleared from display. Continuation is
+  // owned by the AgenticLoop; this is display-only.
   const { externalTools } = classifyCompletedTools(
     completedToolCallsFromScheduler,
   );
   if (externalTools.length > 0) {
-    markToolsAsSubmitted(externalTools.map((tc) => tc.request.callId));
+    markToolsAsDisplayCleared(externalTools.map((tc) => tc.request.callId));
   }
 }
 
 function processSecondaryCompletion(
   completedToolCallsFromScheduler: TrackedToolCall[],
-  markToolsAsSubmitted: (callIds: string[]) => void,
+  markToolsAsDisplayCleared: (callIds: string[]) => void,
   addItem: UseHistoryManagerReturn['addItem'],
 ): void {
   const callIdsToMark = completedToolCallsFromScheduler.map(
     (toolCall) => toolCall.request.callId,
   );
-  if (callIdsToMark.length > 0) markToolsAsSubmitted(callIdsToMark);
+  if (callIdsToMark.length > 0) markToolsAsDisplayCleared(callIdsToMark);
   addItem(
     mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
     Date.now(),
@@ -220,6 +220,7 @@ export function useCancellation(
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void,
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>,
   queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>,
+  cancelRunningAsyncTasks: () => void = () => {},
 ) {
   const cancelOngoingRequest = useCallback(() => {
     if (
@@ -232,6 +233,7 @@ export function useCancellation(
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
     if (abortControllerRef.current) cancelAllToolCalls();
+    cancelRunningAsyncTasks();
     if (pendingHistoryItemRef.current) flushPendingHistoryItem(Date.now());
     addItem({ type: MessageType.INFO, text: 'Request cancelled.' }, Date.now());
     setPendingHistoryItem(null);
@@ -243,6 +245,7 @@ export function useCancellation(
     turnCancelledRef,
     abortControllerRef,
     cancelAllToolCalls,
+    cancelRunningAsyncTasks,
     pendingHistoryItemRef,
     flushPendingHistoryItem,
     addItem,

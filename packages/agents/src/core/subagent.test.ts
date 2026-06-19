@@ -943,6 +943,103 @@ describe('subagent.ts', () => {
       });
     });
 
+    // Issue #2069: explicit empty/fail-closed toolConfig must be preserved through
+    // SubAgentScope.create so buildRuntimeFunctionDeclarations produces no normal
+    // declarations. Omitted toolConfig must yield runtime default declarations.
+    describe('create (toolConfig preservation — Issue #2069)', () => {
+      it('explicit empty toolConfig + outputConfig yields only self_emitvalue', async () => {
+        const { config } = await createMockConfig();
+        const runtimeToolsView: ToolRegistryView = {
+          listToolNames: vi.fn(() => ['read_file', 'write_file']),
+          getToolMetadata: vi.fn(() => ({
+            name: 'read_file',
+            description: 'Reads a file',
+            parameterSchema: { type: 'object', properties: {} },
+          })),
+        };
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolsView: runtimeToolsView,
+        });
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        vi.mocked(ChatSession).mockClear();
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
+        const outputConfig: OutputConfig = {
+          outputs: { result: 'The answer' },
+        };
+
+        const scope = await SubAgentScope.create(
+          'fail-closed-agent',
+          config,
+          { systemPrompt: 'Fail closed' },
+          defaultModelConfig,
+          defaultRunConfig,
+          { tools: [] },
+          outputConfig,
+          overrides,
+        );
+        await scope.runNonInteractive(new ContextState());
+
+        const generationConfig = getGenerationConfigFromMock();
+        const toolGroups = generationConfig.tools ?? [];
+        expect(toolGroups).toHaveLength(1);
+        const functionDeclarations = toolGroups[0]?.functionDeclarations ?? [];
+        // Only self_emitvalue should be present; no normal runtime tools.
+        expect(functionDeclarations).toHaveLength(1);
+        expect(functionDeclarations[0]?.name).toBe('self_emitvalue');
+        // Runtime tool metadata must NOT have been read for declarations.
+        expect(runtimeToolsView.getToolMetadata).not.toHaveBeenCalled();
+      });
+
+      it('omitted toolConfig + outputConfig yields runtime default tools plus self_emitvalue', async () => {
+        const { config } = await createMockConfig();
+        const runtimeToolsView: ToolRegistryView = {
+          listToolNames: vi.fn(() => ['read_file', 'write_file', 'task']),
+          getToolMetadata: vi.fn((name: string) => ({
+            name,
+            description: `Tool ${name}`,
+            parameterSchema: { type: 'object', properties: {} },
+          })),
+        };
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolsView: runtimeToolsView,
+        });
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        vi.mocked(ChatSession).mockClear();
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
+        const outputConfig: OutputConfig = {
+          outputs: { result: 'The answer' },
+        };
+
+        const scope = await SubAgentScope.create(
+          'default-tools-agent',
+          config,
+          { systemPrompt: 'Default tools' },
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          outputConfig,
+          overrides,
+        );
+        await scope.runNonInteractive(new ContextState());
+
+        const generationConfig = getGenerationConfigFromMock();
+        const toolGroups = generationConfig.tools ?? [];
+        expect(toolGroups).toHaveLength(1);
+        const functionDeclarations = toolGroups[0]?.functionDeclarations ?? [];
+        const names = functionDeclarations.map((d) => d?.name);
+        // Runtime default tools (minus excluded) plus self_emitvalue.
+        expect(names).toContain('read_file');
+        expect(names).toContain('write_file');
+        expect(names).toContain('self_emitvalue');
+        // task must be excluded from runtime defaults.
+        expect(names).not.toContain('task');
+      });
+    });
+
     describe('runNonInteractive - Initialization and Prompting', () => {
       it('should correctly template the system prompt and initialize ChatSession', async () => {
         const { config } = await createMockConfig();

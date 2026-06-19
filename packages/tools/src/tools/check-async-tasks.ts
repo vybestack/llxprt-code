@@ -130,18 +130,14 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
   }
 
   private executePeek(taskId: string): ToolResult {
-    const task = this.taskService.getTask?.(taskId);
+    const task = this.taskService.getTask(taskId);
 
     if (task) {
       return this.formatTaskDetails(task);
     }
 
-    const { task: prefixTask, candidates } = this.taskService.getTaskByPrefix?.(
-      taskId,
-    ) ?? {
-      task: undefined,
-      candidates: [],
-    };
+    const { task: prefixTask, candidates } =
+      this.taskService.getTaskByPrefix(taskId);
 
     if (prefixTask) {
       return this.formatTaskDetails(prefixTask);
@@ -188,7 +184,7 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
       details.completedAt = new Date(task.completedAt).toISOString();
     }
 
-    const output = task.output as unknown;
+    const output = task.output;
     if (output !== undefined && output !== '') {
       details.output = task.output;
     }
@@ -243,7 +239,9 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
       `Duration: ${this.formatDuration(task.launchedAt, task.completedAt)}`,
     );
 
-    const output = task.output as { emitted_vars?: Record<string, unknown> };
+    const output = task.output as
+      | { emitted_vars?: Record<string, unknown> }
+      | undefined;
     if (output?.emitted_vars && Object.keys(output.emitted_vars).length > 0) {
       lines.push('Emitted variables:');
       for (const [key, value] of Object.entries(output.emitted_vars)) {
