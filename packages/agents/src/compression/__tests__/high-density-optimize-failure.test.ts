@@ -74,9 +74,9 @@ describe('Failure modes @plan PLAN-20260211-HIGHDENSITY.P10', () => {
 
   /**
    * @plan PLAN-20260211-HIGHDENSITY.P10
-   * @requirement REQ-HD-013.3
+   * @requirement REQ-HD-007.1
    */
-  it('individual pruning pass failure does not block other passes', () => {
+  it('nonmatching read-write and dedupe passes do not block recency pruning', () => {
     const strategy = createStrategy();
     const history: IContent[] = [];
 

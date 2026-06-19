@@ -29,6 +29,30 @@ import {
   getInternals,
 } from './chatSession-density-helpers.js';
 
+type RawHistoryEntry = ReturnType<HistoryService['getRawHistory']>[number];
+
+function historySignatures(history: RawHistoryEntry[]): string[] {
+  return history.map((entry) => JSON.stringify(entry));
+}
+
+function isSignatureMultisetSubset(
+  candidate: string[],
+  original: string[],
+): boolean {
+  const remaining = new Map<string, number>();
+  for (const signature of original) {
+    remaining.set(signature, (remaining.get(signature) ?? 0) + 1);
+  }
+  for (const signature of candidate) {
+    const count = remaining.get(signature) ?? 0;
+    if (count === 0) {
+      return false;
+    }
+    remaining.set(signature, count - 1);
+  }
+  return true;
+}
+
 describe('Density Optimization Property-Based Tests (P19)', () => {
   /**
    * Property: For any history state and strategy, after ensureDensityOptimized()
@@ -173,8 +197,9 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
               hs.add(makeAiText(`Plain response ${i}`));
             }
 
-            const lengthBefore = hs.getRawHistory().length;
-            const speakersBefore = hs.getRawHistory().map((h) => h.speaker);
+            const beforeHistory = hs.getRawHistory();
+            const lengthBefore = beforeHistory.length;
+            const signaturesBefore = historySignatures(beforeHistory);
 
             const ctx = buildRuntimeContext(hs, {
               compressionStrategy: 'high-density',
@@ -186,11 +211,12 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
 
             await internals.ensureDensityOptimized();
 
-            const speakersAfter = hs.getRawHistory().map((h) => h.speaker);
+            const signaturesAfter = historySignatures(hs.getRawHistory());
 
             return (
               hs.getRawHistory().length === lengthBefore &&
-              JSON.stringify(speakersAfter) === JSON.stringify(speakersBefore)
+              JSON.stringify(signaturesAfter) ===
+                JSON.stringify(signaturesBefore)
             );
           },
         ),
@@ -308,7 +334,7 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
           }
           hs.add(makeAiText('End'));
 
-          const speakersBefore = hs.getRawHistory().map((h) => h.speaker);
+          const signaturesBefore = historySignatures(hs.getRawHistory());
 
           const ctx = buildRuntimeContext(hs, {
             compressionStrategy: 'high-density',
@@ -320,13 +346,13 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
 
           await internals.ensureDensityOptimized();
 
-          const speakersAfter = hs.getRawHistory().map((h) => h.speaker);
+          const signaturesAfter = historySignatures(hs.getRawHistory());
 
-          // Every speaker in the after set must appear in the before set
-          // and the after length must be ≤ before length
+          // Every remaining entry must match a complete original entry and the
+          // after length must be ≤ before length.
           return (
-            speakersAfter.length <= speakersBefore.length &&
-            speakersAfter.every((s) => speakersBefore.includes(s))
+            signaturesAfter.length <= signaturesBefore.length &&
+            isSignatureMultisetSubset(signaturesAfter, signaturesBefore)
           );
         }),
         { numRuns: 5 },

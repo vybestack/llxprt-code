@@ -87,8 +87,10 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     );
     vi.spyOn(historyService, 'getStatistics').mockReturnValue({
       totalMessages: 10,
-      humanMessages: 5,
+      userMessages: 5,
       aiMessages: 5,
+      toolCalls: 0,
+      toolResponses: 0,
     });
     vi.spyOn(historyService, 'startCompression').mockImplementation(() => {});
     vi.spyOn(historyService, 'endCompression').mockImplementation(() => {});
@@ -125,7 +127,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     const mockContentGenerator = {
       generateContent: vi.fn(),
       generateContentStream: vi.fn(),
-      countTokens: vi.fn().mockReturnValue(100),
+      countTokens: vi.fn().mockResolvedValue({ totalTokens: 100 }),
       embedContent: vi.fn(),
     };
 
@@ -200,82 +202,85 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
    */
   it('bypasses cooldown when enforcing hard context window limit', async () => {
     vi.useFakeTimers();
-    // Set totalTokens high enough that projected > marginAdjustedLimit
-    // marginAdjustedLimit = 200000 - 1000 = 199000
-    // projected = totalTokens + pendingTokens + completionBudget
-    // With totalTokens=100000, pendingTokens=50000, completionBudget=65536 => 215536 > 199000
-    const chat = makeChatForEnforceContextWindow({ totalTokens: 100_000 });
+    try {
+      // Set totalTokens high enough that projected > marginAdjustedLimit
+      // marginAdjustedLimit = 200000 - 1000 = 199000
+      // projected = totalTokens + pendingTokens + completionBudget
+      // With totalTokens=100000, pendingTokens=50000, completionBudget=65536 => 215536 > 199000
+      const chat = makeChatForEnforceContextWindow({ totalTokens: 100_000 });
 
-    // Put the chat into cooldown by forcing 3 compression failures
-    let primaryAttempts = 0;
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      () => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          primaryAttempts++;
-          throw makeHttpError(500);
-        }),
-      }),
-    );
-
-    // Trigger cooldown: 3 failures via performCompression
-    await chat.performCompression('test-prompt'); // failure 1
-    await chat.performCompression('test-prompt'); // failure 2
-    await chat.performCompression('test-prompt'); // failure 3 → cooldown
-
-    const attemptsBeforeCooldown = primaryAttempts;
-
-    // 4th performCompression should be skipped (cooldown active)
-    await chat.performCompression('test-prompt');
-    expect(primaryAttempts).toBe(attemptsBeforeCooldown);
-
-    // Now make compression succeed so enforceContextWindow can get past it
-    const succeedAfter = primaryAttempts;
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      () => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          primaryAttempts++;
-          if (primaryAttempts <= succeedAfter) {
+      // Put the chat into cooldown by forcing 3 compression failures
+      let primaryAttempts = 0;
+      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+        () => ({
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            primaryAttempts++;
             throw makeHttpError(500);
-          }
-          return {
-            newHistory: [],
-            metadata: {
-              originalMessageCount: 10,
-              compressedMessageCount: 0,
-              strategyUsed: 'middle-out' as const,
-              llmCallMade: true,
-            },
-          };
+          }),
         }),
-      }),
-    );
+      );
 
-    // Mock getTotalTokens to return a low value after a few calls
-    // (simulating compression having succeeded)
-    let tokenCallCount = 0;
-    vi.spyOn(chat['historyService'], 'getTotalTokens').mockImplementation(
-      () => {
-        tokenCallCount++;
-        // After the initial checks, return low tokens
-        if (tokenCallCount > 3) {
-          return 10_000; // Well under limit
-        }
-        return 100_000;
-      },
-    );
+      // Trigger cooldown: 3 failures via performCompression
+      await chat.performCompression('test-prompt'); // failure 1
+      await chat.performCompression('test-prompt'); // failure 2
+      await chat.performCompression('test-prompt'); // failure 3 → cooldown
 
-    // enforceContextWindow should bypass cooldown and attempt compression
-    await chat['enforceContextWindow'](50_000, 'test-prompt');
+      const attemptsBeforeCooldown = primaryAttempts;
 
-    // Compression should have been attempted despite cooldown
-    expect(primaryAttempts).toBeGreaterThan(attemptsBeforeCooldown);
-    vi.useRealTimers();
+      // 4th performCompression should be skipped (cooldown active)
+      await chat.performCompression('test-prompt');
+      expect(primaryAttempts).toBe(attemptsBeforeCooldown);
+
+      // Now make compression succeed so enforceContextWindow can get past it
+      const succeedAfter = primaryAttempts;
+      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+        () => ({
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            primaryAttempts++;
+            if (primaryAttempts <= succeedAfter) {
+              throw makeHttpError(500);
+            }
+            return {
+              newHistory: [],
+              metadata: {
+                originalMessageCount: 10,
+                compressedMessageCount: 0,
+                strategyUsed: 'middle-out' as const,
+                llmCallMade: true,
+              },
+            };
+          }),
+        }),
+      );
+
+      // Mock getTotalTokens to return a low value after a few calls
+      // (simulating compression having succeeded)
+      let tokenCallCount = 0;
+      vi.spyOn(chat['historyService'], 'getTotalTokens').mockImplementation(
+        () => {
+          tokenCallCount++;
+          // After the initial checks, return low tokens
+          if (tokenCallCount > 3) {
+            return 10_000; // Well under limit
+          }
+          return 100_000;
+        },
+      );
+
+      // enforceContextWindow should bypass cooldown and attempt compression
+      await chat['enforceContextWindow'](50_000, 'test-prompt');
+
+      // Compression should have been attempted despite cooldown
+      expect(primaryAttempts).toBeGreaterThan(attemptsBeforeCooldown);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   /**

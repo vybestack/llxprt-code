@@ -132,5 +132,8 @@ describe('deduplicateFileInclusions @plan PLAN-20260211-HIGHDENSITY.P10', () => 
     const result = strategy.optimize(history, config);
 
     expect(result.metadata.fileDeduplicationsPruned).toBe(0);
+    expect(result.removals).not.toContain(0);
+    expect(result.replacements.has(0)).toBe(false);
+    expect(history[0]).toStrictEqual(brokenInclusion);
   });
 });

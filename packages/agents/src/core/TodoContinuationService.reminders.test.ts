@@ -272,12 +272,18 @@ describe('TodoContinuationService', () => {
 
   describe('buildFollowUpReminder', () => {
     it('returns update reminder text when active todos exist', () => {
-      service.lastTodoSnapshot = [pendingTodo];
+      service.lastTodoSnapshot = [];
       const result = service.buildFollowUpReminder(
         [pendingTodo],
         [pendingTodo],
       );
-      expect(result).toBeDefined();
+      expect(result).toBe('---\nSystem Note: Update the active todo.\n---');
+      expect(
+        vi.mocked(reminderService.getUpdateActiveTodoReminder),
+      ).toHaveBeenCalledWith(pendingTodo);
+      expect(
+        vi.mocked(reminderService.getEscalatedActiveTodoReminder),
+      ).not.toHaveBeenCalled();
     });
 
     it('returns escalated reminder when snapshot unchanged', () => {

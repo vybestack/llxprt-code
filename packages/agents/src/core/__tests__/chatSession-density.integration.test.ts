@@ -72,6 +72,10 @@ describe('Density Optimization Integration (P19)', () => {
       );
       const internals = getInternals(chat);
       internals.densityDirty = true;
+      const compressionSpy = vi.spyOn(
+        internals.compressionHandler,
+        'performCompression',
+      );
 
       // Ensure tokens are settled
       await historyService.waitForTokenUpdates();
@@ -88,6 +92,7 @@ describe('Density Optimization Integration (P19)', () => {
           (b) => b.type === 'text' && b.text.includes('state_snapshot'),
         ),
       );
+      expect(compressionSpy).not.toHaveBeenCalled();
       expect(hasSummary).toBe(false);
     });
 
@@ -235,6 +240,10 @@ describe('Density Optimization Integration (P19)', () => {
       );
       const internals = getInternals(chat);
       internals.densityDirty = true;
+      const compressionSpy = vi.spyOn(
+        internals.compressionHandler,
+        'performCompression',
+      );
 
       // Mock getTotalTokens:
       // - First call (initial projected check): over the margin-adjusted limit
@@ -259,6 +268,7 @@ describe('Density Optimization Integration (P19)', () => {
       // Density optimization ran, applied changes, and the flag was cleared
       expect(densityOptRan).toBe(true);
       expect(internals.densityDirty).toBe(false);
+      expect(compressionSpy).not.toHaveBeenCalled();
     });
   });
 

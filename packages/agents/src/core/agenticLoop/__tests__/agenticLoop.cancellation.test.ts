@@ -21,6 +21,7 @@ import {
   createAskPolicyEngine,
   collectEvents,
   isToolsComplete,
+  isToolOutput,
   toolCallRequestEvent,
   contentEvent,
   finishedEvent,
@@ -191,10 +192,20 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       }
     })();
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
-      setTimeout(() => reject(new Error('loop did not terminate')), 5000);
+      timeoutId = setTimeout(
+        () => reject(new Error('loop did not terminate')),
+        5000,
+      );
     });
-    await expect(Promise.race([run, timeout])).resolves.toBeUndefined();
+    try {
+      await expect(Promise.race([run, timeout])).resolves.toBeUndefined();
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+    }
     expect(sawTool).toBe(true);
 
     const fresh = await config.getOrCreateScheduler(
@@ -321,7 +332,10 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
   });
 
   it('tool_output emitted just before completion is observed by the consumer', async () => {
-    const tool = new MockTool({ name: 'output_tool' });
+    const tool = new MockTool({
+      name: 'output_tool',
+      canUpdateOutput: true,
+    });
     tool.executeFn.mockImplementation(
       async (_params, _signal, updateOutput?: (chunk: string) => void) => {
         updateOutput?.('streaming-chunk');
@@ -360,6 +374,10 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
     );
 
     expect(tool.executeFn).toHaveBeenCalledTimes(1);
+    const outputEvents = events.filter(isToolOutput);
+    expect(outputEvents).toStrictEqual([
+      { kind: 'tool_output', callId: 'call-out', chunk: 'streaming-chunk' },
+    ]);
     const completedEvents = events.filter(isToolsComplete);
     expect(completedEvents).toHaveLength(1);
     expect(completedEvents[0].completed[0].status).toBe('success');

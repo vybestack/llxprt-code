@@ -170,7 +170,7 @@ export function buildMockContentGenerator(): ContentGenerator {
   return {
     generateContent: vi.fn(),
     generateContentStream: vi.fn(),
-    countTokens: vi.fn().mockReturnValue(100),
+    countTokens: vi.fn().mockResolvedValue({ totalTokens: 100 }),
     embedContent: vi.fn(),
   } as unknown as ContentGenerator;
 }

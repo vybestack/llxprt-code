@@ -275,17 +275,24 @@ export function createTestConfig(options: {
       callbacks: Parameters<Config['getOrCreateScheduler']>[1],
       schedulerOptions: Parameters<Config['getOrCreateScheduler']>[2],
       deps: Parameters<Config['getOrCreateScheduler']>[3],
-    ) =>
-      getOrCreateScheduler(
+    ) => {
+      const schedulerMessageBus = deps?.messageBus;
+      if (!schedulerMessageBus) {
+        throw new Error(
+          'Test config requires an explicit scheduler MessageBus dependency.',
+        );
+      }
+      return getOrCreateScheduler(
         testBoundaryConfig(fixture),
         sessionId,
         callbacks,
         schedulerOptions,
         {
-          messageBus: deps?.messageBus ?? messageBus,
-          toolRegistry: deps?.toolRegistry ?? toolRegistry,
+          messageBus: schedulerMessageBus,
+          toolRegistry: deps.toolRegistry ?? toolRegistry,
         },
-      ),
+      );
+    },
     disposeScheduler: (sessionId: string) => disposeScheduler(sessionId),
   };
   return testBoundaryConfig(fixture);
@@ -359,6 +366,12 @@ export function isToolsComplete(
   e: AgenticLoopEvent,
 ): e is Extract<AgenticLoopEvent, { kind: 'tools_complete' }> {
   return e.kind === 'tools_complete';
+}
+
+export function isToolOutput(
+  e: AgenticLoopEvent,
+): e is Extract<AgenticLoopEvent, { kind: 'tool_output' }> {
+  return e.kind === 'tool_output';
 }
 
 export function isStream(
