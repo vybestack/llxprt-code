@@ -1050,9 +1050,6 @@ export default tseslint.config(
         console: 'readonly',
       },
     },
-    rules: {
-      'no-restricted-syntax': 'off',
-    },
   },
   // ============================================================================
   // Issue #1577: text-buffer.ts decomposition - Architecture Enforcement

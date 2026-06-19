@@ -46,11 +46,13 @@ import {
   buildProviderInfos,
   buildToolInfos,
   deriveDisplayCallbacks,
-  wrapApprovalHandler,
   recordOwnership,
   AgentBootstrapError,
   runWrapSchedulerFactory,
+  runWrapApprovalHandler,
+  makeConfirmationRequest,
   toPartListUnion,
+  ToolConfirmationOutcome,
 } from './helpers/bootstrapProbe.js';
 
 async function* fromEvents(
@@ -427,37 +429,38 @@ describe('Agent bootstrap helpers @plan:PLAN-20260617-COREAPI.P15 @requirement:R
 
   describe('wrapApprovalHandler @requirement:REQ-006', () => {
     it('maps request fields onto the simple confirmation and returns {outcome} @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-006', async () => {
-      const seen: Array<{
-        confirmationId: string;
-        toolCallId: string;
-        name: string;
-        details: unknown;
-      }> = [];
-      const wrapped = wrapApprovalHandler((c) => {
-        seen.push(c);
-        return 'proceed_once' as never;
+      const details = {
+        type: 'info',
+        title: 'Confirm read',
+        prompt: 'Allow reading the file?',
+      } as const;
+      const { observed, result } = await runWrapApprovalHandler({
+        request: makeConfirmationRequest({
+          correlationId: 'corr-1',
+          toolCall: { id: 'tc-1', name: 'read_file' },
+          details,
+        }),
+        outcome: ToolConfirmationOutcome.ProceedOnce,
       });
-      const result = await wrapped({
-        correlationId: 'corr-1',
-        toolCall: { id: 'tc-1', name: 'read_file' },
-        confirmationDetails: { foo: 'bar' },
+      expect(observed.confirmationId).toBe('corr-1');
+      expect(observed.toolCallId).toBe('tc-1');
+      expect(observed.name).toBe('read_file');
+      expect(observed.details).toStrictEqual(details);
+      expect(result).toStrictEqual({
+        outcome: ToolConfirmationOutcome.ProceedOnce,
       });
-      expect(seen[0].confirmationId).toBe('corr-1');
-      expect(seen[0].toolCallId).toBe('tc-1');
-      expect(seen[0].name).toBe('read_file');
-      expect(seen[0].details).toStrictEqual({ foo: 'bar' });
-      expect(result).toStrictEqual({ outcome: 'proceed_once' });
     });
 
     it("applies '' fallbacks when toolCall id and name are absent @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-006", async () => {
-      const seen: Array<{ toolCallId: string; name: string }> = [];
-      const wrapped = wrapApprovalHandler((c) => {
-        seen.push(c);
-        return 'cancel' as never;
+      const { observed } = await runWrapApprovalHandler({
+        request: makeConfirmationRequest({
+          correlationId: 'corr-2',
+          toolCall: {},
+        }),
+        outcome: ToolConfirmationOutcome.Cancel,
       });
-      await wrapped({ correlationId: 'corr-2', toolCall: {} });
-      expect(seen[0].toolCallId).toBe('');
-      expect(seen[0].name).toBe('');
+      expect(observed.toolCallId).toBe('');
+      expect(observed.name).toBe('');
     });
   });
 

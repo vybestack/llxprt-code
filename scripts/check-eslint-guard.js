@@ -40,7 +40,10 @@ function parseArgs(argv) {
 }
 
 function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8' }).trim();
+  return execFileSync('git', args, {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  }).trim();
 }
 
 function resolveBase(base, head) {

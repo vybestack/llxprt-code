@@ -33,7 +33,10 @@ import type {
   EditorCallbacks,
 } from './config-types.js';
 import type { AgentInput, AgentResult } from './agent.js';
-import type { DisplayCallbacks } from '../core/agenticLoop/types.js';
+import type {
+  ApprovalHandler,
+  DisplayCallbacks,
+} from '../core/agenticLoop/types.js';
 import type { AgentEvent, AgentToolCall, DoneReason } from './event-types.js';
 import type { ProviderInfo, ToolInfo, SessionStats } from './agent.js';
 
@@ -144,19 +147,14 @@ export function wrapApprovalHandler(
     readonly name: string;
     readonly details: unknown;
   }) => Promise<ToolConfirmationOutcome> | ToolConfirmationOutcome,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AgenticLoop ApprovalHandler is a complex generic; the runtime wrapper is structurally correct.
-): any {
-  return async (request: {
-    readonly correlationId: string;
-    readonly toolCall: { readonly id?: string; readonly name?: string };
-    readonly confirmationDetails?: unknown;
-  }) => {
+): ApprovalHandler {
+  return async (request) => {
     const callId = request.toolCall.id ?? '';
     const outcome = await handler({
       confirmationId: request.correlationId,
       toolCallId: callId,
       name: request.toolCall.name ?? '',
-      details: request.confirmationDetails,
+      details: request.details,
     });
     return { outcome };
   };

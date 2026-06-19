@@ -34,6 +34,14 @@ import type {
   AgentSchedulerFactory,
   AgentSchedulerHandle,
 } from '../../config-types.js';
+import {
+  MessageBusType,
+  type ToolConfirmationRequest,
+  type SerializableConfirmationDetails,
+} from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+
+export { ToolConfirmationOutcome };
 
 export {
   resolveAuthType,
@@ -113,5 +121,56 @@ export function runWrapSchedulerFactory(opts: {
     interactiveModeForwarded,
     observedInteractiveMode,
     retainedHandles: createdHandles,
+  };
+}
+
+/** Simple confirmation shape the production wrapApprovalHandler maps onto. */
+export interface ObservedConfirmation {
+  readonly confirmationId: string;
+  readonly toolCallId: string;
+  readonly name: string;
+  readonly details: unknown;
+}
+
+/** Observable outcome of driving the production wrapApprovalHandler. */
+export interface WrapApprovalProbeResult {
+  readonly observed: ObservedConfirmation;
+  readonly result: { readonly outcome: ToolConfirmationOutcome };
+}
+
+/**
+ * Drives the genuine wrapApprovalHandler with a real {@link
+ * ToolConfirmationRequest}, capturing the simple confirmation object the inner
+ * handler received and the {outcome} result it returned. The request is fully
+ * typed against the production ApprovalHandler contract (no `any`); helpers/ is
+ * exempt from the boundary deep-import rule so this is the genuine seam.
+ */
+export async function runWrapApprovalHandler(input: {
+  readonly request: ToolConfirmationRequest;
+  readonly outcome: ToolConfirmationOutcome;
+}): Promise<WrapApprovalProbeResult> {
+  let observed: ObservedConfirmation | undefined;
+  const wrapped = wrapApprovalHandler((confirmation) => {
+    observed = confirmation;
+    return input.outcome;
+  });
+  const result = await wrapped(input.request);
+  if (observed === undefined) {
+    throw new Error('wrapApprovalHandler did not invoke the inner handler');
+  }
+  return { observed, result };
+}
+
+/** Builds a real ToolConfirmationRequest for the approval-handler probe. */
+export function makeConfirmationRequest(fields: {
+  readonly correlationId: string;
+  readonly toolCall: { readonly id?: string; readonly name?: string };
+  readonly details?: SerializableConfirmationDetails;
+}): ToolConfirmationRequest {
+  return {
+    type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
+    correlationId: fields.correlationId,
+    toolCall: fields.toolCall,
+    ...(fields.details !== undefined ? { details: fields.details } : {}),
   };
 }

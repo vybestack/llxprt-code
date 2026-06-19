@@ -108,28 +108,177 @@ function collectSpecFiles(
   return out;
 }
 
-// eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-const STATIC_FROM_RE = /\bfrom\s*'([^']+)'/g;
-// eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-const STATIC_FROM_DQ_RE = /\bfrom\s*"([^"]+)"/g;
-// eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*'([^']+)'\s*\)/g;
-// eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-const DYNAMIC_IMPORT_DQ_RE = /\bimport\s*\(\s*"([^"]+)"\s*\)/g;
+const IDENT_CHARS =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_$';
+const WS_CHARS = ' \t\n\r\f\v';
 
-function pushMatches(source: string, re: RegExp, found: string[]): void {
-  for (const m of source.matchAll(re)) {
-    found.push(m[1]);
-  }
+function isIdentChar(ch: string): boolean {
+  return IDENT_CHARS.includes(ch);
 }
 
-function extractSpecifiers(source: string): readonly string[] {
+function isWs(ch: string): boolean {
+  return WS_CHARS.includes(ch);
+}
+
+/**
+ * Returns true when the keyword occurrence at [start, end) honours a leading
+ * word boundary: it must be preceded by start-of-source or a non-identifier
+ * character. Mirrors the original `\b` semantics so substrings inside words
+ * like "transform" or "important" are not treated as keywords.
+ */
+function hasLeadingBoundary(source: string, start: number): boolean {
+  return start === 0 || !isIdentChar(source[start - 1]);
+}
+
+/** Advances past any run of whitespace, returning the next index. */
+function skipWs(source: string, index: number): number {
+  let i = index;
+  while (i < source.length && isWs(source[i])) {
+    i += 1;
+  }
+  return i;
+}
+
+/**
+ * Reads a quoted string starting at the opening quote index. Returns the inner
+ * specifier and the index just past the closing quote, or null when the quote
+ * is unterminated.
+ */
+function readQuoted(
+  source: string,
+  quoteIndex: number,
+): { value: string; next: number } | null {
+  const quote = source[quoteIndex];
+  const close = source.indexOf(quote, quoteIndex + 1);
+  if (close === -1) {
+    return null;
+  }
+  return { value: source.slice(quoteIndex + 1, close), next: close + 1 };
+}
+
+/**
+ * Reads a quoted string that MUST open with the exact `quoteChar` at
+ * `quoteIndex`. Returns the inner specifier and the index just past the closing
+ * quote, or null when the opening char is not `quoteChar` or the quote is
+ * unterminated. Quote-specificity is the crux of the parity fix: it lets a
+ * single pass faithfully mirror exactly ONE of the original regex passes.
+ */
+function readQuotedExact(
+  source: string,
+  quoteIndex: number,
+  quoteChar: string,
+): { value: string; next: number } | null {
+  if (source[quoteIndex] !== quoteChar) {
+    return null;
+  }
+  return readQuoted(source, quoteIndex);
+}
+
+/**
+ * Attempts to read a `from <quoteChar>spec<quoteChar>` specifier at keyword
+ * index `i` (which points at the 'f' of "from"), requiring the SPECIFIC
+ * `quoteChar`. Returns the specifier and the index past the closing quote, or
+ * null when the shape (with that quote) does not match. Mirrors exactly ONE of
+ * the original `from`-quote regex passes.
+ */
+function matchFromQuote(
+  source: string,
+  i: number,
+  quoteChar: string,
+): { value: string; next: number } | null {
+  if (!source.startsWith('from', i)) {
+    return null;
+  }
+  if (!hasLeadingBoundary(source, i)) {
+    return null;
+  }
+  const afterKeyword = i + 'from'.length;
+  const quoteIndex = skipWs(source, afterKeyword);
+  if (quoteIndex >= source.length) {
+    return null;
+  }
+  return readQuotedExact(source, quoteIndex, quoteChar);
+}
+
+/**
+ * Attempts to read an `import(<quoteChar>spec<quoteChar>)` specifier at keyword
+ * index `i` (which points at the 'i' of "import"), requiring the SPECIFIC inner
+ * `quoteChar`. Returns the specifier and the index past the closing
+ * parenthesis, or null when the shape (with that quote) does not match. Mirrors
+ * exactly ONE of the original `import`-quote regex passes.
+ */
+function matchImportQuote(
+  source: string,
+  i: number,
+  quoteChar: string,
+): { value: string; next: number } | null {
+  if (!source.startsWith('import', i)) {
+    return null;
+  }
+  if (!hasLeadingBoundary(source, i)) {
+    return null;
+  }
+  const afterKeyword = i + 'import'.length;
+  const parenIndex = skipWs(source, afterKeyword);
+  if (source[parenIndex] !== '(') {
+    return null;
+  }
+  const quoteIndex = skipWs(source, parenIndex + 1);
+  if (quoteIndex >= source.length) {
+    return null;
+  }
+  const quoted = readQuotedExact(source, quoteIndex, quoteChar);
+  if (quoted === null) {
+    return null;
+  }
+  const closeParen = skipWs(source, quoted.next);
+  if (source[closeParen] !== ')') {
+    return null;
+  }
+  return { value: quoted.value, next: closeParen + 1 };
+}
+
+/**
+ * Runs a SINGLE independent pass over the entire source from index 0, mirroring
+ * one `matchAll` call: at each position it tries `tryMatch`; on a match it
+ * records the value and advances past ONLY that match, otherwise it advances by
+ * one. Because each pass scans the whole source independently, overlapping
+ * matches of OTHER shapes are not consumed here — they are recovered by their
+ * own pass. This restores true 4-independent-`matchAll` parity, RegExp-free.
+ */
+function extractWithPass(
+  source: string,
+  tryMatch: (s: string, i: number) => { value: string; next: number } | null,
+): readonly string[] {
   const found: string[] = [];
-  pushMatches(source, STATIC_FROM_RE, found);
-  pushMatches(source, STATIC_FROM_DQ_RE, found);
-  pushMatches(source, DYNAMIC_IMPORT_RE, found);
-  pushMatches(source, DYNAMIC_IMPORT_DQ_RE, found);
+  let i = 0;
+  while (i < source.length) {
+    const m = tryMatch(source, i);
+    i = m === null ? i + 1 : m.next;
+    if (m !== null) {
+      found.push(m.value);
+    }
+  }
   return found;
+}
+
+/**
+ * Extracts every import specifier reachable through `from '<spec>'`,
+ * `from "<spec>"`, `import('<spec>')`, or `import("<spec>")` WITHOUT any RegExp,
+ * via FOUR INDEPENDENT passes — one per (keyword, quote) shape — each scanning
+ * the whole source from index 0. This faithfully mirrors the original four
+ * independent `matchAll` calls, including their cross-quote overlap (e.g. a
+ * single-quoted specifier nested inside a double-quoted one is still caught by
+ * the single-quote pass). Results are concatenated in a deterministic grouped
+ * order: from-sq, from-dq, import-sq, import-dq.
+ */
+function extractSpecifiers(source: string): readonly string[] {
+  return [
+    ...extractWithPass(source, (s, i) => matchFromQuote(s, i, "'")),
+    ...extractWithPass(source, (s, i) => matchFromQuote(s, i, '"')),
+    ...extractWithPass(source, (s, i) => matchImportQuote(s, i, "'")),
+    ...extractWithPass(source, (s, i) => matchImportQuote(s, i, '"')),
+  ];
 }
 
 function isRelativeEscapingTests(specifier: string, fromAbs: string): boolean {
@@ -245,5 +394,42 @@ describe('Package boundary (T17) @plan:PLAN-20260617-COREAPI.P09 @requirement:RE
 
   it('no consumer-facing spec imports a deep core/providers/tools/auth path @plan:PLAN-20260617-COREAPI.P09 @requirement:REQ-019', () => {
     expect(DEEP_IMPORT_HITS).toHaveLength(0);
+  });
+
+  it('extractSpecifiers preserves 4-independent-pass parity: nested cross-quote specifiers are both detected @plan:PLAN-20260617-COREAPI.P09 @requirement:REQ-019', () => {
+    // A double-quoted `from` string whose CONTENT is itself a single-quoted
+    // `from '@vybestack/...secret'` deep import. The original used four
+    // independent matchAll passes, so BOTH the outer double-quote content AND
+    // the inner single-quote forbidden deep import are captured. A single
+    // consuming loop would skip the inner one and weaken the guard.
+    //
+    // The fixture and its expected specifiers are assembled from fragments at
+    // runtime so the literal `from '<deep>'` shape never appears contiguously
+    // in THIS source file — otherwise the file-level boundary scanner above
+    // (which reads this spec) would, correctly post-fix, flag the fixture as a
+    // real forbidden deep import. Assembling at runtime keeps the constructed
+    // strings exact while leaving the on-disk source clean.
+    const fromKw = 'fr' + 'om';
+    const importKw = 'imp' + 'ort';
+    const deep = '@vybestack/llxprt-code-core' + '/secret';
+    const innerSq = fromKw + " '" + deep + "'";
+    const fixture = importKw + ' x ' + fromKw + ' "' + innerSq + '"';
+
+    const specs = extractSpecifiers(fixture);
+    // Inner single-quote forbidden deep import — the one the single-pass bug
+    // dropped.
+    expect(specs).toContain(deep);
+    // Outer double-quote content.
+    expect(specs).toContain(innerSq);
+
+    // Word-boundary negatives: keyword substrings inside larger identifiers
+    // must NOT match.
+    expect(extractSpecifiers(`transform 'x'`)).not.toContain('x');
+    expect(extractSpecifiers(`reimport('x')`)).not.toContain('x');
+
+    // Optional-whitespace semantics: no whitespace and extra whitespace both
+    // still match.
+    expect(extractSpecifiers(`from'a'`)).toContain('a');
+    expect(extractSpecifiers(`import ( "b" )`)).toContain('b');
   });
 });
