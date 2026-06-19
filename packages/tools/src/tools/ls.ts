@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import fs from 'fs';
 import path from 'path';
 import {
@@ -20,6 +18,7 @@ import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 
 /**
  * Parameters for the LS tool
@@ -89,8 +88,10 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
   }
 
   private getDirPath(): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback chain for optional params
-    return this.params.dir_path || this.params.path || '';
+    return stringOrDefault(
+      this.params.dir_path,
+      stringOrDefault(this.params.path, ''),
+    );
   }
 
   /**
@@ -104,12 +105,8 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
       return false;
     }
     for (const pattern of patterns) {
-      // Convert glob pattern to RegExp
-      const regexPattern = pattern
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-        .replace(/\*/g, '.*')
-        .replace(/\?/g, '.');
+      // Convert glob pattern to RegExp, escaping special characters individually
+      const regexPattern = globToRegexPattern(pattern);
       const regex = new RegExp(`^${regexPattern}$`);
       if (regex.test(filename)) {
         return true;
@@ -199,45 +196,69 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
     const entries: FileEntry[] = [];
     let ignoredCount = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const file of files) {
-      if (this.shouldIgnore(file, this.params.ignore)) {
-        continue;
+      const result = this.processFile(
+        file,
+        dirPath,
+        fileFilteringOptions,
+        fileDiscovery,
+      );
+      if (result.entry) {
+        entries.push(result.entry);
       }
-
-      const fullPath = path.join(dirPath, file);
-      const relativePath = path.relative(this.host.getTargetDir(), fullPath);
-
-      if (
-        fileFilteringOptions.respectGitIgnore &&
-        fileDiscovery.shouldGitIgnoreFile(relativePath)
-      ) {
+      if (result.ignored) {
         ignoredCount++;
-        continue;
       }
-      if (
-        fileFilteringOptions.respectLlxprtIgnore &&
-        fileDiscovery.shouldLlxprtIgnoreFile(relativePath)
-      ) {
-        ignoredCount++;
-        continue;
-      }
+    }
+    return { entries, ignoredCount };
+  }
 
-      try {
-        const stats = fs.statSync(fullPath);
-        const isDir = stats.isDirectory();
-        entries.push({
+  private processFile(
+    file: string,
+    dirPath: string,
+    fileFilteringOptions: {
+      respectGitIgnore: boolean;
+      respectLlxprtIgnore: boolean;
+    },
+    fileDiscovery: ReturnType<typeof this.host.getFileService>,
+  ): { entry: FileEntry | null; ignored: boolean } {
+    if (this.shouldIgnore(file, this.params.ignore)) {
+      return { entry: null, ignored: false };
+    }
+
+    const fullPath = path.join(dirPath, file);
+    const relativePath = path.relative(this.host.getTargetDir(), fullPath);
+
+    if (
+      fileFilteringOptions.respectGitIgnore &&
+      fileDiscovery.shouldGitIgnoreFile(relativePath)
+    ) {
+      return { entry: null, ignored: true };
+    }
+    if (
+      fileFilteringOptions.respectLlxprtIgnore &&
+      fileDiscovery.shouldLlxprtIgnoreFile(relativePath)
+    ) {
+      return { entry: null, ignored: true };
+    }
+
+    try {
+      const stats = fs.statSync(fullPath);
+      const isDir = stats.isDirectory();
+      return {
+        entry: {
           name: file,
           path: fullPath,
           isDirectory: isDir,
           size: isDir ? 0 : stats.size,
           modifiedTime: stats.mtime,
-        });
-      } catch (error) {
-        debugLogger.error(`Error accessing ${fullPath}: ${error}`);
-      }
+        },
+        ignored: false,
+      };
+    } catch (error) {
+      debugLogger.error(`Error accessing ${fullPath}: ${error}`);
+      return { entry: null, ignored: false };
     }
-    return { entries, ignoredCount };
   }
 
   private formatListingResult(
@@ -353,9 +374,8 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
   protected override validateToolParamValues(
     params: LSToolParams,
   ): string | null {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to validation
-    const dirPath = params.dir_path || params.path;
-    if (!dirPath || dirPath.trim() === '') {
+    const dirPath = stringOrDefault(params.dir_path ?? '', params.path ?? '');
+    if (dirPath.trim() === '') {
       return "Either 'dir_path' or 'path' parameter must be provided and non-empty.";
     }
 
@@ -374,4 +394,39 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
     const noValidationError = null;
     return noValidationError;
   }
+}
+
+/**
+ * Converts a glob pattern into a regex source string by escaping
+ * special regex characters and replacing glob wildcards.
+ * Uses character-by-character scanning to avoid complex regex.
+ */
+function globToRegexPattern(pattern: string): string {
+  const specialChars = new Set([
+    '.',
+    '+',
+    '^',
+    '$',
+    '{',
+    '}',
+    '(',
+    ')',
+    '|',
+    '[',
+    ']',
+    '\\',
+  ]);
+  let result = '';
+  for (const ch of pattern) {
+    if (specialChars.has(ch)) {
+      result += '\\' + ch;
+    } else if (ch === '*') {
+      result += '.*';
+    } else if (ch === '?') {
+      result += '.';
+    } else {
+      result += ch;
+    }
+  }
+  return result;
 }

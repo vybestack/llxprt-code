@@ -50,10 +50,9 @@ function createFakeShellService(
         aborted: false,
       };
     },
-    isCommandAllowed: (command: string) => {
+    isCommandAllowed: (command: string) =>
       // Allow echo commands, deny everything else
-      return command.trim().startsWith('echo ') || command.trim() === 'false';
-    },
+      command.trim().startsWith('echo ') || command.trim() === 'false',
   };
 }
 

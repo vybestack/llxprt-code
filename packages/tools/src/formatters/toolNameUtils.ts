@@ -173,5 +173,5 @@ export function findMatchingTool(
     return toolLower.includes(nameLower) || nameLower.includes(toolLower);
   });
 
-  return partialMatch || null;
+  return partialMatch ?? null;
 }

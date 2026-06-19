@@ -65,15 +65,20 @@ function normalizeStringList(values: string[] | undefined): string[] {
     .filter((value) => value.length > 0);
 }
 
+function resolveBehaviourPrompts(params: TaskToolParams): string[] | undefined {
+  return (
+    params.behaviour_prompts ??
+    params.behavior_prompts ??
+    params.behaviourPrompts ??
+    params.behaviorPrompts
+  );
+}
+
 function normalizeTaskParams(params: TaskToolParams): NormalizedTaskParams {
   const prompt = params.goal_prompt ?? params.goalPrompt ?? params.prompt ?? '';
   const behaviourPrompts = normalizeStringList([
     prompt,
-    ...(params.behaviour_prompts ??
-      params.behavior_prompts ??
-      params.behaviourPrompts ??
-      params.behaviorPrompts ??
-      []),
+    ...(resolveBehaviourPrompts(params) ?? []),
   ]);
   const toolWhitelist = normalizeStringList(
     params.tool_whitelist ?? params.toolWhitelist,

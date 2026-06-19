@@ -564,7 +564,7 @@ export class ToolFormatter implements IToolFormatter {
     return tools.map((tool) => ({
       type: 'function' as const,
       name: tool.function.name,
-      description: tool.function.description || null,
+      description: tool.function.description ?? null,
       parameters:
         (this.convertGeminiSchemaToStandard(tool.function.parameters) as
           | Record<string, unknown>

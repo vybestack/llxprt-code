@@ -117,16 +117,15 @@ export function buildLanguageContext(
  * @param _language - Programming language (unused but kept for signature compatibility)
  * @returns True if the line is significant
  */
+const COMMENT_STARTS = ['//', '#', '*', '/*', '*/'];
+
 export function isSignificantLine(line: string, _language: string): boolean {
   const trimmed = line.trim();
-  const isComment =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    trimmed.startsWith('//') ||
-    trimmed.startsWith('#') ||
-    trimmed.startsWith('*') ||
-    trimmed.startsWith('/*') ||
-    trimmed.startsWith('*/');
-  return trimmed.length > 0 && !isComment;
+  if (trimmed.length === 0) {
+    return false;
+  }
+  const isComment = COMMENT_STARTS.some((prefix) => trimmed.startsWith(prefix));
+  return !isComment;
 }
 
 /**
@@ -181,36 +180,14 @@ export function extractFunctions(
   lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (_language === 'typescript' || _language === 'javascript') {
-      const match = trimmed.match(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-        /function\s+(\w+)\s*\(([^)]*)\)(?::\s*(\w+))?/,
-      );
-      if (match) {
-        functions.push({
-          name: match[1],
-          parameters: match[2]
-            .split(',')
-            .map((p) => p.trim())
-            .filter((p) => p),
-          returnType: match[3] || 'unknown',
-          line: index + 1,
-        });
+      const info = extractJsFunction(trimmed);
+      if (info) {
+        functions.push({ ...info, line: index + 1 });
       }
     } else if (_language === 'python') {
-      const match = trimmed.match(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-        /def\s+(\w+)\s*\(([^)]*)\)\s*(?:->\s*(\w+))?/,
-      );
-      if (match) {
-        functions.push({
-          name: match[1],
-          parameters: match[2]
-            .split(',')
-            .map((p) => p.trim())
-            .filter((p) => p),
-          returnType: match[3] || 'unknown',
-          line: index + 1,
-        });
+      const info = extractPythonFunction(trimmed);
+      if (info) {
+        functions.push({ ...info, line: index + 1 });
       }
     }
   });
@@ -234,11 +211,10 @@ export function extractClasses(
   lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (trimmed.includes(KEYWORDS.CLASS)) {
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      const match = trimmed.match(/class\s+(\w+)/);
-      if (match) {
+      const name = extractWordAfterPrefix(trimmed, KEYWORDS.CLASS);
+      if (name) {
         classes.push({
-          name: match[1],
+          name,
           methods: [], // Simplified implementation
           properties: [], // Simplified implementation
           line: index + 1,
@@ -266,14 +242,9 @@ export function extractVariables(
   lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (_language === 'typescript' || _language === 'javascript') {
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      const match = trimmed.match(/(?:const|let|var)\s+(\w+)\s*:\s*(\w+)/);
-      if (match) {
-        variables.push({
-          name: match[1],
-          type: match[2],
-          line: index + 1,
-        });
+      const info = extractTypedVariable(trimmed);
+      if (info) {
+        variables.push({ ...info, line: index + 1 });
       }
     }
   });
@@ -319,4 +290,137 @@ export function optimizeContextCollection(
   );
 
   return ContextOptimizer.optimizeSnippets(allSnippets);
+}
+
+const WORD_PATTERN = /^[A-Za-z_$][\w$]*/;
+
+/**
+ * Extracts a word identifier immediately following a prefix string using
+ * linear scanning (avoids regex backtracking).
+ */
+function extractWordAfterPrefix(line: string, prefix: string): string | null {
+  const idx = line.indexOf(prefix);
+  if (idx === -1) {
+    return null;
+  }
+  const after = line.slice(idx + prefix.length).trimStart();
+  const match = after.match(WORD_PATTERN);
+  return match ? match[0] : null;
+}
+
+/**
+ * Parses parameters from a parenthesis-delimited string.
+ */
+function parseParameters(paramStr: string): string[] {
+  return paramStr
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p);
+}
+
+/**
+ * Extract a JS/TS function declaration: `function name(params): ReturnType`
+ */
+function extractJsFunction(trimmed: string): Omit<FunctionInfo, 'line'> | null {
+  if (!trimmed.startsWith('function ')) {
+    return null;
+  }
+  const name = extractWordAfterPrefix(trimmed, 'function ');
+  if (!name) {
+    return null;
+  }
+  const openParen = trimmed.indexOf('(', 'function '.length + name.length);
+  if (openParen === -1) {
+    return null;
+  }
+  const closeParen = trimmed.indexOf(')', openParen + 1);
+  if (closeParen === -1) {
+    return null;
+  }
+  const params = parseParameters(trimmed.slice(openParen + 1, closeParen));
+
+  let returnType = 'unknown';
+  const afterParens = trimmed.slice(closeParen + 1);
+  if (afterParens.startsWith(':')) {
+    const typeMatch = afterParens.slice(1).trimStart().match(WORD_PATTERN);
+    if (typeMatch) {
+      returnType = typeMatch[0];
+    }
+  }
+  return { name, parameters: params, returnType };
+}
+
+/**
+ * Extract a Python function declaration: `def name(params) -> ReturnType`
+ */
+function extractPythonFunction(
+  trimmed: string,
+): Omit<FunctionInfo, 'line'> | null {
+  if (!trimmed.startsWith('def ')) {
+    return null;
+  }
+  const name = extractWordAfterPrefix(trimmed, 'def ');
+  if (!name) {
+    return null;
+  }
+  const openParen = trimmed.indexOf('(', 'def '.length + name.length);
+  if (openParen === -1) {
+    return null;
+  }
+  const closeParen = trimmed.indexOf(')', openParen + 1);
+  if (closeParen === -1) {
+    return null;
+  }
+  const params = parseParameters(trimmed.slice(openParen + 1, closeParen));
+
+  let returnType = 'unknown';
+  const afterParens = trimmed.slice(closeParen + 1).trimStart();
+  if (afterParens.startsWith('->')) {
+    const typeMatch = afterParens.slice(2).trimStart().match(WORD_PATTERN);
+    if (typeMatch) {
+      returnType = typeMatch[0];
+    }
+  }
+  return { name, parameters: params, returnType };
+}
+
+/**
+ * Extract a typed variable declaration: `const name: Type`
+ */
+function extractTypedVariable(
+  trimmed: string,
+): Omit<VariableInfo, 'line'> | null {
+  for (const keyword of ['const ', 'let ', 'var ']) {
+    const result = tryTypedVariable(trimmed, keyword);
+    if (result) {
+      return result;
+    }
+  }
+  return null;
+}
+
+function tryTypedVariable(
+  trimmed: string,
+  keyword: string,
+): Omit<VariableInfo, 'line'> | null {
+  if (!trimmed.startsWith(keyword)) {
+    return null;
+  }
+  const name = extractWordAfterPrefix(trimmed, keyword);
+  if (!name) {
+    return null;
+  }
+  const nameEnd = keyword.length + name.length;
+  const colonIdx = trimmed.indexOf(':', nameEnd);
+  if (colonIdx === -1) {
+    return null;
+  }
+  const typeMatch = trimmed
+    .slice(colonIdx + 1)
+    .trimStart()
+    .match(WORD_PATTERN);
+  if (!typeMatch) {
+    return null;
+  }
+  return { name, type: typeMatch[0] };
 }

@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as Diff from 'diff';
@@ -32,6 +30,7 @@ import { getSpecificMimeType } from '../utils/fileUtils.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from '../utils/diffOptions.js';
 import { collectLspDiagnosticsBlock } from '../utils/lsp-diagnostics-helper.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 
 /**
  * Parameters for the InsertAtLine tool
@@ -79,8 +78,10 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
   }
 
   private getFilePath(): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-    return this.params.absolute_path || this.params.file_path || '';
+    return stringOrDefault(
+      this.params.absolute_path,
+      stringOrDefault(this.params.file_path, ''),
+    );
   }
 
   getDescription(): string {
@@ -356,8 +357,10 @@ export class InsertAtLineTool extends BaseDeclarativeTool<
   protected override validateToolParamValues(
     params: InsertAtLineToolParams,
   ): string | null {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid
-    const filePath = params.absolute_path || params.file_path || '';
+    const filePath = stringOrDefault(
+      params.absolute_path,
+      stringOrDefault(params.file_path, ''),
+    );
 
     if (filePath.trim() === '') {
       return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";

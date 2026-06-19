@@ -177,7 +177,6 @@ const legacyDirectiveCleanupScopes = [
   'packages/providers/src/utils/toolResponsePayload.ts', // #2084
   'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2087/#2091
-  'packages/tools/src/**/*.{ts,tsx}', // #2088
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   'packages/storage/src/**/*.{ts,tsx}', // #2092
   // #2089 scope: the six target packages (mcp/auth/settings/telemetry/
@@ -247,6 +246,7 @@ const completedDirectiveCleanupScopes = [
   'packages/core/src/prompt-config/prompt-resolver.ts', // #2082
   'packages/core/src/prompt-config/resolver/**/*.{ts,tsx}', // #2082
   'packages/core/src/runtime/runtimeStateFactory.ts', // #2082
+  'packages/tools/src/**/*.{ts,tsx}', // #2088
   // #2083 providers core cleanup — only these enumerated files are locked;
   // ProviderContentExtractor.ts remains in legacyDirectiveCleanupScopes for #2084.
   'packages/providers/src/LoadBalancingProvider.ts', // #2083
@@ -1393,40 +1393,52 @@ export default tseslint.config(
       ],
     },
   },
-  // ============================================================================
-  // Issue #1585: tools package migration lint compatibility
-  // ============================================================================
-  // The tools package contains legacy tool implementations moved out of core.
-  // Preserve behavior during extraction; post-extraction cleanup can tighten
-  // rules per module without mixing large semantic refactors into the move.
+  // Issue #2088: tools package lint cleanup complete.
+  // The blanket #1585 migration suppression was removed after all inline
+  // directives and lint violations were resolved. sonarjs/os-command and
+  // sonarjs/no-os-command-from-path remain off project-wide (see global rules).
+
+  // Issue #2088: The "todo" subsystem naturally uses the domain word "todo" in
+  // comments (todo store, todo tools, ITodoService, etc.). sonarjs/todo-tag
+  // matches case-insensitively, producing false positives on legitimate domain
+  // vocabulary rather than actual TODO task markers.
   {
-    files: ['packages/tools/src/**/*.{ts,tsx}'],
+    files: [
+      'packages/tools/src/interfaces/ITodoService.ts',
+      'packages/tools/src/tools/todo-*.ts',
+      'packages/tools/src/utils/todo*.ts',
+      'packages/tools/src/__tests__/todo-*.ts',
+    ],
     rules: {
-      '@typescript-eslint/array-type': 'off',
-      '@typescript-eslint/consistent-type-imports': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-inferrable-types': 'off',
-      '@typescript-eslint/no-misused-promises': 'off',
-      '@typescript-eslint/no-unnecessary-condition': 'off',
-      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-      '@typescript-eslint/prefer-nullish-coalescing': 'off',
-      '@typescript-eslint/strict-boolean-expressions': 'off',
-      'arrow-body-style': 'off',
-      complexity: 'off',
-      'default-case': 'off',
-      'max-lines': 'off',
-      'max-lines-per-function': 'off',
-      'no-useless-escape': 'off',
-      'sonarjs/expression-complexity': 'off',
-      'sonarjs/nested-control-flow': 'off',
-      'sonarjs/no-nested-conditional': 'off',
-      'sonarjs/no-identical-functions': 'off',
-      'sonarjs/no-os-command-from-path': 'off',
-      'sonarjs/os-command': 'off',
-      'sonarjs/regular-expr': 'off',
-      'sonarjs/todo-tag': 'off',
-      'sonarjs/too-many-break-or-continue-in-loop': 'off',
+      'sonarjs/todo-tag': 'off', // eslint-policy-allow-off: #2088 domain vocabulary
+    },
+  },
+  // Issue #2088: EmojiFilter uses inherently complex Unicode emoji range regexes
+  // that are safe but exceed SonarJS regex-complexity heuristics, analogous to
+  // ANSI/terminal control-character parsing.
+  {
+    files: ['packages/tools/src/utils/EmojiFilter.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2088 emoji Unicode ranges
+    },
+  },
+  // Issue #2088: IToolMessageBus is a cross-package bridge interface consumed
+  // by core, mcp, and agents. Its `any` types serve as forward-compatible duck-
+  // typing escape hatches for implementations with heterogeneous signatures.
+  {
+    files: ['packages/tools/src/interfaces/IToolMessageBus.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off', // eslint-policy-allow-off: #2088 cross-package bridge
+    },
+  },
+  // Issue #2088: schemaValidator uses ajv subpath import (ajv/dist/2020.js)
+  // which is the only supported way to load draft-2020-12 per ajv docs.
+  // The `any` cast is required for ajv's ESM/CJS interop default resolution.
+  {
+    files: ['packages/tools/src/utils/schemaValidator.ts'],
+    rules: {
+      'import/no-internal-modules': 'off', // eslint-policy-allow-off: #2088 ajv subpath
+      '@typescript-eslint/no-explicit-any': 'off', // eslint-policy-allow-off: #2088 ajv interop
     },
   },
   {
@@ -1438,6 +1450,15 @@ export default tseslint.config(
       'vitest/no-conditional-expect': 'off',
       'vitest/no-conditional-in-test': 'off',
       'vitest/prefer-strict-equal': 'off',
+    },
+  },
+  // Issue #2088: tools.ts defines abstract base classes (BaseDeclarativeTool,
+  // BaseToolInvocation) whose `any` return/parameter types serve as cross-
+  // package compatibility bridges for subclasses in core, mcp, and agents.
+  {
+    files: ['packages/tools/src/tools/tools.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off', // eslint-policy-allow-off: #2088 cross-package bridge
     },
   },
   {

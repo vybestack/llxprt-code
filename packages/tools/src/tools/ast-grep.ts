@@ -5,8 +5,6 @@
  * @plan PLAN-20260211-ASTGREP.P05
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import * as path from 'node:path';
 import { promises as fs, statSync, existsSync } from 'node:fs';
 import FastGlob from 'fast-glob';
@@ -214,9 +212,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
       );
       files = await this.applyGlobFilters(files, globs, searchPath);
       for (const file of files) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (signal?.aborted === true) break;
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         try {
           const content = await fs.readFile(file, 'utf-8');
           allMatches.push(
@@ -248,14 +244,12 @@ class AstGrepToolInvocation extends BaseToolInvocation<
       .filter((g) => g.startsWith('!'))
       .map((g) => g.slice(1));
 
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (includePatterns.length > 0) {
       const includeSet = new Set(
         await FastGlob(includePatterns, { cwd: searchPath, absolute: true }),
       );
       files = files.filter((f) => includeSet.has(f));
     }
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (excludePatterns.length > 0) {
       const excludeSet = new Set(
         await FastGlob(excludePatterns, { cwd: searchPath, absolute: true }),
@@ -292,7 +286,6 @@ class AstGrepToolInvocation extends BaseToolInvocation<
     for (const m of result.matches) {
       llmContent += `${m.file}:${m.startLine} [${m.nodeKind}] ${m.text}\n`;
       if (Object.keys(m.metaVariables).length > 0) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (const [k, v] of Object.entries(m.metaVariables)) {
           llmContent += `  $${k} = ${v}\n`;
         }
@@ -335,8 +328,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
       // Extract single metavariables ($NAME patterns, excluding $$$ multi-vars)
       if (pattern) {
         const metaVarNames =
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: array default for regex match
-          pattern.match(/(?<!\$)\$(?!\$)([A-Z_][A-Z0-9_]*)/g) || [];
+          pattern.match(/(?<!\$)\$(?!\$)([A-Z_][A-Z0-9_]*)/g) ?? [];
         for (const raw of metaVarNames) {
           const name = raw.slice(1); // remove $
           const match = node.getMatch(name);
@@ -345,8 +337,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
           }
         }
         // Extract multi metavariables ($$$NAME patterns)
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: array default for regex match
-        const multiVarNames = pattern.match(/\$\$\$([A-Z_][A-Z0-9_]*)/g) || [];
+        const multiVarNames = pattern.match(/\$\$\$([A-Z_][A-Z0-9_]*)/g) ?? [];
         for (const raw of multiVarNames) {
           const name = raw.slice(3); // remove $$$
           const matches = node.getMultipleMatches(name);

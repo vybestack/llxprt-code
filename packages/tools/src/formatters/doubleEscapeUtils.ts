@@ -19,11 +19,8 @@
  */
 
 const noop = {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   debug: (_msg: string) => {},
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   error: (_msg: string) => {},
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   warn: (_msg: string) => {},
 };
 
@@ -61,6 +58,19 @@ function fixStringifiedValues(parsed: Record<string, unknown>): {
     }
   }
   return { fixed, wasDoubleEscaped };
+}
+
+/**
+ * Checks whether a single value is a JSON string that encodes an object.
+ */
+function isStringifiedValue(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    const testParse = JSON.parse(value);
+    return typeof testParse === 'object';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -109,17 +119,8 @@ export function detectDoubleEscaping(jsonString: string): {
         result.correctedValue = parsed;
       }
     } else if (typeof parsed === 'object' && parsed !== null) {
-      const hasStringifiedValues = Object.values(parsed).some((value) => {
-        if (typeof value === 'string') {
-          try {
-            const testParse = JSON.parse(value);
-            return typeof testParse === 'object';
-          } catch {
-            return false;
-          }
-        }
-        return false;
-      });
+      const hasStringifiedValues =
+        Object.values(parsed).some(isStringifiedValue);
 
       if (hasStringifiedValues) {
         const { fixed, wasDoubleEscaped } = fixStringifiedValues(parsed);
@@ -150,12 +151,18 @@ export function detectDoubleEscapingInChunk(chunk: string): boolean {
   const startPattern = String.raw`"\\`;
   const endPattern = String.raw`\\"`;
 
-  return (
-    chunk.includes(backslashBracket) ||
-    chunk.includes(doubleBackslash) ||
-    chunk.includes(backslashQuote) ||
-    (chunk.startsWith(startPattern) && chunk.endsWith(endPattern))
+  const doubleEscapeMarkers = [
+    backslashBracket,
+    doubleBackslash,
+    backslashQuote,
+  ];
+  const hasMarker = doubleEscapeMarkers.some((marker) =>
+    chunk.includes(marker),
   );
+  const hasWrappedPattern =
+    chunk.startsWith(startPattern) && chunk.endsWith(endPattern);
+
+  return hasMarker || hasWrappedPattern;
 }
 
 /**
@@ -202,7 +209,7 @@ function tryMultipleParsingStrategies(
 
   // Strategy 2: Detect and repair double escaping
   const detection = detectDoubleEscaping(parametersString);
-  const formatLabel = format || 'auto';
+  const formatLabel = format ?? 'auto';
   if (detection.correctedValue !== undefined) {
     if (detection.isDoubleEscaped) {
       noop.error(
@@ -234,7 +241,9 @@ function convertStringNumbersToNumbers(obj: unknown): unknown {
   if (obj == null) return obj;
 
   if (typeof obj === 'string') {
-    if (/^-?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$/.test(obj)) {
+    // Only convert strings matching decimal number syntax (not hex, octal,
+    // whitespace-padded, etc.) to preserve the original regex semantics.
+    if (isDecimalNumberString(obj)) {
       const num = Number(obj);
       if (Number.isFinite(num)) return num;
     }
@@ -257,6 +266,58 @@ function convertStringNumbersToNumbers(obj: unknown): unknown {
   }
 
   return obj;
+}
+
+/**
+ * Equivalent to /^-?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$/ without using a regex.
+ * Accepts: "123", "-45", "3.14", ".5", "-0.1", "1e5", "3.14E-10"
+ * Rejects: "0xff", "  123  ", "Infinity", "NaN", "", "abc"
+ */
+function isDecimalNumberString(value: string): boolean {
+  if (value.length === 0) return false;
+  let s = value;
+  if (s[0] === '-') s = s.slice(1);
+  if (s.length === 0) return false;
+
+  // Split mantissa and optional exponent at 'e' or 'E'
+  let mantissa = s;
+  let expPart = '';
+  let hasExponent = false;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === 'e' || s[i] === 'E') {
+      mantissa = s.slice(0, i);
+      expPart = s.slice(i + 1);
+      hasExponent = true;
+      break;
+    }
+  }
+
+  // Validate exponent: optional sign, then one or more digits
+  if (hasExponent) {
+    if (expPart[0] === '+' || expPart[0] === '-') expPart = expPart.slice(1);
+    if (!allDigits(expPart)) return false;
+  }
+
+  // Validate mantissa: \d+ or \d*\.\d+
+  const dotIdx = mantissa.indexOf('.');
+  if (dotIdx !== -1) {
+    const intPart = mantissa.slice(0, dotIdx);
+    const fracPart = mantissa.slice(dotIdx + 1);
+    if (mantissa.indexOf('.', dotIdx + 1) !== -1) return false;
+    if (intPart.length > 0 && !allDigits(intPart)) return false;
+    if (fracPart.length === 0 || !allDigits(fracPart)) return false;
+  } else if (mantissa.length === 0 || !allDigits(mantissa)) {
+    return false;
+  }
+  return true;
+}
+
+function allDigits(s: string): boolean {
+  if (s.length === 0) return false;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] < '0' || s[i] > '9') return false;
+  }
+  return true;
 }
 
 /**

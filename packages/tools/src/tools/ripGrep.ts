@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import fsPromises from 'fs/promises';
 import path from 'path';
 import { EOL } from 'os';
@@ -21,6 +19,7 @@ import {
 import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { getRipgrepPath } from '../utils/ripgrepPathResolver.js';
 import {
@@ -255,8 +254,7 @@ File: ${resolved.basename}
         getDirectories: () => this.host.getWorkspaceRoots(),
       };
       const resolved = this.resolveTarget(this.params.path);
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: path param may be empty string, display '.' instead
-      const searchDirDisplay = this.params.path || '.';
+      const searchDirDisplay = stringOrDefault(this.params.path, '.');
 
       if (resolved.kind === 'file') {
         return await this.handleFileSearch(resolved, searchDirDisplay, signal);
@@ -297,34 +295,10 @@ File: ${resolved.basename}
 
     const lines = output.split(EOL);
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const line of lines) {
-      if (!line.trim()) continue;
-
-      const firstColonIndex = line.indexOf(':');
-      if (firstColonIndex === -1) continue;
-
-      const secondColonIndex = line.indexOf(':', firstColonIndex + 1);
-      if (secondColonIndex === -1) continue;
-
-      const filePathRaw = line.substring(0, firstColonIndex);
-      const lineNumberStr = line.substring(
-        firstColonIndex + 1,
-        secondColonIndex,
-      );
-      const lineContent = line.substring(secondColonIndex + 1);
-
-      const lineNumber = parseInt(lineNumberStr, 10);
-
-      if (!isNaN(lineNumber)) {
-        const absoluteFilePath = path.resolve(basePath, filePathRaw);
-        const relativeFilePath = path.relative(basePath, absoluteFilePath);
-
-        results.push({
-          filePath: relativeFilePath || path.basename(absoluteFilePath),
-          lineNumber,
-          line: lineContent,
-        });
+      const match = parseRipgrepLine(line, basePath);
+      if (match) {
+        results.push(match);
       }
     }
     return results;
@@ -605,4 +579,42 @@ export class RipGrepTool extends BaseDeclarativeTool<
   ): Promise<ToolResult> {
     return this.build(params).execute(signal);
   }
+}
+
+/**
+ * Parses a single ripgrep output line into a GrepMatch, or returns null
+ * if the line is blank or malformed.
+ */
+function parseRipgrepLine(line: string, basePath: string): GrepMatch | null {
+  if (!line.trim()) {
+    return null;
+  }
+
+  const firstColonIndex = line.indexOf(':');
+  if (firstColonIndex === -1) {
+    return null;
+  }
+
+  const secondColonIndex = line.indexOf(':', firstColonIndex + 1);
+  if (secondColonIndex === -1) {
+    return null;
+  }
+
+  const filePathRaw = line.substring(0, firstColonIndex);
+  const lineNumberStr = line.substring(firstColonIndex + 1, secondColonIndex);
+  const lineContent = line.substring(secondColonIndex + 1);
+
+  const lineNumber = parseInt(lineNumberStr, 10);
+  if (isNaN(lineNumber)) {
+    return null;
+  }
+
+  const absoluteFilePath = path.resolve(basePath, filePathRaw);
+  const relativeFilePath = path.relative(basePath, absoluteFilePath);
+
+  return {
+    filePath: relativeFilePath || path.basename(absoluteFilePath),
+    lineNumber,
+    line: lineContent,
+  };
 }
