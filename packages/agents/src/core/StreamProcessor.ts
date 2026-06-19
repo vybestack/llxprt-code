@@ -273,7 +273,7 @@ export class StreamProcessor {
     const tools = toolSelection.tools;
 
     const { requestPayload, baseRuntimeContext, runtimeContext } =
-      this._prepareRequestPayload(requestContents, tools, params);
+      this._prepareRequestPayload(requestContents, tools);
 
     const finalContents = await this._fireBeforeModelHook(
       configForHooks,
@@ -414,7 +414,6 @@ export class StreamProcessor {
   private _prepareRequestPayload(
     requestContents: IContent[],
     tools: GenerateContentConfig['tools'],
-    params: SendMessageParameters,
   ): {
     requestPayload: { contents: IContent[]; tools: unknown };
     baseRuntimeContext: ProviderRuntimeContext;
@@ -438,25 +437,24 @@ export class StreamProcessor {
 
     const requestPayload = { contents: requestContents, tools };
 
-    const runtimeContext = this._buildRuntimeContext(
-      baseRuntimeContext,
-      params,
-      tools,
-    );
+    const runtimeContext = this._buildRuntimeContext(baseRuntimeContext);
 
     return { requestPayload, baseRuntimeContext, runtimeContext };
   }
 
+  // @plan:PLAN-20260617-COREAPI.P15
+  // @requirement:REQ-001
   private _buildRuntimeContext(
     baseRuntimeContext: ProviderRuntimeContext,
-    params: SendMessageParameters,
-    tools: unknown,
   ): ProviderRuntimeContext {
-    if (!params.config) return baseRuntimeContext;
-    return {
-      ...baseRuntimeContext,
-      config: { ...baseRuntimeContext.config, ...params.config, tools },
-    } as unknown as ProviderRuntimeContext;
+    // The runtime context's `config` MUST stay the live llxprt `Config`
+    // class instance so provider-side resolution (ProviderManager
+    // .resolveModelField -> config.getModel()) keeps working. Per-request
+    // genai GenerateContentConfig (params.config), tools, and abortSignal
+    // reach the provider via dedicated channels (requestPayload.tools,
+    // metadata.abortSignal, and direct params.config reads); spreading them
+    // into the Config slot would strip its prototype methods.
+    return baseRuntimeContext;
   }
 
   private async _sendProviderRequest(

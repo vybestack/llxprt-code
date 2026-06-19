@@ -191,6 +191,14 @@ export interface IsolatedRuntimeContextOptions {
   debugMode?: boolean;
   workspaceDir?: string;
   oauthManager?: OAuthManager;
+  /**
+   * Caller-provided shared MessageBus. When supplied, the runtime uses THIS
+   * instance as its session bus (so the context-created OAuthManager binds to
+   * it) instead of constructing a private one.
+   * @plan:PLAN-20260617-COREAPI.P15
+   * @requirement:REQ-001
+   */
+  messageBus?: MessageBus;
   prepare?: (context: {
     config: Config;
     settingsService: SettingsService;
@@ -469,10 +477,13 @@ export function createIsolatedRuntimeContext(
 
   const config = resolveRuntimeConfig(options, runtimeId, settingsService);
   const resolvedSettingsService = config.getSettingsService();
-  const sessionMessageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
-  );
+  // @plan:PLAN-20260617-COREAPI.P15
+  // @requirement:REQ-001
+  // Use the caller-provided bus when present so the context-created
+  // OAuthManager binds to the SAME bus the caller shares with the loop.
+  const sessionMessageBus =
+    options.messageBus ??
+    new MessageBus(config.getPolicyEngine(), config.getDebugMode());
   const oauthManager = resolveOAuthManager(
     sessionMessageBus,
     options.oauthManager,

@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call-tool-a","name":"list_files","parameters":{"dir":"{{CWD}}"}},{"type":"tool_call","id":"call-tool-b","name":"read_file","parameters":{"path":"{{CWD}}/package.json"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"after both tools ran"}]}]}

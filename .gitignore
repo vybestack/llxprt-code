@@ -79,6 +79,10 @@ luther/
 # Stryker mutation testing temporary files
 .stryker-tmp/
 **/.stryker-tmp/
+# Stryker inPlace mode writes per-runner setup files into the package dir
+# (see stryker-mutator/stryker-js#5305). They are regenerated every run.
+stryker-setup-*.js
+**/stryker-setup-*.js
 
 # Test and debug files (should not be committed)
 test-*.txt
