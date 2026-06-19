@@ -138,9 +138,11 @@ export async function applyLoadedProfileConfig(
   context: CommandContext,
   result: { providerName?: string },
 ): Promise<void> {
-  const configService = context.services
-    .config as unknown as ProfileConfigService | null;
-  if (configService === null) {
+  const configService = context.services.config as unknown as
+    | ProfileConfigService
+    | null
+    | undefined;
+  if (configService == null) {
     return;
   }
 

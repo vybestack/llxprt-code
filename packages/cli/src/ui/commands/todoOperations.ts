@@ -102,6 +102,12 @@ export function parsePosition(pos: string, todos: Todo[]): ParsedPosition {
 
     // Line 59: INSERT at subtask_pos - 1
     const subtaskIndex = parseInt(subtaskMatch[2], 10) - 1;
+    const subtaskCount = parent.subtasks?.length ?? 0;
+    if (subtaskIndex < 0 || subtaskIndex > subtaskCount) {
+      throw new Error(
+        `Subtask position ${subtaskMatch[2]} out of range (1-${subtaskCount + 1})`,
+      );
+    }
     return { parentIndex, subtaskIndex, isLast: false };
   }
 
@@ -200,8 +206,8 @@ export function applyStatusChange(
   if (!rejectSubtaskPosition(addItem, parsed)) return;
 
   const newTodos = [...todos];
-  const todo = newTodos[parsed.parentIndex];
-  todo.status = newStatus;
+  const todo = { ...newTodos[parsed.parentIndex], status: newStatus };
+  newTodos[parsed.parentIndex] = todo;
 
   context.todoContext.updateTodos(newTodos);
   addInfo(

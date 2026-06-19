@@ -367,6 +367,9 @@ async function fetchOAuthQuotaLines(
   if (codexResult.status === 'rejected') {
     logger.warn('Failed to fetch Codex usage info:', codexResult.reason);
   }
+  if (geminiResult.status === 'rejected') {
+    logger.warn('Failed to fetch Gemini usage info:', geminiResult.reason);
+  }
 
   const anthropicUsageInfo: UsageMap =
     anthropicResult.status === 'fulfilled'

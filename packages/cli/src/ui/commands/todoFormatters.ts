@@ -100,9 +100,10 @@ export function formatSessionEntry(
     const firstTitle = todos[0]?.content || '(empty)';
     const age = formatAge(file.mtime);
     const statusSummary = buildStatusSummary(counts);
+    const statusSuffix = statusSummary === '' ? '' : ` (${statusSummary})`;
 
     return [
-      `${idx + 1}. ${age} │ ${todos.length} items (${statusSummary})`,
+      `${idx + 1}. ${age} │ ${todos.length} items${statusSuffix}`,
       `   → "${firstTitle}"`,
       '',
     ];
