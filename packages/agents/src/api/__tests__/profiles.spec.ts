@@ -304,6 +304,37 @@ describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-
     }
   });
 
+  it('T19a list() returns a DETERMINISTIC dir-scan order (sorted, stable across repeated calls) @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    try {
+      // The dir-scan sorts entries by filename and de-duplicates by name, so the
+      // relative order of dir-scan profiles must not depend on filesystem
+      // enumeration order and must be identical across repeated list() calls.
+      const firstNames = agent.profiles.list().map((s) => s.name);
+      const secondNames = agent.profiles.list().map((s) => s.name);
+      expect(secondNames).toStrictEqual(firstNames);
+
+      // The two well-formed dir-scan fixtures appear exactly once each and in a
+      // stable relative order (their names are unique across the scanned dirs).
+      const dirScanNames = firstNames.filter(
+        (n) => n === 'lb-anthropic-openai' || n === 'standard-openai',
+      );
+      expect(dirScanNames.filter((n) => n === 'standard-openai')).toHaveLength(
+        1,
+      );
+      expect(
+        dirScanNames.filter((n) => n === 'lb-anthropic-openai'),
+      ).toHaveLength(1);
+      // Deterministic relative order is reproduced on a second independent call.
+      const dirScanNames2 = secondNames.filter(
+        (n) => n === 'lb-anthropic-openai' || n === 'standard-openai',
+      );
+      expect(dirScanNames2).toStrictEqual(dirScanNames);
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('T19a getDefault surfaces isLoadBalancer for a dir-scan LB default profile @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {

@@ -89,6 +89,16 @@ export interface HookControlDeps {
  * @requirement:REQ-015
  */
 export class HookControl implements AgentHookControl {
+  /**
+   * Upper bound on buffered HOOK_EXECUTION_REQUEST correlations. A request whose
+   * matching RESPONSE never arrives would otherwise grow the buffer unbounded;
+   * when the cap is exceeded the OLDEST entry (Map preserves insertion order) is
+   * evicted. Deterministic — no timer-based eviction.
+   * @plan:PLAN-20260617-COREAPI.P23
+   * @requirement:REQ-015
+   */
+  private static readonly MAX_PENDING_CORRELATIONS = 1000;
+
   private readonly observers = new Set<HookObserver>();
   private readonly pendingByCorrelation = new Map<
     string,
@@ -185,6 +195,17 @@ export class HookControl implements AgentHookControl {
         MessageBusType.HOOK_EXECUTION_REQUEST,
         (message) => {
           this.pendingByCorrelation.set(message.payload.correlationId, message);
+          // Bound the buffer: if a response never arrives the map would grow
+          // unbounded. Evict the oldest insertion-ordered entry past the cap.
+          if (
+            this.pendingByCorrelation.size >
+            HookControl.MAX_PENDING_CORRELATIONS
+          ) {
+            const oldest = this.pendingByCorrelation.keys().next().value;
+            if (oldest !== undefined) {
+              this.pendingByCorrelation.delete(oldest);
+            }
+          }
         },
       );
     this.busUnsubscribeResponse =

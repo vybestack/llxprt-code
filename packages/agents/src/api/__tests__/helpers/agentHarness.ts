@@ -88,7 +88,19 @@ export async function buildAgent(
     model: 'fake-model',
     workingDir: resolve(HARNESS_DIR, '..'),
   };
-  const agent = await createAgent({ ...baseConfig, ...configOverrides });
+  let agent: Agent;
+  try {
+    agent = await createAgent({ ...baseConfig, ...configOverrides });
+  } catch (error) {
+    // createAgent failed before a cleanup could be returned — restore the env
+    // var so the mutation does not leak into later tests, then rethrow.
+    if (prev === undefined) {
+      delete process.env.LLXPRT_FAKE_RESPONSES;
+    } else {
+      process.env.LLXPRT_FAKE_RESPONSES = prev;
+    }
+    throw error;
+  }
   const cleanup = async (): Promise<void> => {
     await agent.dispose().catch(() => {
       /* disposed via cleanup regardless of impl state */
@@ -132,7 +144,21 @@ export async function buildAgentFromContent(
     model: 'fake-model',
     workingDir: resolve(HARNESS_DIR, '..'),
   };
-  const agent = await createAgent({ ...baseConfig, ...configOverrides });
+  let agent: Agent;
+  try {
+    agent = await createAgent({ ...baseConfig, ...configOverrides });
+  } catch (error) {
+    // createAgent failed before a cleanup could be returned — restore the env
+    // var and remove the temp dir so neither leaks into later tests, then
+    // rethrow.
+    if (prev === undefined) {
+      delete process.env.LLXPRT_FAKE_RESPONSES;
+    } else {
+      process.env.LLXPRT_FAKE_RESPONSES = prev;
+    }
+    rmSync(dir, { recursive: true, force: true });
+    throw error;
+  }
   const cleanup = async (): Promise<void> => {
     await agent.dispose().catch(() => {
       /* disposed via cleanup regardless of impl state */

@@ -83,16 +83,19 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
     try {
       const controller = new AbortController();
       const collected: AgentEvent[] = [];
-      // abort shortly after the stream begins
-      const abortTimer = setTimeout(() => controller.abort(), 0);
-      try {
-        for await (const event of agent.stream('go', {
-          signal: controller.signal,
-        })) {
-          collected.push(event);
+      // Deterministic mid-stream abort: on the FIRST non-'done' event, abort
+      // exactly once, then keep collecting. This guarantees the abort lands
+      // mid-stream so the terminal done.reason is stably 'aborted' (no timer
+      // race).
+      let aborted = false;
+      for await (const event of agent.stream('go', {
+        signal: controller.signal,
+      })) {
+        collected.push(event);
+        if (!aborted && event.type !== 'done') {
+          aborted = true;
+          controller.abort();
         }
-      } finally {
-        clearTimeout(abortTimer);
       }
 
       const events = collected;

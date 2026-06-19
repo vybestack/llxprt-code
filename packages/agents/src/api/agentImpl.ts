@@ -1047,7 +1047,17 @@ export class AgentImpl implements Agent {
     try {
       await switchActiveProvider(provider);
       providerChanged = true;
-    } catch {
+    } catch (error) {
+      // Only the EXPECTED fake-seam case is suppressed: the fake seam sets
+      // LLXPRT_FAKE_RESPONSES to a fixture-file path (never the string '1'), so
+      // the seam predicate is simply "the env var is set at all". A REAL
+      // provider-switch failure (env var not set) must propagate so a genuine
+      // failure is never reported as success — facade state below is then left
+      // untouched.
+      const isFakeSeam = process.env.LLXPRT_FAKE_RESPONSES !== undefined;
+      if (!isFakeSeam) {
+        throw error;
+      }
       // Provider not registered (fake seam) — the active provider handles all
       // requests. Per-agent state still reflects the switch (getProvider etc.).
     }

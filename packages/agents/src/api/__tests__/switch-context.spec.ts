@@ -223,7 +223,11 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       const newHistoryService = captureHistoryServiceIdentity(agent);
 
       // IDENTITY reuse: the SAME HistoryService instance (the headline
-      // guarantee). `toBe`, not equal contents.
+      // guarantee). `toBe`, not equal contents. Guard both probes are REAL
+      // instances first so the identity compare cannot pass vacuously when both
+      // are undefined.
+      expect(existingHistoryService).toBeDefined();
+      expect(newHistoryService).toBeDefined();
       expect(newHistoryService).toBe(existingHistoryService);
 
       // behavioral continuity: the follow-up turn sees the prior N messages
@@ -259,7 +263,10 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
       const newHistoryService = captureHistoryServiceIdentity(agent);
 
-      // IDENTITY reuse across the LB failover (switch ≡ failover)
+      // IDENTITY reuse across the LB failover (switch ≡ failover). Guard both
+      // probes are REAL instances first so the compare cannot pass vacuously.
+      expect(existingHistoryService).toBeDefined();
+      expect(newHistoryService).toBeDefined();
       expect(newHistoryService).toBe(existingHistoryService);
 
       // context preserved: the follow-up turn sees the prior messages
@@ -449,7 +456,11 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
             const newHistoryService = captureHistoryServiceIdentity(agent);
 
-            // identity is preserved across the switch for every generated seed
+            // identity is preserved across the switch for every generated seed.
+            // Guard both probes are REAL instances first so the compare cannot
+            // pass vacuously when both are undefined.
+            expect(existingHistoryService).toBeDefined();
+            expect(newHistoryService).toBeDefined();
             expect(newHistoryService).toBe(existingHistoryService);
 
             // history length is at least the seeded count (continuity)

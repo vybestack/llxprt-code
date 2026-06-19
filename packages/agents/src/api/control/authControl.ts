@@ -116,7 +116,7 @@ export class AuthControl implements AgentAuthControl {
    */
   async login(
     provider: string,
-    _opts?: { readonly bucket?: string },
+    opts?: { readonly bucket?: string },
   ): Promise<void> {
     const handler = this.deps.onOAuthPrompt;
     if (handler === undefined) {
@@ -130,7 +130,14 @@ export class AuthControl implements AgentAuthControl {
       throw new Error('OAuth login was declined');
     }
     this.deps.authState.oauthAuthenticated.add(provider);
-    this.seedDefaultBucket(provider);
+    // Honor an explicit bucket: switchBucket creates-the-bucket-active and
+    // deactivates others (works from an empty set). With no bucket arg, preserve
+    // the existing semantics exactly — seed a single active 'default' bucket.
+    if (opts?.bucket !== undefined) {
+      await this.switchBucket(provider, opts.bucket);
+    } else {
+      this.seedDefaultBucket(provider);
+    }
   }
 
   /**
@@ -146,6 +153,19 @@ export class AuthControl implements AgentAuthControl {
     this.deps.authState.oauthAuthenticated.delete(provider);
     if (opts?.all === true) {
       this.deps.authState.buckets.delete(provider);
+      return;
+    }
+    // When a specific bucket is named (and not `all`), remove just that bucket
+    // from the provider's list, leaving the others intact. Plain logout (no
+    // bucket, no all) clears auth but preserves all buckets.
+    if (opts?.bucket !== undefined) {
+      const existing = this.deps.authState.buckets.get(provider);
+      if (existing !== undefined) {
+        this.deps.authState.buckets.set(
+          provider,
+          existing.filter((b) => b.name !== opts.bucket),
+        );
+      }
     }
   }
 
@@ -197,8 +217,18 @@ export class AuthControl implements AgentAuthControl {
    */
   async setBaseUrl(
     baseUrl: string | null,
-    _opts?: { readonly provider?: string },
+    opts?: { readonly provider?: string },
   ): Promise<void> {
+    // setBaseUrl mutates the CURRENT provider context only. If a different
+    // provider is requested, throw rather than silently updating the wrong one.
+    if (opts?.provider !== undefined) {
+      const current = this.deps.getCurrentProvider();
+      if (opts.provider !== current) {
+        throw new Error(
+          `setBaseUrl can only target the active provider "${current}", but provider "${opts.provider}" was requested`,
+        );
+      }
+    }
     this.deps.authState.baseUrl = baseUrl ?? undefined;
     await this.deps.setBaseUrl(baseUrl);
   }

@@ -86,21 +86,36 @@ describe('Hooks @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-015 @requiremen
   it('T15b hook execution is observable via onHookExecution with the request/response pair @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-015', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      let sawExecution = false;
-      const unsub = agent.hooks.onHookExecution((_req, _resp) => {
-        sawExecution = true;
+      let executionCount = 0;
+      const pairs: Array<{ reqEvent: unknown; respEvent: unknown }> = [];
+      const unsub = agent.hooks.onHookExecution((req, resp) => {
+        executionCount += 1;
+        pairs.push({ reqEvent: req.event, respEvent: resp.event });
       });
       try {
+        // A real hook execution (the SessionStart lifecycle trigger) is the
+        // observable hook source for onHookExecution. Counting executions
+        // (rather than latching a boolean) proves the observer actually fired
+        // for THIS execution and did not pass vacuously: the count must rise by
+        // exactly one across the single trigger, and the forwarded pair must
+        // carry the matching request/response event.
+        const beforeTrigger = executionCount;
         await agent.hooks.triggerSessionStart();
-        // the public callback fires when the Agent executes a hook. At RED
-        // triggerSessionStart throws NYI so sawExecution stays false; at GREEN
-        // the real hook runner fires and sawExecution becomes true.
+        expect(executionCount).toBe(beforeTrigger + 1);
+        const last = pairs[pairs.length - 1];
+        expect(last.reqEvent).toBe(last.respEvent);
+
+        // The chat path runs to completion through the same live Agent; it does
+        // not itself publish a bus-mediated hook execution in this hermetic
+        // setup, so the observer count is unchanged by chat() — asserting that
+        // explicitly prevents a future regression that silently double-counts.
+        const beforeChat = executionCount;
         const triggered = await agent
           .chat('trigger a hook')
           .then(() => true)
           .catch(() => false);
         expect(triggered).toBe(true);
-        expect(sawExecution).toBe(true);
+        expect(executionCount).toBe(beforeChat);
       } finally {
         unsub();
       }
@@ -423,6 +438,39 @@ describe('Hooks @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-015 @requiremen
         handle.publishBusResponse('corr-dup');
         handle.publishBusResponse('corr-dup');
         // the request is deleted after the first correlated response
+        expect(pairs).toHaveLength(1);
+        expect(pairs[0].event).toBe(HookEventName.BeforeTool);
+      } finally {
+        unsub();
+        handle.control.detach();
+      }
+    });
+
+    it('the pending-correlation buffer is bounded: the OLDEST request is evicted once the cap is exceeded while a recent one still resolves @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-015', () => {
+      // A HOOK_EXECUTION_REQUEST whose matching RESPONSE never arrives would
+      // otherwise grow the buffer unbounded. Publish MORE requests than the cap
+      // (1000) WITHOUT responses, then prove behaviorally that the oldest
+      // correlation was evicted (its later response forwards nothing) while a
+      // recent correlation still resolves. No size seam is needed — eviction is
+      // observed through the real correlation path.
+      const handle = createHookControlDeps();
+      const { pairs, unsub } = collect(handle.control);
+      const CAP = 1000;
+      try {
+        // Publish CAP + 1 distinct requests with no responses. After the
+        // (CAP+1)-th set(), size momentarily exceeds the cap and the OLDEST
+        // entry ('corr-0') is evicted.
+        for (let n = 0; n <= CAP; n += 1) {
+          handle.publishBusRequest(HookEventName.BeforeTool, `corr-${n}`);
+        }
+        // The oldest correlation was evicted → its response correlates to
+        // nothing → no pair forwarded.
+        handle.publishBusResponse('corr-0');
+        expect(pairs).toHaveLength(0);
+
+        // A recent correlation survives → its response forwards exactly one
+        // pair.
+        handle.publishBusResponse(`corr-${CAP}`);
         expect(pairs).toHaveLength(1);
         expect(pairs[0].event).toBe(HookEventName.BeforeTool);
       } finally {

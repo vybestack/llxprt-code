@@ -487,6 +487,51 @@ describe('Auth @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
     }
   });
 
+  it('T18a login with an explicit bucket makes THAT bucket the active one @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+      provider: 'anthropic',
+      onOAuthPrompt: () => true,
+    });
+    try {
+      await agent.auth.login('anthropic', { bucket: 'work' });
+
+      // the resolved bucket is the named one — active, bound to the provider,
+      // and the only bucket present (no stray 'default').
+      const buckets = agent.auth.listBuckets('anthropic');
+      expect(buckets).toHaveLength(1);
+      expect(buckets[0].name).toBe('work');
+      expect(buckets[0].provider).toBe('anthropic');
+      expect(buckets[0].active).toBe(true);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('T18a logout with an explicit bucket removes only that named bucket @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+      provider: 'anthropic',
+      onOAuthPrompt: () => true,
+    });
+    try {
+      // seed two buckets: 'default' (via login) and 'work' (via switchBucket)
+      await agent.auth.login('anthropic');
+      await agent.auth.switchBucket('anthropic', 'work');
+      expect(
+        agent.auth
+          .listBuckets('anthropic')
+          .map((b) => b.name)
+          .sort(),
+      ).toStrictEqual(['default', 'work']);
+
+      // logout of just 'work' removes only it, leaving 'default' intact
+      await agent.auth.logout('anthropic', { bucket: 'work' });
+      const remaining = agent.auth.listBuckets('anthropic');
+      expect(remaining.map((b) => b.name)).toStrictEqual(['default']);
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('T18a setBaseUrl mirrors onto the provider status; setBaseUrl(null) clears it @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
       provider: 'openai',
@@ -502,6 +547,24 @@ describe('Auth @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
 
       // clearing it removes the baseUrl from the status
       await agent.auth.setBaseUrl(null, { provider: 'openai' });
+      expect(agent.getProviderStatus().baseUrl).toBeUndefined();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('T18a setBaseUrl with a DIFFERENT provider than the active one throws @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+      provider: 'openai',
+    });
+    try {
+      // the active provider is 'openai'; targeting 'anthropic' must throw and
+      // must NOT mutate the active provider's baseUrl.
+      await expect(
+        agent.auth.setBaseUrl('https://proxy.example.com/v1', {
+          provider: 'anthropic',
+        }),
+      ).rejects.toThrow(/active provider "openai"/);
       expect(agent.getProviderStatus().baseUrl).toBeUndefined();
     } finally {
       await cleanup();

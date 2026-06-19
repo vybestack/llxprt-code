@@ -239,6 +239,41 @@ function matchImportQuote(
 }
 
 /**
+ * Attempts to read a bare side-effect `import <quoteChar>spec<quoteChar>`
+ * specifier at keyword index `i` (which points at the 'i' of "import"),
+ * requiring the SPECIFIC `quoteChar` to appear immediately (after optional
+ * whitespace) AFTER the keyword — i.e. NOT a `(` (that is the dynamic-import
+ * shape handled by matchImportQuote). Returns the specifier and the index past
+ * the closing quote, or null when the shape (with that quote) does not match.
+ * This catches `import '<spec>'` / `import "<spec>"` side-effect imports that
+ * carry no `from` and no parentheses.
+ */
+function matchSideEffectImportQuote(
+  source: string,
+  i: number,
+  quoteChar: string,
+): { value: string; next: number } | null {
+  if (!source.startsWith('import', i)) {
+    return null;
+  }
+  if (!hasLeadingBoundary(source, i)) {
+    return null;
+  }
+  const afterKeyword = i + 'import'.length;
+  const quoteIndex = skipWs(source, afterKeyword);
+  if (quoteIndex >= source.length) {
+    return null;
+  }
+  // The crux of the disambiguation: a side-effect import has the QUOTE char
+  // immediately after `import`+ws. A dynamic `import(` has `(` here instead and
+  // is handled exclusively by matchImportQuote.
+  if (source[quoteIndex] !== quoteChar) {
+    return null;
+  }
+  return readQuotedExact(source, quoteIndex, quoteChar);
+}
+
+/**
  * Runs a SINGLE independent pass over the entire source from index 0, mirroring
  * one `matchAll` call: at each position it tries `tryMatch`; on a match it
  * records the value and advances past ONLY that match, otherwise it advances by
@@ -264,18 +299,21 @@ function extractWithPass(
 
 /**
  * Extracts every import specifier reachable through `from '<spec>'`,
- * `from "<spec>"`, `import('<spec>')`, or `import("<spec>")` WITHOUT any RegExp,
- * via FOUR INDEPENDENT passes — one per (keyword, quote) shape — each scanning
- * the whole source from index 0. This faithfully mirrors the original four
- * independent `matchAll` calls, including their cross-quote overlap (e.g. a
- * single-quoted specifier nested inside a double-quoted one is still caught by
- * the single-quote pass). Results are concatenated in a deterministic grouped
- * order: from-sq, from-dq, import-sq, import-dq.
+ * `from "<spec>"`, bare side-effect `import '<spec>'` / `import "<spec>"`, or
+ * dynamic `import('<spec>')` / `import("<spec>")` WITHOUT any RegExp, via SIX
+ * INDEPENDENT passes — one per (keyword/shape, quote) — each scanning the whole
+ * source from index 0. This faithfully mirrors independent `matchAll` calls,
+ * including their cross-quote overlap (e.g. a single-quoted specifier nested
+ * inside a double-quoted one is still caught by the single-quote pass). Results
+ * are concatenated in a deterministic grouped order: from-sq, from-dq,
+ * side-effect-sq, side-effect-dq, import-sq, import-dq.
  */
 function extractSpecifiers(source: string): readonly string[] {
   return [
     ...extractWithPass(source, (s, i) => matchFromQuote(s, i, "'")),
     ...extractWithPass(source, (s, i) => matchFromQuote(s, i, '"')),
+    ...extractWithPass(source, (s, i) => matchSideEffectImportQuote(s, i, "'")),
+    ...extractWithPass(source, (s, i) => matchSideEffectImportQuote(s, i, '"')),
     ...extractWithPass(source, (s, i) => matchImportQuote(s, i, "'")),
     ...extractWithPass(source, (s, i) => matchImportQuote(s, i, '"')),
   ];
@@ -431,5 +469,37 @@ describe('Package boundary (T17) @plan:PLAN-20260617-COREAPI.P09 @requirement:RE
     // still match.
     expect(extractSpecifiers(`from'a'`)).toContain('a');
     expect(extractSpecifiers(`import ( "b" )`)).toContain('b');
+  });
+
+  it('extractSpecifiers detects bare side-effect imports as deep imports @plan:PLAN-20260617-COREAPI.P09 @requirement:REQ-019', () => {
+    // A bare side-effect `import '<deep>'` (no `from`, no parens) must be caught
+    // by the scanner — otherwise a forbidden deep import written this way would
+    // evade the boundary guard. The forbidden specifier is assembled from
+    // fragments at runtime so the literal `import '<deep>'` shape never appears
+    // contiguously in THIS source file (mirroring the parity test's fragment
+    // trick), keeping the on-disk source clean for the file-level self-scan.
+    const importKw = 'imp' + 'ort';
+    const deep = '@vybestack/llxprt-code-core' + '/foo';
+    const sideEffectSq = importKw + " '" + deep + "'";
+    const sideEffectDq = importKw + ' "' + deep + '"';
+
+    const sqSpecs = extractSpecifiers(sideEffectSq);
+    expect(sqSpecs).toContain(deep);
+    expect(isForbiddenDeep(deep)).toBe(true);
+
+    const dqSpecs = extractSpecifiers(sideEffectDq);
+    expect(dqSpecs).toContain(deep);
+
+    // Disambiguation: a dynamic `import('<spec>')` must NOT be captured by the
+    // side-effect pass (it has `(` after the keyword, not a quote), and a bare
+    // side-effect import must NOT be captured by the dynamic pass.
+    expect(
+      extractWithPass(sideEffectSq, (s, i) => matchImportQuote(s, i, "'")),
+    ).not.toContain(deep);
+    expect(
+      extractWithPass(`import('dyn')`, (s, i) =>
+        matchSideEffectImportQuote(s, i, "'"),
+      ),
+    ).not.toContain('dyn');
   });
 });

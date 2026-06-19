@@ -282,47 +282,50 @@ export async function runRealLoopExecuteTool(): Promise<
   readonly AgenticLoopEvent[]
 > {
   clearAllSchedulers();
-  const tool = new MockTool({
-    name: 'harness_tool',
-    execute: async () => ({
+  try {
+    const tool = new MockTool({
+      name: 'harness_tool',
+      execute: async () => ({
+        llmContent: 'tool-output',
+        returnDisplay: 'tool-output',
+      }),
+    });
+    tool.shouldConfirm = true;
+    tool.executeFn.mockResolvedValue({
       llmContent: 'tool-output',
       returnDisplay: 'tool-output',
-    }),
-  });
-  tool.shouldConfirm = true;
-  tool.executeFn.mockResolvedValue({
-    llmContent: 'tool-output',
-    returnDisplay: 'tool-output',
-  });
-  const toolRegistry = createToolRegistry([tool]);
-  const messageBus = new MessageBus(createAskPolicyEngine(), false);
-  const config = createTestConfig({
-    messageBus,
-    toolRegistry,
-    policyEngine: createAskPolicyEngine(),
-  });
-  const approvalHandler: ApprovalHandler = async () => ({
-    outcome: ToolConfirmationOutcome.ProceedOnce,
-  });
-  const { client } = createScriptedAgentClient([
-    [
-      streamToolCallRequest('call-real', 'harness_tool', { x: 1 }),
-      streamFinished(),
-    ],
-    [streamContent('done'), streamFinished()],
-  ]);
-  const loop = new AgenticLoop({
-    agentClient: client,
-    config,
-    messageBus,
-    approvalHandler,
-  });
-  const events: AgenticLoopEvent[] = [];
-  for await (const event of loop.run('go', new AbortController().signal)) {
-    events.push(event);
+    });
+    const toolRegistry = createToolRegistry([tool]);
+    const messageBus = new MessageBus(createAskPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAskPolicyEngine(),
+    });
+    const approvalHandler: ApprovalHandler = async () => ({
+      outcome: ToolConfirmationOutcome.ProceedOnce,
+    });
+    const { client } = createScriptedAgentClient([
+      [
+        streamToolCallRequest('call-real', 'harness_tool', { x: 1 }),
+        streamFinished(),
+      ],
+      [streamContent('done'), streamFinished()],
+    ]);
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      messageBus,
+      approvalHandler,
+    });
+    const events: AgenticLoopEvent[] = [];
+    for await (const event of loop.run('go', new AbortController().signal)) {
+      events.push(event);
+    }
+    return events;
+  } finally {
+    clearAllSchedulers();
   }
-  clearAllSchedulers();
-  return events;
 }
 
 /**
@@ -332,33 +335,36 @@ export async function runRealLoopExecuteTool(): Promise<
  */
 export async function runRealLoopAbort(): Promise<readonly AgenticLoopEvent[]> {
   clearAllSchedulers();
-  const tool = new MockTool({ name: 'abort_tool' });
-  const toolRegistry = createToolRegistry([tool]);
-  const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-  const config = createTestConfig({
-    messageBus,
-    toolRegistry,
-    policyEngine: createAllowPolicyEngine(),
-  });
-  const controller = new AbortController();
-  const { client } = createScriptedAgentClient([
-    [streamContent('partial...'), streamFinished()],
-  ]);
-  const loop = new AgenticLoop({
-    agentClient: client,
-    config,
-    messageBus,
-  });
-  const events: AgenticLoopEvent[] = [];
-  const iterator = loop.run('go', controller.signal);
-  const first = await iterator.next();
-  if (first.done !== true) {
-    events.push(first.value);
+  try {
+    const tool = new MockTool({ name: 'abort_tool' });
+    const toolRegistry = createToolRegistry([tool]);
+    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAllowPolicyEngine(),
+    });
+    const controller = new AbortController();
+    const { client } = createScriptedAgentClient([
+      [streamContent('partial...'), streamFinished()],
+    ]);
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      messageBus,
+    });
+    const events: AgenticLoopEvent[] = [];
+    const iterator = loop.run('go', controller.signal);
+    const first = await iterator.next();
+    if (first.done !== true) {
+      events.push(first.value);
+    }
+    controller.abort();
+    for await (const event of iterator) {
+      events.push(event);
+    }
+    return events;
+  } finally {
+    clearAllSchedulers();
   }
-  controller.abort();
-  for await (const event of iterator) {
-    events.push(event);
-  }
-  clearAllSchedulers();
-  return events;
 }

@@ -390,18 +390,31 @@ export class ProfilesControl implements AgentProfileControl {
   private scanPublicProfiles(): readonly PublicProfileCandidate[] {
     const dirs = [join(this.deps.workingDir, 'fixtures'), this.deps.workingDir];
     const candidates: PublicProfileCandidate[] = [];
-    const seen = new Set<string>();
+    const seenPaths = new Set<string>();
+    const seenNames = new Set<string>();
     for (const dir of dirs) {
-      const entries = safeReadDir(dir);
+      // Sort entries deterministically so list()/name-resolution order does not
+      // depend on filesystem enumeration order.
+      const entries = [...safeReadDir(dir)].sort((a, b) => a.localeCompare(b));
       const newCandidates = entries
         .filter((entry) => entry.endsWith('.json'))
         .map((entry) => join(dir, entry))
-        .filter((abs) => !seen.has(abs))
+        .filter((abs) => !seenPaths.has(abs))
         .map((abs) => {
-          seen.add(abs);
+          seenPaths.add(abs);
           return this.readPublicProfile(abs);
         })
-        .filter((c): c is PublicProfileCandidate => c !== undefined);
+        .filter((c): c is PublicProfileCandidate => c !== undefined)
+        // De-duplicate by profile NAME across dirs so name resolution is
+        // stable. The fixtures dir is scanned first, so it wins on a name
+        // collision (matching this function's documented precedence).
+        .filter((c) => {
+          if (seenNames.has(c.name)) {
+            return false;
+          }
+          seenNames.add(c.name);
+          return true;
+        });
       candidates.push(...newCandidates);
     }
     return candidates;
