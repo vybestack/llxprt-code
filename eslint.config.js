@@ -155,7 +155,12 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/utils/terminalSerializer.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/tool-utils.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/userAccountManager.ts', // remaining core cleanup after #2081/#2082
-  'packages/providers/src/**/*.{ts,tsx}', // #2083/#2084/#2092
+  // #2084 scope: providers target files. The broad
+  // packages/providers/src/** override remains for non-target files (other
+  // provider packages still have legacy directives outside #2084). The
+  // completedDirectiveCleanupScopes block below overrides this for the 15
+  // target files and their extracted modules, locking them to error.
+  'packages/providers/src/**/*.{ts,tsx}', // #2083/#2092 (non-target files; #2084 targets overridden below)
   'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2087/#2091
   'packages/tools/src/**/*.{ts,tsx}', // #2088
@@ -254,6 +259,51 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089
+  // #2084 scope — provider implementation files fully compliant: zero inline
+  // lint directives. Locked to error so any new directive fails immediately.
+  // The broad packages/providers/src/** legacy override above is overridden
+  // here for these specific files. Extracted modules added as created.
+  'packages/providers/src/anthropic/AnthropicProvider.ts', // #2084
+  'packages/providers/src/anthropic/AnthropicRequestPreparation.ts', // #2084
+  'packages/providers/src/gemini/GeminiProvider.ts', // #2084
+  'packages/providers/src/gemini/thoughtSignatures.ts', // #2084
+  'packages/providers/src/gemini/geminiAuth.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiGenerationExecution.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiGenerationSetup.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiModels.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiReasoningConfig.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiRequestBuilding.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiResponseMapper.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiSchemaHelpers.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiServerTools.ts', // #2084 extracted
+  'packages/providers/src/openai-responses/buildResponsesInputFromContent.ts', // #2084
+  'packages/providers/src/openai-vercel/messageConversion.ts', // #2084
+  'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts', // #2084
+  'packages/providers/src/openai-vercel/vercelDeveloperRoleFetch.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelLogging.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelMetadataMapper.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelModelClient.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelModelListing.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelNonStreamingHandler.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelNonStreamingResponse.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelReasoningCapture.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelRequestParams.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelStreamHandler.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelStreamProcessor.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelStreamTypes.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelSystemPrompt.ts', // #2084 extracted
+  'packages/providers/src/openai/buildResponsesRequest.ts', // #2084
+  'packages/providers/src/openai/getOpenAIProviderInfo.ts', // #2084
+  'packages/providers/src/openai/OpenAIApiExecution.ts', // #2084
+  'packages/providers/src/openai/OpenAINonStreamHandler.ts', // #2084
+  'packages/providers/src/openai/OpenAIProvider.ts', // #2084
+  'packages/providers/src/openai/OpenAIStreamChunkText.ts', // #2084 extracted
+  'packages/providers/src/openai/OpenAIRequestPreparation.ts', // #2084
+  'packages/providers/src/openai/OpenAIResponseParser.ts', // #2084
+  'packages/providers/src/openai/parseResponsesStream.ts', // #2084
+  'packages/providers/src/openai/responsesErrorParsing.ts', // #2084 extracted
+  // #2084 extracted shared helpers
+  'packages/providers/src/utils/falsyFallback.ts', // #2084
 ];
 
 export default tseslint.config(
@@ -1233,6 +1283,21 @@ export default tseslint.config(
     files: ['packages/core/src/services/environmentSanitization.ts'],
     rules: {
       'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2081/#2082 security credential-detection regex
+    },
+  },
+
+  // Issue #2084: Kimi K2 fixed-format tool-call template regexes.
+  // These parse the vendor-specific `<|tool_calls_section_begin|>...<|tool_call_end|>`
+  // protocol emitted by HF/vLLM-style Kimi deployments. Inputs are bounded to
+  // model-generated tool-call sections (not arbitrary user input), and the
+  // patterns use explicit delimiters and `[^<]` / lazy quantifiers to avoid
+  // unbounded backtracking. sonarjs/regular-expr is a generic heuristic that
+  // cannot distinguish these reviewed, bounded protocol parsers from unsafe
+  // regexes.
+  {
+    files: ['packages/providers/src/openai/OpenAIResponseParser.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2084 Kimi protocol template regex
     },
   },
 

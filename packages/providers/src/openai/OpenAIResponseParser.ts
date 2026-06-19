@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 import type OpenAI from 'openai';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type {
@@ -26,6 +24,19 @@ import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';
 import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+
+/**
+ * Returns true for parts that carry no textual content and should be skipped.
+ */
+function isEmptyishPart(part: unknown): boolean {
+  if (part === undefined || part === null || part === false) {
+    return true;
+  }
+  if (part === 0 || part === '') {
+    return true;
+  }
+  return typeof part === 'number' && Number.isNaN(part);
+}
 
 /**
  * Coerce provider "content" (which may be a string or an array-of-parts)
@@ -41,15 +52,7 @@ export function coerceMessageContentToString(
   if (Array.isArray(content)) {
     const parts: string[] = [];
     for (const part of content) {
-      if (
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        part === undefined ||
-        part === null ||
-        part === false ||
-        part === 0 ||
-        part === '' ||
-        (typeof part === 'number' && Number.isNaN(part))
-      ) {
+      if (isEmptyishPart(part)) {
         continue;
       }
       if (typeof part === 'string') {
@@ -97,8 +100,7 @@ export function sanitizeToolArgumentsString(
 
   // Strip fenced code blocks like ```json { ... } ```.
   if (text.startsWith('```')) {
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    text = text.replace(/^```[a-zA-Z0-9_-]*\s*/m, '');
+    text = text.replace(/^```[\w-]*/m, '');
     text = text.replace(/```$/m, '');
     text = text.trim();
   }
@@ -117,6 +119,44 @@ export function sanitizeToolArgumentsString(
   }
 
   return text.length > 0 ? text : '{}';
+}
+
+/**
+ * Infer the tool name from a Kimi K2 tool-call id string.
+ *
+ * Ids follow `functions.<name>:<seq>` or `<group>.<name>:<seq>`; when neither
+ * pattern matches, the final `.`/`:` segment is used as a fallback.
+ */
+function inferKimiToolName(rawId: string): string {
+  const match =
+    /^functions\.(\w+):\d+/i.exec(rawId) ?? /^[\w]+\.(\w+):\d+/.exec(rawId);
+  if (match) {
+    return match[1];
+  }
+  const colonParts = rawId.split(':');
+  const head = colonParts[0] || rawId;
+  const dotParts = head.split('.');
+  return dotParts[dotParts.length - 1] || head;
+}
+
+function buildKimiToolCall(
+  rawId: string,
+  rawArgs: string,
+  logger: DebugLogger,
+): ToolCallBlock {
+  let toolName = inferKimiToolName(rawId);
+  // Normalize tool name (handles Kimi-K2 style prefixes like call_functionsglob7)
+  toolName = normalizeToolName(toolName);
+
+  const sanitizedArgs = sanitizeToolArgumentsString(rawArgs, logger);
+  const processedParameters = processToolParameters(sanitizedArgs, toolName);
+
+  return {
+    type: 'tool_call',
+    id: normalizeToHistoryToolId(rawId),
+    name: toolName,
+    parameters: processedParameters,
+  } as ToolCallBlock;
 }
 
 /**
@@ -154,46 +194,11 @@ export function extractKimiToolCallsFromText(
       (_sectionMatch: string, sectionBody: string) => {
         try {
           const callRegex =
-            // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-            /<\|tool_call_begin\|>\s*([^<]+?)\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/g;
+            /<\|tool_call_begin\|>([^<]+)<\|tool_call_argument_begin\|>([\s\S]*?)<\|tool_call_end\|>/g;
 
           let m: RegExpExecArray | null;
           while ((m = callRegex.exec(sectionBody)) !== null) {
-            const rawId = m[1].trim();
-            const rawArgs = m[2].trim();
-
-            // Infer tool name from ID.
-            let toolName = '';
-            const match =
-              // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-              /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ??
-              // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-              /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (match) {
-              toolName = match[1];
-            } else {
-              const colonParts = rawId.split(':');
-              const head = colonParts[0] || rawId;
-              const dotParts = head.split('.');
-              toolName = dotParts[dotParts.length - 1] || head;
-            }
-
-            // Normalize tool name (handles Kimi-K2 style prefixes like call_functionsglob7)
-            toolName = normalizeToolName(toolName);
-
-            const sanitizedArgs = sanitizeToolArgumentsString(rawArgs, logger);
-            const processedParameters = processToolParameters(
-              sanitizedArgs,
-              toolName,
-            );
-
-            toolCalls.push({
-              type: 'tool_call',
-              id: normalizeToHistoryToolId(rawId),
-              name: toolName,
-              parameters: processedParameters,
-            } as ToolCallBlock);
+            toolCalls.push(buildKimiToolCall(m[1].trim(), m[2].trim(), logger));
           }
         } catch (err) {
           logger.debug(

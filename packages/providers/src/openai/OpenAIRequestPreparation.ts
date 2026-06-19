@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 import type OpenAI from 'openai';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -101,15 +99,21 @@ async function resolveSystemPrompt(
 
   const userMemory = await resolveUserMemory(
     options.userMemory,
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    () => options.invocation?.userMemory,
+    () => options.invocation.userMemory,
   );
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  const mcpInstructions = config?.getMcpClientManager?.()?.getMcpInstructions();
+  const mcpClientManager =
+    typeof config?.getMcpClientManager === 'function'
+      ? config.getMcpClientManager()
+      : undefined;
+  const mcpInstructions = mcpClientManager
+    ? mcpClientManager.getMcpInstructions()
+    : undefined;
   const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
     toolNamesArg ?? [],
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    () => config?.getSubagentManager?.(),
+    () =>
+      typeof config?.getSubagentManager === 'function'
+        ? config.getSubagentManager()
+        : undefined,
   );
   return getCoreSystemPromptAsync({
     userMemory,
@@ -126,13 +130,39 @@ async function resolveSystemPrompt(
   });
 }
 
+type OpenAIInvocationRuntime = {
+  ephemerals?: Record<string, unknown>;
+  modelBehavior?: Record<string, unknown>;
+};
+
+function resolveReasoningConfig(
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  options: NormalizedGenerateChatOptions,
+): void {
+  if ('thinking' in requestBody || 'reasoning_effort' in requestBody) {
+    return;
+  }
+  const invocation = options.invocation as OpenAIInvocationRuntime;
+  const reasoningEnabled = invocation.modelBehavior?.['reasoning.enabled'] as
+    | boolean
+    | undefined;
+  if (reasoningEnabled === true) {
+    (requestBody as unknown as Record<string, unknown>)['thinking'] = {
+      type: 'enabled',
+    };
+  } else if (reasoningEnabled === false) {
+    (requestBody as unknown as Record<string, unknown>)['thinking'] = {
+      type: 'disabled',
+    };
+  }
+}
+
 /**
  * Apply reasoning, max-tokens, and stream-options to the request body.
  */
 function applyRequestBodyOverrides(
   requestBody: OpenAI.Chat.ChatCompletionCreateParams,
   options: NormalizedGenerateChatOptions,
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   ephemeralSettings: Record<string, unknown>,
   maxTokens: number | undefined,
   streamingEnabled: boolean,
@@ -149,22 +179,7 @@ function applyRequestBodyOverrides(
     Object.assign(requestBody, requestOverrides);
   }
 
-  // Inject thinking parameter for reasoning models
-  if (!('thinking' in requestBody) && !('reasoning_effort' in requestBody)) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    const reasoningEnabled = options.invocation?.modelBehavior?.[
-      'reasoning.enabled'
-    ] as boolean | undefined;
-    if (reasoningEnabled === true) {
-      (requestBody as unknown as Record<string, unknown>)['thinking'] = {
-        type: 'enabled',
-      };
-    } else if (reasoningEnabled === false) {
-      (requestBody as unknown as Record<string, unknown>)['thinking'] = {
-        type: 'disabled',
-      };
-    }
-  }
+  resolveReasoningConfig(requestBody, options);
 
   if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
     requestBody.max_tokens = maxTokens;
@@ -193,8 +208,8 @@ export async function prepareRequest(
 ): Promise<RequestContext> {
   const { contents, tools, metadata } = options;
   const model = options.resolved.model || defaultModel;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  const ephemeralSettings = options.invocation?.ephemerals ?? {};
+  const invocation = options.invocation as OpenAIInvocationRuntime;
+  const ephemeralSettings = invocation.ephemerals ?? {};
 
   // Detect the tool format to use BEFORE building messages
   // Check for provider toolFormat override before auto-detecting
@@ -247,8 +262,7 @@ export async function prepareRequest(
   ];
 
   const maxTokens =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    (metadata?.maxTokens as number | undefined) ??
+    (metadata.maxTokens as number | undefined) ??
     (ephemeralSettings['max-tokens'] as number | undefined);
 
   // Build request

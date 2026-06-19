@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 /**
  * @plan PLAN-20251127-OPENAIVERCEL.P06
  * @requirement REQ-OAV-MC-001 - Convert IContent to Vercel CoreMessage
@@ -59,6 +57,7 @@ import {
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
 } from '../utils/mediaUtils.js';
+import { firstTruthyString } from '../utils/falsyFallback.js';
 
 function inferMediaEncoding(imageData: string): {
   encoding: 'base64' | 'url';
@@ -245,8 +244,7 @@ function convertToolContent(
     return {
       type: 'tool-result' as const,
       toolCallId: resolveToolResponseId(block),
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string name/toolName should fall through to empty string
-      toolName: extBlock.name || extBlock.toolName || '',
+      toolName: firstTruthyString(extBlock.name, extBlock.toolName),
       output: {
         type: 'text',
         value: payload.result,
@@ -297,8 +295,7 @@ export function convertToVercelMessages(
       if (msg) messages.push(msg);
     } else if (content.speaker === 'ai') {
       convertAiContent(messages, content, resolveToolCallId, options);
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Vercel message payloads are external provider boundaries despite declared types.
-    } else if (content.speaker === 'tool') {
+    } else {
       convertToolContent(messages, content, resolveToolResponseId);
     }
   }
@@ -310,8 +307,7 @@ function parseUserContentPart(part: unknown, blocks: ContentBlock[]): void {
   const partType = (part as { type?: string }).type;
 
   if (typeof part === 'string') {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Vercel message payloads are external provider boundaries despite declared types.
-    if (part) {
+    if (part.length > 0) {
       blocks.push({ type: 'text', text: part });
     }
     return;
@@ -340,8 +336,7 @@ function parseAssistantContentPart(
   const partType = (part as { type?: string }).type;
 
   if (typeof part === 'string') {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Vercel message payloads are external provider boundaries despite declared types.
-    if (part) {
+    if (part.length > 0) {
       blocks.push({ type: 'text', text: part });
     }
   } else if (partType === 'text') {
@@ -435,27 +430,28 @@ function convertFromVercelAssistant(message: CoreMessage): IContent | null {
   return blocks.length > 0 ? { speaker: 'ai', blocks } : null;
 }
 
-function parseToolResultPart(part: ToolResultPart): ToolResponseBlock | null {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Vercel message payloads are external provider boundaries despite declared types.
-  if (part.type !== 'tool-result') return null;
+function isOutputErrorType(output: unknown): boolean {
+  if (output === null || output === undefined || typeof output !== 'object') {
+    return false;
+  }
+  const typeValue = (output as { type?: unknown }).type;
+  return typeof typeValue === 'string' && typeValue.startsWith('error');
+}
 
+function extractOutputValue(output: unknown): unknown {
+  if (output === null || output === undefined || typeof output !== 'object') {
+    return output;
+  }
+  if ('value' in (output as Record<string, unknown>)) {
+    return (output as { value?: unknown }).value;
+  }
+  return output;
+}
+
+function parseToolResultPart(part: ToolResultPart): ToolResponseBlock | null {
   const output = (part as { output?: unknown }).output;
-  const isErrorOutput =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    output !== null &&
-    output !== undefined &&
-    typeof output === 'object' &&
-    'type' in (output as { type?: string }) &&
-    typeof (output as { type?: string }).type === 'string' &&
-    (output as { type?: string }).type?.startsWith('error');
-  const resultValue =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    output !== null &&
-    output !== undefined &&
-    typeof output === 'object' &&
-    'value' in (output as { value?: unknown })
-      ? (output as { value?: unknown }).value
-      : output;
+  const isErrorOutput = isOutputErrorType(output);
+  const resultValue = extractOutputValue(output);
   let parsedResult = resultValue;
 
   if (typeof resultValue === 'string') {
@@ -496,21 +492,24 @@ function convertFromVercelTool(message: CoreMessage): IContent | null {
   return blocks.length > 0 ? { speaker: 'tool', blocks } : null;
 }
 
+function extractSystemText(systemContent: unknown): string {
+  if (typeof systemContent === 'string') {
+    return systemContent;
+  }
+  if (!Array.isArray(systemContent)) {
+    return '';
+  }
+  return (systemContent as Array<{ type: string; text?: string } | string>)
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (part.type === 'text') return part.text ?? '';
+      return '';
+    })
+    .join('\n');
+}
+
 function convertFromVercelSystem(message: CoreMessage): IContent | null {
-  const systemContent = message.content;
-  const text =
-    typeof systemContent === 'string'
-      ? systemContent
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        Array.isArray(systemContent)
-        ? (systemContent as Array<{ type: string; text?: string } | string>)
-            .map((part) => {
-              if (typeof part === 'string') return part;
-              if (part.type === 'text') return part.text ?? '';
-              return '';
-            })
-            .join('\n')
-        : '';
+  const text = extractSystemText(message.content);
 
   if (text) {
     const systemContentObj: IContent & { metadata: { role: string } } = {
@@ -535,8 +534,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
       result = convertFromVercelAssistant(message);
     } else if (message.role === 'tool') {
       result = convertFromVercelTool(message);
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Vercel message payloads are external provider boundaries despite declared types.
-    } else if (message.role === 'system') {
+    } else {
       result = convertFromVercelSystem(message);
     }
 

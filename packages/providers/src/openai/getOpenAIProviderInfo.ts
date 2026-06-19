@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 /**
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
@@ -63,84 +61,137 @@ export function getOpenAIProviderInfo(
     const settingsService = runtime.settingsService;
     const config = runtime.config;
 
-    const runtimeManager =
-      typeof config?.getProviderManager === 'function'
-        ? config.getProviderManager()
-        : undefined;
-    const manager = providerManager ?? runtimeManager ?? null;
-
-    const activeProviderName =
-      (manager?.hasActiveProvider() === true
-        ? manager.getActiveProviderName()
-        : undefined) ??
-      (typeof config?.getProvider === 'function'
-        ? config.getProvider()
-        : undefined);
-
+    const manager = resolveManager(providerManager, config);
+    const activeProviderName = resolveActiveProviderName(manager, config);
     if (activeProviderName !== 'openai') {
       return result;
     }
 
-    // Narrow to expected provider type using feature detection for ancillary data
-    let openaiProvider: OpenAIProviderLike | null = null;
-    if (manager?.hasActiveProvider() === true) {
-      const activeProvider = manager.getActiveProvider();
-      if (activeProvider != null && activeProvider.name === 'openai') {
-        openaiProvider = activeProvider as unknown as OpenAIProviderLike;
-      }
-    }
-
+    const openaiProvider = resolveOpenAIProvider(manager);
     result.provider = openaiProvider;
+    result.conversationCache = resolveConversationCache(openaiProvider);
 
-    if (openaiProvider) {
-      if (typeof openaiProvider.getConversationCache === 'function') {
-        result.conversationCache = openaiProvider.getConversationCache();
-      } else if ('conversationCache' in openaiProvider) {
-        result.conversationCache =
-          (
-            openaiProvider as {
-              conversationCache?: ConversationCache;
-            }
-          ).conversationCache ?? null;
-      }
-    }
-
-    const ephemeralModel = settingsService.get('model') as string | undefined;
-    const providerSettings = settingsService.getProviderSettings('openai');
-    const providerModel = providerSettings.model as string | undefined;
-    const configModel =
-      typeof config?.getModel === 'function' ? config.getModel() : undefined;
-
-    const normalizedModel =
-      getValidString(ephemeralModel) ?? providerModel ?? configModel;
-    result.currentModel = normalizedModel ?? null;
-
-    const configuredMode =
-      (providerSettings.apiMode as string | undefined) ??
-      (providerSettings.responsesMode as string | undefined) ??
-      (settingsService.get('responses-mode') as string | undefined);
-
-    if (configuredMode) {
-      result.isResponsesAPI = configuredMode.toLowerCase() === 'responses';
-    } else if (result.currentModel) {
-      if (openaiProvider?.shouldUseResponses) {
-        result.isResponsesAPI = openaiProvider.shouldUseResponses(
-          result.currentModel,
-        );
-      } else {
-        result.isResponsesAPI = (
-          RESPONSES_API_MODELS as readonly string[]
-        ).includes(result.currentModel);
-      }
-    }
-
-    // Note: Remote token info would need to be tracked separately during API calls
-    // This is a placeholder for where that information would be stored
+    result.currentModel = resolveCurrentModel(settingsService, config);
+    result.isResponsesAPI = resolveResponsesApiMode(
+      settingsService,
+      result.currentModel,
+      openaiProvider,
+    );
   } catch (error) {
     logger.debug(() => `Error accessing OpenAI provider info: ${error}`);
   }
 
   return result;
+}
+
+type ProviderInfoManager = {
+  hasActiveProvider: () => boolean;
+  getActiveProviderName: () => string | undefined;
+  getActiveProvider: () => { name: string } | undefined;
+};
+
+type ProviderInfoConfig = {
+  getProviderManager?: () => ProviderInfoManager | undefined;
+  getProvider?: () => string | undefined;
+  getModel?: () => string | undefined;
+};
+
+type ProviderInfoSettings = {
+  get: (key: string) => unknown;
+  getProviderSettings: (name: string) => Record<string, unknown>;
+};
+
+function resolveManager(
+  providerManager: ProviderManager | null | undefined,
+  config: ProviderInfoConfig | undefined,
+): ProviderInfoManager | null | undefined {
+  const runtimeManager =
+    typeof config?.getProviderManager === 'function'
+      ? config.getProviderManager()
+      : undefined;
+  return providerManager ?? runtimeManager ?? null;
+}
+
+function resolveActiveProviderName(
+  manager: ProviderInfoManager | null | undefined,
+  config: ProviderInfoConfig | undefined,
+): string | undefined {
+  return (
+    (manager?.hasActiveProvider() === true
+      ? manager.getActiveProviderName()
+      : undefined) ??
+    (typeof config?.getProvider === 'function'
+      ? config.getProvider()
+      : undefined)
+  );
+}
+
+function resolveOpenAIProvider(
+  manager: ProviderInfoManager | null | undefined,
+): OpenAIProviderLike | null {
+  if (manager?.hasActiveProvider() !== true) {
+    return null;
+  }
+  const activeProvider = manager.getActiveProvider();
+  if (activeProvider === undefined || activeProvider.name !== 'openai') {
+    return null;
+  }
+  return activeProvider as unknown as OpenAIProviderLike;
+}
+
+function resolveConversationCache(
+  openaiProvider: OpenAIProviderLike | null,
+): ConversationCache | null {
+  if (!openaiProvider) {
+    return null;
+  }
+  if (typeof openaiProvider.getConversationCache === 'function') {
+    return openaiProvider.getConversationCache();
+  }
+  if ('conversationCache' in openaiProvider) {
+    return (
+      (openaiProvider as { conversationCache?: ConversationCache })
+        .conversationCache ?? null
+    );
+  }
+  return null;
+}
+
+function resolveCurrentModel(
+  settingsService: ProviderInfoSettings,
+  config: ProviderInfoConfig | undefined,
+): string | null {
+  const ephemeralModel = settingsService.get('model') as string | undefined;
+  const providerSettings = settingsService.getProviderSettings('openai');
+  const providerModel = providerSettings.model as string | undefined;
+  const configModel =
+    typeof config?.getModel === 'function' ? config.getModel() : undefined;
+  const normalizedModel =
+    getValidString(ephemeralModel) ?? providerModel ?? configModel;
+  return normalizedModel ?? null;
+}
+
+function resolveResponsesApiMode(
+  settingsService: ProviderInfoSettings,
+  currentModel: string | null,
+  openaiProvider: OpenAIProviderLike | null,
+): boolean {
+  const providerSettings = settingsService.getProviderSettings('openai');
+  const configuredMode =
+    (providerSettings.apiMode as string | undefined) ??
+    (providerSettings.responsesMode as string | undefined) ??
+    (settingsService.get('responses-mode') as string | undefined);
+
+  if (configuredMode) {
+    return configuredMode.toLowerCase() === 'responses';
+  }
+  if (!currentModel) {
+    return false;
+  }
+  if (openaiProvider?.shouldUseResponses) {
+    return openaiProvider.shouldUseResponses(currentModel);
+  }
+  return (RESPONSES_API_MODELS as readonly string[]).includes(currentModel);
 }
 
 /**
