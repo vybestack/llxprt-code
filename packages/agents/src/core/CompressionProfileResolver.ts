@@ -511,17 +511,19 @@ export async function resolveLoadBalancedCompressionProvider(
 
 /**
  * Resolve a compression profile by name into a provider + runtime + config.
- * When no profile name is given, the supplied default provider/runtime is used.
+ * When no profile name is given, the default provider is resolved lazily via
+ * `resolveDefaultProvider` so its throw/side-effect semantics only apply on the
+ * no-profile path (matching the pre-extraction control flow).
  */
 export async function resolveCompressionProvider(
   ctx: CompressionProfileResolverContext,
   profileName: string | undefined,
-  defaultProvider: IProvider,
+  resolveDefaultProvider: () => IProvider,
 ): Promise<CompressionProviderResult> {
   if (!profileName) {
     const runtime = ctx.providerRuntime;
     return {
-      provider: defaultProvider,
+      provider: resolveDefaultProvider(),
       runtime,
       config: runtime.config,
     };

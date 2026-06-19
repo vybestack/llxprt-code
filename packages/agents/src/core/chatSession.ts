@@ -414,13 +414,13 @@ export class ChatSession {
   private async resolveCompressionProvider(
     profileName: string | undefined,
   ): Promise<CompressionProviderResult> {
-    const defaultProvider = this.resolveProviderForRuntime(
-      'ChatSession.resolveCompressionProvider.default',
-    );
     return resolveCompressionProvider(
       this.getCompressionProfileResolverContext(),
       profileName,
-      defaultProvider,
+      () =>
+        this.resolveProviderForRuntime(
+          'ChatSession.resolveCompressionProvider.default',
+        ),
     );
   }
 

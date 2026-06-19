@@ -572,7 +572,10 @@ function applyFinishReasonMapping(
       incomplete: FinishReason.MAX_TOKENS,
       failed: FinishReason.STOP,
     };
-    const hasMapping = terminationReason in finishReasonByTerminationReason;
+    const hasMapping = Object.prototype.hasOwnProperty.call(
+      finishReasonByTerminationReason,
+      terminationReason,
+    );
     if (hasMapping) {
       const mappedReason = finishReasonByTerminationReason[terminationReason];
       response.candidates[0].finishReason = mappedReason;

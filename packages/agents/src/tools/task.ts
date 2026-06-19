@@ -61,7 +61,9 @@ function resolveOptionalConfigMethod<T>(
   methodName: 'getProfileManager' | 'getSubagentManager',
 ): T | undefined {
   const fn = (config as unknown as Record<string, unknown>)[methodName];
-  return typeof fn === 'function' ? (fn as () => T)() : undefined;
+  return typeof fn === 'function'
+    ? (fn as (this: Config) => T).call(config)
+    : undefined;
 }
 
 export interface TaskToolParams {
