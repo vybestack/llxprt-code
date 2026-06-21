@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 /**
  * @plan PLAN-20260211-HIGHDENSITY.P09
  * @plan PLAN-20260211-HIGHDENSITY.P11
@@ -148,6 +146,27 @@ function isEmptyTextBlock(block: ContentBlock): boolean {
 
 /**
  * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Resolve write-tool target paths for a single AI entry's blocks.
+ * Returns resolved paths keyed to the given history index.
+ * @pseudocode high-density-optimize.md lines 70-90
+ */
+function collectLatestWriteIndexes(
+  blocks: readonly ContentBlock[],
+  workspaceRoot: string,
+): string[] {
+  return blocks
+    .filter(
+      (b): b is ToolCallBlock =>
+        b.type === 'tool_call' &&
+        (WRITE_TOOLS as readonly string[]).includes(b.name),
+    )
+    .map((b) => extractFilePath(b.parameters))
+    .filter((fp): fp is string => fp !== undefined)
+    .map((fp) => resolvePath(fp, workspaceRoot));
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
  * Build latest write map — latest write index per file path.
  * @pseudocode high-density-optimize.md lines 60-90
  */
@@ -163,25 +182,13 @@ function buildLatestWriteMap(
       continue;
     }
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const block of entry.blocks) {
-      if (block.type !== 'tool_call') {
-        continue;
-      }
-      if (!(WRITE_TOOLS as readonly string[]).includes(block.name)) {
-        continue;
-      }
-
-      const filePath = extractFilePath(block.parameters);
-      if (filePath === undefined) {
-        continue;
-      }
-
-      const resolved = resolvePath(filePath, config.workspaceRoot);
-      if (!latestWrite.has(resolved)) {
-        latestWrite.set(resolved, index);
-      }
-    }
+    collectLatestWriteIndexes(entry.blocks, config.workspaceRoot).forEach(
+      (resolved) => {
+        if (!latestWrite.has(resolved)) {
+          latestWrite.set(resolved, index);
+        }
+      },
+    );
   }
 
   return latestWrite;
@@ -217,49 +224,71 @@ function identifyStaleReadCalls(
     );
     aiEntryTotalToolCalls.set(index, toolCallBlocks.length);
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const block of toolCallBlocks) {
-      if (!(READ_TOOLS as readonly string[]).includes(block.name)) {
-        continue;
-      }
-
-      if (block.name === 'read_many_files') {
-        const canPrune = strategy.canPruneReadManyFiles(
-          block.parameters,
-          config.workspaceRoot,
-          latestWrite,
-          index,
-        );
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (!canPrune) {
-          continue;
-        }
-      } else {
-        const filePath = extractFilePath(block.parameters);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (filePath === undefined) {
-          continue;
-        }
-
-        const resolved = resolvePath(filePath, config.workspaceRoot);
-        const writeIndex = latestWrite.get(resolved);
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (writeIndex === undefined || writeIndex <= index) {
-          continue;
-        }
-      }
-
-      // This read is stale
-      staleCallIds.add(block.id);
-      if (!aiEntryStaleBlocks.has(index)) {
-        aiEntryStaleBlocks.set(index, new Set());
-      }
-      aiEntryStaleBlocks.get(index)!.add(block.id);
+    const staleBlockIds = identifyStaleReadBlocksForEntry(
+      toolCallBlocks,
+      config.workspaceRoot,
+      latestWrite,
+      index,
+      strategy,
+    );
+    if (staleBlockIds.size > 0) {
+      staleBlockIds.forEach((id) => staleCallIds.add(id));
+      aiEntryStaleBlocks.set(index, staleBlockIds);
     }
   }
 
   return { staleCallIds, aiEntryStaleBlocks, aiEntryTotalToolCalls };
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Determine which read-tool-call blocks in a single AI entry are stale.
+ * @pseudocode high-density-optimize.md lines 100-160
+ */
+function identifyStaleReadBlocksForEntry(
+  toolCallBlocks: ToolCallBlock[],
+  workspaceRoot: string,
+  latestWrite: Map<string, number>,
+  index: number,
+  strategy: HighDensityStrategy,
+): Set<string> {
+  return new Set(
+    toolCallBlocks
+      .filter((b) => (READ_TOOLS as readonly string[]).includes(b.name))
+      .filter((b) =>
+        isStaleReadCall(b, workspaceRoot, latestWrite, index, strategy),
+      )
+      .map((b) => b.id),
+  );
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Check whether a single read-tool-call block is stale (superseded by a later write).
+ * @pseudocode high-density-optimize.md lines 110-155
+ */
+function isStaleReadCall(
+  block: ToolCallBlock,
+  workspaceRoot: string,
+  latestWrite: Map<string, number>,
+  index: number,
+  strategy: HighDensityStrategy,
+): boolean {
+  if (block.name === 'read_many_files') {
+    return strategy.canPruneReadManyFiles(
+      block.parameters,
+      workspaceRoot,
+      latestWrite,
+      index,
+    );
+  }
+  const filePath = extractFilePath(block.parameters);
+  if (filePath === undefined) {
+    return false;
+  }
+  const resolved = resolvePath(filePath, workspaceRoot);
+  const writeIndex = latestWrite.get(resolved);
+  return writeIndex !== undefined && writeIndex > index;
 }
 
 /**
@@ -311,50 +340,69 @@ function applyStaleToolEntries(
 ): number {
   let prunedCount = 0;
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let index = 0; index < history.length; index++) {
     const entry = history[index];
-    if (entry.speaker !== 'tool') {
-      continue;
-    }
-    if (removals.has(index)) {
+    if (entry.speaker !== 'tool' || removals.has(index)) {
       continue;
     }
 
-    const responseBlocks = entry.blocks.filter(
-      (b): b is ToolResponseBlock => b.type === 'tool_response',
+    const pruned = applyStaleToolEntry(
+      index,
+      entry,
+      staleCallIds,
+      removals,
+      replacements,
     );
-    const staleResponses = responseBlocks.filter((b) =>
-      staleCallIds.has(b.callId),
-    );
-
-    if (staleResponses.length === 0) {
-      continue;
-    }
-
-    if (
-      staleResponses.length === responseBlocks.length &&
-      entry.blocks.every((b) => b.type === 'tool_response')
-    ) {
-      removals.add(index);
-      prunedCount = prunedCount + staleResponses.length;
-    } else {
-      const filteredBlocks = entry.blocks.filter(
-        (b) => b.type !== 'tool_response' || !staleCallIds.has(b.callId),
-      );
-      if (filteredBlocks.length === 0) {
-        removals.add(index);
-      } else {
-        replacements.set(index, {
-          ...entry,
-          blocks: filteredBlocks,
-        });
-      }
-      prunedCount = prunedCount + staleResponses.length;
-    }
+    prunedCount = prunedCount + pruned;
   }
 
   return prunedCount;
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Process a single tool entry — remove or replace stale tool_response blocks.
+ * Returns the number of pruned responses for this entry (0 if none stale).
+ * @pseudocode high-density-optimize.md lines 185-209
+ */
+function applyStaleToolEntry(
+  index: number,
+  entry: IContent,
+  staleCallIds: Set<string>,
+  removals: Set<number>,
+  replacements: Map<number, IContent>,
+): number {
+  const responseBlocks = entry.blocks.filter(
+    (b): b is ToolResponseBlock => b.type === 'tool_response',
+  );
+  const staleResponses = responseBlocks.filter((b) =>
+    staleCallIds.has(b.callId),
+  );
+
+  if (staleResponses.length === 0) {
+    return 0;
+  }
+
+  if (
+    staleResponses.length === responseBlocks.length &&
+    entry.blocks.every((b) => b.type === 'tool_response')
+  ) {
+    removals.add(index);
+    return staleResponses.length;
+  }
+
+  const filteredBlocks = entry.blocks.filter(
+    (b) => b.type !== 'tool_response' || !staleCallIds.has(b.callId),
+  );
+  if (filteredBlocks.length === 0) {
+    removals.add(index);
+  } else {
+    replacements.set(index, {
+      ...entry,
+      blocks: filteredBlocks,
+    });
+  }
+  return staleResponses.length;
 }
 
 /**
@@ -381,45 +429,55 @@ function scanFileInclusions(
 ): Map<string, InclusionEntry[]> {
   const inclusions = new Map<string, InclusionEntry[]>();
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let index = 0; index < history.length; index++) {
     const entry = history[index];
-    if (entry.speaker !== 'human') {
-      continue;
-    }
-    if (existingRemovals.has(index)) {
+    if (entry.speaker !== 'human' || existingRemovals.has(index)) {
       continue;
     }
 
-    for (let blockIndex = 0; blockIndex < entry.blocks.length; blockIndex++) {
-      const block = entry.blocks[blockIndex];
-      if (block.type !== 'text') {
-        continue;
-      }
-
-      const text = block.text;
-      const matches = findAllInclusions(text);
-
-      for (const match of matches) {
-        const resolvedFilePath = resolvePath(
-          match.filePath,
-          config.workspaceRoot,
-        );
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (!inclusions.has(resolvedFilePath)) {
-          inclusions.set(resolvedFilePath, []);
-        }
-        inclusions.get(resolvedFilePath)!.push({
-          messageIndex: index,
-          blockIndex,
-          startOffset: match.startOffset,
-          endOffset: match.endOffset,
-        });
-      }
-    }
+    collectEntryInclusions(entry.blocks, index, config.workspaceRoot).forEach(
+      (inc) => {
+        const list = inclusions.get(inc.resolvedFilePath) ?? [];
+        list.push(inc.entry);
+        inclusions.set(inc.resolvedFilePath, list);
+      },
+    );
   }
 
   return inclusions;
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Collect file inclusions from a single human entry's text blocks.
+ * @pseudocode high-density-optimize.md lines 285-310
+ */
+function collectEntryInclusions(
+  blocks: readonly ContentBlock[],
+  messageIndex: number,
+  workspaceRoot: string,
+): Array<{ resolvedFilePath: string; entry: InclusionEntry }> {
+  const results: Array<{ resolvedFilePath: string; entry: InclusionEntry }> =
+    [];
+  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+    const block = blocks[blockIndex];
+    if (block.type !== 'text') {
+      continue;
+    }
+    const matches = findAllInclusions(block.text);
+    for (const match of matches) {
+      results.push({
+        resolvedFilePath: resolvePath(match.filePath, workspaceRoot),
+        entry: {
+          messageIndex,
+          blockIndex,
+          startOffset: match.startOffset,
+          endOffset: match.endOffset,
+        },
+      });
+    }
+  }
+  return results;
 }
 
 /**
@@ -503,6 +561,78 @@ function applyStaleInclusionRemovals(
   }
 
   return count;
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P14
+ * Find the file-path key parameter for a tool_call matching the given callId.
+ * @pseudocode high-density-compress.md lines 130-149
+ */
+function findKeyParamForCallId(
+  fullHistory: readonly IContent[],
+  callId: string,
+): string | undefined {
+  for (const entry of fullHistory) {
+    if (entry.speaker !== 'ai') {
+      continue;
+    }
+    const matchingBlock = entry.blocks.find(
+      (b): b is ToolCallBlock => b.type === 'tool_call' && b.id === callId,
+    );
+    if (matchingBlock) {
+      return extractFilePath(matchingBlock.parameters);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Classify a single read_many_files path for pruning eligibility.
+ * @pseudocode high-density-optimize.md lines 220-250
+ */
+function classifyReadManyFilesPath(
+  filePath: string,
+  workspaceRoot: string,
+  latestWrite: Map<string, number>,
+  readIndex: number,
+): 'glob' | 'concrete-with-write' | 'concrete-without-write' {
+  if (GLOB_CHARS.some((c) => filePath.includes(c))) {
+    return 'glob';
+  }
+  const resolved = resolvePath(filePath, workspaceRoot);
+  const writeIndex = latestWrite.get(resolved);
+  if (writeIndex === undefined || writeIndex <= readIndex) {
+    return 'concrete-without-write';
+  }
+  return 'concrete-with-write';
+}
+
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P11
+ * Walk a tool entry's blocks in reverse, counting per-tool responses and
+ * returning those exceeding the retention threshold. Mutates toolCounts.
+ * @pseudocode high-density-optimize.md lines 410-440
+ */
+function findPrunableToolResponses(
+  blocks: readonly ContentBlock[],
+  toolCounts: Map<string, number>,
+  retention: number,
+): number[] {
+  const prunable: number[] = [];
+  for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex--) {
+    const block = blocks[blockIndex];
+    if (block.type !== 'tool_response' || block.result === PRUNED_POINTER) {
+      continue;
+    }
+    const toolName = block.toolName;
+    const currentCount = (toolCounts.get(toolName) ?? 0) + 1;
+    toolCounts.set(toolName, currentCount);
+    if (currentCount > retention) {
+      prunable.push(blockIndex);
+    }
+  }
+  return prunable;
 }
 
 // ---------------------------------------------------------------------------
@@ -785,19 +915,7 @@ export class HighDensityStrategy implements CompressionStrategy {
     const outcome = hasError || looksLikeError ? 'error' : 'success';
 
     // Extract key param — look for matching tool_call by callId
-    let keyParam: string | undefined;
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const entry of fullHistory) {
-      if (entry.speaker !== 'ai') continue;
-      for (const b of entry.blocks) {
-        if (b.type === 'tool_call' && b.id === block.callId) {
-          const params = b.parameters;
-          keyParam = extractFilePath(params);
-          break;
-        }
-      }
-      if (keyParam !== undefined) break;
-    }
+    const keyParam = findKeyParamForCallId(fullHistory, block.callId);
 
     if (keyParam) {
       return `[${toolName} ${keyParam}: ${outcome} ${RERUN_HINT_SUFFIX}]`;
@@ -919,23 +1037,27 @@ export class HighDensityStrategy implements CompressionStrategy {
     let allConcreteHaveWrite = true;
     let hasAnyConcrete = false;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const filePath of paths) {
       if (typeof filePath !== 'string') {
         continue;
       }
-
-      if (GLOB_CHARS.some((c) => filePath.includes(c))) {
+      const classification = classifyReadManyFilesPath(
+        filePath,
+        workspaceRoot,
+        latestWrite,
+        readIndex,
+      );
+      if (classification === 'glob') {
         hasGlob = true;
-        continue;
       }
-
-      hasAnyConcrete = true;
-      const resolved = resolvePath(filePath, workspaceRoot);
-      const writeIndex = latestWrite.get(resolved);
-      if (writeIndex === undefined || writeIndex <= readIndex) {
+      if (
+        classification === 'concrete-with-write' ||
+        classification === 'concrete-without-write'
+      ) {
+        hasAnyConcrete = true;
+      }
+      if (classification === 'concrete-without-write') {
         allConcreteHaveWrite = false;
-        break;
       }
     }
 
@@ -992,40 +1114,18 @@ export class HighDensityStrategy implements CompressionStrategy {
     const toolCounts = new Map<string, number>();
     const entriesToPrune: Array<{ index: number; blockIndex: number }> = [];
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (let index = history.length - 1; index >= 0; index--) {
       const entry = history[index];
-      if (entry.speaker !== 'tool') {
-        continue;
-      }
-      if (existingRemovals.has(index)) {
+      if (entry.speaker !== 'tool' || existingRemovals.has(index)) {
         continue;
       }
 
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for (
-        let blockIndex = entry.blocks.length - 1;
-        blockIndex >= 0;
-        blockIndex--
-      ) {
-        const block = entry.blocks[blockIndex];
-        if (block.type !== 'tool_response') {
-          continue;
-        }
-
-        // Skip already-pruned results to ensure idempotency
-        if (block.result === PRUNED_POINTER) {
-          continue;
-        }
-
-        const toolName = block.toolName;
-        let currentCount = toolCounts.get(toolName) ?? 0;
-        currentCount = currentCount + 1;
-        toolCounts.set(toolName, currentCount);
-
-        if (currentCount > retention) {
-          entriesToPrune.push({ index, blockIndex });
-        }
+      for (const blockIndex of findPrunableToolResponses(
+        entry.blocks,
+        toolCounts,
+        retention,
+      )) {
+        entriesToPrune.push({ index, blockIndex });
       }
     }
 

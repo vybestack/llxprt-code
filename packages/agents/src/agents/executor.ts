@@ -4,46 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable max-lines -- Existing executor is above the project line budget; this change keeps recovery logic localized. */
-
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
-import {
-  ChatSession,
-  StreamEventType,
-  type StreamEvent,
-} from '../core/chatSession.js';
-import { Type } from '@google/genai';
+import { ChatSession } from '../core/chatSession.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { type ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { createAgentRuntimeStateFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeStateFactory.js';
 import type {
   Content,
-  Part,
   FunctionCall,
   GenerateContentConfig,
-  GenerateContentResponse,
   FunctionDeclaration,
-  Schema,
 } from '@google/genai';
-import { executeToolCall } from '../core/nonInteractiveToolExecutor.js';
-import {
-  filterHookRestrictedFunctionCalls,
-  filterHookRestrictedParts,
-  getHookRestrictedAllowedTools,
-  getHookRestrictedAllowedToolsForFunctionCall,
-  getHookRestrictedFunctionCallsFromParts,
-  hasFilteredHookRestrictedToolCalls,
-  isHookRestrictedToolCall,
-  mergeHookRestrictedFunctionCalls,
-} from '../core/hookToolRestrictions.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
 
-import { type ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
 import type {
   AgentDefinition,
   AgentInputs,
@@ -59,15 +38,21 @@ import {
 import { checkAgentTermination } from './executor-termination.js';
 import {
   type RecoveryState,
-  type RecoveryActive,
+  type EmitActivityFn,
   resolveGracePeriodSeconds,
-  isRecoverableTermination,
-  enterRecovery,
   recoveryFailureResult,
   markRecoveryResponseUsed,
+  checkRecoveryToolCalls,
+  handleTerminationReason,
+  handleProtocolViolation,
 } from './recovery.js';
 import { templateString } from './utils.js';
-import { parseThought } from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
+import { type z } from 'zod';
+import {
+  processFunctionCalls as processFunctionCallsDispatch,
+  buildCompleteTaskDeclaration,
+} from './executor-tool-dispatch.js';
+import { callModelAndConsumeStream } from './executor-stream-processor.js';
 
 /** Result type for a single agent loop iteration. */
 type AgentLoopIterationResult =
@@ -87,29 +72,40 @@ type AgentLoopIterationResult =
       };
     };
 
-type ToolExecutionResult = {
-  responseParts: Part[];
-  partialResult: string | null;
-};
-
-type AgentModelResult = {
-  functionCalls: FunctionCall[];
-  textResponse: string;
-};
-
-import { type z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
-import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import {
-  nextStreamEventWithIdleTimeout,
-  resolveStreamIdleTimeoutMs,
-} from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
-
 /** A callback function to report on agent activity. */
 export type ActivityCallback = (activity: SubagentActivityEvent) => void;
 
-const TASK_COMPLETE_TOOL_NAME = 'complete_task';
+/**
+ * Register tools from the agent's tool config into the isolated agent registry.
+ *
+ * String references are resolved from the parent registry; tool instances with
+ * a `build` method are registered directly; raw `FunctionDeclaration` objects
+ * are skipped (their schemas are passed to the model later).
+ */
+function registerToolsFromConfig(
+  tools: Array<string | FunctionDeclaration | AnyDeclarativeTool>,
+  parentToolRegistry: ToolRegistry,
+  agentToolRegistry: ToolRegistry,
+): void {
+  for (const toolRef of tools) {
+    if (typeof toolRef === 'string') {
+      // If the tool is referenced by name, retrieve it from the parent
+      // registry and register it with the agent's isolated registry.
+      const toolFromParent = parentToolRegistry.getTool(toolRef);
+      if (toolFromParent) {
+        agentToolRegistry.registerTool(toolFromParent);
+      }
+    } else if (
+      typeof toolRef === 'object' &&
+      'name' in toolRef &&
+      'build' in toolRef
+    ) {
+      agentToolRegistry.registerTool(toolRef);
+    }
+    // Note: Raw `FunctionDeclaration` objects in the config don't need to be
+    // registered; their schemas are passed directly to the model later.
+  }
+}
 
 /**
  * Executes an agent loop based on an {@link AgentDefinition}.
@@ -160,25 +156,11 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     const parentToolRegistry = runtimeContext.getToolRegistry();
 
     if (definition.toolConfig) {
-      for (const toolRef of definition.toolConfig.tools) {
-        if (typeof toolRef === 'string') {
-          // If the tool is referenced by name, retrieve it from the parent
-          // registry and register it with the agent's isolated registry.
-          const toolFromParent = parentToolRegistry.getTool(toolRef);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (toolFromParent) {
-            agentToolRegistry.registerTool(toolFromParent);
-          }
-        } else if (
-          typeof toolRef === 'object' &&
-          'name' in toolRef &&
-          'build' in toolRef
-        ) {
-          agentToolRegistry.registerTool(toolRef);
-        }
-        // Note: Raw `FunctionDeclaration` objects in the config don't need to be
-        // registered; their schemas are passed directly to the model later.
-      }
+      registerToolsFromConfig(
+        definition.toolConfig.tools,
+        parentToolRegistry,
+        agentToolRegistry,
+      );
 
       agentToolRegistry.sortTools();
       // Validate that all registered tools are safe for non-interactive
@@ -287,8 +269,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     let recoveryState: RecoveryState = { phase: 'none' };
     let recoveryModelResponseUsed = false;
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries.
-    while (true) {
+    for (;;) {
       const outcome = await this.runAgentLoopIteration(
         chat,
         tools,
@@ -367,7 +348,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   }
 
   /** Body of the agent loop iteration (after termination checks). */
-  // eslint-disable-next-line max-lines-per-function -- Agent iteration orchestration coordinates model calls, recovery handling, and tool dispatch in one control-flow boundary.
   private async runAgentLoopIterationBody(
     chat: ChatSession,
     tools: FunctionDeclaration[],
@@ -386,58 +366,130 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       };
     }
 
+    const promptId = `${this.runtimeContext.getSessionId()}#${this.agentId}#${turnCounter}`;
+    const nextTurnCounter = turnCounter + 1;
+
+    const modelOutcome = await this.executeModelCall(
+      chat,
+      tools,
+      signal,
+      currentMessage,
+      recoveryState,
+      recoveryModelResponseUsed,
+      finalResult,
+      promptId,
+    );
+    if (modelOutcome.kind === 'error') {
+      return modelOutcome.result;
+    }
+
+    return this.handleModelResponse(
+      modelOutcome.functionCalls,
+      signal,
+      promptId,
+      nextTurnCounter,
+      finalResult,
+      recoveryState,
+      recoveryModelResponseUsed,
+    );
+  }
+
+  /** Execute the model call, handling recovery-abort and error paths. */
+  private async executeModelCall(
+    chat: ChatSession,
+    tools: FunctionDeclaration[],
+    signal: AbortSignal,
+    currentMessage: Content,
+    recoveryState: RecoveryState,
+    recoveryModelResponseUsed: boolean,
+    finalResult: string | null,
+    promptId: string,
+  ): Promise<
+    | { kind: 'ok'; functionCalls: FunctionCall[] }
+    | { kind: 'error'; result: AgentLoopIterationResult }
+  > {
     const recoveryAbort =
       recoveryState.phase === 'active' && !recoveryModelResponseUsed
         ? this.createRecoveryAbortController(recoveryState.deadlineMs, signal)
         : undefined;
 
-    const promptId = `${this.runtimeContext.getSessionId()}#${this.agentId}#${turnCounter}`;
-    const nextTurnCounter = turnCounter + 1;
-
-    let modelResult: AgentModelResult;
-    let functionCalls: FunctionCall[];
     try {
-      modelResult = await this.callModel(
+      const toolsConfig =
+        tools.length > 0 ? [{ functionDeclarations: tools }] : undefined;
+      const modelResult = await callModelAndConsumeStream(
         chat,
         currentMessage,
-        tools,
+        toolsConfig,
         recoveryAbort?.signal ?? signal,
         promptId,
+        this.runtimeContext,
+        (type, data) => this.emitActivity(type, data),
       );
-      functionCalls = modelResult.functionCalls;
+      return { kind: 'ok', functionCalls: modelResult.functionCalls };
     } catch (error) {
-      if (recoveryState.phase === 'active') {
-        // If the parent signal was aborted, terminate as ABORTED rather than
-        // emitting a misleading recovery-timeout outcome.
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- signal.aborted can be true even though the outer already-gated check passed; the catch path is reached from callModel which can throw on abort.
-        if (signal.aborted) {
-          return {
-            kind: 'done',
-            result: {
-              terminateReason: AgentTerminateMode.ABORTED,
-              finalResult,
-            },
-          };
-        }
-        this.emitRecoveryOutcome(
-          recoveryState.originalReason,
-          'failure',
-          recoveryState.originalReason,
-          recoveryState.gracePeriodSeconds,
-        );
-        return {
-          kind: 'done',
-          result: {
-            terminateReason: recoveryState.originalReason,
-            finalResult: finalResult ?? 'Recovery turn timed out.',
-          },
-        };
+      const errorResult = this.handleModelCallError(
+        error,
+        recoveryState,
+        signal,
+        finalResult,
+      );
+      if (errorResult !== null) {
+        return { kind: 'error', result: errorResult };
       }
       throw error;
     } finally {
       recoveryAbort?.abort();
     }
+  }
 
+  /** Handle an error from callModel during recovery or re-throw. */
+  private handleModelCallError(
+    error: unknown,
+    recoveryState: RecoveryState,
+    signal: AbortSignal,
+    finalResult: string | null,
+  ): AgentLoopIterationResult | null {
+    if (recoveryState.phase !== 'active') {
+      return null;
+    }
+    // If the parent signal was aborted, terminate as ABORTED rather than
+    // emitting a misleading recovery-timeout outcome. Using this.isAborted
+    // avoids TS narrowing the flag to false after the early return above,
+    // since signal.aborted can flip during the awaited callModel.
+    if (this.isAborted(signal)) {
+      return {
+        kind: 'done',
+        result: {
+          terminateReason: AgentTerminateMode.ABORTED,
+          finalResult,
+        },
+      };
+    }
+    this.emitRecoveryOutcome(
+      recoveryState.originalReason,
+      'failure',
+      recoveryState.originalReason,
+      recoveryState.gracePeriodSeconds,
+    );
+    return {
+      kind: 'done',
+      result: {
+        terminateReason: recoveryState.originalReason,
+        finalResult: finalResult ?? 'Recovery turn timed out.',
+      },
+    };
+  }
+
+  /** Handle the model's response: recovery checks, protocol violation, tool dispatch. */
+  private async handleModelResponse(
+    functionCalls: FunctionCall[],
+    signal: AbortSignal,
+    promptId: string,
+    nextTurnCounter: number,
+    finalResult: string | null,
+    recoveryState: RecoveryState,
+    recoveryModelResponseUsed: boolean,
+  ): Promise<AgentLoopIterationResult> {
     const newRecoveryModelResponseUsed = markRecoveryResponseUsed(
       recoveryState,
       recoveryModelResponseUsed,
@@ -450,45 +502,102 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       };
     }
 
-    const checkResult = this.checkRecoveryToolCalls(
+    const gracePeriodSeconds = resolveGracePeriodSeconds(
+      this.definition.runConfig.grace_period_seconds,
+    );
+    const emitFn: EmitActivityFn = (type, data) =>
+      this.emitActivity(type, data);
+
+    const checkResult = checkRecoveryToolCalls(
       recoveryState,
       newRecoveryModelResponseUsed,
       functionCalls,
       finalResult,
+      emitFn,
     );
-
     if (checkResult) {
       return { kind: 'done', result: checkResult };
     }
 
     if (functionCalls.length === 0) {
-      const enterResult = this.handleProtocolViolation(
+      return this.handleEmptyFunctionCalls(
         recoveryState,
         finalResult,
+        nextTurnCounter,
+        gracePeriodSeconds,
+        emitFn,
       );
-      if (enterResult.entered) {
-        return {
-          kind: 'continue',
-          recoveryState: enterResult.state,
-          currentMessage: enterResult.warningMessage,
-          recoveryModelResponseUsed: false,
-          turnCounter: nextTurnCounter,
-          finalResult,
-        };
-      }
-      const activeGrace =
-        recoveryState.phase === 'active' ? recoveryState.gracePeriodSeconds : 0;
-      this.emitRecoveryOutcome(
-        enterResult.result.terminateReason,
-        'failure',
-        enterResult.result.terminateReason,
-        activeGrace,
-      );
-      return { kind: 'done', result: enterResult.result };
     }
 
+    return this.processToolCalls(
+      functionCalls,
+      signal,
+      promptId,
+      nextTurnCounter,
+      finalResult,
+      recoveryState,
+      newRecoveryModelResponseUsed,
+      emitFn,
+    );
+  }
+
+  /** Handle the protocol-violation path when the model returned no tool calls. */
+  private handleEmptyFunctionCalls(
+    recoveryState: RecoveryState,
+    finalResult: string | null,
+    nextTurnCounter: number,
+    gracePeriodSeconds: number,
+    emitFn: EmitActivityFn,
+  ): AgentLoopIterationResult {
+    const enterResult = handleProtocolViolation(
+      recoveryState,
+      finalResult,
+      gracePeriodSeconds,
+      emitFn,
+    );
+    if (enterResult.entered) {
+      return {
+        kind: 'continue',
+        recoveryState: enterResult.state,
+        currentMessage: enterResult.warningMessage,
+        recoveryModelResponseUsed: false,
+        turnCounter: nextTurnCounter,
+        finalResult,
+      };
+    }
+    const activeGrace =
+      recoveryState.phase === 'active' ? recoveryState.gracePeriodSeconds : 0;
+    this.emitRecoveryOutcome(
+      enterResult.result.terminateReason,
+      'failure',
+      enterResult.result.terminateReason,
+      activeGrace,
+    );
+    return { kind: 'done', result: enterResult.result };
+  }
+
+  /** Dispatch tool calls and handle task completion / recovery-failure paths. */
+  private async processToolCalls(
+    functionCalls: FunctionCall[],
+    signal: AbortSignal,
+    promptId: string,
+    nextTurnCounter: number,
+    finalResult: string | null,
+    recoveryState: RecoveryState,
+    newRecoveryModelResponseUsed: boolean,
+    emitFn: EmitActivityFn,
+  ): Promise<AgentLoopIterationResult> {
     const { nextMessage, submittedOutput, taskCompleted, partialResult } =
-      await this.processFunctionCalls(functionCalls, signal, promptId);
+      await processFunctionCallsDispatch(
+        functionCalls,
+        this.toolRegistry,
+        this.runtimeContext,
+        this.messageBus,
+        this.definition as unknown as AgentDefinition<z.ZodTypeAny>,
+        emitFn,
+        signal,
+        promptId,
+      );
 
     if (taskCompleted) {
       if (recoveryState.phase === 'active') {
@@ -499,10 +608,13 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           recoveryState.gracePeriodSeconds,
         );
       }
-      finalResult = submittedOutput ?? 'Task completed successfully.';
+      const completedResult = submittedOutput ?? 'Task completed successfully.';
       return {
         kind: 'done',
-        result: { terminateReason: AgentTerminateMode.GOAL, finalResult },
+        result: {
+          terminateReason: AgentTerminateMode.GOAL,
+          finalResult: completedResult,
+        },
       };
     }
 
@@ -521,7 +633,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     }
 
     const nextFinalResult = partialResult ?? finalResult;
-
     return {
       kind: 'continue',
       recoveryState,
@@ -532,117 +643,22 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     };
   }
 
-  /** Check tool calls during recovery: non-complete_task = recovery failure. */
-  private checkRecoveryToolCalls(
-    recoveryState: RecoveryState,
-    recoveryModelResponseUsed: boolean,
-    functionCalls: FunctionCall[],
-    finalResult: string | null,
-  ): { terminateReason: AgentTerminateMode; finalResult: string } | null {
-    if (recoveryState.phase !== 'active' || !recoveryModelResponseUsed) {
-      return null;
-    }
-    const hasCompleteTask = functionCalls.some(
-      (fc) => fc.name === TASK_COMPLETE_TOOL_NAME,
-    );
-    if (!hasCompleteTask) {
-      this.emitRecoveryOutcome(
-        recoveryState.originalReason,
-        'failure',
-        recoveryState.originalReason,
-        recoveryState.gracePeriodSeconds,
-      );
-      return recoveryFailureResult(recoveryState.originalReason, finalResult);
-    }
-
-    // Recovery response must be exactly one complete_task call.
-    // If complete_task is accompanied by other tools, fail recovery immediately
-    // and do not execute any of the tool calls.
-    if (functionCalls.length > 1) {
-      this.emitRecoveryOutcome(
-        recoveryState.originalReason,
-        'failure',
-        recoveryState.originalReason,
-        recoveryState.gracePeriodSeconds,
-      );
-      return recoveryFailureResult(recoveryState.originalReason, finalResult);
-    }
-
-    return null;
-  }
-
   /** Handle termination-reason checks: enter recovery or return immediately. */
   private handleTerminationReason(
     reason: AgentTerminateMode,
     recoveryState: RecoveryState,
     finalResult: string | null,
-  ):
-    | { handled: true; newState: RecoveryActive; currentMessage: Content }
-    | {
-        handled: false;
-        result: {
-          terminateReason: AgentTerminateMode;
-          finalResult: string | null;
-        };
-      } {
-    if (isRecoverableTermination(reason) && recoveryState.phase === 'none') {
-      const gracePeriodSeconds = resolveGracePeriodSeconds(
-        this.definition.runConfig.grace_period_seconds,
-      );
-      const { state, warningMessage } = enterRecovery(
-        reason,
-        gracePeriodSeconds,
-        (type, data) => this.emitActivity(type, data),
-      );
-      return { handled: true, newState: state, currentMessage: warningMessage };
-    }
-
-    if (recoveryState.phase === 'active') {
-      const fail = recoveryFailureResult(
-        recoveryState.originalReason,
-        finalResult,
-      );
-      this.emitRecoveryOutcome(
-        recoveryState.originalReason,
-        'failure',
-        fail.terminateReason,
-        recoveryState.gracePeriodSeconds,
-      );
-      return { handled: false, result: fail };
-    }
-
-    return { handled: false, result: { terminateReason: reason, finalResult } };
-  }
-
-  /** Handle the protocol-violation path (model stopped calling tools). */
-  private handleProtocolViolation(
-    recoveryState: RecoveryState,
-    finalResult: string | null,
-  ):
-    | { entered: true; state: RecoveryActive; warningMessage: Content }
-    | {
-        entered: false;
-        result: { terminateReason: AgentTerminateMode; finalResult: string };
-      } {
-    if (recoveryState.phase === 'none') {
-      const gracePeriodSeconds = resolveGracePeriodSeconds(
-        this.definition.runConfig.grace_period_seconds,
-      );
-      const { state, warningMessage } = enterRecovery(
-        AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
-        gracePeriodSeconds,
-        (type, data) => this.emitActivity(type, data),
-      );
-      return { entered: true, state, warningMessage };
-    }
-
-    // Already in recovery: the one recovery model response didn't call
-    // complete_task, so this empty response confirms recovery failure.
-    const fail = recoveryFailureResult(
-      recoveryState.originalReason,
-      finalResult,
+  ) {
+    const gracePeriodSeconds = resolveGracePeriodSeconds(
+      this.definition.runConfig.grace_period_seconds,
     );
-    return { entered: false, result: fail };
+    return handleTerminationReason(
+      reason,
+      recoveryState,
+      finalResult,
+      gracePeriodSeconds,
+      (type, data) => this.emitActivity(type, data),
+    );
   }
 
   private isAborted(signal: AbortSignal): boolean {
@@ -684,154 +700,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       terminateReason,
       gracePeriodSeconds,
     });
-  }
-
-  /**
-   * Calls the generative model with the current context and tools.
-   *
-   * @returns The model's response, including any tool calls or text.
-   */
-  private async callModel(
-    chat: ChatSession,
-    message: Content,
-    tools: FunctionDeclaration[],
-    signal: AbortSignal,
-    promptId: string,
-  ): Promise<AgentModelResult> {
-    const timeoutController = new AbortController();
-    const timeoutSignal = timeoutController.signal;
-    const onAbort = () => timeoutController.abort();
-    signal.addEventListener('abort', onAbort, { once: true });
-
-    const messageParams = {
-      message: message.parts ?? [],
-      config: {
-        abortSignal: timeoutSignal,
-        tools: tools.length > 0 ? [{ functionDeclarations: tools }] : undefined,
-      },
-    };
-
-    let streamIterator: AsyncIterator<StreamEvent> | undefined;
-    const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(this.runtimeContext);
-
-    try {
-      const responseStream = await chat.sendMessageStream(
-        messageParams,
-        promptId,
-      );
-
-      const functionCalls: FunctionCall[] = [];
-      let textResponse = '';
-      streamIterator = responseStream[Symbol.asyncIterator]();
-
-      await this.consumeStream(
-        streamIterator,
-        effectiveTimeoutMs,
-        signal,
-        timeoutSignal,
-        timeoutController,
-        functionCalls,
-        (text) => {
-          textResponse += text;
-        },
-      );
-
-      return {
-        functionCalls,
-        textResponse,
-      };
-    } finally {
-      streamIterator?.return?.().catch(() => {});
-      timeoutController.abort();
-      signal.removeEventListener('abort', onAbort);
-    }
-  }
-
-  /** Consumes a response stream, accumulating function calls and text. */
-  private async consumeStream(
-    streamIterator: AsyncIterator<StreamEvent>,
-    effectiveTimeoutMs: number,
-    signal: AbortSignal,
-    timeoutSignal: AbortSignal,
-    timeoutController: AbortController,
-    functionCalls: FunctionCall[],
-    onText: (text: string) => void,
-  ): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Agent/model streams are external runtime boundaries despite declared types.
-    while (true) {
-      let result: IteratorResult<StreamEvent>;
-      if (effectiveTimeoutMs > 0) {
-        result = await nextStreamEventWithIdleTimeout({
-          iterator: streamIterator,
-          timeoutMs: effectiveTimeoutMs,
-          signal: timeoutSignal,
-          onTimeout: () => {
-            if (signal.aborted) {
-              return;
-            }
-            timeoutController.abort();
-          },
-          createTimeoutError: () => createAbortError(),
-        });
-      } else {
-        result = await streamIterator.next();
-      }
-      if (result.done === true) {
-        break;
-      }
-
-      const resp = result.value;
-      if (signal.aborted) break;
-
-      if (resp.type === StreamEventType.CHUNK) {
-        this.processStreamChunk(resp.value, functionCalls, onText);
-      }
-    }
-  }
-
-  /** Processes a single stream chunk, extracting thoughts, function calls, and text. */
-  private processStreamChunk(
-    chunk: GenerateContentResponse,
-    functionCalls: FunctionCall[],
-    onText: (text: string) => void,
-  ): boolean {
-    const parts = chunk.candidates?.[0]?.content?.parts ?? [];
-    const allowedTools = getHookRestrictedAllowedTools(chunk);
-    const filteredParts = filterHookRestrictedParts(parts, allowedTools);
-    const { subject } = parseThought(
-      filteredParts.find((p: Part) => p.thought === true)?.text ?? '',
-    );
-
-    if (subject !== '') {
-      this.emitActivity('THOUGHT_CHUNK', { text: subject });
-    }
-
-    const partCalls = getHookRestrictedFunctionCallsFromParts(
-      filteredParts,
-      allowedTools,
-    );
-    const topLevelCalls = filterHookRestrictedFunctionCalls(
-      chunk.functionCalls ?? [],
-      allowedTools,
-    );
-    const allowedFunctionCalls = mergeHookRestrictedFunctionCalls(
-      partCalls,
-      topLevelCalls,
-    );
-    if (allowedFunctionCalls.length > 0) {
-      functionCalls.push(...allowedFunctionCalls);
-    }
-
-    const text = filteredParts
-      .filter((p: Part) => p.thought !== true && typeof p.text === 'string')
-      .map((p: Part) => p.text)
-      .join('');
-
-    if (text.length > 0) {
-      onText(text);
-    }
-
-    return hasFilteredHookRestrictedToolCalls(chunk);
   }
 
   /** Initializes a `ChatSession` instance for the agent run. */
@@ -918,8 +786,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         providerRuntime,
         contentGeneratorConfig: this.runtimeContext.getContentGeneratorConfig(),
         toolRegistry: this.toolRegistry,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
-        providerManager: this.runtimeContext.getProviderManager?.(),
+        providerManager: this.runtimeContext.getProviderManager(),
       },
       overrides: {
         contentGenerator: this.tryGetContentGenerator(),
@@ -966,369 +833,10 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   /** Attempts to get the content generator from the runtime context. */
   private tryGetContentGenerator() {
     try {
-      return (
-        this.runtimeContext
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
-          .getAgentClient?.()
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
-          ?.getContentGenerator()
-      );
+      return this.runtimeContext.getAgentClient().getContentGenerator();
     } catch {
       return undefined;
     }
-  }
-
-  /**
-   * Executes function calls requested by the model and returns the results.
-   *
-   * @returns A new `Content` object for history, any submitted output, and completion status.
-   */
-  private async processFunctionCalls(
-    functionCalls: FunctionCall[],
-    signal: AbortSignal,
-    promptId: string,
-  ): Promise<{
-    nextMessage: Content;
-    submittedOutput: string | null;
-    taskCompleted: boolean;
-    partialResult: string | null;
-  }> {
-    const allowedToolNames = new Set(this.toolRegistry.getAllToolNames());
-    allowedToolNames.add(TASK_COMPLETE_TOOL_NAME);
-
-    let submittedOutput: string | null = null;
-    let taskCompleted = false;
-
-    const toolExecutionPromises: Array<Promise<ToolExecutionResult | void>> =
-      [];
-    const syncResponseParts: Part[] = [];
-    let executableFunctionCallCount = 0;
-
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const [index, functionCall] of functionCalls.entries()) {
-      const callId = functionCall.id ?? `${promptId}-${index}`;
-      const args = functionCall.args ?? {};
-      const hookAllowedTools =
-        getHookRestrictedAllowedToolsForFunctionCall(functionCall);
-      if (isHookRestrictedToolCall(functionCall, hookAllowedTools)) {
-        continue;
-      }
-
-      executableFunctionCallCount += 1;
-      this.emitActivity('TOOL_CALL_START', { name: functionCall.name, args });
-
-      if (functionCall.name === TASK_COMPLETE_TOOL_NAME) {
-        const result = this.handleCompleteTaskCall(
-          functionCall,
-          callId,
-          args,
-          taskCompleted,
-          submittedOutput,
-        );
-        taskCompleted = result.taskCompleted;
-        submittedOutput = result.submittedOutput;
-        syncResponseParts.push(...result.syncParts);
-        continue;
-      }
-
-      if (!allowedToolNames.has(functionCall.name as string)) {
-        this.handleUnauthorizedToolCall(
-          functionCall,
-          callId,
-          syncResponseParts,
-        );
-        continue;
-      }
-
-      toolExecutionPromises.push(
-        this.createToolExecutionPromise(
-          functionCall,
-          callId,
-          args,
-          signal,
-          promptId,
-        ),
-      );
-    }
-
-    return this.assembleToolResponses(
-      executableFunctionCallCount,
-      syncResponseParts,
-      toolExecutionPromises,
-      submittedOutput,
-      taskCompleted,
-    );
-  }
-
-  /** Handles a `complete_task` function call, returning updated state and response parts. */
-  private handleCompleteTaskCall(
-    functionCall: FunctionCall,
-    callId: string,
-    args: Record<string, unknown>,
-    currentTaskCompleted: boolean,
-    currentSubmittedOutput: string | null,
-  ): {
-    taskCompleted: boolean;
-    submittedOutput: string | null;
-    syncParts: Part[];
-  } {
-    const syncParts: Part[] = [];
-
-    if (currentTaskCompleted) {
-      const error =
-        'Task already marked complete in this turn. Ignoring duplicate call.';
-      syncParts.push({
-        functionResponse: {
-          name: TASK_COMPLETE_TOOL_NAME,
-          response: { error },
-          id: callId,
-        },
-      });
-      this.emitActivity('ERROR', {
-        context: 'tool_call',
-        name: functionCall.name,
-        error,
-      });
-      return {
-        taskCompleted: currentTaskCompleted,
-        submittedOutput: currentSubmittedOutput,
-        syncParts,
-      };
-    }
-
-    const { outputConfig } = this.definition;
-
-    if (outputConfig) {
-      const result = this.processCompleteTaskOutput(
-        functionCall,
-        callId,
-        args,
-        outputConfig,
-      );
-      syncParts.push(...result.syncParts);
-      return {
-        taskCompleted: result.taskCompleted,
-        submittedOutput: result.submittedOutput,
-        syncParts,
-      };
-    }
-
-    syncParts.push({
-      functionResponse: {
-        name: TASK_COMPLETE_TOOL_NAME,
-        response: { status: 'Task marked complete.' },
-        id: callId,
-      },
-    });
-    this.emitActivity('TOOL_CALL_END', {
-      name: functionCall.name,
-      output: 'Task marked complete.',
-    });
-
-    return {
-      taskCompleted: true,
-      submittedOutput: 'Task completed successfully.',
-      syncParts,
-    };
-  }
-
-  /** Processes the output argument of a `complete_task` call when outputConfig is present. */
-  private processCompleteTaskOutput(
-    functionCall: FunctionCall,
-    callId: string,
-    args: Record<string, unknown>,
-    outputConfig: NonNullable<AgentDefinition<z.ZodTypeAny>['outputConfig']>,
-  ): {
-    taskCompleted: boolean;
-    submittedOutput: string | null;
-    syncParts: Part[];
-  } {
-    const syncParts: Part[] = [];
-    const outputName = outputConfig.outputName;
-
-    if (args[outputName] !== undefined) {
-      const outputValue = args[outputName];
-      const validationResult = outputConfig.schema.safeParse(outputValue);
-
-      if (!validationResult.success) {
-        const error = `Output validation failed: ${JSON.stringify(validationResult.error.flatten())}`;
-        syncParts.push({
-          functionResponse: {
-            name: TASK_COMPLETE_TOOL_NAME,
-            response: { error },
-            id: callId,
-          },
-        });
-        this.emitActivity('ERROR', {
-          context: 'tool_call',
-          name: functionCall.name,
-          error,
-        });
-        return { taskCompleted: false, submittedOutput: null, syncParts };
-      }
-
-      const validatedOutput = validationResult.data;
-      let submittedOutput: string;
-      if (this.definition.processOutput) {
-        submittedOutput = this.definition.processOutput(validatedOutput);
-      } else if (typeof outputValue === 'string') {
-        submittedOutput = outputValue;
-      } else {
-        submittedOutput = JSON.stringify(outputValue, null, 2);
-      }
-
-      syncParts.push({
-        functionResponse: {
-          name: TASK_COMPLETE_TOOL_NAME,
-          response: { result: 'Output submitted and task completed.' },
-          id: callId,
-        },
-      });
-      this.emitActivity('TOOL_CALL_END', {
-        name: functionCall.name,
-        output: 'Output submitted and task completed.',
-      });
-      return { taskCompleted: true, submittedOutput, syncParts };
-    }
-
-    // Missing required output argument
-    const error = `Missing required argument '${outputName}' for completion.`;
-    syncParts.push({
-      functionResponse: {
-        name: TASK_COMPLETE_TOOL_NAME,
-        response: { error },
-        id: callId,
-      },
-    });
-    this.emitActivity('ERROR', {
-      context: 'tool_call',
-      name: functionCall.name,
-      error,
-    });
-    return { taskCompleted: false, submittedOutput: null, syncParts };
-  }
-
-  /** Handles an unauthorized tool call by pushing an error response. */
-  private handleUnauthorizedToolCall(
-    functionCall: FunctionCall,
-    callId: string,
-    syncResponseParts: Part[],
-  ): void {
-    const error = `Unauthorized tool call: '${functionCall.name}' is not available to this agent.`;
-
-    debugLogger.warn(`[AgentExecutor] Blocked call: ${error}`);
-
-    syncResponseParts.push({
-      functionResponse: {
-        name: functionCall.name as string,
-        id: callId,
-        response: { error },
-      },
-    });
-
-    this.emitActivity('ERROR', {
-      context: 'tool_call_unauthorized',
-      name: functionCall.name,
-      callId,
-      error,
-    });
-  }
-
-  /** Creates an async promise that executes a standard tool call. */
-  private createToolExecutionPromise(
-    functionCall: FunctionCall,
-    callId: string,
-    args: Record<string, unknown>,
-    signal: AbortSignal,
-    promptId: string,
-  ): Promise<ToolExecutionResult | void> {
-    const hookAllowedTools =
-      getHookRestrictedAllowedToolsForFunctionCall(functionCall);
-    const requestInfo: ToolCallRequestInfo = {
-      callId,
-      name: functionCall.name as string,
-      args,
-      isClientInitiated: true,
-      prompt_id: promptId,
-      ...(hookAllowedTools !== undefined
-        ? { hookRestrictedAllowedTools: hookAllowedTools }
-        : {}),
-    };
-
-    return (async () => {
-      const completed = await executeToolCall(
-        this.runtimeContext,
-        requestInfo,
-        signal,
-        { messageBus: this.messageBus },
-      );
-      const toolResponse = completed.response;
-
-      if (toolResponse.error) {
-        this.emitActivity('ERROR', {
-          context: 'tool_call',
-          name: functionCall.name,
-          error: toolResponse.error.message,
-        });
-      } else {
-        this.emitActivity('TOOL_CALL_END', {
-          name: functionCall.name,
-          output: toolResponse.resultDisplay,
-        });
-      }
-
-      return {
-        responseParts: toolResponse.responseParts,
-        partialResult:
-          typeof toolResponse.resultDisplay === 'string'
-            ? toolResponse.resultDisplay
-            : null,
-      };
-    })();
-  }
-
-  /** Assembles all tool response parts and returns the final result. */
-  private async assembleToolResponses(
-    executableFunctionCallCount: number,
-    syncResponseParts: Part[],
-    toolExecutionPromises: Array<Promise<ToolExecutionResult | void>>,
-    submittedOutput: string | null,
-    taskCompleted: boolean,
-  ): Promise<{
-    nextMessage: Content;
-    submittedOutput: string | null;
-    taskCompleted: boolean;
-    partialResult: string | null;
-  }> {
-    const asyncResults = await Promise.all(toolExecutionPromises);
-
-    const toolResponseParts: Part[] = [...syncResponseParts];
-    let partialResult: string | null = null;
-    for (const result of asyncResults) {
-      if (result) {
-        toolResponseParts.push(...result.responseParts);
-        if (result.partialResult !== null) {
-          partialResult = result.partialResult;
-        }
-      }
-    }
-
-    if (
-      executableFunctionCallCount > 0 &&
-      toolResponseParts.length === 0 &&
-      !taskCompleted
-    ) {
-      toolResponseParts.push({
-        text: 'All tool calls failed or were unauthorized. Please analyze the errors and try an alternative approach.',
-      });
-    }
-
-    return {
-      nextMessage: { role: 'user', parts: toolResponseParts },
-      submittedOutput,
-      taskCompleted,
-      partialResult,
-    };
   }
 
   /**
@@ -1358,32 +866,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     }
 
     // Always inject complete_task.
-    // Configure its schema based on whether output is expected.
-    const completeTool: FunctionDeclaration = {
-      name: TASK_COMPLETE_TOOL_NAME,
-      description: outputConfig
-        ? 'Call this tool to submit your final answer and complete the task. This is the ONLY way to finish.'
-        : 'Call this tool to signal that you have completed your task. This is the ONLY way to finish.',
-      parameters: {
-        type: Type.OBJECT,
-        properties: {},
-        required: [],
-      },
-    };
-
-    if (outputConfig) {
-      const jsonSchema = zodToJsonSchema(outputConfig.schema);
-      const {
-        $schema: _$schema,
-        definitions: _definitions,
-        ...schema
-      } = jsonSchema;
-      completeTool.parameters!.properties![outputConfig.outputName] =
-        schema as Schema;
-      completeTool.parameters!.required!.push(outputConfig.outputName);
-    }
-
-    toolsList.push(completeTool);
+    toolsList.push(buildCompleteTaskDeclaration(outputConfig));
 
     return toolsList;
   }

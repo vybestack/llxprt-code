@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 /**
  * @plan PLAN-20251028-STATELESS6.P08
  * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
@@ -16,32 +14,13 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import {
-  nextStreamEventWithIdleTimeout,
-  resolveStreamIdleTimeoutMs,
-} from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
-import {
-  type Content,
-  type Part,
-  type FunctionCall,
-  type FunctionDeclaration,
-} from '@google/genai';
+import { type Content, type Part } from '@google/genai';
 
-import {
-  StreamEventType,
-  type StreamEvent,
-  type ChatSession,
-} from './chatSession.js';
-import {
-  filterHookRestrictedParts,
-  filterHookRestrictedFunctionCalls,
-  getHookRestrictedAllowedTools,
-  getHookRestrictedFunctionCallsFromParts,
-  isHookRestrictedToolCall,
-  mergeHookRestrictedFunctionCalls,
-} from './hookToolRestrictions.js';
+import { type ChatSession } from './chatSession.js';
+import { isHookRestrictedToolCall } from './hookToolRestrictions.js';
 import type {
   AgentRuntimeContext,
+  ToolRegistryView,
   ReadonlySettingsSnapshot,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
@@ -61,23 +40,21 @@ import {
 import {
   isFatalToolError,
   buildToolUnavailableMessage,
-  resolveToolName,
   finalizeOutput,
   handleEmitValueCall,
   buildPartsFromCompletedCalls,
-  processFunctionCalls,
   buildTodoCompletionPrompt,
 } from './subagentToolProcessing.js';
 import {
   checkTerminationConditions,
   filterTextWithEmoji,
   checkGoalCompletion,
-  processNonInteractiveTextResponse,
   processInteractiveTextResponse,
   handleExecutionError,
   initInteractiveScheduler,
   type ExecutionLoopContext,
 } from './subagentExecution.js';
+import { executeNonInteractiveRun } from './subagentNonInteractive.js';
 
 // --- Internal imports from subagentTypes.ts (used within this file) ---
 import type { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
@@ -97,6 +74,56 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 
 // Types, interfaces, enums, and ContextState are now in subagentTypes.ts
 // Runtime setup helpers are now in subagentRuntimeSetup.ts
+
+/**
+ * Resolve the provider name, defaulting to 'backend' when the persisted
+ * runtime state carries a nullish provider (the declared type lies for
+ * deserialized configs). Mirrors the original `provider ?? 'backend'`
+ * nullish fallback exactly: a defined value (including '') passes through.
+ */
+function providerNameOrDefault(provider: string | null | undefined): string {
+  if (provider === null || provider === undefined) {
+    return 'backend';
+  }
+  return provider;
+}
+
+/**
+ * Process a single interactive stream event, accumulating text and
+ * dispatching emoji-filtered messages. Throws when content is blocked
+ * or when the provider signals an error.
+ *
+ * Extracted from runInteractiveTurn to keep nesting within limits.
+ */
+function processInteractiveStreamEvent(
+  event: { type: GeminiEventType; value?: unknown },
+  execCtx: ExecutionLoopContext,
+): string {
+  if (
+    event.type === GeminiEventType.Content &&
+    typeof event.value === 'string'
+  ) {
+    const value = event.value;
+    const filtered = filterTextWithEmoji(value, execCtx);
+    if (filtered.blocked) {
+      execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
+      throw new Error(filtered.error ?? 'Content blocked by emoji filter');
+    }
+    if (execCtx.onMessage && filtered.text) {
+      execCtx.onMessage(filtered.text);
+    }
+    return value;
+  }
+  if (event.type === GeminiEventType.Error) {
+    const eventError = (event.value as { error?: Error | null } | undefined)
+      ?.error;
+    if (eventError != null) {
+      execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
+      throw new Error(eventError.message);
+    }
+  }
+  return '';
+}
 
 /**
  * Represents the scope and execution environment for a subagent.
@@ -185,15 +212,22 @@ export class SubAgentScope {
       );
     }
 
-    const toolsView =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
-      runtimeBundle.runtimeContext.tools ?? runtimeBundle.toolsView;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
-    if (toolsView == null) {
+    // Persisted subagent config may omit tools/toolsView despite the
+    // declared-required type; validate at the boundary.
+    const contextTools = runtimeBundle.runtimeContext.tools as
+      | ToolRegistryView
+      | undefined;
+    const bundleToolsView = runtimeBundle.toolsView as
+      | ToolRegistryView
+      | undefined;
+    const toolsCandidate: ToolRegistryView | undefined =
+      contextTools ?? bundleToolsView;
+    if (toolsCandidate == null) {
       throw new Error(
         'SubAgentScope.create requires a ToolRegistryView from the runtime bundle.',
       );
     }
+    const toolsView = toolsCandidate;
 
     const toolRegistry = overrides.toolRegistry ?? runtimeBundle.toolRegistry;
     if (!toolRegistry) {
@@ -390,46 +424,26 @@ export class SubAgentScope {
         await this.initScheduler(options);
       schedulerDispose = disposeScheduler;
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Persisted subagent config and runtime tool payloads.
-      while (true) {
-        const check = checkTerminationConditions(
-          turnCounter,
-          startTime,
-          execCtx,
-        );
-        if (check.shouldStop) break;
-
-        const { responseParts, textResponse, currentTurn } =
-          await this.runInteractiveTurn(
-            chat,
-            currentMessages,
-            abortController,
-            turnCounter++,
-            execCtx,
-          );
-        if (abortController.signal.aborted === true) return;
-
-        processInteractiveTextResponse(textResponse, execCtx);
-
-        const toolMessages = await this.handleInteractiveToolCalls(
-          responseParts,
-          scheduler,
+      let keepRunning = true;
+      while (keepRunning) {
+        const iteration = await this.runInteractiveLoopIteration(
+          chat,
+          currentMessages,
           abortController,
-          execCtx,
-        );
-        if (toolMessages) {
-          currentMessages = toolMessages;
-          continue;
-        }
-
-        const nextMessages = await this.runInteractiveGoalCheckLoop(
-          execCtx,
-          startTime,
           turnCounter,
-          currentTurn,
+          startTime,
+          execCtx,
+          scheduler,
         );
-        if (!nextMessages) break;
-        currentMessages = nextMessages;
+        if (iteration.action === 'abort') {
+          return;
+        }
+        if (iteration.action === 'stop') {
+          keepRunning = false;
+        } else {
+          currentMessages = iteration.messages;
+          turnCounter = iteration.turnCounter;
+        }
       }
       finalizeOutput(this.output);
     } catch (error) {
@@ -441,6 +455,76 @@ export class SubAgentScope {
     } finally {
       await this.cleanupInteractive(schedulerDispose, abortController);
     }
+  }
+
+  /**
+   * Discriminated result for a single interactive loop iteration.
+   * Extracting the loop body keeps the caller loop to a single control
+   * branch (no break/continue) and avoids the always-truthy while(true).
+   */
+  private async runInteractiveLoopIteration(
+    chat: ChatSession,
+    currentMessages: Content[],
+    abortController: AbortController,
+    turnCounter: number,
+    startTime: number,
+    execCtx: ExecutionLoopContext,
+    scheduler: {
+      schedule: (
+        req: ToolCallRequestInfo | ToolCallRequestInfo[],
+        signal: AbortSignal,
+      ) => Promise<void> | void;
+      awaitCompletedCalls: (
+        signal?: AbortSignal,
+      ) => Promise<CompletedToolCall[]>;
+    },
+  ): Promise<
+    | { action: 'stop' }
+    | { action: 'abort' }
+    | { action: 'continue'; messages: Content[]; turnCounter: number }
+  > {
+    const check = checkTerminationConditions(turnCounter, startTime, execCtx);
+    if (check.shouldStop) return { action: 'stop' };
+
+    const nextTurnCounter = turnCounter + 1;
+    const { responseParts, textResponse, currentTurn } =
+      await this.runInteractiveTurn(
+        chat,
+        currentMessages,
+        abortController,
+        turnCounter,
+        execCtx,
+      );
+    if (abortController.signal.aborted === true) return { action: 'abort' };
+
+    processInteractiveTextResponse(textResponse, execCtx);
+
+    const toolMessages = await this.handleInteractiveToolCalls(
+      responseParts,
+      scheduler,
+      abortController,
+      execCtx,
+    );
+    if (toolMessages) {
+      return {
+        action: 'continue',
+        messages: toolMessages,
+        turnCounter: nextTurnCounter,
+      };
+    }
+
+    const nextMessages = await this.runInteractiveGoalCheckLoop(
+      execCtx,
+      startTime,
+      nextTurnCounter,
+      currentTurn,
+    );
+    if (!nextMessages) return { action: 'stop' };
+    return {
+      action: 'continue',
+      messages: nextMessages,
+      turnCounter: nextTurnCounter,
+    };
   }
 
   private async initScheduler(
@@ -468,8 +552,13 @@ export class SubAgentScope {
   ) {
     const currentTurn = turnIndex;
     const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
-    const providerName = this.runtimeContext.state.provider ?? 'backend';
+    // Persisted subagent runtime state may carry a nullish provider
+    // despite the declared-required type; validate at the boundary.
+    const providerRaw = this.runtimeContext.state.provider as
+      | string
+      | null
+      | undefined;
+    const providerName = providerNameOrDefault(providerRaw);
     const turn = new Turn(chat, promptId, this.subagentId, providerName);
     const parts = currentMessages[0]?.parts ?? [];
 
@@ -478,30 +567,8 @@ export class SubAgentScope {
       const stream = turn.run(parts, abortController.signal);
       for await (const event of stream) {
         if (abortController.signal.aborted === true) break;
-        if (event.type === GeminiEventType.Content && event.value) {
-          textResponse += event.value;
-          const filtered = filterTextWithEmoji(event.value, execCtx);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (filtered.blocked) {
-            execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
-            throw new Error(
-              filtered.error ?? 'Content blocked by emoji filter',
-            );
-          }
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (execCtx.onMessage && filtered.text) {
-            execCtx.onMessage(filtered.text);
-          }
-        } else if (event.type === GeminiEventType.Error) {
-          const eventError = (
-            event.value as { error?: Error | null } | undefined
-          )?.error;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (eventError != null) {
-            execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
-            throw new Error(eventError.message);
-          }
-        }
+        const eventText = processInteractiveStreamEvent(event, execCtx);
+        textResponse += eventText;
       }
     } catch (error) {
       if (abortController.signal.aborted === true) {
@@ -657,291 +724,35 @@ export class SubAgentScope {
       return `Subagent ${this.subagentId} (${this.name}) starting run with toolCount=${toolsList.length} requestedOutputs=${outputs} runConfig=${JSON.stringify(this.runConfig)}`;
     });
     const execCtx = this.buildExecCtx();
-    let currentMessages: Content[] = this.buildInitialMessages(context);
+    const initialMessages = this.buildInitialMessages(context);
     const startTime = Date.now();
-    let turnCounter = 0;
 
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Persisted subagent config and runtime tool payloads.
-      while (true) {
-        const check = checkTerminationConditions(
-          turnCounter,
-          startTime,
-          execCtx,
-        );
-        if (check.shouldStop) break;
-
-        const currentTurn = turnCounter++;
-        const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
-        this.logger.debug(
-          () =>
-            `Subagent ${this.subagentId} turn=${currentTurn} promptId=${promptId}`,
-        );
-
-        const { functionCalls } = await this.runNonInteractiveTurn(
-          chat,
-          currentMessages,
-          toolsList,
-          abortController,
-          currentTurn,
-          execCtx,
-        );
-        if (abortController.signal.aborted === true) return;
-
-        // Post-send timeout recheck
-        const recheck = checkTerminationConditions(
-          turnCounter,
-          startTime,
-          execCtx,
-        );
-        if (recheck.shouldStop) break;
-
-        const nextMessages = await this.dispatchNonInteractiveTurnResult(
-          functionCalls,
-          abortController,
-          promptId,
-          currentTurn,
-          execCtx,
-        );
-        if (!nextMessages) break;
-        currentMessages = nextMessages;
-      }
-      finalizeOutput(this.output);
-    } catch (error) {
-      if (this.output.terminate_reason !== SubagentTerminateMode.TIMEOUT) {
-        handleExecutionError(error, execCtx);
-      }
-      finalizeOutput(this.output);
-      throw error;
-    } finally {
-      this.clearTimeoutHandle();
-      this.parentAbortCleanup?.();
-      this.parentAbortCleanup = undefined;
-      this.activeAbortController = null;
-    }
-  }
-
-  private async runNonInteractiveTurn(
-    chat: ChatSession,
-    currentMessages: Content[],
-    toolsList: FunctionDeclaration[],
-    abortController: AbortController,
-    currentTurn: number,
-    execCtx: ExecutionLoopContext,
-  ) {
-    const messageParams = {
-      message: currentMessages[0]?.parts ?? [],
-      config: {
-        abortSignal: abortController.signal,
-        tools: [{ functionDeclarations: toolsList }],
-      },
-    };
-
-    const responseStream = await chat.sendMessageStream(
-      messageParams,
-      `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`,
-    );
-
-    const {
-      functionCalls: rawCalls,
-      textResponse,
-      parseableTextResponse,
-      hookRestrictedAllowedTools,
-    } = await this.consumeNonInteractiveStream(
-      responseStream,
+    await executeNonInteractiveRun(
+      chat,
+      toolsList,
       abortController,
-      currentTurn,
-    );
-    if (abortController.signal.aborted === true) {
-      return { functionCalls: [], textResponse: '' };
-    }
-
-    let functionCalls = rawCalls;
-    if (parseableTextResponse) {
-      const result = processNonInteractiveTextResponse(
-        parseableTextResponse,
-        functionCalls,
-        execCtx,
-        resolveToolName,
-        hookRestrictedAllowedTools,
-      );
-      functionCalls = result.functionCalls;
-    }
-
-    return { functionCalls, textResponse };
-  }
-
-  private async consumeNonInteractiveStream(
-    responseStream: AsyncIterable<StreamEvent>,
-    abortController: AbortController,
-    currentTurn: number,
-  ): Promise<{
-    functionCalls: FunctionCall[];
-    textResponse: string;
-    parseableTextResponse: string;
-    hookRestrictedAllowedTools: string[] | undefined;
-  }> {
-    const timeoutController = new AbortController();
-    const timeoutSignal = timeoutController.signal;
-    const onAbort = () => timeoutController.abort();
-    abortController.signal.addEventListener('abort', onAbort, { once: true });
-    if (abortController.signal.aborted === true) {
-      onAbort();
-      abortController.signal.removeEventListener('abort', onAbort);
-      return {
-        functionCalls: [],
-        textResponse: '',
-        parseableTextResponse: '',
-        hookRestrictedAllowedTools: undefined,
-      };
-    }
-
-    const functionCalls: FunctionCall[] = [];
-    let textResponse = '';
-    let parseableTextResponse = '';
-    let hookRestrictedAllowedTools: string[] | undefined;
-    const iterator = responseStream[Symbol.asyncIterator]();
-    const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(this.config);
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
-      while (true) {
-        const result = await this.readNextNonInteractiveEvent(
-          iterator,
-          abortController,
-          timeoutController,
-          timeoutSignal,
-          effectiveTimeoutMs,
-        );
-        if (result.done === true) {
-          break;
-        }
-        const resp = result.value;
-        const isRuntimeAborted = Boolean(abortController.signal.aborted);
-        if (isRuntimeAborted) {
-          return {
-            functionCalls: [],
-            textResponse: '',
-            parseableTextResponse: '',
-            hookRestrictedAllowedTools,
-          };
-        }
-        if (resp.type === StreamEventType.CHUNK) {
-          const chunkResult = this.collectNonInteractiveChunk(
-            resp,
-            functionCalls,
-            currentTurn,
-          );
-          hookRestrictedAllowedTools =
-            chunkResult.hookRestrictedAllowedTools ??
-            hookRestrictedAllowedTools;
-          textResponse += chunkResult.text;
-          parseableTextResponse += chunkResult.text;
-        }
-      }
-    } finally {
-      iterator.return?.(undefined).catch(() => {});
-      timeoutController.abort();
-      abortController.signal.removeEventListener('abort', onAbort);
-    }
-
-    return {
-      functionCalls,
-      textResponse,
-      parseableTextResponse,
-      hookRestrictedAllowedTools,
-    };
-  }
-
-  private async readNextNonInteractiveEvent(
-    iterator: AsyncIterator<StreamEvent, unknown>,
-    abortController: AbortController,
-    timeoutController: AbortController,
-    timeoutSignal: AbortSignal,
-    effectiveTimeoutMs: number,
-  ): Promise<IteratorResult<StreamEvent, unknown>> {
-    if (effectiveTimeoutMs > 0) {
-      return nextStreamEventWithIdleTimeout({
-        iterator,
-        timeoutMs: effectiveTimeoutMs,
-        signal: timeoutSignal,
-        onTimeout: () => {
-          if (abortController.signal.aborted === true) {
-            return;
-          }
-          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
-          timeoutController.abort();
-          abortController.abort(createAbortError());
-        },
-        createTimeoutError: () => createAbortError(),
-      });
-    }
-    return iterator.next();
-  }
-
-  private collectNonInteractiveChunk(
-    resp: StreamEvent & { type: StreamEventType.CHUNK },
-    functionCalls: FunctionCall[],
-    currentTurn: number,
-  ): { text: string; hookRestrictedAllowedTools: string[] | undefined } {
-    const allowedTools = getHookRestrictedAllowedTools(resp.value);
-    const parts = resp.value.candidates?.[0]?.content?.parts ?? [];
-    const partCalls = getHookRestrictedFunctionCallsFromParts(
-      parts,
-      allowedTools,
-    );
-    const topLevelCalls = filterHookRestrictedFunctionCalls(
-      resp.value.functionCalls ?? [],
-      allowedTools,
-    );
-    const chunkCalls = mergeHookRestrictedFunctionCalls(
-      partCalls,
-      topLevelCalls,
-    );
-    if (chunkCalls.length > 0) {
-      functionCalls.push(...chunkCalls);
-      this.logger.debug(
-        () =>
-          `Subagent ${this.subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
-      );
-    }
-    if (allowedTools === undefined) {
-      return {
-        text: resp.value.text ?? '',
-        hookRestrictedAllowedTools: undefined,
-      };
-    }
-    const filteredParts = filterHookRestrictedParts(parts, allowedTools);
-    const filteredText = filteredParts
-      .map((part) => part.text)
-      .filter((text): text is string => typeof text === 'string')
-      .join('');
-    return { text: filteredText, hookRestrictedAllowedTools: allowedTools };
-  }
-
-  private async dispatchNonInteractiveTurnResult(
-    functionCalls: FunctionCall[],
-    abortController: AbortController,
-    promptId: string,
-    currentTurn: number,
-    execCtx: ExecutionLoopContext,
-  ): Promise<Content[] | null> {
-    if (functionCalls.length > 0) {
-      return processFunctionCalls(functionCalls, abortController, promptId, {
+      initialMessages,
+      startTime,
+      execCtx,
+      {
         output: this.output,
         subagentId: this.subagentId,
+        name: this.name,
+        runtimeContext: this.runtimeContext,
         logger: this.logger,
-        toolExecutorContext: this.toolExecutorContext,
         config: this.config,
+        runConfig: this.runConfig,
+        outputConfig: this.outputConfig,
+        toolExecutorContext: this.toolExecutorContext,
         messageBus: this.messageBus,
-      });
-    }
-    const todoReminder = await buildTodoCompletionPrompt(
-      this.runtimeContext,
-      this.subagentId,
-      this.logger,
+      },
+      () => {
+        this.clearTimeoutHandle();
+        this.parentAbortCleanup?.();
+        this.parentAbortCleanup = undefined;
+        this.activeAbortController = null;
+      },
     );
-    return checkGoalCompletion(execCtx, todoReminder, currentTurn);
   }
 
   private buildExecCtx(): ExecutionLoopContext {

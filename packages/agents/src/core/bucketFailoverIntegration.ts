@@ -9,8 +9,6 @@
  * Integrates bucket failover logic into ChatSession provider execution flow
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import type {
   IContent,
   ContentBlock,
@@ -50,22 +48,70 @@ function shouldFailover(error: Error): boolean {
     return true;
   }
 
-  return (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  const hasStatusCode =
     message.includes('429') ||
     message.includes('401') ||
     message.includes('403') ||
-    message.includes('rate limit') ||
-    message.includes('quota') ||
-    message.includes('402') ||
+    message.includes('402');
+  const hasRateLimitText =
+    message.includes('rate limit') || message.includes('quota');
+  const hasPaymentText =
     message.includes('payment') ||
     message.includes('revoked') ||
-    message.includes('permission_error') ||
-    (message.includes('token') && message.includes('expired'))
-  );
+    message.includes('permission_error');
+  const hasTokenExpiry =
+    message.includes('token') && message.includes('expired');
+
+  return hasStatusCode || hasRateLimitText || hasPaymentText || hasTokenExpiry;
 }
 
 const logger = new DebugLogger('llxprt:bucket:failover:integration');
+
+/**
+ * Returns true when there is at least one more bucket after currentIndex.
+ */
+function hasMoreBuckets(currentIndex: number, buckets: string[]): boolean {
+  return currentIndex < buckets.length - 1;
+}
+
+/**
+ * Notifies the caller that execution is failing over from the current bucket
+ * to the next one.
+ */
+function notifyFailover(
+  currentIndex: number,
+  buckets: string[],
+  notificationCallback?: (fromBucket: string, toBucket: string) => void,
+): void {
+  const currentBucket = buckets[currentIndex];
+  const nextBucket = buckets[currentIndex + 1];
+
+  if (notificationCallback) {
+    notificationCallback(currentBucket, nextBucket);
+  }
+
+  logger.debug(
+    () => `Failing over from bucket '${currentBucket}' to '${nextBucket}'`,
+  );
+}
+
+type FailoverAction = 'continue' | 'exhausted';
+
+/**
+ * Resolves the failover action for a failover-eligible error: continue to the
+ * next bucket if one remains (notifying the caller), otherwise signal exhaustion.
+ */
+function resolveFailoverAction(
+  currentIndex: number,
+  buckets: string[],
+  notificationCallback?: (fromBucket: string, toBucket: string) => void,
+): FailoverAction {
+  if (!hasMoreBuckets(currentIndex, buckets)) {
+    return 'exhausted';
+  }
+  notifyFailover(currentIndex, buckets, notificationCallback);
+  return 'continue';
+}
 
 /**
  * Configuration for bucket failover execution
@@ -162,32 +208,22 @@ export async function executeProviderWithBucketFailover(
       );
 
       // Check if this error should trigger failover
-      if (shouldFailover(err)) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (i < buckets.length - 1) {
-          const nextBucket = buckets[i + 1];
-
-          // Notify about bucket switch
-          if (notificationCallback) {
-            notificationCallback(bucket, nextBucket);
-          }
-
-          logger.debug(
-            () => `Failing over from bucket '${bucket}' to '${nextBucket}'`,
-          );
-
-          // Continue to next bucket
-          continue;
-        } else {
-          // Last bucket also failed with failover error
-          const exhaustedMessage = formatAllBucketsExhaustedError(
-            provider.name,
-            buckets,
-            attemptedBuckets,
-            lastError,
-          );
-          throw new Error(exhaustedMessage);
-        }
+      const isFailover = shouldFailover(err);
+      if (
+        isFailover &&
+        resolveFailoverAction(i, buckets, notificationCallback) === 'continue'
+      ) {
+        continue;
+      }
+      if (isFailover) {
+        // Last bucket also failed with failover error
+        const exhaustedMessage = formatAllBucketsExhaustedError(
+          provider.name,
+          buckets,
+          attemptedBuckets,
+          lastError,
+        );
+        throw new Error(exhaustedMessage);
       }
 
       // Non-failover error - throw immediately

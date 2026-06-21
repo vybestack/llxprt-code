@@ -4,12 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import { type PartListUnion, type Content } from '@google/genai';
 
 export function isThinkingSupported(model: string) {
   return !model.startsWith('gemini-2.0');
+}
+
+function getLastContent(contents: Content[]): Content | undefined {
+  return contents.length > 0 ? contents[contents.length - 1] : undefined;
 }
 
 /**
@@ -59,7 +61,7 @@ export function findCompressSplitPoint(
     cumulativeCharCount += charCounts[i];
   }
 
-  const lastContent = contents[contents.length - 1];
+  const lastContent = getLastContent(contents);
   const hasNoFunctionCall = (content: Content | undefined): boolean => {
     const parts = content?.parts;
 
@@ -67,7 +69,6 @@ export function findCompressSplitPoint(
   };
 
   if (lastSplitPoint > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
     if (lastContent?.role === 'model' && hasNoFunctionCall(lastContent)) {
       return contents.length;
     }
@@ -83,12 +84,15 @@ export function findCompressSplitPoint(
     return lastToolCallSplitPoint;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
   if (lastContent?.role === 'model' && hasNoFunctionCall(lastContent)) {
     return contents.length;
   }
 
   return lastSplitPoint;
+}
+
+function hasTextProperty(value: unknown): value is { text: string } {
+  return typeof value === 'object' && value !== null && 'text' in value;
 }
 
 export function extractPromptText(request: PartListUnion): string {
@@ -97,10 +101,8 @@ export function extractPromptText(request: PartListUnion): string {
     return request
       .map((part) => {
         if (typeof part === 'string') return part;
-        // Preserve defensive runtime check: part could be null at runtime despite types.
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
-        if (part !== null && typeof part === 'object' && 'text' in part) {
-          return (part as { text: string }).text;
+        if (hasTextProperty(part)) {
+          return part.text;
         }
         return '';
       })
@@ -108,9 +110,8 @@ export function extractPromptText(request: PartListUnion): string {
       .join(' ');
   }
   // Not an array, check for single object with text
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
-  if (request !== null && typeof request === 'object' && 'text' in request) {
-    return (request as { text: string }).text;
+  if (hasTextProperty(request)) {
+    return request.text;
   }
   return '';
 }
@@ -121,14 +122,8 @@ export function estimateTextOnlyLength(request: PartListUnion): number {
   }
 
   if (!Array.isArray(request)) {
-    if (
-      typeof request === 'object' &&
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
-      request !== null &&
-      'text' in request &&
-      request.text
-    ) {
-      return (request as { text: string }).text.length;
+    if (hasTextProperty(request) && request.text) {
+      return request.text.length;
     }
     return 0;
   }
@@ -137,13 +132,7 @@ export function estimateTextOnlyLength(request: PartListUnion): number {
   for (const part of request) {
     if (typeof part === 'string') {
       textLength += part.length;
-    } else if (
-      typeof part === 'object' &&
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
-      part !== null &&
-      'text' in part &&
-      part.text
-    ) {
+    } else if (hasTextProperty(part) && part.text) {
       textLength += part.text.length;
     }
   }
