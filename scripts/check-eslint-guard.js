@@ -39,8 +39,13 @@ function parseArgs(argv) {
   return args;
 }
 
+const GIT_OUTPUT_BUFFER_BYTES = 64 * 1024 * 1024;
+
 function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8' }).trim();
+  return execFileSync('git', args, {
+    encoding: 'utf8',
+    maxBuffer: GIT_OUTPUT_BUFFER_BYTES,
+  }).trim();
 }
 
 function resolveBase(base, head) {
